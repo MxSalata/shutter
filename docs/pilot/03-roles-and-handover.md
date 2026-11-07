@@ -30,7 +30,7 @@ So your stop list needs a person, or a pair on call together, holding both the s
 
 ## Handover
 
-Shutter has no field for who owns a case at this release, and **nobody is told when a case needs someone.** After 24 hours undecided, a waiting plan's case moves to `escalated`, with no mail or alert. So keep your own list, and use this for each unresolved case:
+Shutter has no field for who owns a case, and **nobody is told when a case needs someone** unless your release has reminders for cases left open and the site has turned them on (off by default, and no mail goes in shadow mode). A reminder doesn't show anyone read it or took the case on. After 24 hours undecided, a waiting plan's case moves to `escalated`, with no mail or alert of its own. So keep your own list, and use this for each unresolved case:
 
 ```text
 Case id:

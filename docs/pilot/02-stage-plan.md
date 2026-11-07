@@ -4,7 +4,7 @@ Move up one stage at a time, each with a signed [decision record](00-decision-re
 
 ## Features that may not be in your release
 
-These are planned after 1.0.0 and may never ship. Look for them in `CHANGELOG.md`. **Every stage works without them**, using the right-hand column.
+These came after 1.0.0, so not every release has each of them. Look for them in `CHANGELOG.md`. **Every stage works without them**, using the right-hand column.
 
 | Feature | Used in | Without it |
 | --- | --- | --- |
