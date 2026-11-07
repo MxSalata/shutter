@@ -1,15 +1,15 @@
 ---
 id: shutter-in-plain-words
-version: 1.2
+version: 1.3
 collection: explain
 applies_to: [shutter, hl7-v2-adt]
-effective_from: 2026-11-06
+effective_from: 2026-11-07
 ---
 
 # Shutter in plain words
 
 What Shutter's words mean for a person reading a case: the outcomes, who decides, the gate's checks and the site profile
-settings that change what Shutter does. Version 1.2, in force from 6 November 2026. These words explain; they never
+settings that change what Shutter does. Version 1.3, in force from 7 November 2026. These words explain; they never
 decide anything about a case. The case's own evidence, the gate's checks and the what-if facts do.
 
 ## SPW-1 What a case is

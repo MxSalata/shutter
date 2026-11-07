@@ -689,7 +689,7 @@ Say these plainly to whoever owns the feed.
   in-patient movement on another visit (`further_messages` in the site profile; CONTRACTS 6.5). It can't see a change made by hand
   at the receiver, or a message on a route the index doesn't watch once the index has passed it. In a watched namespace it reads every
   HL7 header since the case's own at each write, for at most 30 seconds (`further_messages.scan_seconds`), and a read that runs out blocks the write (`FURTHER_NOT_READ`). Nothing holds the feed during a
-  correction, and a person who reinvestigates a stopped case meets the same stop until they close it by hand.
+  correction, and a person who reinvestigates a stopped case meets the same stop until they close it by hand, or, where it is only another visit's movement, an approver releases it on the case page for the rows they read.
 - **A forwarder sign-in can open a case for any receiver.** An invented movement goes to a person, as the source can't be proved, but a genuine message posted again passes
   that check, so at a tier that releases by policy (9.6) it can write with no approval. A user per namespace does not close this (section 3.5), so that password deserves an integration credential's care.
 - **A message accepted by a transport ACK and then lost downstream raises nothing in Shutter today.** The engine completed it, so no alert comes and no case

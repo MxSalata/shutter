@@ -292,6 +292,7 @@ Method RaiseTask(incident As Shutter.Store.Incident, chains As %ListOfObjects, s
 /// What the task adds to an item's line when it is a lost admission: the question a person answers by approving.
 ClassMethod LostWords(item As %DynamicObject) As %String
 {
+    If item.%Get("event") '= "admit" Quit ""
     Set case = ##class(Shutter.Store.Case).ByCaseId(item.%Get("caseId"))
     Set snap = $SELECT($ISOBJECT(case): case.CurrentSnapshot, 1: "")
     If '$ISOBJECT(snap) || '##class(Shutter.Util.FurtherMessages).AdmissionOnNotFound(case, snap.SummaryObject()) Quit ""

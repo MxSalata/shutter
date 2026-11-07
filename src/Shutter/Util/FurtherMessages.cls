@@ -8,7 +8,8 @@
 /// - shows: anything else about the patient in the ADT feed, such as an out-patient attendance or an emergency department's
 ///   discharge. It stops nothing and goes on the plan.
 /// The site profile's further_messages.in_patient_movement says show to let another visit's movement through. The gate reads
-/// the snapshot at the proposal and reads again at dispatch, and the connector reads again at the moment of the write.
+/// the snapshot at the proposal and reads again at dispatch, and the connector reads again at the moment of the write. A person
+/// with Shutter_Approve can release a stop that is only another visit's movement, for the rows they read (Release, Released).
 /// What this can't see: a change made by hand at the receiver, which is why a lost admission's plan asks for its screen to be
 /// checked. A later hold of the feed or of a laboratory route can call Find as it stands.
 Class Shutter.Util.FurtherMessages
