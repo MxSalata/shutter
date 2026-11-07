@@ -108,6 +108,113 @@ Method TestDigestBindsVersionsAndEpoch()
     Do $$$AssertEquals(..Digest(inc), base, "the same evidence gives it back")
 }
 
+/// An acknowledged write, on the contract's answer: {applied, receipt: {version_after}, encounter: {version}}. Another
+/// system moved the encounter on before the verification's read, and the next item goes at the receipt's version.
+Method TestVersionAfterAnAppliedWrite()
+{
+    Set item = ..NewIncident().ChainAt(1).ItemAt(1), case = item.Case
+    Set answer = {"applied": true, "receipt": {"version_after": 2}, "encounter": {"version": 2}}
+    Set attempt = ..Attempt(case, "applied", 200, answer)
+    Do ..Verified(case, attempt, 200, {"version_after": 2}, {"version": 3})
+    Do $$$AssertEquals(..Workflow().VersionAfter(case, item), 2, "the receipt of the write, not the encounter as read at verification")
+}
+
+/// A write whose answer was lost has no answer to read: its receipt comes from the verification.
+Method TestVersionAfterALostAnswer()
+{
+    Set item = ..NewIncident().ChainAt(1).ItemAt(1), case = item.Case
+    Set attempt = ..Attempt(case, "uncertain", 0, {})
+    Do ..Verified(case, attempt, 200, {"version_after": 2}, {"version": 3})
+    Do $$$AssertEquals(..Workflow().VersionAfter(case, item), 2, "the receipt the verification read")
+}
+
+/// A reconcile writes nothing: the receipt found is the operation's own, and the encounter may have moved since. The
+/// next item then stops for a person, which is the safe direction.
+Method TestVersionAfterAReconcile()
+{
+    Set item = ..NewIncident().ChainAt(1).ItemAt(1), case = item.Case
+    Do ..Verified(case, "", 200, {"version_after": 2}, {"version": 3})
+    Do $$$AssertEquals(..Workflow().VersionAfter(case, item), 2, "the receipt found")
+}
+
+/// A receiver that keeps no receipts: the history entry holding the operation's key says where it landed.
+Method TestVersionAfterOnAReceiverWithNoReceipts()
+{
+    Set item = ..NewIncident().ChainAt(1).ItemAt(1), case = item.Case
+    Set attempt = ..Attempt(case, "uncertain", 0, {})
+    Set encounter = {"version": 3, "history": [{"operation_key": "another", "version_after": 1}, {"operation_key": (case.OperationKey), "version_after": 2}, {"operation_key": "a later one", "version_after": 3}]}
+    Do ..Verified(case, attempt, -1, {}, encounter)
+    Do $$$AssertEquals(..Workflow().VersionAfter(case, item), 2, "the history entry of the operation")
+}
+
+/// A write acknowledged by a receiver that answers with no receipt: its answer still gives the version.
+Method TestVersionAfterAnAnswerWithNoReceipt()
+{
+    Set item = ..NewIncident().ChainAt(1).ItemAt(1), case = item.Case
+    Set attempt = ..Attempt(case, "applied", 200, {"applied": true, "version_after": 2})
+    Do ..Verified(case, attempt, -1, {}, {"version": 3})
+    Do $$$AssertEquals(..Workflow().VersionAfter(case, item), 2, "the version in the answer")
+    Set item = ..NewIncident().ChainAt(1).ItemAt(1), case = item.Case
+    Set attempt = ..Attempt(case, "applied", 200, {"applied": true, "encounter": {"version": 2}})
+    Do ..Verified(case, attempt, -1, {}, {"version": 3})
+    Do $$$AssertEquals(..Workflow().VersionAfter(case, item), 2, "the encounter in the answer, as the write left it")
+}
+
+/// A closure with no write and no receipt (superseded): only the encounter as read is left, and a failed receipt
+/// lookup's body is not a receipt.
+Method TestVersionAfterAClosureWithNoReceipt()
+{
+    Set item = ..NewIncident().ChainAt(1).ItemAt(1), case = item.Case
+    Do ..Verified(case, "", 404, {"error": "not_found"}, {"version": 3})
+    Do $$$AssertEquals(..Workflow().VersionAfter(case, item), 3, "the encounter as read")
+    Set item = ..NewIncident().ChainAt(1).ItemAt(1), case = item.Case
+    Do ..Verified(case, "", 503, {"version_after": 9}, {"version": 3})
+    Do $$$AssertEquals(..Workflow().VersionAfter(case, item), 3, "not a body the receipt lookup answered with an error")
+    Set item = ..NewIncident().ChainAt(1).ItemAt(1)
+    Set item.ExpectedVersion = 7
+    Do $$$AssertEquals(..Workflow().VersionAfter(item.Case, item), 7, "and with nothing recorded, the version the item expected")
+}
+
+/// The sequence rule (7.4): the next item at the previous receipt's version, the receiver one past it. Nothing goes, and
+/// a person looks. Driven with the case workflow's send to the gate taken away.
+Method TestTheSequenceRuleStopsAtAMovedVersion()
+{
+    Set inc = ..NewIncident(), item = inc.ChainAt(1).ItemAt(2), case = item.Case
+    Set wf = ##class(Shutter.Test.QuietWorkflow).%New("Case Workflow")
+    Set wf.CaseId = case.CaseId, wf.Mode = "policy", wf.Release = 1, wf.IncidentId = inc.IncidentId, wf.ChainSeq = 1, wf.ChainDecides = "policy", wf.ExpectedVersion = 2
+    Set case.State = "collecting"
+    Do $$$AssertStatusOK(case.%Save(), "the released case collects its evidence")
+    Set result = ##class(Shutter.Msg.EvidenceResult).%New()
+    Set result.SummaryJSON = {"ward_state": {"version": 3}, "catalogue": {"decision": "policy"}}.%ToJSON()
+    Do $$$AssertStatusOK(wf.OnEvidence(case, result), "the evidence is read")
+    Set case = ##class(Shutter.Store.Case).ByCaseId(case.CaseId)
+    Do $$$AssertEquals(case.State, "blocked", "the item does not go")
+    Do $$$AssertTrue(case.Headline [ "sequence rule", "the headline names the rule: " _ case.Headline)
+    Do $$$AssertTrue(case.Headline [ "version 3", "and the version it found")
+}
+
+/// An instance of the incident workflow outside the production.
+Method Workflow() As Shutter.Test.QuietIncident
+{
+    Quit ##class(Shutter.Test.QuietIncident).%New("Incident Workflow")
+}
+
+/// A write attempt of the case, as the connector records one, under a plan of its own.
+Method Attempt(case As Shutter.Store.Case, outcome As %String, status As %Integer, answer As %DynamicObject) As Shutter.Store.ExecutionAttempt
+{
+    Set planObj = {"disposition": "resend", "action": {"type": "resend", "operation_key": (case.OperationKey), "expected_version": 1, "payload_digest": "sha256:ut"}, "summary": "Resend the operation"}
+    Do $$$AssertStatusOK(##class(Shutter.Store.Plan).Create(case, case.CurrentSnapshot, planObj, "policy:E4", .plan), "the plan is saved")
+    Do $$$AssertStatusOK(##class(Shutter.Store.ExecutionAttempt).Create(case, plan, "", "", status, outcome, answer, "", .attempt), "the attempt is saved")
+    Quit attempt
+}
+
+/// A verification of the case with the two reads the verifier records.
+Method Verified(case As Shutter.Store.Case, attempt As Shutter.Store.ExecutionAttempt, receiptStatus As %Integer, receipt As %DynamicObject, encounter As %DynamicObject)
+{
+    Set detail = {"encounter_http_status": 200, "encounter": (encounter), "receipt_http_status": (receiptStatus), "receipt": (receipt)}
+    Do $$$AssertStatusOK(##class(Shutter.Store.Verification).Create(case, attempt, "verified", "unit test", detail, .v), "the verification is saved")
+}
+
 /// Builds the plan again and returns its digest.
 Method Digest(inc As Shutter.Store.Incident) As %String
 {
@@ -198,7 +305,7 @@ ClassMethod Purge(id As %String)
 /// Deletes a test case and everything the stores recorded for it, as Shutter.Test.Gate does.
 ClassMethod PurgeCase(id As %String)
 {
-    For table = "Shutter_Store.GateDecision", "Shutter_Store.Approval", "Shutter_Store.Plan", "Shutter_Store.CaseEvent" {
+    For table = "Shutter_Store.Verification", "Shutter_Store.ExecutionAttempt", "Shutter_Store.GateDecision", "Shutter_Store.Approval", "Shutter_Store.Plan", "Shutter_Store.CaseEvent" {
         Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM " _ table _ " WHERE ""Case"" = ?", id)
     }
     Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM Shutter_Store.SnapshotItem WHERE Snapshot IN (SELECT ID FROM Shutter_Store.Snapshot WHERE ""Case"" = ?)", id)
