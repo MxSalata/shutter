@@ -538,3 +538,30 @@ describe('IncidentPage', () => {
     expect(technical).toBeLessThanOrEqual(plain * 1.5);
   });
 });
+
+describe('an incident with no approval task', () => {
+  const words =
+    'No approval task could be raised for incident I-000001: nothing was released and no case failed, and the chains wait for a person.';
+  const events = (recorded.events as IncidentEvent[]).concat({
+    at: '2026-11-06T09:00:00Z',
+    kind: 'error',
+    text: words,
+    actor: 'system',
+  });
+
+  it('says so at the top of the page, in the words of the error', async () => {
+    served = { ...waiting(), tasks: [] };
+    server.use(http.get(`${BASE}/incidents/:id/events`, () => HttpResponse.json(events)));
+    renderAt(`/incidents/${closed.incidentId}`);
+    expect(await screen.findByRole('alert')).toHaveTextContent(words);
+    expect(screen.getByText('This incident is waiting for a person')).toBeInTheDocument();
+  });
+
+  it('says nothing once the task is there', async () => {
+    served = waiting();
+    server.use(http.get(`${BASE}/incidents/:id/events`, () => HttpResponse.json(events)));
+    renderAt(`/incidents/${closed.incidentId}`);
+    await screen.findByText('Timeline');
+    expect(screen.queryByText('This incident is waiting for a person')).not.toBeInTheDocument();
+  });
+});

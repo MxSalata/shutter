@@ -245,6 +245,8 @@ Method TaskNotRaised(incident As Shutter.Store.Incident, seq As %String, error A
 Method OnRaiseAgain(incident As Shutter.Store.Incident, seq As %String) As %Status
 {
     Set pending = ..PendingTasks
+    // The instance keeps the settings it started with, and the cause may have been the target: the item's own now.
+    Set ..ApprovalTarget = ..%New(..%ConfigName).ApprovalTarget
     Set sc = ..AskApproval(incident, incident.ChainList(), seq, 1)
     Quit:$$$ISERR(sc) sc
     Quit:(..PendingTasks = pending) $$$OK

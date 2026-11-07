@@ -15,6 +15,7 @@ Two storms through the intake route, each with its own patients, on an instance 
 Writes DIR/result.json as it goes. Exit status: 0 held, 1 a line failed. Standard library only.
 """
 import argparse
+import base64
 import datetime as dt
 import json
 import os
@@ -81,7 +82,17 @@ def complete_in_inbox(ctr, incident_id, digest):
     return "RESULT: ok" in storm.iris_session(ctr, "SHUTTER", code)
 
 
+def reset_receiver(args, log):
+    """The receiver as new, so a storm's beds are free whatever ran before it."""
+    token = base64.b64encode(f"{storm.ADMIN[0]}:{storm.ADMIN[1]}".encode()).decode()
+    request = urllib.request.Request(args.url + "/downstream/api/reset", data=b"{}", method="POST",
+                                     headers={"Authorization": "Basic " + token, "Content-Type": "application/json"})
+    with urllib.request.urlopen(request, timeout=60) as response:
+        log.line("calls.jsonl", role="receiver", method="POST", path="/downstream/api/reset", status=response.status)
+
+
 def post(args, plan, log):
+    reset_receiver(args, log)
     forwarder = storm.Role(args.url, "forwarder", log)
     result = types.SimpleNamespace(rule=lambda *a, **k: None, invalid=lambda r: print("INVALID", r), report=lambda *a: None)
     ids, *_ = storm.generate(types.SimpleNamespace(board=False), plan, forwarder, result, log)
