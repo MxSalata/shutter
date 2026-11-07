@@ -411,7 +411,7 @@ Method OnPoll(incident As Shutter.Store.Incident) As %Status
     Quit ..Advance(incident)
 }
 
-/// Whether the case waits on a case of this incident that is still grouped: held for a later chain, not working.
+/// Whether the case waits on a case of this incident that is still grouped: held for another chain, not working.
 ClassMethod HeldBackByThisIncident(case As Shutter.Store.Case, incident As Shutter.Store.Incident) As %Boolean
 {
     If case.WaitsOnCase = "" Quit 0

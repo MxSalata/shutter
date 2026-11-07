@@ -961,9 +961,9 @@ the framework). The Dockerfile runs it, and a site with Java runs it once by han
 - A released item whose case is blocked while it waits on another case (`waitsOn`, the occupied bed) or on a newer message
   of its encounter (`waitsOnMessage`) is still working for the chain (v1.29): the chain waits with it, the incident is told once,
   and the item is judged when the case closes after its release. An escalated item stops the chain as before. So does a wait on
-  a case this incident still holds back for a later chain, which could only go once this chain had stopped: the chain stops,
-  the incident says why, the later chains go on, and that case's closing reopens the waiting one, which plans alone on fresh
-  evidence under the site's policy for a single case.
+  a case this incident still holds back for another of its chains, which could only go once this chain had stopped: the chain
+  stops, the incident says why, the other chains go on, and that case's closing reopens the waiting one, which plans alone on
+  fresh evidence under the site's policy for a single case.
 - Every item keeps its own trace, approval record and closure; the incident's record lists each chain's outcome:
   `resolved`, `stopped` (with the item), `escalated` (a board chain or a no-match).
 - Chain states: `pending`, `awaiting_approval`, `approved`, `rejected`, `releasing`, `resolved`, `stopped`, `escalated`;
