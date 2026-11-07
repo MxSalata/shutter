@@ -986,11 +986,15 @@ def with_bed(segs, bed):
 code, ans = post_intake({"source": {"namespace": "PAS", "production": "OnbPas.Production", "route": "PAS In", "header_id": "999999999"}, "receiver": "Bed Mgmt Out", "failure": {"kind": "delivery_failed", "text": "invented", "outcome": "error"}, "message": "\r".join(with_bed(hl7("a01", "A0c" + tag), "C1")) + "\r"})
 check("the intake takes the post, as it takes any", code == 202, (code, ans))
 if code == 202:
-    c = settled(ans["caseId"])
-    time.sleep(3)
-    c = api("GET", "/cases/" + ans["caseId"])[1]
+    # A header the engine has no row for can't show whether it still holds the message: refreshed, then stopped for a person.
+    end = time.time() + 90
+    while time.time() < end:
+        c = api("GET", "/cases/" + ans["caseId"])[1]
+        if c.get("state") in ("awaiting_approval", "blocked", "escalated", "resolved", "failed"):
+            break
+        time.sleep(2)
     print(json.dumps({k: c.get(k) for k in ("caseId", "state", "headline")})[:300])
-    check("it waits for a person, with no write", c.get("state") == "awaiting_approval" and at_beds(f"ENC-A0c{tag}")[0] == 404, (c.get("state"), at_beds(f"ENC-A0c{tag}")))
+    check("it waits for a person, with no write", c.get("state") == "blocked" and "ENGINE_UNREADABLE" in gate_codes(ans["caseId"]) and at_beds(f"ENC-A0c{tag}")[0] == 404, (c.get("state"), gate_codes(ans["caseId"])[:300], at_beds(f"ENC-A0c{tag}")))
     events = json.dumps(api("GET", f"/cases/{ans['caseId']}/events")[1])
     check("and the case says the source is not verified, and who posted it", "Source not verified" in events and "Posted to the intake by shutter-fwd" in events, events[:800])
 code, ans = post_intake({"receiver": "Bed Mgmt Out", "mode": "policy", "failure": {"kind": "delivery_failed", "text": "no source at all", "outcome": "error"}, "message": "\r".join(with_bed(hl7("a01", "A0e" + tag), "E1")) + "\r"})

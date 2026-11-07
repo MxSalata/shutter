@@ -254,14 +254,16 @@ def main():
             delivered_by_itself(*plain, "AP", "application", "accepted by the receiver's application (its ACK), as declared in the site profile")
         if "commit" in only:
             delivered_by_itself(*plain, "CM", "commit", "accepted by the receiver's transport; processing not confirmed")
-        if "not_established" in only:
-            not_established(s, r.PLAIN, "V11Rig.Plain", "Retry Out", r.RETRY_IN, r.RETRY, "NE")
-        if "ack" in only:
-            ack_case(*plain, "AK")
+        # A receiver's fifth failure in a few minutes joins an incident instead of waiting alone, so no receiver takes more than four here.
+        routed = (s, r.ROUTED, "LIMS Out", r.ROUTED_IN, r.LIMS)
+        if not r.listening(r.SECOND):
+            r.listener_up(r.SECOND, {"mode": "up"})
         if "routed" in only:
-            if not r.listening(r.SECOND):
-                r.listener_up(r.SECOND, {"mode": "up"})
-            delivered_by_itself(s, r.ROUTED, "LIMS Out", r.ROUTED_IN, r.LIMS, "RT", "", "accepted on the connection")
+            delivered_by_itself(*routed, "RT", "", "accepted on the connection")
+        if "not_established" in only:
+            not_established(s, r.ROUTED, "V11Rig.Routed", "LIMS Out", r.ROUTED_IN, r.LIMS, "NE")
+        if "ack" in only:
+            ack_case(*routed, "AK")
         if "bounded" in only:
             settled_bounded(s, r.PLAIN, "Bounded Out", r.BOUNDED_IN, r.BOUNDED, "BD")
         if "may_hold" in only:
@@ -269,7 +271,7 @@ def main():
         if "race" in only:
             first_look_race(s, r.PLAIN, "NoRetry Out", r.NORETRY_IN, r.NORETRY, "FR")
         if "unreadable" in only:
-            unreadable(s, r.PLAIN, "V11Rig.Plain", "Retry Out", r.RETRY_IN, r.RETRY, "UR")
+            unreadable(s, r.ROUTED, "V11Rig.Routed", "LIMS Out", r.ROUTED_IN, r.LIMS, "UR")
     except RigBroken as e:
         print(f"RIG BROKEN: {e}", flush=True)
         return 3
