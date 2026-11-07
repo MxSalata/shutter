@@ -847,7 +847,6 @@ export const handlers = [
       header: [],
       messages: [],
       cannot_know: [],
-      left_alone: [],
       never: [],
     });
   }),

@@ -131,11 +131,6 @@ function Structure({ receiver, sequence }: { receiver: string; sequence: Correct
           </List.Item>
         ))}
       </List>
-      {sequence.left_alone?.length ? (
-        <Text size="sm">
-          {`Left alone: ${plural(sequence.left_alone.length, 'demographic update')} between these movements, which the cancels don't touch.`}
-        </Text>
-      ) : null}
       {sequence.end?.ward ? (
         <Text size="sm">
           {`At the end: ${sequence.end.ward}${sequence.end.history?.length ? `, with the history ${sequence.end.history.join(', ')}` : ''}.`}
@@ -195,18 +190,6 @@ function Read({ draft, planDrawn }: { draft: CorrectionDraftView; planDrawn: boo
           <Message key={m.n} message={m} of={draft.messages.length} />
         ))}
       </Stack>
-      {draft.left_alone.length ? (
-        <Stack gap={4}>
-          <Title order={4} fz="sm">
-            Left alone
-          </Title>
-          {draft.left_alone.map((line, i) => (
-            <Text key={i} size="sm">
-              {line}
-            </Text>
-          ))}
-        </Stack>
-      ) : null}
       <Stack gap={4}>
         <Title order={4} fz="sm">
           What this draft can't know

@@ -134,27 +134,26 @@ ClassMethod Decide(case As Shutter.Store.Case, summary As %DynamicObject, entry 
     // The later movements by operation key alone: two rows of one key are one movement, and two keys are two movements however
     // alike they look. Which of them come from the feed and which from the receiver's history is the check further down.
     Set failedTime = ..Norm(case.EventTime), later = ##class(Shutter.Catalogue.Matcher).Later(summary, case, "single")
-    Set li = later.%GetIterator(), spanEnd = failedTime, noKey = 0, updates = 0, other = 0
+    Set li = later.%GetIterator(), noKey = 0, updates = 0, other = 0
     While li.%GetNext(, .e) {
         Set key = e."operation_key", word = e.word
         Continue:((key '= "") && (key = case.OperationKey))
-        If key '= "" Set acc(key) = 1
+        // A demographic update accounts for nothing: it is a further message like any other, wherever it falls.
         If word = "update" { Set updates = updates + 1, updates(updates) = e Continue }
+        If key '= "" Set acc(key) = 1
         If (word '= "transfer") && (word '= "discharge") { Set other = other + 1 Continue }
         If key = "" { Set noKey = 1 Continue }
         If '$DATA(m(key)) Set m(key) = e, m(key, "delivered") = 1
         Set m(key, e.from) = 1
         If 'e.delivered Set m(key, "delivered") = 0
         If 'e.plausible Set m(key, "doubt") = 1
-        Set gap = ..Gap(spanEnd, e."event_time")
-        If (gap '= "") && (gap > 0) Set spanEnd = ..Norm(e."event_time")
     }
 
     // The patient-level check: a message of this patient, on any encounter, that the movements above don't account for.
     Set observed = $CLASSMETHOD(json, "Str", summary, "observed_at"), failedSent = "", ri = rows.%GetIterator()
     While ri.%GetNext(, .r) { If ($CLASSMETHOD(json, "Str", r, "operation_key") = case.OperationKey) && (failedSent = "") Set failedSent = $CLASSMETHOD(json, "Str", r, "sent_at") }
     If failedSent = "" Try { Set failedSent = ##class(Shutter.Util.ResendGuard).SinceOf(case) } Catch { Set failedSent = "" }
-    Set leftAlone = [], ri = rows.%GetIterator()
+    Set ri = rows.%GetIterator()
     While ri.%GetNext(, .r) {
         Set key = $CLASSMETHOD(json, "Str", r, "operation_key"), control = $CLASSMETHOD(json, "Str", r, "control_id")
         Set visit = $CLASSMETHOD(json, "Str", r, "visit_number"), event = $CLASSMETHOD(json, "Str", r, "event")
@@ -165,9 +164,6 @@ ClassMethod Decide(case As Shutter.Store.Case, summary As %DynamicObject, entry 
             // A second message under an accounted key is not the message accounted for.
             If (control '= "") && $DATA(control(key)) && (control(key) '= control) Set hit = 1
             If control '= "" Set control(key) = control
-        } ElseIf (visit = case.EncounterId) && (event = "update") && ..InSpan(t, failedTime, spanEnd) && '..AtOrAfter(sent, observed) {
-            // An update inside the span is history already accounted for: the cancels don't touch it.
-            Do ..LeftAlone(leftAlone, event, t, key)
         } ElseIf ..Norm(t) = "" {
             Set hit = 1
         } Else {
@@ -180,16 +176,12 @@ ClassMethod Decide(case As Shutter.Store.Case, summary As %DynamicObject, entry 
     }
     If $GET(hit) {
         Set where = $SELECT((visit = case.EncounterId) || forPeople: "encounter " _ visit, 1: "another encounter")
-        Quit ..Stop(out, "further_message", "No sequence: a further message for this patient was found: " _ $SELECT(event '= "": event, 1: "a message") _ " on " _ where _ " at " _ $SELECT(t '= "": t, 1: "an unreadable time") _ " (header " _ $CLASSMETHOD(json, "Str", r, "ens_header_id", "unknown") _ "), after the movements this draft covers. A person reads it first.")
+        Quit ..Stop(out, "further_message", "No sequence: a further message for this patient was found: " _ $SELECT(event '= "": event, 1: "a message") _ " on " _ where _ " at " _ $SELECT(t '= "": t, 1: "an unreadable time") _ " (header " _ $CLASSMETHOD(json, "Str", r, "ens_header_id", "unknown") _ "), which the movements this draft covers don't account for. A person reads it first.")
     }
-    // An update the snapshot holds: left alone inside the span, a further message after it.
-    For u = 1:1:updates {
-        Set e = updates(u)
-        If ..InSpan(e."event_time", failedTime, spanEnd) {
-            Do ..LeftAlone(leftAlone, e.event, e."event_time", e."operation_key")
-        } Else {
-            Return ..Stop(out, "further_message", "No sequence: a further message for this patient was found: " _ e.event _ " on encounter " _ case.EncounterId _ " at " _ e."event_time" _ " (header unknown), after the movements this draft covers. A person reads it first.")
-        }
+    // An update the snapshot holds and the index doesn't.
+    If updates {
+        Set e = updates(1)
+        Quit ..Stop(out, "further_message", "No sequence: a further message for this patient was found: " _ e.event _ " on encounter " _ case.EncounterId _ " at " _ e."event_time" _ " (header unknown), which the movements this draft covers don't account for. A person reads it first.")
     }
 
     Set key = "" For { Set key = $ORDER(m(key)) Quit:key=""
@@ -274,7 +266,7 @@ ClassMethod Decide(case As Shutter.Store.Case, summary As %DynamicObject, entry 
         Do steps.%Push(..Replay(n, e.word, e.ward, e."event_time", key, bodies.%Get(key), bySource(i)))
     }
     Do out.%Set("drawn", 1, "boolean")
-    Set out.k = k, out.count = n, out.steps = steps, out."left_alone" = leftAlone
+    Set out.k = k, out.count = n, out.steps = steps
     Set history = []
     For i = 1:1:earlier { Do history.%Push(earlier(i)) }
     Do history.%Push(case.Ward)
@@ -291,7 +283,7 @@ ClassMethod Draft(case As Shutter.Store.Case, summary As %DynamicObject, entry A
     Set seq = ..Sequence(case, summary, entry, 1, facts)
     Set out = {"caseId": (case.CaseId), "reason_code": (seq."reason_code"), "reason": (seq.reason)}
     Do out.%Set("drawn", seq.drawn, "boolean")
-    Set out.header = [], out.messages = [], out."cannot_know" = [], out."left_alone" = [], out.never = [], out."checked_at" = seq."checked_at", out.digest = ""
+    Set out.header = [], out.messages = [], out."cannot_know" = [], out.never = [], out."checked_at" = seq."checked_at", out.digest = ""
     Quit:'seq.drawn out
     Set receiver = case.Receiver, bodies = facts.%Get("bodies"), joined = "", states = ""
     Set si = seq.steps.%GetIterator()
@@ -338,8 +330,6 @@ ClassMethod Draft(case As Shutter.Store.Case, summary As %DynamicObject, entry A
     Do out."cannot_know".%Push({"what": "A message under another identifier", "why": "Further messages are looked for under every identifier in the failed message's PID-3. A message the index keeps under an identifier the failed message doesn't hold can't be matched, and Shutter doesn't match on a name or a date of birth, because a different patient must not match.", "does": "Says so here. The line about checking the receiver's own screen covers it."})
     Do out."cannot_know".%Push({"what": "A change made by hand at the receiver", "why": "It is invisible over HL7, and a message on a route the index doesn't cover is invisible too.", "does": "The line about checking the receiver's own screen."})
     Do out."cannot_know".%Push({"what": "What the source's time meant", "why": "Operation keys are in UTC, and the source's own text may be in local time.", "does": "Shows the source's own text, never a converted time."})
-    Set li = seq."left_alone".%GetIterator()
-    While li.%GetNext(, .l) { Do out."left_alone".%Push("A demographic update (" _ l."event_time" _ ") sits between these movements; the cancels don't touch it, and it stays in the receiver's record.") }
     Set out.never = [
         "Never edit a value in a source message or show one as edited.",
         "Never guess a time, control id or location.",
@@ -388,7 +378,7 @@ ClassMethod Blank(summary As %DynamicObject, facts As %DynamicObject) As %Dynami
         Do out.%Set("cancels_flag", "", "null")
     }
     Set out."resend_timestamp" = $CLASSMETHOD(json, "Str", facts, "resend_timestamp")
-    Set out.steps = [], out."left_alone" = [], out.end = {}, out."checked_at" = ##class(Shutter.Util.Time).NowUTC()
+    Set out.steps = [], out.end = {}, out."checked_at" = ##class(Shutter.Util.Time).NowUTC()
     Quit out
 }
 
@@ -407,13 +397,6 @@ ClassMethod Replay(n As %Integer, word As %String, ward As %String, time As %Str
     Do step.%Set("non_ascii", ..NonAscii(text), "boolean")
     Set step.after = {"by_source": (place), "by_receiver": (place)}
     Quit step
-}
-
-ClassMethod LeftAlone(list As %DynamicArray, event As %String, time As %String, key As %String) [ Private ]
-{
-    Set li = list.%GetIterator()
-    While li.%GetNext(, .l) { If (key '= "") && (l."operation_key" = key) Return }
-    Do list.%Push({"event": (event), "event_time": (time), "operation_key": (key)})
 }
 
 ClassMethod Body(bodies As %DynamicObject, key As %String) As %String [ Private ]
@@ -522,12 +505,6 @@ ClassMethod Norm(t As %String) As %String
 ClassMethod Gap(a As %String, b As %String) As %String
 {
     Quit ##class(Shutter.Util.Time).SecondsBetween(..Norm(a), ..Norm(b))
-}
-
-ClassMethod InSpan(t As %String, from As %String, to As %String) As %Boolean [ Private ]
-{
-    Set a = ..Gap(from, t), b = ..Gap(t, to)
-    Quit (a '= "") && (b '= "") && (a >= 0) && (b >= 0)
 }
 
 /// Whether a is at or after b; 0 when either is no time.

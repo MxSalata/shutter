@@ -55,7 +55,6 @@ export const DRAWN_SEQUENCE: CorrectionSequence = {
       after: { by_source: 'WARD-C', by_receiver: 'WARD-C' },
     },
   ],
-  left_alone: [],
   end: { ward: 'WARD-C', history: ['WARD-A', 'WARD-B', 'WARD-C'] },
   checked_at: '2026-10-16T10:00:00Z',
 };
@@ -69,7 +68,6 @@ export const CANCELS_FALSE: CorrectionSequence = {
   k: 0,
   count: 0,
   steps: [],
-  left_alone: [],
 };
 
 const PID = 'PID|1||MRN1022^^^HOSP^MR~9991002200^^^NHS^NH||SYNTH^VERA||19700202|F';
@@ -202,7 +200,6 @@ export const DRAWN_DRAFT: CorrectionDraftView = {
       does: "Shows the source's own text, never a converted time.",
     },
   ],
-  left_alone: [],
   never: [
     'Never edit a value in a source message or show one as edited.',
     'Never guess a time, control id or location.',
@@ -224,7 +221,6 @@ export const NOT_YET: CorrectionSequence = {
   k: 0,
   count: 0,
   steps: [],
-  left_alone: [],
   checked_at: '2026-10-16T10:00:00Z',
 };
 
@@ -237,7 +233,6 @@ export const NOT_YET_DRAFT: CorrectionDraftView = {
   header: [],
   messages: [],
   cannot_know: [],
-  left_alone: [],
   never: [],
   digest: '',
   checked_at: '2026-10-16T10:05:00Z',
@@ -253,7 +248,6 @@ export const STOPPED_DRAFT: CorrectionDraftView = {
   header: [],
   messages: [],
   cannot_know: [],
-  left_alone: [],
   never: [],
   digest: '',
   checked_at: '2026-10-16T11:05:00Z',

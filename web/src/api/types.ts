@@ -573,7 +573,6 @@ export interface CorrectionSequence {
   cancels_flag?: boolean | null;
   resend_timestamp?: string;
   steps?: CorrectionSequenceStep[];
-  left_alone?: { event?: string; event_time?: string; operation_key?: string }[];
   end?: { ward?: string; history?: string[] };
   checked_at?: string;
 }
@@ -597,7 +596,6 @@ export interface CorrectionDraftView {
     body_digest?: string;
   }[];
   cannot_know: { what: string; why: string; does: string }[];
-  left_alone: string[];
   never: string[];
   digest?: string;
   checked_at?: string;
