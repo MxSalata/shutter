@@ -1551,20 +1551,34 @@ ClassMethod ApprovalTask(case As Shutter.Store.Case, plan As Shutter.Store.Plan,
         Set lines = ##class(Shutter.Util.FurtherMessages).PlanLines(case, $SELECT($ISOBJECT(case.CurrentSnapshot): case.CurrentSnapshot.SummaryObject(), 1: ""))
         Set li = lines.%GetIterator()
         While li.%GetNext(, .line) { Set task.%Message = task.%Message _ $CHAR(10) _ line }
-    } Catch ex {}
+    } Catch ex {
+        Set task.%Message = task.%Message _ $CHAR(10) _ ..NotRead(case, "further messages for this patient", ex)
+    }
     Try {
         Set unproved = ##class(Shutter.Operation.Origin).Problem(case)
         If unproved '= "" Set task.%Message = task.%Message _ $CHAR(10) _ "Source not verified: " _ unproved _ "."
-    } Catch ex {}
+    } Catch ex {
+        Set task.%Message = task.%Message _ $CHAR(10) _ ..NotRead(case, "whether this case's source is proved", ex)
+    }
     // What approvers decided before on these conditions at this receiver (6.4, v1.35); a lookup that fails leaves the line out.
     Try {
         Set words = ##class(Shutter.Store.Precedent).Words(##class(Shutter.Store.Precedent).SummaryFor(case))
         If words '= "" Set task.%Message = task.%Message _ $CHAR(10) _ words
-    } Catch ex {}
+    } Catch ex {
+        Do ..NotRead(case, "what approvers decided before", ex)
+    }
     If waitSeconds > 0 Set task.%Message = task.%Message _ $CHAR(10) _ "Unanswered after " _ ..WaitWords(waitSeconds) _ ", the task is cancelled and the case escalates to a person."
     Set task.%Priority = 2
     Set task.%FormFields = "PlanDigest,Comment"
     Quit task
+}
+
+/// A line of an approval task that could not be worked out, logged, and said in words: the plan's digest doesn't change, so
+/// nothing else on the page would show the approver it is missing.
+ClassMethod NotRead(case As Shutter.Store.Case, what As %String, ex As %Exception.AbstractException) As %String
+{
+    $$$LOGWARNING("Case " _ case.CaseId _ ": the approval task could not read " _ what _ ": " _ ex.DisplayString())
+    Quit "Not shown: " _ what _ " could not be read. Read the case itself before deciding."
 }
 
 /// A person's decision as a precedent (CONTRACTS 6.4, v1.35): an approval once its resend is verified at the receiver, a
