@@ -135,6 +135,44 @@ class EveryMutant(unittest.TestCase):
         self.assertEqual(status(report, 4), "not_supported")
         self.assertFalse([r for r in requests if r[0] == "POST"])
 
+    def test_capabilities_that_cannot_be_read_stop_every_write(self):
+        for mutant in ("caps_html_200", "caps_malformed"):
+            with self.subTest(mutant=mutant):
+                report, requests, _, text = run_against(mutant)
+                self.assertEqual(status(report, 1), "fail")
+                self.assertEqual(status(report, 4), "not_supported")
+                self.assertEqual([r for r in requests if r[0] != "GET"], [])
+                self.assertFalse(report["summary"]["all_required_passed"])
+                self.assertIn("could not be read", text)
+
+    def test_a_prior_report_with_unreadable_capabilities_is_reported_not_a_crash(self):
+        with tempfile.TemporaryDirectory() as folder:
+            prior = Path(folder, "prior.json")
+            prior.write_text(json.dumps({"receiver_identity": "stub", "capabilities": {"epoch": 3}}))
+            report, _, _, _ = run_against("caps_html_200", only={1, 25}, prior_report=str(prior))
+        self.assertEqual(status(report, 25), "not_run")
+
+    def test_the_kits_own_reading_is_check_24_not_check_23(self):
+        report, _, _, _ = run_against(only={1, 2, 23, 24})
+        names = lambda number: [s["name"] for c in report["checks"] if c["id"] == number for s in c["subchecks"]]
+        for name in ("no answer reads as unknown, not absent", "an HTML 404 reads as unknown, not absent"):
+            self.assertNotIn(name, names(23))
+            self.assertIn(name, names(24))
+        self.assertIn("a 503 reads as unknown, not absent", names(24))
+        self.assertEqual(status(report, 23), "pass")
+
+    def test_a_kit_that_reads_no_answer_as_absent_fails_check_24(self):
+        with mock.patch.object(kit, "classify_receipt", lambda reply, key: ("absent", None)):
+            report, _, _, _ = run_against(only={24})
+        failed = [s["name"] for c in report["checks"] if c["id"] == 24 for s in c["subchecks"] if s["status"] == "fail"]
+        self.assertEqual(status(report, 24), "fail")
+        self.assertIn("no answer reads as unknown, not absent", failed)
+
+    def test_no_stub_beside_the_kit_leaves_check_24_not_run(self):
+        with mock.patch.object(kit, "STUB_FILE", Path("/nonexistent/receiver_stub.py")):
+            report, _, _, _ = run_against(only={24})
+        self.assertEqual(status(report, 24), "not_run")
+
     def test_an_identity_breach_stops_the_run(self):
         report, _, _, _ = run_against("wrong_identity")
         self.assertEqual(status(report, 4), "fail")

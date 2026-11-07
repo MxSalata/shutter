@@ -1242,10 +1242,8 @@ def c23(r):
         seen = proxy.call("GET", r.receipt_path(held_answer["operation_key"]))
     finally:
         proxy.close()
-    r.sub("a 503 from a receipt lookup reads as unknown, not absent", classify_receipt(seen, held_answer["operation_key"])[0] == "unknown", seen and seen.status)
-    r.sub("no answer reads as unknown, not absent", classify_receipt(None, held_answer["operation_key"])[0] == "unknown")
-    r.sub("an HTML 404 reads as unknown, not absent", classify_receipt(Reply(404, b"<html></html>", "text/html", 0, 0), held_answer["operation_key"])[0] == "unknown")
-    r.sub("the direct read still finds the commit", r.read_receipt(held_answer["operation_key"]) is not None)
+    r.note("The proxy makes the 503 itself, so the receiver never sees that lookup. The kit's reading of it is exercised in check 24; what this check takes from the receiver is the direct read.")
+    r.sub("a lookup the proxy answered 503 reads as unknown, and the direct read still finds the commit", classify_receipt(seen, held_answer["operation_key"])[0] == "unknown" and r.read_receipt(held_answer["operation_key"]) is not None, seen and seen.status)
 
 
 # The negative controls of check 24: the five kinds the check names, each with the check that must fail against it.
@@ -1275,6 +1273,10 @@ def c24(r):
         r.not_run("The kit's negative controls", f"{STUB_FILE.name} is not beside the kit")
         return
     stubs = load_stubs()
+    # After the test for the stub, or these would turn a check that could not run into a pass (status_of)
+    r.sub("no answer reads as unknown, not absent", classify_receipt(None, "k")[0] == "unknown")
+    r.sub("a 503 reads as unknown, not absent", classify_receipt(Reply(503, b'{"error": "ward_unavailable"}', "application/json", 0, 0), "k")[0] == "unknown")
+    r.sub("an HTML 404 reads as unknown, not absent", classify_receipt(Reply(404, b"<html></html>", "text/html", 0, 0), "k")[0] == "unknown")
     for mutant, check in CONTROLS:
         report = against_stub(stubs, mutant, (1, 2, check))
         status = next(c["status"] for c in report["checks"] if c["id"] == check)
@@ -1289,6 +1291,9 @@ def c25(r):
     r.not_run("Shutter refuses an approval from before the reset", "The kit runs no Shutter and issues no reset: an operator does this in a disposable environment.")
     if r.prior_report is None:
         r.not_run("The epoch moved since an earlier report", "Pass --prior-report after a reset made outside the kit.")
+        return
+    if r.capabilities is None:
+        r.not_run("The epoch moved since an earlier report", "The receiver's capabilities could not be read (check 1), so there is no epoch to compare.")
         return
     prior = json.loads(Path(r.prior_report).read_text())
     if prior.get("receiver_identity") != r.manifest["receiver_identity"]:
@@ -1348,9 +1353,11 @@ def execute(manifest, out, credential=None, ca_file=None, prior_report=None, onl
         if stopped is not None and number not in OFFLINE:
             results[number] = {"status": "not_run", "subs": [{"name": stopped, "status": "not_run", "detail": ""}], "from": None, "to": None}
             continue
-        if number not in (1, 2) and number not in OFFLINE and r.capabilities is not None and not all(r.capabilities.get(name) is True for name in OWN_CAPABILITIES):
-            missing = [name for name in OWN_CAPABILITIES if r.capabilities.get(name) is not True]
-            results[number] = {"status": "not_supported", "subs": [{"name": "The receiver does not declare " + ", ".join(missing), "status": "not_supported", "detail": ""}], "from": None, "to": None}
+        if number not in (1, 2) and number not in OFFLINE and (r.capabilities is None or not all(r.capabilities.get(name) is True for name in OWN_CAPABILITIES)):
+            why = "The receiver's capabilities could not be read (check 1)"
+            if r.capabilities is not None:
+                why = "The receiver does not declare " + ", ".join(name for name in OWN_CAPABILITIES if r.capabilities.get(name) is not True)
+            results[number] = {"status": "not_supported", "subs": [{"name": why, "status": "not_supported", "detail": ""}], "from": None, "to": None}
             continue
         r.check_id = number
         r.subs = []

@@ -41,7 +41,7 @@ These rules limit what the kit sends. They cannot establish from a URL or a conf
 
 ## The report
 
-Each check reads `pass`, `fail`, `not_run` or `not_supported`, with its subchecks and the journal lines that are its evidence. The summary says "All required checks passed" only when every required check reads `pass`. `not_run` is never counted as a pass. A receiver that doesn't declare conditional writes, receipts, history and dry run fails check 1, and the checks that write read `not_supported`, since nothing is sent to it.
+Each check reads `pass`, `fail`, `not_run` or `not_supported`, with its subchecks and the journal lines that are its evidence. The summary says "All required checks passed" only when every required check reads `pass`. `not_run` is never counted as a pass. A receiver that doesn't declare conditional writes, receipts, history and dry run, or whose capabilities can't be read, fails check 1, and the checks that write read `not_supported`, since nothing is sent to it.
 
 Check 24 is evidence about the kit, not the receiver. Check 25 is not required: the kit issues no reset and runs no Shutter, so it reads `not_run`, even after an operator's reset in a disposable environment and `--prior-report` showing that the epoch moved. If the epoch has not moved, it fails. Check 22 reads `pass` on the receiver's half and shows Shutter's own read-back as a `not_run` subcheck: `tests/e2e/lost_answer_check.py` and scenario S3 exercise that, on an installation with Shutter.
 
@@ -55,7 +55,7 @@ These are a declared extension of a receiver whose site profile says `cancels: t
 
 | # | Stimulus | Passes when | Contract |
 |---|---|---|---|
-| 1 | GET /capabilities | A strict JSON object that declares conditional_writes, receipts, history and dry_run true, an integer epoch, and a retention and idempotency statement, which the report records. A receiver without one of them is not tested further: the other checks read not_supported. | 1.8 |
+| 1 | GET /capabilities | A strict JSON object that declares conditional_writes, receipts, history and dry_run true, an integer epoch, and a retention and idempotency statement, which the report records. A receiver without one of them, or whose answer cannot be read, is not tested further: the other checks read not_supported. | 1.8 |
 | 2 | GET an unknown encounter and an unknown receipt | Exactly 404 unknown_encounter and 404 no_receipt as JSON, not an HTML page or an unrelated 404. Until this passes absence cannot be established, so nothing is written. | 1.2, 1.3 |
 | 3 | Dry run of an admission at expected version 0 | 200, would_apply true, encounter_before null, encounter_after consistent with the plan. Afterwards there is still no encounter, history or receipt. | 1.1, 1.4 |
 | 4 | Real admission at expected version 0 | 201, applied true, one admitted state at version 1, one history row and a matching committed receipt, in the answer and in the reads. | 1.1, 1.2, 1.3, 1.4 |
@@ -77,8 +77,8 @@ These are a declared extension of a receiver whose site profile says `cancels: t
 | 20 | Dry runs that would be refused | 200 would_apply false with the refusal as reason (bed_occupied is 409 itself, check 14); nothing persists and no receipt appears. | 1.1 |
 | 21 | Compare what was sent with the receipt, the history row and the encounter for every committed operation | Key, encounter, event, event time, ward, bed, digest and versions agree on the receipt and the history row, patient and authority on the encounter (the receipt carries no patient). A matching key alone is not enough. | 1.2, 1.3, 1.6 |
 | 22 | The kit's loopback proxy drops the answer after the receiver has answered | The sender saw no answer; the committed operation is found by receipt and in the history, without a second write. Shutter's own read-back is not exercised by the kit. | 1.3, 5.1 |
-| 23 | The proxy holds a write past the sender's timeout, holds an answer, and answers a receipt lookup with 503 | No answer and a 503 are unknown, never absence; a 404 read while a write is in flight is not final. The report gives the observed timing and infers no maximum commit delay. | 1.3, 1.9, 5.1 |
-| 24 | The kit against its own mutant stubs: an HTML 200, malformed JSON, a wrong identity, partial history, a mismatched receipt | The kit rejects each, and passes the correct stub. This is evidence about the kit, not about the receiver. | 1.1, 1.2, 1.3 |
+| 23 | The proxy holds a write past the sender's timeout, holds an answer, and answers a receipt lookup with 503 | No answer is unknown, never absence, and after the proxy's own 503 the direct read still finds the commit; a 404 read while a write is in flight is not final. The report gives the observed timing and infers no maximum commit delay. | 1.3, 1.9, 5.1 |
+| 24 | The kit against its own mutant stubs: an HTML 200, malformed JSON, a wrong identity, partial history, a mismatched receipt; and its own reading of no answer, a 503 and an HTML 404 | The kit rejects each, reads those three as unknown, and passes the correct stub. This is evidence about the kit, not about the receiver. | 1.1, 1.2, 1.3 |
 | 25 | An operator's reset or restore outside the kit, in a disposable environment | The epoch has moved since an earlier report, and Shutter refuses old approvals in its own integration test. The kit issues no reset and runs no Shutter, so this is not_run unless the epoch comparison fails. | 1.7, 1.8 |
 | 26 | Read earlier committed history and receipts again after later operations | They have not changed during the run. Retention beyond the run remains the receiver's declaration. | 1.2, 1.3 |
 
