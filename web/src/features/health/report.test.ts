@@ -498,6 +498,30 @@ describe('the row rule', () => {
   });
 });
 
+describe('the reminder for cases left open', () => {
+  it('is quiet when off or complete, and asks for a look with what is missing when on without it', () => {
+    expect(rowInfo('case_reminders', { enabled: false }, {}, false)).toEqual({
+      mark: 'none',
+      tone: null,
+      missing: false,
+    });
+    expect(rowInfo('case_reminders', { enabled: true, warnings: [] }, {}, false).tone).toBeNull();
+    const on = rowInfo(
+      'case_reminders',
+      { enabled: true, warnings: ['No mail server', 'No officer'] },
+      {},
+      false,
+    );
+    expect(on.tone).toBe('attention');
+    expect(on.todo).toBe('No mail server. No officer');
+  });
+
+  it('adds no row to a report that does not send it', () => {
+    const { groups } = groupReport(RECORDED, true);
+    expect(groups.flatMap((g) => g.rows).some((r) => r.key === 'case_reminders')).toBe(false);
+  });
+});
+
 describe('the licence', () => {
   it('is one sentence built from the fields as the report names them, with no sum', () => {
     expect(licenceSentence(RECORDED.license)).toBe(

@@ -70,7 +70,7 @@ export const GROUPS: readonly GroupDef[] = [
   {
     id: 'cases',
     title: 'Cases and housekeeping',
-    keys: ['cases', 'working_cases', 'abandon_after_minutes', 'purge_task'],
+    keys: ['cases', 'working_cases', 'abandon_after_minutes', 'purge_task', 'case_reminders'],
   },
   {
     id: 'installation',
@@ -100,6 +100,7 @@ const LABELS: Record<string, string> = {
   provider_config: 'Provider configuration in the Config Store',
   recordings: 'Recorded agent runs',
   working_cases: 'Cases still in progress',
+  case_reminders: 'Reminders for cases left open',
   abandon_after_minutes: 'Abandon allowed after (minutes)',
   license: 'Licence',
   api_webapp: 'REST API web application',
@@ -371,6 +372,13 @@ const NO_PURGE_NOTE =
  * has no mark.
  */
 export function rowInfo(key: string, value: unknown, report: Report, trial: boolean): RowInfo {
+  // On with something missing asks for a look, with what is missing; off is a setting, not a missing value
+  if (key === 'case_reminders' && typeof value === 'object' && value !== null) {
+    const warnings = (value as { warnings?: string[] }).warnings ?? [];
+    return warnings.length
+      ? { mark: 'dash', tone: 'attention', missing: false, todo: warnings.join('. ') }
+      : { mark: 'none', tone: null, missing: false };
+  }
   // The API mimic's switch is "" when it is off: a setting, not a missing value
   if (key === 'mock_config' && value === '') return { mark: 'none', tone: null, missing: false };
   // No time when the portal was never hardened, the case on any instance but the public demo: not a missing value

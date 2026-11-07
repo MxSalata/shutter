@@ -989,6 +989,20 @@ export interface SiteProfile {
   recovery?: { mode?: 'shadow' | 'enabled' };
   /** Whether a person's escalation email goes out in shadow mode; it doesn't, unless this says enabled. */
   notifications?: { shadow_delivery?: 'disabled' | 'enabled' };
+  /** A scheduled mail for cases left open (CONTRACTS 6.4): off unless enabled, in the feed's time zone. */
+  reminders?: {
+    enabled?: boolean;
+    team_hours?: number;
+    officer_hours?: number;
+    officer_name?: string;
+    officer_address?: string;
+    window_start?: string;
+    window_end?: string;
+    days?: string[];
+    /** none, identifiers or identifiers_initial; never a full name, date of birth, address or NHS number. */
+    patient_detail?: string;
+    sign_in_url?: string;
+  };
 }
 
 /** GET /site-profile: the profile in force and its store version, which a PUT sends back as expectedVersion. */

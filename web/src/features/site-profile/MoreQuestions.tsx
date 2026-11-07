@@ -1,12 +1,20 @@
 import { Alert, Button, Fieldset, Group, SimpleGrid, Stack, Text } from '@mantine/core';
 import { IconPlus, IconTrash } from '@tabler/icons-react';
-import { useState } from 'react';
+import { useState, type ChangeEvent } from 'react';
 import type { SiteProfile, SiteTeam } from '@/api/types';
 import { Section } from '@/components/Section';
-import { Checkbox, Radio, Switch, TextInput } from './controls';
+import { TechDetail } from '@/components/TechDetail';
+import { Checkbox, NativeSelect, NumberInput, Radio, Switch, TextInput } from './controls';
 import { useEditable } from './editable';
 import { IANA_ZONE, ZONE_LABELS, newTeam, parseList } from './profile';
 import { Question, QuestionDetails } from './Question';
+import {
+  DAY_LABELS,
+  DETAIL_LABELS,
+  REMINDER_DEFAULTS,
+  reminderPreview,
+  type Reminders,
+} from './reminderPreview';
 
 type Problem = { path: string; message: string } | null;
 type SetDraft = (fn: (d: SiteProfile) => void) => void;
@@ -494,9 +502,153 @@ function Recovery({
   );
 }
 
+function CaseReminders({
+  draft,
+  setDraft,
+  problem,
+}: {
+  draft: SiteProfile;
+  setDraft: SetDraft;
+  problem: Problem;
+}) {
+  const r = draft.reminders;
+  const set = (fn: (x: Reminders) => void) =>
+    setDraft((d) => {
+      d.reminders = { ...(d.reminders ?? {}) };
+      fn(d.reminders);
+    });
+  const err = (key: string) =>
+    problem && problem.path.replace(/\[\d+\]$/, '') === `reminders.${key}` ? problem.message : undefined;
+  const preview = reminderPreview(r);
+  const text = (key: 'officer_name' | 'officer_address' | 'window_start' | 'window_end' | 'sign_in_url') => ({
+    id: `site-reminders-${key}`,
+    error: err(key),
+    onChange: (e: ChangeEvent<HTMLInputElement>) => {
+      const v = e.currentTarget.value;
+      set((x) => {
+        if (v) x[key] = v;
+        else delete x[key];
+      });
+    },
+  });
+  const hours = (key: 'team_hours' | 'officer_hours') => ({
+    id: `site-reminders-${key}`,
+    min: 1,
+    max: 720,
+    allowDecimal: false,
+    value: r?.[key] ?? REMINDER_DEFAULTS[key],
+    error: err(key),
+    onChange: (v: string | number) =>
+      set((x) => {
+        if (typeof v === 'number') x[key] = v;
+      }),
+  });
+  return (
+    <Section
+      id="site-reminders"
+      title="Reminders"
+      note="A scheduled mail when a case that needs a person stays open. It writes to no receiver, calls no model and moves no case."
+    >
+      <Question n={15} text="Should anyone be reminded of cases left open?" acts />
+      <Switch
+        id="site-reminders-enabled"
+        label="Send reminders for cases left open"
+        description="Off (the default). On: the receiver's team first, then a named clinical officer, in the feed's time zone."
+        checked={r?.enabled === true}
+        onChange={(e) => {
+          const v = e.currentTarget.checked;
+          set((x) => {
+            x.enabled = v;
+          });
+        }}
+        error={err('enabled')}
+      />
+      {r?.enabled ? (
+        <Stack gap="sm">
+          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+            <NumberInput label="Team, after hours open" {...hours('team_hours')} />
+            <NumberInput label="Officer, after hours open" {...hours('officer_hours')} />
+            <TextInput label="Clinical officer" value={r.officer_name ?? ''} {...text('officer_name')} />
+            <TextInput
+              label="Officer's address"
+              description="In an allowed mail domain"
+              value={r.officer_address ?? ''}
+              {...text('officer_address')}
+            />
+            <TextInput
+              label="Window opens"
+              type="time"
+              value={r.window_start ?? REMINDER_DEFAULTS.window_start}
+              {...text('window_start')}
+            />
+            <TextInput
+              label="Window closes"
+              type="time"
+              value={r.window_end ?? REMINDER_DEFAULTS.window_end}
+              {...text('window_end')}
+            />
+          </SimpleGrid>
+          <Checkbox.Group
+            id="site-reminders-days"
+            label="Days"
+            value={[...(r.days ?? REMINDER_DEFAULTS.days)]}
+            onChange={(v) =>
+              set((x) => {
+                x.days = Object.keys(DAY_LABELS).filter((d) => v.includes(d));
+              })
+            }
+            error={err('days')}
+          >
+            <Group gap="sm" mt={4}>
+              {Object.entries(DAY_LABELS).map(([d, label]) => (
+                <Checkbox key={d} value={d} label={label} />
+              ))}
+            </Group>
+          </Checkbox.Group>
+          <NativeSelect
+            id="site-reminders-patient_detail"
+            label="Patient detail in the mail"
+            description="This mail goes out with nobody reviewing it. What it carries is your site's information governance decision."
+            value={r.patient_detail ?? REMINDER_DEFAULTS.patient_detail}
+            data={Object.entries(DETAIL_LABELS).map(([value, label]) => ({ value, label }))}
+            onChange={(e) => {
+              const v = e.currentTarget.value;
+              set((x) => {
+                x.patient_detail = v;
+              });
+            }}
+            error={err('patient_detail')}
+          />
+          <TextInput
+            label="Sign-in address"
+            description="The link in the mail, such as https://shutter.example.nhs.uk/shutter/"
+            value={r.sign_in_url ?? ''}
+            {...text('sign_in_url')}
+          />
+        </Stack>
+      ) : null}
+      <TechDetail label="Preview with made-up patients" kind="explain">
+        <Stack gap={4}>
+          <Text size="sm">Nothing is sent from here.</Text>
+          <Text size="sm" fw={600}>
+            {preview.subject}
+          </Text>
+          <Text size="sm" style={{ whiteSpace: 'pre-line' }}>
+            {preview.body}
+          </Text>
+        </Stack>
+      </TechDetail>
+      <QuestionDetails
+        keys={[['reminders.enabled', r?.enabled, 'false']]}
+        more="Cases awaiting approval, blocked, escalated or failed, abandoned ones aside. Each is reminded once per threshold. Nothing goes outside the window, so a case left overnight is in the first mail of the morning, and at most one mail an hour goes to anyone. Bank holidays aren't known. Never a full name, date of birth, address or NHS number. A failed send goes again at the next run."
+      />
+    </Section>
+  );
+}
+
 /**
- * Questions 9 to 14: escalation teams and mail, the feed's time zone, note text for the model, merges, and whether the
- * feed is held while a schema is missing.
+ * Questions 9 to 14: escalation teams and mail, the feed's time zone, note text for the model, merges, whether the
+ * feed is held while a schema is missing, and recovery; question 15: reminders for cases left open.
  */
 export function MoreQuestions({
   draft,
@@ -515,6 +667,7 @@ export function MoreQuestions({
       <Merges draft={draft} setDraft={setDraft} problem={problem} />
       <PreventFailures draft={draft} setDraft={setDraft} problem={problem} />
       <Recovery draft={draft} setDraft={setDraft} problem={problem} />
+      <CaseReminders draft={draft} setDraft={setDraft} problem={problem} />
     </>
   );
 }

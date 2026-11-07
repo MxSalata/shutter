@@ -35,7 +35,7 @@ Method OnEscalationSend(request As Shutter.Msg.EscalationSend, Output response A
     Try {
         If ..Adapter.SMTPServer = "" {
             Set file = ..WriteFile(esc)
-            Do esc.MarkSent("file", file)
+            Do esc.MarkAccepted("file", file)
         } Else {
             Set mail = ..Mail(esc)
             Set sc = ..Adapter.SendMail(mail, .failed)
@@ -46,11 +46,46 @@ Method OnEscalationSend(request As Shutter.Msg.EscalationSend, Output response A
                 For i = 1:1:failed.Count() { Set list = list _ $SELECT(list = "": "", 1: ", ") _ failed.GetAt(i) }
                 Do esc.MarkFailed("Refused for " _ list)
             } Else {
-                Do esc.MarkSent("smtp", "Accepted by " _ ..Adapter.SMTPServer _ " for " _ esc.ToAddr)
+                Do esc.MarkAccepted("smtp", "The mail server " _ ..Adapter.SMTPServer _ " accepted it, which does not show anyone has read it" _ " for " _ esc.ToAddr)
             }
         }
     } Catch ex {
         Do esc.MarkFailed(ex.DisplayString())
+    }
+    Quit $$$OK
+}
+
+/// A reminder digest for cases left open (Shutter.Util.CaseReminderTask): by the same mail server, with nobody reviewing it,
+/// so the last check is here. A digest that may no longer go, a mail server's refusal or no mail server at all fails it,
+/// logged, and the next run builds it afresh; never the .eml file, which nobody would read and which would keep the
+/// identifiers on disk.
+Method OnReminderSend(request As Shutter.Msg.ReminderSend, Output response As Ens.Response) As %Status
+{
+    Set response = ##class(Ens.Response).%New()
+    Set row = ##class(Shutter.Store.ReminderDigest).%OpenId(request.DigestId)
+    If '$ISOBJECT(row) || (row.State '= "queued") Quit $$$OK
+    Set profile = ##class(Shutter.Store.SiteProfile).Current()
+    Set settings = ##class(Shutter.Util.CaseReminder).Settings(profile)
+    Set problem = row.SendProblem(##class(Shutter.Util.Time).NowUTC(), settings, ##class(Shutter.Store.SiteProfile).AllowedDomains())
+    If (problem = "") && (..Adapter.SMTPServer = "") Set problem = "no mail server is set on this operation"
+    If problem '= "" Do row.MarkFailed(problem) Quit $$$OK
+    Set changed = row.ChangedSince(settings)
+    If changed '= "" Do row.MarkFailed(changed, 1) Quit $$$OK
+    Try {
+        Set mail = ##class(%Net.MailMessage).%New()
+        Set mail.From = ..Sender(), mail.Subject = ##class(Shutter.Util.Mail).HeaderValue(row.Subject), mail.Charset = "UTF-8"
+        Do mail.To.Insert(##class(Shutter.Util.Mail).HeaderValue(row.Recipient))
+        Do mail.TextData.Write(row.Body)
+        Set sc = ..Adapter.SendMail(mail, .failed)
+        If $$$ISERR(sc) {
+            Do row.MarkFailed($SYSTEM.Status.GetErrorText(sc))
+        } ElseIf $DATA(failed) && $ISOBJECT(failed) && (failed.Count() > 0) {
+            Do row.MarkFailed("Refused for " _ failed.GetAt(1))
+        } Else {
+            Do row.MarkAccepted("The mail server " _ ..Adapter.SMTPServer _ " accepted it, which does not show anyone has read it")
+        }
+    } Catch ex {
+        Do row.MarkFailed(ex.DisplayString())
     }
     Quit $$$OK
 }
@@ -135,6 +170,9 @@ XData MessageMap
 <MapItems>
   <MapItem MessageType="Shutter.Msg.EscalationSend">
     <Method>OnEscalationSend</Method>
+  </MapItem>
+  <MapItem MessageType="Shutter.Msg.ReminderSend">
+    <Method>OnReminderSend</Method>
   </MapItem>
 </MapItems>
 }
