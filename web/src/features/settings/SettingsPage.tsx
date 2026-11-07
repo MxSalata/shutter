@@ -1,5 +1,6 @@
-import { Badge, Group, Stack } from '@mantine/core';
+import { Anchor, Badge, Group, Stack, Text } from '@mantine/core';
 import { IconSettings } from '@tabler/icons-react';
+import { Link } from 'react-router';
 import { useCosts, useSettings } from '@/api/hooks';
 import type { Settings } from '@/api/types';
 import { ApiSource } from '@/components/ApiSource';
@@ -67,6 +68,12 @@ export default function SettingsPage() {
             <SettingsTiles s={s} costs={costs.data} />
             {s ? <Flags s={s} /> : null}
             <RecoveryControlSection />
+            <Text size="sm">
+              <Anchor component={Link} to="/settings/namespaces" underline="always">
+                Watched namespaces
+              </Anchor>
+              : which report failures here, and adding one.
+            </Text>
             {s ? <AgentsSection s={s} /> : null}
             <CostsSection costs={costs} settings={s} />
             {s ? <PricesSection prices={s.prices} /> : null}

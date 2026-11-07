@@ -54,6 +54,12 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
   <Route Url="/live/storm" Method="POST" Call="LiveStorm"/>
   <Route Url="/settings/schemas" Method="GET" Call="SchemasGet"/>
   <Route Url="/settings/schemas" Method="POST" Call="SchemasImport"/>
+  <Route Url="/settings/namespaces" Method="GET" Call="Shutter.API.Onboarding:List"/>
+  <Route Url="/settings/namespaces/:ns/plan" Method="POST" Call="Shutter.API.Onboarding:Plan"/>
+  <Route Url="/settings/namespaces/:ns/apply" Method="POST" Call="Shutter.API.Onboarding:Apply"/>
+  <Route Url="/settings/namespaces/:ns/test" Method="POST" Call="Shutter.API.Onboarding:Test"/>
+  <Route Url="/settings/namespaces/:ns/removal" Method="GET" Call="Shutter.API.Onboarding:Removal"/>
+  <Route Url="/settings/namespaces/:ns/remove" Method="POST" Call="Shutter.API.Onboarding:Remove"/>
   <Route Url="/site-profile" Method="GET" Call="SiteProfileGet"/>
   <Route Url="/site-profile" Method="PUT" Call="SiteProfilePut"/>
   <Route Url="/recovery-control" Method="GET" Call="Shutter.API.Recovery:ControlGet"/>

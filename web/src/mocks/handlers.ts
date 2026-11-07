@@ -35,6 +35,7 @@ import {
 import { digest, draftEscalation, teamFor } from './escalation';
 import { receiverCheckFor, type RecordedCase } from './receiverCheck';
 import { freshHolds, heldView, type CaseFixture, type Hold } from './hold';
+import { onboardingHandlers, resetOnboarding } from './onboarding';
 import { recordedSiteProfile, recordedSiteProfileHistory } from './profile';
 import {
   questionDetail,
@@ -203,6 +204,7 @@ export function resetMock(signedInAs: keyof typeof USERS | null = 'approver') {
   startedReviews = {};
   asked = {};
   resetQuestionIds();
+  resetOnboarding();
 }
 
 /**
@@ -690,6 +692,7 @@ async function decideIncident(request: Request, id: string, seq: number | null) 
 }
 
 export const handlers = [
+  ...onboardingHandlers(csrf, guard),
   http.post(`${BASE}/session`, async ({ request }) => {
     const bad = csrf(request);
     if (bad) return bad;
