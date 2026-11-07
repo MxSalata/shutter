@@ -80,7 +80,7 @@ Method OnEvidenceRequest(request As Shutter.Msg.EvidenceRequest, Output response
         Set status = 0, wardState = {"note": "Not applicable: the case names no encounter (the message carries no visit number)"}
     } Else {
         Set statePath = ##class(Shutter.Store.SiteProfile).ReceiverPath(receiver, "state", case.EncounterId)
-        If statePath = "" { Set status = 0, wardState = {"error": "no state endpoint in the receiver's description"} } Else { Set wardState = ..WardGet(statePath, .status) }
+        If statePath = "" { Set status = 0, wardState = {"error": "no state endpoint in the receiver's description"} } Else { Set wardState = ..WardGet(statePath, .status) Do ##class(Shutter.Operation.Ward).TrustRead("state", .status, .wardState, "", ##class(Shutter.Store.SiteProfile).StrictAnswers(receiver)) }
     }
     Set wardItem = {}
     Set wardItem."http_status" = status
@@ -113,7 +113,7 @@ Method OnEvidenceRequest(request As Shutter.Msg.EvidenceRequest, Output response
         Set receiptPath = ##class(Shutter.Store.SiteProfile).ReceiverPath(receiver, "receipt", "", case.OperationKey)
         Set receipt = $SELECT(receiptPath = "": {}, 1: ..WardGet(receiptPath, .rstatus))
         // -1: the receiver keeps no receipts (no receipt path in its description), as against 0 for no answer.
-        If receiptPath = "" Set rstatus = -1
+        If receiptPath = "" { Set rstatus = -1 } Else { Do ##class(Shutter.Operation.Ward).TrustRead("receipt", .rstatus, .receipt, case.OperationKey, ##class(Shutter.Store.SiteProfile).StrictAnswers(receiver)) }
     }
     Set receiptItem = {}
     Set receiptItem."http_status" = rstatus
@@ -141,6 +141,11 @@ Method OnEvidenceRequest(request As Shutter.Msg.EvidenceRequest, Output response
     Do pendingItem.%Set("count", pending.%Size(), "number")
     Do snap.AddItem("pending_messages", "message_store", now, pendingItem) Set count = count + 1
 
+    // 6c. Further messages for the patient, on any visit (Shutter.Util.FurtherMessages): the gate stops a write on them, and
+    // the plan shows the ones that don't stop it.
+    Set further = ##class(Shutter.Util.FurtherMessages).Find(case)
+    Do snap.AddItem("further_messages", "message_store", now, further) Set count = count + 1
+
     // 7. The route, with the receiver's own capability profile (its capabilities endpoint): the gate's capability
     // check reads this, never an assumption. A receiver without such an endpoint is described by the site profile's
     // declared features, and the route says so.
@@ -163,6 +168,7 @@ Method OnEvidenceRequest(request As Shutter.Msg.EvidenceRequest, Output response
     Set summary.timeline = timeline
     Set summary."later_events" = laterCount
     Set summary."pending_messages" = pending
+    Set summary."further_messages" = further
     Set summary.route = route
     If $ISOBJECT(source) Set summary.source = source
     Set summary.epoch = ##class(Shutter.Util.Json).Str(wardState, "epoch", ##class(Shutter.Util.Json).Str(route, "epoch"))
@@ -269,6 +275,8 @@ Method MessageFields(headerId As %String, Output validation As %DynamicObject) A
         Set info."sending_application" = msg.GetValueAt("MSH:3.1")
         Set info."sending_facility" = msg.GetValueAt("MSH:4.1")
         Set info."receiving_application" = msg.GetValueAt("MSH:5.1")
+        // When the engine received the message, by its own clock: the sender's clock stamps MSH-7 and the event alike.
+        Set info."received_at" = header.TimeCreated
         Set zone = ##class(Shutter.Store.SiteProfile).FeedTimeZone(), withOffset = 0, without = 0
         Set info."message_time" = ##class(Shutter.Util.Time).FromHL7(msg.GetValueAt("MSH:7.1"), zone, .had)
         If msg.GetValueAt("MSH:7.1") '= "" { If had { Set withOffset = withOffset + 1 } Else { Set without = without + 1 } }
@@ -286,6 +294,8 @@ Method MessageFields(headerId As %String, Output validation As %DynamicObject) A
         Set info."patient_identifier" = pid _ "^^^" _ pidAuthority _ "^" _ pidType
         Set info."patient_name" = ##class(Shutter.Util.OperationKey).Value(msg, "PID", "5(1).1") _ ", " _ ##class(Shutter.Util.OperationKey).Value(msg, "PID", "5(1).2")
         Set info."patient_class" = ##class(Shutter.Util.OperationKey).Value(msg, "PV1", "2")
+        // A word only (yes, cleared, no): the date of death stays in the message.
+        Set info."death_recorded" = ##class(Shutter.Util.OperationKey).DeathRecorded(msg)
         Set info."assigned_location" = ##class(Shutter.Util.OperationKey).Value(msg, "PV1", "3.1") _ "^" _ ##class(Shutter.Util.OperationKey).Value(msg, "PV1", "3.2") _ "^" _ ##class(Shutter.Util.OperationKey).Value(msg, "PV1", "3.3") _ "^" _ ##class(Shutter.Util.OperationKey).Value(msg, "PV1", "3.4")
         Set info."visit_number" = ##class(Shutter.Util.OperationKey).Value(msg, "PV1", "19.1")
         Set info."admit_time" = ##class(Shutter.Util.Time).FromHL7(##class(Shutter.Util.OperationKey).Value(msg, "PV1", "44.1"), zone, .had)
@@ -434,6 +444,15 @@ Method StandardCategory(category As %String) As %String [ Private ]
     Quit out
 }
 
+/// Whether the receiver offers a readable history: its capabilities' own word when they mention it, else its entry's explicit
+/// declaration in the site profile, which is how a site whose endpoint does not mention history says it has one. Neither is no.
+ClassMethod HistoryOffered(caps As %DynamicObject, entry As %DynamicObject) As %Boolean
+{
+    If $ISOBJECT(caps) && caps.%IsDefined("history") Quit ##class(Shutter.Util.Json).Bool(caps, "history")
+    Set features = $SELECT($ISOBJECT(entry): entry.%Get("features"), 1: "")
+    Quit $ISOBJECT(features) && ##class(Shutter.Util.Json).Bool(features, "history")
+}
+
 /// The route item (CONTRACTS 6.4): the receiver's own capability profile, read from its capabilities endpoint, or
 /// the features its entry in the site profile declares when it has no such endpoint. An entry without an endpoint that
 /// declares no features vouches for nothing: the route then records the capabilities as unread (status 0), so the gate
@@ -467,6 +486,7 @@ Method Route(receiver As %String) As %DynamicObject
         Set route.capabilities = caps
         Do route.%Set("conditional_writes", ##class(Shutter.Util.Json).Bool(caps, "conditional_writes"), "boolean")
         Do route.%Set("receipts", ##class(Shutter.Util.Json).Bool(caps, "receipts"), "boolean")
+        Do route.%Set("history", ..HistoryOffered(caps, entry), "boolean")
         Do route.%Set("dry_run", ##class(Shutter.Util.Json).Bool(caps, "dry_run"), "boolean")
         Set route.epoch = ##class(Shutter.Util.Json).Str(caps, "epoch")
     } ElseIf undeclared {

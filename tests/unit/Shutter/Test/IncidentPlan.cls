@@ -108,7 +108,203 @@ Method TestDigestBindsVersionsAndEpoch()
     Do $$$AssertEquals(..Digest(inc), base, "the same evidence gives it back")
 }
 
+/// An acknowledged write, on the contract's answer: {applied, receipt: {version_after}, encounter: {version}}. Another
+/// system moved the encounter on before the verification's read, and the next item goes at the receipt's version.
+Method TestVersionAfterAnAppliedWrite()
+{
+    Set item = ..NewIncident().ChainAt(1).ItemAt(1), case = item.Case
+    Set answer = {"applied": true, "receipt": {"version_after": 2}, "encounter": {"version": 2}}
+    Set attempt = ..Attempt(case, "applied", 200, answer)
+    Do ..Verified(case, attempt, 200, {"version_after": 2}, {"version": 3})
+    Do $$$AssertEquals(..Workflow().VersionAfter(case, item), 2, "the receipt of the write, not the encounter as read at verification")
+}
+
+/// A write whose answer was lost has no answer to read: its receipt comes from the verification.
+Method TestVersionAfterALostAnswer()
+{
+    Set item = ..NewIncident().ChainAt(1).ItemAt(1), case = item.Case
+    Set attempt = ..Attempt(case, "uncertain", 0, {})
+    Do ..Verified(case, attempt, 200, {"version_after": 2}, {"version": 3})
+    Do $$$AssertEquals(..Workflow().VersionAfter(case, item), 2, "the receipt the verification read")
+}
+
+/// A reconcile writes nothing: the receipt found is the operation's own, and the encounter may have moved since. The
+/// next item then stops for a person, which is the safe direction.
+Method TestVersionAfterAReconcile()
+{
+    Set item = ..NewIncident().ChainAt(1).ItemAt(1), case = item.Case
+    Do ..Verified(case, "", 200, {"version_after": 2}, {"version": 3})
+    Do $$$AssertEquals(..Workflow().VersionAfter(case, item), 2, "the receipt found")
+}
+
+/// A receiver that keeps no receipts: the history entry holding the operation's key says where it landed.
+Method TestVersionAfterOnAReceiverWithNoReceipts()
+{
+    Set item = ..NewIncident().ChainAt(1).ItemAt(1), case = item.Case
+    Set attempt = ..Attempt(case, "uncertain", 0, {})
+    Set encounter = {"version": 3, "history": [{"operation_key": "another", "version_after": 1}, {"operation_key": (case.OperationKey), "version_after": 2}, {"operation_key": "a later one", "version_after": 3}]}
+    Do ..Verified(case, attempt, -1, {}, encounter)
+    Do $$$AssertEquals(..Workflow().VersionAfter(case, item), 2, "the history entry of the operation")
+}
+
+/// A write acknowledged by a receiver that answers with no receipt: its answer still gives the version.
+Method TestVersionAfterAnAnswerWithNoReceipt()
+{
+    Set item = ..NewIncident().ChainAt(1).ItemAt(1), case = item.Case
+    Set attempt = ..Attempt(case, "applied", 200, {"applied": true, "version_after": 2})
+    Do ..Verified(case, attempt, -1, {}, {"version": 3})
+    Do $$$AssertEquals(..Workflow().VersionAfter(case, item), 2, "the version in the answer")
+    Set item = ..NewIncident().ChainAt(1).ItemAt(1), case = item.Case
+    Set attempt = ..Attempt(case, "applied", 200, {"applied": true, "encounter": {"version": 2}})
+    Do ..Verified(case, attempt, -1, {}, {"version": 3})
+    Do $$$AssertEquals(..Workflow().VersionAfter(case, item), 2, "the encounter in the answer, as the write left it")
+}
+
+/// A closure with no write and no receipt (superseded): only the encounter as read is left, and a failed receipt
+/// lookup's body is not a receipt.
+Method TestVersionAfterAClosureWithNoReceipt()
+{
+    Set item = ..NewIncident().ChainAt(1).ItemAt(1), case = item.Case
+    Do ..Verified(case, "", 404, {"error": "not_found"}, {"version": 3})
+    Do $$$AssertEquals(..Workflow().VersionAfter(case, item), 3, "the encounter as read")
+    Set item = ..NewIncident().ChainAt(1).ItemAt(1), case = item.Case
+    Do ..Verified(case, "", 503, {"version_after": 9}, {"version": 3})
+    Do $$$AssertEquals(..Workflow().VersionAfter(case, item), 3, "not a body the receipt lookup answered with an error")
+    Set item = ..NewIncident().ChainAt(1).ItemAt(1)
+    Set item.ExpectedVersion = 7
+    Do $$$AssertEquals(..Workflow().VersionAfter(item.Case, item), 7, "and with nothing recorded, the version the item expected")
+}
+
+/// The sequence rule (7.4): the next item at the previous receipt's version, the receiver one past it. Nothing goes, and
+/// a person looks. Driven with the case workflow's send to the gate taken away.
+Method TestTheSequenceRuleStopsAtAMovedVersion()
+{
+    Set inc = ..NewIncident(), item = inc.ChainAt(1).ItemAt(2), case = item.Case
+    Set wf = ##class(Shutter.Test.QuietWorkflow).%New("Case Workflow")
+    Set wf.CaseId = case.CaseId, wf.Mode = "policy", wf.Release = 1, wf.IncidentId = inc.IncidentId, wf.ChainSeq = 1, wf.ChainDecides = "policy", wf.ExpectedVersion = 2
+    Set case.State = "collecting"
+    Do $$$AssertStatusOK(case.%Save(), "the released case collects its evidence")
+    Set result = ##class(Shutter.Msg.EvidenceResult).%New()
+    Set result.SummaryJSON = {"ward_state": {"version": 3}, "catalogue": {"decision": "policy"}}.%ToJSON()
+    Do $$$AssertStatusOK(wf.OnEvidence(case, result), "the evidence is read")
+    Set case = ##class(Shutter.Store.Case).ByCaseId(case.CaseId)
+    Do $$$AssertEquals(case.State, "blocked", "the item does not go")
+    Do $$$AssertTrue(case.Headline [ "sequence rule", "the headline names the rule: " _ case.Headline)
+    Do $$$AssertTrue(case.Headline [ "version 3", "and the version it found")
+}
+
+/// A chain's patient waits for a bed whose occupant's movement is held in a later chain of the same incident. Only this
+/// chain's stopping can let that one go: the chain stops with the case still waiting, and the incident goes on. The
+/// occupant's case closing reopens this one, which then runs alone.
+Method TestABedHeldByALaterChainStopsTheChain()
+{
+    Set inc = ..NewIncident(), chain = inc.ChainAt(1), item = chain.ItemAt(1), later = inc.ChainAt(2).ItemAt(1).Case
+    Set wf = ..Waiting(inc, chain, item, later.CaseId, "")
+    Do $$$AssertStatusOK(wf.OnPoll(inc), "the poll")
+    Do $$$AssertEquals(wf.Alarms, "", "no more polls for this item")
+    Do $$$AssertEquals(wf.Advances, 1, "the next chain is released")
+    Do $$$AssertEquals(wf.CurrentCaseId _ wf.CurrentItemId _ wf.CurrentChainId, "", "and the instance holds nothing of this one")
+    Set chain = ##class(Shutter.Store.Chain).%OpenId(chain.%Id()), item = chain.ItemAt(1)
+    Do $$$AssertEquals(chain.State, "stopped", "the chain stops")
+    Do $$$AssertEquals(chain.StoppedAt, 1, "at the item")
+    Do $$$AssertEquals(item.State, "blocked", "the item is blocked")
+    Do $$$AssertEquals(chain.ItemAt(2).State, "stopped", "the rest of the chain goes to a person")
+    Set case = ##class(Shutter.Store.Case).ByCaseId(item.Case.CaseId)
+    Do $$$AssertEquals(case.State, "blocked", "the case stays blocked")
+    Do $$$AssertEquals(case.WaitsOnCase, later.CaseId, "and still waits, so the occupant's case closing reopens it")
+    Do $$$AssertTrue(##class(Shutter.Store.Case).ByCaseId(later.CaseId).State = "grouped", "the occupant's case is left for its own chain")
+    Do $$$AssertTrue(..NotesSay(inc, later.CaseId _ ", which this incident has not released yet"), "the incident says which case holds the bed")
+}
+
+/// A wait that nothing in this incident holds up still waits with the chain: a case outside the incident, a case of the
+/// incident already working, and a newer message (v1.29).
+Method TestOtherWaitsStillWait()
+{
+    Set inc = ..NewIncident(), chain = inc.ChainAt(1), item = chain.ItemAt(1)
+    Set wf = ..Waiting(inc, chain, item, "C-NOT-IN-THIS-INCIDENT", "")
+    Do $$$AssertStatusOK(wf.OnPoll(inc), "a case outside the incident")
+    Do $$$AssertEquals(wf.Alarms _ wf.Advances, "poll;0", "the chain waits for it")
+    Do $$$AssertEquals(##class(Shutter.Store.Chain).%OpenId(chain.%Id()).State, "releasing", "and goes on releasing")
+
+    Set later = inc.ChainAt(2).ItemAt(1).Case
+    Set later.State = "collecting"
+    Do $$$AssertStatusOK(later.%Save(), "the occupant's case is working")
+    Set wf = ..Waiting(inc, chain, item, later.CaseId, "")
+    Do $$$AssertStatusOK(wf.OnPoll(inc), "a case of the incident already working")
+    Do $$$AssertEquals(wf.Alarms _ wf.Advances, "poll;0", "the chain waits for it")
+
+    Set wf = ..Waiting(inc, chain, item, "", "MSG-UT")
+    Do $$$AssertStatusOK(wf.OnPoll(inc), "a newer message")
+    Do $$$AssertEquals(wf.Alarms _ wf.Advances, "poll;0", "the chain waits for it")
+}
+
+/// An instance polling the chain's item, whose case is blocked with the wait given. Nothing else of the chain moves.
+Method Waiting(inc As Shutter.Store.Incident, chain As Shutter.Store.Chain, item As Shutter.Store.ChainItem, onCase As %String, onMessage As %String) As Shutter.Test.QuietIncident
+{
+    Set chain.State = "releasing"
+    Do $$$AssertStatusOK(chain.%Save(), "the chain is releasing")
+    Set item.State = "released"
+    Do $$$AssertStatusOK(item.%Save(), "the item is released")
+    Set case = item.Case
+    Set case.State = "blocked", case.WaitsOnCase = onCase, case.WaitsOnMessage = onMessage
+    Do $$$AssertStatusOK(case.%Save(), "the case waits")
+    Set wf = ..Workflow()
+    Set wf.IncidentId = inc.IncidentId, wf.Phase = "releasing"
+    Set wf.CurrentChainId = chain.%Id(), wf.CurrentItemId = item.%Id(), wf.CurrentCaseId = case.CaseId
+    Quit wf
+}
+
+/// Whether one of the incident's events names the text.
+Method NotesSay(inc As Shutter.Store.Incident, text As %String) As %Boolean
+{
+    Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT Text FROM Shutter_Store.IncidentEvent WHERE Incident = ? ORDER BY ID", inc.%Id())
+    While rs.%Next() { If rs.%Get("Text") [ text Quit }
+    Quit ''$FIND(rs.%Get("Text"), text)
+}
+
+/// An instance of the incident workflow outside the production.
+Method Workflow() As Shutter.Test.QuietIncident
+{
+    Quit ##class(Shutter.Test.QuietIncident).%New("Incident Workflow")
+}
+
+/// A write attempt of the case, as the connector records one, under a plan of its own.
+Method Attempt(case As Shutter.Store.Case, outcome As %String, status As %Integer, answer As %DynamicObject) As Shutter.Store.ExecutionAttempt
+{
+    Set planObj = {"disposition": "resend", "action": {"type": "resend", "operation_key": (case.OperationKey), "expected_version": 1, "payload_digest": "sha256:ut"}, "summary": "Resend the operation"}
+    Do $$$AssertStatusOK(##class(Shutter.Store.Plan).Create(case, case.CurrentSnapshot, planObj, "policy:E4", .plan), "the plan is saved")
+    Do $$$AssertStatusOK(##class(Shutter.Store.ExecutionAttempt).Create(case, plan, "", "", status, outcome, answer, "", .attempt), "the attempt is saved")
+    Quit attempt
+}
+
+/// A verification of the case with the two reads the verifier records.
+Method Verified(case As Shutter.Store.Case, attempt As Shutter.Store.ExecutionAttempt, receiptStatus As %Integer, receipt As %DynamicObject, encounter As %DynamicObject)
+{
+    Set detail = {"encounter_http_status": 200, "encounter": (encounter), "receipt_http_status": (receiptStatus), "receipt": (receipt)}
+    Do $$$AssertStatusOK(##class(Shutter.Store.Verification).Create(case, attempt, "verified", "unit test", detail, .v), "the verification is saved")
+}
+
 /// Builds the plan again and returns its digest.
+/// A receiver that is up and refuses a new message every minute keeps the quiet period from ever passing, and every other
+/// failure to it stays grouped. Past the maximum the intake closes, but only while the newest failure is a refusal: a receiver
+/// that answers nothing has nothing to release into, so its incident waits as before.
+Method TestIntakeMaximum()
+{
+    Set d = "Shutter.Store.IncidentDetector"
+    Set inc = ..NewIncident()
+    Set inc.OpenedAt = ##class(Shutter.Util.Time).FromNow(-7200), inc.LastFailureAt = ##class(Shutter.Util.Time).NowUTC(), inc.IntakeClosedAt = "", inc.QuietSeconds = 60
+    Do $$$AssertStatusOK(inc.%Save(), "an incident open for two hours, with a failure just now")
+    Do $$$AssertNotTrue($CLASSMETHOD(d, "QuietFor", inc), "the quiet period has not passed")
+    Set refused = ..NewCase(inc, 9, 1, "ENC-UTI9", "transfer", "2026-10-19T09:20:00Z")
+    Do $$$AssertNotTrue($CLASSMETHOD(d, "IntakeOverdue", inc, 7200 + 600), "inside the maximum it waits")
+    Do $$$AssertNotTrue($CLASSMETHOD(d, "IntakeOverdue", inc, 0), "a maximum of 0 is none")
+    Do $$$AssertNotTrue($CLASSMETHOD(d, "IntakeOverdue", inc, 1800), "past it, with the newest failure a delivery failure, it waits")
+    Set refused.FailureKind = "rejected"
+    Do $$$AssertStatusOK(refused.%Save(), "the newest failure is a refusal")
+    Do $$$AssertTrue($CLASSMETHOD(d, "IntakeOverdue", inc, 1800), "past it, with the newest failure a refusal, the intake closes")
+    Do $$$AssertTrue($CLASSMETHOD(d, "IntakeOverdue", inc), "and the default maximum is passed after two hours")
+}
+
 Method Digest(inc As Shutter.Store.Incident) As %String
 {
     Do $$$AssertStatusOK(inc.BuildPlan(..#POLICY), "the plan is built")
@@ -198,7 +394,7 @@ ClassMethod Purge(id As %String)
 /// Deletes a test case and everything the stores recorded for it, as Shutter.Test.Gate does.
 ClassMethod PurgeCase(id As %String)
 {
-    For table = "Shutter_Store.GateDecision", "Shutter_Store.Approval", "Shutter_Store.Plan", "Shutter_Store.CaseEvent" {
+    For table = "Shutter_Store.Verification", "Shutter_Store.ExecutionAttempt", "Shutter_Store.GateDecision", "Shutter_Store.Approval", "Shutter_Store.Plan", "Shutter_Store.CaseEvent" {
         Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM " _ table _ " WHERE ""Case"" = ?", id)
     }
     Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM Shutter_Store.SnapshotItem WHERE Snapshot IN (SELECT ID FROM Shutter_Store.Snapshot WHERE ""Case"" = ?)", id)

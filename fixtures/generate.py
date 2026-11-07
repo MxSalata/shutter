@@ -53,6 +53,13 @@ PATIENTS = {
     "S8": ("MRN1008", "ENC-1008", "SYNTH^HARRY", "19700123", "M"),
     "S9": ("MRN1009", "ENC-1009", "SYNTH^ISLA", "19951111", "F"),
     "S10": ("MRN1010", "ENC-1010", "SYNTH^JUDE", "19820618", "M"),
+    # S27 to S30, further messages for the patient: a new visit, a day case, a withdrawn move, a lost admission alone
+    "S27": ("MRN1027", "ENC-1027", "SYNTH^KIT", "19780622", "F"),
+    "S28": ("MRN1028", "ENC-1028", "SYNTH^LEO", "19960130", "M"),
+    "S29": ("MRN1029", "ENC-1029", "SYNTH^MAE", "19831017", "F"),
+    "S30": ("MRN1030", "ENC-1030", "SYNTH^NED", "19710408", "M"),
+    "S31": ("MRN1031", "ENC-1031", "SYNTH^OLA", "19890911", "F"),
+    "S32": ("MRN1032", "ENC-1032", "SYNTH^PIP", "19741203", "M"),
     # S11, the outage burst: six patients in one scenario
     "S11-P1": ("MRN1101", "ENC-1101", "SYNTH^KAI", "19880404", "M"),
     "S11-P2": ("MRN1102", "ENC-1102", "SYNTH^LENA", "19790908", "F"),
@@ -353,7 +360,7 @@ def scenarios():
         "title": "One patient, two encounters",
         "summary": "Admit to Ward A applied; the 09:20 transfer to Ward B fails; at 09:30 the same patient is registered "
                    "for an outpatient clinic under another visit number. That attendance belongs to another encounter "
-                   "and supersedes nothing: the transfer is still due.",
+                   "and supersedes nothing: the transfer is still due, and the plan shows the other visit.",
         "steps": [
             {"file": a[0]},
             {"fault": "fail_before_accept"},
@@ -363,8 +370,144 @@ def scenarios():
             {"file": d[0], "expect": "indexed"},
         ],
         "expected": {"disposition": "resend", "write": True, "final_state": "admitted", "final_ward": "WARD-B",
-                     "failed_operation_key": b[2]["operation_key"], "other_encounter": "ENC-2009"},
+                     "failed_operation_key": b[2]["operation_key"], "other_encounter": "ENC-2009",
+                     "names": ["ENC-2009"]},
     }, [a, b, d]))
+
+    # S27: the same shape as S9, but the other visit is an in-patient admission: someone may be working round bad history
+    a = message("S27", 1, "A01", "0900", ward="WARD-A")
+    b = message("S27", 2, "A02", "0920", ward="WARD-B", prior="WARD-A")
+    d = message("S27", 3, "A01", "0930", ward="WARD-C", admit_time="0930", encounter="ENC-2027")
+    out.append(({
+        "id": "S27",
+        "title": "A new admission under a new visit number",
+        "summary": "Admit to Ward A applied; the 09:20 transfer to Ward B fails; at 09:30 the same patient is admitted to "
+                   "Ward C under another visit number. Shutter can't say which visit is real, so the resend stops and "
+                   "the case names both visits for a person.",
+        "steps": [
+            {"file": a[0]},
+            {"fault": "fail_before_accept"},
+            {"file": b[0], "expect": "delivery_fails"},
+            {"wait": 5},
+            {"fault": "off"},
+            {"file": d[0]},
+        ],
+        "expected": {"disposition": "resend", "write": False, "final_state": "admitted", "final_ward": "WARD-A",
+                     "case_by_key": True, "blocked_by": "FURTHER_MOVEMENT", "final_reason": "FURTHER_MOVEMENT",
+                     "failed_operation_key": b[2]["operation_key"], "names": ["ENC-1027", "ENC-2027", "MRN1027"],
+                     "modes": ["policy", "rules"]},
+    }, [a, b, d]))
+
+    # S31: S27 in the demo hospital's own production: the new admission is read in the namespace the case came from
+    a = message("S31", 1, "A01", "0900", ward="WARD-A")
+    b = message("S31", 2, "A02", "0920", ward="WARD-B", prior="WARD-A")
+    d = message("S31", 3, "A01", "0930", ward="WARD-C", admit_time="0930", encounter="ENC-2031")
+    out.append(({
+        "id": "S31",
+        "title": "A new admission under a new visit number, in the hospital's own production",
+        "summary": "S27's story in the hospital's own production. Shutter's own index never sees the new admission: it is "
+                   "read in the namespace the case came from, and the resend stops and names both visits.",
+        "steps": [
+            {"file": a[0], "route": "hospital"},
+            {"fault": "fail_before_accept"},
+            {"file": b[0], "route": "hospital", "expect": "delivery_fails"},
+            {"wait": 5},
+            {"fault": "off"},
+            {"file": d[0], "route": "hospital"},
+        ],
+        "expected": {"disposition": "resend", "write": False, "final_state": "admitted", "final_ward": "WARD-A",
+                     "case_by_key": True, "blocked_by": "FURTHER_MOVEMENT", "final_reason": "FURTHER_MOVEMENT",
+                     "failed_operation_key": b[2]["operation_key"], "names": ["ENC-1031", "ENC-2031"],
+                     "modes": ["policy"]},
+    }, [a, b, d]))
+
+    # S32: the new admission arrives while the plan waits for its approval, so only the read at dispatch can catch it
+    a = message("S32", 1, "A01", "0900", ward="WARD-A")
+    b = message("S32", 2, "A02", "0920", ward="WARD-B", prior="WARD-A")
+    d = message("S32", 3, "A01", "0930", ward="WARD-C", admit_time="0930", encounter="ENC-2032")
+    out.append(({
+        "id": "S32",
+        "title": "A new admission under a new visit number, while the plan awaits approval",
+        "summary": "S27's new admission arrives after the plan went to the approver. The approval doesn't carry it through: "
+                   "the check is read again at dispatch, and the write stops and names both visits.",
+        "steps": [
+            {"file": a[0]},
+            {"fault": "fail_before_accept"},
+            {"file": b[0], "expect": "delivery_fails"},
+            {"wait": 5},
+            {"fault": "off"},
+            {"wait_for_state": "awaiting_approval", "timeout": 180},
+            {"file": d[0]},
+        ],
+        "expected": {"disposition": "resend", "write": False, "final_state": "admitted", "final_ward": "WARD-A",
+                     "case_by_key": True, "blocked_by": "FURTHER_MOVEMENT", "final_reason": "FURTHER_MOVEMENT",
+                     "failed_operation_key": b[2]["operation_key"], "names": ["ENC-1032", "ENC-2032", "MRN1032"],
+                     "modes": ["rules"]},
+    }, [a, b, d]))
+
+    # S28: a day case. Resending the admission alone would put someone on a closed unit
+    a = message("S28", 1, "A01", "0800", ward="WARD-A", admit_time="0800")
+    b = message("S28", 2, "A03", "1600", ward="WARD-A", admit_time="0800")
+    out.append(({
+        "id": "S28",
+        "title": "A day case's admission and discharge both fail",
+        "summary": "The 08:00 admission fails, and so does the 16:00 discharge. Resending the admission alone would admit "
+                   "someone who has gone home, so it stops and names the discharge for a person.",
+        "steps": [
+            {"fault": "fail_before_accept"},
+            {"file": a[0], "expect": "delivery_fails"},
+            {"file": b[0], "expect": "delivery_fails"},
+            {"wait": 5},
+            {"fault": "off"},
+        ],
+        "expected": {"disposition": "resend", "write": False, "final_state": None, "final_ward": None,
+                     "case_by_key": True, "blocked_by": "FURTHER_MOVEMENT", "final_reason": "FURTHER_MOVEMENT",
+                     "failed_operation_key": a[2]["operation_key"], "names": ["discharge"],
+                     "modes": ["policy", "rules"]},
+    }, [a, b]))
+
+    # S29: the transfer fails, then the PAS withdraws it. The cancel is withheld, so it is never delivered: nothing to wait for
+    a = message("S29", 1, "A01", "0900", ward="WARD-A")
+    b = message("S29", 2, "A02", "0920", ward="WARD-B", prior="WARD-A")
+    c = message("S29", 3, "A12", "0935", ward="WARD-A", prior="WARD-B")
+    out.append(({
+        "id": "S29",
+        "title": "A failed transfer that is then withdrawn",
+        "summary": "Admit to Ward A applied; the 09:20 transfer to Ward B fails; at 09:35 the PAS cancels it, and the "
+                   "receiver takes no cancels. Sending the withdrawn move would be wrong and the cancel will never be "
+                   "delivered, so the case stops at once and names the pair, with no promise of a delivery.",
+        "steps": [
+            {"file": a[0]},
+            {"fault": "fail_before_accept"},
+            {"file": b[0], "expect": "delivery_fails"},
+            {"wait": 5},
+            {"fault": "off"},
+            {"file": c[0], "expect": "withheld"},
+        ],
+        "expected": {"disposition": "resend", "write": False, "final_state": "admitted", "final_ward": "WARD-A",
+                     "case_by_key": True, "blocked_by": "FURTHER_MOVEMENT", "final_reason": "FURTHER_MOVEMENT",
+                     "failed_operation_key": b[2]["operation_key"], "names": ["cancel of the transfer", "MRN1029"],
+                     "modes": ["policy", "rules"]},
+    }, [a, b, c]))
+
+    # S30: a lost admission on its own. A 404 doesn't prove the receiver holds nothing: a person checks first
+    a = message("S30", 1, "A01", "0800", ward="WARD-A", admit_time="0800")
+    out.append(({
+        "id": "S30",
+        "title": "A lost admission, with nothing else known",
+        "summary": "The 08:00 admission fails and the receiver answers that it has no encounter under this number. That "
+                   "doesn't prove it holds no record for the patient, so the site's policy doesn't release it: the plan "
+                   "asks someone to check the system's own screen, and a person approves.",
+        "steps": [
+            {"fault": "fail_before_accept"},
+            {"file": a[0], "expect": "delivery_fails"},
+            {"wait": 5},
+            {"fault": "off"},
+        ],
+        "expected": {"disposition": "resend", "write": True, "final_state": "admitted", "final_ward": "WARD-A",
+                     "failed_operation_key": a[2]["operation_key"], "names": ["by hand"], "person_approves": True,
+                     "modes": ["policy"]},
+    }, [a]))
 
     # S10: the downstream system loses conditional writes
     a = message("S10", 1, "A01", "0900", ward="WARD-A")

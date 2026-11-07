@@ -120,6 +120,10 @@ Property Incident As Shutter.Store.Incident(%JSONINCLUDE = "none");
 /// recordings of agent runs for a scenario replay on any instance.
 Property Scenario As %String(%JSONFIELDNAME = "scenario", MAXLEN = 32);
 
+/// Whether the scenario runner played this case, set when it opens: a live story stamps its cases with a scenario id too, and
+/// isn't a recorded run. Rules only's exemption at the gate asks this, and a later story can't change it.
+Property ScenarioRecorded As %Boolean(%JSONINCLUDE = "none") [ InitialExpression = 0 ];
+
 Index ScenarioIdx On Scenario;
 
 /// The production session of the failed delivery: the Visual Trace link.
@@ -187,9 +191,13 @@ ClassMethod Open(op As %DynamicObject, failureKind As %String, failureText As %S
             // The same key with other content (a corrected message resent with the same event time): the open case's plan
             // carries the first content, so it must not go out; a person decides (PAYLOAD_CHANGED).
             Set newDigest = ##class(Shutter.Util.Json).Str(op, "payload_digest"), oldDigest = case.PayloadDigest()
-            If (newDigest '= "") && (oldDigest '= "") && (newDigest '= oldDigest) && 'case.IsClosed() {
+            Set digestDiffers = (newDigest '= "") && (oldDigest '= "") && (newDigest '= oldDigest)
+            // The bed sits outside the digest (CONTRACTS 1.6), so a correction of the bed alone shows only here.
+            Set newBed = $EXTRACT(##class(Shutter.Util.Json).Str(op, "bed"), 1, 64)
+            Set bedDiffers = (op.%GetTypeOf("bed") '= "unassigned") && (newBed '= case.Bed)
+            If (digestDiffers || bedDiffers) && 'case.IsClosed() {
                 Set case.Headline = "Blocked: a further message for the same operation carries different content"
-                Quit case.Transition("blocked", "PAYLOAD_CHANGED: a further failure for the same operation key carries different content (payload digest " _ $EXTRACT(newDigest, 1, 19) _ " against " _ $EXTRACT(oldDigest, 1, 19) _ "); the plan would write the first content, so nothing is dispatched and a person must decide. " _ failureText, "system", "ens:" _ sourceHeaderId)
+                Quit case.Transition("blocked", "PAYLOAD_CHANGED: a further failure for the same operation key carries different content (" _ $SELECT(digestDiffers: "payload digest " _ $EXTRACT(newDigest, 1, 19) _ " against " _ $EXTRACT(oldDigest, 1, 19), 1: "bed " _ $SELECT(newBed = "": "none", 1: newBed) _ " against " _ $SELECT(case.Bed = "": "none", 1: case.Bed)) _ "); the plan would write the first content, so nothing is dispatched and a person must decide. " _ failureText, "system", "ens:" _ sourceHeaderId)
             }
             Set sc = case.Note("note", "A further failure for the same operation: " _ failureText, "system", "ens:" _ sourceHeaderId)
             Quit sc
@@ -220,6 +228,7 @@ ClassMethod Open(op As %DynamicObject, failureKind As %String, failureText As %S
     Set case.SourceHeaderId = sourceHeaderId
     Set case.Mode = $SELECT(mode = "": "board", 1: mode)
     Set case.Scenario = $GET(^Shutter.Config("scenario"))
+    Set case.ScenarioRecorded = (case.Scenario '= "") && (case.Scenario = $GET(^Shutter.Config("scenarioRun")))
     Set now = ##class(Shutter.Util.Time).NowUTC()
     Set case.OpenedAt = now, case.UpdatedAt = now
     // A held message's headline is the hold itself ("Held: the schema X is not loaded here ..."), as the feed wrote it.
@@ -236,15 +245,17 @@ ClassMethod Open(op As %DynamicObject, failureKind As %String, failureText As %S
     Quit sc
 }
 
-/// Delete the closed cases whose closing is older than a time, with everything that hangs off them (events, snapshots
+/// Delete the finished cases whose closing is older than a time, with everything that hangs off them (events, snapshots
 /// and their items, plans, approvals, rehearsals, gate decisions, attempts, verifications, agent runs and their tool
 /// calls, chain items, escalation emails and their .eml files), and the closed incidents older than it with their
-/// chains, items, events and the cases they held. Cases an open incident still holds stay. Returns how many cases went.
+/// chains, items, events and the cases they held. Finished means resolved, which covers handled by hand, or abandoned: a
+/// blocked, escalated or failed case is waiting for a person, whatever its age, so it stays, and so does an incident that
+/// holds one. Cases an open incident still holds stay. Returns how many cases went.
 /// Housekeeping only (Shutter.Util.RetentionTask, switched on by a site): the record is the product.
 ClassMethod PurgeClosedBefore(cutoff As %String) As %Integer
 {
     Set n = 0
-    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Shutter_Store.""Case"" WHERE ClosedAt IS NOT NULL AND ClosedAt < ? AND State IN ('resolved', 'blocked', 'escalated', 'failed') AND Incident IS NULL", cutoff)
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Shutter_Store.""Case"" WHERE ClosedAt IS NOT NULL AND ClosedAt < ? AND (State = 'resolved' OR (State = 'failed' AND Disposition = 'abandoned')) AND Incident IS NULL", cutoff)
     While rs.%Next() {
         If $$$ISOK(..PurgeCase(rs.%Get("ID"))) Set n = n + 1
     }
@@ -252,7 +263,7 @@ ClassMethod PurgeClosedBefore(cutoff As %String) As %Integer
     While ri.%Next() {
         Set iid = ri.%Get("ID"), ok = 1
         // Only its cases whose own closing is older than the cutoff: a case reopened and closed again later stays.
-        Set rc = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Shutter_Store.""Case"" WHERE Incident = ? AND State IN ('resolved', 'blocked', 'escalated', 'failed') AND ClosedAt IS NOT NULL AND ClosedAt < ?", iid, cutoff)
+        Set rc = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Shutter_Store.""Case"" WHERE Incident = ? AND (State = 'resolved' OR (State = 'failed' AND Disposition = 'abandoned')) AND ClosedAt IS NOT NULL AND ClosedAt < ?", iid, cutoff)
         While rc.%Next() { If $$$ISOK(..PurgeCase(rc.%Get("ID"))) { Set n = n + 1 } Else { Set ok = 0 } }
         Continue:'ok
         Set open = 0
@@ -929,6 +940,9 @@ Storage Default
 </Value>
 <Value name="50">
 <Value>LeadSignature</Value>
+</Value>
+<Value name="51">
+<Value>ScenarioRecorded</Value>
 </Value>
 </Data>
 <DataLocation>^Shutter.Store.CaseD</DataLocation>

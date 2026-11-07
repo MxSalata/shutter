@@ -173,6 +173,7 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
     Set case.Receiver = $SELECT(request.Receiver '= "": request.Receiver, 1: ..WardTarget)
     Set case.SourceNamespace = request.SourceNamespace, case.SourceProduction = request.SourceProduction
     Set case.SourceRoute = request.SourceRoute, case.OriginHeaderId = request.OriginHeaderId
+    If request.SignedInUser '= "" Do case.Note("note", "Posted to the intake by " _ request.SignedInUser, "system")
     // The connector's answer, structured, so the matcher never parses it out of the failure text.
     Set wr = ##class(Shutter.Util.Json).Parse(request.WardResultJSON, .wsc)
     If $ISOBJECT(wr) {
@@ -404,6 +405,9 @@ Method OnEvidence(case As Shutter.Store.Case, result As Shutter.Msg.EvidenceResu
     // A receiver of category orders_results (v1.23) keeps orders and results, which the ADT catalogue does not model:
     // the case goes to a person at once, in every mode, and no model runs for it.
     If ##class(Shutter.Store.SiteProfile).ReceiverCategory($SELECT(case.Receiver '= "": case.Receiver, 1: ..WardTarget)) = "orders_results" Quit ..NotModelledToPerson(case)
+    // A death on the message (catalogue E19) goes to a person in Board mode as in Site policy mode, and no board is asked what
+    // only a person can check. Rules only is the baseline and stays as it is; a judge's forced board still convenes.
+    If (..Mode '= "rules") && '..ForceBoard && (decision = "person") && (##class(Shutter.Util.Json).Str(cat, "entry") = "E19") Quit ..PersonByCatalogue(case, cat)
     If ..Release {
         // The sequence rule (7.4): the item goes at the version the chain expects, or not at all.
         If ..ExpectedVersion '= "" {
@@ -498,7 +502,8 @@ Method OnLeadReady(request As Shutter.Msg.LeadReady, Output response As %Library
     Quit ..TakeDiagnosis(case, lead)
 }
 
-/// The bound on a follower's wait: the lead's decision if it is there by now, else the rules path.
+/// The bound on a follower's wait: the lead's decision if it is there by now, else what a case with no board answer gets
+/// (NoBoard).
 Method OnLeadTimeout(case As Shutter.Store.Case) As %Status
 {
     If (case.State '= "investigating") || (case.FollowsCase = "") { $$$TRACE("The lead wait ended; the case is " _ case.State _ ", so nothing is due") Quit $$$OK }
@@ -507,15 +512,53 @@ Method OnLeadTimeout(case As Shutter.Store.Case) As %Status
     Quit ..LeadFailedFallback(case, lead)
 }
 
-/// The board this case followed ended without a decision, or never ended: the rules path proposes the plain resend and
-/// the gate judges it, as when no board member can answer.
+/// The board this case followed ended without a decision, or never ended: as when no board member can answer (NoBoard).
 Method LeadFailedFallback(case As Shutter.Store.Case, lead As Shutter.Store.BoardLead) As %Status
 {
     Set leader = case.FollowsCase
     Set case.FollowsCase = ""
     Set why = $SELECT('$ISOBJECT(lead): "no lead was recorded for it", lead.State = "running": "its board has not finished within the wait", lead.Reason '= "": lead.Reason, 1: "it ended without a plan")
-    Do case.Note("note", "The board this case followed (case " _ leader _ ") decided nothing: " _ why _ "; the rules path proposes the plain resend and the gate judges it", "system")
-    Quit ..RulesOnly(case)
+    Quit ..NoBoard(case, "the board this case followed (case " _ leader _ ") decided nothing: " _ why)
+}
+
+/// No board can answer this case. Outside Rules only, a case the catalogue gives to the board, or to a person, goes to a
+/// person with the reason and no plan, since the plain resend would replace that decision with one nobody took: the
+/// catalogue's match needs no model. Any other case takes the rules path: the plain resend, which the gate judges.
+Method NoBoard(case As Shutter.Store.Case, why As %String = "") As %Status
+{
+    Set stops = ..CatalogueStops(..Mode, case.CurrentSnapshot, .text)
+    If stops = "" {
+        If why '= "" Do case.Note("note", "No board answered: " _ why _ "; the rules path proposes the plain resend and the gate judges it", "system")
+        Quit ..RulesOnly(case)
+    }
+    If why = "" Set why = "no member of the board is enabled"
+    Do ..LeadFinish(case, "failed", "", "no board member could answer: " _ why)
+    Set case.Disposition = "escalate"
+    Set case.Headline = ##class(Shutter.Util.Json).Clip("Escalated to a person: catalogue " _ stops _ ", and no board member could answer: " _ why, 300)
+    Quit case.Transition("escalated", "Catalogue " _ text _ ", and no board member could answer: " _ why _ ". Nothing is planned and nothing is sent. A person must look, or reinvestigate when the agents can run", "system")
+}
+
+/// The catalogue entries of a snapshot that keep a case with no board answer from the rules path: those of a match that
+/// decides by the board or by a person, outside Rules only; "" for every other case. text says so in words, for the event.
+ClassMethod CatalogueStops(mode As %String, snapshot As Shutter.Store.Snapshot, Output text As %String) As %String
+{
+    Set json = "Shutter.Util.Json", text = ""
+    If (mode = "rules") || '$ISOBJECT(snapshot) Quit ""
+    Set summary = snapshot.SummaryObject()
+    Set cat = $SELECT($ISOBJECT(summary): summary.%Get("catalogue"), 1: "")
+    If '$ISOBJECT(cat) || (cat.%GetTypeOf("matches") '= "array") || (cat.%Get("matches").%Size() = 0) Quit ""
+    Set decision = $CLASSMETHOD(json, "Str", cat, "decision")
+    If (decision '= "board") && (decision '= "person") Quit ""
+    Set matches = cat.%Get("matches"), ids = "", it = matches.%GetIterator()
+    While it.%GetNext(, .m) { Set ids = ids _ $SELECT(ids = "": "", 1: ", ") _ $CLASSMETHOD(json, "Str", m, "id") }
+    Set asks = $SELECT(decision = "person": " asks for a person", 1: " gives this case to the board")
+    If matches.%Size() > 1 {
+        Set text = ids _ " all match, which" _ asks
+        Quit ids
+    }
+    Set m = matches.%Get(0), why = $CLASSMETHOD(json, "Str", m.%Get("preferred"), "why")
+    Set text = ids _ " (" _ $CLASSMETHOD(json, "Str", m, "title") _ ")" _ asks _ $SELECT(why '= "": " (" _ why _ ")", 1: "")
+    Quit ids
 }
 
 /// The leader's decision applied to this case's own evidence: the disposition and action type, the catalogue entry and
@@ -526,6 +569,9 @@ Method TakeDiagnosis(case As Shutter.Store.Case, lead As Shutter.Store.BoardLead
 {
     Set json = "Shutter.Util.Json"
     Set case.FollowsCase = ""
+    // A plan the rules made because nobody on the board could answer is no board's decision to pass on: the case takes
+    // what its own match allows.
+    If lead.DecidedBy = "rules" Quit ..NoBoard(case, "the case this one followed (case " _ lead.LeaderCaseId _ ") had no board answer and took the rules path")
     Set leaderPlan = $CLASSMETHOD(json, "Parse", lead.PlanJSON, .psc)
     If '$ISOBJECT(leaderPlan) Quit ..LeadFailedFallback(case, lead)
     Set snap = case.CurrentSnapshot
@@ -569,10 +615,10 @@ Method TakeDiagnosis(case As Shutter.Store.Case, lead As Shutter.Store.BoardLead
 
 /// The leader's board ended, with a plan or without: the lead is finished for its signature and every follower still
 /// waiting is told (Shutter.Msg.LeadReady to this item), so each carries on at once.
-Method LeadFinish(case As Shutter.Store.Case, state As %String, plan As %DynamicObject = "", reason As %String = "")
+Method LeadFinish(case As Shutter.Store.Case, state As %String, plan As %DynamicObject = "", reason As %String = "", decidedBy As %String = "")
 {
     Quit:(..LeadSignature = "")
-    Set lead = ##class(Shutter.Store.BoardLead).Finish(case.CaseId, state, plan, ##class(Shutter.Store.BoardLead).VerdictsOf(case.CurrentSnapshot), reason)
+    Set lead = ##class(Shutter.Store.BoardLead).Finish(case.CaseId, state, plan, ##class(Shutter.Store.BoardLead).VerdictsOf(case.CurrentSnapshot), reason, decidedBy)
     Set ..LeadSignature = ""
     Quit:'$ISOBJECT(lead)
     Set n = ..TellFollowers(case.CaseId, lead)
@@ -580,7 +626,7 @@ Method LeadFinish(case As Shutter.Store.Case, state As %String, plan As %Dynamic
 }
 
 /// Every case still waiting on a leader's lead is told that it ended (Shutter.Msg.LeadReady to this item), so each
-/// carries on at once: with the leader's decision when the lead is done, on the rules path when it failed. The followers
+/// carries on at once: with the leader's decision when the lead is done, as a case with no board answer when it failed. The followers
 /// are found by the leader's case id, so a fresh instance that never knew the lead (an abandon, a close by hand) can tell
 /// them too. Returns how many were told.
 Method TellFollowers(leaderCaseId As %String, lead As Shutter.Store.BoardLead) As %Integer
@@ -613,8 +659,8 @@ Method LeadLeftBehind(case As Shutter.Store.Case, reason As %String)
 /// The board convened on the evidence (6.6): a request to every member of the mode's board, the pending list kept for the
 /// answers, one slot of the minute taken. Under the per-minute cap (v1.35, BoardsPerMinute; 0 for none) a case that finds
 /// the minute full waits for a slot instead: a note says so, an alarm keyed by the round brings it back (OnBoardDefer), and
-/// convened is 0 (DeferredBy and DeferredMode say who asked and with which members). With no member to convene the rules
-/// path takes over (RulesOnly), convened 0 too. The slot is taken only once every member's request is built.
+/// convened is 0 (DeferredBy and DeferredMode say who asked and with which members). With no member to convene the case
+/// has no board answer (NoBoard), convened 0 too. The slot is taken only once every member's request is built.
 Method ConveneBoard(case As Shutter.Store.Case, summaryJSON As %String, byWhom As %String = "", mode As %String = "", Output convened As %Boolean) As %Status
 {
     Set convened = 0, sc = $$$OK
@@ -622,7 +668,7 @@ Method ConveneBoard(case As Shutter.Store.Case, summaryJSON As %String, byWhom A
     // the case's mode, as it did before the cap.
     If mode = "" Set mode = $SELECT(..Mode = "policy": "board", 1: ..Mode)
     Set members = ##class(Shutter.Store.BoardMember).MembersForMode(mode)
-    If members.%Size() = 0 Quit ..RulesOnly(case)
+    If members.%Size() = 0 Quit ..NoBoard(case)
     // Every request first: the model view may refuse, and no slot is spent on a board that never convenes.
     Set n = 0
     Set iter = members.%GetIterator()
@@ -634,7 +680,7 @@ Method ConveneBoard(case As Shutter.Store.Case, summaryJSON As %String, byWhom A
         Set n = n + 1, reqs(n) = req, items(n) = m.ConfigItem, codes(n) = code
     }
     If $DATA(refused) Quit ..ModelViewFailed(case, refused)
-    If n = 0 Quit ..RulesOnly(case)
+    If n = 0 Quit ..NoBoard(case)
     // The minute's slot, taken atomically (TryTake): a case that finds the minute full waits for the next one instead.
     If '##class(Shutter.Util.BoardSlots).TryTake(..BoardsPerMinute, .count) {
         Set wait = 60 + $RANDOM(30)
@@ -651,7 +697,7 @@ Method ConveneBoard(case As Shutter.Store.Case, summaryJSON As %String, byWhom A
         Do pending.%Push(codes(k))
     }
     Quit:$$$ISERR(sc) sc
-    Set ..PendingJSON = pending.%ToJSON(), convened = 1
+    Set ..PendingJSON = pending.%ToJSON(), ..FailedJSON = "[]", convened = 1
     Do case.Note("note", "Board convened" _ $SELECT(byWhom '= "": " by " _ byWhom, 1: "") _ ": " _ $REPLACE($REPLACE(pending.%ToJSON(), "[", ""), "]", ""), $SELECT(..ForceBoard && (..ConvenedBy '= ""): ..ConvenedBy, 1: "system"))
     Quit $$$OK
 }
@@ -834,12 +880,9 @@ Method AfterBoard(case As Shutter.Store.Case) As %Status
             Set case.Headline = "Escalated: reopened without the live agents, and no recording to replay"
             Quit case.Transition("escalated", "Reopened without the live agents, and no board member has a recording for this case, so nobody has looked at the fresh evidence and nothing is planned. A person must look, or reinvestigate with the live agents when they can run", "system")
         }
-        // In replay mode a case outside the fixtures has no recording for anyone: the rules path plans the plain
-        // resend and the gate judges it, instead of an escalation that says only "no findings" (B10).
-        If ..AllNoRecord(case) {
-            Do case.Note("note", ..UnansweredNote(case), "system")
-            Quit ..RulesOnly(case)
-        }
+        // Replay mode outside the fixtures, the day's budget or the provider's refusal: nobody could look, and the case
+        // says why rather than only "no findings" (B10), through NoBoard.
+        If ..AllNoRecord(case) Quit ..NoBoard(case, ..UnansweredWhy(case))
         Do ..LeadFinish(case, "failed", "", "no board member produced usable findings")
         Quit case.Transition("escalated", "No board member produced usable findings; a person must look", "system")
     }
@@ -857,19 +900,19 @@ Method AfterBoard(case As Shutter.Store.Case) As %Status
     Quit ..ArmTimeout("coordinator:timeout")
 }
 
-/// A case the alert intake opened (CONTRACTS 11: FailureReasonCode "alert", the failure read from the alert's words) takes
+/// A case the alert intake opened (CONTRACTS 11: FailureReasonCode "alert" or "alert_unread", the failure read from the alert's words) takes
 /// the production's own report of the same failure when that arrives second and the case is still detected or
 /// collecting (v1.38): the kind, text, outcome, reason code, HTTP status and Retry-After the connector answered, and the
 /// headline from them. After the evidence is collected the case keeps what its snapshot was built on. Returns 1 when the
 /// fields were taken.
 ClassMethod TakeReport(case As Shutter.Store.Case, request As Shutter.Msg.CaseIntake) As %Boolean
 {
-    If '$ISOBJECT(case) || (case.FailureReasonCode '= "alert") Quit 0
+    If '$ISOBJECT(case) || '$LISTFIND($LISTBUILD("alert", "alert_unread"), case.FailureReasonCode) Quit 0
     If '$LISTFIND($LISTBUILD("detected", "collecting"), case.State) Quit 0
     Set wr = ##class(Shutter.Util.Json).Parse(request.WardResultJSON, .wsc)
     If '$ISOBJECT(wr) Quit 0
     Set reason = ##class(Shutter.Util.Json).Str(wr, "reason_code")
-    If (reason = "") || (reason = "alert") Quit 0
+    If (reason = "") || (reason = "alert") || (reason = "alert_unread") Quit 0
     Set case.FailureKind = request.FailureKind, case.FailureText = $EXTRACT(request.FailureText, 1, 2000)
     Set case.FailureOutcome = ##class(Shutter.Util.Json).Str(wr, "outcome"), case.FailureReasonCode = reason
     Set status = ##class(Shutter.Util.Json).Str(wr, "http_status")
@@ -891,16 +934,16 @@ Method AllNoRecord(case As Shutter.Store.Case) As %Boolean
     Quit (+n > 0) && (+other = 0)
 }
 
-/// Why nobody on the board answered this snapshot: the day's model budget is spent (Shutter.Util.Budget, v1.34), or replay
-/// mode has no recording for the case (it answers the fixtures only). Either way the rules path proposes the plain resend.
-Method UnansweredNote(case As Shutter.Store.Case) As %String
+/// Why nobody on the board answered this snapshot: the day's model budget is spent (Shutter.Util.Budget, v1.34), the
+/// provider refuses the key, or replay mode has no recording for the case (it answers the fixtures only).
+Method UnansweredWhy(case As Shutter.Store.Case) As %String
 {
     Set cid = case.%Id(), sid = $SELECT($ISOBJECT(case.CurrentSnapshot): case.CurrentSnapshot.%Id(), 1: ""), n = 0
     &sql(SELECT COUNT(*) INTO :n FROM Shutter_Store.AgentRun WHERE "Case" = :cid AND Snapshot = :sid AND Status = 'budget_exhausted')
-    If +n > 0 Quit "No board member could run: the day's model budget is spent (budget_exhausted); the rules path proposes the plain resend and the gate judges it"
+    If +n > 0 Quit "the day's model budget is spent (budget_exhausted)"
     &sql(SELECT COUNT(*) INTO :n FROM Shutter_Store.AgentRun WHERE "Case" = :cid AND Snapshot = :sid AND Status = 'provider_auth')
-    If +n > 0 Quit "No board member could run: the model provider refuses the key (provider_auth); the rules path proposes the plain resend and the gate judges it"
-    Quit "No board member has a recording for this case (replay mode answers the fixtures only); the rules path proposes the plain resend and the gate judges it"
+    If +n > 0 Quit "the model provider refuses the key (provider_auth)"
+    Quit "this case has no recording (replay mode answers the fixtures only)"
 }
 
 /// Whether the call being answered was made about a snapshot other than the case's current one.
@@ -1024,8 +1067,24 @@ Method PolicyPath(case As Shutter.Store.Case, summary As %DynamicObject, cat As 
     Set tier = ##class(Shutter.Store.SiteProfile).TierOf($SELECT(case.Receiver '= "": case.Receiver, 1: ..WardTarget))
     Set kind = $SELECT(..Release: ..ChainKind, 1: $CLASSMETHOD(json, "Str", cat.%Get("conditions"), "chain", "single"))
     Set ..Policy = ##class(Shutter.Store.SiteProfile).Policy(tier, kind)
+    // A receiver's 404 doesn't prove it holds no record for the patient: a lost admission waits for a person, unless the
+    // site's profile says policy may release it.
+    Set heldBack = 0
+    If ('..Release) && (..Policy = "automatic") && ##class(Shutter.Util.FurtherMessages).AdmissionOnNotFound(case, summary) && (##class(Shutter.Store.SiteProfile).AdmissionNotFound() = "person") {
+        Set ..Policy = "approval", heldBack = 1
+        Do case.Note("note", "A lost admission on the receiver's 404: a person approves, as the site's profile asks (further_messages.admission_not_found)", "system")
+    }
     // A released item is authorised by its incident (7.3): by site policy, or under the incident's approval.
     If ..Release Set ..Policy = $SELECT(..ReleasePolicy = "incident": "incident", ..ReleasePolicy = "automatic": "automatic", 1: ..Policy)
+    // An automatic release writes with no person, so the case's source must be proved (CONTRACTS 11); otherwise a person approves.
+    // A lost admission held back above is asked too, so the person is told both.
+    If (..Policy = "automatic") || heldBack {
+        Set unproved = ##class(Shutter.Operation.Origin).Problem(case)
+        If unproved '= "" {
+            Set ..Policy = "approval"
+            Do case.Note("note", "Source not verified: " _ unproved _ ". The site's policy would release this automatically, so a person approves it instead", "system")
+        }
+    }
     // The outcome the matcher settled on: the preferred one, or a site-policy alternative whose when holds for the case's
     // receiver (CONTRACTS 6.3, v1.25); the plan names it as the board would.
     Set ref = $CLASSMETHOD(json, "Str", cat, "outcome_ref", "preferred")
@@ -1111,6 +1170,12 @@ Method BedWaitOutcome(case As Shutter.Store.Case, result As Shutter.Msg.GateResu
         While ci.%GetNext(, .c) {
             Continue:'$ISOBJECT(c)
             Set rc = ##class(Shutter.Util.Json).Str(c, "reason_code")
+            // Further messages for the patient come first and are no wait: a person reads what the check names.
+            If $LISTFIND($LISTBUILD("FURTHER_MOVEMENT", "PATIENT_UNREADABLE", "FURTHER_NOT_READ"), rc) {
+                Set waited = 1, detail = ##class(Shutter.Util.Json).Str(c, "detail")
+                Set case.Headline = "Stopped for a person: " _ ##class(Shutter.Util.Json).Clip(detail, 200)
+                Return case.Transition("blocked", detail, "gate", "gate:" _ result.DecisionId)
+            }
             If (rc = "WAITING_FOR_OCCUPANT_CASE") || (rc = "OCCUPANT_CASE_FAILED") || (rc = "NEWER_MESSAGE_PENDING") Set code = rc Quit
         }
     }
@@ -1205,10 +1270,25 @@ Method RulesOnly(case As Shutter.Store.Case) As %Status
 /// Store the plan as the case's current plan and send it to the gate.
 Method AdoptPlan(case As Shutter.Store.Case, plan As %DynamicObject, createdBy As %String) As %Status
 {
-    Set sc = ##class(Shutter.Store.Plan).Create(case, case.CurrentSnapshot, plan, createdBy, .p)
+    // The members who gave no usable answer go on the plan, under its digest, so its approver sees a thinner review.
+    Set absent = ..AbsentMembers()
+    If absent.%Size() > 0 Set plan."absent_members" = absent
+    // What a person should see on a resend's plan (Shutter.Util.FurtherMessages). On this case's plan only: its followers
+    // are other patients, and they read their own.
+    Set stored = plan
+    If ##class(Shutter.Util.Json).Str(plan, "disposition") = "resend" {
+        Set lines = ##class(Shutter.Util.FurtherMessages).PlanLines(case, $SELECT($ISOBJECT(case.CurrentSnapshot): case.CurrentSnapshot.SummaryObject(), 1: ""))
+        If lines.%Size() > 0 {
+            Set stored = ##class(%DynamicObject).%FromJSON(plan.%ToJSON())
+            If stored.%GetTypeOf("preconditions") '= "array" Set stored.preconditions = []
+            Set li = lines.%GetIterator()
+            While li.%GetNext(, .line) { Do stored.preconditions.%Push(line) }
+        }
+    }
+    Set sc = ##class(Shutter.Store.Plan).Create(case, case.CurrentSnapshot, stored, createdBy, .p)
     Quit:$$$ISERR(sc) sc
     // A case that leads its failure signature (v1.35) has decided: its followers take the plan.
-    Do ..LeadFinish(case, "done", plan)
+    Do ..LeadFinish(case, "done", plan, "", createdBy)
     Set ..PlanId = p.%Id()
     Set case.CurrentPlan = p
     Set case.Disposition = p.Disposition
@@ -1221,6 +1301,17 @@ Method AdoptPlan(case As Shutter.Store.Case, plan As %DynamicObject, createdBy A
         If parked || $$$ISERR(sc) Quit sc
     }
     Quit ..SendGate(case, "proposal", "gate:proposal")
+}
+
+/// The names of this round's board members who gave no usable answer.
+Method AbsentMembers() As %DynamicArray
+{
+    Set out = [], iter = ##class(%DynamicArray).%FromJSON(..FailedJSON).%GetIterator()
+    While iter.%GetNext(.i, .code) {
+        Set m = ##class(Shutter.Store.BoardMember).ByCode(code)
+        Do out.%Push($SELECT($ISOBJECT(m): m.Name, 1: code))
+    }
+    Quit out
 }
 
 /// The case's headline: what the plan does, then the start of its summary, cut at a word (the whole summary is on the
@@ -1449,15 +1540,45 @@ ClassMethod ApprovalTask(case As Shutter.Store.Case, plan As Shutter.Store.Plan,
     Set task.%Subject = "Shutter " _ case.CaseId _ ": approve plan v" _ plan.Version _ " (" _ plan.Disposition _ ")"
     Set task.%Message = case.Headline _ $CHAR(10) _ "Exact action: " _ plan.ActionType _ " " _ plan.OperationKey _ " at receiver version " _ plan.ExpectedVersion _ $CHAR(10) _ "Plan digest: " _ plan.Digest _ $CHAR(10) _ "Snapshot digest: " _ $SELECT($ISOBJECT(case.CurrentSnapshot): case.CurrentSnapshot.Digest, 1: "") _ $CHAR(10) _ "Rehearsal: would apply (rolled back)."
     Set task.%Message = task.%Message _ $CHAR(10) _ "To approve from the Workflow inbox, paste the plan digest above into the PlanDigest field: an approval with no digest, or another one, binds nothing and blocks the case."
+    Set absent = $SELECT(plan.Json '= "": plan.PlanObject().%Get("absent_members"), 1: "")
+    If $ISOBJECT(absent) && (absent.%Size() > 0) {
+        Set names = "", iter = absent.%GetIterator()
+        While iter.%GetNext(.i, .name) { Set names = names _ $SELECT(names = "": "", 1: ", ") _ name }
+        Set task.%Message = task.%Message _ $CHAR(10) _ "Not every board member's review stands behind this plan: " _ names _ " did not answer."
+    }
+    // What the approver should look at first (Shutter.Util.FurtherMessages): the plan's lines for this patient.
+    Try {
+        Set lines = ##class(Shutter.Util.FurtherMessages).PlanLines(case, $SELECT($ISOBJECT(case.CurrentSnapshot): case.CurrentSnapshot.SummaryObject(), 1: ""))
+        Set li = lines.%GetIterator()
+        While li.%GetNext(, .line) { Set task.%Message = task.%Message _ $CHAR(10) _ line }
+    } Catch ex {
+        Set task.%Message = task.%Message _ $CHAR(10) _ ..NotRead(case, "further messages for this patient", ex)
+    }
+    Try {
+        Set unproved = ##class(Shutter.Operation.Origin).Problem(case)
+        If unproved '= "" Set task.%Message = task.%Message _ $CHAR(10) _ "Source not verified: " _ unproved _ "."
+    } Catch ex {
+        Set task.%Message = task.%Message _ $CHAR(10) _ ..NotRead(case, "whether this case's source is proved", ex)
+    }
     // What approvers decided before on these conditions at this receiver (6.4, v1.35); a lookup that fails leaves the line out.
     Try {
         Set words = ##class(Shutter.Store.Precedent).Words(##class(Shutter.Store.Precedent).SummaryFor(case))
         If words '= "" Set task.%Message = task.%Message _ $CHAR(10) _ words
-    } Catch ex {}
+    } Catch ex {
+        Do ..NotRead(case, "what approvers decided before", ex)
+    }
     If waitSeconds > 0 Set task.%Message = task.%Message _ $CHAR(10) _ "Unanswered after " _ ..WaitWords(waitSeconds) _ ", the task is cancelled and the case escalates to a person."
     Set task.%Priority = 2
     Set task.%FormFields = "PlanDigest,Comment"
     Quit task
+}
+
+/// A line of an approval task that could not be worked out, logged, and said in words: the plan's digest doesn't change, so
+/// nothing else on the page would show the approver it is missing.
+ClassMethod NotRead(case As Shutter.Store.Case, what As %String, ex As %Exception.AbstractException) As %String
+{
+    $$$LOGWARNING("Case " _ case.CaseId _ ": the approval task could not read " _ what _ ": " _ ex.DisplayString())
+    Quit "Not shown: " _ what _ " could not be read. Read the case itself before deciding."
 }
 
 /// A person's decision as a precedent (CONTRACTS 6.4, v1.35): an approval once its resend is verified at the receiver, a
@@ -1860,6 +1981,11 @@ Method OnExecute(case As Shutter.Store.Case, result As Shutter.Msg.WardResult) A
         Quit ..StartEvidence(case)
     }
     Set case.Headline = "Dispatch refused: " _ outcome _ $SELECT(result.ReasonCode '= "": " (" _ result.ReasonCode _ ")", 1: "")
+    If result.ReasonCode = "further_movement" {
+        // The connector's last line for further messages for the patient: what it found is in its error.
+        Set case.Headline = "Stopped for a person: " _ ##class(Shutter.Util.Json).Clip(result.Error, 200)
+        Quit case.Transition("blocked", "The connector held the resend (FURTHER_MOVEMENT): " _ result.Error _ ". Nothing was sent; a person reads both and decides", "system", "attempt:" _ attempt.%Id())
+    }
     If result.ReasonCode = "newer_message_pending" {
         // The connector's last-line check (v1.29): the resend waits for the pending message's delivery.
         Set pending = ##class(Shutter.Util.ResendGuard).Pending(case)
@@ -1884,6 +2010,13 @@ Method OnVerify(case As Shutter.Store.Case, result As Shutter.Msg.VerifyResult) 
     Set detail = $CLASSMETHOD(json, "Parse", result.DetailJSON, .dsc)
     If result.Outcome = "verified" {
         Set case.Outcome = result.Summary
+        // A write nobody released: the receiver applied a rehearsal (OnRehearsal). It is verified, and in effect, but no approval or
+        // policy stands behind it, so it never reads as a success; a person checks.
+        Set attempt = $SELECT(..AttemptId '= "": ##class(Shutter.Store.ExecutionAttempt).%OpenId(..AttemptId), 1: "")
+        If $ISOBJECT(attempt) && '$ISOBJECT(attempt.Approval) {
+            Set case.Headline = "Escalated: the receiver wrote during a rehearsal, with no release"
+            Quit case.Transition("escalated", "A write made during a rehearsal, with no release: " _ result.Summary _ ". The receiver does not honour dry_run and the operation is in effect; a person must check it at the receiver", "system", "verification:" _ result.VerificationId)
+        }
         // A closure on a later transfer the feed sent whose delivery failed or is uncertain is written on that transfer's
         // case too (CONTRACTS 6.1): the person handling it sees what was dropped on its account.
         If $ISOBJECT(detail) Do ..NoteSupersededBy(case, detail.%Get("superseded_by"))
@@ -1919,8 +2052,11 @@ Method OnVerify(case As Shutter.Store.Case, result As Shutter.Msg.VerifyResult) 
         Set case.Headline = "Escalated: the resend was not committed"
         Quit case.Transition("escalated", "Not verified (not_committed): " _ result.Summary _ ". The approval is revoked, and nothing is resent without a person: a reinvestigation plans again on fresh evidence", "system", "verification:" _ result.VerificationId)
     }
-    // A write whose outcome the reads could not settle: unknown is the verdict, and a person checks at the receiver.
+    // A write whose outcome the reads could not settle: unknown is the verdict, and a person checks at the receiver. The
+    // approval authorised one write and it is spent, whatever became of it.
     If (result.Outcome = "unresolved") && $ISOBJECT(detail) && ($CLASSMETHOD(json, "Str", detail, "disposition") = "resend") && ($CLASSMETHOD(json, "Str", detail, "verdict") = "unknown") && $ISOBJECT(detail.%Get("attempt")) {
+        Set approval = ##class(Shutter.Store.Approval).%OpenId(..ApprovalId)
+        If $ISOBJECT(approval) Do approval.Revoke("system: the write's outcome is unknown, and its one write is spent")
         Set case.Headline = "Escalated: the resend's outcome is unknown"
         Quit case.Transition("escalated", "Not verified (unknown): " _ result.Summary _ ". Whether the receiver applied the resend is unknown; a person must check at the receiver before anything is resent", "system", "verification:" _ result.VerificationId)
     }

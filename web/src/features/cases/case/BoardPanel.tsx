@@ -419,7 +419,7 @@ function SpecialistCard({
         <Text size="sm" data-testid="own-confidence">
           {'Its '}
           {defineConfidence ? (
-            <Term definition="The agent's own report. The gate does not use it.">{own}</Term>
+            <Term definition="The agent's own report, not calibrated. The gate does not use it.">{own}</Term>
           ) : (
             own
           )}

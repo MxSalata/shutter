@@ -104,10 +104,13 @@ ClassMethod Classify(response As Shutter.Msg.WardResult, sc As %Status, parsed A
         If ##class(Shutter.Util.Json).Bool(parsed, "rehearsal") {
             Set response.Outcome = $SELECT(##class(Shutter.Util.Json).Bool(parsed, "would_apply"): "would_apply", 1: "would_not_apply")
             Set response.ReasonCode = ##class(Shutter.Util.Json).Str(parsed, "reason")
-        } ElseIf ##class(Shutter.Util.Json).Str(parsed, "reason") = "already_committed" {
-            Set response.Outcome = "already_committed"
+        } ElseIf ##class(Shutter.Util.Json).Bool(parsed, "applied") && (##class(Shutter.Util.Json).Str(parsed, "reason") '= "already_committed") {
+            Set response.Outcome = "applied"
+        } ElseIf '$ISOBJECT(parsed.%Get("receipt")) {
+            Set response.Outcome = "uncertain"
+            Set response.Error = "HTTP 200 with no receipt and no sign it was applied; the operation may or may not have been applied"
         } Else {
-            Set response.Outcome = $SELECT(##class(Shutter.Util.Json).Bool(parsed, "applied"): "applied", 1: "already_committed")
+            Set response.Outcome = "already_committed"
         }
         Quit
     }

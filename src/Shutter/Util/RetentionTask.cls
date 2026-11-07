@@ -8,7 +8,8 @@ Class Shutter.Util.RetentionTask Extends %SYS.Task.Definition
 
 Parameter TaskName = "Shutter retention";
 
-/// Closed cases older than this many days are purged when PurgeClosedCases is on.
+/// Finished cases older than this many days are purged when PurgeClosedCases is on: resolved, handled by hand or abandoned,
+/// never a blocked, escalated or failed case waiting for a person.
 Property RetentionDays As %Integer [ InitialExpression = 30 ];
 
 /// Off by default: a closed case, its evidence, plans, approvals, attempts and verifications are the record.

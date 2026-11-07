@@ -3,6 +3,9 @@
 Class Shutter.Store.SiteProfile Extends (%Persistent, %JSON.Adaptor)
 {
 
+/// How long a read of a namespace's messages takes at most at a write, when the profile doesn't say (further_messages.scan_seconds).
+Parameter SCANSECONDS = 30;
+
 Property Name As %String(%JSONFIELDNAME = "name", MAXLEN = 32) [ InitialExpression = "current", Required ];
 
 Index NameIdx On Name [ Unique ];
@@ -34,6 +37,7 @@ ClassMethod Default() As %DynamicObject
     Set p.incident = {"threshold": 5, "window_minutes": 10, "quiet_seconds": 60}
     Set p."model_content" = {"free_text": false}
     Set p.feed = {"time_zone": "Europe/London", "prevent_failures": false}
+    Set p."further_messages" = {"in_patient_movement": "stop", "admission_not_found": "person", "scan_seconds": (..#SCANSECONDS)}
     Quit p
 }
 
@@ -113,7 +117,7 @@ ClassMethod Validate(p As %DynamicObject) As %String
     If '$ISOBJECT(p) Quit "the profile must be a JSON object"
     Set it = p.%GetIterator()
     While it.%GetNext(.key, .v) {
-        If '$LISTFIND($LISTBUILD("version", "receivers", "history_policy", "authoritative_source", "unconditional_resend", "merges", "policy", "approvers", "incident", "model_content", "teams", "mail", "feed"), key) Return key _ ": unknown field"
+        If '$LISTFIND($LISTBUILD("version", "receivers", "history_policy", "authoritative_source", "unconditional_resend", "merges", "policy", "approvers", "incident", "model_content", "teams", "mail", "feed", "further_messages"), key) Return key _ ": unknown field"
     }
     If p.%IsDefined("version") && ((p.%Get("version") '= +p.%Get("version")) || (p.%Get("version") < 0)) Quit "version: must be a whole number"
     Set rcv = p.%Get("receivers")
@@ -123,11 +127,15 @@ ClassMethod Validate(p As %DynamicObject) As %String
         Set at = "receivers[" _ i _ "]"
         If '$ISOBJECT(r) Return at _ ": must be an object"
         If $CLASSMETHOD(json, "Str", r, "name") = "" Return at _ ".name: required"
+        // Every reader takes the first entry of a name, so a second one would silently count for nothing.
+        If $DATA(receiverNames($CLASSMETHOD(json, "Str", r, "name"))) Return at _ ".name: must be unique"
+        Set receiverNames($CLASSMETHOD(json, "Str", r, "name")) = ""
         Set tier = r.%Get("tier")
         If (tier '= +tier) || (tier < 1) || (tier > 3) Return at _ ".tier: must be 1, 2 or 3"
         // The receiver's category (v1.23) and its own history policy, which the category derives when absent.
         If r.%IsDefined("category") && '$LISTFIND($LISTBUILD("current_state", "history_of_record", "orders_results"), r.%Get("category")) Return at _ ".category: must be current_state, history_of_record or orders_results"
         If r.%IsDefined("history_policy") && '$LISTFIND($LISTBUILD("current", "correct"), r.%Get("history_policy")) Return at _ ".history_policy: must be current or correct"
+        If r.%IsDefined("strict_answers") && (r.%GetTypeOf("strict_answers") '= "boolean") Return at _ ".strict_answers: must be true or false"
         // A demo receiver's namespace (v1.25): where the scenario runner resets it and sets its faults.
         If r.%IsDefined("demo") {
             Set demo = r.%Get("demo")
@@ -193,7 +201,17 @@ ClassMethod Validate(p As %DynamicObject) As %String
         If '$ISOBJECT(feed) Quit "feed: must be an object"
         Set fi = feed.%GetIterator()
         While fi.%GetNext(.k, .v) {
-            If '$LISTFIND($LISTBUILD("time_zone", "prevent_failures"), k) Return "feed." _ k _ ": unknown setting"
+            If '$LISTFIND($LISTBUILD("time_zone", "prevent_failures", "source_skew_seconds", "prove_origin"), k) Return "feed." _ k _ ": unknown setting"
+            // How far apart two source systems' events still count as simultaneous, in whole seconds.
+            If k = "source_skew_seconds" {
+                If (feed.%GetTypeOf(k) '= "number") || (v '= (v \ 1)) || (v < 0) || (v > 3600) Return "feed.source_skew_seconds: must be a whole number of seconds from 0 to 3600"
+                Continue
+            }
+            // An automatic release needs a proved source (CONTRACTS 11): true or false.
+            If k = "prove_origin" {
+                If feed.%GetTypeOf(k) '= "boolean" Return "feed.prove_origin: must be true or false"
+                Continue
+            }
             // Hold a message whose schema is not loaded here (v1.34, "prevent failures"): true or false.
             If k = "prevent_failures" {
                 If feed.%GetTypeOf(k) '= "boolean" Return "feed.prevent_failures: must be true or false"
@@ -202,6 +220,23 @@ ClassMethod Validate(p As %DynamicObject) As %String
             // UTC, Europe/London and a fixed offset by Shutter's own rules; any other IANA zone when Embedded Python's zoneinfo knows it (v1.30).
             Set zoneOk = (feed.%GetTypeOf(k) = "string") && ($LISTFIND($LISTBUILD("UTC", "Europe/London"), v) || $MATCH(v, "^[+-](0[0-9]|1[0-4]):[0-5][0-9]$") || ##class(Shutter.Util.Time).PythonZoneKnown(v))
             If 'zoneOk Return "feed.time_zone: must be UTC, Europe/London, a fixed offset such as +01:00 (up to 14:00), or an IANA zone name this IRIS knows (for example Europe/Paris)"
+        }
+    }
+    // How rigid a site wants the check for further messages: a safe stop unless it says otherwise.
+    If p.%IsDefined("further_messages") {
+        Set fm = p.%Get("further_messages")
+        If '$ISOBJECT(fm) || fm.%IsA("%Library.DynamicArray") Quit "further_messages: must be an object"
+        Set fi = fm.%GetIterator()
+        While fi.%GetNext(.k, .v) {
+            If k = "in_patient_movement" {
+                If '$LISTFIND($LISTBUILD("stop", "show"), v) Return "further_messages.in_patient_movement: must be stop or show"
+            } ElseIf k = "admission_not_found" {
+                If '$LISTFIND($LISTBUILD("person", "policy"), v) Return "further_messages.admission_not_found: must be person or policy"
+            } ElseIf k = "scan_seconds" {
+                If (fm.%GetTypeOf(k) '= "number") || (v '= (v \ 1)) || (v < 1) || (v > 600) Return "further_messages.scan_seconds: must be a whole number of seconds from 1 to 600"
+            } Else {
+                Return "further_messages." _ k _ ": unknown setting"
+            }
         }
     }
     // What may leave IRIS for a model (T27): free text off unless the site says so.
@@ -289,8 +324,9 @@ ClassMethod Validate(p As %DynamicObject) As %String
         If '$ISOBJECT(inc) Quit "incident: must be an object"
         Set ii = inc.%GetIterator()
         While ii.%GetNext(.k, .n) {
-            If '$LISTFIND($LISTBUILD("threshold", "window_minutes", "quiet_seconds"), k) Return "incident." _ k _ ": unknown setting"
-            If (n '= +n) || (n < 0) || ((k '= "quiet_seconds") && (n < 1)) Return "incident." _ k _ ": must be a whole number" _ $SELECT(k = "quiet_seconds": "", 1: " of 1 or more")
+            If '$LISTFIND($LISTBUILD("threshold", "window_minutes", "quiet_seconds", "max_intake_seconds"), k) Return "incident." _ k _ ": unknown setting"
+            Set zero = (k = "quiet_seconds") || (k = "max_intake_seconds")
+            If (n '= +n) || (n < 0) || ('zero && (n < 1)) Return "incident." _ k _ ": must be a whole number" _ $SELECT(zero: "", 1: " of 1 or more")
         }
     }
     Quit ""
@@ -341,6 +377,44 @@ ClassMethod FeedTimeZone() As %String
     Quit zone
 }
 
+/// How far apart, in seconds, two source systems' events for an encounter still count as simultaneous (catalogue E7):
+/// feed.source_skew_seconds, or 300 when the profile doesn't say, the five minutes the time checks already allow a clock.
+/// A site that trusts its clocks can narrow it; 0 keeps the exact second.
+ClassMethod SourceSkewSeconds() As %Integer
+{
+    Set feed = ..Current().%Get("feed")
+    If $ISOBJECT(feed) && (feed.%GetTypeOf("source_skew_seconds") = "number") Quit +feed.%Get("source_skew_seconds")
+    Quit 300
+}
+
+/// What a further in-patient movement for the patient on another visit does to a write: stop (the default) or show.
+ClassMethod FurtherMovement() As %String
+{
+    Quit ..FurtherSetting("in_patient_movement", "stop")
+}
+
+/// Who releases a failed admission the receiver answers 404 for: person (the default) or policy, the tier's own.
+ClassMethod AdmissionNotFound() As %String
+{
+    Quit ..FurtherSetting("admission_not_found", "person")
+}
+
+/// How long one read of a namespace's messages may take at a write, before it counts as not whole and blocks the write:
+/// further_messages.scan_seconds, or the default when the profile doesn't say.
+ClassMethod FurtherScanSeconds(profile As %DynamicObject = "") As %Integer
+{
+    If '$ISOBJECT(profile) Set profile = ..Current()
+    Set fm = profile.%Get("further_messages")
+    If $ISOBJECT(fm) && (fm.%GetTypeOf("scan_seconds") = "number") Quit +fm.%Get("scan_seconds")
+    Quit ..#SCANSECONDS
+}
+
+ClassMethod FurtherSetting(name As %String, default As %String) As %String [ Private ]
+{
+    Set fm = ..Current().%Get("further_messages")
+    Quit $SELECT($ISOBJECT(fm): ##class(Shutter.Util.Json).Str(fm, name, default), 1: default)
+}
+
 /// Whether the site holds a message whose HL7 schema category is not loaded here instead of delivering what was read by
 /// position (v1.34, "prevent failures"; CONTRACTS 6.4 and 12): off unless the profile says feed.prevent_failures: true.
 /// Read on the feed's hot path for every message, so cached as the zone is; every store of the profile clears the cache.
@@ -354,6 +428,16 @@ ClassMethod PreventFailures() As %Boolean
     // the cache was empty: on a fresh install with no demo, and after every save of the profile. The answer needs no cache.
     Try { Set ^Shutter.Config("preventFailures") = ''on } Catch ex { }
     Quit ''on
+}
+
+/// Whether an automatic release needs the case's source proved (Shutter.Operation.Origin; CONTRACTS 6.4 and 11): yes unless the profile
+/// says feed.prove_origin: false, for a forwarder on another instance. The profile given, else the current one.
+ClassMethod ProveOrigin(profile As %DynamicObject = "") As %Boolean
+{
+    If '$ISOBJECT(profile) Set profile = ..Current()
+    Set feed = profile.%Get("feed")
+    If $ISOBJECT(feed) && (feed.%GetTypeOf("prove_origin") = "boolean") Quit ''feed.%Get("prove_origin")
+    Quit 1
 }
 
 /// The demo hospital follows the setting (CONTRACTS 11): when a hospital namespace is recorded here, its PAS In takes
@@ -491,6 +575,18 @@ ClassMethod ReceiverFeatures(name As %String) As %DynamicObject
     Quit {"conditional_writes": true, "receipts": true, "history": true, "dry_run": true}
 }
 
+/// Whether Shutter checks a receiver's answers against the contract (CONTRACTS 6.4), the default: a read counts only with the
+/// kind's own field or error, a 200 is a delivery only with its receipt or applied, and a receipt or history entry must hold
+/// the operation's own digest, ward and bed to close a case. A site whose receiver answers another way, and whose answers it
+/// has looked at, sets strict_answers false on its entry: the answers are then read on their status alone. Such a site's
+/// gateway page or corrected message can read as delivered or committed.
+ClassMethod StrictAnswers(name As %String) As %Boolean
+{
+    Set r = ..Receiver(name)
+    If '$ISOBJECT(r) || (r.%GetTypeOf("strict_answers") '= "boolean") Quit 1
+    Quit ''r.%Get("strict_answers")
+}
+
 /// The receiver's category (CONTRACTS 6.4, v1.23): current_state (a bed manager or whiteboard, where only the present
 /// placement matters), history_of_record (a PAS, EPR or warehouse, whose movement history must be complete) or
 /// orders_results (order communications or a LIMS, not modelled yet). current_state when the entry names none or the
@@ -563,7 +659,7 @@ ClassMethod Flag(name As %String, default As %String = "") As %String
     Quit ##class(Shutter.Util.Json).Str(..Current(), name, default)
 }
 
-/// An incident setting: threshold, window_minutes, quiet_seconds.
+/// An incident setting: threshold, window_minutes, quiet_seconds, max_intake_seconds.
 ClassMethod IncidentSetting(name As %String, default As %Integer) As %Integer
 {
     Set inc = ..Current().%Get("incident")

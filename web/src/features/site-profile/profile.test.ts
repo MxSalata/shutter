@@ -199,6 +199,10 @@ describe('validateProfile, the port of SiteProfile.Validate', () => {
       'incident.quiet_seconds: must be a whole number',
     ],
     [
+      (p: SiteProfile) => (p.incident = { ...p.incident, max_intake_seconds: -1 }),
+      'incident.max_intake_seconds: must be a whole number',
+    ],
+    [
       (p: SiteProfile) =>
         (p.approvers = { ...p.approvers, close_needs_approver: 'yes' as unknown as boolean }),
       'approvers.close_needs_approver: must be true or false',
@@ -217,6 +221,58 @@ describe('validateProfile, the port of SiteProfile.Validate', () => {
     const p = copy();
     (spoil as (p: unknown) => void)(p);
     expect(validateProfile(p)).toBe(message);
+  });
+
+  it('accepts the further-message, source-skew and source-proof settings, as the server ships and reads them', () => {
+    const p = {
+      ...copy(),
+      further_messages: { in_patient_movement: 'stop', admission_not_found: 'person', scan_seconds: 30 },
+      feed: { time_zone: 'UTC', source_skew_seconds: 0, prove_origin: false },
+    };
+    expect(validateProfile(p)).toBe('');
+    p.further_messages = { in_patient_movement: 'show', admission_not_found: 'policy', scan_seconds: 600 };
+    p.feed.source_skew_seconds = 3600;
+    expect(validateProfile(p)).toBe('');
+  });
+
+  it.each([
+    [{ further_messages: [] }, 'further_messages: must be an object'],
+    [
+      { further_messages: { in_patient_movement: 'maybe' } },
+      'further_messages.in_patient_movement: must be stop or show',
+    ],
+    [
+      { further_messages: { admission_not_found: 'maybe' } },
+      'further_messages.admission_not_found: must be person or policy',
+    ],
+    [{ further_messages: { in_patient: 'stop' } }, 'further_messages.in_patient: unknown setting'],
+    [
+      { further_messages: { scan_seconds: 0 } },
+      'further_messages.scan_seconds: must be a whole number of seconds from 1 to 600',
+    ],
+    [
+      { further_messages: { scan_seconds: 601 } },
+      'further_messages.scan_seconds: must be a whole number of seconds from 1 to 600',
+    ],
+    [
+      { further_messages: { scan_seconds: 1.5 } },
+      'further_messages.scan_seconds: must be a whole number of seconds from 1 to 600',
+    ],
+    [
+      { further_messages: { scan_seconds: '30' } },
+      'further_messages.scan_seconds: must be a whole number of seconds from 1 to 600',
+    ],
+    [
+      { feed: { source_skew_seconds: 3601 } },
+      'feed.source_skew_seconds: must be a whole number of seconds from 0 to 3600',
+    ],
+    [
+      { feed: { source_skew_seconds: '300' } },
+      'feed.source_skew_seconds: must be a whole number of seconds from 0 to 3600',
+    ],
+    [{ feed: { prove_origin: 'yes' } }, 'feed.prove_origin: must be true or false'],
+  ])('refuses %j as the server does', (patch, message) => {
+    expect(validateProfile({ ...copy(), ...patch })).toBe(message);
   });
 
   it('accepts what the server accepts: a quiet period of 0 and a tier written as "2"', () => {

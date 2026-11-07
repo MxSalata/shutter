@@ -82,6 +82,31 @@ Method TestTheWordsForNoAnswer()
     Do $$$AssertEquals($CLASSMETHOD(f, "RefusalWords", 500, $$$OK, "", "/intake"), "HTTP 500 from Shutter: empty body", "even an empty one")
 }
 
+/// A 202 that names no case took nothing: the real intake always names one, so this is a proxy or a wrong path answering.
+Method TestA202WithNoCaseIsARefusal()
+{
+    Set f = "Shutter.Intake.Forwarder"
+    For body = "", "<html>Welcome</html>", "{}", "[]", "{""state"":""sealed""}", "{""caseId"":""""}", "{""caseId"":null}", "not json" {
+        Do $$$AssertEquals($CLASSMETHOD(f, "CaseIdIn", body), "", "no case in: " _ body)
+    }
+    Do $$$AssertEquals($CLASSMETHOD(f, "CaseIdIn", "{""caseId"":""C-000123"",""state"":""sealed"",""opened"":true}"), "C-000123", "a case")
+    Set words = $CLASSMETHOD(f, "NoCaseWords", "/intake", "<html>")
+    Do $$$AssertTrue((words [ "202") && (words [ "/intake") && (words [ "no case id"), "the words say so: " _ words)
+}
+
+/// What the forwarder keeps in its own queue and tries again: no answer, and the answers of a Shutter or a gateway that is down. A
+/// refusal is final: an answer about the request itself does not change by asking again.
+Method TestWhichAnswersAreTriedAgain()
+{
+    Set f = "Shutter.Intake.Forwarder"
+    For status = "", 0, 502, 503, 504 {
+        Do $$$AssertTrue($CLASSMETHOD(f, "TryAgain", status), "[" _ status _ "] is tried again")
+    }
+    For status = 202, 400, 401, 403, 404, 413, 500 {
+        Do $$$AssertNotTrue($CLASSMETHOD(f, "TryAgain", status), "[" _ status _ "] is not")
+    }
+}
+
 /// An answer keeps its meaning: nothing above reaches a request that got one.
 Method TestAnAnswerIsNotNoAnswer()
 {

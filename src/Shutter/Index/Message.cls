@@ -127,12 +127,61 @@ ClassMethod Count() As %Integer
 }
 
 /// The rows for a visit number whose header is not older than a time, event time ascending, as objects. An empty
-/// visit number, or the "-" piece of a message without one, has no rows: it would match every such message.
-ClassMethod ForVisit(visitNumber As %String, since As %String = "") As %DynamicArray
+/// visit number, or the "-" piece of a message without one, has no rows: it would match every such message. With a
+/// patient or an authority, a row naming another one is left out; a row that names none stays.
+ClassMethod ForVisit(visitNumber As %String, since As %String = "", patientId As %String = "", authority As %String = "") As %DynamicArray
 {
     Set out = []
     If (visitNumber = "") || (visitNumber = "-") Quit out
     Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Shutter_Index.Message WHERE VisitNumber = ? AND (TimeCreated >= ? OR TimeCreated IS NULL) ORDER BY EventTime, ID", visitNumber, since)
+    While rs.%Next() {
+        Set r = ..%OpenId(rs.%Get("ID"))
+        Continue:'$ISOBJECT(r)
+        Continue:((patientId '= "") && (r.PatientId '= "") && (r.PatientId '= patientId))
+        Continue:((authority '= "") && (r.PatientIdAuthority '= "") && (r.PatientIdAuthority '= authority))
+        Do out.%Push(r.ToObject())
+    }
+    Quit out
+}
+
+/// A cancel in the index for this patient's visit at or after an event time, described, or "".
+ClassMethod CancelSince(visitNumber As %String, patientId As %String, authority As %String, eventTime As %String) As %String
+{
+    // A since is passed because SQL reads an empty one as null, which no row's time follows.
+    Set rows = ..ForVisit(visitNumber, "1900-01-01"), found = "", json = "Shutter.Util.Json"
+    Set iter = rows.%GetIterator()
+    While iter.%GetNext(.i, .row) {
+        Continue:($EXTRACT($CLASSMETHOD(json, "Str", row, "event"), 1, 7) '= "cancel_")
+        Continue:($CLASSMETHOD(json, "Str", row, "patient_id") '= patientId)
+        Set a = $CLASSMETHOD(json, "Str", row, "patient_id_authority")
+        Continue:((a '= "") && (authority '= "") && (a '= authority))
+        Set t = $CLASSMETHOD(json, "Str", row, "event_time")
+        Continue:((t = "") || (eventTime ]] t))
+        Set found = $CLASSMETHOD(json, "Str", row, "event") _ " at " _ t
+    }
+    Quit found
+}
+
+/// The rows for a patient identifier whose header is not older than a time, event time ascending, as objects. The caller
+/// reads the assigning authority. An empty identifier has no rows. The time must be given: an empty one matches no row.
+ClassMethod ForPatient(patientId As %String, since As %String) As %DynamicArray
+{
+    Set out = []
+    If (patientId = "") || (patientId = "-") Quit out
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Shutter_Index.Message WHERE PatientId = ? AND (TimeCreated >= ? OR TimeCreated IS NULL) ORDER BY EventTime, ID", patientId, since)
+    While rs.%Next() {
+        Set r = ..%OpenId(rs.%Get("ID"))
+        Continue:'$ISOBJECT(r)
+        Do out.%Push(r.ToObject())
+    }
+    Quit out
+}
+
+/// The merges whose header is not older than a time, as objects: the prior record a merge names is in the message itself.
+ClassMethod MergesSince(since As %String) As %DynamicArray
+{
+    Set out = []
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Shutter_Index.Message WHERE Event = 'merge' AND (TimeCreated >= ? OR TimeCreated IS NULL) ORDER BY ID", since)
     While rs.%Next() {
         Set r = ..%OpenId(rs.%Get("ID"))
         Continue:'$ISOBJECT(r)

@@ -199,7 +199,7 @@ ClassMethod Begin(scenario As %String, mode As %String, Output error As %String)
         Quit ""
     }
     Set ^Shutter.Config("mode") = mode
-    Set ^Shutter.Config("scenario") = scenario
+    Set ^Shutter.Config("scenario") = scenario, ^Shutter.Config("scenarioRun") = scenario
     Quit reset."reset_at"
 }
 
@@ -394,7 +394,7 @@ ClassMethod Reset() As %String [ SqlProc ]
         }
     }
     Set ^Shutter.Config("mode") = "board"
-    Kill ^Shutter.Config("scenario")
+    Kill ^Shutter.Config("scenario"), ^Shutter.Config("scenarioRun")
     Set ^Shutter.Config("resetAt") = resetAt
     Set abandoned = ##class(Shutter.Store.Incident).AbandonOpen("scenario reset")
     // A run record left queued or finished goes with the reset (a queued run whose player stopped would otherwise

@@ -738,11 +738,25 @@ ClassMethod CasePreview(caseId As %String) As %Status
         Set o.note = "The receiver applied the preview (HTTP " _ result.HttpStatus _ "): it does not honour dry_run and the operation is now in effect"
         Do ##class(Ens.Util.Log).LogAlert($CLASSNAME(), "CasePreview", "Receiver " _ svc.Target _ " applied a blind-resend preview of " _ case.OperationKey _ " for " _ case.CaseId _ ": it does not honour dry_run")
         Do case.Note("execution", "The receiver applied the blind-resend preview requested by " _ ..User() _ " (HTTP " _ result.HttpStatus _ "): it does not honour dry_run and the operation is now in effect" _ against, ..User())
+        Set sc = ..PreviewWrote(case, result, ..User())
+        If $$$ISERR(sc) Do ##class(Ens.Util.Log).LogError($CLASSNAME(), "CasePreview", "Could not stop " _ case.CaseId _ " after the preview's write: " _ $SYSTEM.Status.GetErrorText(sc))
+        Set o.state = case.State
     } Else {
         Set o.note = $SELECT(rolledBack: "What a blind resend with no expected version would do at the downstream system now" _ against _ "; the dry run was rolled back and nothing was written", 1: "The downstream system did not answer the dry run as one (" _ result.Outcome _ $SELECT(result.Error '= "": ", " _ result.Error, 1: "") _ "); nothing is known to have been written")
         Do case.Note("note", "Blind-resend preview requested by " _ ..User() _ ": " _ result.Outcome _ $SELECT(result.ReasonCode '= "": " (" _ result.ReasonCode _ ")", 1: "") _ against, ..User())
     }
     Quit ..Json(o)
+}
+
+/// A preview the receiver applied: a write that no plan, gate or person released. It goes on the record as an attempt, and the case
+/// stops for a person, since the operation is in effect whatever the case was about to do.
+ClassMethod PreviewWrote(case As Shutter.Store.Case, result As Shutter.Msg.WardResult, who As %String) As %Status
+{
+    Set sc = ##class(Shutter.Store.ExecutionAttempt).Create(case, "", "", "", result.HttpStatus, result.Outcome, result.ResponseObject(), "written by the receiver during a blind-resend preview", .attempt)
+    Quit:$$$ISERR(sc) sc
+    Do case.%Reload()
+    Set case.Headline = "Blocked: the receiver wrote during a rehearsal, with no release"
+    Quit case.Transition("blocked", "A write made during a rehearsal, with no release: the receiver applied the blind-resend preview " _ who _ " asked for (HTTP " _ result.HttpStatus _ "). It does not honour dry_run and the operation is in effect; a person must check it at the receiver", who, "attempt:" _ attempt.%Id())
 }
 
 ClassMethod CaseBlockedReason(caseId As %String) As %Status
@@ -776,17 +790,18 @@ ClassMethod CaseBlockedReason(caseId As %String) As %Status
     Quit ..Json(o)
 }
 
-/// A write whose answer was lost (Verify.Judge: not committed, or unknown after the last read), or a rehearsal nobody answered.
+/// A write whose answer was lost (Verify.Judge: not committed, or unknown after the last read), a rehearsal nobody answered,
+/// or a case no board could answer, which never reached the gate this round.
 ClassMethod StoppedAfterTheGate(text As %String) As %Boolean
 {
-    Quit (text [ "Not committed:") || (text [ "Not verified (unknown)") || (text [ "outcome of the resend is unknown") || (text [ "no usable answer") || (text [ "Error from the write call")
+    Quit (text [ "during a rehearsal") || (text [ "Not committed:") || (text [ "Not verified (unknown)") || (text [ "outcome of the resend is unknown") || (text [ "no usable answer") || (text [ "Error from the write call") || (text [ "no board member could answer")
 }
 
 /// The reason code of a stopped case no failing gate check names, from the words of the event that stopped it. A rehearsal
 /// that got no usable answer showed nothing about the action, so it is no refusal, whatever the word rehearsal suggests.
 ClassMethod ReasonFromEvent(text As %String, state As %String) As %String
 {
-    Quit $SELECT(text [ "Error from the write call": "WRITE_OUTCOME_UNKNOWN", text [ "Rejected by": "REJECTED_BY_APPROVER", text [ "no usable answer": "BLOCKED", text [ "rehearsal": "REHEARSAL_WOULD_NOT_APPLY", text [ "refused": "DISPATCH_REFUSED", text [ "Not committed:": "WRITE_NOT_COMMITTED", (text [ "Not verified (unknown)") || (text [ "outcome of the resend is unknown"): "WRITE_OUTCOME_UNKNOWN", text [ "person": "ESCALATED", state = "escalated": "ESCALATED", 1: "BLOCKED")
+    Quit $SELECT(text [ "during a rehearsal": "WRITE_NOT_RELEASED", text [ "FURTHER_MOVEMENT": "FURTHER_MOVEMENT", text [ "no board member could answer": "NO_BOARD_ANSWER", text [ "Error from the write call": "WRITE_OUTCOME_UNKNOWN", text [ "Rejected by": "REJECTED_BY_APPROVER", text [ "no usable answer": "BLOCKED", text [ "rehearsal": "REHEARSAL_WOULD_NOT_APPLY", text [ "refused": "DISPATCH_REFUSED", text [ "Not committed:": "WRITE_NOT_COMMITTED", (text [ "Not verified (unknown)") || (text [ "outcome of the resend is unknown"): "WRITE_OUTCOME_UNKNOWN", text [ "person": "ESCALATED", state = "escalated": "ESCALATED", 1: "BLOCKED")
 }
 
 // ---- library, settings, costs ----
@@ -1145,6 +1160,7 @@ ClassMethod Intake() As %Status
     Set msg.MessageText = message
     Set msg.SchemaCategory = $EXTRACT(##class(Shutter.Util.Json).Str(body, "schema_category", "2.5.1"), 1, 32)
     Set msg.Mode = mode
+    Set msg.SignedInUser = $USERNAME
     Set sc = ##class(Ens.Director).CreateBusinessService("Shutter API", .service)
     If $$$ISERR(sc) || '$ISOBJECT($GET(service)) Quit ..Fail("503 Service Unavailable", "no_service", "The API service is not running: " _ $SYSTEM.Status.GetErrorText(sc))
     Set service.Target = "Case Intake", service.Async = 0

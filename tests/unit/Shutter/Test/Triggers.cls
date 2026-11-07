@@ -117,6 +117,37 @@ Method TestMergeWithoutVisitAndWithTwoGroups()
     Do $$$AssertEquals(op."merge_groups", 2, "two groups counted")
 }
 
+/// An event time that makes no date or time is not an empty time: every other row would read as later than it, and the
+/// case would close as overtaken. The message doesn't map, and the error says the time couldn't be read.
+Method TestUnreadableEventTimeDoesNotMap()
+{
+    Set msh = "MSH|^~\&|PAS|HOSP|DOWNSTREAM|HOSP|20261019100000||ADT^A02^ADT_A02|UTA02|P|2.5.1"
+    For time = "202610", "20261345120000", "20260230120000", "soon" {
+        Set op = ..Op(msh _ "<CR>EVN|A02|" _ time _ "||||" _ time _ "<CR>" _ ..#PID _ "<CR>" _ ..PV1("I", "WARD-A", "ENC-9001"))
+        Do $$$AssertTrue(op.%IsDefined("error"), time _ " does not map")
+        Do $$$AssertTrue(op.error [ "unreadable", time _ ": the error says so: " _ op.error)
+    }
+    Set op = ..Op(msh _ "<CR>EVN|A02|20261019100000||||20261019100000<CR>" _ ..#PID _ "<CR>" _ ..PV1("I", "WARD-A", "ENC-9001"))
+    Do $$$AssertNotTrue(op.%IsDefined("error"), "a time that reads still maps")
+}
+
+/// A death on a message, from PID-29 and PID-30: yes when either says so, cleared when either holds the HL7 null that deletes
+/// it, no otherwise. An explicit N says nothing about what came before, so it reads no.
+Method TestDeathRecorded()
+{
+    For row = $LISTBUILD("", "", "no"), $LISTBUILD("", "N", "no"), $LISTBUILD("", "Y", "yes"), $LISTBUILD("", "y", "yes"), $LISTBUILD("20261019090000", "", "yes"), $LISTBUILD("20261019090000", "N", "yes"), $LISTBUILD("""""", "", "cleared"), $LISTBUILD("", """""", "cleared"), $LISTBUILD("""""", """""", "cleared") {
+        Set text = ..Message("A08", "ADT_A01", ..#PID _ $TRANSLATE($JUSTIFY("", 21), " ", "|") _ $LIST(row, 1) _ "|" _ $LIST(row, 2) _ "<CR>" _ ..PV1("I", "WARD-A", "ENC-9001"))
+        Set msg = ##class(EnsLib.HL7.Message).ImportFromString($REPLACE(text, "<CR>", $CHAR(13)), .sc)
+        Do $$$AssertStatusOK(sc, "the message parses")
+        Do msg.PokeDocType("2.5.1:ADT_A01")
+        Do $$$AssertEquals(##class(Shutter.Util.OperationKey).DeathRecorded(msg), $LIST(row, 3), "PID-29 '" _ $LIST(row, 1) _ "', PID-30 '" _ $LIST(row, 2) _ "'")
+    }
+    Set msg = ##class(EnsLib.HL7.Message).ImportFromString($REPLACE(..Message("A02", "ADT_A02", ..#PID _ "<CR>" _ ..PV1("I", "WARD-A", "ENC-9001")), "<CR>", $CHAR(13)), .sc)
+    Do msg.PokeDocType("2.5.1:ADT_A02")
+    Do $$$AssertEquals(##class(Shutter.Util.OperationKey).DeathRecorded(msg), "no", "a PID that stops before them")
+    Do $$$AssertEquals(##class(Shutter.Util.OperationKey).DeathRecorded(""), "unreadable", "a read that fails is not no death")
+}
+
 Method TestUnmappedTriggerSaysSo()
 {
     Set op = ..Op(..Message("A17", "ADT_A17", ..#PID _ "<CR>" _ ..PV1("I", "WARD-A", "ENC-9001")))

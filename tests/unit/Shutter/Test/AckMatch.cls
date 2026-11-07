@@ -20,7 +20,7 @@ Method OnAfterAllTests() As %Status
         }
     }
     For i = 1:1:$LISTLENGTH(..Sessions) {
-        Kill ^Shutter.AlertIntake("seen", $LIST(..Sessions, i)), ^Shutter.AlertIntake("pending", $LIST(..Sessions, i))
+        Kill ^Shutter.AlertIntake("seen", $LIST(..Sessions, i)), ^Shutter.AlertIntake("pending", $LIST(..Sessions, i)), ^Shutter.AlertIntake("handed", $LIST(..Sessions, i))
     }
     Quit $$$OK
 }
@@ -81,7 +81,27 @@ Method TestWhatItCannotFindIsSaid()
     Do $$$AssertTrue(problem [ "no MSA", "and it says so: " _ problem)
 }
 
-/// The forward names the session's first HL7 message, once; the receiver's other messages are not it.
+/// An acknowledgement of another message in a session that has handed one on: the message is known, and it gets no case, so the problem names it.
+Method TestAnotherMessageOfTheSessionIsSaid()
+{
+    Set m = "Shutter.Intake.AckMatch", ap = "Shutter.Intake.AlertProcess"
+    Set session = 999997000 + $RANDOM(900), control = "UTACK" _ session
+    Do ..Sent(control _ "A", "UT Router", ..#RECEIVER, session), ..Sent(control _ "B", "UT Router", ..#RECEIVER, session)
+    Set first = $CLASSMETHOD(m, "ForwardFor", ..Ack("AE", control _ "A", "Not known"), ..#RECEIVER, .problem, .key)
+    Do $$$AssertTrue($ISOBJECT(first), "the first AE gives a forward: " _ problem)
+    If '$ISOBJECT(first) Quit
+    Set header = ##class(Ens.MessageHeader).%OpenId(first.HeaderId)
+    Do $$$AssertEquals(##class(EnsLib.HL7.Message).%OpenId(header.MessageBodyId).GetValueAt("1:10"), control _ "A", "the message it answers, not the session's first by chance")
+    Do $CLASSMETHOD(ap, "ForwardAnswered", key, ##class(Shutter.Intake.Forwarded).%New(), ..#RECEIVER)
+    Set same = $CLASSMETHOD(m, "ForwardFor", ..Ack("AE", control _ "A", "Not known"), ..#RECEIVER, .problem)
+    Do $$$AssertNotTrue($ISOBJECT(same), "a second AE for that message gives no forward")
+    Do $$$AssertEquals(problem, "", "and no problem")
+    Set other = $CLASSMETHOD(m, "ForwardFor", ..Ack("AR", control _ "B", "Closed encounter"), ..#RECEIVER, .problem)
+    Do $$$AssertNotTrue($ISOBJECT(other), "another message of the session gives no forward")
+    Do $$$AssertTrue((problem [ (control _ "B")) && (problem [ "AR") && (problem [ "Closed encounter") && (problem [ ..#RECEIVER) && (problem [ "no case"), "and a problem naming it: " _ problem)
+}
+
+/// The forward names the message the receiver was sent, which a transform on the route may have changed, once; the receiver's other messages are not it.
 Method TestFindsTheMessageAndForwardsOnce()
 {
     Set m = "Shutter.Intake.AckMatch", ap = "Shutter.Intake.AlertProcess"
@@ -97,8 +117,8 @@ Method TestFindsTheMessageAndForwardsOnce()
     Do $$$AssertTrue($ISOBJECT(f), "an AE gives a forward: " _ problem)
     If '$ISOBJECT(f) Quit
     Do $$$AssertEquals(key, session, "its completion key is the session")
-    Do $$$AssertEquals(f.HeaderId, inbound.%Id(), "it names the session's first HL7 message")
-    Do $$$AssertEquals(f.Route, "UT In", "and that message's service")
+    Do $$$AssertEquals(f.HeaderId, sent.%Id(), "it names the message the acknowledgement answers")
+    Do $$$AssertEquals(f.Route, "UT In", "and the service the session began at")
     Do $$$AssertEquals(f.Receiver, ..#RECEIVER, "the item that delivered")
     Do $$$AssertEquals(f.FailureKind _ "|" _ f.FailureOutcome _ "|" _ f.FailureReasonCode, "rejected|rejected|ack_AE", "a rejection, by that code")
     Do $$$AssertTrue((f.FailureText [ "AE") && (f.FailureText [ control) && (f.FailureText [ "Patient not known"), "the text has the code, the control id and the words: " _ f.FailureText)

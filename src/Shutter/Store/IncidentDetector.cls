@@ -83,6 +83,19 @@ ClassMethod QuietFor(incident As Shutter.Store.Incident) As %Boolean
     Quit ##class(Shutter.Util.Time).SecondsBetween(incident.LastFailureAt, ##class(Shutter.Util.Time).NowUTC()) >= quiet
 }
 
+/// Whether the intake should close although failures keep arriving: it has been open past its maximum (the profile's
+/// incident.max_intake_seconds, 1800 by default, 0 for none) and the newest failure is a refusal, so the receiver is answering.
+/// Steady refusals of new messages would otherwise hold every other failure to it for as long as they last. A newest failure
+/// that got no answer keeps the wait: the fresh evidence of a release would only block against a receiver that is down.
+ClassMethod IntakeOverdue(incident As Shutter.Store.Incident, max As %Integer = "") As %Boolean
+{
+    If max = "" Set max = ##class(Shutter.Store.SiteProfile).IncidentSetting("max_intake_seconds", 1800)
+    If max <= 0 Quit 0
+    If ##class(Shutter.Util.Time).SecondsBetween(incident.OpenedAt, ##class(Shutter.Util.Time).NowUTC()) < max Quit 0
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT TOP 1 FailureKind FROM Shutter_Store.""Case"" WHERE Incident = ? AND FailureKind IN ('delivery_failed', 'rejected') ORDER BY ID DESC", incident.%Id())
+    Quit rs.%Next() && (rs.%Get("FailureKind") = "rejected")
+}
+
 /// Cases of the incident not yet parked (grouped) or closed: their evidence and match are not there yet.
 ClassMethod NotReady(incident As Shutter.Store.Incident) As %DynamicArray
 {

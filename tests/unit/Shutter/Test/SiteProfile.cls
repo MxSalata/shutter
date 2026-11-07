@@ -29,6 +29,20 @@ Method TestMail()
     Do ..RunRows("mail")
 }
 
+/// A new strictness a site may loosen: both default to the safe stop, and a stored profile can say otherwise.
+Method TestFurtherMessages()
+{
+    Do ..RunRows("further")
+    Set p = ##class(Shutter.Store.SiteProfile).Default()
+    Do $$$AssertEquals(p."further_messages"."in_patient_movement", "stop", "another visit's movement stops by default")
+    Do $$$AssertEquals(p."further_messages"."admission_not_found", "person", "a lost admission waits for a person by default")
+    Do $$$AssertEquals(p."further_messages"."scan_seconds", 30, "a read of a namespace takes up to 30 seconds by default")
+    Do p."further_messages".%Remove("scan_seconds")
+    Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).FurtherScanSeconds(p), 30, "and when the profile doesn't say")
+    Set p."further_messages"."scan_seconds" = 120
+    Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).FurtherScanSeconds(p), 120, "a site's own figure is read")
+}
+
 Method TestTeamsNeedADomain()
 {
     Do ..RunRows("teams")
@@ -53,6 +67,49 @@ Method TestSeedProfileValidates()
     Set p = ##class(Shutter.Util.Json).Parse(##class(Shutter.Knowledge.Text).ReadFile(path), .sc)
     Do $$$AssertStatusOK(sc, "the seed parses")
     Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).Validate(p), "", "the shipped seed profile passes the validator")
+}
+
+/// The window in which two sources count as simultaneous: whole seconds, none below 0 or above an hour.
+Method TestSourceSkewSeconds()
+{
+    Set c = "Shutter.Store.SiteProfile"
+    Set base = $CLASSMETHOD(c, "Default")
+    For value = 0, 1, 300, 3600 {
+        Set base.feed = {"time_zone": "UTC"}
+        Do base.feed.%Set("source_skew_seconds", value, "number")
+        Do $$$AssertEquals($CLASSMETHOD(c, "Validate", base), "", value _ " seconds")
+    }
+    For value = -1, 3601, 1.5 {
+        Set base.feed = {"time_zone": "UTC"}
+        Do base.feed.%Set("source_skew_seconds", value, "number")
+        Do $$$AssertTrue($CLASSMETHOD(c, "Validate", base) [ "feed.source_skew_seconds", value _ " seconds is refused")
+    }
+    Set base.feed = {"time_zone": "UTC", "source_skew_seconds": "300"}
+    Do $$$AssertTrue($CLASSMETHOD(c, "Validate", base) [ "feed.source_skew_seconds", "a string is refused")
+}
+
+/// Two receivers with one name: the first would take every decision and the second's tier and API would be ignored, so the
+/// server refuses it, as the page does.
+Method TestReceiverNamesAreUnique()
+{
+    Set p = ##class(Shutter.Store.SiteProfile).Default()
+    Set name = p.receivers.%Get(0).name
+    Do p.receivers.%Push({"name": (name), "tier": 3})
+    Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).Validate(p), "receivers[1].name: must be unique", "a second receiver with the first's name")
+    Set p.receivers.%Get(1).name = name _ " Two"
+    Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).Validate(p), "", "another name passes")
+}
+
+/// The intake's maximum sits beside the quiet period: a whole number, with 0 for none, and no other setting takes 0.
+Method TestIntakeMaximumSetting()
+{
+    Set p = ##class(Shutter.Store.SiteProfile).Default()
+    Set p.incident."max_intake_seconds" = 900
+    Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).Validate(p), "", "a maximum passes")
+    Set p.incident."max_intake_seconds" = 0
+    Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).Validate(p), "", "0 means none")
+    Set p.incident."max_intake_seconds" = -1
+    Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).Validate(p), "incident.max_intake_seconds: must be a whole number", "a negative one is refused")
 }
 
 /// The receiver's category and history policy (v1.23): the validator's values, the derivation, and the deprecated
@@ -169,6 +226,16 @@ ClassMethod Rows() As %DynamicArray
 XData Rows [ MimeType = application/json ]
 {
 [
+ {"group": "further", "name": "a site lets another visit's movement show", "patch": {"further_messages": {"in_patient_movement": "show"}}, "expect": ""},
+ {"group": "further", "name": "a site lets policy release a lost admission", "patch": {"further_messages": {"admission_not_found": "policy"}}, "expect": ""},
+ {"group": "further", "name": "an unknown word is refused", "patch": {"further_messages": {"in_patient_movement": "maybe"}}, "expect": "further_messages.in_patient_movement: must be stop or show"},
+ {"group": "further", "name": "an unknown word is refused for the admission too", "patch": {"further_messages": {"admission_not_found": "auto"}}, "expect": "further_messages.admission_not_found: must be person or policy"},
+ {"group": "further", "name": "a site gives the read more time", "patch": {"further_messages": {"scan_seconds": 600}}, "expect": ""},
+ {"group": "further", "name": "the read must have some time", "patch": {"further_messages": {"scan_seconds": 0}}, "expect": "further_messages.scan_seconds: must be a whole number of seconds from 1 to 600"},
+ {"group": "further", "name": "the read's time has a ceiling", "patch": {"further_messages": {"scan_seconds": 601}}, "expect": "further_messages.scan_seconds: must be a whole number of seconds from 1 to 600"},
+ {"group": "further", "name": "the read's time is a number", "patch": {"further_messages": {"scan_seconds": "30"}}, "expect": "further_messages.scan_seconds: must be a whole number of seconds from 1 to 600"},
+ {"group": "further", "name": "the read's time is whole", "patch": {"further_messages": {"scan_seconds": 1.5}}, "expect": "further_messages.scan_seconds: must be a whole number of seconds from 1 to 600"},
+ {"group": "further", "name": "a misspelt setting is refused", "patch": {"further_messages": {"in_patient": "stop"}}, "expect": "further_messages.in_patient: unknown setting"},
  {"group": "approvers", "name": "a misspelt switch is refused, not read as off", "patch": {"approvers": {"close_needs_aprover": true}}, "expect": "approvers.close_needs_aprover: unknown setting"},
  {"group": "approvers", "name": "the switch must be true or false", "patch": {"approvers": {"close_needs_approver": "yes"}}, "expect": "approvers.close_needs_approver: must be true or false"},
  {"group": "approvers", "name": "the role must be a string", "patch": {"approvers": {"role": 5}}, "expect": "approvers.role: must be a string"},

@@ -420,7 +420,7 @@ export interface Plan {
   plan: unknown;
   createdAt: string;
   createdBy: string;
-  /** The scenario catalogue's entry the plan follows, when it names one (E1 to E18). */
+  /** The scenario catalogue's entry the plan follows, when it names one (E1 to E19). */
   catalogueEntry?: string;
   /** "preferred", or the alternative taken, with the reason. */
   outcome?: string;
@@ -827,7 +827,12 @@ export interface SiteProfile {
   policy: Record<string, Partial<Record<ChainKind, string>>>;
   /** close_needs_approver: closing a case by hand needs an approver (the two-person rule); off when absent. */
   approvers?: { role?: string; escalation?: string; close_needs_approver?: boolean };
-  incident?: { threshold?: number; window_minutes?: number; quiet_seconds?: number };
+  incident?: {
+    threshold?: number;
+    window_minutes?: number;
+    quiet_seconds?: number;
+    max_intake_seconds?: number;
+  };
   /** Who corrects the systems by hand when Shutter can't, and where their email goes (T29). */
   teams?: SiteTeam[];
   mail?: { from?: string; allowed_domains?: string[] };
@@ -835,9 +840,21 @@ export interface SiteProfile {
   model_content?: { free_text?: boolean };
   /**
    * The zone of times the feed sends without an offset: an IANA name or a fixed offset (CONTRACTS 6.4); and whether the
-   * feed is held while a message's HL7 schema category is not loaded here ("prevent failures", default false).
+   * feed is held while a message's HL7 schema category is not loaded here ("prevent failures", default false); how far
+   * apart two sources' events still count as simultaneous; and whether an automatic release needs its source proved.
    */
-  feed?: { time_zone?: string; prevent_failures?: boolean };
+  feed?: {
+    time_zone?: string;
+    prevent_failures?: boolean;
+    source_skew_seconds?: number;
+    prove_origin?: boolean;
+  };
+  /** How rigid the check of further messages for the patient is (CONTRACTS 6.5). Absent means stop and person. */
+  further_messages?: {
+    in_patient_movement?: 'stop' | 'show';
+    admission_not_found?: 'person' | 'policy';
+    scan_seconds?: number;
+  };
 }
 
 /** GET /site-profile: the profile in force and its store version, which a PUT sends back as expectedVersion. */

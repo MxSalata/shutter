@@ -9,7 +9,7 @@ Class Shutter.Operation.Gate Extends Ens.BusinessOperation
 Parameter INVOCATION = "Queue";
 
 /// Bumped whenever a check changes; recorded on every decision and bound by approvals.
-Parameter POLICYVERSION = "2026-11-01.1";
+Parameter POLICYVERSION = "2026-11-06.1";
 
 Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shutter.Msg.GateResult) As %Status
 {
@@ -37,7 +37,7 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
     } ElseIf case.EncounterId = "-" {
         Do ..Check(checks, "identity", "pass", "NO_ENCOUNTER", "The message names no encounter (a patient-level message): there is no receiver record to compare")
     } ElseIf (wardStatus = 404) && (case.Event = "admit") {
-        Do ..Check(checks, "identity", "pass", "NEW_ENCOUNTER", "The receiver has no encounter yet, as an admission expects")
+        Do ..Check(checks, "identity", "pass", "NEW_ENCOUNTER", "The receiver answers no encounter under this number, as an admission expects. That does not prove it holds no record for this patient")
     } ElseIf wardStatus = 404 {
         Do ..Check(checks, "identity", "block", "UNKNOWN_ENCOUNTER", "The receiver does not know encounter " _ case.EncounterId)
     } Else {
@@ -107,6 +107,18 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
     // one of them (v1.34), until they are delivered.
     Set pendingMsgs = summary.%Get("pending_messages")
     If isWrite {
+        // Further messages for the patient, on any visit (Shutter.Util.FurtherMessages): the snapshot's at the proposal, read
+        // again at dispatch, since a snapshot may be hours old by the time a person approves. A hit stops the plan for a person.
+        Set further = $SELECT(request.Stage = "proposal": summary.%Get("further_messages"), 1: ##class(Shutter.Util.FurtherMessages).Find(case))
+        If ##class(Shutter.Util.FurtherMessages).Unreadable(further) {
+            Do ..Check(checks, "ordering", "block", "PATIENT_UNREADABLE", "The case's patient identifier could not be read, so what else has happened to this patient is not known; a person decides")
+        } ElseIf ##class(Shutter.Util.FurtherMessages).Count(further, "stops") > 0 {
+            Do ..Check(checks, "ordering", "block", "FURTHER_MOVEMENT", ##class(Shutter.Util.FurtherMessages).Describe(case, further) _ ". Nothing is sent; a person reads both and decides")
+        } ElseIf ##class(Shutter.Util.FurtherMessages).Unread(further) '= "" {
+            Do ..Check(checks, "ordering", "block", "FURTHER_NOT_READ", "Further messages for this patient could not all be read: " _ ##class(Shutter.Util.FurtherMessages).Unread(further) _ ". Nothing is sent until they can be, or a person decides")
+        } ElseIf $ISOBJECT(further) {
+            Do ..Check(checks, "ordering", "pass", "NO_FURTHER_MOVEMENT", "No further in-patient movement for this patient" _ $SELECT(##class(Shutter.Util.FurtherMessages).Count(further, "shows") > 0: "; " _ ##class(Shutter.Util.FurtherMessages).Count(further, "shows") _ " other message(s) on file, shown on the plan", 1: ""))
+        }
         // The occupied bed (v1.28): a write into a bed another encounter holds waits for them to leave, or never goes.
         Set bedConflict = $SELECT($ISOBJECT(conds): ##class(Shutter.Util.Json).Str(conds, "bed_conflict", "none"), 1: "none")
         If bedConflict '= "none" Do ..BedConflictCheck(checks, case, summary, bedConflict)
@@ -163,7 +175,17 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
     // Effect completeness: a receipt means the operation is already in effect.
     If receiptStatus = 200 {
         If plan.Disposition = "reconcile" {
-            Do ..Check(checks, "effect", "pass", "RECEIPT_FOUND", "The receiver holds a receipt for this operation; reconciling is right")
+            // A receipt shows the key is taken, not that this message is what the receiver holds: another movement in the same
+            // minute or a corrected message shares the key, and a cancel since means it no longer stands.
+            Set differs = $SELECT(##class(Shutter.Store.SiteProfile).StrictAnswers(case.Receiver): ##class(Shutter.Operation.Verify).ReceiptDiffers(receipt, summary.%Get("operation")), 1: "")
+            Set cancelled = ##class(Shutter.Catalogue.Matcher).CancelSince(summary, case)
+            If differs '= "" {
+                Do ..Check(checks, "effect", "block", "RECEIPT_PAYLOAD_DIFFERS", "The receiver holds this operation key with other content (" _ differs _ "); closing it as committed would drop this message, so a person decides")
+            } ElseIf cancelled '= "" {
+                Do ..Check(checks, "effect", "block", "RECEIPT_THEN_CANCELLED", "The receiver holds a receipt for this operation, but a cancel followed (" _ cancelled _ "), so the receipt does not show it stands; a person decides")
+            } Else {
+                Do ..Check(checks, "effect", "pass", "RECEIPT_FOUND", "The receiver holds a receipt for this operation; reconciling is right")
+            }
         } ElseIf isWrite {
             Do ..Check(checks, "effect", "block", "ALREADY_COMMITTED", "The receiver already committed this operation; a resend would be a duplicate")
         } Else {
@@ -204,10 +226,15 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
                 Set tier = ##class(Shutter.Store.SiteProfile).TierOf(request.Receiver)
                 Set policy = ##class(Shutter.Store.SiteProfile).Policy(tier, $SELECT(request.ChainKind = "": "single", 1: request.ChainKind))
                 If policy '= "automatic" Set why = "policy_requires_approval"
+                // An admission on a 404 is never released by policy alone (a record may have been entered by hand under another
+                // number), unless the site's profile says so. An incident's release has its own path (7.3).
+                If (why = "") && '$ISOBJECT(case.Incident) && ##class(Shutter.Util.FurtherMessages).AdmissionOnNotFound(case, summary) && (##class(Shutter.Store.SiteProfile).AdmissionNotFound() = "person") Set why = "policy_requires_approval"
                 // The plan must have come from the policy path for the entry it names: a board's plan never goes by policy.
                 If (why = "") && ((plan.CatalogueEntry = "") || (plan.CreatedBy '= ("policy:" _ plan.CatalogueEntry))) Set why = "plan_origin"
+                // A write with no person needs the case's source proved (CONTRACTS 11).
+                If why = "" Set unproved = ##class(Shutter.Operation.Origin).Problem(case) Set:unproved'="" why = "origin_not_proved"
             }
-            Do ..Check(checks, "authorization", $SELECT(why = "": "pass", 1: "block"), $SELECT(why = "": "APPROVAL_VALID", why = "policy_requires_approval": "POLICY_REQUIRES_APPROVAL", 1: "APPROVAL_" _ $ZCONVERT(why, "U")), $SELECT(why = "": "Approved by " _ approval.Approver _ " for plan digest " _ $EXTRACT(approval.PlanDigest, 1, 19), why = "item_changed": "The incident's approval bound entry " _ approval.BoundEntry _ " (" _ approval.BoundOutcome _ ") for this item; the plan or the fresh evidence now reads " _ plan.CatalogueEntry _ " (" _ ##class(Shutter.Util.Json).Str(summary.%Get("catalogue"), "outcome") _ ")", 1: "The approval no longer authorises this dispatch: " _ why))
+            Do ..Check(checks, "authorization", $SELECT(why = "": "pass", 1: "block"), $SELECT(why = "": "APPROVAL_VALID", why = "policy_requires_approval": "POLICY_REQUIRES_APPROVAL", 1: "APPROVAL_" _ $ZCONVERT(why, "U")), $SELECT(why = "": "Approved by " _ approval.Approver _ " for plan digest " _ $EXTRACT(approval.PlanDigest, 1, 19), why = "origin_not_proved": "Source not verified, so no automatic release: " _ $GET(unproved), why = "item_changed": "The incident's approval bound entry " _ approval.BoundEntry _ " (" _ approval.BoundOutcome _ ") for this item; the plan or the fresh evidence now reads " _ plan.CatalogueEntry _ " (" _ ##class(Shutter.Util.Json).Str(summary.%Get("catalogue"), "outcome") _ ")", 1: "The approval no longer authorises this dispatch: " _ why))
         }
     }
 
@@ -271,11 +298,18 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
         Set capable = ##class(Shutter.Util.Json).Bool(route, "conditional_writes") && ##class(Shutter.Util.Json).Bool(route, "receipts")
         If 'capable {
             Do ..Check(checks, "capability", "block", "CONNECTOR_INCAPABLE", "The receiver reports no conditional writes: a resend cannot be made safe, so only investigation and reconciliation are open")
+        } ElseIf '##class(Shutter.Util.Json).Bool(route, "history") {
+            // A receiver with no readable history can hold a move made outside this feed, and nothing here would see it: every
+            // read says nothing is later, the resend goes over that move, and the verifier finds out only afterwards.
+            Do ..Check(checks, "capability", "block", "HISTORY_UNSUPPORTED", "The receiver offers no readable history: a move made outside this feed would not show, so a resend could overwrite it. A resend is not offered; investigation, reconciliation and escalation remain")
         } ElseIf '##class(Shutter.Util.Json).Bool(route, "dry_run") {
             // No dry run means the exact action cannot be rehearsed before it is written (v1.21): no resend to this receiver.
             Do ..Check(checks, "capability", "block", "DRY_RUN_UNSUPPORTED", "The receiver reports no dry run: the exact action cannot be rehearsed before it is written, so a resend is not offered; investigation, reconciliation and escalation remain")
+        } ElseIf (wardStatus = 200) && '($ISOBJECT(ward) && (ward.%GetTypeOf("history") = "array")) {
+            // It says it keeps a history, but this read holds none: nothing here can tell what moved, which is unknown, not "nothing later".
+            Do ..Check(checks, "capability", "unknown", "HISTORY_UNREADABLE", "The receiver says it keeps a history, but its read of this encounter holds none, so what moved since is unknown")
         } Else {
-            Do ..Check(checks, "capability", "pass", "CONNECTOR_CAPABLE", "The receiver guarantees conditional writes, receipts and dry runs")
+            Do ..Check(checks, "capability", "pass", "CONNECTOR_CAPABLE", "The receiver guarantees conditional writes, receipts, a readable history and dry runs")
         }
     }
 
@@ -288,6 +322,11 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
         Do ..Check(checks, "catalogue", "unknown", "MATCHER_ERROR", "The matcher failed on this evidence: " _ $EXTRACT(##class(Shutter.Util.Json).Str(cat, "error"), 1, 200))
     } ElseIf decision = "new_pattern" {
         Do ..Check(checks, "catalogue", "block", "NEW_PATTERN", "No catalogue entry matches this evidence: a candidate entry for a reviewer")
+    } ElseIf (plan.CatalogueEntry = "") && isWrite && '((case.Mode = "rules") && (plan.CreatedBy = "rules") && case.ScenarioRecorded) && (..EntriesThatStop(cat) '= "") {
+        // Rules only in a scenario the runner plays is the baseline, kept to show what a plain resend does: any other write, a
+        // real case or a live story in that mode included, must name the entry it follows, and the entry the plan could not name
+        // calls for no resend.
+        Do ..Check(checks, "catalogue", "block", "ENTRY_NOT_NAMED_WRITE", "The plan writes and names no catalogue entry, but the evidence matched " _ ..EntriesThatStop(cat) _ ", which calls for no resend")
     } ElseIf plan.CatalogueEntry = "" {
         Do ..Check(checks, "catalogue", "pass", "ENTRY_NOT_NAMED", "The plan names no catalogue entry; the evidence matched " _ $SELECT(##class(Shutter.Util.Json).Str(cat, "entry") '= "": ##class(Shutter.Util.Json).Str(cat, "entry"), 1: "several entries"))
     } Else {
@@ -397,6 +436,22 @@ ClassMethod DispositionFor(outcome As %String) As %String
     Quit $CASE(outcome, "resend": "resend", "resend_chain": "resend", "resend_latest": "resend", "resend_after_occupant": "resend", "reconcile": "reconcile", "none": "superseded", "escalate": "escalate", "resend_unconditional": "escalate", "correct_history": "escalate", : "")
 }
 
+/// The matched entries whose outcome calls for something other than a resend: the one match by the outcome the matcher
+/// chose for it, several by their preferred ones. "" when none does.
+ClassMethod EntriesThatStop(cat As %DynamicObject) As %String
+{
+    Set json = "Shutter.Util.Json"
+    If '$ISOBJECT(cat) || (cat.%GetTypeOf("matches") '= "array") Quit ""
+    Set matches = cat.%Get("matches"), out = "", it = matches.%GetIterator()
+    While it.%GetNext(, .m) {
+        Set outcome = $SELECT(matches.%Size() = 1: $CLASSMETHOD(json, "Str", cat, "outcome"), 1: "")
+        If outcome = "" Set outcome = $CLASSMETHOD(json, "Str", m.%Get("preferred"), "outcome")
+        Set disposition = ..DispositionFor(outcome)
+        If (disposition '= "") && (disposition '= "resend") Set out = out _ $SELECT(out = "": "", 1: ", ") _ $CLASSMETHOD(json, "Str", m, "id")
+    }
+    Quit out
+}
+
 Method OutcomeConsistency(checks As %DynamicArray, plan As Shutter.Store.Plan, outcome As %String) [ Private ]
 {
     Set allowed = ..DispositionFor(outcome)
@@ -416,7 +471,7 @@ Method Superseding(summary As %DynamicObject, case As Shutter.Store.Case, chainK
 {
     Set found = "", delivered = 1
     Set later = ##class(Shutter.Catalogue.Matcher).Later(summary, case, chainKind)
-    Set words = $SELECT(isWrite: $LISTBUILD("transfer", "discharge", "cancelled", "merge", "admit"), 1: $LISTBUILD("transfer", "discharge"))
+    Set words = $SELECT(isWrite: $LISTBUILD("transfer", "discharge", "cancelled", "cancel_other", "merge", "admit"), 1: $LISTBUILD("transfer", "discharge"))
     For pass = $LISTBUILD("timeline", 1), $LISTBUILD("history", 1), $LISTBUILD("timeline", 0) {
         Set from = $LIST(pass, 1), want = $LIST(pass, 2)
         Set iter = later.%GetIterator()

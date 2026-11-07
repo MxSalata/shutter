@@ -81,14 +81,39 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
         Quit $$$ERROR($$$GeneralError, text)
     }
     Set response = result
-    If result.IsInEffect() {
+    Set notThis = $SELECT(result.Outcome = "already_committed": ..CommittedNotThis(op, result, ##class(Shutter.Store.SiteProfile).StrictAnswers(..WardTarget)), 1: "")
+    If result.IsInEffect() && (notThis = "") {
         $$$TRACE("Delivered: " _ result.Outcome _ " (HTTP " _ result.HttpStatus _ ", version " _ result.EncounterVersion _ ")")
         Quit $$$OK
+    }
+    If notThis '= "" {
+        // Delivered in the receiver's words, not in effect: a person decides, and the case's plan cannot close it (Gate, effect).
+        Set result.ReasonCode = "committed_not_this_message"
+        Set text = "The receiver answered already committed, but " _ notThis
+        Set sent = ..OpenCase(op, "rejected", text, result, "")
+        Quit $$$ERROR($$$GeneralError, text _ $SELECT(sent '= "": ". A case was opened", 1: ". No case could be opened"))
     }
     Set kind = $CASE(result.Outcome, "uncertain": "uncertain_outcome", "unavailable": "delivery_failed", "error": "delivery_failed", : "rejected")
     Set text = "Delivery " _ result.Outcome _ $SELECT(result.ReasonCode '= "": " (" _ result.ReasonCode _ ")", 1: "") _ $SELECT(+result.HttpStatus: ", HTTP " _ result.HttpStatus, 1: "") _ $SELECT(result.Error '= "": ": " _ result.Error, 1: "")
     Set sent = ..OpenCase(op, kind, text, result, "")
     Quit $$$ERROR($$$GeneralError, text _ $SELECT(sent '= "": ". A case was opened", 1: ". No case could be opened"))
+}
+
+/// Why an already_committed answer does not show this message is in effect, in words, or "": the receiver's receipt holds other
+/// content, such as a corrected bed, which sits outside the digest (CONTRACTS 1.6), or the index holds a cancel of this patient's
+/// visit at or after this event, so this is a re-issue the receiver answers from the first delivery's receipt. strict is the
+/// receiver's entry in the site profile; the cancel is the feed's own record, so it counts whatever a site reads of the receiver.
+ClassMethod CommittedNotThis(op As %DynamicObject, result As Shutter.Msg.WardResult, strict As %Boolean = 1) As %String
+{
+    If strict && (result.ReceiptJSON '= "") {
+        Set receipt = ##class(Shutter.Util.Json).Parse(result.ReceiptJSON, .sc)
+        Set differs = $SELECT($ISOBJECT(receipt): ##class(Shutter.Operation.Verify).ReceiptDiffers(receipt, op), 1: "")
+        If differs '= "" Quit "its receipt holds other content (" _ differs _ "), so this message is not what it holds"
+    }
+    Set json = "Shutter.Util.Json"
+    Set cancel = ##class(Shutter.Index.Message).CancelSince($CLASSMETHOD(json, "Str", op, "encounter_id"), $CLASSMETHOD(json, "Str", op, "patient_id"), $CLASSMETHOD(json, "Str", op, "patient_id_authority"), $CLASSMETHOD(json, "Str", op, "event_time"))
+    If cancel '= "" Quit "a cancel followed (" _ cancel _ "), so this re-issue is not in effect there"
+    Quit ""
 }
 
 /// Send the intake to the case workflow asynchronously; returns the case id when the workflow

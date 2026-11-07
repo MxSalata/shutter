@@ -511,7 +511,7 @@ function ProfileForm({
           id="site-approvals"
           tour="site-approvals"
           title="Approvals"
-          note="Automatic is still gated, rehearsed and verified; only the person's approval is left out."
+          note="Automatic overwrites the receiver's record, such as a patient's placement, with no person looking. It is still gated, rehearsed and verified."
         >
           <Question n={7} text="How each tier's chains are approved" acts />
           {TIERS.map((tier) => (

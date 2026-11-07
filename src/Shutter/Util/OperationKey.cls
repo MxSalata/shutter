@@ -78,6 +78,9 @@ ClassMethod FromHL7(message As EnsLib.HL7.Message, Output sc As %Status) As %Dyn
         // A registration, a person update or a merge may carry no visit number: the piece is "-", never empty.
         If encounterId = "" Set encounterId = "-"
         Set isoTime = ##class(Shutter.Util.Time).FromHL7(eventTime)
+        // Digits that make no date or time read as no time at all. An operation with an empty time would read every other
+        // row as later than it and close as overtaken, so this is a message a person looks at.
+        If isoTime = "" Set sc = $$$ERROR($$$GeneralError, "Missing field for the operation key: EVN-6 or EVN-2 event time (unreadable)") Quit
         Set op = {}
         Set op."operation_key" = ..FromParts(sourceSystem, authority, patientId, encounterId, event, isoTime)
         Set op."encounter_id" = encounterId
@@ -102,6 +105,22 @@ ClassMethod FromHL7(message As EnsLib.HL7.Message, Output sc As %Status) As %Dyn
     }
     If $$$ISERR(sc) Quit ""
     Quit op
+}
+
+/// Whether a message records a death, from PID-29 (the date and time) and PID-30 (the indicator): "yes" when PID-30 says Y
+/// or PID-29 holds a time; "cleared" when either holds the HL7 null ("") that deletes it; "unreadable" when a read fails,
+/// which is not the same as no death; "no" otherwise. An N in PID-30 is "no": it says nothing about what the receiver held
+/// before. What goes to the receiver carries neither field.
+ClassMethod DeathRecorded(message As EnsLib.HL7.Message) As %String
+{
+    Set when = "", flag = "", failed = 0
+    Try {
+        Set when = $ZSTRIP(..Value(message, "PID", "29"), "<>W")
+        Set flag = $ZCONVERT($ZSTRIP(..Value(message, "PID", "30"), "<>W"), "U")
+    } Catch ex {
+        Set failed = 1
+    }
+    Quit $SELECT((flag = "Y") || ((when '= "") && (when '= """""")): "yes", (when = """""") || (flag = """"""): "cleared", failed: "unreadable", 1: "no")
 }
 
 /// The prior record of a merge (A40) from the message's MRG segments, added to the operation: prior_patient_id and

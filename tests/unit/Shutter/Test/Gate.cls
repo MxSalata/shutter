@@ -173,6 +173,34 @@ Method TestCapabilityUndeclared()
     Do $$$AssertEquals(..Found(run.checks, "capability", "CONNECTOR_CAPABLE"), "pass", "the gate passes it (" _ ..Codes(run.checks, "capability") _ ")")
 }
 
+/// What a receiver offers on history reaches the route: the capabilities endpoint's word, else the entry's own declaration,
+/// which is how a site whose endpoint does not mention history says it has one. Nothing said by either is no history.
+Method TestHistoryOnTheRoute()
+{
+    Set e = "Shutter.Operation.Evidence", yes = {"features": {"history": true}}, no = {"features": {"history": false}}
+    Do $$$AssertEquals($CLASSMETHOD(e, "HistoryOffered", {"history": true}, ""), 1, "the endpoint says yes")
+    Do $$$AssertEquals($CLASSMETHOD(e, "HistoryOffered", {"history": false}, yes), 0, "the endpoint's no outranks the entry")
+    Do $$$AssertEquals($CLASSMETHOD(e, "HistoryOffered", {}, yes), 1, "the endpoint is silent and the entry declares it")
+    Do $$$AssertEquals($CLASSMETHOD(e, "HistoryOffered", {}, no), 0, "the endpoint is silent and the entry declares none")
+    Do $$$AssertEquals($CLASSMETHOD(e, "HistoryOffered", {}, {}), 0, "neither says")
+    Do $$$AssertEquals($CLASSMETHOD(e, "HistoryOffered", {}, ""), 0, "and no entry at all")
+    Set recs = ##class(Shutter.Store.SiteProfile).Current().%Get("receivers")
+    Set api = {"base": "/wardb/api", "state": "/encounters/{encounter}", "receipt": "/receipts/{key}", "capabilities": "", "operations": "/operations"}
+    Do recs.%Push({"name": "UT No History", "tier": 2, "api": (api), "features": {"conditional_writes": true, "receipts": true, "history": false, "dry_run": true}})
+    Do recs.%Push({"name": "UT History", "tier": 2, "api": (api), "features": {"conditional_writes": true, "receipts": true, "history": true, "dry_run": true}})
+    Do ..ChangeProfile({"receivers": (recs)})
+    Set evidence = ##class(Shutter.Operation.Evidence).%New("Shutter Evidence (unit test)")
+    Set route = evidence.Route("UT History")
+    Do $$$AssertEquals(route.%GetTypeOf("history"), "boolean", "the route carries history")
+    Do $$$AssertTrue(route.history, "as declared")
+    Set route = evidence.Route("UT No History")
+    Do $$$AssertEquals(route.%GetTypeOf("history"), "boolean", "the route says so when there is none")
+    Do $$$AssertNotTrue(route.history, "as declared")
+    Set run = ..Run({"name": "a receiver that declares no history, through the route", "summary": {"route": (route)}})
+    Do $$$AssertEquals(..Found(run.checks, "capability", "HISTORY_UNSUPPORTED"), "block", "the gate blocks the resend (" _ ..Codes(run.checks, "capability") _ ")")
+    Do $$$AssertEquals(run.response.Outcome, "block", "and the plan is not released")
+}
+
 Method TestCatalogue()
 {
     Do ..RunRows("catalogue")
@@ -240,6 +268,33 @@ Method TestReversed()
 
 /// Every reason code the gate can give has a row in the table: the codes written in the gate's source, and the
 /// approval's reasons (Shutter.Store.Approval.InvalidReason) as the gate words them.
+/// A further message that reached the index after the snapshot: the dispatch gate reads again and stops the approved write, and
+/// the connector, reading once more at the moment of the write, refuses it with nothing sent.
+Method TestFurtherMessagesAreReadAgainBeforeTheWrite()
+{
+    Set row = ##class(Shutter.Index.Message).%New()
+    Set row.DocId = "UT-GATE-FURTHER", row.PatientId = "MRN-UT1", row.PatientIdAuthority = "HOSP", row.VisitNumber = "ENC-UT-NEW", row.Event = "admit", row.MessageType = "ADT_A01"
+    Set row.ControlId = "UT-NEW", row.EventTime = "2026-10-20T09:00:00Z", row.TimeCreated = "2099-01-01 00:00:00"
+    Do $$$AssertStatusOK(row.%Save(), "the index's row is saved")
+    Try {
+        Set run = ..Run({"name": "the dispatch gate reads again", "approval": {}})
+        Do $$$AssertEquals(..Found(run.checks, "ordering", "FURTHER_MOVEMENT"), "block", "the dispatch gate stops the write")
+        Do $$$AssertTrue(..Detail(run.checks, "ordering", "FURTHER_MOVEMENT") [ "ENC-UT-NEW", "and names the new visit")
+        Set case = ..NewCase({})
+        Set request = ##class(Shutter.Msg.WardOperation).%New()
+        Set request.Purpose = "recovery", request.CaseId = case.CaseId, request.OperationKey = case.OperationKey
+        Set ward = ##class(Shutter.Operation.Ward).%New("UT Ward")
+        Do $$$AssertStatusOK(ward.OnWardOperation(request, .response), "the connector answers")
+        Do $$$AssertEquals(response.Outcome, "refused", "the connector refuses the write")
+        Do $$$AssertEquals(response.ReasonCode, "further_movement", "for this reason")
+        Do $$$AssertTrue(response.Error [ "ENC-UT-NEW", "and says what it found: " _ response.Error)
+        Do $$$AssertEquals(response.HttpStatus, "", "nothing was sent")
+    } Catch ex {
+        Do $$$AssertTrue(0, "no error: " _ ex.DisplayString())
+    }
+    Do ##class(Shutter.Index.Message).%DeleteId(row.%Id())
+}
+
 Method TestEveryReasonCodeHasARow()
 {
     Set asserted = ""
@@ -257,7 +312,7 @@ Method TestEveryReasonCodeHasARow()
     Set m = ##class(%Regex.Matcher).%New("Quit ""([a-z_]+)""", ..Source("Shutter.Store.Approval", "InvalidReason"))
     While m.Locate() { Set codes("APPROVAL_" _ $ZCONVERT(m.Group(1), "U")) = "" }
     // The two reasons the gate itself gives an automatic release.
-    Set codes("POLICY_REQUIRES_APPROVAL") = "", codes("APPROVAL_PLAN_ORIGIN") = ""
+    Set codes("POLICY_REQUIRES_APPROVAL") = "", codes("APPROVAL_PLAN_ORIGIN") = "", codes("APPROVAL_ORIGIN_NOT_PROVED") = ""
     Do $$$AssertTrue($DATA(codes("EXACT_OPERATION")) && $DATA(codes("APPROVAL_EXPIRED")), "the codes were read from the source")
     Set code = "", missing = ""
     For {
@@ -316,6 +371,7 @@ Method Run(row As %DynamicObject) As %DynamicObject
         Set inc.IncidentId = "UT-GATE-I-" _ $JOB _ "-" _ $INCREMENT(^||Shutter.Test.Gate)
         Set inc.Receiver = case.Receiver, inc.Mode = "policy", inc.State = "releasing", inc.OpenedAt = case.OpenedAt
         Set inc.PlanDigest = ##class(Shutter.Util.Json).Str(row.incident, "plan_digest")
+        If row.incident.%IsDefined("epoch") Set inc.ReceiverEpoch = row.incident.epoch
         Do $$$AssertStatusOK(inc.%Save(), row.name _ ": the incident is saved")
         Set i%MadeIncidents(inc.%Id()) = ""
         Do $$$AssertStatusOK(case.SetIncident(inc), row.name _ ": the case belongs to the incident")
@@ -395,7 +451,9 @@ Method NewCase(spec As %DynamicObject) As Shutter.Store.Case
     Set case.SourceSystem = "PAS", case.Ward = $SELECT(case.Event = "transfer": "WARD-B", 1: "")
     Set case.Receiver = $PARAMETER("Shutter.Production", "RECEIVER")
     Set case.OperationKey = "PAS^HOSP^" _ case.PatientId _ "^" _ case.EncounterId _ "^" _ case.Event _ "^" _ case.EventTime
-    Set case.State = "investigating", case.Mode = "rules"
+    Set case.State = "investigating", case.Mode = $CLASSMETHOD(json, "Str", spec, "mode", "rules")
+    Set case.Scenario = $CLASSMETHOD(json, "Str", spec, "scenario"), case.ScenarioRecorded = $CLASSMETHOD(json, "Bool", spec, "scenario_recorded")
+    Set case.SourceNamespace = $CLASSMETHOD(json, "Str", spec, "source_namespace"), case.OriginHeaderId = $CLASSMETHOD(json, "Str", spec, "origin_header_id")
     Set now = ##class(Shutter.Util.Time).NowUTC()
     Set case.OpenedAt = now, case.UpdatedAt = now
     Set sc = case.%Save()
@@ -436,7 +494,8 @@ Method NewRehearsal(case As Shutter.Store.Case, snap As Shutter.Store.Snapshot, 
 }
 
 /// The evidence of a transfer that can be resent: the receiver knows the encounter (admitted, version 3, the case's
-/// patient), holds no receipt, takes conditional writes, keeps receipts and runs dry runs; the message parses; nothing later.
+/// patient), holds no receipt, takes conditional writes, keeps receipts, offers a history and runs dry runs; the message
+/// parses; nothing later.
 ClassMethod BaseSummary() As %DynamicObject
 {
     Quit {
@@ -445,7 +504,7 @@ ClassMethod BaseSummary() As %DynamicObject
         "ward_state": {"patient_id": "MRN-UT1", "patient_id_authority": "HOSP", "state": "admitted", "ward": "WARD-A", "version": 3, "epoch": 1, "history": [{"event": "admit", "event_time": "2026-10-18T08:00:00Z", "ward": "WARD-A", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^admit^2026-10-18T08:00:00Z"}]},
         "receipt_http_status": 404,
         "validation": {"parsed": true},
-        "route": {"capabilities_http_status": 200, "conditional_writes": true, "receipts": true, "dry_run": true},
+        "route": {"capabilities_http_status": 200, "conditional_writes": true, "receipts": true, "history": true, "dry_run": true},
         "timeline": []
     }
 }
@@ -611,7 +670,7 @@ XData Rows [ MimeType = application/json ]
    "expect": [["identity", "pass", "NO_ENCOUNTER"], ["state_transition", "block", "PATIENT_LEVEL_WRITE"], ["concurrency", "block", "PATIENT_LEVEL_WRITE"]]},
   {"group": "identity", "name": "an admission the receiver does not know yet",
    "case": {"event": "admit"}, "summary": {"ward_state_http_status": 404, "ward_state": null}, "plan": {"action": {"expected_version": 0}},
-   "expect": [["identity", "pass", "NEW_ENCOUNTER"], ["state_transition", "pass", "TRANSITION_ALLOWED"], ["concurrency", "pass", "VERSION_MATCHES"]], "outcome": "pass"},
+   "expect": [["identity", "pass", "NEW_ENCOUNTER"], ["state_transition", "pass", "TRANSITION_ALLOWED"], ["concurrency", "pass", "VERSION_MATCHES"]], "contains": [["identity", "NEW_ENCOUNTER", "does not prove"]], "outcome": "pass"},
   {"group": "identity", "name": "a transfer of an encounter the receiver does not know",
    "summary": {"ward_state_http_status": 404, "ward_state": null},
    "expect": [["identity", "block", "UNKNOWN_ENCOUNTER"], ["state_transition", "unknown", "RECEIVER_UNREADABLE"], ["concurrency", "unknown", "RECEIVER_UNREADABLE"]]},
@@ -670,9 +729,31 @@ XData Rows [ MimeType = application/json ]
   {"group": "conformance", "name": "a message whose schema is not loaded here",
    "summary": {"validation": {"parsed": false, "schema_known": false, "schema_category": "2.5.1.HOSP", "schema_fix": "Import the schema, then reinvestigate the case", "error": "unknown schema"}},
    "expect": [["conformance", "block", "SCHEMA_UNKNOWN"]], "absent": [["conformance", "PARSE_FAILED"]], "outcome": "block"},
+  {"group": "ordering", "name": "a cancel of another movement holds a write back",
+   "summary": {"ward_state": {"history": [{"event": "admit", "event_time": "2026-10-18T08:00:00Z", "ward": "WARD-A", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^admit^2026-10-18T08:00:00Z"}, {"event": "cancel_discharge", "event_time": "2026-10-19T11:00:00Z", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^cancel_discharge^2026-10-19T11:00:00Z"}]}},
+   "expect": [["ordering", "block", "SUPERSEDED_BY_LATER_EVENT"]], "outcome": "block"},
   {"group": "ordering", "name": "a resend while a newer message of the encounter is pending in Shutter",
    "summary": {"pending_messages": [{"event": "transfer", "event_time": "2026-10-19T10:00:00Z", "operation_key": "k-later", "control_id": "MSG-9", "ens_header_id": "77", "sent_at": "2026-10-19 09:01:00.000", "receiver": "Downstream Out", "where": "queued for the receiver, no answer yet"}]},
    "expect": [["ordering", "block", "NEWER_MESSAGE_PENDING"]], "outcome": "block"},
+  {"group": "ordering", "name": "a resend with a new admission for the patient on another visit stops and names both visits",
+   "summary": {"further_messages": {"identifier": "read", "stops": [{"why": "other_visit", "event": "admit", "message_type": "ADT_A01", "visit_number": "ENC-OTHER", "event_time": "2026-10-19T10:00:00Z", "control_id": "MSG-9"}], "shows": [], "unread": ""}},
+   "expect": [["ordering", "block", "FURTHER_MOVEMENT"]], "contains": [["ordering", "FURTHER_MOVEMENT", "visit ENC-OTHER"], ["ordering", "FURTHER_MOVEMENT", "visit ENC-UT1"]], "outcome": "block"},
+  {"group": "ordering", "name": "a further movement comes before a pending message in the checks, so the workflow doesn't wait",
+   "summary": {"further_messages": {"identifier": "read", "stops": [{"why": "cancel", "event": "cancel_transfer", "visit_number": "ENC-UT1", "event_time": "2026-10-19T10:00:00Z", "control_id": "MSG-9"}], "shows": [], "unread": ""}, "pending_messages": [{"event": "cancel_transfer", "event_time": "2026-10-19T10:00:00Z", "operation_key": "k-later", "control_id": "MSG-9", "ens_header_id": "77", "sent_at": "2026-10-19 09:01:00.000", "receiver": "Downstream Out", "where": "received, not yet delivered to the receiver"}]},
+   "expect": [["ordering", "block", "FURTHER_MOVEMENT"], ["ordering", "block", "NEWER_MESSAGE_PENDING"]], "contains": [["ordering", "FURTHER_MOVEMENT", "cancel of the transfer"], ["ordering", "FURTHER_MOVEMENT", "MRN-UT1"]], "outcome": "block"},
+  {"group": "ordering", "name": "an out-patient attendance on another visit passes and is counted",
+   "summary": {"further_messages": {"identifier": "read", "stops": [], "shows": [{"why": "shown", "event": "register", "message_type": "ADT_A04", "visit_number": "ENC-OTHER", "event_time": "2026-10-19T10:00:00Z", "control_id": "MSG-9"}], "unread": ""}},
+   "expect": [["ordering", "pass", "NO_FURTHER_MOVEMENT"]], "contains": [["ordering", "NO_FURTHER_MOVEMENT", "shown on the plan"]], "outcome": "pass"},
+  {"group": "ordering", "name": "a patient identifier that can't be read blocks a write",
+   "summary": {"further_messages": {"identifier": "unreadable", "stops": [], "shows": [], "unread": ""}},
+   "expect": [["ordering", "block", "PATIENT_UNREADABLE"]], "outcome": "block"},
+  {"group": "ordering", "name": "further messages that could not all be read block a write",
+   "summary": {"further_messages": {"identifier": "read", "stops": [], "shows": [], "unread": "the read of HOSPITAL ran out of its 30 seconds with messages left"}},
+   "expect": [["ordering", "block", "FURTHER_NOT_READ"]], "contains": [["ordering", "FURTHER_NOT_READ", "HOSPITAL"]], "outcome": "block"},
+  {"group": "ordering", "name": "a further movement doesn't block a plan that writes nothing",
+   "plan": {"disposition": "escalate", "action": null},
+   "summary": {"further_messages": {"identifier": "read", "stops": [{"why": "other_visit", "event": "admit", "visit_number": "ENC-OTHER"}], "shows": [], "unread": ""}},
+   "expect": [["ordering", "pass", "NOT_APPLICABLE"]], "absent": [["ordering", "FURTHER_MOVEMENT"]], "outcome": "pass"},
   {"group": "ordering", "name": "a resend into a bed whose occupant has left",
    "summary": {"catalogue": {"conditions": {"bed_conflict": "occupant_left"}}, "bed_conflict": {"refused": true, "ward": "WARD-B", "bed": "B2", "since": "2026-10-18T08:10:00Z", "status": "occupant_left", "note": "The occupant's encounter is discharged now, so the bed is free of them", "occupant": {"encounter_id": "ENC-OCC"}, "occupant_movement": {"event": "discharge", "delivery": "applied"}}},
    "expect": [["ordering", "pass", "OCCUPANT_MOVED_OUT"], ["ordering", "pass", "NO_LATER_EVENT"]]},
@@ -800,6 +881,25 @@ XData Rows [ MimeType = application/json ]
   {"group": "effect", "name": "reconcile, with the receiver's receipt",
    "plan": {"disposition": "reconcile", "action": {"type": "reconcile"}}, "summary": {"receipt_http_status": 200, "receipt": {"operation_key": "{key}"}},
    "expect": [["effect", "pass", "RECEIPT_FOUND"]], "outcome": "pass"},
+  {"group": "effect", "name": "reconcile, the receipt's digest the operation's own",
+   "plan": {"disposition": "reconcile", "action": {"type": "reconcile"}}, "summary": {"receipt_http_status": 200, "receipt": {"operation_key": "{key}", "payload_digest": "sha256:ut"}},
+   "expect": [["effect", "pass", "RECEIPT_FOUND"]], "outcome": "pass"},
+  {"group": "effect", "name": "reconcile, the receipt holding other content under the key",
+   "plan": {"disposition": "reconcile", "action": {"type": "reconcile"}}, "summary": {"receipt_http_status": 200, "receipt": {"operation_key": "{key}", "payload_digest": "sha256:other", "ward": "WARD-B"}, "operation": {"ward": "WARD-C"}},
+   "expect": [["effect", "block", "RECEIPT_PAYLOAD_DIFFERS"]], "outcome": "block"},
+  {"group": "effect", "name": "reconcile, the receipt naming another bed under the same digest",
+   "plan": {"disposition": "reconcile", "action": {"type": "reconcile"}}, "summary": {"receipt_http_status": 200, "receipt": {"operation_key": "{key}", "payload_digest": "sha256:ut", "bed": "B1"}, "operation": {"bed": "B2"}},
+   "expect": [["effect", "block", "RECEIPT_PAYLOAD_DIFFERS"]], "outcome": "block"},
+  {"group": "effect", "name": "reconcile, the receipt and the operation both with no bed",
+   "plan": {"disposition": "reconcile", "action": {"type": "reconcile"}}, "summary": {"receipt_http_status": 200, "receipt": {"operation_key": "{key}", "payload_digest": "sha256:ut", "bed": null}, "operation": {"bed": null}},
+   "expect": [["effect", "pass", "RECEIPT_FOUND"]], "outcome": "pass"},
+  {"group": "effect", "name": "reconcile, a site that reads this receiver's answers on status alone",
+   "plan": {"disposition": "reconcile", "action": {"type": "reconcile"}}, "profile": {"receiver": {"strict_answers": false}}, "summary": {"receipt_http_status": 200, "receipt": {"operation_key": "{key}", "payload_digest": "sha256:other"}},
+   "expect": [["effect", "pass", "RECEIPT_FOUND"]], "outcome": "pass"},
+  {"group": "effect", "name": "reconcile, a cancel recorded since: the receipt is not what stands",
+   "plan": {"disposition": "reconcile", "action": {"type": "reconcile"}}, "summary": {"receipt_http_status": 200, "receipt": {"operation_key": "{key}", "payload_digest": "sha256:ut"},
+     "timeline": [{"event": "cancel_transfer", "event_time": "2026-10-19T10:00:00Z", "operation_key": "PAS^HOSP^MRN-UT^ENC-UT^cancel_transfer^2026-10-19T10:00:00Z", "outcome": "unknown", "source": "index"}]},
+   "expect": [["effect", "block", "RECEIPT_THEN_CANCELLED"]], "outcome": "block"},
   {"group": "effect", "name": "a resend of an operation the receiver already committed",
    "summary": {"receipt_http_status": 200, "receipt": {"operation_key": "{key}"}},
    "expect": [["effect", "block", "ALREADY_COMMITTED"]], "outcome": "block"},
@@ -872,6 +972,23 @@ XData Rows [ MimeType = application/json ]
    "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2"}, "approval": {"approver": "policy"}, "request": {"chain_kind": "ordered"},
    "profile": {"policy": {"2": {"ordered": "approval"}}},
    "expect": [["authorization", "block", "POLICY_REQUIRES_APPROVAL"]]},
+  {"group": "authorization", "name": "an automatic release of a lost admission: the receiver's 404 proves nothing about a record entered by hand",
+   "case": {"event": "admit"}, "summary": {"ward_state_http_status": 404, "ward_state": null},
+   "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2", "action": {"expected_version": 0}}, "approval": {"approver": "policy"}, "request": {"chain_kind": "single"},
+   "profile": {"policy": {"2": {"single": "automatic"}}},
+   "expect": [["authorization", "block", "POLICY_REQUIRES_APPROVAL"]]},
+  {"group": "authorization", "name": "the same release at a site whose profile lets policy take a lost admission",
+   "case": {"event": "admit"}, "summary": {"ward_state_http_status": 404, "ward_state": null},
+   "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2", "action": {"expected_version": 0}}, "approval": {"approver": "policy"}, "request": {"chain_kind": "single"},
+   "profile": {"policy": {"2": {"single": "automatic"}}, "further_messages": {"admission_not_found": "policy"}},
+   "expect": [["authorization", "pass", "APPROVAL_VALID"]]},
+  {"group": "authorization", "name": "an automatic release of a case whose source cannot be proved",
+   "case": {"source_namespace": "UTNOSUCHNAMESPACE", "origin_header_id": "1"}, "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2"}, "approval": {"approver": "policy"}, "request": {"chain_kind": "single"},
+   "profile": {"policy": {"2": {"single": "automatic"}}},
+   "expect": [["authorization", "block", "APPROVAL_ORIGIN_NOT_PROVED"]]},
+  {"group": "authorization", "name": "a person's approval of a case whose source cannot be proved",
+   "case": {"source_namespace": "UTNOSUCHNAMESPACE", "origin_header_id": "1"}, "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2"}, "approval": {},
+   "expect": [["authorization", "pass", "APPROVAL_VALID"]]},
   {"group": "authorization", "name": "an automatic release of a board's plan",
    "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "run:1"}, "approval": {"approver": "policy"},
    "profile": {"policy": {"2": {"single": "automatic"}}},
@@ -885,6 +1002,21 @@ XData Rows [ MimeType = application/json ]
    "summary": {"catalogue": {"decision": "policy", "entry": "E2", "outcome": "resend", "matches": [{"id": "E2", "preferred": {"outcome": "resend"}}]}},
    "approval": {"incident_plan_digest": "sha256:ut-incident", "bound_entry": "E2", "bound_outcome": "resend"},
    "expect": [["authorization", "pass", "APPROVAL_VALID"], ["catalogue", "pass", "ENTRY_MATCHED"]], "outcome": "pass"},
+  {"group": "authorization", "name": "an approval under an incident whose receiver was reset since the plan the person bound, the numbers matching",
+   "incident": {"plan_digest": "sha256:ut-incident", "epoch": 1}, "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2"},
+   "summary": {"catalogue": {"decision": "policy", "entry": "E2", "outcome": "resend", "matches": [{"id": "E2", "preferred": {"outcome": "resend"}}]}},
+   "approval": {"incident_plan_digest": "sha256:ut-incident", "bound_entry": "E2", "bound_outcome": "resend", "epoch": 2}, "rehearsal": {"epoch": 2}, "request": {"receiver_epoch": 2},
+   "expect": [["authorization", "block", "APPROVAL_RECEIVER_RESET"]], "outcome": "block"},
+  {"group": "authorization", "name": "an approval under an incident, the receiver at the epoch of the plan",
+   "incident": {"plan_digest": "sha256:ut-incident", "epoch": 1}, "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2"},
+   "summary": {"catalogue": {"decision": "policy", "entry": "E2", "outcome": "resend", "matches": [{"id": "E2", "preferred": {"outcome": "resend"}}]}},
+   "approval": {"incident_plan_digest": "sha256:ut-incident", "bound_entry": "E2", "bound_outcome": "resend", "epoch": 1}, "request": {"receiver_epoch": 1},
+   "expect": [["authorization", "pass", "APPROVAL_VALID"]], "outcome": "pass"},
+  {"group": "authorization", "name": "an approval under an incident whose plan recorded no epoch: a receiver that keeps none",
+   "incident": {"plan_digest": "sha256:ut-incident"}, "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2"},
+   "summary": {"catalogue": {"decision": "policy", "entry": "E2", "outcome": "resend", "matches": [{"id": "E2", "preferred": {"outcome": "resend"}}]}},
+   "approval": {"incident_plan_digest": "sha256:ut-incident", "bound_entry": "E2", "bound_outcome": "resend", "epoch": 1}, "request": {"receiver_epoch": 1},
+   "expect": [["authorization", "pass", "APPROVAL_VALID"]], "outcome": "pass"},
   {"group": "authorization", "name": "an approval under an incident whose item now follows another entry",
    "incident": {"plan_digest": "sha256:ut-incident"}, "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2"},
    "summary": {"catalogue": {"decision": "policy", "entry": "E2", "outcome": "resend", "matches": [{"id": "E2", "preferred": {"outcome": "resend"}}]}},
@@ -937,6 +1069,30 @@ XData Rows [ MimeType = application/json ]
   {"group": "capability", "name": "a receiver without receipts",
    "summary": {"route": {"receipts": false}},
    "expect": [["capability", "block", "CONNECTOR_INCAPABLE"]]},
+  {"group": "capability", "name": "a receiver that declares no history",
+   "summary": {"route": {"history": false}},
+   "expect": [["capability", "block", "HISTORY_UNSUPPORTED"]], "absent": [["capability", "CONNECTOR_CAPABLE"]], "outcome": "block"},
+  {"group": "capability", "name": "a route that says nothing about history, as an older snapshot's",
+   "summary": {"route": {"history": null}},
+   "expect": [["capability", "block", "HISTORY_UNSUPPORTED"]], "outcome": "block"},
+  {"group": "capability", "name": "no conditional writes comes first and alone, whatever the history",
+   "summary": {"route": {"conditional_writes": false, "history": false}},
+   "expect": [["capability", "block", "CONNECTOR_INCAPABLE"]], "absent": [["capability", "HISTORY_UNSUPPORTED"]], "outcome": "block"},
+  {"group": "capability", "name": "a read with no history from a receiver that declares one",
+   "summary": {"ward_state": {"history": null}},
+   "expect": [["capability", "unknown", "HISTORY_UNREADABLE"]], "absent": [["capability", "CONNECTOR_CAPABLE"]], "outcome": "unknown"},
+  {"group": "capability", "name": "a read whose history is not an array",
+   "summary": {"ward_state": {"history": {"note": "see elsewhere"}}},
+   "expect": [["capability", "unknown", "HISTORY_UNREADABLE"]], "outcome": "unknown"},
+  {"group": "capability", "name": "an empty history is a history",
+   "summary": {"ward_state": {"history": []}},
+   "expect": [["capability", "pass", "CONNECTOR_CAPABLE"]]},
+  {"group": "capability", "name": "an admission the receiver does not know yet has no history to read",
+   "case": {"event": "admit"}, "summary": {"ward_state_http_status": 404, "ward_state": {"error": "unknown_encounter", "history": null}},
+   "expect": [["capability", "pass", "CONNECTOR_CAPABLE"]], "absent": [["capability", "HISTORY_UNREADABLE"]]},
+  {"group": "capability", "name": "closing a case needs no history",
+   "plan": {"disposition": "superseded", "action": {"type": "none"}}, "summary": {"route": {"history": false}},
+   "expect": [["capability", "pass", "NOT_APPLICABLE"]]},
   {"group": "capability", "name": "reconciling needs no write capability",
    "plan": {"disposition": "reconcile", "action": {"type": "reconcile"}}, "summary": {"receipt_http_status": 200, "route": {"conditional_writes": false}},
    "expect": [["capability", "pass", "NOT_APPLICABLE"]], "outcome": "pass"},
@@ -952,6 +1108,36 @@ XData Rows [ MimeType = application/json ]
    "expect": [["catalogue", "block", "NEW_PATTERN"]], "outcome": "block"},
   {"group": "catalogue", "name": "the plan names no entry while several match",
    "summary": {"catalogue": {"decision": "board", "matches": [{"id": "E2", "preferred": {"outcome": "resend"}}, {"id": "E9", "preferred": {"outcome": "resend"}}]}},
+   "expect": [["catalogue", "pass", "ENTRY_NOT_NAMED"]]},
+  {"group": "catalogue", "name": "Rules only's plan names no entry on an entry that stops, in a recorded scenario: the demonstration stays",
+   "case": {"scenario": "S8", "scenario_recorded": true}, "summary": {"catalogue": {"decision": "board", "entry": "E7", "outcome": "escalate", "matches": [{"id": "E7", "preferred": {"outcome": "escalate"}}]}},
+   "expect": [["catalogue", "pass", "ENTRY_NOT_NAMED"]]},
+  {"group": "catalogue", "name": "Rules only on a case stamped by a live story, which the scenario runner did not play, gets no exemption",
+   "case": {"scenario": "S8"}, "summary": {"catalogue": {"decision": "board", "entry": "E7", "outcome": "escalate", "matches": [{"id": "E7", "preferred": {"outcome": "escalate"}}]}},
+   "expect": [["catalogue", "block", "ENTRY_NOT_NAMED_WRITE"]], "outcome": "block"},
+  {"group": "catalogue", "name": "Rules only on a real case, which no scenario made, gets no exemption",
+   "summary": {"catalogue": {"decision": "board", "entry": "E7", "outcome": "escalate", "matches": [{"id": "E7", "preferred": {"outcome": "escalate"}}]}},
+   "expect": [["catalogue", "block", "ENTRY_NOT_NAMED_WRITE"]], "outcome": "block"},
+  {"group": "catalogue", "name": "a board's plan writes and names no entry on an entry that stops",
+   "case": {"mode": "board"}, "plan": {"created_by": "run:1"}, "summary": {"catalogue": {"decision": "board", "entry": "E7", "outcome": "escalate", "matches": [{"id": "E7", "preferred": {"outcome": "escalate"}}]}},
+   "expect": [["catalogue", "block", "ENTRY_NOT_NAMED_WRITE"]], "outcome": "block", "contains": [["catalogue", "ENTRY_NOT_NAMED_WRITE", "E7"]]},
+  {"group": "catalogue", "name": "a judge's board on a Rules only case writes and names no entry on an entry that stops",
+   "plan": {"created_by": "run:1"}, "summary": {"catalogue": {"decision": "board", "entry": "E7", "outcome": "escalate", "matches": [{"id": "E7", "preferred": {"outcome": "escalate"}}]}},
+   "expect": [["catalogue", "block", "ENTRY_NOT_NAMED_WRITE"]], "outcome": "block"},
+  {"group": "catalogue", "name": "the rules path outside Rules only writes and names no entry on an entry that stops",
+   "case": {"mode": "policy"}, "summary": {"catalogue": {"decision": "board", "entry": "E7", "outcome": "escalate", "matches": [{"id": "E7", "preferred": {"outcome": "escalate"}}]}},
+   "expect": [["catalogue", "block", "ENTRY_NOT_NAMED_WRITE"]], "outcome": "block"},
+  {"group": "catalogue", "name": "a follower's plan writes and names no entry when the site chose an outcome with no write",
+   "case": {"mode": "board"}, "plan": {"created_by": "lead:C-1"}, "summary": {"catalogue": {"decision": "board", "entry": "E7", "outcome": "none", "outcome_ref": "alternative:1", "matches": [{"id": "E7", "preferred": {"outcome": "escalate"}}]}},
+   "expect": [["catalogue", "block", "ENTRY_NOT_NAMED_WRITE"]], "outcome": "block"},
+  {"group": "catalogue", "name": "a plan writes and names no entry while one of several matches stops",
+   "case": {"mode": "board"}, "plan": {"created_by": "run:1"}, "summary": {"catalogue": {"decision": "board", "matches": [{"id": "E2", "preferred": {"outcome": "resend"}}, {"id": "E7", "preferred": {"outcome": "escalate"}}]}},
+   "expect": [["catalogue", "block", "ENTRY_NOT_NAMED_WRITE"]], "outcome": "block", "contains": [["catalogue", "ENTRY_NOT_NAMED_WRITE", "E7"]]},
+  {"group": "catalogue", "name": "a board's plan writes and names no entry on an entry that resends",
+   "case": {"mode": "board"}, "plan": {"created_by": "run:1"}, "summary": {"catalogue": {"decision": "board", "entry": "E9", "outcome": "resend", "matches": [{"id": "E9", "preferred": {"outcome": "resend"}}]}},
+   "expect": [["catalogue", "pass", "ENTRY_NOT_NAMED"]]},
+  {"group": "catalogue", "name": "a plan that names no entry and writes nothing on an entry that stops",
+   "case": {"mode": "board"}, "plan": {"created_by": "run:1", "disposition": "escalate", "action": {"type": "none"}}, "summary": {"catalogue": {"decision": "board", "entry": "E7", "outcome": "escalate", "matches": [{"id": "E7", "preferred": {"outcome": "escalate"}}]}},
    "expect": [["catalogue", "pass", "ENTRY_NOT_NAMED"]]},
   {"group": "catalogue", "name": "the plan follows an entry whose pattern does not hold",
    "plan": {"catalogue_entry": "E2", "outcome": "preferred"}, "summary": {"catalogue": {"decision": "policy", "entry": "E3", "matches": [{"id": "E3", "preferred": {"outcome": "reconcile"}}]}},

@@ -1,6 +1,6 @@
 /// The board a case was following has ended (CONTRACTS 6.6, v1.35, one board per failure signature): a fresh instance of
 /// the case workflow carries the follower on from its evidence, taking the leader's decision when the lead is done, or
-/// the rules path when it failed.
+/// what a case with no board answer gets when it failed (CaseWorkflow.NoBoard).
 Class Shutter.Msg.LeadReady Extends Ens.Request
 {
 

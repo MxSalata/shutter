@@ -2,8 +2,8 @@
 /// one 00:00 UTC and the next, read from SHUTTER_DAILY_BUDGET_USD at the install into ^Shutter.Config("dailyBudgetUsd");
 /// 0 or unset means no cap. The Agent item asks Allows() before a run that would call a model and refuses the run with the
 /// status budget_exhausted when the day's spend (the AgentRun rows' CostUSD since 00:00 UTC; replays and the mimic's runs
-/// spend nothing, as GET /costs counts them) has reached the cap. The board then takes the rules path and the gate judges
-/// the plain resend (CaseWorkflow.AfterBoard); a question or a review fails with the status. GET /settings and the Doctor
+/// spend nothing, as GET /costs counts them) has reached the cap. A case the catalogue gives to the board or a person then
+/// goes to a person, and another takes the rules path (CaseWorkflow.NoBoard); a question or a review fails with the status. GET /settings and the Doctor
 /// carry Status(). The public demo sets the cap with its own API key, so a day of visitors spends at most the cap.
 /// Reserve, then settle (v1.35): a run in flight has no row yet, so three members running at once were not counted against
 /// the cap. The Agent item reserves an estimate for each live run it starts (Reserve) and settles it when the run ends

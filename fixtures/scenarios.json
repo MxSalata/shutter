@@ -276,7 +276,7 @@
   {
     "id": "S9",
     "title": "One patient, two encounters",
-    "summary": "Admit to Ward A applied; the 09:20 transfer to Ward B fails; at 09:30 the same patient is registered for an outpatient clinic under another visit number. That attendance belongs to another encounter and supersedes nothing: the transfer is still due.",
+    "summary": "Admit to Ward A applied; the 09:20 transfer to Ward B fails; at 09:30 the same patient is registered for an outpatient clinic under another visit number. That attendance belongs to another encounter and supersedes nothing: the transfer is still due, and the plan shows the other visit.",
     "steps": [
       {
         "file": "S9-01-A01.hl7"
@@ -305,7 +305,269 @@
       "final_state": "admitted",
       "final_ward": "WARD-B",
       "failed_operation_key": "PAS^HOSP^MRN1009^ENC-1009^transfer^2026-10-15T08:20:00Z",
-      "other_encounter": "ENC-2009"
+      "other_encounter": "ENC-2009",
+      "names": [
+        "ENC-2009"
+      ]
+    }
+  },
+  {
+    "id": "S27",
+    "title": "A new admission under a new visit number",
+    "summary": "Admit to Ward A applied; the 09:20 transfer to Ward B fails; at 09:30 the same patient is admitted to Ward C under another visit number. Shutter can't say which visit is real, so the resend stops and the case names both visits for a person.",
+    "steps": [
+      {
+        "file": "S27-01-A01.hl7"
+      },
+      {
+        "fault": "fail_before_accept"
+      },
+      {
+        "file": "S27-02-A02.hl7",
+        "expect": "delivery_fails"
+      },
+      {
+        "wait": 5
+      },
+      {
+        "fault": "off"
+      },
+      {
+        "file": "S27-03-A01.hl7"
+      }
+    ],
+    "expected": {
+      "disposition": "resend",
+      "write": false,
+      "final_state": "admitted",
+      "final_ward": "WARD-A",
+      "case_by_key": true,
+      "blocked_by": "FURTHER_MOVEMENT",
+      "final_reason": "FURTHER_MOVEMENT",
+      "failed_operation_key": "PAS^HOSP^MRN1027^ENC-1027^transfer^2026-10-15T08:20:00Z",
+      "names": [
+        "ENC-1027",
+        "ENC-2027",
+        "MRN1027"
+      ],
+      "modes": [
+        "policy",
+        "rules"
+      ]
+    }
+  },
+  {
+    "id": "S31",
+    "title": "A new admission under a new visit number, in the hospital's own production",
+    "summary": "S27's story in the hospital's own production. Shutter's own index never sees the new admission: it is read in the namespace the case came from, and the resend stops and names both visits.",
+    "steps": [
+      {
+        "file": "S31-01-A01.hl7",
+        "route": "hospital"
+      },
+      {
+        "fault": "fail_before_accept"
+      },
+      {
+        "file": "S31-02-A02.hl7",
+        "route": "hospital",
+        "expect": "delivery_fails"
+      },
+      {
+        "wait": 5
+      },
+      {
+        "fault": "off"
+      },
+      {
+        "file": "S31-03-A01.hl7",
+        "route": "hospital"
+      }
+    ],
+    "expected": {
+      "disposition": "resend",
+      "write": false,
+      "final_state": "admitted",
+      "final_ward": "WARD-A",
+      "case_by_key": true,
+      "blocked_by": "FURTHER_MOVEMENT",
+      "final_reason": "FURTHER_MOVEMENT",
+      "failed_operation_key": "PAS^HOSP^MRN1031^ENC-1031^transfer^2026-10-15T08:20:00Z",
+      "names": [
+        "ENC-1031",
+        "ENC-2031"
+      ],
+      "modes": [
+        "policy"
+      ]
+    }
+  },
+  {
+    "id": "S32",
+    "title": "A new admission under a new visit number, while the plan awaits approval",
+    "summary": "S27's new admission arrives after the plan went to the approver. The approval doesn't carry it through: the check is read again at dispatch, and the write stops and names both visits.",
+    "steps": [
+      {
+        "file": "S32-01-A01.hl7"
+      },
+      {
+        "fault": "fail_before_accept"
+      },
+      {
+        "file": "S32-02-A02.hl7",
+        "expect": "delivery_fails"
+      },
+      {
+        "wait": 5
+      },
+      {
+        "fault": "off"
+      },
+      {
+        "wait_for_state": "awaiting_approval",
+        "timeout": 180
+      },
+      {
+        "file": "S32-03-A01.hl7"
+      }
+    ],
+    "expected": {
+      "disposition": "resend",
+      "write": false,
+      "final_state": "admitted",
+      "final_ward": "WARD-A",
+      "case_by_key": true,
+      "blocked_by": "FURTHER_MOVEMENT",
+      "final_reason": "FURTHER_MOVEMENT",
+      "failed_operation_key": "PAS^HOSP^MRN1032^ENC-1032^transfer^2026-10-15T08:20:00Z",
+      "names": [
+        "ENC-1032",
+        "ENC-2032",
+        "MRN1032"
+      ],
+      "modes": [
+        "rules"
+      ]
+    }
+  },
+  {
+    "id": "S28",
+    "title": "A day case's admission and discharge both fail",
+    "summary": "The 08:00 admission fails, and so does the 16:00 discharge. Resending the admission alone would admit someone who has gone home, so it stops and names the discharge for a person.",
+    "steps": [
+      {
+        "fault": "fail_before_accept"
+      },
+      {
+        "file": "S28-01-A01.hl7",
+        "expect": "delivery_fails"
+      },
+      {
+        "file": "S28-02-A03.hl7",
+        "expect": "delivery_fails"
+      },
+      {
+        "wait": 5
+      },
+      {
+        "fault": "off"
+      }
+    ],
+    "expected": {
+      "disposition": "resend",
+      "write": false,
+      "final_state": null,
+      "final_ward": null,
+      "case_by_key": true,
+      "blocked_by": "FURTHER_MOVEMENT",
+      "final_reason": "FURTHER_MOVEMENT",
+      "failed_operation_key": "PAS^HOSP^MRN1028^ENC-1028^admit^2026-10-15T07:00:00Z",
+      "names": [
+        "discharge"
+      ],
+      "modes": [
+        "policy",
+        "rules"
+      ]
+    }
+  },
+  {
+    "id": "S29",
+    "title": "A failed transfer that is then withdrawn",
+    "summary": "Admit to Ward A applied; the 09:20 transfer to Ward B fails; at 09:35 the PAS cancels it, and the receiver takes no cancels. Sending the withdrawn move would be wrong and the cancel will never be delivered, so the case stops at once and names the pair, with no promise of a delivery.",
+    "steps": [
+      {
+        "file": "S29-01-A01.hl7"
+      },
+      {
+        "fault": "fail_before_accept"
+      },
+      {
+        "file": "S29-02-A02.hl7",
+        "expect": "delivery_fails"
+      },
+      {
+        "wait": 5
+      },
+      {
+        "fault": "off"
+      },
+      {
+        "file": "S29-03-A12.hl7",
+        "expect": "withheld"
+      }
+    ],
+    "expected": {
+      "disposition": "resend",
+      "write": false,
+      "final_state": "admitted",
+      "final_ward": "WARD-A",
+      "case_by_key": true,
+      "blocked_by": "FURTHER_MOVEMENT",
+      "final_reason": "FURTHER_MOVEMENT",
+      "failed_operation_key": "PAS^HOSP^MRN1029^ENC-1029^transfer^2026-10-15T08:20:00Z",
+      "names": [
+        "cancel of the transfer",
+        "MRN1029"
+      ],
+      "modes": [
+        "policy",
+        "rules"
+      ]
+    }
+  },
+  {
+    "id": "S30",
+    "title": "A lost admission, with nothing else known",
+    "summary": "The 08:00 admission fails and the receiver answers that it has no encounter under this number. That doesn't prove it holds no record for the patient, so the site's policy doesn't release it: the plan asks someone to check the system's own screen, and a person approves.",
+    "steps": [
+      {
+        "fault": "fail_before_accept"
+      },
+      {
+        "file": "S30-01-A01.hl7",
+        "expect": "delivery_fails"
+      },
+      {
+        "wait": 5
+      },
+      {
+        "fault": "off"
+      }
+    ],
+    "expected": {
+      "disposition": "resend",
+      "write": true,
+      "final_state": "admitted",
+      "final_ward": "WARD-A",
+      "failed_operation_key": "PAS^HOSP^MRN1030^ENC-1030^admit^2026-10-15T07:00:00Z",
+      "names": [
+        "by hand"
+      ],
+      "person_approves": true,
+      "modes": [
+        "policy"
+      ]
     }
   },
   {

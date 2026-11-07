@@ -15,9 +15,9 @@ ClassMethod Vocabulary() As %DynamicObject
     Quit {
         "event": ["admit", "transfer", "discharge", "update", "merge", "cancel", "other"],
         "delivery": ["failed", "rejected", "uncertain", "unmappable", "withheld", "unreadable"],
-        "receiver_answer": ["unavailable", "timeout", "duplicate", "version_conflict", "refused", "none"],
+        "receiver_answer": ["unavailable", "timeout", "duplicate", "version_conflict", "refused", "unread", "none"],
         "receipt": ["present", "absent", "unreadable", "none"],
-        "later_applied": ["none", "transfer", "discharge", "update", "admit", "cancelled", "merge"],
+        "later_applied": ["none", "transfer", "discharge", "update", "admit", "cancelled", "cancel_other", "merge"],
         "later_delivery": ["applied", "sent", "none"],
         "event_time": ["plausible", "before_admission", "future", "far_from_recorded", "clock_change", "later_event_future"],
         "encounter_state": ["admitted", "discharged", "not_found", "unknown"],
@@ -28,7 +28,8 @@ ClassMethod Vocabulary() As %DynamicObject
         "free_text": ["yes", "no"],
         "chain": ["single", "ordered", "interleaved"],
         "receiver_category": ["current_state", "history_of_record", "orders_results"],
-        "bed_conflict": ["none", "occupant_leaving", "occupant_left", "occupant_staying", "unknown"]
+        "bed_conflict": ["none", "occupant_leaving", "occupant_left", "occupant_staying", "unknown"],
+        "death_recorded": ["no", "yes", "cleared", "unreadable"]
     }
 }
 
@@ -111,6 +112,65 @@ Method TestSimultaneousSources()
 
 /// The occupied bed (v1.28): the condition is the status of the section the evidence adds to a bed_occupied refusal, none
 /// without one; the fact occupant_case names the case about the occupant's movement out.
+/// A profile's source_skew_seconds decides how far apart two sources still count as simultaneous: 0 keeps the exact second,
+/// and a wider window reaches further. Put back afterwards.
+Method TestSourceSkewFromTheProfile()
+{
+    Set row = ##class(Shutter.Store.SiteProfile).Row()
+    Do $$$AssertTrue($ISOBJECT(row), "the tests' profile row")
+    Set saved = row.Json
+    Set one = {"summary": {"ward_state": {"history": [{"event": "transfer", "event_time": "2026-10-19T09:00:01Z", "operation_key": "EPR^HOSP^MRN-UT1^ENC-UT1^transfer^2026-10-19T09:00:01Z"}]}}}
+    Set same = {"summary": {"ward_state": {"history": [{"event": "transfer", "event_time": "2026-10-19T09:00:00Z", "operation_key": "EPR^HOSP^MRN-UT1^ENC-UT1^transfer^2026-10-19T09:00:00Z"}]}}}
+    Set nine = {"summary": {"ward_state": {"history": [{"event": "transfer", "event_time": "2026-10-19T09:09:00Z", "operation_key": "EPR^HOSP^MRN-UT1^ENC-UT1^transfer^2026-10-19T09:09:00Z"}]}}}
+    Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).SourceSkewSeconds(), 300, "the default, when the profile says nothing")
+    Do $$$AssertEquals(..Conditions(nine)."simultaneous_sources", "no", "nine minutes apart, at the default")
+    Set p = ##class(Shutter.Util.Json).Parse(saved, .sc)
+    Set feed = p.%Get("feed")
+    If '$ISOBJECT(feed) Set feed = {}, p.feed = feed
+    Do feed.%Set("source_skew_seconds", 0, "number")
+    Set row.Json = p.%ToJSON()
+    Do $$$AssertStatusOK(row.%Save(), "a profile with no window")
+    Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).SourceSkewSeconds(), 0, "the site's 0 is read as 0")
+    Do $$$AssertEquals(..Conditions(one)."simultaneous_sources", "no", "with 0, a second apart is not simultaneous")
+    Do $$$AssertEquals(..Conditions(same)."simultaneous_sources", "yes", "with 0, the same second still is")
+    Do feed.%Set("source_skew_seconds", 600, "number")
+    Set row.Json = p.%ToJSON()
+    Do $$$AssertStatusOK(row.%Save(), "a profile with ten minutes")
+    Do $$$AssertEquals(..Conditions(nine)."simultaneous_sources", "yes", "with 600, nine minutes apart is simultaneous")
+    Set row.Json = saved
+    Do $$$AssertStatusOK(row.%Save(), "the profile put back")
+}
+
+/// Near a clock change in any zone, with no offset: the rows need Embedded Python's zoneinfo, as Shutter.Test.Zones does.
+Method TestEventTimeInAnyZone()
+{
+    If '##class(Shutter.Util.Time).PythonZones() {
+        Do $$$AssertTrue(1, "Embedded Python's zoneinfo does not answer on this image: the native rules stand alone, nothing more to test")
+        Quit
+    }
+    Do ..RunRows("event_time_zone")
+}
+
+/// Which catalogue entries a case matches, and who decides: an entry's event condition, the window for two sources and
+/// the entry for a death on the message.
+Method TestEntries()
+{
+    Do $$$AssertTrue(##class(Shutter.Catalogue.Entry).Count() > 0, "the catalogue is installed")
+    Set n = 0, iter = ..Rows().%GetIterator()
+    While iter.%GetNext(.i, .row) {
+        Continue:(row.group '= "entries")
+        Set n = n + 1
+        Set case = ..Case($SELECT(row.%IsDefined("case"): row.case, 1: {}))
+        Set summary = ..Summary(row, case)
+        Set result = ##class(Shutter.Catalogue.Matcher).Match(##class(Shutter.Catalogue.Matcher).Conditions(case, summary, "single"), ##class(Shutter.Catalogue.Matcher).Facts(summary, case))
+        Set ids = "", it2 = result.matches.%GetIterator()
+        While it2.%GetNext(.j, .m) { Set ids = ids _ $SELECT(ids = "": "", 1: ",") _ m.id }
+        Do $$$AssertEquals(ids, row.expect.entries, row.name _ ": the entries")
+        Do $$$AssertEquals(result.decision, row.expect.decision, row.name _ ": who decides")
+    }
+    Do $$$AssertTrue(n > 0, "the table has rows of entries")
+}
+
 Method TestBedConflict()
 {
     Do ..RunRows("bed_conflict")
@@ -125,6 +185,18 @@ Method TestBedConflict()
 Method TestCapabilitiesFreeTextChain()
 {
     Do ..RunRows("other")
+}
+
+/// An alert whose words were not read says nothing about delivery: with everything else E2 asks for, it matches no resend entry, so
+/// no site policy releases a write on it, and known words still do.
+Method TestWordsNotReadMatchNoResend()
+{
+    Set unread = ..Conditions({"case": {"failure_kind": "uncertain_outcome"}, "summary": {"failure": {"reason_code": "alert_unread", "http_status": 0}}})
+    Set match = ##class(Shutter.Catalogue.Matcher).Match(unread)
+    Do $$$AssertEquals(match.decision, "new_pattern", "no entry decides: " _ match.%ToJSON())
+    Do $$$AssertNotEquals(match.outcome, "resend", "and nothing resends")
+    Set known = ..Conditions({"case": {"failure_kind": "uncertain_outcome"}, "summary": {"failure": {"reason_code": "alert", "http_status": 0}}})
+    Do $$$AssertEquals(##class(Shutter.Catalogue.Matcher).Match(known).entry, "E2", "known words still read as a timeout")
 }
 
 /// An alert-only failure (the alert intake's reason code "alert", a 503 read from the alert's words) matches E4 in an
@@ -267,6 +339,12 @@ Method TestFacts()
     Do $$$AssertEquals(f."other_source", "EPR", "the other source")
     Set f = ##class(Shutter.Catalogue.Matcher).Facts(..Summary({}, case), case)
     Do $$$AssertEquals(f."other_source", "", "none")
+    Set row = {"case": {}, "summary": {"ward_state": {"history": [{"event": "transfer", "event_time": "2026-10-19T08:59:59Z", "operation_key": "EPR^HOSP^MRN-UT1^ENC-UT1^transfer^2026-10-19T08:59:59Z"}]}}}
+    Set f = ##class(Shutter.Catalogue.Matcher).Facts(..Summary(row, case), case)
+    Do $$$AssertEquals(f."other_source", "EPR", "the other source, a second earlier")
+    Set row = {"case": {}, "summary": {"ward_state": {"history": [{"event": "update", "event_time": (..#EVENTTIME), "operation_key": ("EPR^HOSP^MRN-UT1^ENC-UT1^update^" _ ..#EVENTTIME)}]}}}
+    Set f = ##class(Shutter.Catalogue.Matcher).Facts(..Summary(row, case), case)
+    Do $$$AssertEquals(f."other_source", "", "another source's update names no other source")
 }
 
 /// Runs the rows of one group and asserts each one's conditions.
@@ -387,6 +465,7 @@ XData Rows [ MimeType = application/json ]
   {"group": "receiver_answer", "name": "a gateway timeout with no reason", "summary": {"failure": {"reason_code": null, "http_status": 504}}, "expect": {"receiver_answer": "timeout"}},
   {"group": "receiver_answer", "name": "a duplicate", "summary": {"failure": {"reason_code": "duplicate_message", "http_status": 409}}, "expect": {"receiver_answer": "duplicate"}},
   {"group": "receiver_answer", "name": "a version conflict", "summary": {"failure": {"reason_code": "version_conflict", "http_status": 409}}, "expect": {"receiver_answer": "version_conflict"}},
+  {"group": "receiver_answer", "name": "an alert whose words were not read is no answer at all, and not a timeout", "case": {"failure_kind": "uncertain_outcome"}, "summary": {"failure": {"reason_code": "alert_unread", "http_status": 0}}, "expect": {"delivery": "uncertain", "receiver_answer": "unread"}},
   {"group": "receiver_answer", "name": "any other reason is a refusal", "summary": {"failure": {"reason_code": "invalid_transition", "http_status": 422}}, "expect": {"receiver_answer": "refused"}},
   {"group": "receiver_answer", "name": "a 422 with no reason", "summary": {"failure": {"reason_code": null, "http_status": 422}}, "expect": {"receiver_answer": "refused"}},
   {"group": "receiver_answer", "name": "a 409 with no reason", "summary": {"failure": {"reason_code": null, "http_status": 409}}, "expect": {"receiver_answer": "refused"}},
@@ -438,7 +517,11 @@ XData Rows [ MimeType = application/json ]
   {"group": "later_applied", "name": "a later merge", "summary": {"timeline": [{"later": true, "outcome": "applied", "event": "merge", "event_time": "2026-10-19T12:00:00Z"}]}, "expect": {"later_applied": "merge"}},
   {"group": "later_applied", "name": "a merge outranks a discharge", "summary": {"timeline": [{"later": true, "outcome": "applied", "event": "discharge", "event_time": "2026-10-19T11:00:00Z"}, {"later": true, "outcome": "applied", "event": "merge", "event_time": "2026-10-19T12:00:00Z"}]}, "expect": {"later_applied": "merge"}},
   {"group": "later_applied", "name": "a cancel carrying the failed event's own time", "summary": {"timeline": [{"later": false, "outcome": "applied", "event": "cancel_transfer", "event_time": "2026-10-19T09:00:00Z", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^cancel_transfer^2026-10-19T09:00:00Z"}]}, "expect": {"later_applied": "cancelled"}},
-  {"group": "later_applied", "name": "a cancel outranks a merge", "summary": {"timeline": [{"later": true, "outcome": "applied", "event": "merge", "event_time": "2026-10-19T12:00:00Z"}, {"later": true, "outcome": "applied", "event": "cancel_admit", "event_time": "2026-10-19T12:30:00Z", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^cancel_admit^2026-10-19T12:30:00Z"}]}, "expect": {"later_applied": "cancelled"}},
+  {"group": "later_applied", "name": "a cancel outranks a merge", "summary": {"timeline": [{"later": true, "outcome": "applied", "event": "merge", "event_time": "2026-10-19T12:00:00Z"}, {"later": true, "outcome": "applied", "event": "cancel_admit", "event_time": "2026-10-19T12:30:00Z", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^cancel_admit^2026-10-19T12:30:00Z"}]}, "expect": {"later_applied": "cancel_other"}},
+  {"group": "later_applied", "name": "a cancel of this movement outranks a merge", "summary": {"timeline": [{"later": true, "outcome": "applied", "event": "merge", "event_time": "2026-10-19T12:00:00Z"}, {"later": false, "outcome": "applied", "event": "cancel_transfer", "event_time": "2026-10-19T09:00:00Z", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^cancel_transfer^2026-10-19T09:00:00Z"}]}, "expect": {"later_applied": "cancelled"}},
+  {"group": "later_applied", "name": "a later discharge and its cancel reverse nothing of this transfer: the patient is admitted again and a person looks", "summary": {"ward_state": {"history": [{"event": "admit", "event_time": "2026-10-18T08:00:00Z"}, {"event": "discharge", "event_time": "2026-10-19T11:00:00Z"}, {"event": "cancel_discharge", "event_time": "2026-10-19T11:00:00Z", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^cancel_discharge^2026-10-19T11:00:00Z"}]}}, "expect": {"later_applied": "cancel_other"}},
+  {"group": "later_applied", "name": "a later transfer and its cancel in the timeline reverse nothing of this transfer", "summary": {"timeline": [{"later": true, "outcome": "applied", "event": "transfer", "event_time": "2026-10-19T10:00:00Z"}, {"later": true, "outcome": "applied", "event": "cancel_transfer", "event_time": "2026-10-19T10:00:00Z", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^cancel_transfer^2026-10-19T10:00:00Z"}]}, "expect": {"later_applied": "cancel_other"}},
+  {"group": "later_applied", "name": "a cancel of another kind of event at this event's own time", "summary": {"ward_state": {"history": [{"event": "admit", "event_time": "2026-10-18T08:00:00Z"}, {"event": "cancel_admit", "event_time": "2026-10-19T09:00:00Z", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^cancel_admit^2026-10-19T09:00:00Z"}]}}, "expect": {"later_applied": "cancel_other"}},
   {"group": "later_applied", "name": "a cancel before the failed event counts for nothing", "summary": {"timeline": [{"later": false, "outcome": "applied", "event": "cancel_transfer", "event_time": "2026-10-19T08:00:00Z", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^cancel_transfer^2026-10-19T08:00:00Z"}]}, "expect": {"later_applied": "none"}},
   {"group": "later_applied", "name": "the case's own cancel counts for nothing", "case": {"event": "cancel_transfer"}, "summary": {"timeline": [{"later": false, "outcome": "applied", "event": "cancel_transfer", "event_time": "2026-10-19T09:00:00Z", "operation_key": "{key}"}]}, "expect": {"later_applied": "none"}},
   {"group": "later_applied", "name": "a cancel with no time counts for nothing", "summary": {"timeline": [{"outcome": "applied", "event": "cancel_transfer", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^cancel_transfer^"}]}, "expect": {"later_applied": "none"}},
@@ -447,7 +530,7 @@ XData Rows [ MimeType = application/json ]
   {"group": "later_applied", "name": "an earlier applied event", "summary": {"timeline": [{"later": false, "outcome": "applied", "event": "transfer", "event_time": "2026-10-19T08:00:00Z"}]}, "expect": {"later_applied": "none"}},
   {"group": "later_applied", "name": "a later discharge in the receiver's history", "summary": {"ward_state": {"history": [{"event": "admit", "event_time": "2026-10-18T08:00:00Z"}, {"event": "discharge", "event_time": "2026-10-19T11:00:00Z"}]}}, "expect": {"later_applied": "discharge", "later_delivery": "applied"}},
   {"group": "later_applied", "name": "an event in the history at the failed event's own time is not later", "summary": {"ward_state": {"history": [{"event": "admit", "event_time": "2026-10-18T08:00:00Z"}, {"event": "transfer", "event_time": "2026-10-19T09:00:00Z", "operation_key": "EPR^HOSP^MRN-UT1^ENC-UT1^transfer^2026-10-19T09:00:00Z"}]}}, "expect": {"later_applied": "none", "simultaneous_sources": "yes"}},
-  {"group": "later_applied", "name": "a cancel in the receiver's history at the failed event's time", "summary": {"ward_state": {"history": [{"event": "admit", "event_time": "2026-10-18T08:00:00Z"}, {"event": "cancel_admit", "event_time": "2026-10-19T09:00:00Z", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^cancel_admit^2026-10-19T09:00:00Z"}]}}, "expect": {"later_applied": "cancelled"}},
+  {"group": "later_applied", "name": "a cancel in the receiver's history at the failed event's time", "summary": {"ward_state": {"history": [{"event": "admit", "event_time": "2026-10-18T08:00:00Z"}, {"event": "cancel_transfer", "event_time": "2026-10-19T09:00:00Z", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^cancel_transfer^2026-10-19T09:00:00Z"}]}}, "expect": {"later_applied": "cancelled"}},
   {"group": "later_applied", "name": "a merge in the receiver's history", "summary": {"ward_state": {"history": [{"event": "admit", "event_time": "2026-10-18T08:00:00Z"}, {"event": "merge", "event_time": "2026-10-19T12:00:00Z"}]}}, "expect": {"later_applied": "merge"}},
 
   {"group": "event_time", "name": "a transfer before the admission the message names", "summary": {"message": {"admit_time": "2026-10-19T10:00:00Z"}}, "expect": {"event_time": "before_admission"}},
@@ -486,6 +569,11 @@ XData Rows [ MimeType = application/json ]
    "case": {"event_time": "2026-10-25T03:00:00Z"},
    "summary": {"observed_at": "2026-10-25T03:05:00Z", "message": {"admit_time": "2026-10-24T08:00:00Z", "event_recorded": "2026-10-25T03:00:00Z", "message_time": "2026-10-25T03:00:05Z", "event_time_had_offset": false}, "ward_state": {"history": [{"event": "admit", "event_time": "2026-10-24T08:00:00Z"}]}},
    "expect": {"event_time": "plausible"}},
+  {"group": "event_time", "name": "ten minutes after the engine received the message, whatever the sender's own clock says", "summary": {"message": {"received_at": "2026-10-19T08:50:00Z"}}, "expect": {"event_time": "future"}},
+  {"group": "event_time", "name": "after the engine received it, in the form the message store writes", "summary": {"message": {"received_at": "2026-10-19 08:50:00.123"}}, "expect": {"event_time": "future"}},
+  {"group": "event_time", "name": "four minutes after the engine received the message", "summary": {"message": {"received_at": "2026-10-19T08:56:00Z"}}, "expect": {"event_time": "plausible"}},
+  {"group": "event_time", "name": "a message the engine received an hour after the event", "summary": {"message": {"received_at": "2026-10-19T10:00:00Z"}}, "expect": {"event_time": "plausible"}},
+  {"group": "event_time", "name": "a receive time in a form that is not UTC skips its check", "summary": {"message": {"received_at": "2026-10-19T08:50:00+01:00"}}, "expect": {"event_time": "plausible"}},
   {"group": "event_time", "name": "no message item", "summary": {"message": null}, "expect": {"event_time": "plausible", "free_text": "no"}},
   {"group": "event_time", "name": "no message item, with the evidence taken an hour before the event", "summary": {"message": null, "observed_at": "2026-10-19T08:00:00Z"}, "expect": {"event_time": "future"}},
   {"group": "event_time", "name": "a later transfer timed after the evidence was taken", "summary": {"timeline": [{"later": true, "outcome": "applied", "event": "transfer", "event_time": "2026-10-19T14:00:00Z"}]}, "expect": {"event_time": "later_event_future", "later_applied": "none"}},
@@ -520,8 +608,54 @@ XData Rows [ MimeType = application/json ]
   {"group": "simultaneous_sources", "name": "another source at the same time", "summary": {"ward_state": {"history": [{"event": "admit", "event_time": "2026-10-18T08:00:00Z"}, {"event": "transfer", "event_time": "2026-10-19T09:00:00Z", "operation_key": "EPR^HOSP^MRN-UT1^ENC-UT1^transfer^2026-10-19T09:00:00Z"}]}}, "expect": {"simultaneous_sources": "yes"}},
   {"group": "simultaneous_sources", "name": "the same source at the same time", "summary": {"ward_state": {"history": [{"event": "update", "event_time": "2026-10-19T09:00:00Z", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^update^2026-10-19T09:00:00Z"}]}}, "expect": {"simultaneous_sources": "no"}},
   {"group": "simultaneous_sources", "name": "the case's own operation in the history", "summary": {"ward_state": {"history": [{"event": "transfer", "event_time": "2026-10-19T09:00:00Z", "operation_key": "{key}"}]}}, "expect": {"simultaneous_sources": "no"}},
-  {"group": "simultaneous_sources", "name": "another source at another time", "summary": {"ward_state": {"history": [{"event": "transfer", "event_time": "2026-10-19T09:01:00Z", "operation_key": "EPR^HOSP^MRN-UT1^ENC-UT1^transfer^2026-10-19T09:01:00Z"}]}}, "expect": {"simultaneous_sources": "no"}},
+  {"group": "simultaneous_sources", "name": "another source at another time", "summary": {"ward_state": {"history": [{"event": "transfer", "event_time": "2026-10-19T09:06:00Z", "operation_key": "EPR^HOSP^MRN-UT1^ENC-UT1^transfer^2026-10-19T09:06:00Z"}]}}, "expect": {"simultaneous_sources": "no"}},
+  {"group": "simultaneous_sources", "name": "another source a second later", "summary": {"ward_state": {"history": [{"event": "transfer", "event_time": "2026-10-19T09:00:01Z", "operation_key": "EPR^HOSP^MRN-UT1^ENC-UT1^transfer^2026-10-19T09:00:01Z"}]}}, "expect": {"simultaneous_sources": "yes", "later_applied": "transfer"}},
+  {"group": "simultaneous_sources", "name": "another source a second earlier", "summary": {"ward_state": {"history": [{"event": "transfer", "event_time": "2026-10-19T08:59:59Z", "operation_key": "EPR^HOSP^MRN-UT1^ENC-UT1^transfer^2026-10-19T08:59:59Z"}]}}, "expect": {"simultaneous_sources": "yes", "later_applied": "none"}},
+  {"group": "simultaneous_sources", "name": "another source a minute apart", "summary": {"ward_state": {"history": [{"event": "transfer", "event_time": "2026-10-19T09:01:00Z", "operation_key": "EPR^HOSP^MRN-UT1^ENC-UT1^transfer^2026-10-19T09:01:00Z"}]}}, "expect": {"simultaneous_sources": "yes"}},
+  {"group": "simultaneous_sources", "name": "another source at the end of the window", "summary": {"ward_state": {"history": [{"event": "transfer", "event_time": "2026-10-19T09:05:00Z", "operation_key": "EPR^HOSP^MRN-UT1^ENC-UT1^transfer^2026-10-19T09:05:00Z"}]}}, "expect": {"simultaneous_sources": "yes"}},
+  {"group": "simultaneous_sources", "name": "another source just past the window", "summary": {"ward_state": {"history": [{"event": "transfer", "event_time": "2026-10-19T09:05:01Z", "operation_key": "EPR^HOSP^MRN-UT1^ENC-UT1^transfer^2026-10-19T09:05:01Z"}]}}, "expect": {"simultaneous_sources": "no"}},
+  {"group": "simultaneous_sources", "name": "another source at the start of the window", "summary": {"ward_state": {"history": [{"event": "transfer", "event_time": "2026-10-19T08:55:00Z", "operation_key": "EPR^HOSP^MRN-UT1^ENC-UT1^transfer^2026-10-19T08:55:00Z"}]}}, "expect": {"simultaneous_sources": "yes"}},
+  {"group": "simultaneous_sources", "name": "another source just before the window", "summary": {"ward_state": {"history": [{"event": "transfer", "event_time": "2026-10-19T08:54:59Z", "operation_key": "EPR^HOSP^MRN-UT1^ENC-UT1^transfer^2026-10-19T08:54:59Z"}]}}, "expect": {"simultaneous_sources": "no"}},
+  {"group": "simultaneous_sources", "name": "the same source a second later", "summary": {"ward_state": {"history": [{"event": "transfer", "event_time": "2026-10-19T09:00:01Z", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^transfer^2026-10-19T09:00:01Z"}]}}, "expect": {"simultaneous_sources": "no"}},
+  {"group": "simultaneous_sources", "name": "another source's update at the same time", "summary": {"ward_state": {"history": [{"event": "update", "event_time": "2026-10-19T09:00:00Z", "operation_key": "EPR^HOSP^MRN-UT1^ENC-UT1^update^2026-10-19T09:00:00Z"}]}}, "expect": {"simultaneous_sources": "no"}},
+  {"group": "simultaneous_sources", "name": "another source's update a second later", "summary": {"ward_state": {"history": [{"event": "update", "event_time": "2026-10-19T09:00:01Z", "operation_key": "EPR^HOSP^MRN-UT1^ENC-UT1^update^2026-10-19T09:00:01Z"}]}}, "expect": {"simultaneous_sources": "no", "later_applied": "update"}},
+  {"group": "simultaneous_sources", "name": "another source's admission in the window", "summary": {"ward_state": {"history": [{"event": "admit", "event_time": "2026-10-19T09:00:01Z", "operation_key": "EPR^HOSP^MRN-UT1^ENC-UT1^admit^2026-10-19T09:00:01Z"}]}}, "expect": {"simultaneous_sources": "yes"}},
+  {"group": "simultaneous_sources", "name": "another source's discharge in the window", "summary": {"ward_state": {"history": [{"event": "discharge", "event_time": "2026-10-19T09:00:01Z", "operation_key": "EPR^HOSP^MRN-UT1^ENC-UT1^discharge^2026-10-19T09:00:01Z"}]}}, "expect": {"simultaneous_sources": "yes"}},
+  {"group": "simultaneous_sources", "name": "another source's merge in the window", "summary": {"ward_state": {"history": [{"event": "merge", "event_time": "2026-10-19T09:00:01Z", "operation_key": "EPR^HOSP^MRN-UT1^ENC-UT1^merge^2026-10-19T09:00:01Z"}]}}, "expect": {"simultaneous_sources": "yes"}},
+  {"group": "simultaneous_sources", "name": "another source's cancel in the window", "summary": {"ward_state": {"history": [{"event": "cancel_transfer", "event_time": "2026-10-19T09:00:01Z", "operation_key": "EPR^HOSP^MRN-UT1^ENC-UT1^cancel_transfer^2026-10-19T09:00:01Z"}]}}, "expect": {"simultaneous_sources": "yes"}},
+  {"group": "simultaneous_sources", "name": "another source's time that cannot be read", "summary": {"ward_state": {"history": [{"event": "transfer", "event_time": "2026-10-19T09:00:01+01:00", "operation_key": "EPR^HOSP^MRN-UT1^ENC-UT1^transfer^2026-10-19T09:00:01+01:00"}]}}, "expect": {"simultaneous_sources": "yes"}},
   {"group": "simultaneous_sources", "name": "no history", "summary": {"ward_state": {"history": null}}, "expect": {"simultaneous_sources": "no"}},
+  {"group": "event_time_zone", "name": "New York, the first pass of the repeated hour", "case": {"event_time": "2026-11-01T05:10:00Z"}, "summary": {"observed_at": "2026-11-01T05:10:00Z", "message": {"admit_time": "2026-01-01T08:00:00Z", "event_recorded": "2026-11-01T05:10:00Z", "message_time": "2026-11-01T05:10:00Z", "event_time_had_offset": false, "feed_time_zone": "America/New_York"}, "ward_state": {"history": [{"event": "admit", "event_time": "2026-01-01T08:00:00Z"}]}}, "expect": {"event_time": "clock_change"}},
+  {"group": "event_time_zone", "name": "New York, late in the repeated hour", "case": {"event_time": "2026-11-01T05:50:00Z"}, "summary": {"observed_at": "2026-11-01T05:50:00Z", "message": {"admit_time": "2026-01-01T08:00:00Z", "event_recorded": "2026-11-01T05:50:00Z", "message_time": "2026-11-01T05:50:00Z", "event_time_had_offset": false, "feed_time_zone": "America/New_York"}, "ward_state": {"history": [{"event": "admit", "event_time": "2026-01-01T08:00:00Z"}]}}, "expect": {"event_time": "clock_change"}},
+  {"group": "event_time_zone", "name": "New York, the skipped hour", "case": {"event_time": "2026-03-08T07:30:00Z"}, "summary": {"observed_at": "2026-03-08T07:30:00Z", "message": {"admit_time": "2026-01-01T08:00:00Z", "event_recorded": "2026-03-08T07:30:00Z", "message_time": "2026-03-08T07:30:00Z", "event_time_had_offset": false, "feed_time_zone": "America/New_York"}, "ward_state": {"history": [{"event": "admit", "event_time": "2026-01-01T08:00:00Z"}]}}, "expect": {"event_time": "clock_change"}},
+  {"group": "event_time_zone", "name": "New York, two hours after its clock change", "case": {"event_time": "2026-11-01T08:10:00Z"}, "summary": {"observed_at": "2026-11-01T08:10:00Z", "message": {"admit_time": "2026-01-01T08:00:00Z", "event_recorded": "2026-11-01T08:10:00Z", "message_time": "2026-11-01T08:10:00Z", "event_time_had_offset": false, "feed_time_zone": "America/New_York"}, "ward_state": {"history": [{"event": "admit", "event_time": "2026-01-01T08:00:00Z"}]}}, "expect": {"event_time": "plausible"}},
+  {"group": "event_time_zone", "name": "New York on the night London changes", "case": {"event_time": "2026-10-25T01:30:00Z"}, "summary": {"observed_at": "2026-10-25T01:30:00Z", "message": {"admit_time": "2026-01-01T08:00:00Z", "event_recorded": "2026-10-25T01:30:00Z", "message_time": "2026-10-25T01:30:00Z", "event_time_had_offset": false, "feed_time_zone": "America/New_York"}, "ward_state": {"history": [{"event": "admit", "event_time": "2026-01-01T08:00:00Z"}]}}, "expect": {"event_time": "plausible"}},
+  {"group": "event_time_zone", "name": "Paris, the repeated hour", "case": {"event_time": "2026-10-25T00:30:00Z"}, "summary": {"observed_at": "2026-10-25T00:30:00Z", "message": {"admit_time": "2026-01-01T08:00:00Z", "event_recorded": "2026-10-25T00:30:00Z", "message_time": "2026-10-25T00:30:00Z", "event_time_had_offset": false, "feed_time_zone": "Europe/Paris"}, "ward_state": {"history": [{"event": "admit", "event_time": "2026-01-01T08:00:00Z"}]}}, "expect": {"event_time": "clock_change"}},
+  {"group": "event_time_zone", "name": "Paris, the skipped hour", "case": {"event_time": "2026-03-29T01:30:00Z"}, "summary": {"observed_at": "2026-03-29T01:30:00Z", "message": {"admit_time": "2026-01-01T08:00:00Z", "event_recorded": "2026-03-29T01:30:00Z", "message_time": "2026-03-29T01:30:00Z", "event_time_had_offset": false, "feed_time_zone": "Europe/Paris"}, "ward_state": {"history": [{"event": "admit", "event_time": "2026-01-01T08:00:00Z"}]}}, "expect": {"event_time": "clock_change"}},
+  {"group": "event_time_zone", "name": "Sydney, the repeated hour", "case": {"event_time": "2026-04-04T15:30:00Z"}, "summary": {"observed_at": "2026-04-04T15:30:00Z", "message": {"admit_time": "2026-01-01T08:00:00Z", "event_recorded": "2026-04-04T15:30:00Z", "message_time": "2026-04-04T15:30:00Z", "event_time_had_offset": false, "feed_time_zone": "Australia/Sydney"}, "ward_state": {"history": [{"event": "admit", "event_time": "2026-01-01T08:00:00Z"}]}}, "expect": {"event_time": "clock_change"}},
+  {"group": "event_time_zone", "name": "Paris, with an offset", "case": {"event_time": "2026-10-25T00:30:00Z"}, "summary": {"observed_at": "2026-10-25T00:30:00Z", "message": {"admit_time": "2026-01-01T08:00:00Z", "event_recorded": "2026-10-25T00:30:00Z", "message_time": "2026-10-25T00:30:00Z", "event_time_had_offset": true, "feed_time_zone": "Europe/Paris"}, "ward_state": {"history": [{"event": "admit", "event_time": "2026-01-01T08:00:00Z"}]}}, "expect": {"event_time": "plausible"}},
+  {"group": "event_time_zone", "name": "a zone with no clock change", "case": {"event_time": "2026-10-25T00:30:00Z"}, "summary": {"observed_at": "2026-10-25T00:30:00Z", "message": {"admit_time": "2026-01-01T08:00:00Z", "event_recorded": "2026-10-25T00:30:00Z", "message_time": "2026-10-25T00:30:00Z", "event_time_had_offset": false, "feed_time_zone": "Asia/Kolkata"}, "ward_state": {"history": [{"event": "admit", "event_time": "2026-01-01T08:00:00Z"}]}}, "expect": {"event_time": "plausible"}},
+  {"group": "event_time_zone", "name": "another name for British time", "case": {"event_time": "2026-10-25T00:30:00Z"}, "summary": {"observed_at": "2026-10-25T00:30:00Z", "message": {"admit_time": "2026-01-01T08:00:00Z", "event_recorded": "2026-10-25T00:30:00Z", "message_time": "2026-10-25T00:30:00Z", "event_time_had_offset": false, "feed_time_zone": "Europe/Belfast"}, "ward_state": {"history": [{"event": "admit", "event_time": "2026-01-01T08:00:00Z"}]}}, "expect": {"event_time": "clock_change"}},
+  {"group": "event_time_zone", "name": "a fixed offset has no clock change", "case": {"event_time": "2026-10-25T00:30:00Z"}, "summary": {"observed_at": "2026-10-25T00:30:00Z", "message": {"admit_time": "2026-01-01T08:00:00Z", "event_recorded": "2026-10-25T00:30:00Z", "message_time": "2026-10-25T00:30:00Z", "event_time_had_offset": false, "feed_time_zone": "+01:00"}, "ward_state": {"history": [{"event": "admit", "event_time": "2026-01-01T08:00:00Z"}]}}, "expect": {"event_time": "plausible"}},
+  {"group": "event_time_zone", "name": "UTC under its zone name has no clock change", "case": {"event_time": "2026-10-25T00:30:00Z"}, "summary": {"observed_at": "2026-10-25T00:30:00Z", "message": {"admit_time": "2026-01-01T08:00:00Z", "event_recorded": "2026-10-25T00:30:00Z", "message_time": "2026-10-25T00:30:00Z", "event_time_had_offset": false, "feed_time_zone": "Etc/UTC"}, "ward_state": {"history": [{"event": "admit", "event_time": "2026-01-01T08:00:00Z"}]}}, "expect": {"event_time": "plausible"}},
+  {"group": "entries", "name": "a failed transfer and a later transfer", "summary": {"ward_state": {"history": [{"event": "admit", "event_time": "2026-10-18T08:00:00Z", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^admit^2026-10-18T08:00:00Z"}, {"event": "transfer", "ward": "WARD-C", "event_time": "2026-10-19T10:00:00Z", "applied_at": "2026-10-19T10:00:02Z", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^transfer^2026-10-19T10:00:00Z"}]}}, "expect": {"entries": "E1", "decision": "policy"}},
+  {"group": "entries", "name": "a failed transfer and a cancel of it", "summary": {"ward_state": {"history": [{"event": "admit", "event_time": "2026-10-18T08:00:00Z", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^admit^2026-10-18T08:00:00Z"}, {"event": "cancel_transfer", "event_time": "2026-10-19T09:00:00Z", "applied_at": "2026-10-19T09:10:02Z", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^cancel_transfer^2026-10-19T09:00:00Z"}]}}, "expect": {"entries": "E1", "decision": "policy"}},
+  {"group": "entries", "name": "a failed transfer and a cancel of another movement", "summary": {"ward_state": {"history": [{"event": "admit", "event_time": "2026-10-18T08:00:00Z", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^admit^2026-10-18T08:00:00Z"}, {"event": "cancel_transfer", "event_time": "2026-10-19T09:10:00Z", "applied_at": "2026-10-19T09:10:02Z", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^cancel_transfer^2026-10-19T09:10:00Z"}]}}, "expect": {"entries": "", "decision": "new_pattern"}},
+  {"group": "entries", "name": "a failed discharge and a later transfer", "case": {"event": "discharge"}, "summary": {"ward_state": {"history": [{"event": "admit", "event_time": "2026-10-18T08:00:00Z", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^admit^2026-10-18T08:00:00Z"}, {"event": "transfer", "ward": "WARD-C", "event_time": "2026-10-19T10:00:00Z", "applied_at": "2026-10-19T10:00:02Z", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^transfer^2026-10-19T10:00:00Z"}]}}, "expect": {"entries": "", "decision": "new_pattern"}},
+  {"group": "entries", "name": "a failed discharge and a cancel of it", "case": {"event": "discharge"}, "summary": {"ward_state": {"history": [{"event": "admit", "event_time": "2026-10-18T08:00:00Z", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^admit^2026-10-18T08:00:00Z"}, {"event": "cancel_discharge", "event_time": "2026-10-19T09:00:00Z", "applied_at": "2026-10-19T09:10:02Z", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^cancel_discharge^2026-10-19T09:00:00Z"}]}}, "expect": {"entries": "", "decision": "new_pattern"}},
+  {"group": "entries", "name": "a failed update and a later transfer", "case": {"event": "update"}, "summary": {"ward_state": {"history": [{"event": "admit", "event_time": "2026-10-18T08:00:00Z", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^admit^2026-10-18T08:00:00Z"}, {"event": "transfer", "ward": "WARD-C", "event_time": "2026-10-19T10:00:00Z", "applied_at": "2026-10-19T10:00:02Z", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^transfer^2026-10-19T10:00:00Z"}]}}, "expect": {"entries": "", "decision": "new_pattern"}},
+  {"group": "entries", "name": "a failed admission and a later transfer", "case": {"event": "admit"}, "summary": {"ward_state": {"history": [{"event": "admit", "event_time": "2026-10-18T08:00:00Z", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^admit^2026-10-18T08:00:00Z"}, {"event": "transfer", "ward": "WARD-C", "event_time": "2026-10-19T10:00:00Z", "applied_at": "2026-10-19T10:00:02Z", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^transfer^2026-10-19T10:00:00Z"}]}}, "expect": {"entries": "", "decision": "new_pattern"}},
+  {"group": "entries", "name": "a failed discharge with nothing later", "case": {"event": "discharge"}, "summary": {}, "expect": {"entries": "E2", "decision": "policy"}},
+  {"group": "entries", "name": "another source at the same second", "summary": {"ward_state": {"history": [{"event": "admit", "event_time": "2026-10-18T08:00:00Z", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^admit^2026-10-18T08:00:00Z"}, {"event": "transfer", "ward": "WARD-C", "event_time": "2026-10-19T09:00:00Z", "applied_at": "2026-10-19T09:00:05Z", "operation_key": "BEDMGR^HOSP^MRN-UT1^ENC-UT1^transfer^2026-10-19T09:00:00Z"}]}}, "expect": {"entries": "E7", "decision": "board"}},
+  {"group": "entries", "name": "another source a second later: not overtaken", "summary": {"ward_state": {"history": [{"event": "admit", "event_time": "2026-10-18T08:00:00Z", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^admit^2026-10-18T08:00:00Z"}, {"event": "transfer", "ward": "WARD-C", "event_time": "2026-10-19T09:00:01Z", "applied_at": "2026-10-19T09:00:05Z", "operation_key": "BEDMGR^HOSP^MRN-UT1^ENC-UT1^transfer^2026-10-19T09:00:01Z"}]}}, "expect": {"entries": "E7", "decision": "board"}},
+  {"group": "entries", "name": "another source a second earlier: not a plain resend", "summary": {"ward_state": {"history": [{"event": "admit", "event_time": "2026-10-18T08:00:00Z", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^admit^2026-10-18T08:00:00Z"}, {"event": "transfer", "ward": "WARD-C", "event_time": "2026-10-19T08:59:59Z", "applied_at": "2026-10-19T09:00:05Z", "operation_key": "BEDMGR^HOSP^MRN-UT1^ENC-UT1^transfer^2026-10-19T08:59:59Z"}]}}, "expect": {"entries": "E7", "decision": "board"}},
+  {"group": "entries", "name": "another source's update at the same second: a plain resend", "summary": {"ward_state": {"history": [{"event": "admit", "event_time": "2026-10-18T08:00:00Z", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^admit^2026-10-18T08:00:00Z"}, {"event": "update", "ward": "WARD-C", "event_time": "2026-10-19T09:00:00Z", "applied_at": "2026-10-19T09:00:05Z", "operation_key": "BEDMGR^HOSP^MRN-UT1^ENC-UT1^update^2026-10-19T09:00:00Z"}]}}, "expect": {"entries": "E2", "decision": "policy"}},
+  {"group": "entries", "name": "another source's movement at a time that cannot be read: it can't be shown outside the window", "summary": {"ward_state": {"history": [{"event": "admit", "event_time": "2026-10-18T08:00:00Z", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^admit^2026-10-18T08:00:00Z"}, {"event": "transfer", "ward": "WARD-C", "event_time": "2026-10-19T08:59:59+01:00", "applied_at": "2026-10-19T09:00:05Z", "operation_key": "BEDMGR^HOSP^MRN-UT1^ENC-UT1^transfer^2026-10-19T08:59:59+01:00"}]}}, "expect": {"entries": "E7", "decision": "board"}},
+  {"group": "entries", "name": "a death field that could not be read", "summary": {"message": {"death_recorded": "unreadable"}}, "expect": {"entries": "E19", "decision": "person"}},
+  {"group": "entries", "name": "the message records a death", "summary": {"message": {"death_recorded": "yes"}}, "expect": {"entries": "E19", "decision": "person"}},
+  {"group": "entries", "name": "the message clears a death", "summary": {"message": {"death_recorded": "cleared"}}, "expect": {"entries": "E19", "decision": "person"}},
+  {"group": "entries", "name": "a death on the message goes ahead of a later transfer", "summary": {"message": {"death_recorded": "yes"}, "ward_state": {"history": [{"event": "admit", "event_time": "2026-10-18T08:00:00Z", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^admit^2026-10-18T08:00:00Z"}, {"event": "transfer", "ward": "WARD-C", "event_time": "2026-10-19T10:00:00Z", "applied_at": "2026-10-19T10:00:02Z", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^transfer^2026-10-19T10:00:00Z"}]}}, "expect": {"entries": "E19", "decision": "person"}},
+  {"group": "entries", "name": "no death on the message", "summary": {"message": {"death_recorded": "no"}}, "expect": {"entries": "E2", "decision": "policy"}},
   {"group": "bed_conflict", "name": "no refusal for an occupied bed", "summary": {}, "expect": {"bed_conflict": "none"}},
   {"group": "bed_conflict", "name": "the occupant is leaving", "case": {"failure_kind": "rejected"}, "summary": {"failure": {"kind": "rejected", "reason_code": "bed_occupied", "http_status": 409}, "bed_conflict": {"refused": true, "ward": "WARD-B", "bed": "B2", "status": "occupant_leaving", "occupant": {"encounter_id": "ENC-OCC"}, "occupant_movement": {"event": "transfer", "delivery": "failed", "case_id": "C-000041"}}}, "expect": {"bed_conflict": "occupant_leaving", "receiver_answer": "refused", "delivery": "rejected"}},
   {"group": "bed_conflict", "name": "the occupant has left", "summary": {"bed_conflict": {"refused": true, "status": "occupant_left", "occupant": {"encounter_id": "ENC-OCC"}, "occupant_movement": {"event": "discharge", "delivery": "applied"}}}, "expect": {"bed_conflict": "occupant_left"}},
@@ -535,6 +669,11 @@ XData Rows [ MimeType = application/json ]
   {"group": "other", "name": "notes in the message", "summary": {"message": {"notes": ["Patient moved early at the family's request"]}}, "expect": {"free_text": "yes"}},
   {"group": "other", "name": "an ordered chain", "chain": "ordered", "expect": {"chain": "ordered"}},
   {"group": "other", "name": "an interleaved chain", "chain": "interleaved", "expect": {"chain": "interleaved"}},
+  {"group": "other", "name": "a death on the message", "summary": {"message": {"death_recorded": "yes"}}, "expect": {"death_recorded": "yes"}},
+  {"group": "other", "name": "a death cleared on the message", "summary": {"message": {"death_recorded": "cleared"}}, "expect": {"death_recorded": "cleared"}},
+  {"group": "other", "name": "a death field that could not be read", "summary": {"message": {"death_recorded": "unreadable"}}, "expect": {"death_recorded": "unreadable"}},
+  {"group": "other", "name": "no death on the message", "summary": {"message": {"death_recorded": "no"}}, "expect": {"death_recorded": "no"}},
+  {"group": "other", "name": "no message item says no death", "summary": {"message": null}, "expect": {"death_recorded": "no"}},
   {"group": "other", "name": "no chain kind reads as single", "chain": "", "expect": {"chain": "single"}}
 ]
 }

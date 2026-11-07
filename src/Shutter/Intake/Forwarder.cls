@@ -14,8 +14,10 @@
 /// schema category is not loaded in this namespace (Shutter holds the case and releases it once the schema is imported
 /// here) or invalid_message when it does not validate against a schema that is loaded. Nothing was delivered: the engine
 /// held the message. HeldReceiver names the receiver such a message was bound for; empty, Shutter's connector item.
-/// It never retries and never fails the message: a refusal is in the response's Error and in the event log as a
-/// warning; the sending process decides what to do with it.
+/// A forward nobody answered, or that a Shutter or a gateway that is down answered (502, 503, 504), waits in this item's own queue and
+/// is tried again until FailureTimeout runs out (the item's setting: 300 seconds here, 0 tries once, -1 never gives up), since the
+/// sends to it are asynchronous and the feed does not wait. It never fails the message: a refusal, or a forward still unanswered at
+/// the end of that time, is in the response's Error and in the event log as a warning; the sending process decides what to do with it.
 Class Shutter.Intake.Forwarder Extends Ens.BusinessOperation
 {
 
@@ -45,6 +47,13 @@ Property HeldReceiver As %String(MAXLEN = 128);
 /// another namespace's, since one name would pool their cases and incidents and give them one profile entry. Onboarding
 /// sets it when a name is taken. Empty: the item's own name.
 Property ReceiverPrefix As %String(MAXLEN = 64);
+
+/// How long a forward nobody answered is kept and tried again, in seconds; 0 tries once, -1 never gives up. Under the alert intake's
+/// ten-minute pending mark, so a forward still out does not forward twice in the usual case; one that does joins the open case.
+Property FailureTimeout As %Numeric(MINVAL = -1) [ InitialExpression = 300 ];
+
+/// The words for the forward being tried again, for the refusal when the time runs out.
+Property NoAnswerWords As %String(MAXLEN = 2500) [ Internal, Transient ];
 
 Parameter SETTINGS = "IntakePath:Shutter,SourceProduction:Shutter,SourceNamespace:Shutter,SchemaCategory:Shutter,HeldReceiver:Shutter,ReceiverPrefix:Shutter";
 
@@ -119,9 +128,16 @@ Method Send(request As Shutter.Intake.Forward, msg As EnsLib.HL7.Message, header
             While 'httpResponse.Data.AtEnd { Set answer = answer _ httpResponse.Data.Read(32000) }
         }
     }
+    If (..FailureTimeout '= 0) && ..TryAgain(status) {
+        // Quietly, as the engine's retry loop has it: no error, so no alert per try. The refusal comes in OnFailureTimeout.
+        Set ..NoAnswerWords = ..RefusalWords(status, sc, answer, ..IntakePath), ..Retry = 1
+        If ..RetryCount <= 1 $$$LOGWARNING("Trying the forward of header " _ request.HeaderId _ " again every " _ ..RetryInterval _ " s for " _ ..FailureTimeout _ " s: " _ ..NoAnswerWords)
+        Quit $$$OK
+    }
     Set parsed = ##class(Shutter.Util.Json).Parse(answer, .psc)
     If '$ISOBJECT(parsed) || $$$ISERR(psc) || 'parsed.%IsA("%DynamicObject") Set parsed = {}
     If status = 202 {
+        If ..CaseIdIn(answer) = "" Quit ..Refused(response, ..NoCaseWords(..IntakePath, answer))
         Set response.CaseId = ##class(Shutter.Util.Json).Str(parsed, "caseId")
         Set response.State = ##class(Shutter.Util.Json).Str(parsed, "state")
         Set response.Opened = ##class(Shutter.Util.Json).Bool(parsed, "opened")
@@ -137,6 +153,35 @@ ClassMethod RefusalWords(status As %String, sc As %Status, answer As %String, pa
 {
     If +status = 0 Quit "No answer from Shutter at " _ path _ ": " _ $SELECT($$$ISERR(sc): $SYSTEM.Status.GetErrorText(sc), 1: "no response")
     Quit "HTTP " _ status _ " from Shutter: " _ $SELECT(answer '= "": $EXTRACT(answer, 1, 2000), 1: "empty body")
+}
+
+/// The case id in an answer, "" when the answer is not an object naming one. The real intake always names one.
+ClassMethod CaseIdIn(answer As %String) As %String
+{
+    Set parsed = ##class(Shutter.Util.Json).Parse(answer, .psc)
+    If '$ISOBJECT(parsed) || $$$ISERR(psc) || 'parsed.%IsA("%Library.DynamicObject") Quit ""
+    Quit ##class(Shutter.Util.Json).Str(parsed, "caseId")
+}
+
+/// Why a 202 with no case id took nothing: something other than Shutter's intake answered, such as a proxy or a wrong IntakePath.
+ClassMethod NoCaseWords(path As %String, answer As %String) As %String
+{
+    Quit "HTTP 202 with no case id from " _ path _ ", so something other than Shutter's intake answered: " _ $SELECT(answer '= "": $EXTRACT(answer, 1, 300), 1: "empty body")
+}
+
+/// Whether to keep the forward and try again: nobody answered, or a Shutter or a gateway that is down did. Any other answer is about the request itself.
+ClassMethod TryAgain(status As %String) As %Boolean
+{
+    Quit (+status = 0) || (+status = 502) || (+status = 503) || (+status = 504)
+}
+
+/// The time ran out on a forward being tried again: from here it goes as a refusal does, with its alert, and the message is not failed.
+Method OnFailureTimeout(pRequest As %Library.Persistent, Output pResponse As %Library.Persistent, ByRef pSC As %Status) As %Boolean
+{
+    Set pResponse = ##class(Shutter.Intake.Forwarded).%New()
+    Set pSC = ..Refused(pResponse, $SELECT(..NoAnswerWords '= "": ..NoAnswerWords, 1: "No answer from Shutter at " _ ..IntakePath))
+    Set ..NoAnswerWords = ""
+    Quit 0
 }
 
 /// The HL7 message behind a header id, or "" with the problem said. The body must be an EnsLib.HL7.Message or a

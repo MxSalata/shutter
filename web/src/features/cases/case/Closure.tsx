@@ -71,7 +71,9 @@ export function Reinvestigate({ c }: { c: CaseDetail }) {
         <Stack gap="sm">
           <Text size="sm">
             The case collects fresh evidence and is investigated again, with a new plan version; the earlier
-            plan and approval stay as history.
+            plan and approval stay as history. This can plan another resend, which this site&apos;s policy may
+            release with no person. If the team has already corrected the receiver, mark the case as handled
+            instead.
           </Text>
           <Textarea
             label="Why look again"

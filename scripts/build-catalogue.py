@@ -19,9 +19,9 @@ import sys
 CONDITIONS = {
     "event": {"admit", "transfer", "discharge", "update", "merge", "cancel", "other"},
     "delivery": {"failed", "rejected", "uncertain", "unmappable", "withheld", "unreadable"},
-    "receiver_answer": {"unavailable", "timeout", "duplicate", "version_conflict", "refused", "none"},
+    "receiver_answer": {"unavailable", "timeout", "duplicate", "version_conflict", "refused", "unread", "none"},
     "receipt": {"present", "absent", "unreadable", "none"},
-    "later_applied": {"none", "transfer", "discharge", "update", "admit", "cancelled", "merge"},
+    "later_applied": {"none", "transfer", "discharge", "update", "admit", "cancelled", "cancel_other", "merge"},
     "later_delivery": {"applied", "sent", "none"},
     "event_time": {"plausible", "before_admission", "future", "far_from_recorded", "clock_change", "later_event_future"},
     "encounter_state": {"admitted", "discharged", "not_found", "unknown"},
@@ -33,6 +33,7 @@ CONDITIONS = {
     "chain": {"single", "ordered", "interleaved"},
     "receiver_category": {"current_state", "history_of_record", "orders_results"},
     "bed_conflict": {"none", "occupant_leaving", "occupant_left", "occupant_staying", "unknown"},
+    "death_recorded": {"no", "yes", "cleared", "unreadable"},
 }
 OUTCOMES = {"resend", "resend_chain", "resend_latest", "reconcile", "none", "escalate", "resend_unconditional", "correct_history", "resend_after_occupant"}
 DECIDES = {"policy", "board", "person"}

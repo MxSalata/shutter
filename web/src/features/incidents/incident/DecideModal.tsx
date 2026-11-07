@@ -12,6 +12,7 @@ import { byEnv } from '@/env/copy';
 import { describeError, isApiError } from '@/lib/errors';
 import { plural } from '@/lib/format';
 import { ApproveWords } from './ApproveWords';
+import { CoveredOperations } from './CoveredOperations';
 
 export type Decision = 'approve' | 'reject';
 
@@ -25,7 +26,10 @@ export function useDecideDialog(inc: IncidentDetail) {
   const [chain, setChain] = useState<Chain | null>(null);
   const [comment, setComment] = useState('');
   const [key, setKey] = useState('');
+  // The digest the dialog opened on: the page's reads carry on under it, and a decision is only on what the person read
+  const [opened, setOpened] = useState<string | undefined>();
   const open = (d: Decision, forChain: Chain | null = null) => {
+    setOpened(inc.planDigest);
     setDecision(d);
     setChain(forChain);
     setComment('');
@@ -37,11 +41,13 @@ export function useDecideDialog(inc: IncidentDetail) {
     ? [chain]
     : inc.chains.filter((c) => c.decides === 'policy' && c.policy === 'approval');
   const operations = covered.reduce((n, c) => n + c.items.length, 0);
+  // A decision sent or answered moves the incident by itself: only a change before that stops the dialog
+  const moved = decision !== null && !decide.isPending && !decide.isSuccess && inc.planDigest !== opened;
   const submit = () => {
-    if (!decision || !inc.planDigest) return;
+    if (!decision || !opened || moved) return;
     decide.mutate(
       {
-        decision: { decision, planDigest: inc.planDigest, comment },
+        decision: { decision, planDigest: opened, comment },
         chainSeq: chain?.seq,
         idempotencyKey: key,
       },
@@ -64,7 +70,7 @@ export function useDecideDialog(inc: IncidentDetail) {
       },
     );
   };
-  const changed = decide.error && isApiError(decide.error) && decide.error.code === 'plan_changed';
+  const changed = moved || (decide.error && isApiError(decide.error) && decide.error.code === 'plan_changed');
   const what = chain ? `chain ${chain.seq} (${chain.encounterId})` : `${plural(covered.length, 'chain')}`;
   const modal = (
     <ConfirmModal
@@ -86,9 +92,10 @@ export function useDecideDialog(inc: IncidentDetail) {
           rows={[['Chains', covered.map((c) => `${c.seq} (${c.encounterId})`).join(', ')]]}
           labelWidth={120}
         />
+        <CoveredOperations chains={covered} />
         <TechDetail label="What this decision is bound to" kind="data">
           <KeyValueList
-            rows={[['Plan digest', <Digest key="p" value={inc.planDigest} label="incident plan digest" />]]}
+            rows={[['Plan digest', <Digest key="p" value={opened} label="incident plan digest" />]]}
             labelWidth={120}
           />
         </TechDetail>
@@ -100,10 +107,10 @@ export function useDecideDialog(inc: IncidentDetail) {
           value={comment}
           onChange={(e) => setComment(e.currentTarget.value)}
         />
-        {decide.error ? (
+        {changed || decide.error ? (
           <Alert color="red" variant="light" role="alert">
             {changed
-              ? "The incident's plan changed since this page loaded: close this and review it again."
+              ? "The incident's plan changed since you opened this: close this and review it again."
               : describeError(decide.error)}
           </Alert>
         ) : null}
@@ -115,7 +122,7 @@ export function useDecideDialog(inc: IncidentDetail) {
             color={decision === 'approve' ? undefined : 'red'}
             loading={decide.isPending}
             onClick={submit}
-            disabled={!!changed || !inc.planDigest}
+            disabled={!!changed || !opened}
           >
             {decision === 'approve' ? 'Approve the release' : 'Reject the release'}
           </Button>

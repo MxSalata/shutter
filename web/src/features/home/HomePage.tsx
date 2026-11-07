@@ -218,11 +218,17 @@ function NeedAPerson() {
   );
 }
 
-/** Whether the production runs, once the instance has said. The Health page has the rest. */
+/** Whether the production runs, once the instance has said; the trial's is a recording's, so it says so. The Health page has the rest. */
 function ProductionState() {
   const state = useHealth().data?.production_state;
   if (typeof state !== 'string') return null;
   const running = state === 'running';
+  if (TRIAL)
+    return (
+      <Badge size="sm" color="gray" variant="light">
+        {running ? 'Running when recorded' : 'Not running when recorded'}
+      </Badge>
+    );
   return (
     <Badge size="sm" color={running ? 'green' : 'yellow'} variant="light">
       {running ? 'Production running' : 'Production not running'}

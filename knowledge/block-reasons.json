@@ -393,6 +393,15 @@
       "text": "An approval by site policy stands only for a plan the policy path produced for its catalogue entry. This plan came from elsewhere, so the automatic release does not cover it."
     },
     {
+      "code": "APPROVAL_ORIGIN_NOT_PROVED",
+      "title": "An automatic release needs a proved source",
+      "prerequisite": "The source namespace holds the message header the case names, its message is the text received, and its session went to this receiver",
+      "next_action": "Have a person read the message in its source and approve or reject the plan.",
+      "owner": "Approver",
+      "reevaluate_when": "A person approves the plan, or the site profile's feed.prove_origin is false",
+      "text": "The intake takes what a holder of the forwarder's sign-in posts, so a write with no person needs the source checked. This one could not be, so the automatic release does not cover it."
+    },
+    {
       "code": "MATCHER_ERROR",
       "title": "The catalogue matcher failed",
       "prerequisite": "A matcher result for the case's conditions",
@@ -492,6 +501,24 @@
       "text": "Without a dry run nothing shows that the exact request would apply before it is written, so resending is not offered."
     },
     {
+      "code": "HISTORY_UNSUPPORTED",
+      "title": "The downstream system offers no readable history",
+      "prerequisite": "history shown in the downstream system's capability profile, or declared on its entry in the site profile when the profile says nothing",
+      "next_action": "Escalate for manual handling. Reconcile and superseded remain possible; a resend is not offered to a receiver whose history can't be read.",
+      "owner": "Downstream system team",
+      "reevaluate_when": "The capability profile changes",
+      "text": "Without a readable history a move made outside this feed would not show, so a resend could overwrite it, and nothing could confirm the write afterwards."
+    },
+    {
+      "code": "HISTORY_UNREADABLE",
+      "title": "The downstream system's read holds no history",
+      "prerequisite": "A read of the encounter with its history as a list, as the receiver says it keeps one",
+      "next_action": "Ask the downstream system's team why the encounter's read has no history, then investigate again.",
+      "owner": "Downstream system team",
+      "reevaluate_when": "The encounter's read holds its history",
+      "text": "The receiver says it keeps a history, but this read of the encounter holds none, so what has moved since is unknown. A missing history isn't the same as nothing later."
+    },
+    {
       "code": "DRY_RUN_MISSING",
       "title": "The exact request was never rehearsed",
       "prerequisite": "A dry run of this plan, bound to its approval (WIC-2.5)",
@@ -521,11 +548,11 @@
     {
       "code": "WRITE_NOT_COMMITTED",
       "title": "The resend was not committed",
-      "prerequisite": "A receipt for the operation key, or the operation in the downstream system's history, once the receiver has had its settle window after a write whose answer was lost",
+      "prerequisite": "A receipt for the operation key, or the operation in the downstream system's history, after a write whose answer was lost",
       "next_action": "Check the receiver's history and receipts for the operation key; reinvestigate the case when the receiver's state is known. Never resend blind.",
       "owner": "Integration team",
       "reevaluate_when": "The receiver's state for the encounter is known, and a person has decided whether the movement is still due",
-      "text": "The write's answer was lost. Not committed: by the last read, after the settle window, the receiver holds no receipt for the operation and its history does not show it, and the encounter is still at the version the write was conditional on (or moved past it by something else, so the conditional write can no longer apply). Nothing shows it was applied; a slower receiver can still commit it, unless the version has moved. The approval authorised one write and it is spent; a reinvestigation makes a new plan on fresh evidence."
+      "text": "The write's answer was lost. Not committed: the receiver holds no receipt for the operation and its history does not show it, and the encounter moved past the version the write was conditional on by something else, so the conditional write can no longer apply. The approval authorised one write and it is spent; a reinvestigation makes a new plan on fresh evidence."
     },
     {
       "code": "WRITE_OUTCOME_UNKNOWN",
@@ -534,7 +561,7 @@
       "next_action": "Check the receiver's history and receipts for the operation key; reinvestigate the case when the receiver's state is known. Never resend blind.",
       "owner": "Integration team",
       "reevaluate_when": "The receiver can be read again, or its team confirms what it applied",
-      "text": "The write's answer was lost, or the write call itself failed, and nothing since has settled whether the receiver applied it: a lookup failed, the receiver no longer knows the encounter, or the budget of reads ran out. Nothing is established either way, so nothing is resent until a person has checked at the receiver."
+      "text": "The write's answer was lost, or the write call itself failed, and nothing since has settled whether the receiver applied it: a lookup failed, the receiver no longer knows the encounter, the budget of reads ran out, or there was no sign of the write by the last read, when a slower receiver can still commit it. Nothing is established either way, so nothing is resent until a person has checked at the receiver. The approval authorised one write and it is spent."
     },
     {
       "code": "WAITING_FOR_OCCUPANT_CASE",
@@ -582,6 +609,42 @@
       "text": "While Shutter was about to resend this movement, a newer message for the same patient arrived from the source system and has not yet reached the receiver. Resending first would be pointless at best, and wrong behind a cancellation or a merge, so the resend waits for the newer message."
     },
     {
+      "code": "FURTHER_MOVEMENT",
+      "title": "Something else has happened to this patient",
+      "prerequisite": "No further in-patient movement for the patient on another visit, and no cancel, merge or change to the record the receiver has not applied",
+      "next_action": "Read both visits named here, in the source system and on the receiver's own screen, and put the patient right by hand or close the case. Nothing is sent, and nothing will be until a person decides.",
+      "owner": "Operator",
+      "reevaluate_when": "A person has read both and closed or reinvestigated the case",
+      "text": "After this message failed, a further message arrived for the same patient that Shutter can't weigh by itself: a new admission or ward stay under another visit number, a cancel or discharge the receiver never applied, or a change to the record. Someone may be working round bad history. Shutter can't say which visit is real, so it stops and names both."
+    },
+    {
+      "code": "NO_FURTHER_MOVEMENT",
+      "title": "Nothing else stops this for the patient",
+      "prerequisite": "No further in-patient movement for the patient on another visit",
+      "next_action": "None: a pass. Anything else on file for the patient, such as an out-patient attendance, is on the plan.",
+      "owner": "Operator",
+      "reevaluate_when": "Not applicable",
+      "text": "Shutter read this patient's further messages on every visit it can see and none of them stops the resend. A change made by hand at the receiver can't be seen this way."
+    },
+    {
+      "code": "PATIENT_UNREADABLE",
+      "title": "The patient's identifier could not be read",
+      "prerequisite": "The case names a patient identifier",
+      "next_action": "Find the patient from the message itself and decide by hand.",
+      "owner": "Operator",
+      "reevaluate_when": "The case is investigated again",
+      "text": "With no identifier, Shutter can't tell what else has happened to this patient, so nothing is sent."
+    },
+    {
+      "code": "FURTHER_NOT_READ",
+      "title": "Further messages for the patient could not all be read",
+      "prerequisite": "Shutter's namespace and the namespace the case came from can be read in full since the case's own message",
+      "next_action": "Reinvestigate the case, or check the patient in the Message Viewer and decide by hand. A read that keeps running out of time needs more of it: further_messages.scan_seconds in the site profile.",
+      "owner": "Operator",
+      "reevaluate_when": "The case is investigated again",
+      "text": "There were too many new messages to read at the moment of the write, or the source namespace could not be read, so whether something else has happened to this patient is not known. Nothing is sent."
+    },
+    {
       "code": "SCHEMA_UNKNOWN",
       "title": "The message's schema is not loaded here",
       "prerequisite": "The message's schema category (its DocType category) is loaded in Shutter's namespace, so the message can be validated",
@@ -589,6 +652,51 @@
       "owner": "Integration team",
       "reevaluate_when": "The schema category is imported",
       "text": "The message names a schema category that Shutter's namespace does not have, such as a site's own variant of HL7 2.5.1 with extra segments. That is missing evidence, not an invalid message: Shutter cannot validate the message until the schema is imported."
+    },
+    {
+      "code": "ENTRY_NOT_NAMED_WRITE",
+      "title": "A write that doesn't name the catalogue entry that stops it",
+      "prerequisite": "A write names the catalogue entry it follows when an entry the evidence matched calls for no resend",
+      "next_action": "Read the matched entry and decide by hand, or investigate again so the plan follows the entry.",
+      "owner": "Operator",
+      "reevaluate_when": "The case is investigated again",
+      "text": "The plan would resend and names no catalogue entry, but an entry that matches this case calls for something other than a resend. Only Rules only mode in a recorded scenario, the baseline, passes this."
+    },
+    {
+      "code": "NO_BOARD_ANSWER",
+      "title": "The board has to decide this, and nobody on it could answer",
+      "prerequisite": "A board member who can answer: a recording, a model budget left and a key the provider accepts",
+      "next_action": "Read the matched catalogue entry and the patient's record, then decide how to recover the message by hand, or investigate again when the agents can run.",
+      "owner": "Operator",
+      "reevaluate_when": "The budget resets, the provider accepts the key, or a person reinvestigates",
+      "text": "The scenario catalogue gives this case to the board or to a person, and no board member could answer. Nothing is planned and nothing is sent, because a plain resend would replace that decision with one nobody took."
+    },
+    {
+      "code": "RECEIPT_PAYLOAD_DIFFERS",
+      "title": "The receiver holds this key with other content",
+      "prerequisite": "A receipt whose payload digest and bed are the failed operation's own",
+      "next_action": "Compare the two at the receiver: this message and what its receipt holds. Correct the patient's location there if this message is the right one, then mark the case handled.",
+      "owner": "Integration team",
+      "reevaluate_when": "A person has compared the message with the receiver's record",
+      "text": "The receipt shows the operation key is taken, not that this message is what the receiver holds: another movement in the same second, or a corrected message, shares the key, and the bed sits outside the digest. The receiver refused or ignored this message, so closing the case as committed would drop it. Nothing is written."
+    },
+    {
+      "code": "RECEIPT_THEN_CANCELLED",
+      "title": "A cancel followed the receipt",
+      "prerequisite": "No cancel of this patient's visit recorded at or after the event",
+      "next_action": "Look at the cancel and at what the receiver holds now, and decide whether this movement should stand. A re-issue under the first message's event time cannot reach the receiver through its API: its key is taken. Correct it there if it is due, then mark the case handled.",
+      "owner": "Integration team",
+      "reevaluate_when": "A person has compared the movement with the receiver's record",
+      "text": "The receiver holds a receipt for this operation, but a cancel was recorded at or after its event, so the receipt does not show it stands. Closing the case as committed could leave the patient where the cancel put them. Nothing is written."
+    },
+    {
+      "code": "WRITE_NOT_RELEASED",
+      "title": "The receiver wrote during a rehearsal",
+      "prerequisite": "A receiver that honours dry_run: a rehearsal or a blind-resend preview that writes nothing",
+      "next_action": "Check the operation at the receiver, correct it there if it should not stand, and mark the case handled. Tell the receiver's team it does not honour dry_run, and take dry_run off its entry in the site profile until it does.",
+      "owner": "Integration team",
+      "reevaluate_when": "A person has checked the operation at the receiver",
+      "text": "The receiver applied a dry run, so the operation is in effect with no approval or policy behind it. It is on the record as an attempt, and the case does not close as a success, whatever the verifier reads."
     }
   ]
 }

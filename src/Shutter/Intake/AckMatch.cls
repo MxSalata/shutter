@@ -52,9 +52,10 @@ ClassMethod FindSent(control As %String, receiver As %String, lookback As %Integ
 
 /// The forward for a negative acknowledgement, as a process on the feed sends it (kind rejected, reason ack_ and the code), or "".
 /// AA and CA give "" and no problem. AE, AR, CE and CR look for the message by MSA-2 among those sent to the receiver: the forward
-/// names its session's first HL7 message, the receiving service's, as the alert intake's does. problem says why there is no forward
+/// names that message, so a transform on the route is not lost, with the session's service as its route. problem says why there is no forward
 /// for one that needed it, and is for the site to raise. session is the completion key: pending and seen marks are the alert intake's
-/// (Shutter.Intake.AlertProcess), so one message at one receiver reaches Shutter once, by whichever route comes first.
+/// (Shutter.Intake.AlertProcess), so one message at one receiver reaches Shutter once, by whichever route comes first. Those marks are
+/// per session and receiver, so a negative code for another message of a session already handed on gets no case, and the problem names it.
 ClassMethod ForwardFor(ack As EnsLib.HL7.Message, receiver As %String, Output problem As %String, Output session As %String, lookback As %Integer = "") As Shutter.Intake.Forward
 {
     Set problem = "", session = ""
@@ -65,16 +66,20 @@ ClassMethod ForwardFor(ack As EnsLib.HL7.Message, receiver As %String, Output pr
     If '$ISOBJECT(sent) Set problem = "A " _ code _ " names the control id '" _ control _ "', and no message with it is among the last " _ $SELECT(+lookback > 0: +lookback, 1: ..#LOOKBACK) _ " sent to " _ receiver _ ", so Shutter has no case for it: " _ $EXTRACT(words, 1, 200) Quit ""
     Set session = sent.SessionId
     Set ap = "Shutter.Intake.AlertProcess"
-    If $CLASSMETHOD(ap, "Seen", session, receiver) || $CLASSMETHOD(ap, "Pending", session, receiver) Quit ""
-    Set header = $CLASSMETHOD(ap, "HL7HeaderOfSession", session, .none)
-    If '$ISOBJECT(header) Set header = sent
+    If $CLASSMETHOD(ap, "Seen", session, receiver) || $CLASSMETHOD(ap, "Pending", session, receiver) {
+        If '$CLASSMETHOD(ap, "Handed", session, receiver, control) && ($LISTLENGTH($CLASSMETHOD(ap, "SentTo", session, receiver)) > 1) {
+            Set problem = "A " _ code _ " names the message " _ control _ " (header " _ sent.%Id() _ ") sent to " _ receiver _ ", and another message of session " _ session _ " was handed to Shutter already, so this one has no case: " _ $EXTRACT(words, 1, 200)
+        }
+        Quit ""
+    }
     Set f = ##class(Shutter.Intake.Forward).%New()
-    Set f.HeaderId = header.%Id()
-    Set f.Route = header.SourceConfigName
+    Set f.HeaderId = sent.%Id()
+    Set f.Route = $CLASSMETHOD(ap, "RouteOfSession", session, sent)
     Set f.Receiver = receiver
     Set f.FailureKind = "rejected", f.FailureOutcome = "rejected", f.FailureReasonCode = "ack_" _ code
     Set f.FailureText = $EXTRACT("The receiver's acknowledgement feed answered " _ code _ " to the message " _ control _ " sent to " _ receiver _ " (header " _ sent.%Id() _ "), which the engine had completed" _ $SELECT(words '= "": ": " _ words, 1: ""), 1, 2000)
     Do $CLASSMETHOD(ap, "MarkPending", session, receiver)
+    Do $CLASSMETHOD(ap, "MarkHanded", session, receiver, control)
     Quit f
 }
 
