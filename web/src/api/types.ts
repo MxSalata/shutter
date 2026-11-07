@@ -864,6 +864,8 @@ export interface SiteReceiver {
   merges?: boolean;
   api?: Record<string, string>;
   features?: Record<string, boolean>;
+  /** The site's one line on where to look at this receiver, shown as a hint on a stopped case; never evidence. */
+  manual_check?: { runbook?: string };
   [key: string]: unknown;
 }
 
@@ -1440,6 +1442,57 @@ export interface WhatIf {
   profile_version: number;
   note: string;
   facts: WhatIfFact[];
+}
+
+/** One value of what a message asked: from the message, read but open to doubt, or not there. */
+export interface ReceiverCheckField {
+  label: string;
+  value: string;
+  source: 'message' | 'doubtful' | 'unavailable';
+}
+
+/**
+ * GET /cases/{id}/receiver-check: what to check at the receiver on a stopped case, with no model and no receiver call
+ * (CONTRACTS 5.2). A person's guide: it has no verified, safe-to-resend or action field. 404 not_stopped otherwise.
+ */
+export interface ReceiverCheck {
+  caseId: string;
+  caseVersion: number;
+  snapshotId: string;
+  profileVersion: number;
+  guideVersion: string;
+  guideDigest: string;
+  variant: string;
+  receiverEvidence: 'read' | 'unavailable';
+  evidenceNote: string;
+  receiverRead: { at: string; state: string; ward: string; bed: string } | null;
+  identity: {
+    patientId: string;
+    authority: string;
+    encounterId: string;
+    receiver: string;
+    sourceSystem: string;
+    messageType: string;
+    controlId: string;
+    timeLabel: string;
+    time: string;
+    messageRef: string;
+    sourceRoute: string;
+    collectedAt: string;
+  };
+  messageRequest: { kind: string; summary: string; note: string; fields: ReceiverCheckField[] };
+  laterMovement: { summary: string; source: string } | null;
+  queueWarning: string;
+  checks: {
+    id: string;
+    where: string;
+    compare: string[];
+    meanings: { answer: string; label: string; text: string }[];
+  }[];
+  siteRunbook: string | null;
+  unknown: string[];
+  limitations: string[];
+  report: string;
 }
 
 /** Shutter.Schema.Answer: what the Explain agent, and each board member, submits. */

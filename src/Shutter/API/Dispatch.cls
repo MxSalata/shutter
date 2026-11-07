@@ -36,6 +36,7 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
   <Route Url="/cases/:caseId/closure" Method="GET" Call="CaseClosure"/>
   <Route Url="/cases/:caseId/preview-blind-resend" Method="POST" Call="CasePreview"/>
   <Route Url="/cases/:caseId/blocked-reason" Method="GET" Call="CaseBlockedReason"/>
+  <Route Url="/cases/:caseId/receiver-check" Method="GET" Call="CaseReceiverCheck"/>
   <Route Url="/cases/:caseId/reinvestigate" Method="POST" Call="CaseReinvestigate"/>
   <Route Url="/cases/:caseId/board" Method="POST" Call="CaseBoard"/>
   <Route Url="/cases/:caseId/close" Method="POST" Call="CaseClose"/>
@@ -798,6 +799,16 @@ ClassMethod CaseBlockedReason(caseId As %String) As %Status
     Set o.failingChecks = failing
     Set o.state = case.State, o.headline = case.Headline
     Quit ..Json(o)
+}
+
+/// What to check at the receiver on a stopped case (CONTRACTS 5.2): no model, no receiver call and no write.
+ClassMethod CaseReceiverCheck(caseId As %String) As %Status
+{
+    If '..Allow() Quit $$$OK
+    Set case = ..CaseOr404(caseId)
+    If '$ISOBJECT(case) Quit $$$OK
+    If '$LISTFIND($LISTBUILD("blocked", "escalated", "failed"), case.State) Quit ..Fail("404 Not Found", "not_stopped", "The case is " _ case.State)
+    Quit ..Json(##class(Shutter.Util.ReceiverCheck).ForCase(case))
 }
 
 /// A write whose answer was lost (Verify.Judge: not committed, or unknown after the last read), a rehearsal nobody answered,

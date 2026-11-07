@@ -10,6 +10,7 @@ import {
   type BlindResendPreview,
   type BlockedReason,
   type RecoveryControl,
+  type ReceiverCheck,
   type CaseDetail,
   type CaseEvent,
   type CaseList,
@@ -855,6 +856,11 @@ export function isAnswering(state: QuestionState | string | undefined): boolean 
 /** The deterministic What-if card (GET /cases/{id}/whatif): no model, so it reads the same with no key. */
 export function useWhatIf(caseId: string, enabled = true) {
   return useCasePart<WhatIf>(caseId, 'whatif', '/whatif', false, enabled);
+}
+
+/** What to check at the receiver (GET /cases/{id}/receiver-check): no model and no receiver call, read when it is opened. */
+export function useReceiverCheck(caseId: string, enabled = true) {
+  return useCasePart<ReceiverCheck>(caseId, 'receiver-check', '/receiver-check', false, enabled);
 }
 
 /** The recorded conversations of the case's scenario; `conversations` is empty when it has none. */

@@ -467,6 +467,31 @@ catalogue entry matched (no agent runs; a person decides). The cases list shows 
 
 **What the case does.** The first verification runs at once after the attempt (a lost answer whose write landed, as S3's 504, resolves on the first read). `verified` resolves the case, unless the attempt has no approval, which is a write the receiver made during a rehearsal: nobody released it, so the case escalates with the headline "Escalated: the receiver wrote during a rehearsal, with no release" (`WRITE_NOT_RELEASED`). While `detail.retry` is true the case workflow verifies again after 10, 20 and 40 s (`MaxRefreshes`, 3: reads at about 0, 10, 30 and 70 s after the attempt, the 70 s read being the first past the default settle window). `not_committed` escalates the case: the approval is revoked (it authorised one write, and that write is spent), the headline is "Escalated: the resend was not committed", and the state event reads "Not verified (not_committed): <summary>. The approval is revoked, and nothing is resent without a person: a reinvestigation plans again on fresh evidence" (block reason `WRITE_NOT_COMMITTED`). `unresolved` with `verdict: unknown` after the last read, for a resend, revokes the approval too and escalates with the headline "Escalated: the resend's outcome is unknown" and "Not verified (unknown): <summary>. Whether the receiver applied the resend is unknown; a person must check at the receiver before anything is resent" (`WRITE_OUTCOME_UNKNOWN`). Any other outcome escalates as "Not verified (<outcome>): <summary>". Nothing is ever dispatched or re-planned from a verification: a person reinvestigates, which collects fresh evidence, makes a new plan and asks for a new approval. The settle window applies to every receiver the site profile describes, with or without a receipt endpoint (6.4).
 
+### 5.2 What to check at the receiver
+
+`GET /cases/{id}/receiver-check` (`Shutter_Operate`; 404 `not_found`, and 404 `not_stopped` unless the case is blocked,
+escalated or failed) answers a person's guide for a stopped case, built by `Shutter.Util.ReceiverCheck` with no model call,
+no receiver call and no write. It reads the case's own fields, named values of the snapshot, the receiver's line in the site
+profile, and TXA or OBR of the stored message. It is an allowlist, never a serialised snapshot: it reads no OBX, no NTE and no
+name, and leaves out the failure text and the bed conflict, since a refusal can name the patient in the bed. No gate check,
+catalogue entry or plan reads it.
+
+`{caseId, caseVersion, snapshotId, profileVersion, guideVersion, guideDigest, variant, receiverEvidence: read | unavailable,
+evidenceNote, receiverRead: {at, state, ward, bed} | null, identity: {patientId, authority, encounterId, receiver, sourceSystem,
+messageType, controlId, timeLabel, time, messageRef, sourceRoute, collectedAt}, messageRequest: {kind, summary, note, fields:
+[{label, value, source: message | doubtful | unavailable}]}, laterMovement: {summary, source} | null, queueWarning, checks: [{id,
+where, compare: [text], meanings: [{answer: present | absent | different | cannot_tell, label, text}]}], siteRunbook: text | null,
+unknown: [text], limitations: [text], report}`. There is no verified, safe-to-resend or action field: what a person finds is their
+report, recorded in the reason of the existing hand close. A missing value reads "Not available from this message".
+
+`variant`, first match: `withheld` (a merge or a cancel); `document` (MDM^T02: TXA-12, TXA-2, TXA-4, TXA-17) and `result` (ORU^R01:
+OBR-3, else OBR-2, ORC-3, ORC-2; OBR-4, OBR-7, OBR-25), with a limitation when the message carries more than one item;
+`other_message` (any other message that isn't ADT: general words, no check of its own); `uncertain` (the latest write has no answer);
+`already_applied` (a receipt from the receiver naming this operation, or `ALREADY_COMMITTED`, never a matching location); `uncertain`
+(the failure's own outcome); `identity_or_time` (unmappable, unreadable, E11, E12, E13, E18, or those gate codes); `refusal`; `history_correction`
+(the plan has correction steps); `later_movement`; `manual_compare`. `guideDigest` is the SHA-256 of the versioned words, the class's
+`Words` block.
+
 ## 6. The scenario catalogue and the matcher (v1.6)
 
 The catalogue is the knowledge base's core: every failure pattern Shutter knows, each with a preferred outcome and its
@@ -699,6 +724,10 @@ in its policy reads `approval`, so it starts with no automatic release. A profil
   (`current` | `correct`) is derived from the category (`history_of_record` -> `correct`, the others -> `current`) and may
   be set on the entry to override it. The site-wide `history_policy` is deprecated: still accepted, read only for an entry
   with neither a category nor its own policy, and no longer in the seed (profile version 5).
+- **A receiver's runbook line** (`receivers[].manual_check.runbook`, optional): one line of plain text, 300 characters at most, on
+  where to look at this receiver, shown on its stopped cases as a navigation hint and never as evidence (5.2). No HTML, links,
+  credentials, control characters or runs of six digits. It is saved with the profile, and the core reads it as nothing else: no
+  command, mapping or capability.
 - **A demo receiver's namespace** (v1.25): `receivers[].demo.namespace` names the namespace a demo receiver runs in, where
   the scenario runner resets it and sets its faults (`Shutter.Store.SiteProfile.ReceiverNamespace`); absent, the receiver
   is the namespace's own. The shipped seed (profile version 6) lists two receivers: Downstream Out (`current_state`) and
