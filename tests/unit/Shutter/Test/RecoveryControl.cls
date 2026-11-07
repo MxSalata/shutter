@@ -642,6 +642,32 @@ Method TestShadowSendsNoEmail()
     Do ##class(%File).RemoveDirectoryTree(dir)
 }
 
+/// A reminder is mail by the same operation: shadow mode holds it, and with recovery enabled it gets as far as the mail server.
+Method TestShadowModeHoldsAReminder()
+{
+    Set c = ..PlannedCase(.plan)
+    Set op = ##class(Shutter.Operation.EscalationMail).%New("UT Mail")
+    Set op.Adapter = ##class(EnsLib.EMail.OutboundAdapter).%New()
+    For mode = "shadow", "enabled" {
+        Do ..SetMode(mode)
+        Set items = [{"id": (c.%Id()), "caseId": (c.CaseId), "threshold": "team", "hours": 4}]
+        Do $$$AssertStatusOK(##class(Shutter.Store.ReminderDigest).Create("team@example.org", "s", "b", items, ##class(Shutter.Util.Time).NowUTC(), .row, "none"), "a digest")
+        Set m = ##class(Shutter.Msg.ReminderSend).%New()
+        Set m.DigestId = row.%Id()
+        Do $$$AssertStatusOK(op.OnReminderSend(m, .resp), "sent to the operation, " _ mode)
+        Set row = ##class(Shutter.Store.ReminderDigest).%OpenId(row.%Id(), 0)
+        Do $$$AssertEquals(row.State, "failed", "no mail went, " _ mode)
+        If mode = "shadow" {
+            Do $$$AssertTrue(row.Result [ "shadow mode", "shadow says why: " _ row.Result)
+            Do $$$AssertEquals(row.Body, "", "and keeps no text")
+        } Else {
+            Do $$$AssertNotTrue(row.Result [ "shadow mode", "enabled: the negative control goes past the check: " _ row.Result)
+        }
+        Do row.%DeleteId(row.%Id())
+    }
+    Kill ^Shutter.Reminder("last_error")
+}
+
 /// The report's denominator is cases reaching Shutter, a case with no observation stays in it, and it authorises nothing.
 Method TestTheReport()
 {

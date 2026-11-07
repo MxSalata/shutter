@@ -640,7 +640,7 @@ function CaseReminders({
       </TechDetail>
       <QuestionDetails
         keys={[['reminders.enabled', r?.enabled, 'false']]}
-        more="Cases awaiting approval, blocked, escalated or failed, abandoned ones aside. Each is reminded once per threshold. Nothing goes outside the window, so a case left overnight is in the first mail of the morning, and at most one mail an hour goes to anyone. Bank holidays aren't known. Never a full name, date of birth, address or NHS number. A failed send goes again at the next run."
+        more="Cases awaiting approval, blocked, escalated or failed, abandoned ones aside. Each is reminded once per threshold. Nothing goes outside the window, so a case left overnight is in the first mail of the morning, and at most one mail an hour goes to anyone. Bank holidays aren't known. Never a full name, date of birth, address or NHS number. A failed send goes again at the next run. In shadow mode none goes, unless the profile's notifications.shadow_delivery says enabled."
       />
     </Section>
   );

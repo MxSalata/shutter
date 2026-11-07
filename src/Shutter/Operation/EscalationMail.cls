@@ -64,6 +64,8 @@ Method OnReminderSend(request As Shutter.Msg.ReminderSend, Output response As En
     Set response = ##class(Ens.Response).%New()
     Set row = ##class(Shutter.Store.ReminderDigest).%OpenId(request.DigestId)
     If '$ISOBJECT(row) || (row.State '= "queued") Quit $$$OK
+    // Shadow mode (CONTRACTS 17) holds this mail as it holds an escalation's, and the next run builds it afresh.
+    If ##class(Shutter.Util.RecoveryControl).MailSuppressed() Do row.MarkFailed("Not sent: shadow mode sends no email") Quit $$$OK
     Set profile = ##class(Shutter.Store.SiteProfile).Current()
     Set settings = ##class(Shutter.Util.CaseReminder).Settings(profile)
     Set problem = row.SendProblem(##class(Shutter.Util.Time).NowUTC(), settings, ##class(Shutter.Store.SiteProfile).AllowedDomains())

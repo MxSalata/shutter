@@ -61,6 +61,9 @@ ClassMethod Run(now As %String = "") As %Integer
             If ..MailServer() = "" {
                 // No file and no record: an .eml nobody reads would leave identifiers on disk and say a reminder went.
                 Do ..Note("Reminders are due and no mail server is set on the Escalation Mail operation, so none went")
+            } ElseIf ##class(Shutter.Util.RecoveryControl).MailSuppressed() {
+                // Nothing built, so no identifiers are stored for a mail that can't go, and no case counts as reminded.
+                Do ..Note("Reminders are due and shadow mode sends no email, so none went")
             } Else {
                 Set it = decided.digests.%GetIterator()
                 While it.%GetNext(, .digest) { Set queued = queued + ..Send(digest, settings, now) }
