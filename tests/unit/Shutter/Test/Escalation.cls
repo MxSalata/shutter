@@ -49,7 +49,7 @@ Method TestWhatTheEmailAsksOnceCorrected()
     Do $$$AssertNotTrue(words [ "verifies the correction", "it promises no check")
     Set words = $CLASSMETHOD(d, "WhenCorrected", "Ward Beds", 0)
     Do $$$AssertTrue(words [ "mark the case as handled", "a receiver Shutter cannot read: " _ words)
-    Do $$$AssertTrue(words [ "cannot verify a correction", "says so")
+    Do $$$AssertTrue(words [ "can't verify the correction", "says so")
     Do $$$AssertNotTrue(words [ "Reinvestigate", "and does not offer Reinvestigate as the way on")
     Set c = ##class(Shutter.Store.Case).ByCaseId(..#CASEID)
     Do $$$AssertStatusOK($CLASSMETHOD(d, "Build", c, {"name": "Beds"}, .subject, .body), "a draft for the demo receiver")
@@ -58,7 +58,7 @@ Method TestWhatTheEmailAsksOnceCorrected()
     Set c.FailureText = "This message is an order, not ADT: nothing is planned"
     Do $$$AssertTrue(c.NotModelled(), "a message Shutter does not model")
     Do $$$AssertStatusOK($CLASSMETHOD(d, "Build", c, {"name": "Beds"}, .subject, .body), "a draft for it")
-    Do $$$AssertTrue(body [ "cannot verify a correction", "the body says Shutter cannot verify it")
+    Do $$$AssertTrue(body [ "can't verify the correction", "the body says Shutter cannot verify it")
 }
 
 Method OnAfterOneTest(testname As %String) As %Status

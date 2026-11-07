@@ -20,6 +20,7 @@ import {
   type CaseFacts,
 } from './outcome';
 import { GatePanel, PlanPanel, RehearsalPanel } from './PlanPanel';
+import { AT_THE_RECEIVER, notCheckedAtReceiver } from './receiver';
 import { S8Compare } from './S8Compare';
 import { NestedSections } from './Section';
 
@@ -101,6 +102,8 @@ export function CaseStory({
     onRetry: facts.retryPlan,
     receiver: c.receiver,
   };
+  // A case with no receipt reads what the engine and the site say, and that nobody read the receiver
+  const notChecked = notCheckedAtReceiver(c, facts.snapshot, facts.attempts);
   const execution = {
     caseId: c.caseId,
     open,
@@ -109,6 +112,7 @@ export function CaseStory({
     byHand: c.disposition === 'handled_by_hand',
     state: c.state,
     receiver: c.receiver,
+    notChecked,
   };
   const key = (facts.snapshot?.items ?? []).filter((x) => KEY_KINDS.includes(x.kind));
   return (
@@ -178,9 +182,14 @@ export function CaseStory({
         <RehearsalPanel view={plan} write={write} receiver={c.receiver} />
         <DispatchPanel {...execution} />
       </Step>
-      <Step value="verified" n={6} title="What was verified" summary={verifiedSummary(facts)}>
+      <Step
+        value="verified"
+        n={6}
+        title={notChecked ? AT_THE_RECEIVER : 'What was verified'}
+        summary={verifiedSummary(facts)}
+      >
         <VerificationPanel {...execution} />
-        <ClosureRecord c={c} />
+        <ClosureRecord c={c} notChecked={notChecked} />
       </Step>
       {c.scenario === 'S8' ? (
         <Step value="compare" title="Why the board matters" summary="The two runs, compared.">

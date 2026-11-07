@@ -45,6 +45,8 @@ ClassMethod Build(case As Shutter.Store.Case, team As %DynamicObject, Output sub
     Set ids = ..Identifiers(case)
     // A result with no PV1 has an empty encounter, a message with no visit number the literal "-".
     Set noEncounter = (case.EncounterId = "-") || (case.EncounterId = "")
+    // An order or a result: its missing visit number is just that, and nothing here reads the receiver for it.
+    Set orderOrResult = case.NotModelled() || (##class(Shutter.Store.SiteProfile).ReceiverCategory(receiver) = "orders_results")
     Set subject = "Shutter " _ case.CaseId _ ": manual check needed, " _ receiver _ $SELECT(noEncounter: ", patient " _ case.PatientId _ " (no encounter)", 1: ", encounter " _ case.EncounterId)
 
     Set teamName = $SELECT($ISOBJECT(team): $CLASSMETHOD(json, "Str", team, "name"), 1: "")
@@ -65,7 +67,7 @@ ClassMethod Build(case As Shutter.Store.Case, team As %DynamicObject, Output sub
     Set b = b _ "  Hospital number: " _ ids.hospital _ nl
     If ids.nhs '= "" Set b = b _ "  NHS number: " _ ids.nhs _ nl
     If ids.dob '= "" Set b = b _ "  Date of birth: " _ ids.dob _ nl
-    Set b = b _ "  Encounter (visit number): " _ $SELECT(noEncounter: "none (a patient-level message)", 1: case.EncounterId) _ nl _ nl
+    Set b = b _ "  Encounter (visit number): " _ $SELECT(noEncounter && orderOrResult: "No visit number was supplied.", noEncounter: "none (a patient-level message)", 1: case.EncounterId) _ nl _ nl
 
     Set b = b _ "THE EVENT" _ nl
     Set b = b _ "  " _ ..EventLine(case.Event, case.Ward, case.EventTime, case) _ nl
@@ -113,7 +115,9 @@ ClassMethod Build(case As Shutter.Store.Case, team As %DynamicObject, Output sub
             }
         }
     } Else {
-        If noEncounter {
+        If noEncounter && orderOrResult {
+            Set b = b _ "  Not applicable: No visit number was supplied." _ nl
+        } ElseIf noEncounter {
             Set b = b _ "  Not applicable: the message names no encounter (a patient-level message)." _ nl
         } Else {
             Set b = b _ "  Not known: the receiver's record of the encounter could not be read (" _ ..StatusWords(summary.%Get("ward_state_http_status")) _ ")." _ nl
@@ -142,10 +146,10 @@ ClassMethod Build(case As Shutter.Store.Case, team As %DynamicObject, Output sub
     Set b = b _ "  " _ ..Attempts(case) _ nl _ nl
 
     Set b = b _ "WHEN IT IS CORRECTED" _ nl
-    If (case.FailureKind = "withheld") || noEncounter {
+    If (case.FailureKind = "withheld") || (noEncounter && 'orderOrResult) {
         Set b = b _ "  Reply to this email with what was changed, or record it on the case, then mark the case as handled by the team on the case page: Shutter sent nothing for this message and will send nothing, and it cannot verify a merge or a cancellation against " _ receiver _ "." _ nl _ nl
     } Else {
-        Set b = b _ ..WhenCorrected(receiver, 'case.NotModelled() && (##class(Shutter.Store.SiteProfile).ReceiverPath(receiver, "state", case.EncounterId) '= "")) _ nl _ nl
+        Set b = b _ ..WhenCorrected(receiver, 'orderOrResult && (##class(Shutter.Store.SiteProfile).ReceiverPath(receiver, "state", case.EncounterId) '= "")) _ nl _ nl
     }
 
     Set b = b _ "REFERENCES" _ nl
@@ -161,8 +165,8 @@ ClassMethod Build(case As Shutter.Store.Case, team As %DynamicObject, Output sub
 /// it is never put as a check of the correction. readable says whether Shutter could read the receiver for this message at all.
 ClassMethod WhenCorrected(receiver As %String, readable As %Boolean) As %String
 {
+    If 'readable Quit "  Reply to this email with what was changed, or record it on the case, then mark the case as handled by the team: Shutter can't read this receiver, so it can't verify the correction."
     Set start = "  Reply to this email with what was changed, or record it on the case, then mark the case as handled by the team on the case page"
-    If 'readable Quit start _ ": Shutter cannot verify a correction against " _ receiver _ "."
     Quit start _ ". Reinvestigate is for when the message is still due: Shutter collects fresh evidence and may plan another resend, which this site's policy may release with no person."
 }
 

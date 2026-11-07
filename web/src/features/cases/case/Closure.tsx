@@ -12,6 +12,8 @@ import { Timestamp } from '@/components/Timestamp';
 import { asArray } from '@/lib/json';
 import { humanize } from '@/lib/format';
 import { ConfirmModal } from '@/components/ConfirmModal';
+import { NotCheckedWords } from './NotCheckedWords';
+import { AT_THE_RECEIVER, type NotChecked } from './receiver';
 import { Section } from './Section';
 
 const text = (x: unknown) => (typeof x === 'string' ? x : JSON.stringify(x));
@@ -105,9 +107,10 @@ export function Reinvestigate({ c }: { c: CaseDetail }) {
 
 /**
  * The closing record: how the case closed, who and what took part, and what was and was not verified at the receiver.
- * The reason a stopped case waits, and what comes next, are at the top of the page.
+ * The reason a stopped case waits, and what comes next, are at the top of the page. A case with no receipt reads that
+ * nobody checked the receiver, with what its level allows; the record's Outcome row has the sentence.
  */
-export function ClosureRecord({ c }: { c: CaseDetail }) {
+export function ClosureRecord({ c, notChecked = null }: { c: CaseDetail; notChecked?: NotChecked | null }) {
   const closed = ['resolved', 'blocked', 'escalated', 'failed'].includes(c.state);
   const closure = useClosure(c.caseId, closed);
   const cl = closure.data;
@@ -124,33 +127,44 @@ export function ClosureRecord({ c }: { c: CaseDetail }) {
             ['People and systems', asArray(cl.actors).map(text).join(', ')],
           ]}
         />
-        <Text size="xs" fw={600} c="dimmed">
-          Verified at the receiver
-        </Text>
-        {asArray(cl.verifiedEffects).length ? (
-          <List size="sm" spacing={2}>
-            {asArray(cl.verifiedEffects).map((x, i) => (
-              <List.Item key={i}>{text(x)}</List.Item>
-            ))}
-          </List>
+        {notChecked ? (
+          <>
+            <Text size="xs" fw={600} c="dimmed">
+              {AT_THE_RECEIVER}
+            </Text>
+            <NotCheckedWords accepted={notChecked.accepted} />
+          </>
         ) : (
-          <Text size="sm" c="dimmed">
-            Nothing.
-          </Text>
-        )}
-        <Text size="xs" fw={600} c="dimmed">
-          Not verified
-        </Text>
-        {asArray(cl.unverified).length ? (
-          <List size="sm" spacing={2}>
-            {asArray(cl.unverified).map((x, i) => (
-              <List.Item key={i}>{text(x)}</List.Item>
-            ))}
-          </List>
-        ) : (
-          <Text size="sm" c="dimmed">
-            Nothing left unverified.
-          </Text>
+          <>
+            <Text size="xs" fw={600} c="dimmed">
+              Verified at the receiver
+            </Text>
+            {asArray(cl.verifiedEffects).length ? (
+              <List size="sm" spacing={2}>
+                {asArray(cl.verifiedEffects).map((x, i) => (
+                  <List.Item key={i}>{text(x)}</List.Item>
+                ))}
+              </List>
+            ) : (
+              <Text size="sm" c="dimmed">
+                Nothing.
+              </Text>
+            )}
+            <Text size="xs" fw={600} c="dimmed">
+              Not verified
+            </Text>
+            {asArray(cl.unverified).length ? (
+              <List size="sm" spacing={2}>
+                {asArray(cl.unverified).map((x, i) => (
+                  <List.Item key={i}>{text(x)}</List.Item>
+                ))}
+              </List>
+            ) : (
+              <Text size="sm" c="dimmed">
+                Nothing left unverified.
+              </Text>
+            )}
+          </>
         )}
       </Stack>
     </Section>
