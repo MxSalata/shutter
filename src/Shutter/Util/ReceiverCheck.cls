@@ -375,7 +375,9 @@ ClassMethod MessageFacts(case As Shutter.Store.Case) As %DynamicObject
         Quit:'$ISOBJECT(header)
         Set msg = ##class(EnsLib.HL7.Message).%OpenId(header.MessageBodyId)
         Quit:'$ISOBJECT(msg)
-        Set out.messageType = ..Narrow(msg.GetValueAt("MSH:9.1")) _ "^" _ ..Narrow(msg.GetValueAt("MSH:9.2"))
+        // By segment too: a stored copy no schema typed answers nothing to the named path.
+        Set type = ..Narrow(##class(Shutter.Util.OperationKey).Value(msg, "MSH", "9.1")), trigger = ..Narrow(##class(Shutter.Util.OperationKey).Value(msg, "MSH", "9.2"))
+        If type '= "" Set out.messageType = type _ $SELECT(trigger '= "": "^" _ trigger, 1: "")
         Set zone = ##class(Shutter.Store.SiteProfile).FeedTimeZone()
         If case.Event = "T02" {
             Set i = "", n = 0, seg = msg.FindSegment("TXA", .i), first = seg
