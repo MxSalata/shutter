@@ -40,7 +40,7 @@ One published snapshot: its manifest.
 | `DatasetId` | `VARCHAR(64)` | Part of the primary key. The site's name for this dataset |
 | `BatchId` | `VARCHAR(64)` | Part of the primary key |
 | `BatchSequence` | `BIGINT` | Goes up by at least one with each batch of a generation |
-| `DatasetGeneration` | `VARCHAR(64)` | Changes when the export is rebuilt or reset, and `BatchSequence` may then start again |
+| `DatasetGeneration` | `VARCHAR(64)` | Changes when the export is rebuilt, reset or restored from a backup, and `BatchSequence` may then start again |
 | `SourceSystem` | `VARCHAR(100)` | The system the data was exported from |
 | `ReceiverReference` | `VARCHAR(128)` | The receiver this dataset is declared to describe. A declaration, not something Shutter infers |
 | `ExtractStartedAtUTC` | `TIMESTAMP` | When the extract started |

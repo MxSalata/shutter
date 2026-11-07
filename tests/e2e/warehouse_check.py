@@ -394,6 +394,13 @@ def main():
         check(body["read"]["status"] == "invalid" and body["read"]["category"] == "row_count_mismatch" and not body["read"]["rows"], "a batch short of its rows is refused")
         iris.sql("UPDATE ShutterWH.Batch SET PublishedRows = PublishedRows - 5 WHERE DatasetId = ? AND BatchId = 'B1'", DATASET)
 
+        # The reader not answering: the supplement says so, and the case is as it was
+        check(iris.call(f'##class(Shutter.Warehouse.Setup).Enable({q(DATASET)}, 360, 0, "localhost", 1)') == "ok", "Enable, at a port nothing listens on")
+        status, body = operator.call("POST", f"/cases/{quoted}/warehouse-history")
+        check(status == 200 and body["read"]["status"] == "unavailable" and body["read"]["category"] == "unreachable", f"unavailable: {status}")
+        _, after = operator.call("GET", f"/cases/{quoted}/events")
+        check(before == after, "and the case's timeline did not grow")
+
     # Switched off again: the supplement goes, nothing else moves
     check(iris.call("##class(Shutter.Warehouse.Setup).Disable()") == "ok", "Disable")
     status, body = operator.call("GET", f"/cases/{urllib.parse.quote(case_id)}/warehouse-history")
