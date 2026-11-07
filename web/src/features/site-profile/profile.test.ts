@@ -30,7 +30,10 @@ const FEED_ZONE =
   'feed.time_zone: must be UTC, Europe/London, a fixed offset such as +01:00 (up to 14:00), or an IANA zone name this IRIS knows (for example Europe/Paris)';
 
 describe('the failure census setting (CONTRACTS 18)', () => {
-  const base = { receivers: [{ name: 'Out', tier: 2 }] };
+  const base = {
+    receivers: [{ name: 'Out', tier: 2 }],
+    policy: { '1': { single: 'automatic' }, '2': { single: 'automatic' }, '3': { single: 'approval' } },
+  };
 
   it('a stored profile with it is one the page can save', () => {
     expect(validateProfile({ ...base, failure_census: { enabled: true } })).not.toContain('failure_census');
