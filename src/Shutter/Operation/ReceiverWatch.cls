@@ -3,7 +3,7 @@
 /// writes nothing in the watched namespace. With no watch block it does nothing at all. It has its own item, so a failure in a
 /// watched namespace can't stop the Case Releaser, and a failure here reaches no intake.
 ///
-/// The judging is in pure class methods (AdapterWord, RetryOf, HeadWords, ReadingOf, DownSince, ShouldOpen), so a table can
+/// The judging is in pure class methods (AdapterWord, RetryOf, HeadWords, HeadCheck, ReadingOf, DownSince, ShouldOpen, MarkAfter), so a table can
 /// test them with no instance. Here it only opens an outage: what moves an open one on is written elsewhere.
 Class Shutter.Operation.ReceiverWatch Extends Ens.BusinessService
 {
@@ -49,8 +49,7 @@ ClassMethod PollOne(entry As %DynamicObject) As %Status
     Set ns = watch.%Get("namespace"), item = watch.%Get("item")
     Set now = ##class(Shutter.Util.Time).NowUTC()
     Set row = ##class(Shutter.Store.ReceiverReading).Find(receiver)
-    Set first = '$ISOBJECT(row)
-    If first Set row = ##class(Shutter.Store.ReceiverReading).%New(), row.Receiver = receiver
+    If '$ISOBJECT(row) Set row = ##class(Shutter.Store.ReceiverReading).%New(), row.Receiver = receiver
     Set outage = ##class(Shutter.Store.Outage).ActiveFor(receiver)
     Set facts = ..Read(ns, item)
     Set facts.lastHead = row.LastHead, facts.open = $ISOBJECT(outage)
@@ -58,7 +57,7 @@ ClassMethod PollOne(entry As %DynamicObject) As %Status
     Do ..Fill(row, ns, item, facts, reading, now)
     Set row.DownSince = ..DownSince(reading, row.DownSince, row.CheckedAt, now)
     Set row.CheckedAt = now, row.LastHead = facts.head
-    Set fresh = ..NewNeverOpened(ns, item, facts.retry, first, row, facts.open)
+    Set fresh = ..NewNeverOpened(ns, item, facts.retry, row, facts.open, .freshHeader)
     Set sc = row.%Save()
     If $$$ISERR(sc) Quit sc
     If $ISOBJECT(outage) {
@@ -66,7 +65,11 @@ ClassMethod PollOne(entry As %DynamicObject) As %Status
     }
     Set why = ..ShouldOpen(reading, row.DownSince, now, fresh)
     If why = "" Quit $$$OK
-    Quit ##class(Shutter.Store.Outage).Open(entry, $SELECT(..IsKind(reading): reading, 1: "cant_tell"), why, "Receiver Watch", .outage, .opened)
+    Set sc = ##class(Shutter.Store.Outage).Open(entry, $SELECT(..IsKind(reading): reading, 1: "cant_tell"), why, "Receiver Watch", .outage, .opened)
+    If $$$ISERR(sc) || 'fresh Quit sc
+    // Only now is that header spent: a refused open judges it again on the next poll.
+    Set row.ErrorHeaderMark = freshHeader
+    Quit row.%Save()
 }
 
 /// What the engine shows about the item, as one object: ItemState's fields, and the settings through the shared read with
@@ -93,7 +96,8 @@ ClassMethod Read(ns As %String, item As %String) As %DynamicObject
 /// Copies what was read onto the stored row.
 ClassMethod Fill(row As Shutter.Store.ReceiverReading, ns As %String, item As %String, facts As %DynamicObject, reading As %String, now As %String) [ Private ]
 {
-    Set row.Namespace = ns, row.Item = item, row.Reading = reading, row.Why = $EXTRACT(facts.why, 1, 1000)
+    Set check = ..HeadCheck(facts.head, facts.active)
+    Set row.Namespace = ns, row.Item = item, row.Reading = reading, row.Why = $EXTRACT($SELECT(facts.why '= "": facts.why, 1: check), 1, 1000)
     Set row.Status = facts.status, row.AdapterState = facts.adapterState, row.Queue = facts.queue
     Set row.HeadHeaderId = facts.head, row.ActiveMessage = facts.active, row.Retry = facts.retry, row.StayConnected = facts.stayConnected
     Set settings = facts.settings
@@ -110,6 +114,7 @@ ClassMethod Fill(row As Shutter.Store.ReceiverReading, ns As %String, item As %S
         For field = "status", "adapterState", "queue", "headHeaderId" Do unknown.%Push(field)
     }
     If (facts.answer = "ok") && (facts.active = "") && ((+facts.queue > 0) || (facts.head '= "")) Do unknown.%Push("activeMessage")
+    If check '= "" Do unknown.%Push("activeMessage")
     Set row.SettingSources = sources.%ToJSON(), row.UnknownFields = unknown.%ToJSON()
 }
 
@@ -120,35 +125,74 @@ ClassMethod Known(settings As %DynamicObject, setting As %String) As %String [ P
     Quit $SELECT(read.source = "unknown": "", 1: read.value)
 }
 
-/// The Error headers to the item that are new since this row's mark, judged by every retained attempt's words: 1 when one
-/// reads never_opened and the item finishes with messages by itself. Moves the mark. A first poll only sets it, since a header
-/// from before the watch began is not new. A failed read leaves the mark, so nothing is lost by it.
-ClassMethod NewNeverOpened(ns As %String, item As %String, retry As %String, first As %Boolean, row As Shutter.Store.ReceiverReading, open As %Boolean) As %Boolean [ Private ]
+/// Whether an Error header to the item new since this row's mark reads never_opened on every retained attempt, at an item that
+/// finishes with messages by itself: header is the first such. A mark never set takes the highest Error header there is and
+/// judges nothing, since a header from before the watch began is not new; a read that fails leaves it unset. With an outage
+/// open or an item that retries for ever nothing can open from these, so the mark goes to the highest too.
+ClassMethod NewNeverOpened(ns As %String, item As %String, retry As %String, row As Shutter.Store.ReceiverReading, open As %Boolean, Output header As %String) As %Boolean [ Private ]
 {
-    If '..ErrorHeaders(ns, item, +row.ErrorHeaderMark, .ids, .newest) Quit 0
-    If newest '= "" Set row.ErrorHeaderMark = newest
-    If first || open || (retry = "unlimited") Quit 0
+    Set header = ""
+    If (row.ErrorHeaderMark = "") || open || (retry = "unlimited") {
+        If ..HighestErrorHeader(ns, item, +row.ErrorHeaderMark, .highest) Set row.ErrorHeaderMark = highest
+        Quit 0
+    }
+    If '..ErrorHeaders(ns, item, +row.ErrorHeaderMark, .ids) Quit 0
+    Set words = ""
     For i = 1:1:$LISTLENGTH(ids) {
         Set rows = ##class(Shutter.Util.EngineRead).LogRows(ns, $LIST(ids, i))
-        If rows.answer '= "ok" Continue
-        If ##class(Shutter.Util.EngineWords).Attempts(rows.rows) = "never_opened" Return 1
+        Set words = words _ $LISTBUILD($SELECT(rows.answer = "ok": ##class(Shutter.Util.EngineWords).Attempts(rows.rows), 1: ""))
     }
-    Quit 0
+    Set row.ErrorHeaderMark = ..MarkAfter(row.ErrorHeaderMark, ids, words, .header)
+    Quit header '= ""
 }
 
-/// The oldest Error headers to the item above the mark (a list of at most 50), and the newest of them. 0 on a failed read.
-/// Only stock classes while switched.
-ClassMethod ErrorHeaders(ns As %String, item As %String, mark As %Integer, Output ids As %List, Output newest As %String) As %Boolean [ Private ]
+/// Where the mark goes after judging ids, oldest first, with words their Attempts answers ("" where the rows could not be
+/// read). It moves only past headers read, and stops short of an unread one and of the first never_opened, which is header:
+/// PollOne moves it past that one once the outage is open. Headers after an unread one are still judged.
+ClassMethod MarkAfter(mark As %String, ids As %List, words As %List, Output header As %String) As %String
 {
-    Set ids = "", newest = "", ok = 0
+    Set header = "", moving = 1
+    For i = 1:1:$LISTLENGTH(ids) {
+        Set word = $LIST(words, i)
+        If word = "never_opened" Set header = $LIST(ids, i) Quit
+        If word = "" Set moving = 0
+        If moving Set mark = $LIST(ids, i)
+    }
+    Quit mark
+}
+
+/// The oldest Error headers to the item above the mark, a list of at most 50. 0 on a failed read. Only stock classes while
+/// switched.
+ClassMethod ErrorHeaders(ns As %String, item As %String, mark As %Integer, Output ids As %List) As %Boolean [ Private ]
+{
+    Set ids = "", ok = 0
     Try {
         New $NAMESPACE
         Set $NAMESPACE = ns
         Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT TOP 50 ID FROM Ens.MessageHeader WHERE TargetConfigName = ? AND Status = ? AND ID > ? ORDER BY ID", item, ..#ERRORSTATUS, mark)
         If rs.%SQLCODE < 0 Quit
         While rs.%Next() {
-            Set newest = rs.%Get("ID"), ids = ids _ $LISTBUILD(newest)
+            Set ids = ids _ $LISTBUILD(rs.%Get("ID"))
         }
+        If rs.%SQLCODE < 0 Quit
+        Set ok = 1
+    } Catch ex {
+        Set ok = 0
+    }
+    Quit ok
+}
+
+/// The highest Error header to the item above the mark, or the mark itself as a number when there is none. 0 on a failed read.
+/// Only stock classes while switched.
+ClassMethod HighestErrorHeader(ns As %String, item As %String, mark As %Integer, Output highest As %Integer) As %Boolean [ Private ]
+{
+    Set highest = +mark, ok = 0
+    Try {
+        New $NAMESPACE
+        Set $NAMESPACE = ns
+        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT MAX(ID) AS Highest FROM Ens.MessageHeader WHERE TargetConfigName = ? AND Status = ? AND ID > ?", item, ..#ERRORSTATUS, +mark)
+        If rs.%SQLCODE < 0 Quit
+        If rs.%Next() && (rs.%Get("Highest") '= "") Set highest = +rs.%Get("Highest")
         If rs.%SQLCODE < 0 Quit
         Set ok = 1
     } Catch ex {
@@ -199,6 +243,14 @@ ClassMethod HeadWords(rows As %DynamicObject) As %String
     Quit ""
 }
 
+/// The job list's active message as a check on the head: words when both were read and they differ, else empty. It changes no
+/// reading, since either can move between the two reads, and with PoolSize above 1 a job may hold another message.
+ClassMethod HeadCheck(head As %String, active As %String) As %String
+{
+    If (head = "") || (active = "") || (head = active) Quit ""
+    Quit "the job list shows message " _ active _ " active and the head is " _ head
+}
+
 /// One of the seven readings. facts: answer, productionState, enabled, status, adapterState, queue, head, active, lastHead,
 /// headWords, retry, stayConnected, open.
 ClassMethod ReadingOf(facts As %DynamicObject) As %String
@@ -213,7 +265,6 @@ ClassMethod ReadingOf(facts As %DynamicObject) As %String
         If (status = "ok") || (status = "inactive") Quit $SELECT(+facts.queue > 0: "slow", 1: "healthy")
         // Error is sticky after one refusal on a quiet feed: with nothing held, the last message failed and no more than that.
         If 'held Quit "healthy"
-        If (facts.head '= "") && (facts.head '= facts.lastHead) Quit "slow"
         Quit "cant_tell"
     }
     If word = "disconnected" {

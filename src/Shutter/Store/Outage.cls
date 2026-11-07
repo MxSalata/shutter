@@ -161,14 +161,34 @@ ClassMethod ApproversOf(entry As %DynamicObject) As %DynamicArray
     Quit out
 }
 
-/// The kind the engine shows now, with an event when it changed. No state moves here, and the version with it.
+/// The kind the engine shows now, with an event when it changed. Under the row's lock, on what the store holds: only Kind
+/// changes, and a closed row or a state moved since this copy was read stays as it is, so a poll's old copy never undoes a
+/// person's act. It gives up quietly, with this copy reading the store, and the next poll reads the row again. No state moves
+/// here, and the version with it.
 Method SetKind(kind As %String, by As %String) As %Status
 {
     If kind = ..Kind Quit $$$OK
-    Set was = ..Kind, ..Kind = kind
-    Set sc = ..%Save()
-    If $$$ISERR(sc) Quit sc
-    Quit ##class(Shutter.Store.OutageEvent).Add(..%Id(), "kind", was _ " to " _ kind, by)
+    Set id = ..%Id()
+    If id = "" Quit $$$ERROR($$$GeneralError, "This outage is not saved")
+    Lock +^Shutter.Outage(id):5
+    If '$TEST Quit $$$ERROR($$$GeneralError, "Outage " _ id _ " is locked")
+    Set sc = $$$OK, state = ..State, version = ..Version
+    Try {
+        Set sc = ..%Reload()
+        If $$$ISERR(sc) Quit
+        If (..State = "closed") || (..State '= state) || (..Version '= version) Quit
+        Set was = ..Kind
+        If kind = was Quit
+        Set ..Kind = kind
+        Set sc = ..%Save()
+        If $$$ISERR(sc) Quit
+        Set sc = ##class(Shutter.Store.OutageEvent).Add(id, "kind", was _ " to " _ kind, by)
+    } Catch ex {
+        Set sc = ex.AsStatus()
+    }
+    If $$$ISERR(sc) Do ..%Reload()
+    Lock -^Shutter.Outage(id)
+    Quit sc
 }
 
 /// "Down on purpose" until a time: a person's act, which withholds any set.

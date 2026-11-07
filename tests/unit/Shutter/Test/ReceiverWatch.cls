@@ -87,10 +87,12 @@ Method TestReadingOf()
     Do rows.%Push(["refusing", {"status": "Retry", "head": "41", "lastHead": "41", "headWords": "refusing"}, "AR loop on one head"])
     Do rows.%Push(["refusing", {"status": "OK", "head": "41", "lastHead": "41", "headWords": "refusing"}, "whatever Status reads"])
     Do rows.%Push(["not_answering", {"status": "Error", "head": "41", "lastHead": "41", "headWords": "not_answering"}, "hung, one head"])
-    Do rows.%Push(["slow", {"status": "Retry", "head": "42", "lastHead": "41", "headWords": "refusing"}, "the head moved: not two polls of one"])
+    Do rows.%Push(["cant_tell", {"status": "Retry", "head": "42", "lastHead": "41", "headWords": "refusing"}, "the head moved under Retry: not two polls of one, and not delivering"])
+    Do rows.%Push(["cant_tell", {"status": "Error", "retry": "none", "head": "42", "lastHead": "41", "headWords": "refusing"}, "the head moved under Error at a no-retry item: not slow"])
+    Do rows.%Push(["slow", {"status": "OK", "queue": 2, "head": "42", "lastHead": "41"}, "the head moved under OK with a queue: delivering"])
     Do rows.%Push(["cant_tell", {"status": "Retry", "head": "41", "lastHead": "41"}, "one head, connected, words it can't place"])
     Do rows.%Push(["cant_tell", {"status": "Retry", "queue": 2}, "the head unknown"])
-    Do rows.%Push(["healthy", {"status": "Error", "retry": "none"}, "E-02: one AR at FailureTimeout 0, then silence"])
+    Do rows.%Push(["healthy", {"status": "Error", "retry": "none"}, "one AR at FailureTimeout 0, then silence"])
     Do rows.%Push(["healthy", {"retry": "none"}, "a quiet no-retry item, connected and OK"])
     Do rows.%Push(["healthy", {"retry": "bounded"}, "a quiet bounded item, connected and OK"])
     Do rows.%Push(["cant_tell", {"retry": "none", "open": 1}, "a quiet no-retry item with an outage open"])
@@ -236,16 +238,100 @@ Method TestStoredReading()
     Do $$$AssertEquals(##class(Shutter.Store.ReceiverReading).Last("No Such Receiver").reading, "unknown", "no row reads unknown")
 }
 
-/// No watch block: nothing read, nothing stored, nothing opened, nothing logged.
+/// A profile with no watch block: nothing stored and nothing opened, where the same poll of a profile with one stores a reading.
 Method TestNoWatchBlockDoesNothing()
 {
+    Set row = ##class(Shutter.Store.SiteProfile).Row()
+    Set p = ##class(Shutter.Store.SiteProfile).Default()
+    Set savedJson = $SELECT($ISOBJECT(row): row.Json, 1: p.%ToJSON()), savedSource = $SELECT($ISOBJECT(row): row.Source, 1: "unit")
+    Do $$$AssertStatusOK(##class(Shutter.Store.SiteProfile).Store(p.%ToJSON(), "unit", "test", "", .v), "a profile with no watch block")
+    Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).WatchedReceivers().%Size(), 0, "nothing to watch")
     &sql(SELECT COUNT(*) INTO :readings FROM Shutter_Store.ReceiverReading)
     &sql(SELECT COUNT(*) INTO :outages FROM Shutter_Store.Outage)
-    Do ##class(Shutter.Operation.ReceiverWatch).PollAll([])
+    Do ##class(Shutter.Operation.ReceiverWatch).PollAll(##class(Shutter.Store.SiteProfile).WatchedReceivers())
     &sql(SELECT COUNT(*) INTO :after FROM Shutter_Store.ReceiverReading)
     Do $$$AssertEquals(after, readings, "no reading stored")
     &sql(SELECT COUNT(*) INTO :after FROM Shutter_Store.Outage)
     Do $$$AssertEquals(after, outages, "no outage opened")
+    Do p.receivers.%Push({"name": (..#RECEIVER), "system": "Made-up LIMS", "category": "orders_results", "tier": 3, "watch": {"namespace": "NOSUCHNS", "item": "Unit Out"}})
+    Do $$$AssertStatusOK(##class(Shutter.Store.SiteProfile).Store(p.%ToJSON(), "unit", "test", "", .v), "the same profile with one")
+    Do ##class(Shutter.Operation.ReceiverWatch).PollAll(##class(Shutter.Store.SiteProfile).WatchedReceivers())
+    &sql(SELECT COUNT(*) INTO :after FROM Shutter_Store.ReceiverReading)
+    Do $$$AssertEquals(after, readings + 1, "the poll does store a reading when there is one to watch")
+    Do $$$AssertStatusOK(##class(Shutter.Store.SiteProfile).Store(savedJson, savedSource, "test", "", .v), "the profile put back")
+}
+
+/// Where the mark goes: past what was read, short of what could not be, and short of the first never-opened header.
+Method TestMarkAfter()
+{
+    Set w = ..Watch(), ids = $LISTBUILD(11, 12, 13)
+    Do $$$AssertEquals($CLASSMETHOD(w, "MarkAfter", 10, ids, $LISTBUILD("reached_receiver", "unknown", "no_rows"), .h), 13, "all read: past them all")
+    Do $$$AssertEquals(h, "", "and none new")
+    Do $$$AssertEquals($CLASSMETHOD(w, "MarkAfter", 10, ids, $LISTBUILD("reached_receiver", "", "reached_receiver"), .h), 11, "stops short of a header not read")
+    Do $$$AssertEquals(h, "", "with none new")
+    Do $$$AssertEquals($CLASSMETHOD(w, "MarkAfter", 10, ids, $LISTBUILD("reached_receiver", "never_opened", "never_opened"), .h), 11, "stops short of the first never-opened")
+    Do $$$AssertEquals(h, 12, "which is the one named")
+    Do $$$AssertEquals($CLASSMETHOD(w, "MarkAfter", 10, ids, $LISTBUILD("", "reached_receiver", "never_opened"), .h), 10, "an unread header holds the mark")
+    Do $$$AssertEquals(h, 13, "and those after it are still judged")
+    Do $$$AssertEquals($CLASSMETHOD(w, "MarkAfter", 10, "", "", .h), 10, "nothing new: it stays")
+}
+
+Method TestHeadCheck()
+{
+    Set w = ..Watch()
+    Do $$$AssertEquals($CLASSMETHOD(w, "HeadCheck", 41, 41), "", "they agree")
+    Do $$$AssertEquals($CLASSMETHOD(w, "HeadCheck", 41, ""), "", "an empty active message is unknown, not a disagreement")
+    Do $$$AssertEquals($CLASSMETHOD(w, "HeadCheck", "", 41), "", "no head to check")
+    Do $$$AssertTrue($CLASSMETHOD(w, "HeadCheck", 41, 42) [ "42", "a disagreement is named")
+}
+
+/// Run in a job of its own, by TestAPollNeverUndoesAClose.
+ClassMethod CloseFromAnotherJob(id As %String)
+{
+    Do ##class(Shutter.Store.Outage).%OpenId(id).Close("a person closes it", "a person")
+}
+
+/// A poll holding a copy read before a person's close, the close made by a second job: the close stands.
+Method TestAPollNeverUndoesAClose()
+{
+    Do $$$AssertStatusOK(##class(Shutter.Store.Outage).Open(..Entry(), "down", "a test", "unit", .o), "opened")
+    Set id = o.%Id()
+    Job ##class(Shutter.Test.ReceiverWatch).CloseFromAnotherJob(id)::10
+    Do $$$AssertTrue($TEST, "the second job started")
+    For i = 1:1:40 {
+        &sql(SELECT State INTO :state FROM Shutter_Store.Outage WHERE ID = :id)
+        If state = "closed" Quit
+        Hang 0.25
+    }
+    Do $$$AssertEquals(state, "closed", "the second job closed it")
+    Do $$$AssertEquals(o.State, "open", "this copy still reads open")
+    Do $$$AssertStatusOK(o.SetKind("refusing", "unit"), "the poll gives up quietly")
+    &sql(SELECT State, Version, Kind, ActiveReceiver INTO :state, :version, :kind, :active FROM Shutter_Store.Outage WHERE ID = :id)
+    Do $$$AssertEquals(state, "closed", "still closed")
+    Do $$$AssertEquals(version, 2, "the version the close gave it")
+    Do $$$AssertEquals(kind, "down", "the kind left alone")
+    Do $$$AssertEquals(active, "", "no longer active")
+    Do $$$AssertEquals(o.State, "closed", "the copy now reads the store")
+    Do $$$AssertEquals(##class(Shutter.Store.OutageEvent).Of(id).%Size(), 2, "opened and closed, no kind event")
+}
+
+/// A state moved under the copy: nothing changes. On a row that hasn't moved, only Kind does, and fields written elsewhere stay.
+Method TestSetKindSetsOnlyKind()
+{
+    Do $$$AssertStatusOK(##class(Shutter.Store.Outage).Open(..Entry(), "down", "a test", "unit", .o), "opened")
+    Set id = o.%Id()
+    &sql(UPDATE Shutter_Store.Outage SET SettledError = 7 WHERE ID = :id)
+    Do $$$AssertStatusOK(o.SetKind("refusing", "unit"), "a change of kind")
+    &sql(SELECT Kind, Version, SettledError INTO :kind, :version, :settled FROM Shutter_Store.Outage WHERE ID = :id)
+    Do $$$AssertEquals(kind, "refusing", "the kind changed")
+    Do $$$AssertEquals(version, 1, "no state moved")
+    Do $$$AssertEquals(settled, 7, "what another writer saved stands")
+    &sql(UPDATE Shutter_Store.Outage SET State = 'paused', Version = 2 WHERE ID = :id)
+    Do $$$AssertStatusOK(o.SetKind("not_answering", "unit"), "a stale copy gives up quietly")
+    &sql(SELECT State, Kind INTO :state, :kind FROM Shutter_Store.Outage WHERE ID = :id)
+    Do $$$AssertEquals(state, "paused", "the pause stands")
+    Do $$$AssertEquals(kind, "refusing", "the kind unchanged")
+    Do $$$AssertEquals(o.Version, 2, "the copy reads the store")
 }
 
 /// A poll of a namespace that isn't there stores unknown, never healthy, and opens nothing.
@@ -259,6 +345,7 @@ Method TestFailedReadStoresUnknown()
     Do $$$AssertTrue(j.unknownFields.%Size() > 0, "says what was not read")
     Do $$$AssertEquals(j.settingSources.FailureTimeout, "unknown", "the setting's source")
     Do $$$AssertTrue('$ISOBJECT(##class(Shutter.Store.Outage).ActiveFor(..#RECEIVER)), "nothing opened")
+    Do $$$AssertEquals(##class(Shutter.Store.ReceiverReading).Find(..#RECEIVER).ErrorHeaderMark, "", "a failed first read leaves the mark unset")
 }
 
 }

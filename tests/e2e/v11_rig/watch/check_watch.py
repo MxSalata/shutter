@@ -96,7 +96,7 @@ def fresh(r, w, receiver, spec=None):
 
 
 def no_watch(r, w):
-    step("O12: no watch block: the item logs nothing, stores nothing and opens nothing")
+    step("No watch block: the item logs nothing, stores nothing and opens nothing")
     time.sleep(16)
     c = w.counts()
     check("no reading, outage or event is stored", c == {"ReceiverReading": "0", "Outage": "0", "OutageEvent": "0"}, c)
@@ -106,7 +106,7 @@ def no_watch(r, w):
 
 
 def retry_outage(r, w):
-    step("O1: a retry-forever outage: one outage within 30 s of polls, nothing sent, the reading down")
+    step("A retry-forever outage: one outage within 30 s of polls, nothing sent, the reading down")
     if r.listening(PORT[RETRY]):
         r.listener_down(PORT[RETRY])
     sent = [f"W1{tag}{i}" for i in range(1, 7)]
@@ -144,7 +144,7 @@ def fresh_field_names(o):
 
 
 def refusing(r, w):
-    step("OF:111: an AR loop at -1 reads refusing, with the head from the oldest Delivered header")
+    step("An AR loop at -1 reads refusing, with the head from the oldest Delivered header")
     fresh(r, w, RETRY, {"mode": "answer", "code": "AR", "words": "Made-up refusal"})
     w.wait_reading(RETRY, ("healthy",), 40)
     control = f"WAR{tag}"
@@ -154,6 +154,7 @@ def refusing(r, w):
     check("reads refusing, not down", got.get("reading") == "refusing", got)
     check("the head is the oldest Delivered header", bool(delivered) and got.get("headHeaderId") == int(delivered[0]["id"]) or str(got.get("headHeaderId")) == (delivered[0]["id"] if delivered else None), (got, delivered))
     print(f"        Status {got.get('status')!r}, AdapterState {got.get('adapterState')!r}, ActiveMessage {got.get('activeMessage')!r}", flush=True)
+    check("the job list's active message agrees with the head", str(got.get("activeMessage")) == str(got.get("headHeaderId")) and not got.get("why"), got)
     r.wait_until(lambda: len(w.outages(RETRY)) == 1, 15, 1)
     o = w.outages(RETRY)
     check("one outage, kind refusing", len(o) == 1 and o[0]["kind"] == "refusing", o)
@@ -162,7 +163,7 @@ def refusing(r, w):
 
 
 def hung(r, w):
-    step("F2:149: a hung listener reads not answering")
+    step("A hung listener reads not answering")
     fresh(r, w, RETRY, {"mode": "hang"})
     control = f"WHG{tag}"
     r.send(IN[RETRY], r.order(control), control)
@@ -183,7 +184,7 @@ def hung(r, w):
 
 
 def one_ar_then_silence(r, w):
-    step("E-02: one AR at FailureTimeout 0, then silence, opens nothing")
+    step("One AR at FailureTimeout 0, then silence, opens nothing")
     fresh(r, w, NORETRY, {"mode": "answer", "code": "AR", "words": "Made-up refusal"})
     w.wait_reading(NORETRY, "healthy", 40)
     control = f"WE2{tag}"
@@ -197,7 +198,7 @@ def one_ar_then_silence(r, w):
 
 
 def quiet_no_retry(r, w):
-    step("fixes-checked item 6: a quiet no-retry item, connected and OK, reads healthy")
+    step("A quiet no-retry item, connected and OK, reads healthy")
     fresh(r, w, NORETRY)
     control = f"WOK{tag}"
     r.send(IN[NORETRY], r.order(control), control)
@@ -209,7 +210,7 @@ def quiet_no_retry(r, w):
 
 
 def blip(r, w):
-    step("JU F10: a blip at a no-retry receiver opens at once on the first never-opened Error header")
+    step("A blip at a no-retry receiver opens at once on the first never-opened Error header")
     r.listener_down(PORT[NORETRY])
     time.sleep(1)
     control = f"WB1{tag}"
@@ -233,8 +234,43 @@ def blip(r, w):
     check("closed, connected and quiet: back to healthy", got.get("reading") == "healthy", got)
 
 
+def old_failures(r, w):
+    step("More than 50 old Error headers on the day a watch block is added open nothing, and a new failure still opens")
+    w.declare([RETRY, ONESHOT])
+    time.sleep(6)
+    r.session("SHUTTER", f"""Set rs=##class(%SQL.Statement).%ExecDirect(,"DELETE FROM Shutter_Store.ReceiverReading WHERE Receiver='{NORETRY}'")""")
+    if r.listening(PORT[NORETRY]):
+        r.listener_down(PORT[NORETRY])
+    r.listener_up(PORT[NORETRY], {"mode": "answer", "code": "AR", "words": "Made-up refusal"})
+    before = len([x for x in r.headers(PLAIN, NORETRY) if x["status"] == "Error"])
+    for i in range(1, 64):
+        c = f"WO{tag}{i}"
+        r.send(IN[NORETRY], r.order(c), c)
+    r.wait_until(lambda: r.queue(PLAIN, NORETRY) == 0, 60)
+    time.sleep(3)
+    errors = [int(x["id"]) for x in r.headers(PLAIN, NORETRY) if x["status"] == "Error"]
+    check("more than 50 settled Error headers", len(errors) - before >= 60 and len(errors) > 50, len(errors))
+    r.listener_spec(PORT[NORETRY], {"mode": "up"})
+    w.declare(RECEIVERS)
+    r.wait_until(lambda: w.reading(NORETRY).get("checkedAt"), 30, 1)
+    mark = lambda: r.value("SHUTTER", f'##class(Shutter.Store.ReceiverReading).Find("{NORETRY}").ErrorHeaderMark')
+    check("the first poll's mark is the highest Error header", str(mark()) == str(max(errors)), (mark(), max(errors)))
+    time.sleep(16)
+    check("no outage over three more polls", w.outages(NORETRY) == [], w.outages(NORETRY))
+    r.listener_down(PORT[NORETRY])
+    time.sleep(1)
+    c = f"WO{tag}N"
+    r.send(IN[NORETRY], r.order(c), c)
+    r.wait_until(lambda: len(w.outages(NORETRY)) >= 1, 30, 1)
+    check("a new never-opened header above the mark still opens", len(w.outages(NORETRY)) == 1, w.outages(NORETRY))
+    r.listener_up(PORT[NORETRY], {"mode": "up"})
+    w.close_all(NORETRY)
+    time.sleep(12)
+    check("and once closed, it stays closed", w.outages(NORETRY) == [], w.outages(NORETRY))
+
+
 def quiet_disconnected(r, w):
-    step("item 6: a quiet no-retry item that reads disconnected reads can't tell and opens nothing")
+    step("A quiet no-retry item that reads disconnected reads can't tell and opens nothing")
     r.listener_down(PORT[NORETRY])
     got = w.wait_reading(NORETRY, "cant_tell", 40)
     time.sleep(36)
@@ -246,7 +282,7 @@ def quiet_disconnected(r, w):
 
 
 def one_shot(r, w):
-    step("F2:148: StayConnected 0 reads can't tell whether up or down, and the 30 s rule never opens")
+    step("StayConnected 0 reads can't tell whether up or down, and the 30 s rule never opens")
     if r.listening(PORT[ONESHOT]):
         r.listener_down(PORT[ONESHOT])
     r.listener_up(PORT[ONESHOT], {"mode": "up"})
@@ -266,7 +302,7 @@ def one_shot(r, w):
 
 
 def settings(r, w):
-    step("Q1: reply code actions are read, never assumed")
+    step("Reply code actions are read, never assumed")
     got = w.reading(RETRY)
     check("the stock default is the effective string and marked so", got.get("replyCodeActions") == STOCK_ACTIONS and got.get("replyCodeActionsStock") is True, got)
     check("GetReply is carried", got.get("getReply") == 1, got)
@@ -295,7 +331,7 @@ Property FailureTimeout As %Numeric [ InitialExpression = 7 ];
 
 
 def disabled_and_stopped(r, w):
-    step("E-17: the item disabled or the source production stopped reads unknown, never healthy")
+    step("The item disabled or the source production stopped reads unknown, never healthy")
     got = w.wait_reading(RETRY, "healthy", 30)
     r.session(PLAIN, f'Set sc=##class(Ens.Director).EnableConfigItem("{RETRY}",0,1)')
     got = w.wait_reading(RETRY, "unknown", 25)
@@ -346,7 +382,7 @@ def main():
             r.install()
             no_watch(r, w)
             w.declare(RECEIVERS)
-        for name, fn in (("retry", retry_outage), ("refusing", refusing), ("hung", hung), ("e02", one_ar_then_silence), ("quiet", quiet_no_retry), ("blip", blip), ("quietoff", quiet_disconnected), ("oneshot", one_shot), ("settings", settings), ("disabled", disabled_and_stopped), ("stamps", stamps)):
+        for name, fn in (("retry", retry_outage), ("refusing", refusing), ("hung", hung), ("e02", one_ar_then_silence), ("quiet", quiet_no_retry), ("blip", blip), ("old", old_failures), ("quietoff", quiet_disconnected), ("oneshot", one_shot), ("settings", settings), ("disabled", disabled_and_stopped), ("stamps", stamps)):
             if not a.only or name in a.only.split(","):
                 fn(r, w)
     except RigBroken as e:
