@@ -37,7 +37,7 @@ ClassMethod Default() As %DynamicObject
     Set p.incident = {"threshold": 5, "window_minutes": 10, "quiet_seconds": 60}
     Set p."model_content" = {"free_text": false}
     Set p.feed = {"time_zone": "Europe/London", "prevent_failures": false}
-    Set p."further_messages" = {"in_patient_movement": "stop", "admission_not_found": "person", "scan_seconds": (..#SCANSECONDS)}
+    Set p."further_messages" = {"in_patient_movement": "stop", "a08_location": "stop", "admission_not_found": "person", "scan_seconds": (..#SCANSECONDS)}
     Quit p
 }
 
@@ -293,6 +293,8 @@ ClassMethod Validate(p As %DynamicObject) As %String
         While fi.%GetNext(.k, .v) {
             If k = "in_patient_movement" {
                 If '$LISTFIND($LISTBUILD("stop", "show"), v) Return "further_messages.in_patient_movement: must be stop or show"
+            } ElseIf k = "a08_location" {
+                If '$LISTFIND($LISTBUILD("stop", "show"), v) Return "further_messages.a08_location: must be stop or show"
             } ElseIf k = "admission_not_found" {
                 If '$LISTFIND($LISTBUILD("person", "policy"), v) Return "further_messages.admission_not_found: must be person or policy"
             } ElseIf k = "scan_seconds" {
@@ -489,6 +491,13 @@ ClassMethod SourceSkewSeconds() As %Integer
 ClassMethod FurtherMovement() As %String
 {
     Quit ..FurtherSetting("in_patient_movement", "stop")
+}
+
+/// What a failed or later A08 naming another ward or bed does to a write: stop (the default) or show, for a site that repeats
+/// stale locations on full-state A08s.
+ClassMethod FurtherA08Location() As %String
+{
+    Quit ..FurtherSetting("a08_location", "stop")
 }
 
 /// Who releases a failed admission the receiver answers 404 for: person (the default) or policy, the tier's own.

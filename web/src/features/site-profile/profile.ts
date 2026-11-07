@@ -463,6 +463,8 @@ export function validateProfile(p: unknown): string {
     for (const [k, v] of members(fm)) {
       if (k === 'in_patient_movement') {
         if (v !== 'stop' && v !== 'show') return 'further_messages.in_patient_movement: must be stop or show';
+      } else if (k === 'a08_location') {
+        if (v !== 'stop' && v !== 'show') return 'further_messages.a08_location: must be stop or show';
       } else if (k === 'admission_not_found') {
         if (v !== 'person' && v !== 'policy')
           return 'further_messages.admission_not_found: must be person or policy';
@@ -793,6 +795,14 @@ export function diffProfiles(a: SiteProfile | undefined, b: SiteProfile): Change
         b.feed?.prevent_failures === true
           ? "Prevent failures: from now on, a message whose HL7 schema isn't loaded here is held as a case, and nothing is sent until the schema is imported"
           : "Prevent failures off: a message whose HL7 schema isn't loaded here is delivered as before",
+    });
+  if ((before.further_messages?.a08_location ?? 'stop') !== (b.further_messages?.a08_location ?? 'stop'))
+    out.push({
+      path: 'further_messages.a08_location',
+      text:
+        b.further_messages?.a08_location === 'show'
+          ? "An A08's location: from now on, a failed or later A08 that names another ward or bed goes on the plan and doesn't stop the write"
+          : "An A08's location: a failed or later A08 that names another ward or bed stops the write for a person",
     });
   if ((before.model_content?.free_text === true) !== (b.model_content?.free_text === true))
     out.push({

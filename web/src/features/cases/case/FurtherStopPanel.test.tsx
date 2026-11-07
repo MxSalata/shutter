@@ -107,10 +107,15 @@ describe('FurtherStopPanel', () => {
     expect(screen.queryByRole('button', { name: 'Release this stop…' })).not.toBeInTheDocument();
   });
 
-  it('says this visit, not another, when every row is on the case\'s own visit', async () => {
+  it("says this visit, not another, when every row is on the case's own visit", async () => {
     const line = 'For patient MRN1034 (HOSP), a later A08 on this visit named another place.';
     show(
-      { ...VIEW, rows: [{ line, visit: 'ENC-1034' }], releasable: false, whyNot: 'It needs correcting by hand.' },
+      {
+        ...VIEW,
+        rows: [{ line, visit: 'ENC-1034' }],
+        releasable: false,
+        whyNot: 'It needs correcting by hand.',
+      },
       { ...C, encounterId: 'ENC-1034' } as CaseDetail,
     );
     expect(await screen.findByText(line)).toBeInTheDocument();
@@ -138,7 +143,7 @@ describe('FurtherStopPanel', () => {
     render(
       <MantineProvider theme={theme}>
         <QueryClientProvider client={client}>
-          <FurtherStopPanel c={c} />
+          <FurtherStopPanel c={C} />
         </QueryClientProvider>
       </MantineProvider>,
     );

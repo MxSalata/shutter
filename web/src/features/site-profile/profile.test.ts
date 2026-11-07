@@ -280,11 +280,21 @@ describe('validateProfile, the port of SiteProfile.Validate', () => {
   it('accepts the further-message, source-skew and source-proof settings, as the server ships and reads them', () => {
     const p = {
       ...copy(),
-      further_messages: { in_patient_movement: 'stop', a08_location: 'stop', admission_not_found: 'person', scan_seconds: 30 },
+      further_messages: {
+        in_patient_movement: 'stop',
+        a08_location: 'stop',
+        admission_not_found: 'person',
+        scan_seconds: 30,
+      },
       feed: { time_zone: 'UTC', source_skew_seconds: 0, prove_origin: false },
     };
     expect(validateProfile(p)).toBe('');
-    p.further_messages = { in_patient_movement: 'show', a08_location: 'show', admission_not_found: 'policy', scan_seconds: 600 };
+    p.further_messages = {
+      in_patient_movement: 'show',
+      a08_location: 'show',
+      admission_not_found: 'policy',
+      scan_seconds: 600,
+    };
     p.feed.source_skew_seconds = 3600;
     expect(validateProfile(p)).toBe('');
   });
@@ -299,10 +309,7 @@ describe('validateProfile, the port of SiteProfile.Validate', () => {
       { further_messages: { admission_not_found: 'maybe' } },
       'further_messages.admission_not_found: must be person or policy',
     ],
-    [
-      { further_messages: { a08_location: 'maybe' } },
-      'further_messages.a08_location: must be stop or show',
-    ],
+    [{ further_messages: { a08_location: 'maybe' } }, 'further_messages.a08_location: must be stop or show'],
     [{ further_messages: { in_patient: 'stop' } }, 'further_messages.in_patient: unknown setting'],
     [
       { further_messages: { scan_seconds: 0 } },

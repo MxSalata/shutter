@@ -78,11 +78,17 @@ export function FurtherStopPanel({ c }: { c: CaseDetail }) {
     );
   const code = isApiError(release.error) ? release.error.code : '';
 
+  const thisVisit = view.rows.length > 0 && view.rows.every((row) => row.visit === c.encounterId);
+
   return (
-    <Section id="further-stop" title="Another visit for this patient">
+    <Section
+      id="further-stop"
+      title={thisVisit ? 'A later message on this visit' : 'Another visit for this patient'}
+    >
       <Text size="sm">
-        These came in for the same patient on another visit, and Shutter can't say which is right, so nothing
-        is sent.
+        {thisVisit
+          ? "This came in for the same patient on this visit, and Shutter can't weigh it by itself, so nothing is sent."
+          : "These came in for the same patient on another visit, and Shutter can't say which is right, so nothing is sent."}
       </Text>
       <List size="sm" spacing={4}>
         {view.rows.map((row) => (

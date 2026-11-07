@@ -106,6 +106,16 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
     // The messages of the encounter pending ahead of this case (v1.29): they hold a write, and a supersession that rests on
     // one of them (v1.34), until they are delivered.
     Set pendingMsgs = summary.%Get("pending_messages")
+    // A failed A08 naming another place than the receiver holds: an update carries no location, so a resend would verify and a
+    // closure would stand with the move undone. A site that repeats stale locations on full-state A08s can show it instead.
+    If (isWrite || (plan.Disposition = "reconcile") || (plan.Disposition = "superseded")) && (##class(Shutter.Catalogue.Matcher).A08Location(summary, case, ##class(Shutter.Catalogue.Matcher).Later(summary, case, chainKind)) = "different") {
+        Set a08Words = ##class(Shutter.Catalogue.Matcher).A08Words(summary, case)
+        If ##class(Shutter.Store.SiteProfile).FurtherA08Location() = "show" {
+            Do ..Check(checks, "ordering", "pass", "UPDATE_LOCATION_SHOWN", a08Words _ ". The site's profile shows it (further_messages.a08_location), so it goes on the plan and stops nothing")
+        } Else {
+            Do ..Check(checks, "ordering", "block", "UPDATE_LOCATION_DIFFERS", a08Words _ ". An update carries no location, so a resend or a closure would leave that undone. Nothing is sent or closed; a person decides")
+        }
+    }
     If isWrite {
         // Further messages for the patient, on any visit (Shutter.Util.FurtherMessages): the snapshot's at the proposal, read
         // again at dispatch, since a snapshot may be hours old by the time a person approves. A hit stops the plan for a person.

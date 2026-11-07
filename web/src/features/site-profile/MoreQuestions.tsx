@@ -650,6 +650,47 @@ function CaseReminders({
  * Questions 9 to 14: escalation teams and mail, the feed's time zone, note text for the model, merges, whether the
  * feed is held while a schema is missing, and recovery; question 15: reminders for cases left open.
  */
+function A08Location({
+  draft,
+  setDraft,
+  problem,
+}: {
+  draft: SiteProfile;
+  setDraft: SetDraft;
+  problem: Problem;
+}) {
+  const value = draft.further_messages?.a08_location;
+  return (
+    <Section id="site-a08" title="An A08 location">
+      <Question
+        n={16}
+        text="Should a failed or later A08 naming another ward or bed stop for a person?"
+        acts
+      />
+      <NativeSelect
+        id="site-further_messages-a08_location"
+        label="When an A08 names another place"
+        value={value ?? 'stop'}
+        data={[
+          { value: 'stop', label: 'Stop for a person' },
+          { value: 'show', label: 'Put it on the plan' },
+        ]}
+        onChange={(e) => {
+          const v = e.currentTarget.value as 'stop' | 'show';
+          setDraft((d) => {
+            d.further_messages = { ...(d.further_messages ?? {}), a08_location: v };
+          });
+        }}
+        error={problem?.path === 'further_messages.a08_location' ? problem.message : undefined}
+      />
+      <QuestionDetails
+        keys={[['further_messages.a08_location', value, 'stop']]}
+        more="Shutter sends an A08 as an update, which carries no location, so a move by A08 never reaches the receiver. Stop, the default: nothing is sent or closed, and a person checks the patient. Show suits a site whose full-state A08s repeat stale locations: it goes on the plan and lets the write through. Only the ward and bed are compared, as the operation key reads them from PV1-3. An A08 at the failed movement's target, or with no location, stops nothing either way."
+      />
+    </Section>
+  );
+}
+
 export function MoreQuestions({
   draft,
   setDraft,
@@ -668,6 +709,7 @@ export function MoreQuestions({
       <PreventFailures draft={draft} setDraft={setDraft} problem={problem} />
       <Recovery draft={draft} setDraft={setDraft} problem={problem} />
       <CaseReminders draft={draft} setDraft={setDraft} problem={problem} />
+      <A08Location draft={draft} setDraft={setDraft} problem={problem} />
     </>
   );
 }

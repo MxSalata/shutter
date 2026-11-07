@@ -989,6 +989,7 @@ export interface SiteProfile {
   /** How rigid the check of further messages for the patient is (CONTRACTS 6.5). Absent means stop and person. */
   further_messages?: {
     in_patient_movement?: 'stop' | 'show';
+    a08_location?: 'stop' | 'show';
     admission_not_found?: 'person' | 'policy';
     scan_seconds?: number;
   };

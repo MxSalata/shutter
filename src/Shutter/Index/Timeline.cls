@@ -58,13 +58,13 @@ ClassMethod Typed(case As Shutter.Store.Case, since As %String) As %DynamicArray
     If case.PatientId '= "" Set who = who _ " AND w.PatientId = ?", args($INCREMENT(args)) = case.PatientId
     If case.PatientIdAuthority '= "" Set who = who _ " AND w.PatientIdAuthority = ?", args($INCREMENT(args)) = case.PatientIdAuthority
     Set args($INCREMENT(args)) = since, args($INCREMENT(args)) = case.Receiver, args($INCREMENT(args)) = case.Receiver
-    Set sql = "SELECT w.ID AS WID, w.Event, w.Ward, w.EventTime, w.OperationKey, w.SourceMessageId, h.ID AS HeaderId, h.SessionId, h.TimeCreated, h.TargetConfigName AS Receiver "
+    Set sql = "SELECT w.ID AS WID, w.Event, w.Ward, w.Bed, w.EventTime, w.OperationKey, w.SourceMessageId, h.ID AS HeaderId, h.SessionId, h.TimeCreated, h.TargetConfigName AS Receiver "
         _ "FROM Shutter_Msg.WardOperation w JOIN Ens.MessageHeader h ON h.MessageBodyId = CAST(w.ID AS VARCHAR(20)) AND h.MessageBodyClassName = 'Shutter.Msg.WardOperation' "
         _ "WHERE w.EncounterId = ?" _ who _ " AND w.Purpose = 'normal' AND h.TimeCreated >= ? AND (? = '' OR h.TargetConfigName = ?) ORDER BY w.EventTime, w.ID"
     Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, sql, args...)
     While rs.%Next() {
         Set ev = {}
-        Set ev."event" = rs.%Get("Event"), ev.ward = rs.%Get("Ward"), ev."event_time" = rs.%Get("EventTime")
+        Set ev."event" = rs.%Get("Event"), ev.ward = rs.%Get("Ward"), ev.bed = rs.%Get("Bed"), ev."event_time" = rs.%Get("EventTime")
         Set ev.receiver = rs.%Get("Receiver")
         Set ev."operation_key" = rs.%Get("OperationKey"), ev."source_message_id" = rs.%Get("SourceMessageId")
         Set ev."ens_header_id" = rs.%Get("HeaderId"), ev."ens_session_id" = rs.%Get("SessionId")

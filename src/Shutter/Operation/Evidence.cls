@@ -299,6 +299,11 @@ Method MessageFields(headerId As %String, Output validation As %DynamicObject) A
         // A word only (yes, cleared, no): the date of death stays in the message.
         Set info."death_recorded" = ##class(Shutter.Util.OperationKey).DeathRecorded(msg)
         Set info."assigned_location" = ##class(Shutter.Util.OperationKey).Value(msg, "PV1", "3.1") _ "^" _ ##class(Shutter.Util.OperationKey).Value(msg, "PV1", "3.2") _ "^" _ ##class(Shutter.Util.OperationKey).Value(msg, "PV1", "3.3") _ "^" _ ##class(Shutter.Util.OperationKey).Value(msg, "PV1", "3.4")
+        // An A08's own location, as the operation key reads it: what it sends to the receiver carries none (Matcher.A08Location).
+        If $ZCONVERT(msg.GetValueAt("MSH:9.2"), "U") = "A08" {
+            Set info."a08_ward" = ##class(Shutter.Util.OperationKey).Value(msg, "PV1", "3.1")
+            Set info."a08_bed" = ##class(Shutter.Util.OperationKey).BedOf(##class(Shutter.Util.OperationKey).Value(msg, "PV1", "3.2"), ##class(Shutter.Util.OperationKey).Value(msg, "PV1", "3.3"))
+        }
         Set info."visit_number" = ##class(Shutter.Util.OperationKey).Value(msg, "PV1", "19.1")
         Set info."admit_time" = ##class(Shutter.Util.Time).FromHL7(##class(Shutter.Util.OperationKey).Value(msg, "PV1", "44.1"), zone, .had)
         If ##class(Shutter.Util.OperationKey).Value(msg, "PV1", "44.1") '= "" { If had { Set withOffset = withOffset + 1 } Else { Set without = without + 1 } }

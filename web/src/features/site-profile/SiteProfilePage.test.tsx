@@ -358,7 +358,9 @@ describe('SiteProfilePage', () => {
     view.profile.further_messages = { in_patient_movement: 'show', scan_seconds: 60 };
     server.use(http.get(`${BASE}/site-profile`, () => HttpResponse.json(view)));
     renderPage();
-    const select = await screen.findByRole('combobox', { name: 'A later or failed A08 names another ward or bed' });
+    const select = await screen.findByRole('combobox', {
+      name: 'When an A08 names another place',
+    });
     expect(select).toHaveValue('stop');
     await userEvent.selectOptions(select, 'show');
     await userEvent.click(screen.getByRole('button', { name: 'Review and save…' }));
@@ -370,7 +372,11 @@ describe('SiteProfilePage', () => {
     ).toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 8' }));
     expect(await screen.findByText('Version 8 saved')).toBeInTheDocument();
-    expect(puts[0].body.further_messages).toEqual({ in_patient_movement: 'show', scan_seconds: 60, a08_location: 'show' });
+    expect(puts[0].body.further_messages).toEqual({
+      in_patient_movement: 'show',
+      scan_seconds: 60,
+      a08_location: 'show',
+    });
   });
 
   it('confirms the shipped answers with no change, which records who answered', async () => {

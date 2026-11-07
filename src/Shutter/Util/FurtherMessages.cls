@@ -4,10 +4,13 @@
 /// the rows and Classify, which is pure so a test runs it without a message store, weighs them:
 /// - stops: an in-patient movement on another visit (a clerk may be working round bad history, and Shutter can't say which
 ///   visit is real, so both are named for a person), a change to the record itself, a cancel or merge of this visit that the
-///   receiver did not apply, and for an admission outside a chain a discharge the receiver did not apply.
+///   receiver did not apply, for an admission outside a chain a discharge the receiver did not apply, and a later A08 on this
+///   visit naming another ward or bed than the failed movement's target (an update carries no location, so it moved nobody at
+///   the receiver and the older movement only looks current).
 /// - shows: anything else about the patient in the ADT feed, such as an out-patient attendance or an emergency department's
 ///   discharge. It stops nothing and goes on the plan.
-/// The site profile's further_messages.in_patient_movement says show to let another visit's movement through. The gate reads
+/// The site profile's further_messages.in_patient_movement says show to let another visit's movement through, and
+/// further_messages.a08_location the same for that A08, for a site that repeats stale locations on full-state A08s. The gate reads
 /// the snapshot at the proposal and reads again at dispatch, and the connector reads again at the moment of the write. A person
 /// with Shutter_Approve can release a stop that is only another visit's movement, for the rows they read (Release, Released).
 /// What this can't see: a change made by hand at the receiver, which is why a lost admission's plan asks for its screen to be
@@ -43,7 +46,7 @@ ClassMethod Find(case As Shutter.Store.Case) As %DynamicObject
     } Catch ex {
         Set unread = "the check itself failed: " _ $EXTRACT(ex.DisplayString(), 1, 200)
     }
-    Quit ..Classify(subject, rows, ##class(Shutter.Store.ChainItem).KindFor(case), since, ##class(Shutter.Store.SiteProfile).FurtherMovement(), unread)
+    Quit ..Classify(subject, rows, ##class(Shutter.Store.ChainItem).KindFor(case), since, ##class(Shutter.Store.SiteProfile).FurtherMovement(), unread, ##class(Shutter.Store.SiteProfile).FurtherA08Location())
 }
 
 ClassMethod Subject(case As Shutter.Store.Case) As %DynamicObject [ Private ]
@@ -51,6 +54,7 @@ ClassMethod Subject(case As Shutter.Store.Case) As %DynamicObject [ Private ]
     Set s = {}
     Set s."encounter_id" = case.EncounterId, s."patient_id" = case.PatientId, s."patient_id_authority" = case.PatientIdAuthority
     Set s.event = case.Event, s."event_time" = case.EventTime, s."operation_key" = case.OperationKey, s."control_id" = case.SourceMessageId
+    Set s.ward = case.Ward, s.bed = case.Bed
     Quit s
 }
 
@@ -76,10 +80,15 @@ ClassMethod Indexed(case As Shutter.Store.Case, rows As %DynamicArray) [ Private
     Set low = $SELECT(resetAt = "": "2000-01-01 00:00:00", 1: $TRANSLATE($PIECE(resetAt, "Z", 1), "T", " "))
     Set found = ##class(Shutter.Index.Message).ForPatient(case.PatientId, low), fi = found.%GetIterator()
     While fi.%GetNext(, .r) {
-        // The index holds no patient class, and a movement's class decides whether it stops.
-        If $LISTFIND($LISTBUILD("register", "preadmit", "admit", "transfer", "discharge", "cancel_admit", "cancel_transfer", "cancel_discharge"), $CLASSMETHOD(json, "Str", r, "event")) {
+        // The index holds no patient class, and a movement's class decides whether it stops. Nor does it hold a bed, and an
+        // A08 on this visit or a movement it may repeat is compared by ward and bed.
+        Set word = $CLASSMETHOD(json, "Str", r, "event")
+        If $LISTFIND($LISTBUILD("register", "preadmit", "admit", "transfer", "discharge", "cancel_admit", "cancel_transfer", "cancel_discharge"), word) || ((word = "update") && ($CLASSMETHOD(json, "Str", r, "visit_number") = case.EncounterId)) {
             Set body = ##class(EnsLib.HL7.Message).%OpenId($CLASSMETHOD(json, "Str", r, "message_body_id"))
-            If $ISOBJECT(body) Set r."patient_class" = ##class(Shutter.Util.OperationKey).Value(body, "PV1", "2")
+            If $ISOBJECT(body) {
+                Set r."patient_class" = ##class(Shutter.Util.OperationKey).Value(body, "PV1", "2")
+                Set r.location = ##class(Shutter.Util.OperationKey).Value(body, "PV1", "3.1"), r.bed = ..BedIn(body)
+            }
         }
         Set r.where = "received"
         Do rows.%Push(r)
@@ -165,10 +174,16 @@ ClassMethod RowOf(body As EnsLib.HL7.Message, id As %String, authority As %Strin
     Set r."message_type" = ##class(Shutter.Util.OperationKey).Value(body, "MSH", "9.1") _ "_" _ trigger
     Set r.event = $SELECT(hasOp: $CLASSMETHOD(json, "Str", op, "event"), event '= "": event, 1: trigger)
     Set r."visit_number" = ##class(Shutter.Util.OperationKey).Value(body, "PV1", "19.1"), r."patient_class" = ##class(Shutter.Util.OperationKey).Value(body, "PV1", "2")
-    Set r.location = ##class(Shutter.Util.OperationKey).Value(body, "PV1", "3.1"), r."control_id" = ##class(Shutter.Util.OperationKey).Value(body, "MSH", "10")
+    Set r.location = ##class(Shutter.Util.OperationKey).Value(body, "PV1", "3.1"), r.bed = ..BedIn(body), r."control_id" = ##class(Shutter.Util.OperationKey).Value(body, "MSH", "10")
     Set r."event_time" = $SELECT(hasOp: $CLASSMETHOD(json, "Str", op, "event_time"), 1: ##class(Shutter.Util.Time).FromHL7(##class(Shutter.Util.OperationKey).Value(body, "EVN", "2.1")))
     If hasOp Set r."operation_key" = $CLASSMETHOD(json, "Str", op, "operation_key"), r."prior_patient_id" = $CLASSMETHOD(json, "Str", op, "prior_patient_id"), r."prior_patient_id_authority" = $CLASSMETHOD(json, "Str", op, "prior_patient_id_authority")
     Quit r
+}
+
+/// The bed PV1-3 names, as the operation key's reader names it.
+ClassMethod BedIn(body As EnsLib.HL7.Message) As %String [ Private ]
+{
+    Quit ##class(Shutter.Util.OperationKey).BedOf(##class(Shutter.Util.OperationKey).Value(body, "PV1", "3.2"), ##class(Shutter.Util.OperationKey).Value(body, "PV1", "3.3"))
 }
 
 ClassMethod Add(rows As %DynamicArray, more As %DynamicArray) [ Private ]
@@ -178,11 +193,11 @@ ClassMethod Add(rows As %DynamicArray, more As %DynamicArray) [ Private ]
 }
 
 /// Weighs the rows for a subject {encounter_id, patient_id, patient_id_authority, event, event_time, operation_key,
-/// control_id}. A row counts when it is this patient's, by identifier and authority, or a merge that names the patient as its
+/// control_id, ward, bed}. A row counts when it is this patient's, by identifier and authority, or a merge that names the patient as its
 /// prior record; an authority missing on either side can't tell two patients apart, so the row counts and a person reads it.
 /// It must have reached the engine after since, or be timed after the case's event, and not be the case's own message. The
 /// first row of a control id and visit wins, so pass the deliveries first: their answers say what the receiver applied.
-ClassMethod Classify(subject As %DynamicObject, rows As %DynamicArray, chainKind As %String = "single", since As %String = "", movement As %String = "stop", unread As %String = "") As %DynamicObject
+ClassMethod Classify(subject As %DynamicObject, rows As %DynamicArray, chainKind As %String = "single", since As %String = "", movement As %String = "stop", unread As %String = "", a08 As %String = "stop") As %DynamicObject
 {
     Set json = "Shutter.Util.Json", out = {}, stops = [], shows = []
     Set id = $CLASSMETHOD(json, "Str", subject, "patient_id"), authority = $CLASSMETHOD(json, "Str", subject, "patient_id_authority")
@@ -192,6 +207,7 @@ ClassMethod Classify(subject As %DynamicObject, rows As %DynamicArray, chainKind
     Set readable = (id '= "") && (id '= "-")
     Set out.identifier = $SELECT(readable: "read", 1: "unreadable")
     If readable && $ISOBJECT(rows) {
+        Do ..Places(rows, visit, .places, .moves)
         Set ri = rows.%GetIterator()
         While ri.%GetNext(, .r) {
             Continue:'$ISOBJECT(r)
@@ -206,17 +222,79 @@ ClassMethod Classify(subject As %DynamicObject, rows As %DynamicArray, chainKind
             Set sent = $CLASSMETHOD(json, "Str", r, "sent_at"), time = $CLASSMETHOD(json, "Str", r, "event_time")
             Continue:'((sent ]] since) || (time ]] eventTime))
             Set why = ..Weigh(r, rowVisit = visit, event, single)
+            Set place = ""
+            If (why = "") && (rowVisit = visit) {
+                Set place = ..A08Place(r, .places)
+                If ..A08Moved(place, subject, time, .moves) Set why = $SELECT(a08 = "show": "a08_location_shown", 1: "a08_location")
+            }
             Continue:(why = "")
             // A pre-admission on file before the case is a date on a waiting list, not a move.
             If (why = "other_visit") && ($CLASSMETHOD(json, "Str", r, "event") = "preadmit") && '(sent ]] since) Set why = "shown"
             Set item = {}
             Set item.why = why, item.event = $CLASSMETHOD(json, "Str", r, "event"), item."message_type" = $CLASSMETHOD(json, "Str", r, "message_type"), item."visit_number" = rowVisit
             Set item."event_time" = time, item."sent_at" = sent, item."control_id" = control, item.location = $CLASSMETHOD(json, "Str", r, "location"), item.where = $CLASSMETHOD(json, "Str", r, "where")
-            If ((why = "other_visit") && (movement = "show")) || (why = "shown") { Do shows.%Push(item) } Else { Do stops.%Push(item) }
+            If $EXTRACT(why, 1, 3) = "a08" Set item.location = $LIST(place, 1), item.bed = $LIST(place, 2), item."message_type" = "ADT_A08"
+            If ((why = "other_visit") && (movement = "show")) || (why = "shown") || (why = "a08_location_shown") { Do shows.%Push(item) } Else { Do stops.%Push(item) }
         }
     }
     Set out.stops = stops, out.shows = shows, out.unread = unread
     Quit out
+}
+
+/// Where this visit's messages say the patient is, from the rows read from the messages: places(control id) for each A08,
+/// since the first row of a control id wins and a delivery's knows no PV1-3, and moves(n) for each movement an A08 may repeat.
+ClassMethod Places(rows As %DynamicArray, visit As %String, Output places, Output moves) [ Private ]
+{
+    Set json = "Shutter.Util.Json", moves = 0, ri = rows.%GetIterator()
+    While ri.%GetNext(, .r) {
+        Continue:'$ISOBJECT(r)
+        Continue:($CLASSMETHOD(json, "Str", r, "visit_number") '= visit)
+        Set ward = $CLASSMETHOD(json, "Str", r, "location"), bed = $CLASSMETHOD(json, "Str", r, "bed")
+        Continue:((ward = "") && (bed = ""))
+        Set type = $CLASSMETHOD(json, "Str", r, "message_type"), control = $CLASSMETHOD(json, "Str", r, "control_id"), word = $CLASSMETHOD(json, "Str", r, "event")
+        If (type = "ADT_A08") && (control '= "") Set places(control) = $LISTBUILD(ward, bed)
+        If (word = "admit") || (word = "transfer") Set moves($INCREMENT(moves)) = $LISTBUILD(ward, bed, $CLASSMETHOD(json, "Str", r, "event_time"))
+    }
+}
+
+/// The ward and bed a row's A08 names, as a list, or "" when the row is no A08 or names no location.
+ClassMethod A08Place(r As %DynamicObject, ByRef places) As %String [ Private ]
+{
+    Set json = "Shutter.Util.Json", type = $CLASSMETHOD(json, "Str", r, "message_type"), control = $CLASSMETHOD(json, "Str", r, "control_id")
+    If $CLASSMETHOD(json, "Str", r, "event") '= "update" Quit ""
+    If (type '= "") && (type '= "ADT_A08") Quit ""
+    If (control '= "") && $DATA(places(control)) Quit places(control)
+    Set ward = $CLASSMETHOD(json, "Str", r, "location"), bed = $CLASSMETHOD(json, "Str", r, "bed")
+    If (type = "") || ((ward = "") && (bed = "")) Quit ""
+    Quit $LISTBUILD(ward, bed)
+}
+
+/// Whether an A08's place counts as a further movement of the subject's: the subject has a target (a failed admission or
+/// transfer), the A08 is not timed before it, it names another ward or bed, and no movement of this visit timed between the
+/// two is what it repeats, since that movement is weighed by its own rule. An A08 naming where the patient was before the failed
+/// movement counts: Shutter can't tell a move back from a stale location, and the site can choose show.
+ClassMethod A08Moved(place As %String, subject As %DynamicObject, time As %String, ByRef moves) As %Boolean [ Private ]
+{
+    If place = "" Quit 0
+    Set json = "Shutter.Util.Json", event = $CLASSMETHOD(json, "Str", subject, "event"), target = $CLASSMETHOD(json, "Str", subject, "ward")
+    If ((event '= "admit") && (event '= "transfer")) || (target = "") Quit 0
+    Set own = $CLASSMETHOD(json, "Str", subject, "event_time")
+    If own ]] time Quit 0
+    If '..LocationDiffers($LIST(place, 1), $LIST(place, 2), target, $CLASSMETHOD(json, "Str", subject, "bed")) Quit 0
+    For n = 1:1:$GET(moves, 0) {
+        Set when = $LIST(moves(n), 3)
+        Continue:((own ]] when) || (when ]] time))
+        If '..LocationDiffers($LIST(place, 1), $LIST(place, 2), $LIST(moves(n), 1), $LIST(moves(n), 2)) Return 0
+    }
+    Quit 1
+}
+
+/// Whether a message's PV1-3 says another place than a given ward and bed, compared as OperationKey reads them (PV1-3.1, and
+/// room-bed by BedOf). A part the message leaves empty says nothing: a ward-level A08 says nothing about the bed. A bed it names
+/// differs from another bed, and from no bed.
+ClassMethod LocationDiffers(ward As %String, bed As %String, otherWard As %String, otherBed As %String) As %Boolean
+{
+    Quit ((ward '= "") && (ward '= otherWard)) || ((bed '= "") && (bed '= otherBed))
 }
 
 /// Whether a row is this patient's. A row of this visit with no identifier is a delivery, read by the visit.
@@ -230,7 +308,8 @@ ClassMethod SamePatient(r As %DynamicObject, id As %String, authority As %String
     Quit (prior '= "") && (prior = id) && ((priorAuth = "") || (authority = "") || (priorAuth = authority))
 }
 
-/// Why a row matters: other_visit, record_changed, cancel, merge, discharge (each stops), shown, or "" when it doesn't.
+/// Why a row matters: other_visit, record_changed, cancel, merge, discharge (each stops), shown, or "" when it doesn't. An A08
+/// on this visit that names another place is weighed apart (A08Moved), since it stops whatever became of it.
 ClassMethod Weigh(r As %DynamicObject, sameVisit As %Boolean, caseEvent As %String, single As %Boolean) As %String [ Private ]
 {
     Set json = "Shutter.Util.Json"
@@ -284,6 +363,10 @@ ClassMethod Line(case As Shutter.Store.Case, item As %DynamicObject) As %String
     Set what = ..Word($CLASSMETHOD(json, "Str", item, "event")) _ $SELECT(type '= "": " (" _ type _ ")", 1: "") _ $SELECT(visit '= "": " on visit " _ visit, 1: " with no visit number")
     Set what = what _ " timed " _ $CLASSMETHOD(json, "Str", item, "event_time") _ ", control id " _ $CLASSMETHOD(json, "Str", item, "control_id")
     Set here = "this case's " _ $EXTRACT(..Word(case.Event), 3, *) _ " on visit " _ case.EncounterId
+    If $EXTRACT(why, 1, 3) = "a08" {
+        Set line = "For patient " _ case.PatientId _ " (" _ case.PatientIdAuthority _ "), a later A08 names another location: " _ what _ " carried " _ ..PlaceWords($CLASSMETHOD(json, "Str", item, "location"), $CLASSMETHOD(json, "Str", item, "bed")) _ ", not " _ ..PlaceWords(case.Ward, case.Bed) _ ", the target of " _ here _ ". Shutter counts it as a further movement"
+        Quit line _ $SELECT(why = "a08_location_shown": ". It does not stop the resend: the site's profile shows it (further_messages.a08_location)", 1: "")
+    }
     Quit $CASE(why,
         "other_visit": "Another visit for patient " _ case.PatientId _ " (" _ case.PatientIdAuthority _ "): " _ what _ ", beside " _ here _ ". Shutter can't say which visit is right",
         "cancel": "For patient " _ case.PatientId _ " (" _ case.PatientIdAuthority _ "), a cancel the receiver has not applied: " _ what _ ". It may withdraw " _ here,
@@ -291,6 +374,12 @@ ClassMethod Line(case As Shutter.Store.Case, item As %DynamicObject) As %String
         "discharge": "For patient " _ case.PatientId _ " (" _ case.PatientIdAuthority _ "), a discharge the receiver has not applied: " _ what _ ". Sending " _ here _ " alone would admit a patient who has left",
         "record_changed": "A change to the record of patient " _ case.PatientId _ " (" _ case.PatientIdAuthority _ "): " _ what _ ", beside " _ here,
         : "Also on file for patient " _ case.PatientId _ " (" _ case.PatientIdAuthority _ "): " _ what _ ", beside " _ here _ ". It does not stop the resend")
+}
+
+/// A ward and a bed for a person, as the line on an A08 names them.
+ClassMethod PlaceWords(ward As %String, bed As %String) As %String
+{
+    Quit $SELECT(ward '= "": "ward " _ ward, 1: "no ward") _ $SELECT(bed '= "": " bed " _ bed, 1: " with no bed")
 }
 
 /// An event word for a person, with its article.
@@ -384,6 +473,7 @@ ClassMethod PlanLines(case As Shutter.Store.Case, summary As %DynamicObject) As 
         Set si = found.%Get("shows").%GetIterator()
         While si.%GetNext(, .item) { Do out.%Push(..Line(case, item)) }
     }
+    If (##class(Shutter.Store.SiteProfile).FurtherA08Location() = "show") && (##class(Shutter.Catalogue.Matcher).A08Location(summary, case) = "different") Do out.%Push(##class(Shutter.Catalogue.Matcher).A08Words(summary, case) _ ". It does not stop the resend: the site's profile shows it (further_messages.a08_location). The resend carries no location, so check the receiver's screen")
     If ..AdmissionOnNotFound(case, summary) Do out.%Push("The receiver answers that it has no encounter under this number. That does not prove it holds no record for this patient: has anyone entered them by hand under another number? Check the system's own screen first")
     Quit out
 }

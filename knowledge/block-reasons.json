@@ -611,11 +611,11 @@
     {
       "code": "FURTHER_MOVEMENT",
       "title": "Something else has happened to this patient",
-      "prerequisite": "No further in-patient movement for the patient on another visit, and no cancel, merge or change to the record the receiver has not applied",
-      "next_action": "Read both visits named here, in the source system and on the receiver's own screen, and put the patient right by hand or close the case. Where it is only another visit's movement, an approver can release this stop on the case page for the rows they read. Nothing is sent until a person decides.",
+      "prerequisite": "No further in-patient movement for the patient on another visit, no later A08 on this visit naming another ward or bed than the failed movement's target, and no cancel, merge or change to the record the receiver has not applied",
+      "next_action": "Read what is named here, in the source system and on the receiver's own screen, and put the patient right by hand or close the case. Where it is only another visit's movement, an approver can release this stop on the case page for the rows they read. Nothing is sent until a person decides.",
       "owner": "Operator",
       "reevaluate_when": "A person has read both and closed or reinvestigated the case",
-      "text": "After this message failed, a further message arrived for the same patient that Shutter can't weigh by itself: a new admission or ward stay under another visit number, a cancel or discharge the receiver never applied, or a change to the record. Someone may be working round bad history. Shutter can't say which visit is real, so it stops and names both."
+      "text": "After this message failed, a further message arrived for the same patient that Shutter can't weigh by itself: a new admission or ward stay under another visit number, a cancel or discharge the receiver never applied, a later A08 that names another ward or bed, or a change to the record. Someone may be working round bad history, or the site may move beds by A08, which reaches the receiver with no location. Shutter can't weigh it, so it stops and names both."
     },
     {
       "code": "FURTHER_MOVEMENT_RELEASED",
@@ -652,6 +652,24 @@
       "owner": "Operator",
       "reevaluate_when": "The case is investigated again",
       "text": "There were too many new messages to read at the moment of the write, or the source namespace could not be read, so whether something else has happened to this patient is not known. Nothing is sent."
+    },
+    {
+      "code": "UPDATE_LOCATION_DIFFERS",
+      "title": "The failed A08 carried a different location",
+      "prerequisite": "A failed A08's PV1-3 names the ward and bed the receiver holds, or no location",
+      "next_action": "Check where the patient is in the source system and on the receiver's own screen, and move them there by hand if the A08 is right. Close the case once they are right. A site that repeats stale locations on full-state A08s can set further_messages.a08_location to show in the site profile.",
+      "owner": "Operator",
+      "reevaluate_when": "A person has checked the patient, or the case is investigated again",
+      "text": "This A08 named another ward or bed than the receiver holds. Shutter sends an A08 as an update, which carries no location, so a resend could be accepted and verified, or the case closed, with the move undone. Shutter can't tell a move from a stale location, so nothing is sent or closed, and it names the patient and both places."
+    },
+    {
+      "code": "UPDATE_LOCATION_SHOWN",
+      "title": "The failed A08 carried a different location, and the site shows it",
+      "prerequisite": "The site profile's further_messages.a08_location says show",
+      "next_action": "None: a pass. The line is on the plan: check the receiver's own screen, since the resend carries no location.",
+      "owner": "Approver",
+      "reevaluate_when": "Each gate",
+      "text": "This A08 named another ward or bed than the receiver holds, and the site has said its A08s can repeat stale locations. It goes on the plan and stops nothing. The update the resend sends carries no location, so it moves nobody."
     },
     {
       "code": "SCHEMA_UNKNOWN",
