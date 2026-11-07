@@ -51,6 +51,7 @@ import { LiveWelcome } from '@/trial/LiveWelcome';
 import { trialChrome } from '@/trial/slot';
 import { bannerForm } from '@/trial/visit';
 import { LiveBanner } from './LiveBanner';
+import { RecoveryBanner } from './RecoveryBanner';
 
 /**
  * The count beside Cases: how many cases need a person, from the same queries as the Cases page's tiles. Nothing at
@@ -343,6 +344,7 @@ export function AppLayout() {
       <AppShell.Main id={MAIN_ID} tabIndex={-1} style={{ outline: 'none' }}>
         {/* A new page starts at its top; Back returns to where the previous one was left. */}
         <ScrollRestoration />
+        <RecoveryBanner />
         <LiveBanner />
         <Suspense fallback={<PageSkeleton />}>
           <Outlet key={displayZone()} />

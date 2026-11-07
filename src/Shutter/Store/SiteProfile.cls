@@ -80,6 +80,7 @@ ClassMethod Store(json As %String, source As %String = "", user As %String = "",
             Set sc = $$$ERROR($$$GeneralError, "stale_version")
             Quit
         }
+        Set oldMode = ##class(Shutter.Util.RecoveryControl).ModeOfJson(row.Json), newMode = ##class(Shutter.Util.RecoveryControl).ModeOfProfile(p)
         TSTART
         Set row.Version = row.Version + 1
         Set row.Json = p.%ToJSON(), row.Source = source, row.UpdatedBy = $EXTRACT(user, 1, 160)
@@ -91,7 +92,7 @@ ClassMethod Store(json As %String, source As %String = "", user As %String = "",
             Set v.Version = row.Version, v.Json = row.Json, v.Source = source, v.UpdatedAt = row.UpdatedAt, v.UpdatedBy = row.UpdatedBy
             Set sc = v.%Save()
         }
-        If $$$ISOK(sc) { TCOMMIT  Kill ^Shutter.Config("feedZone"), ^Shutter.Config("preventFailures")  Do ..SyncWatchedFeed() } Else { TROLLBACK }
+        If $$$ISOK(sc) { TCOMMIT  Kill ^Shutter.Config("feedZone"), ^Shutter.Config("preventFailures")  Do ..SyncWatchedFeed()  If oldMode '= newMode Do ##class(Shutter.Util.RecoveryControl).NoteModeChange(oldMode, newMode, user) } Else { TROLLBACK }
         Set currentVersion = +row.Version
     } Catch ex {
         Set sc = ex.AsStatus()
@@ -117,9 +118,11 @@ ClassMethod Validate(p As %DynamicObject) As %String
     If '$ISOBJECT(p) Quit "the profile must be a JSON object"
     Set it = p.%GetIterator()
     While it.%GetNext(.key, .v) {
-        If '$LISTFIND($LISTBUILD("version", "receivers", "history_policy", "authoritative_source", "unconditional_resend", "merges", "policy", "approvers", "incident", "model_content", "teams", "mail", "feed", "further_messages"), key) Return key _ ": unknown field"
+        If '$LISTFIND($LISTBUILD("version", "receivers", "history_policy", "authoritative_source", "unconditional_resend", "merges", "policy", "approvers", "incident", "model_content", "teams", "mail", "feed", "further_messages", "recovery", "notifications"), key) Return key _ ": unknown field"
     }
     If p.%IsDefined("version") && ((p.%Get("version") '= +p.%Get("version")) || (p.%Get("version") < 0)) Quit "version: must be a whole number"
+    Set problem = ..RecoveryProblem(p)
+    If problem '= "" Quit problem
     Set rcv = p.%Get("receivers")
     If '$ISOBJECT(rcv) || (rcv.%Size() = 0) Quit "receivers: must be a non-empty array"
     Set it = rcv.%GetIterator()
@@ -332,6 +335,26 @@ ClassMethod Validate(p As %DynamicObject) As %String
     Quit ""
 }
 
+/// recovery.mode and notifications.shadow_delivery, the only keys under those fields. Each may be left out.
+ClassMethod RecoveryProblem(p As %DynamicObject) As %String [ Private ]
+{
+    If p.%IsDefined("recovery") {
+        Set r = p.%Get("recovery")
+        If '$ISOBJECT(r) || 'r.%IsA("%DynamicObject") Return "recovery: must be an object"
+        Set it = r.%GetIterator()
+        While it.%GetNext(.key) { If key '= "mode" Return "recovery." _ key _ ": unknown field" }
+        If r.%IsDefined("mode") && '$LISTFIND($LISTBUILD("shadow", "enabled"), r.%Get("mode")) Return "recovery.mode: must be shadow or enabled"
+    }
+    If p.%IsDefined("notifications") {
+        Set n = p.%Get("notifications")
+        If '$ISOBJECT(n) || 'n.%IsA("%DynamicObject") Return "notifications: must be an object"
+        Set it = n.%GetIterator()
+        While it.%GetNext(.key) { If key '= "shadow_delivery" Return "notifications." _ key _ ": unknown field" }
+        If n.%IsDefined("shadow_delivery") && '$LISTFIND($LISTBUILD("disabled", "enabled"), n.%Get("shadow_delivery")) Return "notifications.shadow_delivery: must be disabled or enabled"
+    }
+    Quit ""
+}
+
 /// Seed from knowledge/site/profile.json when the file exists and differs from what is stored.
 ClassMethod SeedFromFile(path As %String) As %Status
 {
@@ -341,6 +364,15 @@ ClassMethod SeedFromFile(path As %String) As %Status
     Set p = ##class(Shutter.Util.Json).Parse(text, .sc)
     If '$ISOBJECT(p) || $$$ISERR(sc) Quit $$$ERROR($$$GeneralError, "The seed profile " _ path _ " is not a JSON object")
     Set row = ..Row()
+    // The file is the same for a site and the demo and says nothing of recovery, which a site's install reads as shadow.
+    // The demo seeds enabled explicitly (CONTRACTS 17), the live hospital's stored form too.
+    If '..SiteInstall() {
+        Do p.%Set("recovery", {"mode": "enabled"})
+        If $ISOBJECT(row) && (row.Source = (path _ " (live hospital)")) && (##class(Shutter.Util.RecoveryControl).ModeOfJson(row.Json) '= "enabled") {
+            Set live = ##class(Shutter.Util.Json).Parse(row.Json, .lsc)
+            If $ISOBJECT(live) Do live.%Set("recovery", {"mode": "enabled"}) Quit ..Store(live.%ToJSON(), row.Source, "install")
+        }
+    }
     // The seed fills an empty store and follows its own file; a profile a person saved (another source) is theirs and
     // is never overwritten by a reinstall or a restart.
     If $ISOBJECT(row) && (row.Source '= path) Quit $$$OK

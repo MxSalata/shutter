@@ -406,6 +406,7 @@ caller's process passes; the operator and the approver read the watched hospital
 | `Shutter_Scenarios` | `POST /scenarios/{id}/run` and `/scenarios/reset`, and `Shutter.Setup_PurgeStore` (v1.34: the demo controls; the operator and approver roles hold it, the public demo's role does not) |
 | `Shutter_LiveAgents` | Spending the model budget (v1.34, the judges): `POST /cases/{id}/board` (the board convenes live on a blocked, escalated or failed case, 14.5), `POST /cases/{id}/questions` running live, the agent part of `POST /production-reviews` (13.5, v1.39: skipped without it, never refused) and a reinvestigation's live runs (v1.39: recordings only without it); without it a question is answered from recordings only, and one with no recording is refused `409 no_recorded_answer` at once. Operators, approvers and the role `Shutter_Judge` (the public demo's role plus this) hold it; `Shutter_Demo` does not. Every live run counts against the day's budget and the caller's share (9) |
 | `Shutter_Configure` | `PUT /site-profile`; `PATCH /library/{code}`; `POST /settings/schemas` (section 12); `POST /production-reviews/{id}/annotations` and `DELETE /production-reviews/annotations/{annotationId}` (section 13) (v1.34: what changes the site; the approver role holds it, the public demo's role does not) |
+| `Shutter_StopRecovery` | `POST /recovery-control/stop` (17; operators and approvers hold it, the public demo's roles do not). `POST /recovery-control/clear` needs `Shutter_Configure` and `Shutter_Approve` |
 | `Shutter_Intake` | `POST /intake` (section 11) |
 
 So the person on call (an operator) escalates a case and, once the team that corrects the systems has done so, marks
@@ -1895,6 +1896,49 @@ board's case in the Visual Trace, the latest cases, and links to the portal's pa
   runs. A figure it can't read leaves its tile out, and with no S8 case the box says so.
 - **Sessions.** A request with no session behind it ends the one it opened, so a caller that keeps no cookie can't use up
   the licence units; a visitor already in a portal session keeps it.
+
+## 17. Shadow mode and the recovery stop
+
+Two different things. **Shadow mode** is a setting: the site profile's `recovery.mode`, `shadow` or `enabled`. Shutter investigates and records what it would propose, and sends no rehearsal, recovery write or blind-resend preview. **The stop** is a latch a person sets, named "Stop Shutter recovery": no new recovery call is admitted until a person clears it. It is kept in the data database, so a restart, a reinstall or a reseed leaves it as it is.
+
+**The mode.**
+- Only an explicit `enabled` enables. A profile with no `recovery`, with no `mode`, or with a value that isn't one of the two reads as shadow, and `PUT /site-profile` refuses such a value, naming it (400).
+- So a new install with no demo starts in shadow, since the shipped `knowledge/site/profile.json` says nothing of it. **An upgrade from a version before this one also comes up in shadow**, unless its profile says otherwise: enabling is a decision, in the normal save of the profile (`Shutter_Configure`). No environment variable enables it.
+- The demo seeds `enabled` explicitly, whenever the seed fills or follows the stored profile, so its behaviour is unchanged. A profile a person saved on the demo keeps what it says.
+- Each change of the mode moves the generation on, like a clear.
+
+**What it covers.** Every call of `Shutter.Operation.Ward` other than a read passes one admission (`Shutter.Util.RecoveryControl.Admit`), immediately before the POST:
+
+| Call | Sender | While shadow or stopped |
+| --- | --- | --- |
+| Rehearsal | `CaseWorkflow.OnGateProposal` | Not sent. The workflow checks first, and the case is escalated |
+| Recovery write | `CaseWorkflow.OnGateDispatch` | Refused at the connector, and the case blocks |
+| Blind-resend preview | `POST /cases/{id}/preview-blind-resend` | 409, and refused at the connector if it gets that far |
+| Any other kind | | Refused always: `unknown_action` |
+
+The refusal is `Outcome` `refused` with `ReasonCode` `recovery_shadow`, `recovery_stopped`, `plan_predates_control`, `plan_unbound`, `control_unavailable` (no lock within 5 s), `control_unreadable` or `unknown_action`. `POST /cases/{id}/approvals` answers 409 with that code to an approve, or `plan_predates_control` when the plan is at or below the floor, once its own state, digest and version checks have passed, so nothing goes on the record. Such a plan stays void, so the words say to reject it and reinvestigate: a case waiting for approval can't be reinvestigated until it is rejected. The incident approvals answer the same codes while shadow or stopped, and say only that it waits: an incident holds no plan row, and each item gathers fresh evidence and makes its plan when released. A reject still goes.
+
+**What it does not cover.** The hospital's ordinary feed and its retries, other systems or people writing to a receiver, Shutter's own records, and reads: preflight, evidence and verification go on, so an earlier attempt's outcome can still be read back. A feed message passes only when it is purpose `normal` with a source header and no case, from an item whose class is `Shutter.Process.ADTToWard` or extends it; the purpose alone isn't enough (`not_original_feed`), and a site's own process that calls the connector directly must extend that class. This pass reads nothing of the control, so nothing that happens to it reaches the feed. A connector other than `Shutter.Operation.Ward` isn't covered: none ships.
+
+**What it promises.** No recovery call is admitted after a stop commits. `Stop` and `Admit` take one short lock, never held across a network call. A call admitted before the stop may still reach the receiver and may still complete; stopping doesn't cancel it. It is listed as outstanding, in the stop's event too.
+
+**A record of every call.** Each admitted call has a `Shutter.Store.DispatchPermit`, committed before the POST, with the SHA-256 of the whole body, bed included. The sender holds a lock on it until the call ends.
+- A call that gets no answer that settles it (`uncertain`, 1.3) has a permit of state `uncertain`. The case reads it back as before, and recovery isn't stopped.
+- A permit still `admitted` whose lock has gone was cut off by a restart or a lost job. It becomes `uncertain`, never "not sent", at the next admission or read of the control, and that **latches the stop**, by `system`. If the message comes round again it is refused, so it is not retried.
+
+**Clearing.** `POST /recovery-control/clear` needs `Shutter_Configure` and `Shutter_Approve`, `reason` and `expectedGeneration` (409 `stale_version` on a generation that moved, 409 `wrong_state` when not stopped). It enables nothing: the mode stays as the profile says. It releases nothing: the control's plan floor rises to the newest plan id at each stop, clear and mode change, and a write under a plan at or below it is refused (`plan_predates_control`), so the case needs fresh evidence and a new plan. Clearing records who saw the calls a restart cut off. They stay `uncertain`: nobody has shown they weren't applied.
+
+A demo reset (`Runner.Reset`, demo only) clears a stop too, with the event `demo_reset`, since it starts the receivers afresh. A site has no such route.
+
+**Routes.**
+- `GET /recovery-control`: `{mode, generation, stopped, stoppedAt, stoppedBy, stopReason, outstanding, outstandingCount, readable, covers, doesNotCover}`. A control that can't be read answers `stopped` true and `readable` false.
+- `POST /recovery-control/stop`: `{reason}`, required. A second stop changes nothing. The actor is the signed-in user; a name in the body is ignored.
+- `GET /shadow-observations?from=&to=&receiver=` and `GET /shadow-observations.csv`: the report. `Shutter_Operate`.
+- `Shutter.Store.RecoveryControlEvent` keeps every stop, clear and mode change, with who, why and what was outstanding.
+
+**Email.** In shadow mode, `Escalation Mail` sends nothing and writes no file: the escalation is marked failed, saying why, and enabling recovery doesn't send it. `notifications.shadow_delivery: "enabled"` in the profile lets them go. A stop doesn't touch email.
+
+**The report.** One row per case that reached Shutter in the period, with its latest observation (`Shutter.Store.ShadowObservation`, one per plan at the proposal gate). The denominator is **cases reaching Shutter**, not all failed deliveries: a failure that never became a case is not in it, and a case not yet investigated stays in it as unobserved. A resend proposal whose proposal gate passed is a **candidate for rehearsal**, and no more: neither a rehearsal nor a dispatch was tested. `recovery_calls_sent`, `rehearsal_performed`, `final_dispatch_tested` and `notification_deliveries` are counted from the permits and the escalations, not assumed from the mode. Patients appear as a reference local to this deployment, a hash keyed by a value the control row keeps and no route returns, since `deployment_id` is printed on every row; no message text. Human review of a proposal isn't built, so the report says nothing about whether a proposal was right. **A report authorises nothing:** it enables nothing, releases no plan and closes no uncertain write.
 
 ## Changes
 

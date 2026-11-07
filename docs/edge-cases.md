@@ -30,6 +30,6 @@ Everything is played against the demo receiver or a stub listener; what a real r
 - It trusts the receiver's API: an ignored condition, a gateway's page or a partial history isn't detected.
 - On the alert route it reads the alert's words and the session's first HL7 message, and doesn't see a hand resend.
 - When no agent can answer, a case the catalogue gives to the board or a person goes to a person with no plan; others take the rules path, where a person still approves.
-- Failover, mirrors and restores are untested, and there is no switch to stop all writes.
+- Failover, mirrors and restores are untested. "Stop Shutter recovery" stops Shutter's own recovery calls, not the hospital's feed or a call already on its way.
 
 **Check it yourself:** the [scenarios](readme/scenarios.md) name their modes; run them with `tests/e2e/scenario_check.py --url "$IRIS_URL" --approve S4 S7 S15`, and the approval attacks with `tests/e2e/boundary_check.py --url "$IRIS_URL"`.

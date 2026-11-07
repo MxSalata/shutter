@@ -256,6 +256,8 @@ export function validateProfile(p: unknown): string {
     'mail',
     'feed',
     'further_messages',
+    'recovery',
+    'notifications',
   ];
   for (const key of Object.keys(p)) if (!top.includes(key)) return `${key}: unknown field`;
   if ('version' in p && (!numeric(p.version) || asNumber(p.version) < 0))
@@ -332,6 +334,22 @@ export function validateProfile(p: unknown): string {
       if (k === 'close_needs_approver' && typeof v !== 'boolean')
         return 'approvers.close_needs_approver: must be true or false';
       if (k !== 'close_needs_approver' && typeof v !== 'string') return `approvers.${k}: must be a string`;
+    }
+  }
+  // Whether Shutter attempts recovery at all, and whether email goes out while it doesn't (CONTRACTS 17).
+  if ('recovery' in p) {
+    if (!isObject(p.recovery)) return 'recovery: must be an object';
+    for (const [k, v] of members(p.recovery)) {
+      if (k !== 'mode') return `recovery.${k}: unknown setting`;
+      if (v !== 'shadow' && v !== 'enabled') return 'recovery.mode: must be shadow or enabled';
+    }
+  }
+  if ('notifications' in p) {
+    if (!isObject(p.notifications)) return 'notifications: must be an object';
+    for (const [k, v] of members(p.notifications)) {
+      if (k !== 'shadow_delivery') return `notifications.${k}: unknown setting`;
+      if (v !== 'disabled' && v !== 'enabled')
+        return 'notifications.shadow_delivery: must be disabled or enabled';
     }
   }
   // The feed: the time zone of timestamps that carry no offset, and whether a message whose schema is not loaded is held.
@@ -504,6 +522,7 @@ export function fieldId(path: string): string {
   if (path === 'merges') return 'site-merges';
   if (path === 'feed.time_zone') return 'site-feed-time_zone';
   if (path === 'feed.prevent_failures') return 'site-feed-prevent_failures';
+  if (path === 'recovery.mode') return 'site-recovery-mode';
   if (path === 'model_content.free_text') return 'site-model_content-free_text';
   return '';
 }
@@ -523,6 +542,7 @@ export function describePath(path: string): string {
   if (m) return `Mail, ${m[1].replace(/_/g, ' ')}${m[2] ? ` ${Number(m[2]) + 1}` : ''}`;
   if (path === 'feed.time_zone') return 'Feed, time zone';
   if (path === 'feed.prevent_failures') return 'Feed, prevent failures';
+  if (path === 'recovery.mode') return 'Recovery, mode';
   if (path === 'model_content.free_text') return 'Model, note text';
   if (path === 'approvers.close_needs_approver') return 'Approvers, closing a case by hand';
   return path.replace(/_/g, ' ');
@@ -664,6 +684,14 @@ export function diffProfiles(a: SiteProfile | undefined, b: SiteProfile): Change
     out.push({
       path: 'feed.time_zone',
       text: `Feed time zone: from ${before.feed?.time_zone || 'not answered (read as UTC)'} to ${b.feed?.time_zone || 'not answered (read as UTC)'}. Every operation key read from now on uses it`,
+    });
+  if ((before.recovery?.mode === 'enabled') !== (b.recovery?.mode === 'enabled'))
+    out.push({
+      path: 'recovery.mode',
+      text:
+        b.recovery?.mode === 'enabled'
+          ? 'Recovery enabled: Shutter may rehearse and send what its gate and the policy allow. A plan made before this save stays refused; reinvestigate it'
+          : 'Shadow mode: from now on Shutter investigates and sends no recovery write, rehearsal or resend preview',
     });
   if ((before.feed?.prevent_failures === true) !== (b.feed?.prevent_failures === true))
     out.push({

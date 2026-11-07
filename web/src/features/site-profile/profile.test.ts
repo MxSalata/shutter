@@ -29,6 +29,44 @@ const copy = (): SiteProfile => structuredClone(recorded);
 const FEED_ZONE =
   'feed.time_zone: must be UTC, Europe/London, a fixed offset such as +01:00 (up to 14:00), or an IANA zone name this IRIS knows (for example Europe/Paris)';
 
+describe('the recovery mode (CONTRACTS 17)', () => {
+  const base = (): Record<string, unknown> => ({
+    receivers: [{ name: 'Out', tier: 2 }],
+    policy: { '1': { single: 'automatic' }, '2': { single: 'automatic' }, '3': { single: 'approval' } },
+  });
+
+  it('a stored profile with the mode is one the page can save', () => {
+    expect(validateProfile({ ...base(), recovery: { mode: 'enabled' } })).not.toContain('recovery');
+    expect(validateProfile({ ...base(), recovery: { mode: 'shadow' } })).not.toContain('recovery');
+    expect(validateProfile({ ...base(), notifications: { shadow_delivery: 'disabled' } })).not.toContain(
+      'notifications',
+    );
+  });
+
+  it('refuses what the server refuses', () => {
+    expect(validateProfile({ ...base(), recovery: { mode: 'on' } })).toBe(
+      'recovery.mode: must be shadow or enabled',
+    );
+    expect(validateProfile({ ...base(), recovery: { mood: 'enabled' } })).toBe(
+      'recovery.mood: unknown setting',
+    );
+    expect(validateProfile({ ...base(), recovery: 'enabled' })).toBe('recovery: must be an object');
+  });
+
+  it('enabling and going back to shadow are spelt out before the save', () => {
+    const on = diffProfiles(
+      { ...base(), recovery: { mode: 'shadow' } } as never,
+      {
+        ...base(),
+        recovery: { mode: 'enabled' },
+      } as never,
+    );
+    expect(on.find((c) => c.path === 'recovery.mode')?.text).toContain('Recovery enabled');
+    const off = diffProfiles({ ...base(), recovery: { mode: 'enabled' } } as never, base() as never);
+    expect(off.find((c) => c.path === 'recovery.mode')?.text).toContain('Shadow mode');
+  });
+});
+
 describe('validateProfile, the port of SiteProfile.Validate', () => {
   it('accepts the recorded profile', () => {
     expect(validateProfile(recorded)).toBe('');

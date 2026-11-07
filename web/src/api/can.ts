@@ -14,6 +14,7 @@ export function resolveCan(me: Me | null | undefined): Can {
     configure: me.can?.configure ?? me.approver,
     // Running and resetting scenarios needed the operator role
     scenarios: me.can?.scenarios ?? me.operator,
+    stopRecovery: me.can?.stopRecovery,
     // A server older than the judges' live agents has no route to convene the board, so nothing offers it
     liveAgents: me.can?.liveAgents ?? false,
   };

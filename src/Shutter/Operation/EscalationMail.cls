@@ -30,6 +30,8 @@ Method OnEscalationSend(request As Shutter.Msg.EscalationSend, Output response A
     // escalation fails with the reason on the timeline; it can be edited and sent again.
     Set problem = esc.Check(.field)
     If problem '= "" Do esc.MarkFailed("Refused before sending, " _ field _ ": " _ problem) Quit $$$OK
+    // Shadow mode (CONTRACTS 17): nothing tells a team to correct a case nothing was done about.
+    If ##class(Shutter.Util.RecoveryControl).MailSuppressed() Do esc.MarkFailed("Not sent: shadow mode sends no email, and enabling recovery does not send this one") Quit $$$OK
     Try {
         If ..Adapter.SMTPServer = "" {
             Set file = ..WriteFile(esc)

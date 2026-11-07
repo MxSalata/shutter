@@ -9,6 +9,7 @@ import { PageSkeleton } from '@/components/PageSkeleton';
 import { AgentsSection } from './AgentsSection';
 import { CostsSection } from './CostsSection';
 import { PricesSection } from './PricesSection';
+import { RecoveryControlSection } from './RecoveryControlSection';
 import { SettingsTiles } from './SettingsTiles';
 
 function Flag({ children }: { children: React.ReactNode }) {
@@ -65,6 +66,7 @@ export default function SettingsPage() {
           <>
             <SettingsTiles s={s} costs={costs.data} />
             {s ? <Flags s={s} /> : null}
+            <RecoveryControlSection />
             {s ? <AgentsSection s={s} /> : null}
             <CostsSection costs={costs} settings={s} />
             {s ? <PricesSection prices={s.prices} /> : null}

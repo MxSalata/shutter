@@ -240,9 +240,9 @@ ClassMethod CreateSecurity(ns As %String, demo As %Boolean) As %Status
     Set hospital = $GET(^|ns|Shutter.Config("hospitalNamespace"))
     New $NAMESPACE
     Set $NAMESPACE = "%SYS"
-    For res = "Shutter_Operate", "Shutter_Approve", "Shutter_Intake", "Shutter_Configure", "Shutter_Scenarios", "Shutter_LiveAgents", "Shutter_Publish" {
+    For res = "Shutter_Operate", "Shutter_Approve", "Shutter_Intake", "Shutter_Configure", "Shutter_Scenarios", "Shutter_LiveAgents", "Shutter_Publish", "Shutter_StopRecovery" {
         If '##class(Security.Resources).Exists(res) {
-            Set sc = ##class(Security.Resources).Create(res, "Shutter: " _ $CASE(res, "Shutter_Approve": "approve or reject recovery plans", "Shutter_Intake": "open a case from another production", "Shutter_Publish": "read cases, incidents, evidence and plans through the MCP publisher", "Shutter_LiveAgents": "spend the model budget: live questions and convening the board", "Shutter_Configure": "change the site: the site profile, the agent library, the schemas, the review annotations", "Shutter_Scenarios": "run and reset the demo's scenarios and purge the store", : "view cases, run scenarios, start investigations"), "")
+            Set sc = ##class(Security.Resources).Create(res, "Shutter: " _ $CASE(res, "Shutter_StopRecovery": "stop Shutter's recovery", "Shutter_Approve": "approve or reject recovery plans", "Shutter_Intake": "open a case from another production", "Shutter_Publish": "read cases, incidents, evidence and plans through the MCP publisher", "Shutter_LiveAgents": "spend the model budget: live questions and convening the board", "Shutter_Configure": "change the site: the site profile, the agent library, the schemas, the review annotations", "Shutter_Scenarios": "run and reset the demo's scenarios and purge the store", : "view cases, run scenarios, start investigations"), "")
             Quit:$$$ISERR(sc)
         }
     }
@@ -273,14 +273,14 @@ ClassMethod CreateSecurity(ns As %String, demo As %Boolean) As %Status
     // Each role is created, or brought to this definition when it exists, so an upgraded instance is tightened too.
     // The approver monitors (traces, messages, the Workflow inbox) and approves; it never starts, stops or purges:
     // %EnsRole_Monitor with the message trace, header and content viewing resources, not %EnsRole_Operator (E2).
-    Set sc = ..EnsureRole("Shutter_Operator", "Shutter operator: cases, scenarios, investigations", "Shutter_Operate:U,Shutter_Scenarios:U,Shutter_LiveAgents:U,Shutter_Publish:U," _ db _ ":RW" _ codeRead _ watchReset _ recordsRW _ ",%Ens_Portal:U", "")
+    Set sc = ..EnsureRole("Shutter_Operator", "Shutter operator: cases, scenarios, investigations", "Shutter_Operate:U,Shutter_Scenarios:U,Shutter_LiveAgents:U,Shutter_Publish:U,Shutter_StopRecovery:U," _ db _ ":RW" _ codeRead _ watchReset _ recordsRW _ ",%Ens_Portal:U", "")
     Quit:$$$ISERR(sc) sc
     // What an approver and the public demo's role share (v1.34): reading, approving, the traces; the approver adds the site's
     // writes (Shutter_Configure) and the demo controls (Shutter_Scenarios), which the demo role never holds.
     Set approverCore = "Shutter_Operate:U,Shutter_Approve:U," _ db _ ":RW" _ codeRead
     Set traces = ",%Ens_MessageTrace:U,%Ens_MessageHeader:U,%Ens_MessageContent:U"
     Set approverRes = approverCore _ watchRead _ traces
-    Set sc = ..EnsureRole("Shutter_Approver", "Shutter approver: everything an operator can, plus approvals, the site's settings and the Workflow inbox", approverCore _ watchReset _ recordsRW _ traces _ ",%Ens_EventLog:U,Shutter_Configure:U,Shutter_Scenarios:U,Shutter_LiveAgents:U", "Shutter_Operator,%EnsRole_Monitor")
+    Set sc = ..EnsureRole("Shutter_Approver", "Shutter approver: everything an operator can, plus approvals, the site's settings and the Workflow inbox", approverCore _ watchReset _ recordsRW _ traces _ ",%Ens_EventLog:U,Shutter_Configure:U,Shutter_Scenarios:U,Shutter_LiveAgents:U,Shutter_StopRecovery:U", "Shutter_Operator,%EnsRole_Monitor")
     Quit:$$$ISERR(sc) sc
     Set sc = ..EnsureRole("Shutter_Demo", "Shutter public demo: reads everything, reinvestigates, approves and asks; cannot run or reset scenarios, save the site profile or the library, or import a schema", approverRes _ ",%Ens_Portal:U", "%EnsRole_Monitor")
     Quit:$$$ISERR(sc) sc
@@ -1477,6 +1477,7 @@ ClassMethod InstallIntoStatus(production As %String, root As %String = "") As %S
 /// the catalogue and the recorded runs. The same list as Install's.
 ClassMethod SeedAll(root As %String) As %Status [ Private ]
 {
+    Set sc = ##class(Shutter.Util.RecoveryControl).Ensure() Quit:$$$ISERR(sc) sc
     Set sc = ##class(Shutter.Store.BoardMember).Seed() Quit:$$$ISERR(sc) sc
     Set sc = ##class(Shutter.Store.ModelPrice).Seed() Quit:$$$ISERR(sc) sc
     If (root '= "") && ##class(%File).Exists(root _ "knowledge/block-reasons.json") {
@@ -1707,6 +1708,7 @@ ClassMethod PurgeStore() As %String [ SqlProc ]
     // Worklist rows whose task is gone (a task deleted by hand) would show as broken entries in the inbox.
     Do ##class(%SQL.Statement).%ExecDirectNoPriv(, "DELETE FROM EnsLib_Workflow.Worklist WHERE Task NOT IN (SELECT ID FROM EnsLib_Workflow.TaskResponse)")
     Kill ^Shutter.Counter, ^Shutter.Scenarios
+    Do ##class(Shutter.Util.RecoveryControl).StoreEmptied()
     // The counters start again, so a new case may carry a purged case's id: the reset stamp keeps a lead begun before
     // the purge from being followed, and the evidence collector from reading older message-store events.
     Set ^Shutter.Config("resetAt") = ##class(Shutter.Util.Time).NowUTC()
@@ -2356,6 +2358,7 @@ ClassMethod ProviderConfigState(mayRead As %Integer = -1) As %String
 ClassMethod RefreshKnowledge(root As %String = "") As %String [ SqlProc ]
 {
     Set out = {}
+    Do ##class(Shutter.Util.RecoveryControl).Ensure()
     // From SQL, another root than the installed one needs the approver's right: it replaces the knowledge wholesale.
     If (root '= "") && $ISOBJECT($GET(%sqlcontext)) && '$SYSTEM.Security.Check("Shutter_Approve", "USE") {
         Set out.error = "Shutter_Approve is required to refresh the knowledge from another root"

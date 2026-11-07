@@ -457,8 +457,45 @@ function PreventFailures({
   );
 }
 
+function Recovery({
+  draft,
+  setDraft,
+  problem,
+}: {
+  draft: SiteProfile;
+  setDraft: SetDraft;
+  problem: Problem;
+}) {
+  return (
+    <Section
+      id="site-recovery"
+      title="Recovery"
+      note="Off is shadow mode: Shutter investigates and sends no recovery write, rehearsal or resend preview. The hospital's ordinary feed goes on either way."
+    >
+      <Question n={14} text="May Shutter attempt recovery here, within its gate and the policy above?" acts />
+      <Switch
+        id="site-recovery-mode"
+        label="Enable recovery"
+        description="Off (the default on a new install). Enabling it releases no plan made before: those are reinvestigated. No report enables it."
+        checked={draft.recovery?.mode === 'enabled'}
+        onChange={(e) => {
+          const v = e.currentTarget.checked;
+          setDraft((d) => {
+            d.recovery = { mode: v ? 'enabled' : 'shadow' };
+          });
+        }}
+        error={problem?.path === 'recovery.mode' ? problem.message : undefined}
+      />
+      <QuestionDetails
+        keys={[['recovery.mode', draft.recovery?.mode, 'shadow']]}
+        more="An emergency stop is apart from this: Stop Shutter recovery, in Settings, latches at once and outlives a restart."
+      />
+    </Section>
+  );
+}
+
 /**
- * Questions 9 to 13: escalation teams and mail, the feed's time zone, note text for the model, merges, and whether the
+ * Questions 9 to 14: escalation teams and mail, the feed's time zone, note text for the model, merges, and whether the
  * feed is held while a schema is missing.
  */
 export function MoreQuestions({
@@ -477,6 +514,7 @@ export function MoreQuestions({
       <Model draft={draft} setDraft={setDraft} />
       <Merges draft={draft} setDraft={setDraft} problem={problem} />
       <PreventFailures draft={draft} setDraft={setDraft} problem={problem} />
+      <Recovery draft={draft} setDraft={setDraft} problem={problem} />
     </>
   );
 }

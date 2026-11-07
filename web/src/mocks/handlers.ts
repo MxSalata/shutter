@@ -13,6 +13,7 @@ import type {
   IncidentEvent,
   IncidentSummary,
   Me,
+  RecoveryControl,
   Precedent,
   PrecedentSummary,
   ReviewAgent,
@@ -67,6 +68,23 @@ interface ReviewFixtures {
 const recordedReviews: ReviewFixtures = (fixtures as unknown as { productionReviews?: ReviewFixtures })
   .productionReviews ?? { targets: [], list: [], reviews: {} };
 
+/** The recovery control as the demo seeds it: enabled and not stopped (CONTRACTS 17). */
+const RECOVERY: RecoveryControl = {
+  mode: 'enabled',
+  generation: 1,
+  stopped: false,
+  stoppedAt: '',
+  stoppedBy: '',
+  stopReason: '',
+  outstanding: [],
+  outstandingCount: 0,
+  readable: true,
+  covers: 'Rehearsals, recovery writes and blind-resend previews that Shutter itself starts.',
+  doesNotCover:
+    "The hospital's ordinary feed and its retries, other systems or people writing to the receiver, Shutter's own records, and read-back of earlier attempts.",
+};
+let recovery = RECOVERY;
+
 /**
  * The mock's users, with `can` as the server answers it (CONTRACTS 5, v1.34): the operator runs scenarios and cannot
  * configure, the approver can do everything, and `demo` is the public demo's role, which operates and approves but
@@ -77,13 +95,27 @@ const USERS: Record<string, Me> = {
     username: 'operator',
     operator: true,
     approver: false,
-    can: { operate: true, approve: false, configure: false, scenarios: true, liveAgents: true },
+    can: {
+      operate: true,
+      approve: false,
+      configure: false,
+      scenarios: true,
+      stopRecovery: true,
+      liveAgents: true,
+    },
   },
   approver: {
     username: 'approver',
     operator: true,
     approver: true,
-    can: { operate: true, approve: true, configure: true, scenarios: true, liveAgents: true },
+    can: {
+      operate: true,
+      approve: true,
+      configure: true,
+      scenarios: true,
+      stopRecovery: true,
+      liveAgents: true,
+    },
   },
   demo: {
     username: 'demo',
@@ -156,6 +188,7 @@ const recordedLibrary = structuredClone(fixtures.library);
  */
 export function resetMock(signedInAs: keyof typeof USERS | null = 'approver') {
   session = signedInAs ? USERS[signedInAs] : null;
+  recovery = RECOVERY;
   fixtures.library.splice(0, fixtures.library.length, ...structuredClone(recordedLibrary));
   run = null;
   played = {};
@@ -1198,6 +1231,29 @@ export const handlers = [
       ref: `escalation:${e.seq}`,
     });
     return HttpResponse.json(e, { status: 202 });
+  }),
+
+  http.get(`${BASE}/recovery-control`, () => HttpResponse.json(recovery)),
+  http.post(`${BASE}/recovery-control/stop`, async ({ request }) => {
+    const { reason } = (await request.json()) as { reason?: string };
+    if (!reason) return HttpResponse.json({ error: 'bad_request' }, { status: 400 });
+    if (!recovery.stopped) {
+      recovery = {
+        ...recovery,
+        stopped: true,
+        stoppedBy: 'you',
+        stoppedAt: new Date().toISOString(),
+        stopReason: reason,
+        generation: recovery.generation + 1,
+      };
+    }
+    return HttpResponse.json(recovery);
+  }),
+  http.post(`${BASE}/recovery-control/clear`, async ({ request }) => {
+    const { reason } = (await request.json()) as { reason?: string };
+    if (!reason) return HttpResponse.json({ error: 'bad_request' }, { status: 400 });
+    recovery = { ...RECOVERY, generation: recovery.generation + 1 };
+    return HttpResponse.json(recovery);
   }),
 
   http.get(`${BASE}/site-profile`, () =>

@@ -9,6 +9,7 @@ import {
   type AttemptView,
   type BlindResendPreview,
   type BlockedReason,
+  type RecoveryControl,
   type CaseDetail,
   type CaseEvent,
   type CaseList,
@@ -69,6 +70,7 @@ export const keys = {
   incident: (id: string) => ['incident', id] as const,
   incidentEvents: (id: string) => ['incident', id, 'events'] as const,
   escalations: (id: string) => ['case', id, 'escalations'] as const,
+  recoveryControl: ['recovery-control'] as const,
   siteProfile: ['site-profile'] as const,
   siteProfileHistory: ['site-profile', 'history'] as const,
   library: ['library'] as const,
@@ -578,6 +580,34 @@ export function useDecideIncident(incidentId: string) {
       await client.invalidateQueries({ queryKey: keys.incident(incidentId) });
       await client.invalidateQueries({ queryKey: ['incidents'] });
     },
+  });
+}
+
+// ---- the recovery control (CONTRACTS 17) ----
+
+export function useRecoveryControl() {
+  return useQuery({
+    queryKey: keys.recoveryControl,
+    queryFn: () => api.get<RecoveryControl>('/recovery-control'),
+    refetchInterval: 15_000,
+    retry: false,
+  });
+}
+
+export function useStopRecovery() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { reason: string }) => api.post<RecoveryControl>('/recovery-control/stop', body),
+    onSuccess: (data) => client.setQueryData(keys.recoveryControl, data),
+  });
+}
+
+export function useClearRecovery() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { reason: string; expectedGeneration: number }) =>
+      api.post<RecoveryControl>('/recovery-control/clear', body),
+    onSuccess: (data) => client.setQueryData(keys.recoveryControl, data),
   });
 }
 
