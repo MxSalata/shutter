@@ -23,6 +23,7 @@ import { isApiError } from '@/lib/errors';
 import { REPLAY_DONE, SHOW_APPROVAL } from '@/lib/events';
 import { usePrefersReducedMotion, useStagedReveal } from '@/lib/motion';
 import { caseOutcome } from '@/lib/status';
+import { CaseBundleDownload } from './case/CaseBundleDownload';
 import { CaseHeader } from './case/CaseHeader';
 import { Lifecycle, REPLAYED_STAGES, type StageKey } from './case/Lifecycle';
 import { FailureMap } from './case/FailureMap';
@@ -444,6 +445,7 @@ function CaseBody({ c }: { c: CaseDetail }) {
               {/* A stopped case's hand-off is part of its next action; once closed by hand, it is history here */}
               {!stopped ? <EscalationPanel c={c} /> : null}
               <PortalLinks c={c} runs={facts.runs} portalBase={base} />
+              <CaseBundleDownload caseId={c.caseId} />
             </Stack>
           </Tabs.Panel>
         </Tabs>
