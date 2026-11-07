@@ -83,7 +83,7 @@ ClassMethod Conditions(case As Shutter.Store.Case, summary As %DynamicObject, ch
     Set c."free_text" = $SELECT($ISOBJECT(notes) && (notes.%Size() > 0): "yes", 1: "no")
     // death_recorded: whether the message records a death or clears one (PID-29, PID-30), as the evidence read it
     Set death = $SELECT($ISOBJECT(msg): $CLASSMETHOD(json, "Str", msg, "death_recorded"), 1: "")
-    Set c."death_recorded" = $SELECT((death = "yes") || (death = "cleared"): death, 1: "no")
+    Set c."death_recorded" = $SELECT((death = "yes") || (death = "cleared") || (death = "unreadable"): death, 1: "no")
     Set c.chain = $SELECT(chainKind = "": "single", 1: chainKind)
     // receiver_category (v1.23): what kind of system the case's receiver is, from its site profile entry
     Set c."receiver_category" = ##class(Shutter.Store.SiteProfile).ReceiverCategory(case.Receiver)
@@ -497,14 +497,15 @@ ClassMethod SimultaneousSource(summary As %DynamicObject, case As Shutter.Store.
 
 /// Whether a history row counts as at the failed event's own time: within skew seconds of it, either side, since two
 /// systems' clocks don't agree to the second and nothing then says which came first. A demographic update moves nobody,
-/// so it never counts. A time that cannot be read doesn't either, unless it is the same text.
+/// so it never counts. A time that cannot be read does: the row shows another system moved the patient, and nothing shows
+/// it was outside the window.
 ClassMethod AtTheSameTime(row As %DynamicObject, case As Shutter.Store.Case, skew As %Integer) As %Boolean [ Private ]
 {
     If ##class(Shutter.Util.Json).Str(row, "event") = "update" Quit 0
     Set t = ##class(Shutter.Util.Json).Str(row, "event_time")
     If t = case.EventTime Quit 1
     Set gap = ..Behind(case.EventTime, t)
-    If gap = "" Quit 0
+    If gap = "" Quit 1
     Quit $ZABS(gap) <= skew
 }
 

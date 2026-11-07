@@ -108,18 +108,19 @@ ClassMethod FromHL7(message As EnsLib.HL7.Message, Output sc As %Status) As %Dyn
 }
 
 /// Whether a message records a death, from PID-29 (the date and time) and PID-30 (the indicator): "yes" when PID-30 says Y
-/// or PID-29 holds a time; "cleared" when either holds the HL7 null ("") that deletes it; "no" otherwise. An N in PID-30 is
-/// "no": it says nothing about what the receiver held before. What goes to the receiver carries neither field.
+/// or PID-29 holds a time; "cleared" when either holds the HL7 null ("") that deletes it; "unreadable" when a read fails,
+/// which is not the same as no death; "no" otherwise. An N in PID-30 is "no": it says nothing about what the receiver held
+/// before. What goes to the receiver carries neither field.
 ClassMethod DeathRecorded(message As EnsLib.HL7.Message) As %String
 {
-    Set when = "", flag = ""
+    Set when = "", flag = "", failed = 0
     Try {
         Set when = $ZSTRIP(..Value(message, "PID", "29"), "<>W")
         Set flag = $ZCONVERT($ZSTRIP(..Value(message, "PID", "30"), "<>W"), "U")
     } Catch ex {
-        Set when = "", flag = ""
+        Set failed = 1
     }
-    Quit $SELECT((flag = "Y") || ((when '= "") && (when '= """""")): "yes", (when = """""") || (flag = """"""): "cleared", 1: "no")
+    Quit $SELECT((flag = "Y") || ((when '= "") && (when '= """""")): "yes", (when = """""") || (flag = """"""): "cleared", failed: "unreadable", 1: "no")
 }
 
 /// The prior record of a merge (A40) from the message's MRG segments, added to the operation: prior_patient_id and

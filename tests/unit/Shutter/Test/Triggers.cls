@@ -145,6 +145,7 @@ Method TestDeathRecorded()
     Set msg = ##class(EnsLib.HL7.Message).ImportFromString($REPLACE(..Message("A02", "ADT_A02", ..#PID _ "<CR>" _ ..PV1("I", "WARD-A", "ENC-9001")), "<CR>", $CHAR(13)), .sc)
     Do msg.PokeDocType("2.5.1:ADT_A02")
     Do $$$AssertEquals(##class(Shutter.Util.OperationKey).DeathRecorded(msg), "no", "a PID that stops before them")
+    Do $$$AssertEquals(##class(Shutter.Util.OperationKey).DeathRecorded(""), "unreadable", "a read that fails is not no death")
 }
 
 Method TestUnmappedTriggerSaysSo()

@@ -246,7 +246,7 @@
   "checks": [
    "ordering"
   ],
-  "prose": "# E7 Two sources at the same time\n\n## Meaning\n\nTwo systems moved the same patient at about the same recorded time, for example the patient administration system and\nthe bed manager. Two systems' clocks don't agree to the second, so a gap this small says nothing about which came first.\nEvery mechanical check passes, so rules alone would resend, and the resend would move the patient away from the\nplacement the other system made.\n\n## Telling it apart\n\nThe other event is from another source system (MSH-3), within the site profile's `feed.source_skew_seconds` of this one\neither way (300 by default; 0 keeps the exact second). A demographic update moves nobody, so it doesn't count. A later\nevent from the same source, or from another one past that window, is E1 or E6.\n\n## Cite\n\nBoth events: source system, event time, ward, and the downstream system's current state set by the other system.",
+  "prose": "# E7 Two sources at the same time\n\n## Meaning\n\nTwo systems moved the same patient at about the same recorded time, for example the patient administration system and\nthe bed manager. Two systems' clocks don't agree to the second, so a gap this small says nothing about which came first.\nEvery mechanical check passes, so rules alone would resend, and the resend would move the patient away from the\nplacement the other system made.\n\n## Telling it apart\n\nThe other event is from another source system (MSH-3), within the site profile's `feed.source_skew_seconds` of this one\neither way (300 by default; 0 keeps the exact second). A time that can't be read counts, since nothing shows it was\noutside the window. A demographic update moves nobody, so it doesn't count. A later\nevent from the same source, or from another one past that window, is E1 or E6.\n\n## Cite\n\nBoth events: source system, event time, ward, and the downstream system's current state set by the other system.",
   "source": "E7.md"
  },
  {
@@ -592,7 +592,8 @@
   "pattern": {
    "death_recorded": [
     "yes",
-    "cleared"
+    "cleared",
+    "unreadable"
    ]
   },
   "decides": "person",
@@ -604,7 +605,7 @@
   "checks": [
    "identity"
   ],
-  "prose": "# E19 A death on the message\n\n## Meaning\n\nThe failed message's PID-29 or PID-30 records a death, or holds the HL7 null that clears one. The operation Shutter sends\ncarries neither field, so a resend would read as committed with the death not delivered, and a closure as overtaken would\nleave it unread. A movement after a death may also be a real one, or a sign that the death is wrong. Which it is can't be\ntold from the messages, so this entry answers alone, whatever else matches: nothing is sent or closed, and the case goes to\na person who checks the patient with the team that owns the record.\n\n## Telling it apart\n\nOnly the failed message's own fields are read. A death shown by an earlier message of the patient's isn't compared with\nthis one, and an N in PID-30 reads as no death: it says nothing about what the receiver held before.\n\n## Cite\n\nThat the message records or clears a death (`death_recorded`, a word: the date stays in the message), the case's patient\nand visit, and the receiver's current state.",
+  "prose": "# E19 A death on the message\n\n## Meaning\n\nThe failed message's PID-29 or PID-30 records a death, holds the HL7 null that clears one, or could not be read. The operation Shutter sends\ncarries neither field, so a resend would read as committed with the death not delivered, and a closure as overtaken would\nleave it unread. A movement after a death may also be a real one, or a sign that the death is wrong. Which it is can't be\ntold from the messages, so this entry answers alone, whatever else matches: nothing is sent or closed, and the case goes to\na person who checks the patient with the team that owns the record.\n\n## Telling it apart\n\nOnly the failed message's own fields are read. A death shown by an earlier message of the patient's isn't compared with\nthis one, and an N in PID-30 reads as no death: it says nothing about what the receiver held before.\n\n## Cite\n\nThat the message records or clears a death (`death_recorded`, a word: the date stays in the message), the case's patient\nand visit, and the receiver's current state.",
   "source": "E19.md"
  }
 ]
