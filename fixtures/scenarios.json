@@ -438,8 +438,8 @@
       "final_state": "admitted",
       "final_ward": "WARD-A",
       "case_by_key": true,
-      "blocked_by": "A08_LOCATION_DIFFERS",
-      "final_reason": "A08_LOCATION_DIFFERS",
+      "blocked_by": "UPDATE_LOCATION_DIFFERS",
+      "final_reason": "UPDATE_LOCATION_DIFFERS",
       "failed_operation_key": "PAS^HOSP^MRN1033^ENC-1033^update^2026-10-15T08:20:00Z",
       "names": [
         "MRN1033",

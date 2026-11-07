@@ -465,7 +465,7 @@ def scenarios():
             {"fault": "off"},
         ],
         "expected": {"disposition": "resend", "write": False, "final_state": "admitted", "final_ward": "WARD-A",
-                     "case_by_key": True, "blocked_by": "A08_LOCATION_DIFFERS", "final_reason": "A08_LOCATION_DIFFERS",
+                     "case_by_key": True, "blocked_by": "UPDATE_LOCATION_DIFFERS", "final_reason": "UPDATE_LOCATION_DIFFERS",
                      "failed_operation_key": u[2]["operation_key"], "names": ["MRN1033", "BAY1-09", "BAY1-01"],
                      "modes": ["policy", "rules"]},
     }, [a, u]))
