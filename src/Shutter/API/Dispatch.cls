@@ -40,6 +40,8 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
   <Route Url="/cases/:caseId/blocked-reason" Method="GET" Call="CaseBlockedReason"/>
   <Route Url="/cases/:caseId/receiver-check" Method="GET" Call="CaseReceiverCheck"/>
   <Route Url="/cases/:caseId/reinvestigate" Method="POST" Call="CaseReinvestigate"/>
+  <Route Url="/cases/:caseId/further-stop" Method="GET" Call="CaseFurtherStop"/>
+  <Route Url="/cases/:caseId/further-release" Method="POST" Call="CaseFurtherRelease"/>
   <Route Url="/cases/:caseId/board" Method="POST" Call="CaseBoard"/>
   <Route Url="/cases/:caseId/close" Method="POST" Call="CaseClose"/>
   <Route Url="/cases/:caseId/abandon" Method="POST" Call="CaseAbandon"/>
@@ -1066,8 +1068,14 @@ ClassMethod CaseReinvestigate(caseId As %String) As %Status
     Set r = ..Idempotent(bodyText, .replayed)
     If replayed Quit $$$OK
     If 'case.IsClosed() || (case.State = "resolved") Quit ..Fail("409 Conflict", "wrong_state", "The case is " _ case.State _ "; only a blocked, escalated or failed case can be reopened")
+    Quit ..Reopen(caseId, $EXTRACT(##class(Shutter.Util.Json).Str(body, "reason"), 1, 2000), bodyText)
+}
+
+/// Sends the case back through fresh evidence, and answers 202: a reinvestigation, or what follows a release.
+ClassMethod Reopen(caseId As %String, reason As %String, bodyText As %String) As %Status [ Private ]
+{
     Set msg = ##class(Shutter.Msg.Reinvestigate).%New()
-    Set msg.CaseId = caseId, msg.RequestedBy = ..User(), msg.Reason = $EXTRACT(##class(Shutter.Util.Json).Str(body, "reason"), 1, 2000)
+    Set msg.CaseId = caseId, msg.RequestedBy = ..User(), msg.Reason = reason
     // Who may spend the model budget (v1.39): the reopened case's runs count against the requester's share, and without
     // the live agents, or while the provider refuses the key, they answer from recordings only (a board with none leaves
     // the case escalated for a person), as a question does (14). Before this every reopening ran live as "system", on nobody's share.
@@ -1090,6 +1098,50 @@ ClassMethod CaseReinvestigate(caseId As %String) As %Status
     Set %response.Status = "202 Accepted"
     Write text
     Quit $$$OK
+}
+
+/// What stops a case's write for further messages, read fresh, with the digest a release must name (CONTRACTS 6.5). Anyone
+/// signed in may read it; a read costs a scan of the patient's messages, so the case page asks only on a stop of this kind.
+ClassMethod CaseFurtherStop(caseId As %String) As %Status
+{
+    If '..Allow() Quit $$$OK
+    Set case = ..CaseOr404(caseId)
+    If '$ISOBJECT(case) Quit $$$OK
+    Set util = "Shutter.Util.FurtherMessages", found = $CLASSMETHOD(util, "Find", case)
+    Set o = {}, rows = []
+    Set it = found.%Get("stops").%GetIterator()
+    While it.%GetNext(, .item) { Do rows.%Push({"line": ($CLASSMETHOD(util, "Line", case, item)), "visit": ($CLASSMETHOD("Shutter.Util.Json", "Str", item, "visit_number"))}) }
+    Set o.rows = rows, o.digest = $CLASSMETHOD(util, "RowsDigest", found), o.whyNot = $CLASSMETHOD(util, "NotReleasable", found)
+    Do o.%Set("releasable", o.whyNot = "", "boolean")
+    Set record = $SELECT(case.FurtherReleaseJSON '= "": ##class(Shutter.Util.Json).Parse(case.FurtherReleaseJSON, .psc), 1: "")
+    If $ISOBJECT(record) {
+        Do record.%Set("stands", $CLASSMETHOD(util, "Released", case, found), "boolean")
+        Set o.release = record
+    } Else {
+        Do o.%Set("release", "", "null")
+    }
+    Quit ..Json(o)
+}
+
+/// A person releases one case's stop on another visit's movement (Shutter_Approve, X-Requested-With; body {digest, reason},
+/// both required): the digest of the rows they read and why. A fresh read must give that digest; the case then goes through
+/// fresh evidence, where the gate checks the same again, every other check runs, and a write waits for its approval.
+ClassMethod CaseFurtherRelease(caseId As %String) As %Status
+{
+    If '..Allow("Shutter_Approve", 1) Quit $$$OK
+    Set case = ..CaseOr404(caseId)
+    If '$ISOBJECT(case) Quit $$$OK
+    Set bodyText = $SELECT($ISOBJECT(%request.Content): %request.Content.Read($$$MaxStringLength), 1: $GET(%request.Content))
+    Set body = ##class(Shutter.Util.Json).Parse(bodyText, .psc)
+    If '$ISOBJECT(body) Set body = {}
+    Set r = ..Idempotent(bodyText, .replayed)
+    If replayed Quit $$$OK
+    Set reason = $ZSTRIP(##class(Shutter.Util.Json).Str(body, "reason"), "<>WC"), digest = ##class(Shutter.Util.Json).Str(body, "digest")
+    If reason = "" Quit ..Fail("400 Bad Request", "bad_request", "Say why it is safe to send", {"field": "reason"})
+    If digest = "" Quit ..Fail("400 Bad Request", "bad_request", "Name the digest of the rows you read", {"field": "digest"})
+    If case.State '= "blocked" Quit ..Fail("409 Conflict", "wrong_state", "The case is " _ case.State _ "; only a blocked case's stop can be released")
+    If '##class(Shutter.Util.FurtherMessages).Release(case, digest, reason, ..User(), .code, .words) Quit ..Fail("409 Conflict", code, words)
+    Quit ..Reopen(caseId, "the stop on further messages was released", bodyText)
 }
 
 /// Close a case the team handled by hand (T31, 2.6): an escalated, blocked or failed case resolves with disposition

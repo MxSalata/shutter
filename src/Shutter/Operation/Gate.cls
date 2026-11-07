@@ -112,8 +112,11 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
         Set further = $SELECT(request.Stage = "proposal": summary.%Get("further_messages"), 1: ##class(Shutter.Util.FurtherMessages).Find(case))
         If ##class(Shutter.Util.FurtherMessages).Unreadable(further) {
             Do ..Check(checks, "ordering", "block", "PATIENT_UNREADABLE", "The case's patient identifier could not be read, so what else has happened to this patient is not known; a person decides")
+        } ElseIf ##class(Shutter.Util.FurtherMessages).Released(case, further) {
+            // A person read these very rows and released this stop, and this read gives the same ones. It releases nothing else.
+            Do ..Check(checks, "ordering", "pass", "FURTHER_MOVEMENT_RELEASED", "Another visit's movement, released by a person who read these rows; this read gives the same ones. " _ ##class(Shutter.Util.FurtherMessages).Describe(case, further))
         } ElseIf ##class(Shutter.Util.FurtherMessages).Count(further, "stops") > 0 {
-            Do ..Check(checks, "ordering", "block", "FURTHER_MOVEMENT", ##class(Shutter.Util.FurtherMessages).Describe(case, further) _ ". Nothing is sent; a person reads both and decides")
+            Do ..Check(checks, "ordering", "block", "FURTHER_MOVEMENT", ##class(Shutter.Util.FurtherMessages).Describe(case, further) _ ". Nothing is sent; a person reads both and decides" _ $SELECT(case.FurtherReleaseJSON '= "": ". An earlier release no longer holds: these aren't the rows that person read", 1: ""))
         } ElseIf ##class(Shutter.Util.FurtherMessages).Unread(further) '= "" {
             Do ..Check(checks, "ordering", "block", "FURTHER_NOT_READ", "Further messages for this patient could not all be read: " _ ##class(Shutter.Util.FurtherMessages).Unread(further) _ ". Nothing is sent until they can be, or a person decides")
         } ElseIf $ISOBJECT(further) {
@@ -229,6 +232,8 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
                 // An admission on a 404 is never released by policy alone (a record may have been entered by hand under another
                 // number), inside an incident too, unless the site's profile says so.
                 If (why = "") && ##class(Shutter.Util.FurtherMessages).AdmissionOnNotFound(case, summary) && (##class(Shutter.Store.SiteProfile).AdmissionNotFound() = "person") Set why = "policy_requires_approval"
+                // A person released a stop on this case: the write after it goes to a person too.
+                If (why = "") && (case.FurtherReleaseJSON '= "") Set why = "policy_requires_approval"
                 // The plan must have come from the policy path for the entry it names: a board's plan never goes by policy.
                 If (why = "") && ((plan.CatalogueEntry = "") || (plan.CreatedBy '= ("policy:" _ plan.CatalogueEntry))) Set why = "plan_origin"
                 // A write with no person needs the case's source proved (CONTRACTS 11).

@@ -612,10 +612,19 @@
       "code": "FURTHER_MOVEMENT",
       "title": "Something else has happened to this patient",
       "prerequisite": "No further in-patient movement for the patient on another visit, and no cancel, merge or change to the record the receiver has not applied",
-      "next_action": "Read both visits named here, in the source system and on the receiver's own screen, and put the patient right by hand or close the case. Nothing is sent, and nothing will be until a person decides.",
+      "next_action": "Read both visits named here, in the source system and on the receiver's own screen, and put the patient right by hand or close the case. Where it is only another visit's movement, an approver can release this stop on the case page for the rows they read. Nothing is sent until a person decides.",
       "owner": "Operator",
       "reevaluate_when": "A person has read both and closed or reinvestigated the case",
       "text": "After this message failed, a further message arrived for the same patient that Shutter can't weigh by itself: a new admission or ward stay under another visit number, a cancel or discharge the receiver never applied, or a change to the record. Someone may be working round bad history. Shutter can't say which visit is real, so it stops and names both."
+    },
+    {
+      "code": "FURTHER_MOVEMENT_RELEASED",
+      "title": "A person released this stop for the rows they read",
+      "prerequisite": "A fresh read gives the same rows of another visit that the person read and released",
+      "next_action": "None: a pass. Every other check still runs, and the write still needs its approval.",
+      "owner": "Approver",
+      "reevaluate_when": "Each read before the write: another relevant message voids the release",
+      "text": "An approver read the messages on the patient's other visit, gave a reason, and released this one stop. It holds only for those rows, and it releases nothing else."
     },
     {
       "code": "NO_FURTHER_MOVEMENT",

@@ -1080,6 +1080,11 @@ Method PolicyPath(case As Shutter.Store.Case, summary As %DynamicObject, cat As 
         Set ..Policy = "approval", heldBack = 1
         Do case.Note("note", "A lost admission on the receiver's 404: a person approves, as the site's profile asks (further_messages.admission_not_found)", "system")
     }
+    // A person released a stop on this case's further messages: the write after it goes to a person too.
+    If (..Policy = "automatic") && (case.FurtherReleaseJSON '= "") {
+        Set ..Policy = "approval", heldBack = 1
+        Do case.Note("note", "A person released the stop on further messages, which releases nothing else: a person approves the write", "system")
+    }
     // An automatic release writes with no person, so the case's source must be proved (CONTRACTS 11); otherwise a person approves.
     // A lost admission held back above is asked too, so the person is told both.
     If (..Policy = "automatic") || heldBack {
