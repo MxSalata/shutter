@@ -255,6 +255,7 @@ export function validateProfile(p: unknown): string {
     'teams',
     'mail',
     'feed',
+    'further_messages',
   ];
   for (const key of Object.keys(p)) if (!top.includes(key)) return `${key}: unknown field`;
   if ('version' in p && (!numeric(p.version) || asNumber(p.version) < 0))
@@ -341,9 +342,31 @@ export function validateProfile(p: unknown): string {
         if (typeof v !== 'boolean') return 'feed.prevent_failures: must be true or false';
         continue;
       }
+      if (k === 'prove_origin') {
+        if (typeof v !== 'boolean') return 'feed.prove_origin: must be true or false';
+        continue;
+      }
+      if (k === 'source_skew_seconds') {
+        if (typeof v !== 'number' || !Number.isInteger(v) || v < 0 || v > 3600)
+          return 'feed.source_skew_seconds: must be a whole number of seconds from 0 to 3600';
+        continue;
+      }
       if (k !== 'time_zone') return `feed.${k}: unknown setting`;
       if (typeof v !== 'string' || !(ZONES.includes(v) || FIXED_OFFSET.test(v) || IANA_ZONE.test(v)))
         return 'feed.time_zone: must be UTC, Europe/London, a fixed offset such as +01:00 (up to 14:00), or an IANA zone name this IRIS knows (for example Europe/Paris)';
+    }
+  }
+  // How rigid the check of further messages for the patient is.
+  if ('further_messages' in p) {
+    const fm = p.further_messages;
+    if (!isObject(fm) || Array.isArray(fm)) return 'further_messages: must be an object';
+    for (const [k, v] of members(fm)) {
+      if (k === 'in_patient_movement') {
+        if (v !== 'stop' && v !== 'show') return 'further_messages.in_patient_movement: must be stop or show';
+      } else if (k === 'admission_not_found') {
+        if (v !== 'person' && v !== 'policy')
+          return 'further_messages.admission_not_found: must be person or policy';
+      } else return `further_messages.${k}: unknown setting`;
     }
   }
   // What may leave IRIS for a model: free text off unless the site says so.

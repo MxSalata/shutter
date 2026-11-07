@@ -840,9 +840,17 @@ export interface SiteProfile {
   model_content?: { free_text?: boolean };
   /**
    * The zone of times the feed sends without an offset: an IANA name or a fixed offset (CONTRACTS 6.4); and whether the
-   * feed is held while a message's HL7 schema category is not loaded here ("prevent failures", default false).
+   * feed is held while a message's HL7 schema category is not loaded here ("prevent failures", default false); how far
+   * apart two sources' events still count as simultaneous; and whether an automatic release needs its source proved.
    */
-  feed?: { time_zone?: string; prevent_failures?: boolean };
+  feed?: {
+    time_zone?: string;
+    prevent_failures?: boolean;
+    source_skew_seconds?: number;
+    prove_origin?: boolean;
+  };
+  /** How rigid the check of further messages for the patient is (CONTRACTS 6.5). Absent means stop and person. */
+  further_messages?: { in_patient_movement?: 'stop' | 'show'; admission_not_found?: 'person' | 'policy' };
 }
 
 /** GET /site-profile: the profile in force and its store version, which a PUT sends back as expectedVersion. */

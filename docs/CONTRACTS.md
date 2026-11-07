@@ -724,7 +724,7 @@ reads it through `Shutter.Store.SiteProfile`.
 - `further_messages` (6.5), how rigid a site wants the patient-level check. `in_patient_movement`: `stop`, or `show` to let a
   movement on another visit through with a line on the plan; a cancel, merge or discharge the receiver didn't apply on this visit
   stops either way. `admission_not_found`: `person`, or `policy` to let the tier's own policy release a lost admission on a 404.
-  Absent means `stop` and `person`, which are the safe defaults, and the shipped profile leaves it out.
+  Absent means `stop` and `person`, which are the safe defaults, and the shipped profile says the same.
 - `feed.prove_origin`: `true` or `false`, `true` when absent and in the shipped profile: an automatic release needs the case's source proved (section 11). A site whose forwarder reports from another instance turns it off.
 - `feed.prevent_failures` (v1.34; "prevent failures", decided on 1 Nov 2026, section 12): `true` or `false`, `false` when
   absent and in the shipped profile. On, the feed holds a message whose HL7 schema category is not loaded here as a case of
