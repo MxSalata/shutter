@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, newIdempotencyKey, seg } from './client';
 import { resolveCan } from './can';
 import { isApiError } from '@/lib/errors';
@@ -201,6 +201,16 @@ export function useCases(filters: CaseFilters, enabled = true) {
 }
 
 /**
+ * How many failed cases need a person, undefined while it loads: a case a person gave up is failed too, and is counted
+ * under By hand. The API counts by state only, so the abandoned ones are taken off among the newest 100; more failed
+ * cases than that can count one given up, which errs towards a person looking.
+ */
+export function useFailedForAPerson(): number | undefined {
+  const { data } = useCases({ state: 'failed', limit: 100 });
+  return data && data.total - data.items.filter((c) => c.disposition === 'abandoned').length;
+}
+
+/**
  * The cases list read once, not polled: for a link that only needs one case's id. These sit on every page or on Home for
  * every visitor of the public instance, where polling them would add a request every few seconds to name the same case.
  */
@@ -228,6 +238,16 @@ export function useCase(caseId: string, enabled = true) {
     queryFn: () => api.get<CaseDetail>(`/cases/${seg(caseId)}`),
     refetchInterval: (q) => (isOpen(q.state.data?.state) ? LIVE : false),
     enabled,
+  });
+}
+
+/** Several cases, each read once, for a dialog that names what it covers. */
+export function useCaseDetails(caseIds: string[]) {
+  return useQueries({
+    queries: caseIds.map((caseId) => ({
+      queryKey: keys.case(caseId),
+      queryFn: () => api.get<CaseDetail>(`/cases/${seg(caseId)}`),
+    })),
   });
 }
 

@@ -150,7 +150,7 @@ describe('a board with a member missing', () => {
     );
     const card = await screen.findByRole('region', { name: 'Encounter Integrity' });
     expect(within(card).getByText('own confidence')).toHaveAccessibleDescription(
-      "The agent's own report. The gate does not use it.",
+      "The agent's own report, not calibrated. The gate does not use it.",
     );
   });
 

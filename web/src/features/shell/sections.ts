@@ -10,7 +10,7 @@ import {
   IconSettings,
   IconStack2,
 } from '@tabler/icons-react';
-import { useCases, useHealth } from '@/api/hooks';
+import { useCases, useFailedForAPerson, useHealth } from '@/api/hooks';
 import { TRIAL } from '@/env/mode';
 import type { Hue } from '@/lib/hues';
 
@@ -129,7 +129,7 @@ export const SECTIONS: SectionGroup[] = [
   },
 ];
 
-/** The cases that need a person: waiting for an approval, escalated or blocked, as the Cases page's tiles count them. */
+/** The cases that need a person: waiting for an approval, escalated, blocked or failed, as the Cases page's tiles count them. */
 const NEED_A_PERSON = ['awaiting_approval', 'escalated', 'blocked'] as const;
 
 /** How many cases need a person, from the same queries as the Cases page's tiles; null while any is still loading. */
@@ -137,8 +137,9 @@ export function useNeedAPerson(): number | null {
   const a = useCases({ state: NEED_A_PERSON[0], limit: 1 });
   const b = useCases({ state: NEED_A_PERSON[1], limit: 1 });
   const c = useCases({ state: NEED_A_PERSON[2], limit: 1 });
-  if (!a.data || !b.data || !c.data) return null;
-  return a.data.total + b.data.total + c.data.total;
+  const failed = useFailedForAPerson();
+  if (!a.data || !b.data || !c.data || failed === undefined) return null;
+  return a.data.total + b.data.total + c.data.total + failed;
 }
 
 /**

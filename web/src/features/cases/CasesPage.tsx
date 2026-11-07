@@ -23,7 +23,7 @@ import {
 import { useId, useMemo, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { useListParams } from '@/lib/listParams';
-import { useCases, useScenarios, type CaseFilters } from '@/api/hooks';
+import { useCases, useFailedForAPerson, useScenarios, type CaseFilters } from '@/api/hooks';
 import type { CaseSummary, Scenario } from '@/api/types';
 import { ApiSource } from '@/components/ApiSource';
 import { CodeChip } from '@/components/CodeChip';
@@ -323,6 +323,32 @@ const tileName = (n: number | string | undefined, label: string, caption: string
 const SHOW = { seen: 'Show', name: 'Show these' };
 const SHOWING = { seen: 'Showing; press to clear', name: 'Showing these; press to clear' };
 
+/** A failed case needs a person too; its tile shows only when there is one, or a tile of nought would say nothing. */
+function FailedTile({
+  n,
+  chosen,
+  onChoose,
+}: {
+  n: number | undefined;
+  chosen: boolean;
+  onChoose: () => void;
+}) {
+  const o = caseOutcome({ state: 'failed', disposition: '' });
+  const caption = chosen ? SHOWING : SHOW;
+  return (
+    <StatTile
+      label={o.short}
+      figure={n === undefined ? '…' : n}
+      caption={caption.seen}
+      tone={o.tone}
+      icon={o.icon as TablerIcon | undefined}
+      onClick={onChoose}
+      pressed={chosen}
+      aria-label={tileName(n, o.short, caption.name)}
+    />
+  );
+}
+
 export function AttentionTile({
   state,
   chosen,
@@ -498,6 +524,9 @@ export default function CasesPage() {
   };
   const paged = useCases(filters, outcome === null);
   const newest = useCases({ limit: NEWEST });
+  const failed = useFailedForAPerson();
+  // A chosen tile stays, or the filter on show could not be turned off where it was turned on
+  const failedShown = (failed ?? 0) > 0 || state === 'failed';
   const scenarios = useScenarios();
   const scenarioList: Scenario[] = useMemo(() => scenarios.data?.scenarios ?? [], [scenarios.data]);
   const byId = useMemo(() => new Map(scenarioList.map((s) => [s.id, s])), [scenarioList]);
@@ -539,8 +568,8 @@ export default function CasesPage() {
         lead="Every failed delivery, newest first. The tiles show which need a person."
       />
       <Stack gap="md">
-        <div className="cases-tile-groups" data-closed={closedShown.length}>
-          <TileGroup title="Needs a person">
+        <div className="cases-tile-groups" data-closed={closedShown.length} data-need={failedShown ? 4 : 3}>
+          <TileGroup title="Needs a person" four={failedShown}>
             {ATTENTION.map((a) => (
               <AttentionTile
                 key={a}
@@ -549,6 +578,13 @@ export default function CasesPage() {
                 onChoose={() => choose({ state: state === a ? null : a })}
               />
             ))}
+            {failedShown ? (
+              <FailedTile
+                n={failed}
+                chosen={state === 'failed' && outcome === null}
+                onChoose={() => choose({ state: state === 'failed' ? null : 'failed' })}
+              />
+            ) : null}
           </TileGroup>
           <TileGroup title={overBase ? 'Closed, in the newest 100' : 'Closed'} four={closedShown.length > 3}>
             {closedShown.map((g) => (

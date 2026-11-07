@@ -1,7 +1,7 @@
 import { MantineProvider } from '@mantine/core';
 import { Notifications, notifications } from '@mantine/notifications';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, render, screen, within } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -502,9 +502,51 @@ describe('IncidentPage', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Approve the release' }));
     expect(
       await within(dialog).findByText(
-        "The incident's plan changed since this page loaded: close this and review it again.",
+        "The incident's plan changed since you opened this: close this and review it again.",
       ),
     ).toBeInTheDocument();
+  });
+
+  it('stops a dialog left open when the plan changes under it, and posts nothing', async () => {
+    served = waiting();
+    renderAt('/incidents/I-000001');
+    const approval = await screen.findByRole('region', { name: 'Approval' });
+    await userEvent.click(within(approval).getByRole('button', { name: /Approve/ }));
+    const dialog = await screen.findByRole('dialog');
+    // The page's next read brings the new digest under the open dialog
+    served = { ...served, planDigest: 'sha256:another' };
+    const confirm = within(dialog).getByRole('button', { name: 'Approve the release' });
+    await waitFor(() => expect(confirm).toBeDisabled(), { timeout: 10_000 });
+    expect(within(dialog).getByRole('alert')).toHaveTextContent(
+      "The incident's plan changed since you opened this: close this and review it again.",
+    );
+    expect(posted).toBeNull();
+  });
+
+  it('names each case it covers, the patient, the time, the bed and why it is still due', async () => {
+    served = waiting();
+    server.use(
+      http.get(`${BASE}/cases/C-000004`, () =>
+        HttpResponse.json({
+          caseId: 'C-000004',
+          patientIdAuthority: 'HOSP',
+          ward: 'WARD-B',
+          bed: 'BAY2-04',
+        }),
+      ),
+    );
+    renderAt('/incidents/I-000001');
+    const approval = await screen.findByRole('region', { name: 'Approval' });
+    await userEvent.click(within(approval).getByRole('button', { name: /Approve/ }));
+    const dialog = await screen.findByRole('dialog');
+    const covered = within(dialog).getByRole('list', { name: 'What this decision covers' });
+    const [first, second] = within(covered).getAllByRole('listitem');
+    await waitFor(() => expect(first).toHaveTextContent('Transfer to WARD-B, bed BAY2-04'));
+    expect(first).toHaveTextContent('C-000004');
+    expect(first).toHaveTextContent('Patient MRN1102 (HOSP)');
+    expect(within(first).getByRole('time')).toHaveAttribute('datetime', served.chains[1].items[0].eventTime);
+    expect(first).toHaveTextContent('Resend the transfer to WARD-B unchanged');
+    expect(second).toHaveTextContent('C-000009');
   });
 
   it('keeps the decision from someone without the approver role', async () => {

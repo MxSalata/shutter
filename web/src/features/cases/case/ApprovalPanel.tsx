@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { usePreviewBlindResend, useDecideApproval } from '@/api/hooks';
 import { newIdempotencyKey } from '@/api/client';
 import { resolveCan } from '@/api/can';
-import type { ApprovalsView, CaseDetail, Me, PlanView } from '@/api/types';
+import type { ApprovalsView, CaseDetail, Me, Plan, PlanView } from '@/api/types';
 import { TRIAL } from '@/env/mode';
 import { byEnv, toBecomeApprover } from '@/env/copy';
 import { Digest } from '@/components/Digest';
@@ -120,6 +120,8 @@ export function ApprovalPanel({
   if (decision && decision !== lastDecision) setLastDecision(decision);
   const [comment, setComment] = useState('');
   const [key, setKey] = useState('');
+  // What the dialog opened on: the page's reads carry on under it, and a decision is only ever on what the person read
+  const [opened, setOpened] = useState<{ plan: Plan; version: number } | null>(null);
   const plan = view?.plan;
   const awaiting = c.state === 'awaiting_approval';
   const write = plan?.disposition === 'resend';
@@ -140,16 +142,25 @@ export function ApprovalPanel({
   const history = earlierApprovalText(earlier, view);
 
   const openDialog = (d: 'approve' | 'reject') => {
+    if (!plan) return;
+    setOpened({ plan, version: c.version });
     setDecision(d);
     setComment('');
     setKey(newIdempotencyKey());
     decide.reset();
   };
+  // A decision sent or answered moves the case by itself: only a change before that stops the dialog
+  const moved =
+    decision !== null &&
+    opened !== null &&
+    !decide.isPending &&
+    !decide.isSuccess &&
+    (plan?.digest !== opened.plan.digest || c.version !== opened.version);
   const submit = () => {
-    if (!decision || !plan) return;
+    if (!decision || !opened || moved) return;
     decide.mutate(
       {
-        decision: { decision, planDigest: plan.digest, expectedVersion: c.version, comment },
+        decision: { decision, planDigest: opened.plan.digest, expectedVersion: opened.version, comment },
         idempotencyKey: key,
       },
       {
@@ -341,12 +352,12 @@ export function ApprovalPanel({
         onClose={() => setDecision(null)}
         title={
           lastDecision === 'approve'
-            ? `Approve plan v${plan?.version ?? ''}`
-            : `Reject plan v${plan?.version ?? ''}`
+            ? `Approve plan v${opened?.plan.version ?? ''}`
+            : `Reject plan v${opened?.plan.version ?? ''}`
         }
         size="lg"
       >
-        {plan ? (
+        {opened ? (
           <Stack gap="sm">
             {/* What the action does, first: for real on a live system, in this browser only in the trial */}
             <Text size="sm" fw={600} data-testid="confirm-consequence">
@@ -364,13 +375,18 @@ export function ApprovalPanel({
             </Text>
             {lastDecision === 'approve' ? (
               <Text size="sm">
-                {`You approve exactly this: ${humanize(plan.actionType || 'resend').toLowerCase()} the ${humanize(c.event).toLowerCase()}${c.ward ? ` to ${c.ward}` : ''} for ${c.encounterId}, conditional on receiver version ${String(plan.expectedVersion)}.`}
+                {`You approve exactly this: ${humanize(opened.plan.actionType || 'resend').toLowerCase()} the ${humanize(c.event).toLowerCase()}${c.ward ? ` to ${c.ward}` : ''} for ${c.encounterId}, conditional on receiver version ${String(opened.plan.expectedVersion)}.`}
               </Text>
             ) : null}
             <KeyValueList
               rows={[
-                ['Plan digest', <Digest key="p" value={plan.digest} label="plan digest" />],
-                ['Case version', String(c.version)],
+                ['Case', c.caseId],
+                ['Patient', `${c.patientId}${c.patientIdAuthority ? ` (${c.patientIdAuthority})` : ''}`],
+                ['Event time', <Timestamp key="t" iso={c.eventTime} />],
+                ['Bed', c.bed ?? ''],
+                ['Why it is still due', opened.plan.why || opened.plan.summary],
+                ['Plan digest', <Digest key="p" value={opened.plan.digest} label="plan digest" />],
+                ['Case version', String(opened.version)],
               ]}
             />
             <Textarea
@@ -381,10 +397,15 @@ export function ApprovalPanel({
               value={comment}
               onChange={(e) => setComment(e.currentTarget.value)}
             />
-            {decide.error ? (
+            {moved ? (
+              <Alert color="red" variant="light" role="alert">
+                The plan or the case changed since you opened this, so this decision can&apos;t be recorded.
+                Close this and review the new plan.
+              </Alert>
+            ) : decide.error ? (
               <Alert color="red" variant="light" role="alert">
                 {stale
-                  ? 'Approval no longer valid: the plan or the case changed since this page loaded, so this decision was not recorded. Close this and review the new plan.'
+                  ? 'Approval no longer valid: the plan or the case changed since you opened this, so this decision was not recorded. Close this and review the new plan.'
                   : describeError(decide.error)}
               </Alert>
             ) : null}
@@ -396,7 +417,7 @@ export function ApprovalPanel({
                 color={lastDecision === 'approve' ? undefined : 'red'}
                 loading={decide.isPending}
                 onClick={submit}
-                disabled={!!stale}
+                disabled={!!stale || moved}
               >
                 {lastDecision === 'approve' ? 'Approve this plan' : 'Reject this plan'}
               </Button>
