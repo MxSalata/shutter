@@ -931,6 +931,56 @@
     }
   },
   {
+    "id": "S14",
+    "title": "A later movement only the index has seen",
+    "summary": "Admit to Ward A applied. A 09:45 transfer to Ward C goes out on another route, whose delivery Shutter doesn't watch, and the receiver shows no sign of it. The 09:20 transfer to Ward B fails before acceptance. The exact index puts the 09:45 on the case's timeline with its outcome unknown. That supersedes nothing by itself, because the receiver's own history decides, so the 09:20 transfer is resent and the patient shows in Ward B.",
+    "steps": [
+      {
+        "file": "S14-01-A01.hl7"
+      },
+      {
+        "file": "S14-02-A02.hl7",
+        "item": "Other Route In",
+        "expect": "indexed"
+      },
+      {
+        "wait": 15
+      },
+      {
+        "fault": "fail_before_accept",
+        "operation_key": "PAS^HOSP^MRN1014^ENC-1014^transfer^2026-10-15T08:20:00Z"
+      },
+      {
+        "file": "S14-03-A02.hl7",
+        "expect": "delivery_fails"
+      },
+      {
+        "wait": 5
+      },
+      {
+        "fault": "off"
+      }
+    ],
+    "expected": {
+      "disposition": "resend",
+      "write": true,
+      "final_state": "admitted",
+      "final_ward": "WARD-B",
+      "failed_operation_key": "PAS^HOSP^MRN1014^ENC-1014^transfer^2026-10-15T08:20:00Z",
+      "case_by_key": true,
+      "index_later": {
+        "route": "Other Route In -> Case Intake Store",
+        "event": "transfer",
+        "ward": "WARD-C",
+        "operation_key": "PAS^HOSP^MRN1014^ENC-1014^transfer^2026-10-15T08:45:00Z"
+      },
+      "modes": [
+        "rules",
+        "policy"
+      ]
+    }
+  },
+  {
     "id": "S15",
     "title": "A patient merge Shutter withholds for the PAS team",
     "summary": "The patient is admitted to Ward A and moved to Ward B; then the PAS merges an older record into theirs (ADT^A40). A merge changes which record a patient's history belongs to, so by default Shutter never sends one: nothing is written, and the case goes to the PAS team, whose email Shutter drafts.",
@@ -1432,6 +1482,59 @@
       "failed_operation_key": "PAS^HOSP^MRN1025^ENC-1025^transfer^2026-10-15T08:20:00Z",
       "modes": [
         "board",
+        "policy"
+      ]
+    }
+  },
+  {
+    "id": "S26",
+    "title": "A schema not loaded here",
+    "summary": "The site prevents failures. Admit to Ward A applied on the usual feed. The 09:20 transfer to Ward B arrives on a new feed whose schema, MYSITE_2.5.1, was never imported here, so IRIS could only read its fields by position. Shutter holds it as a case, sends nothing and names the schema. Once the schema is imported the case is released by itself, the message reads under its schema, and the transfer is resent: at once in Site policy, after approval in Rules only, as every resend is there.",
+    "steps": [
+      {
+        "schema_forget": "MYSITE_2.5.1"
+      },
+      {
+        "prevent_failures": true
+      },
+      {
+        "file": "S26-01-A01.hl7"
+      },
+      {
+        "file": "S26-02-A02.hl7",
+        "item": "Site Feed In",
+        "expect": "held"
+      },
+      {
+        "wait_for_state": "blocked",
+        "timeout": 60
+      },
+      {
+        "schema_import": "schemas/MYSITE_2.5.1.xml"
+      },
+      {
+        "wait_for_state": "awaiting_approval|resolved",
+        "timeout": 90
+      },
+      {
+        "prevent_failures": false
+      },
+      {
+        "schema_forget": "MYSITE_2.5.1"
+      }
+    ],
+    "expected": {
+      "disposition": "resend",
+      "write": true,
+      "final_state": "admitted",
+      "final_ward": "WARD-B",
+      "failed_operation_key": "PAS^HOSP^MRN1026^ENC-1026^transfer^2026-10-15T08:20:00Z",
+      "case_by_key": true,
+      "blocked_by": "SCHEMA_UNKNOWN",
+      "held": true,
+      "failure_kind": "unreadable",
+      "modes": [
+        "rules",
         "policy"
       ]
     }

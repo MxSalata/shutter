@@ -294,7 +294,7 @@ system's case (category `history_of_record`) escalates with the correcting steps
 
 ## 4.1 Scenario steps that wait (v1.4)
 
-A step `{"wait_for_state": "awaiting_approval", "timeout": 120}` makes the runner wait until the newest case of the running scenario reaches that state (or the timeout passes, which the runner reports). The runner reads the case in the same namespace:
+A step `{"wait_for_state": "awaiting_approval", "timeout": 120}` makes the runner wait until the newest case of the running scenario reaches that state, or one of several separated by `|` (S26), or the timeout passes, which the runner reports. The runner reads the case in the same namespace:
 
 ```sql
 SELECT TOP 1 State FROM Shutter_Store."Case" WHERE Scenario = ? ORDER BY ID DESC
@@ -1147,7 +1147,7 @@ separate, later tool.
   patient's message under it is no word on this patient's place, so it can't close the case. The deliveries (`Deliveries`,
   a bed's occupant) and the pending messages (6.5) still read the whole visit, so another patient's message in flight holds
   a write. A patient's later rows under another identifier after a merge the receiver hasn't taken aren't counted either.
-- A scenario for a later movement on a route Shutter does not own, found only by the index, is planned; it is not in `fixtures/scenarios.json` yet.
+- S14 plays a later movement on a route Shutter does not own, found only by the index: the demo item `Other Route In` (`Shutter.Scenarios.Route`, Rules only and Site policy) sends it to `Case Intake Store`, so its header is walked and nothing reaches the receiver. The item types the message under the category its MSH-12 names when that is loaded, as an inbound item's category would. A site's production never gets the item, nor the route in its `HL7 Index` (`Setup.SiteRoutes`).
 - The index row's `Event` is the key's event word (v1.14: `register`, `preadmit`, `person_add`, `person_update`, the cancel words and `merge` included, 32 characters), so registrations, pre-admissions and person updates show between the movements; its `VisitNumber` is `-` for a mapped message with no PV1-19 (an unmappable message without one keeps an empty visit number), and the timeline and the index answer nothing for an encounter of `-` or empty.
 
 ### 8.3 The API

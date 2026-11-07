@@ -1563,10 +1563,16 @@ ClassMethod CopyItem(item As Ens.Config.Item, target As Ens.Config.Production) A
     For j = 1:1:item.Settings.Count() {
         Set s = item.Settings.GetAt(j)
         Set t = ##class(Ens.Config.Setting).%New()
-        Set t.Target = s.Target, t.Name = s.Name, t.Value = s.Value
+        Set t.Target = s.Target, t.Name = s.Name, t.Value = $SELECT(s.Name = "Routes": ..SiteRoutes(s.Value), 1: s.Value)
         Do copy.Settings.Insert(t)
     }
     Quit target.Items.Insert(copy)
+}
+
+/// The index's Routes as a site's production gets them: the demo's own route (S14) stays in the demo.
+ClassMethod SiteRoutes(routes As %String) As %String
+{
+    Quit $REPLACE(routes, ",Other Route In", "")
 }
 
 /// The two daily housekeeping tasks (A14): "Shutter message purge" (the standard Ens.Util.Tasks.Purge: every message
