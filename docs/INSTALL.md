@@ -19,6 +19,7 @@ the productions a hospital already runs; the README's `docker compose up` is the
   namespace-wide purge unless asked for. The feed, records and scenario items (`ADT In`, `ADT to Downstream`,
   `Downstream Out`, `ADT to Records`, `Records Out` and `Scenario Player`) are present but switched off in shape A (the
   installer disables them in `Shutter.Production`), and not added at all in shape B (`InstallInto`).
+- **A new install starts in shadow mode.** Shutter investigates and records what it would propose, and sends no rehearsal, recovery write or resend preview, and no escalation email; the hospital's ordinary feed goes on as before. A person enables recovery by saving `"recovery": {"mode": "enabled"}` in the site profile. Settings has "Stop Shutter recovery", for any operator or approver, and the shadow report (`docs/CONTRACTS.md`, 17).
 - **A receiver with no API is escalated, never resent.** Shutter resends only to a receiver whose site profile entry
   describes its API (state, receipt, capabilities and operations paths). A ward system that takes HL7 over TCP and
   keeps no receipts is investigated and escalated; the team corrects it by hand and marks the case handled.
@@ -315,6 +316,8 @@ category has to be loaded in Shutter's namespace too.
   loaded there; the check still matters for messages forwarded from other namespaces.
 
 ## 8. Upgrading in place
+
+**Upgrading to a version with shadow mode needs a decision.** A stored profile with no `recovery` field reads as shadow, so an instance that was resending comes up in shadow until a person saves `"recovery": {"mode": "enabled"}` in the site profile. The demo seeds it. Plans made before that save don't go: reinvestigate them (`docs/CONTRACTS.md`, 17).
 
 The image keeps Shutter's code; the `shutter-mgr` volume keeps the data: the data databases of the SHUTTER, HOSPITAL and
 RECORDS namespaces under `db/`, and the HL7 folders. So `docker compose down` and `up` keep every case, approval, review,
