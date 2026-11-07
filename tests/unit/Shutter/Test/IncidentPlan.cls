@@ -193,6 +193,75 @@ Method TestTheSequenceRuleStopsAtAMovedVersion()
     Do $$$AssertTrue(case.Headline [ "version 3", "and the version it found")
 }
 
+/// A chain's patient waits for a bed whose occupant's movement is held in a later chain of the same incident. Only this
+/// chain's stopping can let that one go: the chain stops with the case still waiting, and the incident goes on. The
+/// occupant's case closing reopens this one, which then runs alone.
+Method TestABedHeldByALaterChainStopsTheChain()
+{
+    Set inc = ..NewIncident(), chain = inc.ChainAt(1), item = chain.ItemAt(1), later = inc.ChainAt(2).ItemAt(1).Case
+    Set wf = ..Waiting(inc, chain, item, later.CaseId, "")
+    Do $$$AssertStatusOK(wf.OnPoll(inc), "the poll")
+    Do $$$AssertEquals(wf.Alarms, "", "no more polls for this item")
+    Do $$$AssertEquals(wf.Advances, 1, "the next chain is released")
+    Do $$$AssertEquals(wf.CurrentCaseId _ wf.CurrentItemId _ wf.CurrentChainId, "", "and the instance holds nothing of this one")
+    Set chain = ##class(Shutter.Store.Chain).%OpenId(chain.%Id()), item = chain.ItemAt(1)
+    Do $$$AssertEquals(chain.State, "stopped", "the chain stops")
+    Do $$$AssertEquals(chain.StoppedAt, 1, "at the item")
+    Do $$$AssertEquals(item.State, "blocked", "the item is blocked")
+    Do $$$AssertEquals(chain.ItemAt(2).State, "stopped", "the rest of the chain goes to a person")
+    Set case = ##class(Shutter.Store.Case).ByCaseId(item.Case.CaseId)
+    Do $$$AssertEquals(case.State, "blocked", "the case stays blocked")
+    Do $$$AssertEquals(case.WaitsOnCase, later.CaseId, "and still waits, so the occupant's case closing reopens it")
+    Do $$$AssertTrue(##class(Shutter.Store.Case).ByCaseId(later.CaseId).State = "grouped", "the occupant's case is left for its own chain")
+    Do $$$AssertTrue(..NotesSay(inc, later.CaseId _ ", which this incident has not released yet"), "the incident says which case holds the bed")
+}
+
+/// A wait that nothing in this incident holds up still waits with the chain: a case outside the incident, a case of the
+/// incident already working, and a newer message (v1.29).
+Method TestOtherWaitsStillWait()
+{
+    Set inc = ..NewIncident(), chain = inc.ChainAt(1), item = chain.ItemAt(1)
+    Set wf = ..Waiting(inc, chain, item, "C-NOT-IN-THIS-INCIDENT", "")
+    Do $$$AssertStatusOK(wf.OnPoll(inc), "a case outside the incident")
+    Do $$$AssertEquals(wf.Alarms _ wf.Advances, "poll;0", "the chain waits for it")
+    Do $$$AssertEquals(##class(Shutter.Store.Chain).%OpenId(chain.%Id()).State, "releasing", "and goes on releasing")
+
+    Set later = inc.ChainAt(2).ItemAt(1).Case
+    Set later.State = "collecting"
+    Do $$$AssertStatusOK(later.%Save(), "the occupant's case is working")
+    Set wf = ..Waiting(inc, chain, item, later.CaseId, "")
+    Do $$$AssertStatusOK(wf.OnPoll(inc), "a case of the incident already working")
+    Do $$$AssertEquals(wf.Alarms _ wf.Advances, "poll;0", "the chain waits for it")
+
+    Set wf = ..Waiting(inc, chain, item, "", "MSG-UT")
+    Do $$$AssertStatusOK(wf.OnPoll(inc), "a newer message")
+    Do $$$AssertEquals(wf.Alarms _ wf.Advances, "poll;0", "the chain waits for it")
+}
+
+/// An instance polling the chain's item, whose case is blocked with the wait given. Nothing else of the chain moves.
+Method Waiting(inc As Shutter.Store.Incident, chain As Shutter.Store.Chain, item As Shutter.Store.ChainItem, onCase As %String, onMessage As %String) As Shutter.Test.QuietIncident
+{
+    Set chain.State = "releasing"
+    Do $$$AssertStatusOK(chain.%Save(), "the chain is releasing")
+    Set item.State = "released"
+    Do $$$AssertStatusOK(item.%Save(), "the item is released")
+    Set case = item.Case
+    Set case.State = "blocked", case.WaitsOnCase = onCase, case.WaitsOnMessage = onMessage
+    Do $$$AssertStatusOK(case.%Save(), "the case waits")
+    Set wf = ..Workflow()
+    Set wf.IncidentId = inc.IncidentId, wf.Phase = "releasing"
+    Set wf.CurrentChainId = chain.%Id(), wf.CurrentItemId = item.%Id(), wf.CurrentCaseId = case.CaseId
+    Quit wf
+}
+
+/// Whether one of the incident's events names the text.
+Method NotesSay(inc As Shutter.Store.Incident, text As %String) As %Boolean
+{
+    Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT Text FROM Shutter_Store.IncidentEvent WHERE Incident = ? ORDER BY ID", inc.%Id())
+    While rs.%Next() { If rs.%Get("Text") [ text Quit }
+    Quit ''$FIND(rs.%Get("Text"), text)
+}
+
 /// An instance of the incident workflow outside the production.
 Method Workflow() As Shutter.Test.QuietIncident
 {

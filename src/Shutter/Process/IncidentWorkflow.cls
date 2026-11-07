@@ -370,8 +370,11 @@ Method OnPoll(incident As Shutter.Store.Incident) As %Status
     }
     // A released case blocked while it waits on another case or on a message (v1.29) is still working for the chain's
     // purposes: it is reopened when what it waits for closes, so the chain waits with it instead of stopping. An escalated
-    // one is a person's, and the chain stops as before.
-    If (case.State = "blocked") && ((case.WaitsOnCase '= "") || (case.WaitsOnMessage '= "")) {
+    // one is a person's, and the chain stops as before. So does a wait on a case this incident still holds back: its
+    // chain can only be released once this one has stopped, and that case's closing still reopens this one.
+    If (case.State = "blocked") && ..HeldBackByThisIncident(case, incident) {
+        Do incident.Note("release", "Case " _ case.CaseId _ " waits on case " _ case.WaitsOnCase _ ", which this incident has not released yet. Waiting would never end, so this chain stops and the incident goes on; case " _ case.CaseId _ " is checked again when case " _ case.WaitsOnCase _ " closes", "system")
+    } ElseIf (case.State = "blocked") && ((case.WaitsOnCase '= "") || (case.WaitsOnMessage '= "")) {
         If '..WaitNoted {
             Set ..WaitNoted = 1
             Do incident.Note("release", "Case " _ case.CaseId _ " waits on " _ $SELECT(case.WaitsOnCase '= "": "case " _ case.WaitsOnCase, 1: "message " _ case.WaitsOnMessage) _ "; the chain waits with it", "system")
@@ -406,6 +409,16 @@ Method OnPoll(incident As Shutter.Store.Incident) As %Status
     Do incident.Note("release", "Chain " _ chain.Seq _ " " _ chain.State _ ": " _ chain.Outcome, "system")
     Set ..CurrentCaseId = "", ..CurrentItemId = "", ..CurrentChainId = ""
     Quit ..Advance(incident)
+}
+
+/// Whether the case waits on a case of this incident that is still grouped: held for a later chain, not working.
+ClassMethod HeldBackByThisIncident(case As Shutter.Store.Case, incident As Shutter.Store.Incident) As %Boolean
+{
+    If case.WaitsOnCase = "" Quit 0
+    Set other = ##class(Shutter.Store.Case).ByCaseId(case.WaitsOnCase)
+    If '$ISOBJECT(other) || (other.State '= "grouped") Quit 0
+    Set held = other.StoredIncident()
+    Quit $ISOBJECT(held) && (held.%Id() = incident.%Id())
 }
 
 /// Every PollSeconds for the first minute, every 15 s for the next ten minutes, then every minute (a person
