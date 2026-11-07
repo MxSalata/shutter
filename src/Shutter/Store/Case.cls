@@ -296,7 +296,7 @@ ClassMethod PurgeCase(id As %String) As %Status
     While emails.%Next() { Set files = files _ $LISTBUILD($LISTBUILD(emails.%Get("Seq"), emails.%Get("Result"))) }
     TSTART
     Set sc = ..Exec("DELETE FROM Shutter_Bridge.ToolCall WHERE RunKey IN (SELECT EnsMessageId FROM Shutter_Store.AgentRun WHERE ""Case"" = ? AND EnsMessageId IS NOT NULL)", id)
-    For table = "Shutter_Store.CaseToken", "Shutter_Store.ChainItem", "Shutter_Store.Verification", "Shutter_Store.ExecutionAttempt", "Shutter_Store.Approval", "Shutter_Store.Rehearsal", "Shutter_Store.GateDecision", "Shutter_Store.Finding", "Shutter_Store.AgentRun", "Shutter_Store.CaseQuestion", "Shutter_Store.Plan", "Shutter_Store.Escalation", "Shutter_Store.CaseReminder" {
+    For table = "Shutter_Store.WarehouseRead", "Shutter_Store.CaseToken", "Shutter_Store.ChainItem", "Shutter_Store.Verification", "Shutter_Store.ExecutionAttempt", "Shutter_Store.Approval", "Shutter_Store.Rehearsal", "Shutter_Store.GateDecision", "Shutter_Store.Finding", "Shutter_Store.AgentRun", "Shutter_Store.CaseQuestion", "Shutter_Store.Plan", "Shutter_Store.Escalation", "Shutter_Store.CaseReminder" {
         If $$$ISOK(sc) Set sc = ..Exec("DELETE FROM " _ table _ " WHERE ""Case"" = ?", id)
     }
     If $$$ISOK(sc) Set sc = ..Exec("DELETE FROM Shutter_Store.SnapshotItem WHERE Snapshot IN (SELECT ID FROM Shutter_Store.Snapshot WHERE ""Case"" = ?)", id)

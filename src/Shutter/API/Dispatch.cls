@@ -72,6 +72,8 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
   <Route Url="/costs" Method="GET" Call="Costs"/>
   <Route Url="/production-reviews/targets" Method="GET" Call="ProductionReviewTargets"/>
   <Route Url="/cases/:id/whatif" Method="GET" Call="CaseWhatIf"/>
+  <Route Url="/cases/:caseId/warehouse-history" Method="GET" Call="Shutter.API.WarehouseHistory:HistoryGet"/>
+  <Route Url="/cases/:caseId/warehouse-history" Method="POST" Call="Shutter.API.WarehouseHistory:HistoryRead"/>
   <Route Url="/cases/:caseId/questions" Method="GET" Call="CaseQuestions"/>
   <Route Url="/cases/:caseId/questions" Method="POST" Call="CaseQuestionAsk"/>
   <Route Url="/cases/:caseId/questions/suggested" Method="GET" Call="CaseQuestionsSuggested"/>
