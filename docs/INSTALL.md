@@ -610,7 +610,7 @@ what the service received (section 10). Only ACKs on an HL7 service were tried, 
 
 ### 9.10 Document exceptions
 
-By default a failed MDM gets the ordinary case below, with its document kept whole in the case's snapshot, and one over 2 MB gets no case. To have a receiver's documents open metadata-only cases instead, at any size and with no copy in Shutter:
+By default a failed MDM gets the ordinary case below, with its document copied whole into Shutter's store and its first 50 OBX and NTE values into the case's snapshot, and one over 2 MB gets no case. To have a receiver's documents open metadata-only cases instead, at any size and with no copy in Shutter:
 
 1. In the site profile, on the receiver's entry, add this. Saving it needs `Shutter_Configure`.
 
@@ -651,8 +651,8 @@ Say these plainly to whoever owns the feed.
 - **A message sent to two receivers** gives one forward per receiver that fails, each quoting the session's first HL7 message, the
   service's: with a DTL on the route, the case holds what the service received, not what the operation sent.
 - **Nothing over 2 MB, and nothing that is not HL7.** The intake answers 413 or 400, so a large MDM with its document inline, or a FHIR
-  body, is a warning in the event log and no case. A smaller MDM's document is kept whole in the case's snapshot: a governance
-  question for the trust. A receiver with a document profile (section 9.10) avoids both for MDM.
+  body, is a warning in the event log and no case. A smaller MDM's document is copied whole into Shutter's store, and its first 50
+  OBX and NTE values into the case's snapshot: a governance question for the trust. A receiver with a document profile (section 9.10) avoids both for MDM.
 - **The prevent-failures route (section 7) through a stock routing engine** can name the wrong reason: the engine holds the message, but
   the case reads as a schema failure of the standard the message itself names, because the header's source is the router. Use
   it through a process that checks the category, as the demo hospital's does, or test it first with your feed.
