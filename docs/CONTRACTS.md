@@ -1579,7 +1579,7 @@ needs only the packages `Shutter.Intake` and `Shutter.Util` for the forwarder an
   `^Shutter.Config("schemaNamed", category)` until an import clears it. A held forward (kind `unreadable`) keeps its own path above.
 - **The Doctor** adds `watched_namespaces` (each namespace onboarded or named by a case, read there: `{namespace, onboarded, exists, production,
   production_state, forwarder, alert_intake, pass_to, classes, credential, last_forward, last_forward_error, refused_72h, last_refused,
-  last_case, last_case_at, schemas_missing, operations_unwatched, documents_mismatch, removed, problems, ok}`; `documents_mismatch` says, also among the `problems`, each item the forwarder's `DocumentReceivers` names whose profile has `documents.enabled` off, and each the other way round (11.2); `failure_timeout` in the plan's reading is the effective value: the item's, the default settings', else the class's; a namespace taken off is recorded under `^Shutter.Config("onboardRemoved", namespace)` and reads `removed` with no problems) and `receivers_without_item`; `credentials` tries each onboarded namespace's forwarder credential and each
+  last_case, last_case_at, schemas_missing, operations_unwatched, documents_mismatch, removed, problems, ok}`; `documents_mismatch` says, also among the `problems`, each item the forwarder's `DocumentReceivers` names whose profile has `documents.enabled` off, and each the other way round (11.2); `problems` names an alert intake or forwarder that is disabled wherever it is, and for a namespace onboarded here an item named `Ens.Alert` that is missing or of another class, so `ok` is false then; `failure_timeout` in the plan's reading is the effective value: the item's, the default settings', else the class's; a namespace taken off is recorded under `^Shutter.Config("onboardRemoved", namespace)` and reads `removed` with no problems) and `receivers_without_item`; `credentials` tries each onboarded namespace's forwarder credential and each
   connector item's; `hl7_schemas.needed` adds the watched namespaces' missing categories. `AlertProcess.Classify` reads a TCP connect
   timeout (`ErrOutConnectExpired`) as `delivery_failed`: nothing was sent.
 
@@ -1763,6 +1763,22 @@ that reached a model (`live` or `record`, never the API mimic) as `{at, status, 
 has, so a capped or failing afternoon shows as such beside the configured mode. The image's compose file has a healthcheck
 on the health route's `"ok": true` (the production running; `wget`, since the image has no `curl`), so `docker compose ps`
 says healthy and `docker compose up --wait` returns when Shutter is ready.
+
+**What each receiver last answered** (v1.1.0). `ok` stays the production's, since the healthcheck above must not turn on another system's
+health. The Doctor adds `receivers`: for each receiver in the site profile `{name, has_api, state, at, http_status, from, error,
+last_answer_at, last_failure_at, failures_hour, incident}`, from the connector's newest `Shutter.Msg.WardResult` that made a call
+and the evidence's newest `ward_state` items (`from`: `connector` or `evidence`; the status alone, never the body), with no probe. `state` is
+`no_answer`, `server_error` (5xx), `refused` (401 or 403), `failing` (a delivery failed after its newest answer, or in the last hour when
+nothing has read it), `answering`, `not_read` or `no_api`. `receivers_ok` is false when any is in the first four, true when none is
+and one answered, and null when nothing is known; `receivers_state` is `read` or the reading's error; `watched_ok` is false when a
+watched namespace's `ok` is. `GET /health` carries `receivers_ok` and `watched_ok` in its anonymous answer too, and no receiver's name.
+The Health page keeps Ready out of its hero while either is false ("Needs a look", naming the first two and counting the rest, all of them in its Other group), and adds nothing to its first
+layer otherwise.
+
+**Before an install** (v1.1.0). `Shutter.Util.SiteCheck.Report(namespaces)` (and `Print`, in lines) reads an instance with no Shutter on it,
+with only itself and `Shutter.Util.Onboard` loaded, and changes nothing: `{verdict, says, instance, checks, namespaces: [{namespace,
+production, production_state, checks, operations, verdict}], not_checked}`; `verdict` is `blocked`, `changes_needed` or `works`, a check is
+`{id, result, says, guide}` with `result` `pass`, `warn`, `fail` or `info`. INSTALL, "Before you install".
 
 **The environment at a start** (v1.34). `Shutter.Production`'s `OnStart` calls `Shutter.Setup.ApplyEnvironment(120)`, which
 reads the container's `SHUTTER_DAILY_BUDGET_USD`, `SHUTTER_JUDGE_BUDGET_USD`, `SHUTTER_PUBLIC_DEMO_PASSWORD`,

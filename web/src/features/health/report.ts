@@ -115,6 +115,9 @@ const LABELS: Record<string, string> = {
   credentials_checked_at: 'Credentials checked',
   credentials: 'Credentials tried',
   budget: 'Model budget',
+  receivers: 'Receivers, as last read',
+  receivers_ok: 'Every receiver read lately answered',
+  watched_ok: 'Every watched namespace can be heard',
 };
 
 /** What to do when a stored credential no longer signs in (a rebuild that kept the data volume, a changed password). */
@@ -210,7 +213,7 @@ export interface CoreResult {
   group: string;
 }
 
-export type VerdictKind = 'ready' | 'not-ready' | 'not-reported';
+export type VerdictKind = 'ready' | 'attention' | 'not-ready' | 'not-reported';
 
 export interface Verdict {
   kind: VerdictKind;
@@ -225,7 +228,117 @@ export interface Verdict {
   notSent: number;
   /** Whether the report says the production is running. */
   running: boolean;
+  /** What the core checks do not cover and the report found wrong: a receiver not answering, a namespace that cannot be heard. */
+  attention: Attention[];
 }
+
+// ---- the receivers and the watched namespaces ----
+
+/** One receiver as the Doctor last saw it (Shutter.Util.ReceiverHealth): from what Shutter's own reads left, with no probe. */
+export interface ReceiverReading {
+  name: string;
+  state: string;
+  at: string;
+  httpStatus: number | null;
+  error: string;
+  lastAnswerAt: string;
+  lastFailureAt: string;
+  failuresHour: number;
+  incident: string;
+}
+
+/** The report's receivers as typed records: a field it did not send is empty. */
+export function receiverReadings(value: unknown): ReceiverReading[] {
+  if (!Array.isArray(value)) return [];
+  const str = (v: unknown) => (typeof v === 'string' ? v : '');
+  return value.map((v) => {
+    const r = (v && typeof v === 'object' ? v : {}) as Record<string, unknown>;
+    return {
+      name: str(r.name),
+      state: str(r.state),
+      at: str(r.at),
+      httpStatus: typeof r.http_status === 'number' ? r.http_status : null,
+      error: str(r.error),
+      lastAnswerAt: str(r.last_answer_at),
+      lastFailureAt: str(r.last_failure_at),
+      failuresHour: typeof r.failures_hour === 'number' ? r.failures_hour : 0,
+      incident: str(r.incident),
+    };
+  });
+}
+
+/** The states that say a receiver is in trouble, in words; answering, not_read and no_api are not among them. */
+const TROUBLE: Record<string, (r: ReceiverReading) => string> = {
+  no_answer: () => 'no answer',
+  server_error: (r) => `server error, HTTP ${r.httpStatus ?? '?'},`,
+  refused: (r) => `refused Shutter's sign-in, HTTP ${r.httpStatus ?? '?'},`,
+  failing: (r) => (r.at ? failingSinceAnswer(r) : failedLately(r)),
+};
+
+/** Deliveries fail although the receiver's newest reading was an answer. */
+function failingSinceAnswer(r: ReceiverReading): string {
+  return `deliveries failing since it last answered at ${utcMinute(r.lastAnswerAt || r.at)}`;
+}
+
+/** Nothing has read this receiver, so its failures in the last hour are all that is known of it. */
+function failedLately(r: ReceiverReading): string {
+  const count =
+    r.failuresHour === 1 ? '1 delivery' : r.failuresHour ? `${r.failuresHour} deliveries` : 'deliveries';
+  const words = `${count} failed in the last hour`;
+  if (!r.lastFailureAt) return words;
+  return `${words}, ${r.failuresHour === 1 ? 'at' : 'the last at'} ${utcMinute(r.lastFailureAt)}`;
+}
+
+/** A receiver in one line: its state and when, when it last answered, and the incident that holds its failures. */
+export function receiverLine(r: ReceiverReading): string {
+  const word = TROUBLE[r.state]?.(r) ?? (r.state === 'answering' ? 'answered' : r.state.replace(/_/g, ' '));
+  // A failing line carries its own times
+  const failing = r.state === 'failing';
+  const parts = [`${r.name}: ${word}${r.at && !failing ? ` at ${utcMinute(r.at)}` : ''}.`];
+  if (r.lastAnswerAt && r.state !== 'answering' && !failing)
+    parts.push(`Last answered ${utcMinute(r.lastAnswerAt)}.`);
+  if (r.incident) parts.push(`Incident ${r.incident}.`);
+  return parts.join(' ');
+}
+
+/** A problem's words in the hero, with its whole text in the Other group: a refused forward can run to 200 characters. */
+const PROBLEM_WORDS = 20;
+function clipped(problem: string): string {
+  const words = problem.split(/\s+/);
+  return words.length > PROBLEM_WORDS ? `${words.slice(0, PROBLEM_WORDS).join(' ')}...` : problem;
+}
+
+export interface Attention {
+  key: 'receivers' | 'watched_namespaces';
+  /** A receiver's state, for the hero's sentence. */
+  state?: string;
+  /** The line the hero lists, which names the receiver or the namespace. */
+  line: string;
+}
+
+/**
+ * What the report found wrong beyond the core checks. A dead receiver is not a fault in the installation, so `ok` and the
+ * core checks stay as they are; but the page must not read as all clear while one is dead.
+ */
+export function attentionOf(report: Report): Attention[] {
+  const out: Attention[] = [];
+  for (const r of receiverReadings(report.receivers))
+    if (TROUBLE[r.state]) out.push({ key: 'receivers', state: r.state, line: receiverLine(r) });
+  if (Array.isArray(report.watched_namespaces))
+    for (const v of report.watched_namespaces as Record<string, unknown>[]) {
+      const problems = Array.isArray(v?.problems) ? (v.problems as unknown[]).map(String) : [];
+      if (v?.ok !== false || !problems.length) continue;
+      const more = problems.length > 1 ? ` (and ${problems.length - 1} more)` : '';
+      out.push({
+        key: 'watched_namespaces',
+        line: `${String(v.namespace)}: ${clipped(problems[0])}${more}.`,
+      });
+    }
+  return out;
+}
+
+/** How many of those the hero lists: a site that is down must not cost more words than the page has. The rest are counted. */
+export const HERO_ATTENTION_LINES = 2;
 
 const groupOf = (key: string) => GROUPS.find((g) => g.keys.includes(key))?.id ?? OTHER.id;
 
@@ -255,18 +368,36 @@ export function verdictOf(report: Report): Verdict {
       };
     });
   const failing = results.filter((r) => !r.passed);
-  const kind: VerdictKind = results.length === 0 ? 'not-reported' : failing.length ? 'not-ready' : 'ready';
+  const attention = attentionOf(report);
+  const kind: VerdictKind =
+    results.length === 0
+      ? 'not-reported'
+      : failing.length
+        ? 'not-ready'
+        : attention.length
+          ? 'attention'
+          : 'ready';
   return {
     kind,
     tone: kind === 'ready' ? 'positive' : kind === 'not-ready' ? 'blocking' : 'attention',
-    word: kind === 'ready' ? 'Ready' : kind === 'not-ready' ? 'Not ready' : 'Checks not reported',
+    word:
+      kind === 'ready'
+        ? 'Ready'
+        : kind === 'attention'
+          ? 'Needs a look'
+          : kind === 'not-ready'
+            ? 'Not ready'
+            : 'Checks not reported',
     results,
     passed: results.length - failing.length,
     failing,
     notSent: defs.length - results.length,
     running: results.some((r) => r.key === 'production_state' && r.passed),
+    attention,
   };
 }
+
+const needsLook = (trial: boolean, verb: 'needs' | 'need') => `${trial ? 'needed' : verb} a look`;
 
 /**
  * The hero's statement. Live it speaks of this installation; in the trial it is a recording of another one, so it is
@@ -283,6 +414,25 @@ export function verdictStatement(v: Verdict, trial: boolean): string {
         ? 'every core check passed'
         : 'every core check passes';
     return trial ? `The recorded instance was ready: ${engine} (${of}).` : `Ready: ${engine} (${of}).`;
+  }
+  if (v.kind === 'attention') {
+    const troubled = v.attention.filter((a) => a.key === 'receivers');
+    const receivers = troubled.length;
+    const namespaces = v.attention.length - receivers;
+    // A 401, a 503 or a failed delivery is not silence: only a receiver that gave no answer is said to give none
+    const silent = troubled.every((a) => a.state === 'no_answer');
+    const parts: string[] = [];
+    if (receivers === 1)
+      parts.push(
+        `a receiver ${silent ? `${trial ? 'was' : 'is'} not answering` : needsLook(trial, 'needs')}`,
+      );
+    if (receivers > 1)
+      parts.push(
+        `${receivers} receivers ${silent ? `${trial ? 'were' : 'are'} not answering` : needsLook(trial, 'need')}`,
+      );
+    if (namespaces === 1) parts.push(`a watched namespace ${trial ? 'had' : 'has'} a problem`);
+    if (namespaces > 1) parts.push(`${namespaces} watched namespaces ${trial ? 'had' : 'have'} a problem`);
+    return `${trial ? 'The recorded instance was running' : 'Running'}, but ${parts.join(' and ')}.`;
   }
   if (v.kind === 'not-ready') {
     const n = v.failing.length;
@@ -359,6 +509,11 @@ const CHECK_FAILED = 'Check did not run';
 const CHECK_FAILED_NOTE =
   'The Doctor could not run the credential check, so this report says nothing about whether the stored credentials sign in. The state is the error it met.';
 
+/** Shutter reads a receiver only when a case or a delivery needs it, so nothing may have read it yet. */
+const NOT_KNOWN = 'Not known yet';
+const NOT_KNOWN_NOTE =
+  'Shutter reads a receiver only when a case or a delivery needs it, and it has not read one yet. It sends no probe of its own.';
+
 const NO_PURGE_NOTE =
   'Nothing deletes old messages. An installation makes the task when SHUTTER_MESSAGE_PURGE asks for it.';
 
@@ -403,6 +558,16 @@ export function rowInfo(key: string, value: unknown, report: Report, trial: bool
           missing: false,
           reason: { chip: NOT_IN_EDITION, note: NOT_IN_EDITION_NOTE, tone: 'neutral' },
         };
+  // Null: nothing has read a receiver yet, or the reading itself failed. A fact, not a gap in the report
+  if (key === 'receivers_ok' && value === null)
+    return {
+      mark: 'dash',
+      tone: 'neutral',
+      missing: false,
+      reason: { chip: NOT_KNOWN, note: NOT_KNOWN_NOTE, tone: 'neutral' },
+    };
+  if ((key === 'receivers_ok' || key === 'watched_ok') && value === false)
+    return { mark: 'x', tone: 'attention', missing: false };
   // A credential check that threw is attention: its state is the error, not a word
   if (key === 'credentials_state' && credentialCheckFailed(report))
     return {

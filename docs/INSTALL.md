@@ -24,6 +24,36 @@ the productions a hospital already runs; the README's `docker compose up` is the
   describes its API (state, receipt, capabilities and operations paths). A ward system that takes HL7 over TCP and
   keeps no receipts is investigated and escalated; the team corrects it by hand and marks the case handled.
 
+## Before you install: will it work here?
+
+A report from this guide's list, for an instance with nothing of Shutter on it. It changes nothing on the instance but the two
+classes it loads, which you delete afterwards. In a terminal on the server, as `_SYSTEM` or another user who can reach every
+namespace, in `USER` or any namespace of your choice:
+
+```objectscript
+Do $SYSTEM.OBJ.Load("<repository>/src/Shutter/Util/Onboard.cls", "ck")
+Do $SYSTEM.OBJ.Load("<repository>/src/Shutter/Util/SiteCheck.cls", "ck")
+Do ##class(Shutter.Util.SiteCheck).Print()
+Do $SYSTEM.OBJ.Delete("Shutter.Util.SiteCheck,Shutter.Util.Onboard")
+```
+
+`Print("PAS,PATHOLOGY")` looks only at the namespaces you name, and `Report` answers the same as JSON. With no name it looks at every
+namespace with Interoperability on and a production. It says one of three things, with what it found by name and the section of this
+guide that deals with it: **blocked** (a check fails: fix it first), **changes needed** (it can go here, with those changes), or
+nothing found against it.
+
+- **The instance:** the version and which package fits it, this user's rights, IPM, free licence units, the web server's port.
+- **Each namespace:** Interoperability, the running production, the item named `Ens.Alert` (two of them, or the name `Site Alerts`
+  taken, stops an apply; your own is renamed and still gets every alert first), default settings keyed to that name, and the
+  categories its services name.
+- **Each stock HL7 operation:** `AlertOnError`, `FailureTimeout` -1, `GetReply`, and how many messages failed there in the last seven
+  days and how many were ADT, at most the newest 2,000. Only ADT to a receiver with an API can be resent.
+
+**What it can't tell you:** whether a receiver has an API that meets the contract, what a green message means at that receiver
+beyond its settings (9.9), and whether your database is on backed-up storage. It sends no message and calls no receiver. Once Shutter
+is installed, the onboarding plan (9.1) goes further, and `SELECT Shutter.Setup_OnboardTest('<namespace>')` opens a first case with
+nothing sent.
+
 ## 2. What an install creates
 
 - **The package.** `iris-shutter` (the repository root, published on IPM) is the whole of Shutter for an InterSystems IRIS AI
@@ -251,6 +281,10 @@ Shape A:
    receiver's state, and the escalation draft names the right team.
 8. Switch the investigation mode to `policy` for the easy chains once the catalogue's entries are reviewed; watch the
    first weeks on the Settings and costs page and in the Doctor report (`SELECT Shutter.Setup_Doctor()`).
+   `ok` in the health route says Shutter's production runs, and no more. `receivers_ok` says whether each receiver answered when
+   Shutter last read it, and `watched_ok` whether each watched namespace can still be heard (the alert intake and the forwarder
+   there and enabled). Shutter sends no probe: a receiver that died since its last read reads as it last answered, with the time,
+   so silence is not proof. An outside monitor on `receivers_ok`, `watched_ok` and `last_forward` is still yours to set up.
 
 Shape B: section 4 in place of steps 1, 2 and 6; the rest as above.
 
