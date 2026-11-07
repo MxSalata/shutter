@@ -45,7 +45,7 @@ class Watch:
         self.r = r
 
     def reading(self, receiver):
-        return self.r.obj("SHUTTER", f'##class(Shutter.Store.ReceiverReading).Last("{receiver}")')
+        return self.r.obj("SHUTTER", f'##class(Shutter.Store.ReceiverReading).Last("{receiver}").%ToJSON()')
 
     def outages(self, receiver):
         """Rows of this receiver that are not closed."""
