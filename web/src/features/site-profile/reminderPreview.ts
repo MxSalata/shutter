@@ -90,7 +90,7 @@ export function reminderPreview(r: Reminders | undefined): { subject: string; bo
     body: [
       'Hello,',
       '',
-      `${SAMPLE.length} cases in Shutter need a person. This reminder went out by itself and nobody reviewed it. Sending it changed nothing on any case.`,
+      `${SAMPLE.length} cases in Shutter need a person. This reminder went out by itself and nobody reviewed it. Sending it changed no case's state.`,
       '',
       `First reminder, open ${teamHours} hours or more: ${SAMPLE.length - later}`,
       `Later reminder, open ${officerHours} hours or more: ${later}`,

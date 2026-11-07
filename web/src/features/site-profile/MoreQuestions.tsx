@@ -510,7 +510,7 @@ function CaseReminders({
     <Section
       id="site-reminders"
       title="Reminders"
-      note="A scheduled mail when a case that needs a person stays open. It writes to no receiver, calls no model and changes no case."
+      note="A scheduled mail when a case that needs a person stays open. It writes to no receiver, calls no model and moves no case."
     >
       <Question n={14} text="Should anyone be reminded of cases left open?" acts />
       <Switch

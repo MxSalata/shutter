@@ -69,7 +69,7 @@ Method MarkSent(result As %String, now As %String = {##class(Shutter.Util.Time).
         // The unique index refuses a threshold already recorded: nothing more to write for it.
         Continue:$$$ISERR(rec.%Save())
         Set word = $SELECT(item.threshold = "officer": "later reminder", 1: "first reminder")
-        Set ev = ##class(Shutter.Store.CaseEvent).Append(case, "note", "", "", "Reminder sent to " _ ..Recipient _ " (" _ word _ ", open " _ item.hours _ " hours or more). It changes nothing on the case.", "system", "reminder:" _ ..%Id())
+        Set ev = ##class(Shutter.Store.CaseEvent).Append(case, "note", "", "", "Reminder sent to " _ ..Recipient _ " (" _ word _ ", open " _ item.hours _ " hours or more). It moves the case nowhere.", "system", "reminder:" _ ..%Id())
         If $$$ISERR(ev) Set sc = ev
     }
     Quit sc

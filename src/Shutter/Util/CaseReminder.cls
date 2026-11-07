@@ -230,7 +230,7 @@ ClassMethod Compose(digest As %DynamicObject, settings As %DynamicObject, Output
     Set subject = "Shutter: " _ they _ " a person, the oldest open " _ ..Hours(oldest)
     Set name = ..Line(digest.toName)
     Set body = $SELECT(name '= "": "To " _ name _ ",", 1: "Hello,") _ nl _ nl
-    Set body = body _ $SELECT(cases = 1: "1 case in Shutter needs", 1: cases _ " cases in Shutter need") _ " a person. This reminder went out by itself and nobody reviewed it. Sending it changed nothing on any case." _ nl _ nl
+    Set body = body _ $SELECT(cases = 1: "1 case in Shutter needs", 1: cases _ " cases in Shutter need") _ " a person. This reminder went out by itself and nobody reviewed it. Sending it changed no case's state." _ nl _ nl
     If team > 0 Set body = body _ "First reminder, open " _ settings."team_hours" _ " hours or more: " _ team _ nl
     If officer > 0 Set body = body _ "Later reminder, open " _ settings."officer_hours" _ " hours or more: " _ officer _ nl
     Set body = body _ "The oldest has been open " _ ..Hours(oldest) _ "." _ nl _ nl

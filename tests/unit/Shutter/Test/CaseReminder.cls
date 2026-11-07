@@ -219,7 +219,7 @@ Method TestTheDigestsWords()
 {
     Do ..Compose("identifiers", [(..Item("C-1", "team", 5)), (..Item("C-2", "officer", 27, "Records Out", "rejected"))], .subject, .body)
     Do $$$AssertEquals(subject, "Shutter: 2 cases need a person, the oldest open 27 hours", "the subject")
-    For want = "To Bed team,", "2 cases in Shutter need a person.", "nobody reviewed it", "changed nothing", "First reminder, open 4 hours or more: 1", "Later reminder, open 8 hours or more: 1", "The oldest has been open 27 hours.", "Downstream Out, delivery failed: 1", "Records Out, rejected: 1", "https://shutter.example.nhs.uk/" {
+    For want = "To Bed team,", "2 cases in Shutter need a person.", "nobody reviewed it", "changed no case's state", "First reminder, open 4 hours or more: 1", "Later reminder, open 8 hours or more: 1", "The oldest has been open 27 hours.", "Downstream Out, delivery failed: 1", "Records Out, rejected: 1", "https://shutter.example.nhs.uk/" {
         Do $$$AssertTrue(body [ want, "the digest says: " _ want)
     }
     Do ..Compose("identifiers", [(..Item("C-1", "team", 1))], .subject, .body, "")
