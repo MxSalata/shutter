@@ -80,7 +80,7 @@ GROUP BY %EXACT(MemberCode), %EXACT(Model), %EXACT(Mode)
 ORDER BY Member, Mode
 ```
 
-### Limits not listed in the README
+### Other limits
 
 - The shipped site profile is a demo: it releases the single cases the catalogue settles at tier 2 without asking a person. A real site first answers the profile's induction questions.
 - Order communications and results systems are declared but not modelled; a case for one escalates before any model runs.
