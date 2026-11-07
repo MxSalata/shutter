@@ -4037,6 +4037,11 @@
    "why": "an incident whose chains the catalogue and the site's policy settle; the board decides none"
   },
   {
+   "scenario": "S14",
+   "title": "A later movement only the index has seen",
+   "why": "played in rules and policy modes only"
+  },
+  {
    "scenario": "S15",
    "title": "A patient merge Shutter withholds for the PAS team",
    "why": "withheld before any agent runs (MERGE_WITHHELD)"
@@ -4065,6 +4070,11 @@
    "scenario": "S20",
    "title": "A nurse moves the patient by hand while the plan awaits approval",
    "why": "played in rules mode only"
+  },
+  {
+   "scenario": "S26",
+   "title": "A schema not loaded here",
+   "why": "played in rules and policy modes only"
   }
  ],
  "not_used": [],

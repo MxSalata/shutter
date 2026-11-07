@@ -306,12 +306,14 @@ Per member, over all passes:
 - S29 A failed transfer that is then withdrawn: played in policy and rules modes only.
 - S30 A lost admission, with nothing else known: played in policy mode only.
 - S12 A lost admission at the head of a chain: an incident whose chains the catalogue and the site's policy settle; the board decides none.
+- S14 A later movement only the index has seen: played in rules and policy modes only.
 - S15 A patient merge Shutter withholds for the PAS team: withheld before any agent runs (MERGE_WITHHELD).
 - S16 A cancellation the downstream system cannot reverse: withheld before any agent runs (CANCEL_UNSUPPORTED).
 - S17 S2 in HL7 2.4: played in policy mode only.
 - S18 S2 in HL7 2.3.1: played in policy mode only.
 - S19 Shape A: a failed transfer in the hospital's own production: played in policy mode only.
 - S20 A nurse moves the patient by hand while the plan awaits approval: played in rules mode only.
+- S26 A schema not loaded here: played in rules and policy modes only.
 
 ## What the agents see, and a question that tries to act
 
