@@ -35,7 +35,7 @@ ClassMethod Rows(from As %String = "", to As %String = "", receiver As %String =
         Set r."report_id" = reportId, r."deployment_id" = control.DeploymentId, r.version = version, r."report_cutoff_utc" = cutoff
         Set r."case_id" = caseId, r."opened_at_utc" = openedAt, r."source_namespace" = ns, r."source_production" = prod
         Set r."source_receiver_item" = rcv, r."delivery_header_id" = header
-        Set r."patient_reference" = ..PatientReference(control.DeploymentId, authority, patient)
+        Set r."patient_reference" = ..PatientReference(control.ReportKey, authority, patient)
         Set r.trigger = event, r."failure_kind" = kind, r."failure_reason_code" = reason
         Do ..AddObservation(r, caseId)
         Do ..AddCalls(r, caseId, id)
@@ -46,11 +46,12 @@ ClassMethod Rows(from As %String = "", to As %String = "", receiver As %String =
     Quit rows
 }
 
-/// A pilot-local token, never the identifier: the same patient reads the same within this deployment and no other.
-ClassMethod PatientReference(deployment As %String, authority As %String, patient As %String) As %String
+/// A pilot-local token, never the identifier: the same patient reads the same within this deployment and no other. It is
+/// keyed by a value the report doesn't print, or anyone holding the report could hash a list of hospital numbers against it.
+ClassMethod PatientReference(key As %String, authority As %String, patient As %String) As %String
 {
-    If $GET(patient) = "" Quit ""
-    Quit "P-" _ $EXTRACT(##class(Shutter.Util.Digest).SHA256Hex(deployment _ "|" _ authority _ "|" _ patient), 1, 16)
+    If ($GET(patient) = "") || ($GET(key) = "") Quit ""
+    Quit "P-" _ $EXTRACT(##class(Shutter.Util.Digest).SHA256Hex(key _ "|" _ authority _ "|" _ patient), 1, 16)
 }
 
 /// The latest observation of the case, when it has one: an open case that has none stays in the report, unobserved.

@@ -8,8 +8,11 @@ Property Name As %String(MAXLEN = 32) [ InitialExpression = "current", Required 
 
 Index NameIdx On Name [ Unique ];
 
-/// A generated id for this deployment, for the report's rows and its patient references.
+/// A generated id for this deployment, printed on the report's rows.
 Property DeploymentId As %String(MAXLEN = 64);
+
+/// Keys the report's patient references, so that nothing the report prints works one back. No route returns it.
+Property ReportKey As %String(MAXLEN = 64);
 
 /// Moves on at every stop, clear and mode change; never goes back.
 Property Generation As %Integer [ InitialExpression = 1 ];

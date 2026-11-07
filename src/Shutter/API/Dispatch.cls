@@ -591,7 +591,6 @@ ClassMethod CaseApprove(caseId As %String) As %Status
     If '$ISOBJECT(body) Set body = {}
     Set decision = $ZCONVERT(##class(Shutter.Util.Json).Str(body, "decision"), "L")
     If '$LISTFIND($LISTBUILD("approve", "reject"), decision) Quit ..Fail("400 Bad Request", "bad_request", "decision must be approve or reject")
-    If (decision = "approve") && (##class(Shutter.Util.RecoveryControl).Refusal(.refused) '= "") Quit ..Fail("409 Conflict", refused, "Recovery is disabled. Enabling it will not release this plan; reinvestigate first.")
     Set r = ..Idempotent(bodyText, .replayed)
     If replayed Quit $$$OK
     If case.State '= "awaiting_approval" {
@@ -611,6 +610,7 @@ ClassMethod CaseApprove(caseId As %String) As %Status
         Set extra = {} Set extra.currentVersion = case.Version
         Quit ..Fail("409 Conflict", "stale_version", "expectedVersion is not the case's version", extra)
     }
+    If decision = "approve" { Set refusal = ##class(Shutter.Util.RecoveryControl).CaseApprovalRefusal(plan, .refused) If refusal '= "" Quit ..Fail("409 Conflict", refused, refusal) }
     Set comment = ##class(Shutter.Util.Json).Str(body, "comment")
     // The decider is the signed-in user, never a name from the body; the task takes the digest the body named (CONTRACTS 5).
     Set result = ##class(Shutter.Util.Workflow).Decide(caseId, $SELECT(decision = "reject": "Reject", 1: "Approve"), digest, comment)
@@ -1382,7 +1382,6 @@ ClassMethod IncidentDecide(id As %String, seq As %String) As %Status
     If '$ISOBJECT(body) Set body = {}
     Set decision = $ZCONVERT(##class(Shutter.Util.Json).Str(body, "decision", ##class(Shutter.Util.Json).Str(body, "action")), "L")
     If '$LISTFIND($LISTBUILD("approve", "reject"), decision) Quit ..Fail("400 Bad Request", "bad_request", "decision must be approve or reject")
-    If (decision = "approve") && (##class(Shutter.Util.RecoveryControl).Refusal(.refused) '= "") Quit ..Fail("409 Conflict", refused, "Recovery is disabled. Enabling it will not release this plan; reinvestigate first.")
     Set r = ..Idempotent(bodyText, .replayed)
     If replayed Quit $$$OK
     // The incident keeps releasing its automatic and board chains while a task is open, so its state is not the test:
@@ -1403,6 +1402,7 @@ ClassMethod IncidentDecide(id As %String, seq As %String) As %Status
         Set extra = {} Set extra.currentDigest = inc.PlanDigest
         Quit ..Fail("409 Conflict", "plan_changed", "planDigest is not the incident plan's digest", extra)
     }
+    If decision = "approve" { Set refusal = ##class(Shutter.Util.RecoveryControl).IncidentApprovalRefusal(.refused) If refusal '= "" Quit ..Fail("409 Conflict", refused, refusal) }
     Set comment = ##class(Shutter.Util.Json).Str(body, "comment")
     // The decider is the signed-in user, never a name from the body; the task takes the digest the body named (CONTRACTS 5).
     Set result = ##class(Shutter.Util.Workflow).Decide(id _ $SELECT(seq '= "": "/" _ seq, 1: ""), $SELECT(decision = "reject": "Reject", 1: "Approve"), digest, comment)

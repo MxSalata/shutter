@@ -68,6 +68,7 @@ ClassMethod Control() As Shutter.Store.RecoveryControl
     }
     Set row = ##class(Shutter.Store.RecoveryControl).%New()
     Set row.DeploymentId = $SYSTEM.Util.CreateGUID(), row.Generation = 1, row.PlanFloor = ..NewestPlan()
+    Set row.ReportKey = $SYSTEM.Encryption.Base64Encode($SYSTEM.Encryption.GenCryptRand(32))
     Set row.LastChangedAt = ##class(Shutter.Util.Time).NowUTC(), row.LastChangedBy = "install"
     $$$ThrowOnError(row.%Save())
     Quit row
@@ -122,6 +123,37 @@ ClassMethod RefusalOf(control As Shutter.Store.RecoveryControl, Output code As %
         Quit "Shadow mode: Shutter investigates, but sends no recovery write, rehearsal or resend preview"
     }
     Quit ""
+}
+
+/// Why a person can't approve this case's plan now, or "". The words hold at the next step: a plan a stop, a clear or a mode
+/// change has passed stays void, at the connector too, and a waiting case can be reinvestigated only once it is rejected.
+ClassMethod CaseApprovalRefusal(plan As Shutter.Store.Plan, Output code As %String) As %String
+{
+    Set code = "", text = ""
+    Try {
+        Set control = ..Control()
+        Do ..RefusalOf(control, .code)
+        If code = "recovery_stopped" {
+            Set text = "Shutter recovery is stopped, so this plan can't be approved. Clearing the stop will not release it: reject it and reinvestigate."
+        } ElseIf code = "recovery_shadow" {
+            Set text = "Shadow mode: recovery is off, so this plan can't be approved. Enabling recovery will not release it: reject it and reinvestigate."
+        } ElseIf +plan.%Id() <= +control.PlanFloor {
+            Set code = "plan_predates_control", text = "This plan was made before recovery was last stopped, cleared or changed, so it will not be sent: reject it and reinvestigate."
+        }
+    } Catch ex {
+        Set code = "control_unreadable", text = "The recovery control could not be read, so this plan can't be approved."
+    }
+    Quit text
+}
+
+/// Why a person can't approve an incident now, or "". An incident holds no plan row: each item gathers fresh evidence and
+/// makes its plan when it is released, under the floor's check like any other, so it only has to wait.
+ClassMethod IncidentApprovalRefusal(Output code As %String) As %String
+{
+    Set text = ..Refusal(.code)
+    If code = "recovery_stopped" Quit "Shutter recovery is stopped, so this incident can't be approved until the stop is cleared. Its items take fresh evidence when they are released."
+    If code = "recovery_shadow" Quit "Shadow mode: recovery is off, so this incident can't be approved until recovery is enabled. Its items take fresh evidence when they are released."
+    Quit text
 }
 
 /// The connector's check, immediately before its POST: 1 to send, with permit set when the call is a recovery call, or 0
