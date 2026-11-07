@@ -273,7 +273,7 @@ Method RaiseTask(incident As Shutter.Store.Incident, chains As %ListOfObjects, s
         Set items = ch.Items()
         Set it = items.%GetIterator()
         While it.%GetNext(.k, .item) {
-            Set lines = lines _ $CHAR(10) _ "  " _ item.%Get("position") _ ". " _ item.%Get("event") _ " at " _ item.%Get("eventTime") _ " (" _ item.%Get("caseId") _ ", " _ item.%Get("entry") _ " " _ item.%Get("outcome") _ ")"
+            Set lines = lines _ $CHAR(10) _ "  " _ item.%Get("position") _ ". " _ item.%Get("event") _ " at " _ item.%Get("eventTime") _ " (" _ item.%Get("caseId") _ ", " _ item.%Get("entry") _ " " _ item.%Get("outcome") _ ")" _ ..LostWords(item)
         }
     }
     Set task = ..ApprovalTask(incident, seq, count, incident.CaseCount(), lines)
@@ -287,6 +287,15 @@ Method RaiseTask(incident As Shutter.Store.Incident, chains As %ListOfObjects, s
         Do incident.Note("note", "Approval task raised: " _ task.%Subject, "system")
     }
     Quit $$$OK
+}
+
+/// What the task adds to an item's line when it is a lost admission: the question a person answers by approving.
+ClassMethod LostWords(item As %DynamicObject) As %String
+{
+    Set case = ##class(Shutter.Store.Case).ByCaseId(item.%Get("caseId"))
+    Set snap = $SELECT($ISOBJECT(case): case.CurrentSnapshot, 1: "")
+    If '$ISOBJECT(snap) || '##class(Shutter.Util.FurtherMessages).AdmissionOnNotFound(case, snap.SummaryObject()) Quit ""
+    Quit ": the receiver has no such encounter. Check its own screen for a record entered by hand under another number"
 }
 
 /// The approval task for the incident's policy chains (seq ""), or for one chain (7.3), over the text AskApproval

@@ -203,11 +203,29 @@ ClassMethod Classify(chain As Shutter.Store.Chain) As %Status
     If decides = "policy" {
         Set tier = ##class(Shutter.Store.SiteProfile).TierOf(chain.Incident.Receiver)
         Set policy = ##class(Shutter.Store.SiteProfile).Policy(tier, chain.Kind)
-        If policy = "board" { Set decides = "board" } Else { Set chain.Policy = policy }
+        If policy = "board" { Set decides = "board" } Else { Set chain.Policy = ..PolicyFor(chain, policy) }
     }
     Set chain.Entries = ##class(Shutter.Process.IncidentTaskText).ClipEntries(entries), chain.Decides = decides
     If $ISOBJECT(firstCase) Set chain.FirstExpectedVersion = ..VersionOf(firstCase)
     Quit chain.%Save()
+}
+
+/// The chain's authorisation from the site's table: automatic becomes approval when the chain holds a lost admission, an
+/// admission the receiver answers 404 for, unless the site's profile lets policy release one. It joins the incident's one
+/// approval rather than stopping a chain at release for a task of its own, so an outage of lost admissions asks one person
+/// once. The release (CaseWorkflow.PolicyPath) and the dispatch gate hold the same line on fresh evidence.
+ClassMethod PolicyFor(chain As Shutter.Store.Chain, policy As %String) As %String
+{
+    If policy '= "automatic" Quit policy
+    If ##class(Shutter.Store.SiteProfile).AdmissionNotFound() '= "person" Quit policy
+    Set lost = 0, rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Shutter_Store.ChainItem WHERE Chain = ? ORDER BY Position", chain.%Id())
+    While 'lost && rs.%Next() {
+        Set it = ##class(Shutter.Store.ChainItem).%OpenId(rs.%Get("ID"))
+        Continue:'$ISOBJECT(it)
+        Set snap = it.Case.CurrentSnapshot
+        If $ISOBJECT(snap) Set lost = ##class(Shutter.Util.FurtherMessages).AdmissionOnNotFound(it.Case, snap.SummaryObject())
+    }
+    Quit $SELECT(lost: "approval", 1: policy)
 }
 
 /// The case's snapshot matched again with the chain condition set, and, when a projected state is given, with the

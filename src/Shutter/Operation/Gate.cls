@@ -9,7 +9,7 @@ Class Shutter.Operation.Gate Extends Ens.BusinessOperation
 Parameter INVOCATION = "Queue";
 
 /// Bumped whenever a check changes; recorded on every decision and bound by approvals.
-Parameter POLICYVERSION = "2026-11-06.1";
+Parameter POLICYVERSION = "2026-11-07.1";
 
 Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shutter.Msg.GateResult) As %Status
 {
@@ -227,8 +227,8 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
                 Set policy = ##class(Shutter.Store.SiteProfile).Policy(tier, $SELECT(request.ChainKind = "": "single", 1: request.ChainKind))
                 If policy '= "automatic" Set why = "policy_requires_approval"
                 // An admission on a 404 is never released by policy alone (a record may have been entered by hand under another
-                // number), unless the site's profile says so. An incident's release has its own path (7.3).
-                If (why = "") && '$ISOBJECT(case.Incident) && ##class(Shutter.Util.FurtherMessages).AdmissionOnNotFound(case, summary) && (##class(Shutter.Store.SiteProfile).AdmissionNotFound() = "person") Set why = "policy_requires_approval"
+                // number), inside an incident too, unless the site's profile says so.
+                If (why = "") && ##class(Shutter.Util.FurtherMessages).AdmissionOnNotFound(case, summary) && (##class(Shutter.Store.SiteProfile).AdmissionNotFound() = "person") Set why = "policy_requires_approval"
                 // The plan must have come from the policy path for the entry it names: a board's plan never goes by policy.
                 If (why = "") && ((plan.CatalogueEntry = "") || (plan.CreatedBy '= ("policy:" _ plan.CatalogueEntry))) Set why = "plan_origin"
                 // A write with no person needs the case's source proved (CONTRACTS 11).

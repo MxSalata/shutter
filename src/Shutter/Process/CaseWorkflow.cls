@@ -1069,10 +1069,12 @@ Method PolicyPath(case As Shutter.Store.Case, summary As %DynamicObject, cat As 
     Set tier = ##class(Shutter.Store.SiteProfile).TierOf($SELECT(case.Receiver '= "": case.Receiver, 1: ..WardTarget))
     Set kind = $SELECT(..Release: ..ChainKind, 1: $CLASSMETHOD(json, "Str", cat.%Get("conditions"), "chain", "single"))
     Set ..Policy = ##class(Shutter.Store.SiteProfile).Policy(tier, kind)
-    // A receiver's 404 doesn't prove it holds no record for the patient: a lost admission waits for a person, unless the
-    // site's profile says policy may release it.
+    // A released item is authorised by its incident (7.3): by site policy, or under the incident's approval.
+    If ..Release Set ..Policy = $SELECT(..ReleasePolicy = "incident": "incident", ..ReleasePolicy = "automatic": "automatic", 1: ..Policy)
+    // A receiver's 404 doesn't prove it holds no record for the patient: a lost admission waits for a person, inside an
+    // incident too, unless the site's profile says policy may release it. Under the incident's approval a person has.
     Set heldBack = 0
-    If ('..Release) && (..Policy = "automatic") && ##class(Shutter.Util.FurtherMessages).AdmissionOnNotFound(case, summary) && (##class(Shutter.Store.SiteProfile).AdmissionNotFound() = "person") {
+    If (..Policy = "automatic") && ##class(Shutter.Util.FurtherMessages).AdmissionOnNotFound(case, summary) && (##class(Shutter.Store.SiteProfile).AdmissionNotFound() = "person") {
         Set ..Policy = "approval", heldBack = 1
         Do case.Note("note", "A lost admission on the receiver's 404: a person approves, as the site's profile asks (further_messages.admission_not_found)", "system")
     }
