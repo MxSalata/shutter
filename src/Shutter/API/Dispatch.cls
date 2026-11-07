@@ -704,9 +704,9 @@ ClassMethod CasePreview(caseId As %String) As %Status
     If '..Allow("Shutter_Operate", 1) Quit $$$OK
     Set case = ..CaseOr404(caseId)
     If '$ISOBJECT(case) Quit $$$OK
-    If case.IsClosed() Quit ..Fail("409 Conflict", "wrong_state", "The case is closed")
     Set refusal = ##class(Shutter.Util.RecoveryControl).Refusal(.refused)
     If refusal '= "" Quit ..Fail("409 Conflict", refused, refusal _ "; nothing was sent")
+    If case.IsClosed() Quit ..Fail("409 Conflict", "wrong_state", "The case is closed")
     // A preview is a dry run: it goes only to a receiver whose capability profile, as the case's evidence read it, reports one
     // (v1.21); to any other it would be a live write conditional on nothing, so nothing is sent.
     Set snap = case.CurrentSnapshot

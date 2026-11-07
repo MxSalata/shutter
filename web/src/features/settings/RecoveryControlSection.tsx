@@ -4,7 +4,6 @@ import { useCan, useClearRecovery, useRecoveryControl, useStopRecovery } from '@
 import { API_BASE } from '@/api/client';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { Section } from '@/components/Section';
-import { StatusNotice } from '@/components/StatusBadge';
 import { TRIAL } from '@/env/mode';
 
 /**
