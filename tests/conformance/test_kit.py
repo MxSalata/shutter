@@ -321,6 +321,28 @@ class TheRefusals(unittest.TestCase):
             receiver.stop()
 
 
+class ASecondRun(unittest.TestCase):
+    def test_a_new_run_id_needs_no_reset_on_one_endpoint(self):
+        receiver = stubs.Receiver().start()
+        try:
+            url = f"http://127.0.0.1:{receiver.port}/downstream/api"
+            for run_id in ("first", "second"):
+                with tempfile.TemporaryDirectory() as folder:
+                    report = kit.execute(manifest_for(url, run_id=run_id), folder, only={1, 2, 4, 14, 15})
+                for number in (1, 2, 4, 14, 15):
+                    self.assertEqual(status(report, number), "pass", (run_id, number, [c["subchecks"] for c in report["checks"] if c["id"] == number]))
+        finally:
+            receiver.stop()
+
+    def test_the_longest_run_id_still_gives_a_bed_the_contract_takes(self):
+        manifest = manifest_for("http://127.0.0.1:1/downstream/api", run_id="R" * 40)
+        kit.check_manifest(manifest)
+        self.assertLessEqual(max(len(bed) for bed in manifest["beds"]), 64)
+        manifest = manifest_for("http://127.0.0.1:1/downstream/api", run_id="R" * 41)
+        with self.assertRaises(kit.Refusal):
+            kit.check_manifest(manifest)
+
+
 class TheEpochComparison(unittest.TestCase):
     def prior(self, folder, epoch, identity="stub"):
         path = Path(folder, "prior.json")

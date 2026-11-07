@@ -165,8 +165,9 @@ def make_manifest(run_id, base_url, receiver_identity, receiver_build, credentia
         "source_system": "SHUTTER-CONFORMANCE",
         "patient_authority": "SHUTTER-TEST",
         "encounters": [{"id": f"SHUTTER-TEST-{tag}-{n:03d}", "patient_id": f"SYNTHETIC-{tag}-{n:03d}"} for n in range(1, REQUIRED_ENCOUNTERS + 1)],
-        "wards": ["SHUTTER-TEST-A", "SHUTTER-TEST-B"],
-        "beds": [f"TEST-{n:02d}" for n in range(1, REQUIRED_BEDS + 1)],
+        # The run's own wards and beds as well: nothing is cleaned up, so a bed from an earlier run stays occupied.
+        "wards": [f"SHUTTER-TEST-{tag}-A", f"SHUTTER-TEST-{tag}-B"],
+        "beds": [f"TEST-{tag}-{n:02d}" for n in range(1, REQUIRED_BEDS + 1)],
         "credential_scope": credential_scope,
         "isolation_attestation": attestation,
     }

@@ -35,7 +35,7 @@
     "receiver_identity": { "type": "string", "pattern": "^[ -~]{1,200}$" },
     "receiver_build": { "type": "string", "pattern": "^[ -~]{1,200}$" },
     "contract_version": { "const": "shutter-recovery-v1" },
-    "run_id": { "type": "string", "pattern": "^[A-Za-z0-9._-]{1,60}$" },
+    "run_id": { "type": "string", "pattern": "^[A-Za-z0-9._-]{1,40}$" },
     "source_system": { "const": "SHUTTER-CONFORMANCE" },
     "patient_authority": { "const": "SHUTTER-TEST" },
     "encounters": {
@@ -56,13 +56,13 @@
       "type": "array",
       "minItems": 2,
       "uniqueItems": true,
-      "items": { "type": "string", "pattern": "^SHUTTER-TEST-[A-Za-z0-9._-]{1,40}$" }
+      "items": { "type": "string", "pattern": "^SHUTTER-TEST-[A-Za-z0-9._-]{1,60}$" }
     },
     "beds": {
       "type": "array",
       "minItems": 1,
       "uniqueItems": true,
-      "items": { "type": "string", "pattern": "^TEST-[A-Za-z0-9._-]{1,40}$" }
+      "items": { "type": "string", "pattern": "^TEST-[A-Za-z0-9._-]{1,59}$" }
     },
     "credential_scope": {
       "type": "string",

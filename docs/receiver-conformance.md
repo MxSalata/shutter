@@ -20,7 +20,7 @@ Exit status: 0 all required checks passed, 1 they did not, 2 the run was refused
 
 ## The manifest
 
-`tests/conformance/manifest.schema.json` is the whole of it, and no field can carry a path, a request or a credential. `init` writes one with generated identities. Every encounter, patient, ward and bed must be declared before the run, and a run needs at least 60 encounters and 40 beds. Encounters start `SHUTTER-TEST-`, patients `SYNTHETIC-`, wards `SHUTTER-TEST-` and beds `TEST-`. A second run on one endpoint needs a new run id, so new identities: encounters are never reused.
+`tests/conformance/manifest.schema.json` is the whole of it, and no field can carry a path, a request or a credential. `init` writes one with generated identities. Every encounter, patient, ward and bed must be declared before the run, and a run needs at least 60 encounters and 40 beds. Encounters start `SHUTTER-TEST-`, patients `SYNTHETIC-`, wards `SHUTTER-TEST-` and beds `TEST-`. A second run on one endpoint needs a new run id, and so new identities: encounters, wards and beds are never reused, because the kit deletes nothing and an earlier run's beds stay occupied. A manifest that reuses a ward and bed an earlier run still holds stops at rule 8.
 
 ## What it refuses
 
