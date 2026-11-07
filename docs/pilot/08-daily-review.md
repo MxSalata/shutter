@@ -4,7 +4,7 @@ Nothing in Shutter tells a person that a case needs them, so this review is a co
 
 Run these in the Management Portal's SQL page, in Shutter's namespace.
 
-**Every write attempt.** In stage 2 this must return no rows. In stage 3 every row needs an approver, a case you recognise and a known result.
+**Every write attempt.** In stage 2 this must return no rows. In stage 3 every row needs a named person as `Approver`, a case you recognise and a known result. An `Approver` of `policy` means the write went with no person: stop ([07](07-stop-and-withdraw.md)).
 
 ```sql
 SELECT "Case"->CaseId AS CaseId, "At" AS AttemptAt, Outcome, HttpStatus, OperationKey, Approval->Approver AS Approver
