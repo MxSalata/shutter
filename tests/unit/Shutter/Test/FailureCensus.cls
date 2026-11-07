@@ -294,7 +294,10 @@ Method TestTheScopeIsOnlyWhatIsRegistered()
     Do $$$AssertEquals($CLASSMETHOD(util, "ScopeOf", "Lab Out", .ns, .item), 0, "the bare item is not what was registered")
     Do $$$AssertEquals($CLASSMETHOD(util, "ScopeOf", "Own Out", .ns, .item), 0, "Shutter's own namespace is not a watched one")
     Do $$$AssertEquals($CLASSMETHOD(util, "ScopeOf", "' OR 1=1 --", .ns, .item), 0, "nor is free text")
-    Do $$$AssertEquals($CLASSMETHOD(util, "Scopes").%Size(), 1, "one scope to offer")
+    Set offered = "", iter = $CLASSMETHOD(util, "Scopes").%GetIterator()
+    While iter.%GetNext(.i, .one) { Set offered = offered _ "|" _ one.receiver }
+    Do $$$AssertTrue(offered [ "|UTWARD Lab Out", "it is offered")
+    Do $$$AssertTrue(offered '[ "Own Out", "and Shutter's own is not")
     Kill ^Shutter.Config("onboard")
     Merge ^Shutter.Config("onboard") = keep
 }
