@@ -479,6 +479,8 @@ Method TestAnApprovalMeetsNoVoidPlan()
     Do ..SetMode("enabled")
     Do $CLASSMETHOD(control, "CaseApprovalRefusal", fresh, .code)
     Do $$$AssertEquals(code, "plan_predates_control", "and enabling releases it no more than a clear does")
+    // The row in memory would be opened again as it stands, whatever is on disk.
+    Kill row
     Do ..DamageControl()
     Set text = $CLASSMETHOD(control, "CaseApprovalRefusal", fresh, .code)
     Do ..RepairControl()
@@ -679,7 +681,7 @@ Method TestAReferenceCannotBeRecomputed()
     Do $$$AssertTrue($ISOBJECT(row), "the case has a row")
     Set reference = row."patient_reference"
     Do $$$AssertTrue(reference ? 1"P-"16AN, "a reference: " _ reference)
-    Set printed = "P-" _ $EXTRACT(##class(Shutter.Util.Digest).SHA256Hex(row."deployment_id" _ "|" _ c.PatientIdAuthority _ "|" _ c.PatientId), 1, 16)
+    Set printed = "P-" _ $EXTRACT($PIECE(##class(Shutter.Util.Digest).SHA256Hex(row."deployment_id" _ "|" _ c.PatientIdAuthority _ "|" _ c.PatientId), ":", 2), 1, 16)
     Do $$$AssertNotEquals(reference, printed, "the printed deployment id does not give it")
     Set key = ##class(Shutter.Util.RecoveryControl).Control().ReportKey
     Do $$$AssertTrue($LENGTH(key) >= 32, "the deployment keeps a key of its own")

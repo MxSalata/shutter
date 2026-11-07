@@ -51,7 +51,7 @@ ClassMethod Rows(from As %String = "", to As %String = "", receiver As %String =
 ClassMethod PatientReference(key As %String, authority As %String, patient As %String) As %String
 {
     If ($GET(patient) = "") || ($GET(key) = "") Quit ""
-    Quit "P-" _ $EXTRACT(##class(Shutter.Util.Digest).SHA256Hex(key _ "|" _ authority _ "|" _ patient), 1, 16)
+    Quit "P-" _ $EXTRACT($PIECE(##class(Shutter.Util.Digest).SHA256Hex(key _ "|" _ authority _ "|" _ patient), ":", 2), 1, 16)
 }
 
 /// The latest observation of the case, when it has one: an open case that has none stays in the report, unobserved.
