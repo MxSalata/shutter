@@ -47,6 +47,7 @@ import { nextAction, outcomeCaseOf, provenanceOf, recordedApprovalTime } from '.
 import { useCaseFacts } from './case/useCaseFacts';
 import { AskButton, AskSurface } from './ask/AskSurface';
 import { ConveneBoard } from './case/ConveneBoard';
+import { DocumentPanel } from './case/DocumentPanel';
 
 /** The portal's base path (/csp/<namespace>/) for links to messages, read from the case's trace link. */
 function portalBase(visualTrace: string | undefined): string {
@@ -311,7 +312,7 @@ function CaseBody({ c }: { c: CaseDetail }) {
         snapshot={facts.snapshot}
         actions={
           <>
-            <ConveneBoard c={c} />
+            {c.document ? null : <ConveneBoard c={c} />}
             <CaseActionButton action={action} onGo={goToAction} />
             <AskButton
               ref={askButton}
@@ -395,6 +396,7 @@ function CaseBody({ c }: { c: CaseDetail }) {
                   receiver={c.receiver}
                 />
               ) : null}
+              {c.document ? <DocumentPanel c={c} /> : null}
               {/* A stopped case's hand-off to the team, with the action it serves, after the board; the main button
                   only when escalating is the action */}
               {stopped ? <EscalationPanel c={c} primary={nextAction(facts).escalate} /> : null}
