@@ -1412,7 +1412,7 @@ needs only the packages `Shutter.Intake` and `Shutter.Util` for the forwarder an
   connector item's; `hl7_schemas.needed` adds the watched namespaces' missing categories. `AlertProcess.Classify` reads a TCP connect
   timeout (`ErrOutConnectExpired`) as `delivery_failed`: nothing was sent.
 
-### 11.2 Document exceptions (v1.46)
+### 11.2 Document exceptions (v1.47)
 
 A failed MDM T01 to T11 at a receiver with a document profile becomes the ordinary case with its no-recovery path and a document block. Nothing is resent, no catalogue entry matches it, no agent is convened, and no copy of the document is kept in Shutter. A receiver with no profile behaves exactly as before. The HL7 version pinned is v2.5.1, chapter 9.
 
@@ -1437,7 +1437,7 @@ A failed MDM T01 to T11 at a receiver with a document profile becomes the ordina
 
 **`POST /intake` with `kind: "document_failure"`** (`Shutter_Intake`): `source` (`namespace`, `production`, `route`, `header_id`, `item`), `receiver`, `failure` as in section 11, `delivery`, `facts` and `chain`, with no text of the message. 202 `{caseId, state, opened}`; 400 `bad_request` naming the field; 409 `documents_off`.
 
-**What is read, by position, from the delivery body:** MSH-3 to -7, -9, -10, -12; every PID-3 repetition; PV1-19; TXA-12, -13, -17, -18, -19. Read from the header of the session's request to the receiver's item, not the session's first message, so a transformation on the route shows what the operation was given. The walk stops at TXA, so no OBX, NTE, name, title, file name or type is read; a large value is never in memory. The size comes from the engine's own chunk count, and the two digests from a sink the engine writes into piece by piece, which keeps nothing.
+**What is read, by position, from the delivery body:** MSH-3 to -7, -9, -10, -12; every PID-3 repetition; PV1-19; TXA-12, -13, -17, -18, -19. Read from the header of the session's request to the receiver's item, not the session's first message, so a transformation on the route shows what the operation was given. The walk stops at TXA, so no OBX, NTE, name, title, file name or type is read for the fields. The size comes from the engine's own chunk count, and the two digests from a sink the engine writes into one stored piece at a time (at most about 3.6 MB), which keeps nothing.
 
 **The operation key** is `mdm-v1:` and a hash of the receiver, the source namespace, the delivery header, TXA-12, TXA-13, the trigger, the patient binding and the body's digest. It binds one stored delivery. It carries no identifier and is not a document version: a new transmission under a new header is a new case. A missing TXA-12 leaves the identity empty, and nothing stands in for it. The standard lets a sender put a file name in TXA-16 when it has no number; Shutter doesn't use it.
 

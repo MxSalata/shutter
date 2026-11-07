@@ -111,9 +111,10 @@ ClassMethod Refusal(kind As %String, outcome As %String, reason As %String, http
     If +http > 0 Do o.%Set("http_status", +http, "number")
     Set code = ""
     If $EXTRACT(reason, 1, 4) = "ack_" Set code = $EXTRACT(reason, 5, 6)
+    // The engine's own words first ("MSA code 'AE'"), then the code on its own.
     If code = "" {
         Set e = 0, m = ""
-        If $LOCATE(text, "\b(AE|AR|CE|CR)\b", 1, e, m) Set code = m
+        If $LOCATE(text, "MSA code '(AE|AR|CE|CR)'", 1, e, m) { Set code = $EXTRACT(m, 11, 12) } ElseIf $LOCATE(text, "\b(AE|AR|CE|CR)\b", 1, e, m) { Set code = m }
     }
     Set o."ack_code" = code
     Set o.text = $EXTRACT(text, 1, 2000)

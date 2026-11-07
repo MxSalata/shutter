@@ -1614,6 +1614,7 @@ ClassMethod CaseQuestionAsk(caseId As %String) As %Status
     If '..Allow("Shutter_Operate", 1) Quit $$$OK
     Set case = ..CaseOr404(caseId)
     If '$ISOBJECT(case) Quit $$$OK
+    If case.DocumentJSON '= "" Quit ..Fail("409 Conflict", "no_agents", "A document case has no agents, so a person reads its evidence")
     Set shape = "The body must be a JSON object: {tier, question | suggested: {conversation, turn}, conversation?}"
     Set bodyText = $SELECT($ISOBJECT(%request.Content): %request.Content.Read($$$MaxStringLength), 1: $GET(%request.Content))
     Set body = ##class(Shutter.Util.Json).Parse(bodyText, .psc)

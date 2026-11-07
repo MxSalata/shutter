@@ -121,7 +121,8 @@ ClassMethod Reasons(block As %DynamicObject) As %DynamicArray
     If f."patient_conflict" Do out.%Push(..Reason("DOC_PATIENT_CHANGED"))
     If ..StatusUnproven(doc, 0) Do out.%Push(..Reason("DOC_STATUS_UNPROVEN"))
     If $ISOBJECT(delivery) && $CASE(delivery.status, "Created": 1, "Queued": 1, "Delivered": 1, "Deferred": 1, : 0) Do out.%Push(..Reason("DOC_ENGINE_OWNS_DELIVERY"))
-    If $ISOBJECT(block.%Get("refusal")) && (block.refusal.kind = "uncertain_outcome") Do out.%Push(..Reason("DOC_DELIVERY_UNCERTAIN"))
+    // Several bodies to one receiver in one session: which one failed is not known.
+    If ($ISOBJECT(block.%Get("refusal")) && (block.refusal.kind = "uncertain_outcome")) || ($ISOBJECT(delivery) && delivery.ambiguous) Do out.%Push(..Reason("DOC_DELIVERY_UNCERTAIN"))
     If block.%IsDefined("source_body_available") && 'block."source_body_available" Do out.%Push(..Reason("DOC_BODY_UNAVAILABLE"))
     Quit out
 }
@@ -163,7 +164,7 @@ ClassMethod Check(block As %DynamicObject, settings As %DynamicObject, delivery 
     If block.%IsDefined("source_body_available") && 'block."source_body_available" Quit "DOC_BODY_UNAVAILABLE"
     If 'block."source_verified" Quit "DOC_BODY_UNAVAILABLE"
     If $CLASSMETHOD(json, "Str", settings, "duplicates") = "unknown" Quit "DOC_DUPLICATE_UNDECLARED"
-    If '$ISOBJECT(delivery) Quit "DOC_DELIVERY_UNCERTAIN"
+    If '$ISOBJECT(delivery) || (block.%GetTypeOf("delivery") = "object" && block.delivery.ambiguous) Quit "DOC_DELIVERY_UNCERTAIN"
     If '$CLASSMETHOD(json, "Bool", delivery, "engine_settled", 0) Quit "DOC_ENGINE_OWNS_DELIVERY"
     If '$CLASSMETHOD(json, "Bool", delivery, "evidence_complete", 0) || '$CLASSMETHOD(json, "Bool", delivery, "never_opened_every_attempt", 0) Quit "DOC_DELIVERY_UNCERTAIN"
     If '$CLASSMETHOD(json, "Bool", delivery, "patient_history_checked", 0) || '$CLASSMETHOD(json, "Bool", delivery, "patient_history_clear", 0) Quit "DOC_PATIENT_CHANGED"

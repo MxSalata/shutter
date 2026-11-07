@@ -314,11 +314,13 @@ function CaseBody({ c }: { c: CaseDetail }) {
           <>
             {c.document ? null : <ConveneBoard c={c} />}
             <CaseActionButton action={action} onGo={goToAction} />
-            <AskButton
-              ref={askButton}
-              open={asking}
-              onToggle={() => (asking ? closeAsk() : setAsking(true))}
-            />
+            {c.document ? null : (
+              <AskButton
+                ref={askButton}
+                open={asking}
+                onToggle={() => (asking ? closeAsk() : setAsking(true))}
+              />
+            )}
           </>
         }
       />

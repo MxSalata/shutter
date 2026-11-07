@@ -131,8 +131,8 @@ def post_intake(body):
         return e.code, e.read().decode()
 
 
-def mdm(trigger, control, doc="DOC-1^DMS", parent="", app="DOWN", mrn="MRN7001", completion="AU", conf="U", avail="AV", obx="OBX|1|TX|DOC^Letter||Synthetic letter text", name="SYNTH^PAT", filename="", no_txa=False):
-    now = time.strftime("%Y%m%d%H%M%S", time.gmtime(time.time() - 60))
+def mdm(trigger, control, doc="DOC-1^DMS", parent="", app="DOWN", mrn="MRN7001", completion="AU", conf="U", avail="AV", obx="OBX|1|TX|DOC^Letter||Synthetic letter text", name="SYNTH^PAT", filename="", no_txa=False, when=""):
+    now = when or time.strftime("%Y%m%d%H%M%S", time.gmtime(time.time() - 60))
     segs = [
         f"MSH|^~\\&|DOCSRC|HOSP|{app}|HOSP|{now}||MDM^{trigger}^{'MDM_T02' if trigger in ('T02', 'T04', 'T06', 'T08', 'T10') else 'MDM_T01'}|{control}|P|2.5.1",
         f"EVN|{trigger}|{now}",
@@ -314,6 +314,8 @@ if wanted("BASE"):
     time.sleep(3)
     _, again = api("GET", "/cases/" + c["caseId"])
     check("asking for the board runs no agent", again["counts"]["runs"] == 0, (a, again["counts"]))
+    a = op_api("POST", f"/cases/{c['caseId']}/questions", {"tier": "explain", "question": "What does the document say?"})
+    check("a question to an agent is refused", a[0] == 409 and a[1].get("code", json.dumps(a[1])) is not None and "no_agents" in json.dumps(a[1]), a)
     a = api("POST", f"/cases/{c['caseId']}/approvals", {"decision": "approve", "planDigest": "sha256:x"})
     check("an approval is refused", a[0] in (403, 409), a)
 
@@ -352,14 +354,16 @@ if wanted("D07"):
         check(f"{mb} MB: the case's block stays small", int(block) < 30000, block)
         hid = d.get("delivery", {}).get("header_id", "0")
         code = f'''Set h=##class(Ens.MessageHeader).%OpenId("{hid}"),m=##class(EnsLib.HL7.Message).%OpenId(h.MessageBodyId)
-Set $ZSTORAGE=4096
-Set r=$ZSTORAGE,before=$STORAGE
-Try {{ Set f=##class(Shutter.Util.DocumentFacts).FromMessage(m,.sc) Write !,"<<<facts:",$SELECT($ISOBJECT(f):f.trigger,1:"none"),":",$SELECT($ISOBJECT(f)&&$ISOBJECT(f.digests):$L(f.digests.body),1:0),":",before-$STORAGE,">>>",! }} Catch e {{ Write !,"<<<facts:error:",e.DisplayString(),">>>",! }}
-Try {{ Set s=m.OutputToString(,,.osc) Write !,"<<<string:",$L(s),":",$SYSTEM.Status.GetErrorText(osc),">>>",! }} Catch e {{ Write !,"<<<string:error:",e.Name,">>>",! }}'''
+Set $ZSTORAGE=1024
+Try {{ Set f=##class(Shutter.Util.DocumentFacts).FromMessage(m,.sc,0) Write !,"<<<fields:",$SELECT($ISOBJECT(f):f.trigger,1:"none"),">>>",! }} Catch e {{ Write !,"<<<fields:error:",e.DisplayString(),">>>",! }}
+Set $ZSTORAGE=8192
+Try {{ Set m2=##class(EnsLib.HL7.Message).%OpenId(h.MessageBodyId),f=##class(Shutter.Util.DocumentFacts).FromMessage(m2,.sc) Write !,"<<<digest:",$SELECT($ISOBJECT(f):$L(f.digests.body),1:"none"),">>>",! }} Catch e {{ Write !,"<<<digest:error:",e.DisplayString(),">>>",! }}
+Try {{ Set m3=##class(EnsLib.HL7.Message).%OpenId(h.MessageBodyId),s=m3.OutputToString(,,.osc) Write !,"<<<string:",$L(s),":",$SYSTEM.Status.GetErrorText(osc),">>>",! }} Catch e {{ Write !,"<<<string:error:",e.Name,">>>",! }}'''
         out = re.findall(r"<<<(.*?)>>>", session(NS, code, 300), re.S)
-        print("  under a 4 MB process limit:", [x[:160] for x in out])
-        check(f"{mb} MB: the extraction and its digest run under a 4 MB process limit", out and out[0].startswith("facts:T02:64:"), out)
-        check(f"{mb} MB: the control, the whole message as a string, does not", len(out) > 1 and (out[1].startswith("string:error") or "MAXSTRING" in out[1] or "STORE" in out[1] or out[1].startswith("string:0")), out)
+        print("  under a process limit:", [x[:160] for x in out])
+        check(f"{mb} MB: the fields read under a 1 MB process limit: the large value is not read for them", len(out) > 0 and out[0] == "fields:T02", out)
+        check(f"{mb} MB: the size and the digests run under an 8 MB process limit, one stored piece at a time", len(out) > 1 and out[1] == "digest:64", out)
+        check(f"{mb} MB: the control, the whole message as a string, does not", len(out) > 2 and (out[2].startswith("string:error") or "MAXSTRING" in out[2] or "STORE" in out[2]), out)
     ctl = f"D07F-{tag}"
     code, r = post_intake({"source": {"namespace": NS, "production": "DocSite.Production", "route": "Docs In", "header_id": "1"}, "receiver": "Docs Out", "failure": {"kind": "delivery_failed", "text": "t", "outcome": "error"}, "message": "\r".join(mdm("T02", ctl, doc="D07F^DMS")) + "\r"})
     c = case_of(ctl)
@@ -369,7 +373,12 @@ if wanted("D08"):
     step("D08: no TXA-12, and no TXA at all")
     for name, segs in (("blank", mdm("T02", f"D08A-{tag}", doc="")), ("absent", mdm("T02", f"D08B-{tag}", no_txa=True))):
         ctl = segs[0].split("|")[9]
-        send(segs, "d08" + name)
+        if name == "blank":
+            send(segs, "d08" + name)
+        else:
+            # A stock router's validation refuses a message with no TXA before any operation, so this one comes as a forwarder would post it.
+            code, r = post_intake({"source": {"namespace": NS, "production": "DocSite.Production", "route": "Docs In", "header_id": "1"}, "receiver": "Docs Out", "failure": {"kind": "delivery_failed", "text": "t", "outcome": "error"}, "message": "\r".join(segs) + "\r"})
+            check("absent: the intake takes it", code == 202, r)
         c = case_of(ctl)
         d = (c or {}).get("document", {})
         check(f"{name}: a case opens, with reason DOC_ID_MISSING", "DOC_ID_MISSING" in reasons(c), c)
@@ -472,9 +481,10 @@ if wanted("D17"):
     step("D17: the same control id with changed content; the same content under a new control id")
     doc = f"D17{tag}^DMS"
     a = f"D17A-{tag}"
-    send(mdm("T02", a, doc=doc), "d17a")
+    when = time.strftime("%Y%m%d%H%M%S", time.gmtime(time.time() - 60))
+    send(mdm("T02", a, doc=doc, when=when), "d17a")
     ca = case_of(a)
-    send(mdm("T02", a, doc=doc, obx="OBX|1|TX|DOC^Letter||Changed text"), "d17b")
+    send(mdm("T02", a, doc=doc, when=when, obx="OBX|1|TX|DOC^Letter||Changed text"), "d17b")
     time.sleep(20)
     code, r = api("GET", "/cases?limit=200")
     same = [x for x in r["items"] if x.get("sourceMessageId") == a]
@@ -482,7 +492,7 @@ if wanted("D17"):
     newest = case_of(a, 60) if not same else api("GET", "/cases/" + same[0]["caseId"])[1]
     check("the conflict is named", "DOC_VERSION_CONFLICT" in reasons(newest), (reasons(newest), says(newest)))
     b = f"D17C-{tag}"
-    send(mdm("T02", b, doc=doc), "d17c")
+    send(mdm("T02", b, doc=doc, when=when), "d17c")
     cb = case_of(b)
     check("the same content under a new control id: its own case, not merged", cb and cb["caseId"] != ca["caseId"], cb)
     check("and the chain calls it a possible retransmission", "retransmission" in says(cb), says(cb))
@@ -574,20 +584,28 @@ if wanted("PRIVACY"):
         check(f"{label}: the snapshot holds none, for an approver too", not hits, hits)
         check(f"{label}: no agent ran", api("GET", "/cases/" + cid)[1]["counts"]["runs"] == 0)
     step("Every global of Shutter's namespace searched for each canary, and the source's message store")
-    code = r'''Set rs=##class(%ResultSet).%New("%SYS.GlobalQuery:NameSpaceListChui") Do rs.Execute($NAMESPACE,"*",0,,,1)
-For { Quit:'rs.Next()  Set g="^"_rs.GetData(1) Continue:(g="^IRIS.Temp")  Set n=g,seen=0 For c=1:1:2000000 { Set n=$QUERY(@n) Quit:n=""  If $QLENGTH(n)'<0,$GET(@n)["CANARY" { Set v=@n Set p=$FIND(v,"CANARY") Write !,"<<<",g,"|",$E(v,p-6,p+14),">>>" Set seen=seen+1 Quit:seen>12 } } }
+    code = r'''Set g="",count=0,nodes=0
+For { Set g=$ORDER(^$GLOBAL(g)) Quit:g=""  Continue:$CASE($PIECE(g,".",1),"^oddDEF":1,"^oddCOM":1,"^oddBIND":1,"^oddSQL":1,"^oddPKG":1,"^oddPROC":1,"^oddTSQL":1,"^oddXML":1,"^oddStudioMenu":1,"^rOBJ":1,"^rINDEX":1,"^rINDEXCLASS":1,"^rINDEXEXT":1,"^rINDEXSQL":1,"^rMAC":1,"^rINC":1,"^rINT":1,"^rBACKUP":1,"^rMACSAVE":1,"^ROUTINE":1,"^UnitTest":1,:0)  Set count=count+1,n=g,seen=0 For c=1:1:3000000 { Set n=$QUERY(@n) Quit:n=""  Set nodes=nodes+1,v=$GET(@n) If v["CANARY" { Set p=$FIND(v,"CANARY") Write !,"<<<",g,"|",$E(v,p-6,p+22),">>>" Set seen=seen+1 Quit:seen>40 } } }
+Write !,"<<<COUNT|",count,"|",nodes,">>>",!
 Write !,"<<<END>>>",!'''
-    out = session("SHUTTER", code, 500)
+    out = session("SHUTTER", code, 550)
     rows = [x for x in re.findall(r"<<<(.*?)>>>", out) if x != "END"]
-    by = {}
+    by, walked = {}, ""
     for r in rows:
         g, v = r.split("|", 1)
-        by.setdefault(g, set()).add(re.match(r"CANARY[A-Z0-9]*", v).group(0) if re.match(r"CANARY[A-Z0-9]*", v) else v)
+        if g == "COUNT":
+            walked = v
+            continue
+        m = re.match(r"CANARY[A-Z]*", v)
+        by.setdefault(g, set()).add(m.group(0) if m else v)
+    print("  walked (globals|nodes):", walked)
     print("  in Shutter's namespace:", json.dumps({k: sorted(v) for k, v in by.items()}, indent=1))
-    check("the walk finished", "<<<END>>>" in out, out[-500:])
+    check("the walk finished, over real data", "<<<END>>>" in out and walked and int(walked.split("|")[1]) > 1000, out[-500:])
     content = ("CANARYPDFBYTES", "CANARYBASE64TEXT", "CANARYOBXTEXT", "CANARYTITLE", "CANARYNAME")
     bad = {k: [x for x in v if x.startswith(content)] for k, v in by.items()}
-    check("no document content or patient name anywhere in Shutter's namespace", not any(bad.values()), bad)
+    check("no document content, title or patient name anywhere in Shutter's namespace", not any(bad.values()), bad)
+    check("a receiver's words are in the case's block, the one place: the walk does see what it looks for", any("CANARYDIAG" in v for v in by.values()), by)
+    check("a receiver's words and a restricted identity are in the case's own row and nowhere else", set(by) <= {"^Shutter.Store.CaseD"}, sorted(by))
     out = session(NS, r'''Set found="" Set rs=##class(%SQL.Statement).%ExecDirect(,"SELECT TOP 40 ID,MessageBodyId FROM Ens.MessageHeader WHERE TargetConfigName='Docs Refuse Out' ORDER BY ID DESC") While rs.%Next() { Set m=##class(EnsLib.HL7.Message).%OpenId(rs.%Get("MessageBodyId")) Continue:'$ISOBJECT(m)  Set s=m.OutputToString() For w="CANARYBASE64TEXT","CANARYOBXTEXT","CANARYTITLE","CANARYNAME" { If s[w Set found(w)="" } }
 Set k="" For { Set k=$ORDER(found(k)) Quit:k=""  Write !,"<<<",k,">>>",! }''')
     src = re.findall(r"<<<(CANARY.*?)>>>", out)

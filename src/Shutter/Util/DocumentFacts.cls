@@ -1,8 +1,9 @@
 /// What Shutter reads of a document message (docs/CONTRACTS.md 11.2): MDM T01 to T11, by position, needing no schema, from the
 /// delivery body. MSH, every PID-3 repetition, PV1-19 and TXA-12, -13, -17, -18, -19, and nothing else: no OBX, no NTE, no
 /// name, no title, no file name. The walk stops at TXA, which comes before the OBX segments in every MDM structure, so a large
-/// document's value is never read; a message with no TXA reads each later segment's first stored chunk for its name and no
-/// further. Runs in the watched namespace (the package is mapped there) and in Shutter's, so it reads no Shutter store.
+/// document's value is not read for the fields. A message with no TXA reads each later segment's first stored piece for its name
+/// and no further (a piece is at most the longest string IRIS holds, about 3.6 MB). The size and the digests go through the stored
+/// pieces one at a time and keep none. Runs in the watched namespace (the package is mapped there) and in Shutter's, so it reads no Shutter store.
 Class Shutter.Util.DocumentFacts
 {
 
