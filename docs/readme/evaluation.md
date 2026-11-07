@@ -301,6 +301,8 @@ Per member, over all passes:
 
 - S27 A new admission under a new visit number: played in policy and rules modes only.
 - S31 A new admission under a new visit number, in the hospital's own production: played in policy mode only.
+- S33 A failed A08 that moves the patient's bed: played in policy and rules modes only.
+- S34 A failed transfer, then a later A08 that moves the patient's bed: played in policy and rules modes only.
 - S32 A new admission under a new visit number, while the plan awaits approval: played in rules mode only.
 - S28 A day case's admission and discharge both fail: played in policy and rules modes only.
 - S29 A failed transfer that is then withdrawn: played in policy and rules modes only.

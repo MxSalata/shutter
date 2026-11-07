@@ -4012,6 +4012,16 @@
    "why": "played in policy mode only"
   },
   {
+   "scenario": "S33",
+   "title": "A failed A08 that moves the patient's bed",
+   "why": "played in policy and rules modes only"
+  },
+  {
+   "scenario": "S34",
+   "title": "A failed transfer, then a later A08 that moves the patient's bed",
+   "why": "played in policy and rules modes only"
+  },
+  {
    "scenario": "S32",
    "title": "A new admission under a new visit number, while the plan awaits approval",
    "why": "played in rules mode only"
