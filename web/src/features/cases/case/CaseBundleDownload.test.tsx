@@ -19,7 +19,8 @@ vi.mock('@/env/mode', async (importOriginal) => ({
 
 const BUNDLE = '{"redaction":"REDACTED: tokens stand in.",\n"format":"shutter-case-bundle/1"}';
 const ROUTE = '/api/shutter/cases/C-000009/bundle';
-const WHOLE = '{"redaction":"UNREDACTED: this file holds identifiable patient data.",\n"format":"shutter-case-bundle-unredacted/1"}';
+const WHOLE =
+  '{"redaction":"UNREDACTED: this file holds identifiable patient data.",\n"format":"shutter-case-bundle-unredacted/1"}';
 const WHOLE_ROUTE = '/api/shutter/cases/C-000009/bundle-unredacted';
 
 function show() {

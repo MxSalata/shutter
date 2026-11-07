@@ -12,7 +12,10 @@ export async function fetchCaseBundle(caseId: string): Promise<{ text: string; f
 }
 
 /** The same file unredacted, an approver's, with the reason that goes on the case. Its first line says what it holds. */
-export async function fetchUnredactedCaseBundle(caseId: string, reason: string): Promise<{ text: string; filename: string }> {
+export async function fetchUnredactedCaseBundle(
+  caseId: string,
+  reason: string,
+): Promise<{ text: string; filename: string }> {
   const text = await post(`/cases/${seg(caseId)}/bundle-unredacted`, '{"redaction":"UNREDACTED', { reason });
   return { text, filename: `shutter-case-${caseId}-UNREDACTED.json` };
 }
