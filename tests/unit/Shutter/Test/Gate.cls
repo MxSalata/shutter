@@ -316,6 +316,7 @@ Method Run(row As %DynamicObject) As %DynamicObject
         Set inc.IncidentId = "UT-GATE-I-" _ $JOB _ "-" _ $INCREMENT(^||Shutter.Test.Gate)
         Set inc.Receiver = case.Receiver, inc.Mode = "policy", inc.State = "releasing", inc.OpenedAt = case.OpenedAt
         Set inc.PlanDigest = ##class(Shutter.Util.Json).Str(row.incident, "plan_digest")
+        If row.incident.%IsDefined("epoch") Set inc.ReceiverEpoch = row.incident.epoch
         Do $$$AssertStatusOK(inc.%Save(), row.name _ ": the incident is saved")
         Set i%MadeIncidents(inc.%Id()) = ""
         Do $$$AssertStatusOK(case.SetIncident(inc), row.name _ ": the case belongs to the incident")
@@ -885,6 +886,21 @@ XData Rows [ MimeType = application/json ]
    "summary": {"catalogue": {"decision": "policy", "entry": "E2", "outcome": "resend", "matches": [{"id": "E2", "preferred": {"outcome": "resend"}}]}},
    "approval": {"incident_plan_digest": "sha256:ut-incident", "bound_entry": "E2", "bound_outcome": "resend"},
    "expect": [["authorization", "pass", "APPROVAL_VALID"], ["catalogue", "pass", "ENTRY_MATCHED"]], "outcome": "pass"},
+  {"group": "authorization", "name": "an approval under an incident whose receiver was reset since the plan the person bound, the numbers matching",
+   "incident": {"plan_digest": "sha256:ut-incident", "epoch": 1}, "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2"},
+   "summary": {"catalogue": {"decision": "policy", "entry": "E2", "outcome": "resend", "matches": [{"id": "E2", "preferred": {"outcome": "resend"}}]}},
+   "approval": {"incident_plan_digest": "sha256:ut-incident", "bound_entry": "E2", "bound_outcome": "resend", "epoch": 2}, "rehearsal": {"epoch": 2}, "request": {"receiver_epoch": 2},
+   "expect": [["authorization", "block", "APPROVAL_RECEIVER_RESET"]], "outcome": "block"},
+  {"group": "authorization", "name": "an approval under an incident, the receiver at the epoch of the plan",
+   "incident": {"plan_digest": "sha256:ut-incident", "epoch": 1}, "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2"},
+   "summary": {"catalogue": {"decision": "policy", "entry": "E2", "outcome": "resend", "matches": [{"id": "E2", "preferred": {"outcome": "resend"}}]}},
+   "approval": {"incident_plan_digest": "sha256:ut-incident", "bound_entry": "E2", "bound_outcome": "resend", "epoch": 1}, "request": {"receiver_epoch": 1},
+   "expect": [["authorization", "pass", "APPROVAL_VALID"]], "outcome": "pass"},
+  {"group": "authorization", "name": "an approval under an incident whose plan recorded no epoch: a receiver that keeps none",
+   "incident": {"plan_digest": "sha256:ut-incident"}, "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2"},
+   "summary": {"catalogue": {"decision": "policy", "entry": "E2", "outcome": "resend", "matches": [{"id": "E2", "preferred": {"outcome": "resend"}}]}},
+   "approval": {"incident_plan_digest": "sha256:ut-incident", "bound_entry": "E2", "bound_outcome": "resend", "epoch": 1}, "request": {"receiver_epoch": 1},
+   "expect": [["authorization", "pass", "APPROVAL_VALID"]], "outcome": "pass"},
   {"group": "authorization", "name": "an approval under an incident whose item now follows another entry",
    "incident": {"plan_digest": "sha256:ut-incident"}, "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2"},
    "summary": {"catalogue": {"decision": "policy", "entry": "E2", "outcome": "resend", "matches": [{"id": "E2", "preferred": {"outcome": "resend"}}]}},
