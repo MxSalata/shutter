@@ -418,7 +418,7 @@ ClassMethod TypeOf(case As Shutter.Store.Case) As %String [ Private ]
 /// One short coded value: no control characters, and nothing long enough to be a payload.
 ClassMethod Narrow(value As %String) As %String [ Private ]
 {
-    Set v = $ZSTRIP(value, "*C", , "")
+    Set v = $ZSTRIP(value, "*C")
     Quit $SELECT($LENGTH(v) > 64: "", 1: v)
 }
 
