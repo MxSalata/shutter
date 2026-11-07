@@ -145,7 +145,7 @@ ClassMethod Build(case As Shutter.Store.Case, team As %DynamicObject, Output sub
     If (case.FailureKind = "withheld") || noEncounter {
         Set b = b _ "  Reply to this email with what was changed, or record it on the case, then mark the case as handled by the team on the case page: Shutter sent nothing for this message and will send nothing, and it cannot verify a merge or a cancellation against " _ receiver _ "." _ nl _ nl
     } Else {
-        Set b = b _ "  Reply to this email with what was changed, or record it on the case, then choose Reinvestigate on the case page: Shutter reads " _ receiver _ " again and verifies the correction." _ nl _ nl
+        Set b = b _ "  Reply to this email with what was changed, or record it on the case, then choose Reinvestigate on the case page: a new investigation reads " _ receiver _ " again where Shutter can. It does not show that this message was delivered." _ nl _ nl
     }
 
     Set b = b _ "REFERENCES" _ nl

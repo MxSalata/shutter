@@ -102,7 +102,7 @@ export function draftEscalation(
       : '  Nothing: Shutter sent no write for this case.',
     '',
     'WHEN IT IS CORRECTED',
-    `  Reply to this email with what was changed, or record it on the case, then choose Reinvestigate on the case page: Shutter reads ${receiver} again and verifies the correction.`,
+    `  Reply to this email with what was changed, or record it on the case, then choose Reinvestigate on the case page: a new investigation reads ${receiver} again where Shutter can. It does not show that this message was delivered.`,
     '',
     'REFERENCES',
     `  Case: ${str(c, 'caseId')}`,

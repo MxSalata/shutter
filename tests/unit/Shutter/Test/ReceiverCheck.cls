@@ -345,6 +345,15 @@ Method TestRunbookValidation()
     Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).Validate(p), "", "the profile takes a good line")
 }
 
+/// The email for a stopped case makes no promise a receiver Shutter cannot read would break.
+Method TestTheEscalationPromisesNoVerification()
+{
+    Set c = ..Case("transfer", "delivery_failed", ..ReadSummary())
+    Do $$$AssertStatusOK(##class(Shutter.Util.EscalationDraft).Build(c, {"name": "Team"}, .subject, .body), "the draft builds")
+    Do $$$AssertTrue(body '[ "verifies the correction", "no such promise")
+    Do $$$AssertTrue(body [ "does not show that this message was delivered", "it says what a new investigation doesn't show")
+}
+
 /// The class names no way out: no HTTP, no production request, no receiver path, no model; and it writes nothing.
 Method TestTheClassCallsNothingOut()
 {
