@@ -626,7 +626,8 @@ Say these plainly to whoever owns the feed.
 - **`QueueCountAlert` reaches your own alert consumer but opens no case,** and a router's validation refusal, with `AlertOnError` off on
   the router, is only logged: no alert, no case, and its header reads Completed.
 - **A forward is retried only while nobody answers.** While `Shutter.Production` is stopped (or a gateway answers 502, 503 or 504, or nothing does), a
-  forward waits in the forwarder's own queue and is tried again for the item's `FailureTimeout`: 300 seconds unless you set it, 0 tries once, -1 never gives up.
+  forward waits in the forwarder's own queue and is tried again for the item's `FailureTimeout`: 300 seconds as onboarding sets it, 0 tries once (a namespace onboarded
+  before v1.1.0 still reads 0: change it on the item), -1 never gives up.
   The feed does not wait. When that time runs out, or on a wrong password, an over-long body or any other refusal, it is a warning in that namespace's
   event log, an alert to the site's own consumer and `refused_72h` in the Doctor, and no case. A 202 that names no case, from a proxy or a wrong `IntakePath`,
   counts as a refusal too. Restoring the service after that does not bring it back.

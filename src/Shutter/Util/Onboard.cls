@@ -588,7 +588,7 @@ ClassMethod EditProduction(ns As %String, production As %String, actions As %Dyn
                 Set new = ##class(Ens.Config.Item).%New()
                 Set new.Name = a.item, new.ClassName = "Shutter.Intake.Forwarder", new.PoolSize = 1, new.Enabled = 1, new.Production = prod
                 Set new.Comment = "Hands a failed delivery to Shutter"
-                For set = $LISTBUILD("Adapter", "HTTPServer", a.server), $LISTBUILD("Adapter", "HTTPPort", a.port), $LISTBUILD("Adapter", "Credentials", a.credential), $LISTBUILD("Adapter", "SSLConfig", a.ssl), $LISTBUILD("Adapter", "ResponseTimeout", "15"), $LISTBUILD("Adapter", "ConnectTimeout", "5"), $LISTBUILD("Host", "FailureTimeout", "0"), $LISTBUILD("Host", "ReceiverPrefix", a.prefix) {
+                For set = $LISTBUILD("Adapter", "HTTPServer", a.server), $LISTBUILD("Adapter", "HTTPPort", a.port), $LISTBUILD("Adapter", "Credentials", a.credential), $LISTBUILD("Adapter", "SSLConfig", a.ssl), $LISTBUILD("Adapter", "ResponseTimeout", "15"), $LISTBUILD("Adapter", "ConnectTimeout", "5"), $LISTBUILD("Host", "FailureTimeout", "300"), $LISTBUILD("Host", "ReceiverPrefix", a.prefix) {
                     Continue:($LIST(set, 3) = "")
                     Set s = ##class(Ens.Config.Setting).%New(), s.Target = $LIST(set, 1), s.Name = $LIST(set, 2), s.Value = $LIST(set, 3)
                     Do new.Settings.Insert(s)

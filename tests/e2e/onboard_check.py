@@ -426,6 +426,92 @@ Set sc=##class(Ens.Director).UpdateProduction(30,0)""")
     w = watched("FANOUT")
     check("and the Doctor is clear of it", not w.get("operations_unwatched") and not any("Late Out" in x for x in w["problems"]), w)
 
+    step("A transform on the route: the case holds what the failing operation was sent")
+    print(send(7301, from_app("MAPPED", "a01", "DTL" + tag), "dtl"))
+    hit = wait_case(lambda x: x.get("sourceNamespace") == "FANOUT" and x.get("encounterId") == f"ENC-DTL{tag}", 45)
+    check("a case opens for it", bool(hit))
+    if hit:
+        c = settled(hit[0]["caseId"])
+        print(json.dumps({k: c.get(k) for k in ("caseId", "state", "ward", "sourceRoute", "originHeaderId")})[:400])
+        check("its ward is the one the transform set", c.get("ward") == "MAPPED-WARD", c.get("ward"))
+        check("its route is still the service", c.get("sourceRoute") == "Fan In", c.get("sourceRoute"))
+        origin = value("FANOUT", f'##class(EnsLib.HL7.Message).%OpenId(##class(Ens.MessageHeader).%OpenId("{c.get("originHeaderId")}").MessageBodyId).GetValueAt("PV1:3.1")')
+        check("and it names the message that operation was sent", origin == "MAPPED-WARD", origin)
+    n = len(fan_cases())
+
+    step("Two different messages to one item in a session: no case on a guess, and the site is told which")
+    last = max(alert_log("FANOUT") or [0])
+    print(send(7301, from_app("TWIN", "a01", "TWN" + tag), "twin"))
+    end = time.time() + 40
+    said = []
+    while time.time() < end and not said:
+        said = [a for a in alert_log("FANOUT", last).values() if "2 different HL7 messages to Fan One" in a]
+        time.sleep(2)
+    print(json.dumps(said)[:500])
+    check("the site's consumer hears of the session's two messages", len(said) == 1 and f"TWN{tag}" in said[0] and f"TWN{tag}B" in said[0], alert_log("FANOUT", last))
+    check("with no patient identifier in the alert", not any(f"MRNTWN{tag}" in a for a in said), said)
+    time.sleep(8)
+    twin_cases = [x for x in api("GET", "/cases")[1].get("items", []) if x.get("encounterId") == f"ENC-TWN{tag}"]
+    print(json.dumps([{k: x.get(k) for k in ("caseId", "ward", "state")} for x in twin_cases])[:400])
+    check("at most the case of a message sent before the other existed, and none when both were there", len(twin_cases) <= 1, twin_cases)
+    check("and said once", len([a for a in alert_log("FANOUT", last).values() if "2 different HL7 messages to Fan One" in a]) == 1, alert_log("FANOUT", last))
+    n = len(fan_cases())
+
+    step("A forward during Shutter's downtime waits in the forwarder's queue, and opens its case when Shutter returns")
+    last = max(alert_log("FANOUT") or [0])
+
+    def shutter_production(action):
+        # A licence refusal skips a stop or a start with no sign but the output, so it is asked until it says it did it.
+        call = 'StopProduction(60,1)' if action == "stop" else 'StartProduction("Shutter.Production")'
+        for _ in range(30):
+            out = session("SHUTTER", f'Set sc=##class(Ens.Director).{call} Write !,"[{action}] ",$SELECT(sc:"ok",1:$SYSTEM.Status.GetErrorText(sc)),!')
+            if f"[{action}] ok" in out:
+                return True
+            print(f"        {action} again:", out[-200:])
+            time.sleep(10)
+        return False
+
+    check("Shutter's production stops", shutter_production("stop"))
+    print(send(7301, from_app("ONE", "orm", "DWN" + tag), "down"))
+    time.sleep(20)
+    check("the site hears no refusal while it waits", not any("did not take a failed delivery" in a for a in alert_log("FANOUT", last).values()), alert_log("FANOUT", last))
+    check("Shutter's production starts again", shutter_production("start"))
+    hit = wait_case(lambda x: x.get("sourceNamespace") == "FANOUT" and x.get("encounterId") == f"ENC-DWN{tag}", 90)
+    check("the failure has its case once Shutter is back", bool(hit))
+    time.sleep(8)
+    check("one case", len([x for x in api("GET", "/cases")[1].get("items", []) if x.get("encounterId") == f"ENC-DWN{tag}"]) == 1)
+    check("and the site heard no refusal", not any("did not take a failed delivery" in a for a in alert_log("FANOUT", last).values()), alert_log("FANOUT", last))
+    n = len(fan_cases())
+
+    step("A 202 with no case id from something other than Shutter: a refusal, an alert, and the next alert forwards again")
+    last = max(alert_log("FANOUT") or [0])
+    subprocess.Popen(["docker", "exec", CTR, "python3", "-c", """
+import http.server
+class H(http.server.BaseHTTPRequestHandler):
+    def do_POST(self):
+        self.rfile.read(int(self.headers.get('Content-Length') or 0))
+        self.send_response(202); self.send_header('Content-Length', '0'); self.end_headers()
+    def log_message(self, *a): pass
+http.server.HTTPServer(('127.0.0.1', 7399), H).serve_forever()
+"""], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    forwarder_port = value("FANOUT", '##class(Ens.Director).GetItemSettingValue("Shutter Forwarder","Adapter","HTTPPort",.st)')
+    point = """Set p=##class(Ens.Config.Production).%OpenId("OnbFan.Production")
+For i=1:1:p.Items.Count() {{ Set it=p.Items.GetAt(i) If it.Name="Shutter Forwarder" {{ For j=1:1:it.Settings.Count() {{ Set s=it.Settings.GetAt(j) If s.Name="HTTPPort" Set s.Value="{port}" }} }} }}
+Set sc=p.%Save() Set sc=p.SaveToClass() Set sc=##class(Ens.Director).UpdateProduction(30,0) Write !,"[moved] ",sc,!"""
+    time.sleep(2)
+    check("the forwarder points at something else", "[moved] 1" in session("FANOUT", point.format(port="7399")), forwarder_port)
+    print(send(7301, from_app("ONE", "orm", "NOC" + tag), "nocase"))
+    end = time.time() + 30
+    said = []
+    while time.time() < end and not said:
+        said = [a for a in alert_log("FANOUT", last).values() if "no case id" in a]
+        time.sleep(2)
+    print(json.dumps(said)[:400])
+    check("the site hears that nothing took it", bool(said), alert_log("FANOUT", last))
+    session("FANOUT", point.format(port=forwarder_port))
+    check("no case, and the failure is still forwardable: no seen mark", not [x for x in api("GET", "/cases")[1].get("items", []) if x.get("encounterId") == f"ENC-NOC{tag}"], "")
+    n = len(fan_cases())
+
     step("A forward Shutter refuses: an alert to the site, and the Doctor remembers it past the next good one")
     last = max(alert_log("FANOUT") or [0])
     n = len(fan_cases())
@@ -507,7 +593,7 @@ if not args.reuse:
         ("DOCUMENTS", ["OnbDocs.Rule", "OnbDocs.Production"], "TRUSTLAB-documents", "OnbDocs.Production"),
         ("PAS", ["OnbPas.Production"], None, "OnbPas.Production"),
         ("ORDERS", ["OnbSite.AlertLog", "OnbAck.AckProcess", "OnbAck.Production"], None, "OnbAck.Production"),
-        ("FANOUT", ["OnbSite.AlertLog", "OnbFan.Rule", "OnbFan.Production"], None, "OnbFan.Production"),
+        ("FANOUT", ["OnbSite.AlertLog", "OnbFan.WardMap", "OnbFan.TwinMap", "OnbFan.Rule", "OnbFan.Production"], None, "OnbFan.Production"),
     ):
         lines = []
         if schema:
@@ -819,6 +905,58 @@ if hit:
         at_receiver = json.loads(resp.read().decode())
     print(json.dumps(at_receiver)[:300])
     check("the bed system holds the admission", at_receiver.get("state") == "admitted" and at_receiver.get("ward") == "WARD-A", at_receiver)
+
+step("An automatic release needs a proved source: a post with an invented header waits for a person, and a real failure still goes")
+check("site policy releases tier 2 by itself", profile_edit(lambda b: b["policy"]["2"].update(single="automatic")) == 200)
+import base64
+
+
+def at_beds(encounter):
+    req = urllib.request.Request(f"http://127.0.0.1:{args.port}/beds/api/encounters/{encounter}", headers={"Authorization": "Basic " + base64.b64encode(f"beds-client:{PW}".encode()).decode()})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return resp.status, json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        return e.code, {}
+
+
+
+
+def with_bed(segs, bed):
+    # hl7() takes the bed from the control id's end, which the tag shares: a free bed for each of these, or the rehearsal refuses it.
+    return [re.sub(r"\^BAY1\^[^^]*\^", f"^BAY1^{bed}^", x) if x.startswith("PV1") else x for x in segs]
+
+
+code, ans = post_intake({"source": {"namespace": "PAS", "production": "OnbPas.Production", "route": "PAS In", "header_id": "999999999"}, "receiver": "Bed Mgmt Out", "failure": {"kind": "delivery_failed", "text": "invented", "outcome": "error"}, "message": "\r".join(with_bed(hl7("a01", "A0c" + tag), "C1")) + "\r"})
+check("the intake takes the post, as it takes any", code == 202, (code, ans))
+if code == 202:
+    c = settled(ans["caseId"])
+    time.sleep(3)
+    c = api("GET", "/cases/" + ans["caseId"])[1]
+    print(json.dumps({k: c.get(k) for k in ("caseId", "state", "headline")})[:300])
+    check("it waits for a person, with no write", c.get("state") == "awaiting_approval" and at_beds(f"ENC-A0c{tag}")[0] == 404, (c.get("state"), at_beds(f"ENC-A0c{tag}")))
+    events = json.dumps(api("GET", f"/cases/{ans['caseId']}/events")[1])
+    check("and the case says the source is not verified, and who posted it", "Source not verified" in events and "Posted to the intake by shutter-fwd" in events, events[:800])
+code, ans = post_intake({"receiver": "Bed Mgmt Out", "mode": "policy", "failure": {"kind": "delivery_failed", "text": "no source at all", "outcome": "error"}, "message": "\r".join(with_bed(hl7("a01", "A0e" + tag), "E1")) + "\r"})
+check("a post naming no source at all is taken too", code == 202, (code, ans))
+if code == 202:
+    settled(ans["caseId"])
+    time.sleep(3)
+    c = api("GET", "/cases/" + ans["caseId"])[1]
+    check("and waits for a person", c.get("state") == "awaiting_approval" and at_beds(f"ENC-A0e{tag}")[0] == 404, (c.get("state"), at_beds(f"ENC-A0e{tag}")))
+print(send(7121, with_bed(hl7("a01", "A0d" + tag), "D1"), "a01d"))
+hit = wait_case(lambda c: c.get("sourceNamespace") == "PAS" and c.get("encounterId") == f"ENC-A0d{tag}")
+check("a real failure opens a case", bool(hit))
+if hit:
+    end = time.time() + 90
+    while time.time() < end:
+        c = api("GET", "/cases/" + hit[0]["caseId"])[1]
+        if c.get("state") in ("resolved", "failed", "escalated", "blocked", "awaiting_approval"):
+            break
+        time.sleep(2)
+    print(json.dumps({k: c.get(k) for k in ("caseId", "state", "headline")})[:300])
+    check("and it still goes by itself, verified at the receiver", c.get("state") == "resolved" and at_beds(f"ENC-A0d{tag}")[1].get("state") == "admitted", (c.get("state"), at_beds(f"ENC-A0d{tag}")))
+check("the policy goes back", profile_edit(lambda b: b["policy"]["2"].update(single="approval")) == 200)
 
 # ---- the guard and the reload ----
 step("A load in a live namespace is refused; a reload keeps everything")
