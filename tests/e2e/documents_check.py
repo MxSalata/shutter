@@ -146,6 +146,17 @@ def mdm(trigger, control, doc="DOC-1^DMS", parent="", app="DOWN", mrn="MRN7001",
     return segs
 
 
+def oru(control, obx, placer="ORD-1^LAB", filler="REP-1^LAB", status="F", app="DOWN", mrn="MRN7001", name="SYNTH^PAT", when="", obr4="CBC^Test^L", msg_type="ORU^R01^ORU_R01"):
+    now = when or time.strftime("%Y%m%d%H%M%S", time.gmtime(time.time() - 60))
+    return [
+        f"MSH|^~\\&|LABSRC|HOSP|{app}|HOSP|{now}||{msg_type}|{control}|P|2.5.1",
+        f"PID|1||{mrn}^^^HOSP^MR~9990001001^^^NHS^NH||{name}||19800101|F",
+        "PV1|1|O|CLINIC1^^^HOSP||||||||||||||||VISIT-7001",
+        f"ORC|RE|{placer}|{filler}",
+        f"OBR|1|{placer}|{filler}|{obr4}|||{now}|||||||||||||||{now}|||{status}",
+    ] + (obx if isinstance(obx, list) else [obx])
+
+
 def send(segs, name, wait=25):
     text = "\r".join(segs) + "\r"
     subprocess.run(["docker", "exec", "-i", CTR, "sh", "-c", f"cat > /tmp/doc_site/{name}.hl7"], input=text, text=True, check=True, errors="replace")
@@ -594,6 +605,160 @@ if wanted("D28"):
     check("missing namespace: chain coverage incomplete", "DOC_CHAIN_INCOMPLETE" in reasons(c) and "NOSUCH" in says(c), (reasons(c), says(c)))
     check("and the source is marked unverified", (c or {}).get("document", {}).get("source_verified") is False, (c or {}).get("document"))
 
+if wanted("R08"):
+    step("R08: a small ORU with a report as an ED: the same treatment as an MDM")
+    rows, ext = session_count(), external_rows()
+    ctl = f"R08-{tag}"
+    send(oru(ctl, f"OBX|1|ED|REP^Report^L||^application^pdf^Base64^{PDF_B64}", placer=f"R08O{tag}^LAB", filler=f"R08F{tag}^LAB^1.2^ISO"), "r08")
+    c = case_of(ctl)
+    d = (c or {}).get("document", {})
+    check("a report case opens and goes to a person", c and c.get("state") == "escalated", c)
+    check("it says Shutter has sent nothing", d.get("sent_nothing") is True and (c or {}).get("counts", {}).get("attempts") == 0, d)
+    check("OBR-2, OBR-3 whole, and OBR-25", d.get("report", {}).get("placer") == f"R08O{tag}^LAB" and d.get("report", {}).get("filler") == f"R08F{tag}^LAB^1.2^ISO" and d.get("report", {}).get("result_status") == "F", d.get("report"))
+    check("every PID-3 repetition", [k["id"] for k in d.get("patient", {}).get("keys", [])] == ["MRN7001", "9990001001"], d.get("patient"))
+    check("the value type that made it a report", d.get("report", {}).get("attachment") == "ED", d.get("report"))
+    check("no stored HL7 copy in Shutter's namespace", session_count() == rows and external_rows() == ext, (rows, session_count(), ext, external_rows()))
+    check("the operation key is its own form", (c or {}).get("operationKey", "").startswith("oru-v1:"), (c or {}).get("operationKey"))
+    check("the headline says report", (c or {}).get("headline", "").startswith("Report delivery needs review"), (c or {}).get("headline"))
+    _, snap = api("GET", f"/cases/{c['caseId']}/snapshot") if c else (0, {})
+    check("no OBX in the snapshot", PDF_B64[:20] not in json.dumps(snap) and '"notes"' not in json.dumps(snap), json.dumps(snap)[:400])
+    a = op_api("POST", f"/cases/{c['caseId']}/board", {})
+    time.sleep(3)
+    _, again = api("GET", "/cases/" + c["caseId"])
+    check("asking for the board runs no agent", again["counts"]["runs"] == 0, (a, again["counts"]))
+    a = op_api("POST", f"/cases/{c['caseId']}/questions", {"tier": "explain", "question": "What does the report say?"})
+    check("a question to an agent is refused", a[0] == 409 and "no_agents" in json.dumps(a[1]), a)
+    a = api("POST", f"/cases/{c['caseId']}/approvals", {"decision": "approve", "planDigest": "sha256:x"})
+    check("an approval is refused", a[0] in (403, 409), a)
+    for how, line in (("an RP", "OBX|1|RP|REP^Report^L||http://docs.example/1^DOC^application^pdf"), ("a base64 value under TX", f"OBX|1|TX|REP^Report^L||{'QUJD' * 100}")):
+        ctl = f"R08{how[-2:]}-{tag}"
+        send(oru(ctl, line, placer=f"R08{how[-2:]}{tag}^LAB", filler=""), "r08x")
+        c = case_of(ctl)
+        check(f"{how}: a report case, with no copy", bool(c) and "report" in c.get("document", {}) and external_rows() == ext, c)
+    ctl = f"R08T-{tag}"
+    code, r = post_intake({"source": {"namespace": NS, "production": "DocSite.Production", "route": "Docs In", "header_id": "1"}, "receiver": "Docs Out", "failure": {"kind": "delivery_failed", "text": "t", "outcome": "error"}, "message": "\r".join(oru(ctl, f"OBX|1|ED|REP^Report^L||^application^pdf^Base64^{PDF_B64}", placer="R08T^LAB", filler="")) + "\r"})
+    c = case_of(ctl)
+    check("the whole text posted for a profile receiver: no copy kept, a report case", code == 202 and bool(c) and "report" in c.get("document", {}) and external_rows() == ext, (code, r, c))
+    ctl = f"R08N-{tag}"
+    send(oru(ctl, f"OBX|1|ED|REP^Report^L||^application^pdf^Base64^{PDF_B64}", placer="", filler=""), "r08n")
+    c = case_of(ctl)
+    check("no OBR-2 or OBR-3: said, with nothing in its place", "DOC_ID_MISSING" in reasons(c) and not (c or {}).get("document", {}).get("document", {}).get("id") and "cannot establish" in says(c).lower(), c)
+
+if wanted("R07"):
+    step("R07: a 10 MB base64 ORU, as an ED and under TX: a metadata case, with the value not materialised")
+    for how, kind, prefix in (("ED", "ED", "^application^pdf^Base64^"), ("TX", "TX", "")):
+        rows, ext = session_count(), external_rows()
+        ctl = f"R07{how}-{tag}"
+        payload = base64.b64encode(os.urandom(10 * 1024 * 1024 * 3 // 4)).decode()
+        o = send(oru(ctl, f"OBX|1|{kind}|REP^Report^L||{prefix}{payload}", placer=f"R07{how}{tag}^LAB", filler=f"R07F{how}{tag}^LAB"), f"r07{how}", wait=120)
+        print("  sent:", o[:200])
+        c = case_of(ctl, 150)
+        d = (c or {}).get("document", {})
+        print("  size:", d.get("size"), "state:", (c or {}).get("state"), "attachment:", d.get("report", {}).get("attachment"))
+        check(f"{how}: a case opens", bool(c) and c.get("state") == "escalated" and "report" in d, c)
+        check(f"{how}: the size is recorded, over the intake's limit", d.get("size", {}).get("stored_bytes", 0) >= 10 * 1024 * 1024 and d.get("size", {}).get("over_intake_limit") is True, d.get("size"))
+        check(f"{how}: no copy in Shutter", session_count() == rows and external_rows() == ext, (rows, session_count(), ext, external_rows()))
+        block = value("SHUTTER", f'$LENGTH(##class(Shutter.Store.Case).ByCaseId("{(c or {}).get("caseId", "x")}").DocumentJSON)')
+        print("  block length:", block)
+        check(f"{how}: the case's block stays small", int(block) < 30000, block)
+        hid = d.get("delivery", {}).get("header_id", "0")
+        code = f"""Set h=##class(Ens.MessageHeader).%OpenId("{hid}"),m=##class(EnsLib.HL7.Message).%OpenId(h.MessageBodyId)
+Set $ZSTORAGE=1024
+Try {{ Set f=##class(Shutter.Util.DocumentFacts).FromMessage(m,.sc,0) Write !,"<<<fields:",$SELECT($ISOBJECT(f):f.trigger_"|"_f.report.attachment,1:"none"),">>>",! }} Catch e {{ Write !,"<<<fields:error:",e.DisplayString(),">>>",! }}
+Set $ZSTORAGE=8192
+Try {{ Set m2=##class(EnsLib.HL7.Message).%OpenId(h.MessageBodyId),f=##class(Shutter.Util.DocumentFacts).FromMessage(m2,.sc) Write !,"<<<digest:",$SELECT($ISOBJECT(f):$L(f.digests.body),1:"none"),">>>",! }} Catch e {{ Write !,"<<<digest:error:",e.DisplayString(),">>>",! }}
+Try {{ Set m3=##class(EnsLib.HL7.Message).%OpenId(h.MessageBodyId),s=m3.OutputToString(,,.osc) Write !,"<<<string:",$L(s),":",$SYSTEM.Status.GetErrorText(osc),">>>",! }} Catch e {{ Write !,"<<<string:error:",e.Name,">>>",! }}"""
+        out = re.findall(r"<<<(.*?)>>>", session(NS, code, 300), re.S)
+        print("  under a process limit:", [x[:160] for x in out])
+        check(f"{how}: the fields and the rule read under a 1 MB process limit: the value is not materialised", len(out) > 0 and out[0] == ("fields:R01|ED" if how == "ED" else "fields:R01|base64"), out)
+        check(f"{how}: the size and the digests run under an 8 MB process limit", len(out) > 1 and out[1] == "digest:64", out)
+        check(f"{how}: the control, the whole message as a string, does not", len(out) > 2 and (out[2].startswith("string:error") or "MAXSTRING" in out[2] or "STORE" in out[2]), out)
+
+if wanted("R26"):
+    step("R26: an ORU with only numbers or text behaves exactly as before, at a receiver with a profile and at one without")
+
+    def ordinary(c):
+        """What the ordinary path gives, with the message's own ids taken out, to compare between receivers."""
+        c = c or {}
+        return (c.get("state"), c.get("failureKind"), c.get("operationKey", "").split("^")[0], (c.get("failureText") or "").split(": The source")[0], c.get("counts", {}).get("attempts"), "document" in c)
+
+    for what, line, marker in (("numbers", ["OBX|1|NM|K^Potassium^L||5.4|mmol/L|3.5-5.3|H|||F", "OBX|2|NM|NA^Sodium^L||140|mmol/L|||||F"], "5.4"), ("text", "OBX|1|TX|N^Note^L||Plain words that a forwarder posts whole", "Plain words"), ("no OBX", "NTE|1||A note", "A note")):
+        shown = {}
+        for app, where in (("PLAIN", "Docs Plain Out"), ("DOWN", "Docs Out")):
+            before, stored = external_rows(), session_count()
+            ctl = f"R26{what[:2]}{app[:2]}-{tag}"
+            send(oru(ctl, line, placer=f"R26{what[:2]}{tag}^LAB", filler=f"R26F{what[:2]}{tag}^LAB", app=app), "r26")
+            c = case_of(ctl)
+            shown[where] = ordinary(c)
+            check(f"{what} at {where}: the ordinary case, no block", bool(c) and c.get("failureKind") == "unmappable" and "document" not in c, c)
+            check(f"{what} at {where}: through the ordinary intake, one more stored copy", external_rows() != before and session_count() != stored, (before, external_rows(), stored, session_count()))
+            check(f"{what} at {where}: an UNMAPPED operation key, as v1.0.0", (c or {}).get("operationKey", "").startswith("UNMAPPED^"), (c or {}).get("operationKey"))
+            if what != "no OBX":
+                _, snap = api("GET", f"/cases/{c['caseId']}/snapshot") if c else (0, {})
+                check(f"{what} at {where}: its snapshot copies the OBX, as v1.0.0", marker in json.dumps(snap), json.dumps(snap)[:300])
+        print("  ordinary:", shown)
+        check(f"{what}: the profile makes no difference at all", shown["Docs Out"] == shown["Docs Plain Out"], shown)
+    before = external_rows()
+    ctl = f"R26P-{tag}"
+    send(oru(ctl, f"OBX|1|ED|REP^Report^L||^application^pdf^Base64^{PDF_B64}", app="PLAIN", placer="R26P^LAB", filler=""), "r26p")
+    c = case_of(ctl)
+    check("an attachment at a receiver with no profile: ordinary, as before", bool(c) and "document" not in c and external_rows() != before, c)
+    before = external_rows()
+    ctl = f"R26H-{tag}"
+    send(oru(ctl, f"OBX|1|ED|REP^Report^L||^application^pdf^Base64^{PDF_B64}", app="HALF", placer="R26H^LAB", filler=""), "r26h")
+    c = case_of(ctl)
+    check("a forwarder naming a receiver with no profile falls back to the ordinary intake", bool(c) and "document" not in c and external_rows() != before, c)
+    # A profile that names no structure: the receiver's reports go the ordinary way, its documents don't move.
+    code, r = api("GET", "/site-profile")
+    p = r["profile"]
+    for rc in p["receivers"]:
+        if rc["name"].endswith("Docs Out"):
+            rc["documents"]["report_structures"] = []
+    code, ans = api("PUT", "/site-profile", p)
+    check("a profile naming no structure saves", code == 200, ans)
+    before = external_rows()
+    ctl = f"R26S-{tag}"
+    send(oru(ctl, f"OBX|1|ED|REP^Report^L||^application^pdf^Base64^{PDF_B64}", placer="R26S^LAB", filler=""), "r26s")
+    c = case_of(ctl)
+    check("then an attachment there takes the ordinary path", bool(c) and "document" not in c and external_rows() != before, c)
+    code, r = api("GET", "/site-profile")
+    p = r["profile"]
+    for rc in p["receivers"]:
+        if rc["name"].endswith("Docs Out"):
+            rc["documents"].pop("report_structures", None)
+    api("PUT", "/site-profile", p)
+
+if wanted("R09"):
+    step("R09: a further message for the same report under another result status")
+    placer, filler = f"R09O{tag}^LAB", f"R09F{tag}^LAB"
+    ed = f"OBX|1|ED|REP^Report^L||^application^pdf^Base64^{PDF_B64}"
+    a, b, s = f"R09A-{tag}", f"R09B-{tag}", f"R09S-{tag}"
+    send(oru(a, ed, placer=placer, filler=filler, status="P"), "r09a")
+    ca = case_of(a)
+    check("the first case has no other status to say", "DOC_RESULT_STATUS_CHANGED" not in reasons(ca) and "No further message" in says(ca), (reasons(ca), says(ca)))
+    send(oru(s, ed, placer=placer, filler=filler, status="P"), "r09s")
+    cs = case_of(s)
+    check("a further message under the same status is not this rule", "DOC_RESULT_STATUS_CHANGED" not in reasons(cs), (reasons(cs), says(cs)))
+    send(oru(b, ed, placer=placer, filler=filler, status="F"), "r09b")
+    cb = case_of(b)
+    check("two cases, two operation keys", ca and cb and ca["caseId"] != cb["caseId"] and ca["operationKey"] != cb["operationKey"], (ca, cb))
+    print("  says:", says(cb))
+    check("the F's case says the P plainly", "DOC_RESULT_STATUS_CHANGED" in reasons(cb) and "Preliminary (P)" in says(cb) and "Final results (F)" in says(cb), (reasons(cb), says(cb)))
+    check("and makes no claim about which stands", not any(w in says(cb).lower() for w in ("supersede", "replace", "latest", "current")), says(cb))
+    check("no MDM rule fires", not {"DOC_VERSION_CONFLICT", "DOC_PATIENT_CHANGED", "DOC_STATUS_UNPROVEN", "DOC_PARENT_UNPROVEN"} & set(reasons(cb)), reasons(cb))
+    api("POST", f"/cases/{ca['caseId']}/reinvestigate", {"reason": "check"})
+    time.sleep(22)
+    ca = case_of(a, 60)
+    check("the P's case, read again, says the F", "DOC_RESULT_STATUS_CHANGED" in reasons(ca) and "Final results (F)" in says(ca), (reasons(ca), says(ca)))
+    # A further message with no attachment of its own still names the order.
+    n = f"R09N-{tag}"
+    send(oru(n, "OBX|1|NM|K^Potassium^L||5.4", placer=placer, filler=f"R09G{tag}^LAB", status="C"), "r09n")
+    case_of(n)
+    api("POST", f"/cases/{ca['caseId']}/reinvestigate", {"reason": "check"})
+    time.sleep(22)
+    ca = case_of(a, 60)
+    check("a numbers-only message for the same order is read too", "Correction to results (C)" in says(ca), says(ca))
+
 if wanted("PRIVACY"):
     step("Canaries: one document carrying each, and every surface read")
     ctl = f"AE-CAN-{tag}"
@@ -608,7 +773,12 @@ if wanted("PRIVACY"):
     send(segs, "can2")
     c2 = case_of(ctl2)
     allowed_in_store = {"receiver_diagnostic", "restricted_metadata"}
-    for label, cc in (("restricted", c), ("usual", c2)):
+    ctl3 = f"AE-CAN3-{tag}"
+    segs = oru(ctl3, [f"OBX|1|ED|REP^CANARYTITLE^L||^application^pdf^Base64^{PDF_B64}CANARYBASE64TEXT", "OBX|2|TX|NOTE^CANARYTITLE^L||CANARYOBXTEXT", "NTE|1||CANARYOBXTEXT"], placer=f"CANORD{tag}^LAB", filler=f"CANREP{tag}^LAB", app="REFUSE", name="CANARYNAME^CANARYNAME", mrn="MRN8801", obr4="CANARYTITLE^Test^L")
+    send(segs, "can3")
+    c3 = case_of(ctl3)
+    check("the report with the canaries opened a report case", "report" in (c3 or {}).get("document", {}), c3)
+    for label, cc in (("restricted", c), ("usual", c2), ("report", c3)):
         cid = (cc or {}).get("caseId", "x")
         print(f"  {label}: {cid}, reasons {reasons(cc)}")
         surfaces = {}
@@ -656,6 +826,69 @@ Set k="" For { Set k=$ORDER(found(k)) Quit:k=""  Write !,"<<<",k,">>>",! }''')
     src = re.findall(r"<<<(CANARY.*?)>>>", out)
     print("  in the source namespace's message store:", sorted(set(src)))
     check("the content does remain: in the hospital's own message store, subject to its retention", {"CANARYBASE64TEXT", "CANARYOBXTEXT", "CANARYNAME"} <= set(src), out[-300:])
+
+if wanted("SWITCHES"):
+    step("The two switches: the Doctor flags a mismatch, and one onboarding option sets both")
+
+    def watched():
+        out = session("SHUTTER", """Set a=##class(Shutter.Util.Onboard).Watched(),it=a.%GetIterator() While it.%GetNext(,.w) { If w.namespace="DOCSITE" Write !,"<<<",w.%ToJSON(),">>>",! }""")
+        return json.loads(re.findall(r"<<<(.*?)>>>", out, re.S)[-1])
+
+    def onboard(what, options):
+        out = session("SHUTTER", f"""Write !,"<<<",##class(Shutter.Setup).{what}("{NS}","{options}"),">>>",!""", 200)
+        return json.loads(re.findall(r"<<<(.*?)>>>", out, re.S)[-1])
+
+    def documents_of(name):
+        _, r = api("GET", "/site-profile")
+        return next((x.get("documents") for x in r["profile"]["receivers"] if x["name"].endswith(name)), None)
+
+    w = watched()
+    print("  mismatch:", w.get("documents_mismatch"))
+    check("named on the forwarder with the profile off: flagged", any("Docs Half Out" in x for x in w.get("documents_mismatch", [])), w)
+    check("and it is among the namespace's problems", any("Docs Half Out" in x and "DocumentReceivers" in x for x in w.get("problems", [])), w.get("problems"))
+    check("a receiver with both switches on is not flagged", not any("Docs Refuse Out" in x for x in w.get("documents_mismatch", [])), w.get("documents_mismatch"))
+    check("nor one with both off", not any("Docs Plain Out" in x for x in w.get("documents_mismatch", [])), w.get("documents_mismatch"))
+    code, r = api("GET", "/site-profile")
+    p = r["profile"]
+    for rc in p["receivers"]:
+        if rc["name"].endswith("Docs Plain Out"):
+            rc["documents"] = {"enabled": True}
+    api("PUT", "/site-profile", p)
+    w = watched()
+    check("the profile on with the forwarder not naming it: flagged", any("Docs Plain Out" in x for x in w.get("documents_mismatch", [])), w.get("documents_mismatch"))
+    for rc in p["receivers"]:
+        if rc["name"].endswith("Docs Plain Out"):
+            rc.pop("documents")
+    _, r = api("GET", "/site-profile")
+    p = r["profile"]
+    for rc in p["receivers"]:
+        if rc["name"].endswith("Docs Plain Out"):
+            rc.pop("documents", None)
+    api("PUT", "/site-profile", p)
+    plan = onboard("OnboardPlan", '{""document_receivers"":""Docs Plain Out,No Such Item""}')
+    dos = [a["do"] for a in plan["actions"]]
+    print("  plan:", dos, plan["warnings"][:3])
+    check("the plan lists both switches", "set_document_receivers" in dos and "enable_documents" in dos, plan["actions"])
+    check("a name that is no item is said", any("No Such Item" in x for x in plan["warnings"]), plan["warnings"])
+    check("the plan changed nothing", not (documents_of("Docs Plain Out") or {}).get("enabled"), documents_of("Docs Plain Out"))
+    done = onboard("OnboardApply", '{""document_receivers"":""Docs Plain Out""}')
+    print("  apply:", done["changed"], done.get("error"))
+    check("the apply sets the profile", (documents_of("Docs Plain Out") or {}).get("enabled") is True and done["ok"], (documents_of("Docs Plain Out"), done))
+    named = session(NS, """Set p=##class(Ens.Config.Production).%OpenId("DocSite.Production"),i=p.FindItemByConfigName("Shutter Forwarder") For j=1:1:i.Settings.Count() { If i.Settings.GetAt(j).Name="DocumentReceivers" Write !,"<<<",i.Settings.GetAt(j).Value,">>>",! }""")
+    print("  named:", re.findall(r"<<<(.*?)>>>", named))
+    check("and the forwarder, keeping what it named", "Docs Plain Out" in re.findall(r"<<<(.*?)>>>", named)[-1] and "Docs Refuse Out" in re.findall(r"<<<(.*?)>>>", named)[-1], named[-300:])
+    w = watched()
+    check("the Doctor no longer flags it", not any("Docs Plain Out" in x for x in w.get("documents_mismatch", [])), w.get("documents_mismatch"))
+    time.sleep(4)
+    ctl = f"SW-{tag}"
+    send(oru(ctl, f"OBX|1|ED|REP^Report^L||^application^pdf^Base64^{PDF_B64}", app="PLAIN", placer=f"SW{tag}^LAB", filler=""), "sw")
+    c = case_of(ctl)
+    check("and a report there now opens a report case", "report" in (c or {}).get("document", {}), c)
+    again = onboard("OnboardPlan", '{""document_receivers"":""Docs Plain Out""}')
+    check("a second run has nothing to do for them", not {"set_document_receivers", "enable_documents"} & {a["do"] for a in again["actions"]}, again["actions"])
+    off = onboard("OnboardRemove", "{}")
+    print("  remove:", off["removed"][:8], off.get("error"))
+    check("taking the namespace off turns the switch off again", off["ok"] and (documents_of("Docs Plain Out") or {}).get("enabled") is not True, (off, documents_of("Docs Plain Out")))
 
 # A community licence counts each signed-in session until it times out.
 api("DELETE", "/session")
