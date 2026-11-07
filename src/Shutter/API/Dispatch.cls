@@ -615,7 +615,12 @@ ClassMethod CaseApprove(caseId As %String) As %Status
     If decision = "approve" { Set refusal = ##class(Shutter.Util.RecoveryControl).CaseApprovalRefusal(plan, .refused) If refusal '= "" Quit ..Fail("409 Conflict", refused, refusal) }
     Set comment = ##class(Shutter.Util.Json).Str(body, "comment")
     // The decider is the signed-in user, never a name from the body; the task takes the digest the body named (CONTRACTS 5).
+    // One decision at a time on a case: two tabs at the same moment could both read the task open and both be told 202. The
+    // second now finds the task gone and answers 409, as a later one does.
+    Lock +^Shutter.Store.CaseDecision(caseId):10
+    If '$TEST Quit ..Fail("409 Conflict", "wrong_state", "Another decision on this case is being made")
     Set result = ##class(Shutter.Util.Workflow).Decide(caseId, $SELECT(decision = "reject": "Reject", 1: "Approve"), digest, comment)
+    Lock -^Shutter.Store.CaseDecision(caseId)
     Set out = ##class(Shutter.Util.Json).Parse(result, .psc)
     If '$ISOBJECT(out) Set out = {"result": (result)}
     If out.%GetTypeOf("error") '= "unassigned" {
