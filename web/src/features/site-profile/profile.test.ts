@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { SiteProfile } from '@/api/types';
 import { glossary } from '@/lib/glossary';
@@ -485,6 +487,78 @@ describe('diffProfiles', () => {
       'Receiver removed: Downstream Out',
     ]);
   });
+
+  describe("a receiver's outage keys, set where none was", () => {
+    it.each([
+      ['engine_resend', true, 'Downstream Out, the engine resend: on'],
+      [
+        'ack_level',
+        'application',
+        'Downstream Out, what a Completed header proves: from not set to application',
+      ],
+      ['watch', { namespace: 'LAB', item: 'Lab Out' }, 'Downstream Out, its watch changed'],
+      ['mail', { to: ['lab@trust.nhs.net'], on: ['open'] }, 'Downstream Out, its outage mail changed'],
+      ['approvers', ['A. Person'], 'Downstream Out, its approvers changed'],
+      [
+        'resend_approval_minutes',
+        999999,
+        'Downstream Out, minutes an approval to resend lasts: from not set to 999999',
+      ],
+      [
+        'duplicates',
+        { behaviour: 'refuses', code: 'AE' },
+        'Downstream Out, how it treats duplicates changed',
+      ],
+      ['hold', { minutes: 25 }, 'Downstream Out, its hold changed'],
+      ['runbook', 'https://example.nhs.uk/runbook', 'Downstream Out, its runbook changed'],
+      ['call', '01632 960000', 'Downstream Out, who to call changed'],
+      ['settle_minutes', 8, 'Downstream Out, minutes to settle: from not set to 8'],
+      ['window_minutes', 9, 'Downstream Out, minutes in the window: from not set to 9'],
+    ])('%s reads as a change', (key, value, text) => {
+      const p = copy();
+      p.receivers[0][key] = value;
+      expect(diffProfiles(recorded, p).map((c) => c.text)).toEqual([text]);
+    });
+
+    it('reads the engine resend turned off, and an explicit false where nothing was said', () => {
+      const p = copy();
+      p.receivers[0].engine_resend = true;
+      const q = structuredClone(p);
+      q.receivers[0].engine_resend = false;
+      expect(diffProfiles(p, q).map((c) => c.text)).toEqual(['Downstream Out, the engine resend: off']);
+      expect(diffProfiles(recorded, q).map((c) => c.text)).toEqual([
+        'Downstream Out, the engine resend: off',
+      ]);
+    });
+
+    it('reads a key taken away, which puts the receiver back on the default', () => {
+      const p = copy();
+      p.receivers[0].engine_resend = true;
+      p.receivers[0].settle_minutes = 8;
+      expect(diffProfiles(p, recorded).map((c) => c.text)).toEqual([
+        'Downstream Out, the engine resend: off',
+        'Downstream Out, minutes to settle: from 8 to not set',
+      ]);
+    });
+
+    it('prints no address, number or link from what it only says changed', () => {
+      const p = copy();
+      p.receivers[0].runbook = 'https://example.nhs.uk/runbook';
+      p.receivers[0].call = '01632 960000';
+      p.receivers[0].mail = { to: ['lab@trust.nhs.net'], on: ['open'] };
+      const words = diffProfiles(recorded, p)
+        .map((c) => c.text)
+        .join(' ');
+      for (const hidden of ['example.nhs.uk', '01632', 'lab@trust']) expect(words).not.toContain(hidden);
+    });
+
+    it('takes no oversight line from any of them, since a person still approves each engine resend', () => {
+      const p = copy();
+      p.receivers[0].engine_resend = true;
+      p.receivers[0].ack_level = 'application';
+      expect(diffProfiles(recorded, p).some((c) => c.lessOversight)).toBe(false);
+    });
+  });
 });
 
 describe('describeSource', () => {
@@ -546,5 +620,42 @@ describe('the words the restyled page reads from the model', () => {
     expect(incidentRule(p)).toBe('An incident opens at 5 failures to one receiver within 10 minutes.');
     // The full sentence stays for the question’s second layer
     expect(describeIncident(p)).toMatch(/takes no more cases after 60 seconds with no new failure/);
+  });
+});
+
+describe("validateProfile on a receiver's outage keys, the table Shutter.Test.ProfileWatch runs at the server", () => {
+  const source = readFileSync(
+    join(__dirname, '../../../../tests/unit/Shutter/Test/ProfileWatch.cls'),
+    'utf8',
+  );
+  const table = /XData Rows \[ MimeType = application\/json \]\n\{\n(\[[\s\S]*?\n\])\n\}/.exec(source);
+  const rows = JSON.parse(table![1]) as {
+    name: string;
+    receiver: object;
+    top?: object;
+    expect: string;
+  }[];
+
+  it('has the rows of the server class', () => {
+    expect(rows.length).toBeGreaterThan(60);
+  });
+
+  it.each(rows.map((row) => [row.name, row] as const))('%s', (_name, row) => {
+    const profile = { receivers: [{ name: 'R', tier: 2, ...row.receiver }], policy: {}, ...row.top };
+    expect(validateProfile(profile)).toBe(row.expect);
+  });
+
+  it('leaves a recorded profile with none of the keys as it was', () => {
+    for (const r of recorded.receivers) expect(r).not.toHaveProperty('watch');
+    expect(validateProfile(recorded)).toBe('');
+  });
+
+  it('points the server path of a new key at no control, and names it in the alert', () => {
+    expect(fieldId('receivers[0].watch.item')).toBe('');
+    expect(describePath('receivers[0].watch.item')).toBe('Receiver 1, watch.item');
+    expect(problemField('receivers[0].mail.on[1]: must be open, needs_person or closed')).toEqual({
+      path: 'receivers[0].mail.on[1]',
+      message: 'must be open, needs_person or closed',
+    });
   });
 });

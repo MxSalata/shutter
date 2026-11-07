@@ -707,6 +707,23 @@ reads it through `Shutter.Store.SiteProfile`.
   disposition `correct` that always needs an approval and a rehearsal showing the placement unchanged; the gate and the
   verifier reading the history for the inserted movement. Practice (IHE PAM) corrects a past movement only through a
   historic-movement update where the receiver supports it, never by resending the original message.
+- **A receiver's outages** (v1.1.0): optional keys on a receiver entry. Each is checked only when present, an entry with none
+  of them validates as it always did, and a block whose feature is not in the build validates and does nothing.
+  `watch` `{"namespace", "item"}`, both required: the production item Shutter watches, read only; with no `watch` the receiver
+  is not watched. `runbook` and `call`: the site's own words, what to do and who to call. `approvers`: an array of names.
+  `ack_level`: `connection` (the default), `commit` or `application`, on any category: what a Completed header proves at
+  this receiver, as the site declares it. `duplicates` `{"behaviour", "code", "phrase", "refers_to"}`: `behaviour` is `refuses`,
+  `files_twice` or `unknown` (the default); `refuses` needs `code` (ERR-3, as a string) or `phrase` (the exact MSA-3 text); `refers_to`
+  is `message`, `order`, `result` or `unknown` (the default). `engine_resend` (true or false): true is accepted on
+  `orders_results`, on `current_state` or `history_of_record` only beside `ack_level: application`, and never beside
+  `resend_timestamp` `rewritten` or the questionnaire's `fresh`, since the stored message goes out unchanged. `hold` `{"minutes"}`,
+  1 to 60, default 10: on `current_state` and `history_of_record` only, refused on `orders_results`. `mail` `{"to", "on"}`, both
+  required: `to` an array of bare addresses inside `mail.allowed_domains` (section 10), `on` an array of `open`, `needs_person`
+  and `closed`. `resend_approval_minutes` (default 15), `settle_minutes` (default 10) and `window_minutes` (default 5): whole
+  numbers of 1 or more. `Shutter.Store.SiteProfile.ReceiverWatchProblem` and `validateProfile` in
+  `web/src/features/site-profile/profile.ts` give the same words; `tests/unit/Shutter/Test/ProfileWatch.cls` holds the one
+  table both run. The readers `WatchedReceivers`, `ReceiverAckLevel`, `ReceiverDuplicates`, `ReceiverMinutes` and
+  `ReceiverHoldMinutes` give the defaults.
 - **The receiver description** (v1.8): each receiver entry carries `api` (its `base` path and the paths of its `state`,
   `receipt`, `capabilities` and `operations` endpoints, with the placeholders `{encounter}` and `{key}`) and
   `features` (what the site declares it can do: `conditional_writes`, `receipts`, `history`, `dry_run`). The evidence

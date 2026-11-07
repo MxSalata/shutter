@@ -462,6 +462,28 @@ describe('SiteProfilePage', () => {
     await userEvent.click(within(versions).getByRole('button', { name: /Version 1\b/ }));
     expect(await within(versions).findByText('The first stored version.')).toBeInTheDocument();
   });
+
+  it('names the engine resend on a version that turned it on, not "no changes"', async () => {
+    const before = recorded.profile;
+    const after = structuredClone(before);
+    after.receivers[0].engine_resend = true;
+    after.receivers[0].ack_level = 'application';
+    const entry = (version: number, profile: typeof before) => ({
+      version,
+      profile,
+      source: 'api',
+      updatedAt: '2026-11-07T10:00:00Z',
+      updatedBy: 'approver',
+    });
+    server.use(
+      http.get(`${BASE}/site-profile/history`, () => HttpResponse.json([entry(2, after), entry(1, before)])),
+    );
+    renderPage();
+    const versions = await screen.findByRole('region', { name: 'Versions' });
+    await userEvent.click(await within(versions).findByRole('button', { name: /Version 2\b/ }));
+    expect(await within(versions).findByText('Downstream Out, the engine resend: on')).toBeInTheDocument();
+    expect(within(versions).queryByText(/Saved with no changes/)).not.toBeInTheDocument();
+  });
 });
 
 describe('SiteProfilePage, a change a case suggested', () => {
