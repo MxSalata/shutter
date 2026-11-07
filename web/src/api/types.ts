@@ -39,12 +39,36 @@ export interface Can {
   configure: boolean;
   /** Running and resetting scenarios. */
   scenarios: boolean;
+  /** Stopping Shutter recovery (CONTRACTS 17). Absent from an older server, which has no such control. */
+  stopRecovery?: boolean;
   /**
    * Spending the day's model budget (the resource Shutter_LiveAgents, CONTRACTS 5): convening the board on a case, and
    * asking a question that no recording answers. The public demo's own user has it not; a judge, an operator and an
    * approver have it.
    */
   liveAgents: boolean;
+}
+
+/** The recovery control (`GET /recovery-control`, CONTRACTS 17). */
+export interface RecoveryControl {
+  mode: 'shadow' | 'enabled';
+  generation: number;
+  stopped: boolean;
+  stoppedAt: string;
+  stoppedBy: string;
+  stopReason: string;
+  outstanding: {
+    id: number;
+    kind: string;
+    caseId: string;
+    receiver: string;
+    admittedAt: string;
+    state: string;
+  }[];
+  outstandingCount: number;
+  readable: boolean;
+  covers: string;
+  doesNotCover: string;
 }
 
 export interface Me {

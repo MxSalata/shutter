@@ -50,6 +50,7 @@ import { LiveHelpMenu } from '@/features/guide/LiveHelpMenu';
 import { LiveWelcome } from '@/trial/LiveWelcome';
 import { trialChrome } from '@/trial/slot';
 import { bannerForm } from '@/trial/visit';
+import { RecoveryBanner } from '@/features/settings/RecoveryControlSection';
 import { LiveBanner } from './LiveBanner';
 
 /**
@@ -343,6 +344,7 @@ export function AppLayout() {
       <AppShell.Main id={MAIN_ID} tabIndex={-1} style={{ outline: 'none' }}>
         {/* A new page starts at its top; Back returns to where the previous one was left. */}
         <ScrollRestoration />
+        <RecoveryBanner />
         <LiveBanner />
         <Suspense fallback={<PageSkeleton />}>
           <Outlet key={displayZone()} />
