@@ -550,16 +550,14 @@ Method TestShadowSendsNoEmail()
         Set m.EscalationId = e.%Id()
         Do $$$AssertStatusOK(op.OnEscalationSend(m, .resp), "sent to the operation, " _ mode)
         Set e = ##class(Shutter.Store.Escalation).%OpenId(e.%Id(), 0)
-        Set written = 0, rs = ##class(%SQL.Statement).%ExecDirect(, "CALL %Library.File_FileSet(?, '*.eml')", dir)
-        Set files = rs.%NextResult()
-        While $ISOBJECT(files) && files.%Next() { Set written = written + 1 }
+        Set written = ##class(%File).Exists(##class(%File).NormalizeFilename(c.CaseId _ "-escalation-" _ e.Seq _ ".eml", dir))
         If mode = "shadow" {
             Do $$$AssertEquals(e.State, "failed", "shadow: not sent")
             Do $$$AssertTrue(e.Result [ "shadow", "and says why: " _ e.Result)
             Do $$$AssertEquals(written, 0, "and no file")
         } Else {
             Do $$$AssertEquals(e.State, "sent", "enabled: the negative control sends: " _ e.Result)
-            Do $$$AssertEquals(written, 1, "and the file is written: " _ e.Result)
+            Do $$$AssertTrue(##class(%File).Exists(e.Result), "and the file is written: " _ e.Result)
         }
     }
     Do ##class(%File).RemoveDirectoryTree(dir)

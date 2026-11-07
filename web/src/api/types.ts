@@ -862,6 +862,10 @@ export interface SiteProfile {
    * feed is held while a message's HL7 schema category is not loaded here ("prevent failures", default false).
    */
   feed?: { time_zone?: string; prevent_failures?: boolean };
+  /** Anything but an explicit enabled is shadow: nothing is rehearsed or sent (CONTRACTS 17). */
+  recovery?: { mode?: 'shadow' | 'enabled' };
+  /** Whether a person's escalation email goes out in shadow mode; it doesn't, unless this says enabled. */
+  notifications?: { shadow_delivery?: 'disabled' | 'enabled' };
 }
 
 /** GET /site-profile: the profile in force and its store version, which a PUT sends back as expectedVersion. */
