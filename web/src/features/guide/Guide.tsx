@@ -1050,7 +1050,8 @@ export function Guide() {
     onClose: exit,
     // Focus goes back by hand: where the reader was, or into the step's card
     returnFocus: false,
-    transitionProps: reduced ? { duration: 0 } : undefined,
+    // Closing is at once: no half-faded layer for a screenshot or a first click to meet
+    transitionProps: reduced ? { duration: 0 } : { exitDuration: 0 },
     closeButtonProps: { 'aria-label': 'Exit guide' },
     fullScreen: phone,
     size: 'xl' as const,

@@ -470,7 +470,7 @@ apply, whose failures reach the site's consumer and open no case: run the plan a
 `removed` and has no problems. `credentials` tries each namespace's stored
 sign-in. `hl7_schemas.missing` includes what a watched namespace's services name.
 
-The web application is at `/shutter/index.html`; `/shutter` and `/shutter/` answer 404.
+The web application is at `/shutter/index.html`; `/shutter` and `/shutter/` go on to it.
 
 **9.6 Fill in the receivers.** In the app's site profile (an approver's), review each draft: its system, category
 (`current_state`, `history_of_record` or `orders_results`), tier and team, and remove `draft` when you save. Use the name the

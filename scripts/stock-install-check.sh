@@ -12,7 +12,8 @@
 # (2026.3 or later) or "core" for the core alone (2026.2). --archive loads a package archive instead of the folder, the
 # form the registry serves; --write-archive also writes one with `zpm package`. --no-demo loads with -Ddemo=0, as a site does,
 # and stops after the checks of the install, since the scenarios need the demo. The scenarios default to S2.
-# CTR names the container (default shutter-stock-check); KEEP=1 leaves it running. Run from the repository's root.
+# CTR names the container (default shutter-stock-check), PORT its web port (default: any free one); KEEP=1 leaves it
+# running. Run from the repository's root.
 set -euo pipefail
 
 image=${1:?usage: stock-install-check.sh IMAGE MODULE [--archive FILE] [--write-archive FILE] [--no-demo] [SCENARIO...]}
@@ -37,7 +38,7 @@ cleanup() { [ "${KEEP:-0}" = 1 ] || docker rm -f "$ctr" > /dev/null 2>&1 || true
 trap cleanup EXIT
 
 docker rm -f "$ctr" > /dev/null 2>&1 || true
-docker run -d --name "$ctr" -p 127.0.0.1::52773 "$image" --check-caps false --ISCAgent false > /dev/null
+docker run -d --name "$ctr" -p "127.0.0.1:${PORT:-}:52773" "$image" --check-caps false --ISCAgent false > /dev/null
 port=$(docker port "$ctr" 52773/tcp | head -1 | sed 's/.*://')
 url="http://127.0.0.1:$port"
 
@@ -72,6 +73,10 @@ echo "loaded $target in USER in $((SECONDS - start)) s"
 
 code=$(curl -s -m 20 -o /dev/null -w '%{http_code}' "$url/shutter/index.html" || true)
 [ "$code" = 200 ] || { echo "/shutter answered HTTP $code"; exit 1; }
+for bare in /shutter /shutter/; do
+  to=$(curl -s -m 20 -o /dev/null -w '%{http_code} %{redirect_url}' "$url$bare" || true)
+  [ "$to" = "302 $url/shutter/index.html" ] || { echo "$bare answered: $to"; exit 1; }
+done
 state=$(printf '%s\n' 'Set sc = ##class(Ens.Director).GetProductionStatus(.n, .s) Write !,"RESULT: ",$GET(n)," ",$GET(s),!' 'Halt' | session USER | grep '^RESULT: ' || true)
 [ "$state" = 'RESULT: Shutter.Production 1' ] || { echo "the production is not running: $state"; exit 1; }
 echo "/shutter answers and Shutter.Production runs"
