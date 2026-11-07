@@ -73,10 +73,13 @@ ClassMethod RowKind(row As %DynamicObject) As %String [ Private ]
 /// What a Completed header can honestly claim at this item: application, commit, connection or not_established. The
 /// declared level stands only when getReply is 1 and the effective reply actions complete (C or W) on no code but AA and
 /// CA, with one exception, the engine default's own :I?=W and :T?=C, which assume a reply naming another message or of
-/// another type is still the receiver's answer. A code the string leaves unmatched completes too, with no row in the event
-/// log, so the string must also stop every other reply, with its own :* and :~. Anything else completes on something that is
-/// not an acceptance, or awaits nothing, so the answer is not_established, with reason naming the pattern (as written) or
-/// what is missing, or ..#REASONGETREPLYOFF or ..#REASONUNREADABLE. Pass reason on to DeliveredWords.
+/// another type is still the receiver's answer. The exception depends on place: :T?=C holds only after the :* and the :~,
+/// since the engine stops at the first such match and before them it completes refusals. R alone completes too once
+/// FailureTimeout runs out, so it counts as completing on anything but AA, CA or ?A. A code the string leaves unmatched
+/// completes as well, with no row in the event log, so the string must also stop every other reply, with its own :* and
+/// :~. Anything else completes on something that is not an acceptance, or awaits nothing, so the answer is not_established,
+/// with reason naming the pattern (as written) or what is missing, or ..#REASONGETREPLYOFF or ..#REASONUNREADABLE. Pass
+/// reason on to DeliveredWords.
 /// <p>replyCodeActions is the item's resolved string: empty means the engine's default, which only a stock class has, and
 /// a caller that could not read it, or whose class overrides the reply handling, passes "unknown". level is the site's
 /// declaration; an empty one, "none" or one not known here reads as connection, so it is never rounded up.</p>
@@ -102,12 +105,15 @@ ClassMethod EffectiveAck(level As %String = "", replyCodeActions As %String = ""
 /// <p>The engine returns no action for a reply that matches nothing, and the header then reads Completed. :* and :~ are both
 /// asked for because the engine's two ways of matching differ: only its map lets :* take a reply with no MSA. Each must hold
 /// S, D or F: R alone has no final action, and on the engine's unmapped path a retry that runs out completes.</p>
+/// <p>That goes for every R alone, E=R and :?E=R among them. This function cannot see FailureTimeout, so a site at -1, where
+/// a retry never runs out, also answers not_established; writing RF instead keeps its level words.</p>
 ClassMethod NotAcceptance(replyCodeActions As %String) As %String [ Private ]
 {
     Set actions = $ZSTRIP(replyCodeActions, "<>W")
     Quit:actions="unknown" ..#REASONUNREADABLE
     Set:actions="" actions = ..#STOCKREPLYACTIONS
-    Set (found, unreadable, stopsOther, stopsNoMsa) = ""
+    Set (found, unreadable) = ""
+    Set (stopsOther, stopsNoMsa) = 0
     For i = 1:1:$LENGTH(actions, ",") {
         Set piece = $ZSTRIP($PIECE(actions, ",", i), "<>W")
         Continue:piece=""
@@ -120,9 +126,10 @@ ClassMethod NotAcceptance(replyCodeActions As %String) As %String [ Private ]
         If code = ":I?" {
             Set bad = (action '= "W")
         } ElseIf code = ":T?" {
-            Set bad = (action '= "C")
+            Set bad = (action '= "C") || 'stopsOther || 'stopsNoMsa
         } Else {
-            Set bad = ((action [ "C") || (action [ "W")) && '$CASE(code, ":AA": 1, ":CA": 1, ":?A": 1, : 0)
+            Set completes = (action [ "C") || (action [ "W") || ($TRANSLATE(action, "R") = "")
+            Set bad = completes && '$CASE(code, ":AA": 1, ":CA": 1, ":?A": 1, : 0)
         }
         Set:bad found = found _ $SELECT(found="": "", 1: ", ") _ piece
         Set final = (action [ "S") || (action [ "D") || (action [ "F")

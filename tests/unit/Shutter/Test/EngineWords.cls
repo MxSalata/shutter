@@ -124,6 +124,58 @@ Method TestEffectiveAckStands()
     Do ..Ack("application", ":?A=C,:?E=RF,:?R=RD,E=F,:~=S,:*=S", 1, "application", "", "retries and failures, with the rest stopped")
     Do ..Ack("application", ":?A=C,E=F,:*=S,:~=S", 1, "application", "", "the engine's unmapped path")
     Do ..Ack("application", ":?A=C,:*=RF,:~=D", 1, "application", "", "any final action stops them")
+    Do ..Ack("application", ":?A=C,:?E=S,:?R=RF,:~=S,:*=S,:T?=C", 1, "application", "", ":T?=C after both")
+    Do ..Ack("application", ":?A=C,E=F,:*=S,:~=S,:T?=C", 1, "application", "", ":T?=C after both, on the unmapped path")
+    Do ..Ack("application", ":~=S,:*=S,:T?=C,:?A=C,:?E=S,:?R=RF", 1, "application", "", ":T?=C after both, with the codes after it")
+    Do ..Ack("application", ":I?=W,:?A=C,:?E=S,:?R=RF,:~=S,:*=S", 1, "application", "", ":I?=W in first place")
+    Do ..Ack("application", ":?A=C,:I?=W,:?E=S,:?R=RF,:~=S,:*=S", 1, "application", "", ":I?=W among the codes")
+    Do ..Ack("application", ":?A=C,:?E=S,:?R=RF,:~=S,:*=S,E=F", 1, "application", "", "an error status that fails")
+    Do ..Ack("application", ":?R=RF,:?E=S,:~=S,:?A=C,:*=S,:I?=W,:T?=C,E=RF", 1, "application", "", "an error status retried, then failed")
+    Do ..Ack("application", ":AA=R,:CA=C,:AE=S,:CE=S,:AR=RF,:CR=RF,:~=S,:*=S", 1, "application", "", "R alone on AA")
+    Do ..Ack("application", ":?A=R,:?E=S,:?R=RF,:~=S,:*=S", 1, "application", "", "R alone on ?A")
+}
+
+/// R alone completes once FailureTimeout runs out, on a stock operation on both builds, with nothing listening for the E
+/// rows. A label naming a reply says what then read Completed; a string in a map that turns :?E=R into RF is refused too,
+/// since the rule does not follow the engine's two paths and writing RF costs a site nothing.
+Method TestEffectiveAckRetryAlone()
+{
+    Set stock = ":?R=RF,:?E=S,:~=S,:?A=C,:*=S,:I?=W,:T?=C"
+    Do ..Ack("application", stock _ ",E=R", 1, "not_established", "E=R", "a message that never opened a connection, E=R last")
+    Do ..Ack("application", "E=R," _ stock, 1, "not_established", "E=R", "and E=R first")
+    Do ..Ack("application", ":?A=C,:?E=S,:?R=RF,:~=S,:*=S,E#<Ens>ErrOutConnectExpired=R", 1, "not_established", "E#<Ens>ErrOutConnectExpired=R", "and on the error's name")
+    Do ..Ack("application", ":?A=C,:?E=S,:?R=RF,:~=S,:*=S,E*Connect=R", 1, "not_established", "E*Connect=R", "and on the error's words")
+    Do ..Ack("application", ":?A=C,:?R=RF,E=F,:?E=R,:~=S,:*=S", 1, "not_established", ":?E=R", "AE and CE, outside a map")
+    Do ..Ack("application", ":?A=C,:?E=R,E=F,:?R=R,:~=S,:*=S", 1, "not_established", ":?E=R, :?R=R", "AR and CR, outside a map")
+    Do ..Ack("application", ":?A=C,:?E=R,:?R=RF,:~=S,:*=S", 1, "not_established", ":?E=R", "inside a map, which would have made it RF")
+    Do ..Ack("application", ":?A=C,:?E=S,:?R=R,:~=S,:*=S", 1, "not_established", ":?R=R", ":?R inside a map")
+    Do ..Ack("application", ":AE=R", 1, "not_established", ":AE=R", "a literal E code")
+    Do ..Ack("application", ":ZZ=R", 1, "not_established", ":ZZ=R", "an unknown code")
+    Do ..Ack("application", ":?A=C,:?E=S,:?R=RF,:~=S,:*=R", 1, "not_established", ":*=R", "a wildcard, named as written")
+    Do ..Ack("application", ":?A=C,:?E=S,:?R=RF,:~=R,:*=S", 1, "not_established", ":~=R", "no MSA, named as written")
+    Do ..Ack("application", ":?A=C,:?E=S,:?R=RF,:~=S,:*=S,X=R", 1, "not_established", "X=R", "no reply at all")
+    Do ..Ack("application", ":?A=C,:?e=r,:?R=RF,:~=S,:*=S", 1, "not_established", ":?e=r", "as the engine reads it, in lower case")
+    Do ..Ack("application", ":?A=C,:?E=RR,:?R=RF,:~=S,:*=S", 1, "not_established", ":?E=RR", "R twice is still R alone")
+    Do ..Ack("commit", stock _ ",E=R", 1, "not_established", "E=R", "commit falls too")
+    Do ..Ack("connection", stock _ ",E=R", 1, "not_established", "E=R", "connection falls too")
+    Set answer = ##class(Shutter.Util.EngineWords).EffectiveAck("application", stock _ ",E=R", 1, .reason)
+    Do $$$AssertEquals(##class(Shutter.Util.EngineWords).DeliveredWords(17, "03:12", answer, reason), "IRIS marked this delivery Completed. Receiver acceptance has not been established. This operation's reply actions complete on E=R. Header 17 at 03:12.", "the whole sentence")
+}
+
+/// :T?=C before the :* or the :~ completes what they would have stopped: run on a stock operation on both builds, and a label
+/// naming a reply says what then read Completed. After both it completed nothing but AA and CA.
+Method TestEffectiveAckPlaceOfTheException()
+{
+    Do ..Ack("application", ":T?=C,:?A=C,:?E=S,:?R=RF,:~=S,:*=S", 1, "not_established", ":T?=C", "AE, AR and no MSA, in first place")
+    Do ..Ack("application", ":?A=C,:T?=C,:?E=S,:?R=RF,:~=S,:*=S", 1, "not_established", ":T?=C", "AE, AR and no MSA, in second place")
+    Do ..Ack("application", ":?A=C,:?E=S,:T?=C,:?R=RF,:~=S,:*=S", 1, "not_established", ":T?=C", "AR and no MSA, in third place")
+    Do ..Ack("application", ":?A=C,E=F,:*=S,:T?=C,:~=S", 1, "not_established", ":T?=C", "no MSA, after the :* alone")
+    Do ..Ack("application", ":?A=C,E=F,:~=S,:T?=C,:*=S", 1, "not_established", ":T?=C", "after the :~ alone")
+    Do ..Ack("application", ":?A=C,:?E=S,:?R=RF,:T?=C", 1, "not_established", ":T?=C", "with neither")
+    Do ..Ack("application", ":?A=C,:?E=S,:?R=RF,:T?=C,:~=S,:*=S", 1, "not_established", ":T?=C", "before both, after the codes")
+    Do ..Ack("application", ":?A=C,E=F,:*=R,:~=S,:T?=C", 1, "not_established", ":*=R", "after a :* that does not stop, which is named first")
+    Set answer = ##class(Shutter.Util.EngineWords).EffectiveAck("application", ":T?=C,:?A=C,:?E=S,:?R=RF,:~=S,:*=S", 1, .reason)
+    Do $$$AssertEquals(##class(Shutter.Util.EngineWords).DeliveredWords(17, "03:12", answer, reason), "IRIS marked this delivery Completed. Receiver acceptance has not been established. This operation's reply actions complete on :T?=C. Header 17 at 03:12.", "the whole sentence")
 }
 
 /// A code the string leaves unmatched completes. These strings were run against a stock operation on both builds with
@@ -218,7 +270,7 @@ Method TestDeliveredWordsNotEstablished()
 Method TestWordsNeverClaimMore()
 {
     For level = "application", "commit", "connection", "" {
-        For actions = ":?R=RF,:?E=S,:~=S,:?A=C,:*=S,:I?=W,:T?=C", ":?E=C", ":*=C", ":I?=C", ":?A=C", ":?A=C,:?E=S,:?R=RF,:*=S", "unknown" {
+        For actions = ":?R=RF,:?E=S,:~=S,:?A=C,:*=S,:I?=W,:T?=C", ":?E=C", ":*=C", ":I?=C", ":?A=C", ":?A=C,:?E=S,:?R=RF,:*=S", ":?A=C,:?E=S,:?R=RF,:~=S,:*=S,E=R", ":T?=C,:?A=C,:?E=S,:?R=RF,:~=S,:*=S", "unknown" {
             For getReply = 1, 0, "unknown" {
                 Set answer = ##class(Shutter.Util.EngineWords).EffectiveAck(level, actions, getReply, .reason)
                 Set words = ##class(Shutter.Util.EngineWords).DeliveredWords(17, "03:12", answer, reason)
