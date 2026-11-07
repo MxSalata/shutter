@@ -22,6 +22,9 @@ Property Body As %String(MAXLEN = "");
 /// The cases as JSON: [{"id", "caseId", "threshold", "hours"}].
 Property Items As %String(MAXLEN = "");
 
+/// The patient detail the text was built at.
+Property Detail As %String(MAXLEN = 32);
+
 Property CreatedAt As %String(MAXLEN = 30);
 
 Property SentAt As %String(MAXLEN = 30);
@@ -29,10 +32,10 @@ Property SentAt As %String(MAXLEN = 30);
 /// The mail server's answer, or why it did not go.
 Property Result As %String(MAXLEN = 2000);
 
-ClassMethod Create(recipient As %String, subject As %String, body As %String, items As %DynamicArray, now As %String, Output row As Shutter.Store.ReminderDigest) As %Status
+ClassMethod Create(recipient As %String, subject As %String, body As %String, items As %DynamicArray, now As %String, Output row As Shutter.Store.ReminderDigest, detail As %String = "") As %Status
 {
     Set row = ..%New()
-    Set row.Recipient = $ZCONVERT(recipient, "L"), row.Subject = subject, row.Body = body, row.Items = items.%ToJSON(), row.CreatedAt = now
+    Set row.Recipient = $ZCONVERT(recipient, "L"), row.Subject = subject, row.Body = body, row.Items = items.%ToJSON(), row.CreatedAt = now, row.Detail = detail
     Quit row.%Save()
 }
 
@@ -46,6 +49,27 @@ Method SendProblem(now As %String, settings As %DynamicObject, domains As %List)
     Set problem = ##class(Shutter.Util.Mail).AddressProblem(..Recipient, domains)
     If problem '= "" Quit ..Recipient _ ": " _ problem
     Quit ##class(Shutter.Util.Mail).ControlProblem(..Subject)
+}
+
+/// What has changed since the text was built, so that it must not go, or "": the patient detail, a case that no longer
+/// needs a person or has had this reminder, or who the reminder is for. Read as late as the send can read it. Not a fault:
+/// the next run builds what is still due.
+Method ChangedSince(settings As %DynamicObject) As %String
+{
+    If ..Detail '= settings."patient_detail" Quit "the patient detail setting has changed"
+    Set items = ##class(Shutter.Util.Json).Parse(..Items, .psc)
+    If '$ISOBJECT(items) Quit "its cases cannot be read"
+    Set states = $LISTFROMSTRING(##class(Shutter.Util.CaseReminder).#NEEDSPERSON)
+    Set it = items.%GetIterator()
+    While it.%GetNext(, .item) {
+        Set case = ##class(Shutter.Store.Case).%OpenId(item.id, 0)
+        If '$ISOBJECT(case) Return item.caseId _ " has gone"
+        If '$LISTFIND(states, case.State) || (case.Disposition = "abandoned") Return item.caseId _ " no longer needs a person"
+        If ##class(Shutter.Store.CaseReminder).CaseThresholdExists(item.id, item.threshold) Return item.caseId _ " has had this reminder"
+        Set to = $SELECT(item.threshold = "officer": settings."officer_address", 1: ##class(Shutter.Util.Json).Str(##class(Shutter.Util.EscalationDraft).Team(case), "mailbox"))
+        If $ZCONVERT(to, "L") '= ..Recipient Return item.caseId _ " has a new recipient"
+    }
+    Quit ""
 }
 
 /// The mail server took it: each case's threshold is recorded with a line on its audit trail, and the text goes. Touches
@@ -75,11 +99,12 @@ Method MarkSent(result As %String, now As %String = {##class(Shutter.Util.Time).
     Quit sc
 }
 
-/// It did not go: the reason is kept and logged, the text goes, and the next run builds its cases into a new digest.
-Method MarkFailed(reason As %String) As %Status
+/// It did not go: the reason is kept and, unless quiet, logged; the text goes, and the next run builds its cases into a new
+/// digest. Quiet is for a digest overtaken by events, which is no fault to show on the Health page.
+Method MarkFailed(reason As %String, quiet As %Boolean = 0) As %Status
 {
     Set ..State = "failed", ..Result = $EXTRACT(reason, 1, 2000), ..Body = ""
-    Do ##class(Shutter.Util.CaseReminderTask).Note("A reminder to " _ ..Recipient _ " did not go, and goes again at the next run: " _ $EXTRACT(reason, 1, 500))
+    If 'quiet Do ##class(Shutter.Util.CaseReminderTask).Note("A reminder to " _ ..Recipient _ " did not go, and goes again at the next run: " _ $EXTRACT(reason, 1, 500))
     Quit ..%Save()
 }
 
@@ -140,6 +165,9 @@ Storage Default
 </Value>
 <Value name="9">
 <Value>Result</Value>
+</Value>
+<Value name="10">
+<Value>Detail</Value>
 </Value>
 </Data>
 <DataLocation>^Shutter.Store.ReminderDigestD</DataLocation>

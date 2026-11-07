@@ -67,6 +67,8 @@ Method OnReminderSend(request As Shutter.Msg.ReminderSend, Output response As En
     Set problem = row.SendProblem(##class(Shutter.Util.Time).NowUTC(), settings, ##class(Shutter.Store.SiteProfile).AllowedDomains())
     If (problem = "") && (..Adapter.SMTPServer = "") Set problem = "no mail server is set on this operation"
     If problem '= "" Do row.MarkFailed(problem) Quit $$$OK
+    Set changed = row.ChangedSince(settings)
+    If changed '= "" Do row.MarkFailed(changed, 1) Quit $$$OK
     Try {
         Set mail = ##class(%Net.MailMessage).%New()
         Set mail.From = ..Sender(), mail.Subject = ##class(Shutter.Util.Mail).HeaderValue(row.Subject), mail.Charset = "UTF-8"

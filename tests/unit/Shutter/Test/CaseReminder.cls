@@ -334,10 +334,10 @@ Method TestOneCaseTwiceInADigest()
     Do $$$AssertTrue(body [ "Downstream Out, delivery failed: 1", "by receiver once")
 }
 
-Method Digest(threshold As %String = "team") As Shutter.Store.ReminderDigest
+Method Digest(threshold As %String = "team", detail As %String = "identifiers", createdAt As %String = "2026-11-04T12:00:00Z") As Shutter.Store.ReminderDigest
 {
     Set items = [{"id": (..CaseRowId), "caseId": (..#CASEID), "threshold": (threshold), "hours": 4}]
-    Set sc = ##class(Shutter.Store.ReminderDigest).Create("team@reminder.example.nhs.uk", "Shutter: 1 case", "MRN9004", items, "2026-11-04T12:00:00Z", .row)
+    Set sc = ##class(Shutter.Store.ReminderDigest).Create("team@reminder.example.nhs.uk", "Shutter: 1 case", "MRN9004", items, createdAt, .row, detail)
     Do $$$AssertStatusOK(sc, "the digest is stored")
     Quit row
 }
@@ -412,10 +412,41 @@ Method TestTheLastCheckBeforeSending()
     Set on = ##class(Shutter.Util.CaseReminder).Settings({"reminders": {"enabled": true}, "feed": {"time_zone": "UTC"}, "mail": {"allowed_domains": ["reminder.example.nhs.uk"]}})
     Do $$$AssertEquals(row.SendProblem("2026-11-04T12:10:00Z", on, $LISTBUILD("reminder.example.nhs.uk")), "", "fine")
     Do $$$AssertTrue(row.SendProblem("2026-11-04T12:31:00Z", on, $LISTBUILD("reminder.example.nhs.uk")) [ "half an hour", "too old")
-    Do $$$AssertTrue(row.SendProblem("2026-11-04T18:00:00Z", on, $LISTBUILD("reminder.example.nhs.uk")) '= "", "outside the window")
+    Do $$$AssertTrue(..Digest("team", "identifiers", "2026-11-04T17:45:00Z").SendProblem("2026-11-04T18:05:00Z", on, $LISTBUILD("reminder.example.nhs.uk")) [ "outside the reminder window", "outside the window, though only 20 minutes old")
     Do $$$AssertTrue(row.SendProblem("2026-11-04T12:10:00Z", on, $LISTBUILD("other.example.nhs.uk")) [ "not in the allowed domains", "a domain taken off the list")
     Set off = ##class(Shutter.Util.CaseReminder).Settings({"reminders": {"enabled": false}, "feed": {"time_zone": "UTC"}})
     Do $$$AssertTrue(row.SendProblem("2026-11-04T12:10:00Z", off, $LISTBUILD("reminder.example.nhs.uk")) [ "off", "switched off since")
+}
+
+/// Read just before the send: what the digest says must still hold, or it does not go, and that is no fault to report.
+Method TestTheStateIsReadAgainBeforeSending()
+{
+    Set s = ##class(Shutter.Util.CaseReminder).Settings({"reminders": {"enabled": true, "patient_detail": "none", "officer_address": "team@reminder.example.nhs.uk"}, "feed": {"time_zone": "UTC"}})
+    Set row = ..Digest("officer", "none")
+    Do $$$AssertEquals(row.ChangedSince(s), "", "nothing has changed")
+    Do s.%Set("patient_detail", "identifiers")
+    Do $$$AssertTrue(row.ChangedSince(s) [ "patient detail", "the level of detail changed since it was built")
+    Do s.%Set("patient_detail", "none"), s.%Set("officer_address", "someone@reminder.example.nhs.uk")
+    Do $$$AssertTrue(row.ChangedSince(s) [ "new recipient", "the officer changed")
+    Do s.%Set("officer_address", "team@reminder.example.nhs.uk")
+    Set case = ##class(Shutter.Store.Case).%OpenId(..CaseRowId)
+    Set case.State = "resolved"
+    Do $$$AssertStatusOK(case.%Save(), "resolved")
+    Do $$$AssertTrue(row.ChangedSince(s) [ "no longer needs a person", "the case was resolved")
+    Set case.State = "failed", case.Disposition = "abandoned"
+    Do $$$AssertStatusOK(case.%Save(), "abandoned")
+    Do $$$AssertTrue(row.ChangedSince(s) [ "no longer needs a person", "the case was abandoned")
+    Set case.Disposition = ""
+    Do $$$AssertStatusOK(case.%Save(), "failed again")
+    Do $$$AssertEquals(row.ChangedSince(s), "", "still due")
+    Do ..Digest("officer", "none").MarkSent("ok", "2026-11-04T12:01:00Z")
+    Do $$$AssertTrue(row.ChangedSince(s) [ "has had this reminder", "another digest got there first")
+    Set team = ..Digest("team", "none")
+    Do $$$AssertTrue(team.ChangedSince(s) [ "new recipient", "the case's team has another mailbox")
+    Kill ^Shutter.Reminder("last_error")
+    Do $$$AssertStatusOK(row.MarkFailed("overtaken", 1), "failed quietly")
+    Do $$$AssertEquals($GET(^Shutter.Reminder("last_error")), "", "and not reported as a fault")
+    Do $$$AssertEquals(row.Body, "", "its text goes")
 }
 
 /// The gathering reads the stored case: its state, its team, what has been sent.

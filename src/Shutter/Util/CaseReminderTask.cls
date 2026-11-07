@@ -125,7 +125,7 @@ ClassMethod Send(digest As %DynamicObject, settings As %DynamicObject, now As %S
         Do items.%Push({"id": (item.case.id), "caseId": (item.case.caseId), "threshold": (item.threshold), "hours": (settings.%Get(item.threshold _ "_hours"))})
     }
     Do ##class(Shutter.Util.CaseReminder).Compose(digest, settings, .subject, .body)
-    Set sc = ##class(Shutter.Store.ReminderDigest).Create(digest.to, subject, body, items, now, .row)
+    Set sc = ##class(Shutter.Store.ReminderDigest).Create(digest.to, subject, body, items, now, .row, settings."patient_detail")
     If $$$ISERR(sc) Do ..Note("A reminder to " _ digest.to _ " could not be stored: " _ $SYSTEM.Status.GetErrorText(sc)) Quit 0
     Set msg = ##class(Shutter.Msg.ReminderSend).%New()
     Set msg.DigestId = row.%Id()
