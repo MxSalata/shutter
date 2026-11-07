@@ -57,6 +57,8 @@ describe('the live first-run prompt', () => {
     const { unmount } = ui(<LiveWelcome />);
     const dialog = await screen.findByRole('dialog', { name: 'New here?' });
     expect(dialog).toHaveTextContent('a demo hospital with made-up patients');
+    // It sits beside the page, which stays in reach behind it
+    expect(dialog).not.toHaveAttribute('aria-modal');
     expect(screen.getByRole('link', { name: 'Take the guided tour' })).toHaveAttribute(
       'href',
       '/shutter/?trial=tour#/scenarios',
