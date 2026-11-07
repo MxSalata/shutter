@@ -31,6 +31,7 @@ import {
   validateProfile,
 } from '@/features/site-profile/profile';
 import { digest, draftEscalation, teamFor } from './escalation';
+import { receiverCheckFor, type RecordedCase } from './receiverCheck';
 import { freshHolds, heldView, type CaseFixture, type Hold } from './hold';
 import { recordedSiteProfile, recordedSiteProfileHistory } from './profile';
 import {
@@ -1014,6 +1015,15 @@ export const handlers = [
     const id = String(params.id);
     if (!caseOf(id)) return error(404, 'not_found', `No case ${id}`);
     return HttpResponse.json(whatIfFor(id));
+  }),
+  http.get(`${BASE}/cases/:id/receiver-check`, ({ params }) => {
+    if (!session) return signedOut();
+    const id = String(params.id);
+    const c = caseOf(id);
+    if (!c) return error(404, 'not_found', `No case ${id}`);
+    if (!['blocked', 'escalated', 'failed'].includes(String(c.detail.state)))
+      return error(404, 'not_stopped', `The case is ${String(c.detail.state)}`);
+    return HttpResponse.json(receiverCheckFor(c as unknown as RecordedCase, siteProfile!.profile));
   }),
   http.get(`${BASE}/cases/:id/questions/suggested`, ({ params }) => {
     if (!session) return signedOut();

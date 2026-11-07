@@ -135,6 +135,11 @@ ClassMethod Validate(p As %DynamicObject) As %String
             If demo.%IsDefined("namespace") && (demo.%GetTypeOf("namespace") '= "string") Return at _ ".demo.namespace: must be a string"
         }
         If r.%IsDefined("cancels") && (r.%GetTypeOf("cancels") '= "boolean") Return at _ ".cancels: must be true or false"
+        // The site's one line on where to look (Shutter.Util.ReceiverCheck): a hint for a person, never read by the core.
+        If r.%IsDefined("manual_check") {
+            Set problem = ##class(Shutter.Util.ReceiverCheck).ManualCheckProblem(r.%Get("manual_check"))
+            If problem '= "" Return at _ ".manual_check." _ problem
+        }
         // Whether the receiver takes merges (T31); false when absent, and a merge still needs the site's merges: allowed.
         If r.%IsDefined("merges") && (r.%GetTypeOf("merges") '= "boolean") Return at _ ".merges: must be true or false"
         If r.%IsDefined("api") {

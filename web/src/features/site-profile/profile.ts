@@ -238,6 +238,24 @@ export function addressesProblem(list: string, domains: string[] = []): string {
   return '';
 }
 
+/** The port of ReceiverCheck.ManualCheckProblem: one optional line of plain text, a place to look; "" when it passes. */
+export function manualCheckProblem(mc: unknown): string {
+  if (!isObject(mc) || Array.isArray(mc)) return 'must be an object';
+  for (const k of Object.keys(mc)) if (k !== 'runbook') return `${k}: unknown field`;
+  if (!('runbook' in mc)) return '';
+  const v = mc.runbook;
+  if (typeof v !== 'string') return 'runbook: must be text';
+  if (v.trim() === '') return 'runbook: must not be blank';
+  if (v.length > 300) return 'runbook: at most 300 characters';
+  // eslint-disable-next-line no-control-regex
+  if (/[\x00-\x1f\x7f]/.test(v)) return 'runbook: one line, with no control characters';
+  if (v.includes('<')) return 'runbook: plain text only, no HTML';
+  if (/:\/\/|\bwww\.|\bmailto:|\bjavascript:/i.test(v)) return 'runbook: no links';
+  if (/\b(password|passwd|pwd|secret|token|api[ _-]?key)\s*[:=]/i.test(v)) return 'runbook: no credentials';
+  if (/\d{6}/.test(v)) return 'runbook: no patient examples or identifiers';
+  return '';
+}
+
 /** The port of SiteProfile.Validate: "" when the profile is valid, else the server's message for the first problem. */
 export function validateProfile(p: unknown): string {
   if (!isObject(p)) return 'the profile must be a JSON object';
@@ -280,6 +298,10 @@ export function validateProfile(p: unknown): string {
       if (!isObject(r.demo) || Array.isArray(r.demo)) return `${at}.demo: must be an object`;
       if ('namespace' in r.demo && typeof r.demo.namespace !== 'string')
         return `${at}.demo.namespace: must be a string`;
+    }
+    if ('manual_check' in r) {
+      const problem = manualCheckProblem(r.manual_check);
+      if (problem) return `${at}.manual_check.${problem}`;
     }
     if ('cancels' in r && typeof r.cancels !== 'boolean') return `${at}.cancels: must be true or false`;
     if ('merges' in r && typeof r.merges !== 'boolean') return `${at}.merges: must be true or false`;
@@ -460,7 +482,7 @@ export function problemField(text: string): { path: string; message: string } | 
 /** The DOM id of the control for a path, or "" when the page has no control for it (api, features). */
 export function fieldId(path: string): string {
   let m =
-    /^receivers\[(\d+)\]\.(name|system|category|history_policy|tier|applies|resend_timestamp|cancels|merges)$/.exec(
+    /^receivers\[(\d+)\]\.(name|system|category|history_policy|tier|applies|resend_timestamp|cancels|merges|manual_check\.runbook)$/.exec(
       path,
     );
   if (m) return `site-receivers-${m[1]}-${m[2]}`;
@@ -562,6 +584,8 @@ function receiverChanges(a: SiteReceiver, b: SiteReceiver, p: SiteProfile): Chan
       lessOversight: b.merges === true,
     });
   if (!same(a.api, b.api)) out.push({ path: 'api', text: `${name}, its endpoints changed` });
+  if (!same(a.manual_check, b.manual_check))
+    out.push({ path: 'manual_check', text: `${name}, the site's runbook line changed` });
   if (!same(a.features, b.features))
     out.push({ path: 'features', text: `${name}, its declared features changed` });
   return out;
