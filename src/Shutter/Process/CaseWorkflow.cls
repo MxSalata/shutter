@@ -1170,12 +1170,14 @@ Method BedWaitOutcome(case As Shutter.Store.Case, result As Shutter.Msg.GateResu
         While ci.%GetNext(, .c) {
             Continue:'$ISOBJECT(c)
             Set rc = ##class(Shutter.Util.Json).Str(c, "reason_code")
-            // Further messages for the patient come first and are no wait: a person reads what the check names.
-            If $LISTFIND($LISTBUILD("FURTHER_MOVEMENT", "PATIENT_UNREADABLE", "FURTHER_NOT_READ"), rc) {
+            // Further messages for the patient are no wait: a person reads what the check names.
+            If $LISTFIND($LISTBUILD("FURTHER_MOVEMENT", "PATIENT_UNREADABLE", "FURTHER_NOT_READ", "ENGINE_UNREADABLE"), rc) {
                 Set waited = 1, detail = ##class(Shutter.Util.Json).Str(c, "detail")
                 Set case.Headline = "Stopped for a person: " _ ##class(Shutter.Util.Json).Clip(detail, 200)
                 Return case.Transition("blocked", detail, "gate", "gate:" _ result.DecisionId)
             }
+            // The engine still has the message, or has delivered it, or the receiver may hold it (Shutter.Util.EngineCheck).
+            If (rc = "ENGINE_STILL_TRYING") || (rc = "ENGINE_DELIVERED") || (rc = "RECEIVER_MAY_HOLD_IT") Set waited = 1 Return ##class(Shutter.Util.EngineCheck).Settle(case, c, checks, "gate:" _ result.DecisionId)
             If (rc = "WAITING_FOR_OCCUPANT_CASE") || (rc = "OCCUPANT_CASE_FAILED") || (rc = "NEWER_MESSAGE_PENDING") Set code = rc Quit
         }
     }
@@ -1418,7 +1420,7 @@ Method OnlyRefreshable(result As Shutter.Msg.GateResult) As %Boolean
     While iter.%GetNext(.i, .c) {
         Continue:(##class(Shutter.Util.Json).Str(c, "result") = "pass")
         If ##class(Shutter.Util.Json).Str(c, "result") '= "unknown" Return 0
-        If '$LISTFIND($LISTBUILD("STALE_EVIDENCE", "RECEIPT_UNREADABLE", "CAPABILITIES_UNREADABLE", "RECEIVER_UNREADABLE"), ##class(Shutter.Util.Json).Str(c, "reason_code")) Return 0
+        If '$LISTFIND($LISTBUILD("STALE_EVIDENCE", "RECEIPT_UNREADABLE", "CAPABILITIES_UNREADABLE", "RECEIVER_UNREADABLE", "ENGINE_UNREADABLE"), ##class(Shutter.Util.Json).Str(c, "reason_code")) Return 0
         Set found = 1
     }
     Quit found
@@ -1679,7 +1681,7 @@ Method OnReinvestigate(request As Shutter.Msg.Reinvestigate, Output response As 
     Set ..ReopenedBy = request.RequestedBy, ..LiveAllowed = request.LiveAllowed
     Set case.WorkflowSessionId = ..%SessionId, case.ClosedAt = ""
     // A wait on another case ends with the reopening; the fresh gate sets it again if the bed is still held (v1.28).
-    Set case.WaitsOnCase = "", case.WaitsOnMessage = ""
+    Set case.WaitsOnCase = "", case.WaitsOnMessage = "", case.WaitsOnEngine = ""
     If $ISOBJECT(case.CurrentApproval) && 'case.CurrentApproval.Revoked Do case.CurrentApproval.Revoke(request.RequestedBy _ ": the case was reopened")
     Do case.%Save()
     Set who = $SELECT(request.RequestedBy = "": "a person", 1: request.RequestedBy)

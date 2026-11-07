@@ -107,6 +107,9 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
     // one of them (v1.34), until they are delivered.
     Set pendingMsgs = summary.%Get("pending_messages")
     If isWrite {
+        // Whether the engine still has this message, or has delivered it (Shutter.Util.EngineCheck). It comes first: what the engine
+        // has done decides whether there is a write to weigh at all. A watched case with no origin header has nothing to read it by.
+        If (case.SourceNamespace '= "") && (case.OriginHeaderId '= "") Do checks.%Push(..EngineRow(case))
         // Further messages for the patient, on any visit (Shutter.Util.FurtherMessages): the snapshot's at the proposal, read
         // again at dispatch, since a snapshot may be hours old by the time a person approves. A hit stops the plan for a person.
         Set further = $SELECT(request.Stage = "proposal": summary.%Get("further_messages"), 1: ##class(Shutter.Util.FurtherMessages).Find(case))
@@ -366,6 +369,12 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
     Do case.Note("artifact", "Gate (" _ request.Stage _ "): " _ text, "system", "gate:" _ response.DecisionId)
     $$$TRACE("Gate " _ request.Stage _ " for " _ case.CaseId _ " plan v" _ plan.Version _ ": " _ outcome)
     Quit $$$OK
+}
+
+/// The ordering check's row for what the engine shows about the case's message.
+ClassMethod EngineRow(case As Shutter.Store.Case) As %DynamicObject
+{
+    Quit ##class(Shutter.Util.EngineCheck).Row(case)
 }
 
 /// Whether the plan follows a matched catalogue entry whose chosen outcome is "none": the entry closes the case with

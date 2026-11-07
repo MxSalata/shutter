@@ -697,6 +697,105 @@
       "owner": "Integration team",
       "reevaluate_when": "A person has checked the operation at the receiver",
       "text": "The receiver applied a dry run, so the operation is in effect with no approval or policy behind it. It is on the record as an attempt, and the case does not close as a success, whatever the verifier reads."
+    },
+    {
+      "code": "ENGINE_STILL_TRYING",
+      "title": "The engine is still trying this message",
+      "prerequisite": "The source production's engine has finished with the message: nothing Queued or Delivered, no retry at the operation, no copy of it in hand",
+      "next_action": "Wait: the case is judged again when the engine has finished. To act sooner, read the message in the Message Viewer. Reopening the case judges it again at once.",
+      "owner": "Integration team",
+      "reevaluate_when": "The engine has finished with the message",
+      "text": "The message is Queued or Delivered at a stock HL7 TCP operation, or that operation is retrying, or a copy of it is in hand. The engine will deliver it when the receiver returns, so a resend now would deliver it twice. Nothing is written and the case waits."
+    },
+    {
+      "code": "ENGINE_DELIVERED",
+      "title": "The engine delivered this message itself",
+      "prerequisite": "A message the engine has not completed",
+      "next_action": "Nothing to resend. Read the case's outcome: where the acknowledgement can't be established, check the receiver's own screen and record what was found.",
+      "owner": "Integration team",
+      "reevaluate_when": "A person reads the outcome, when the case was left open",
+      "text": "The source production's engine marked this message Completed at the receiver, on a route where that means the failure the case opened on has passed. A resend would deliver it twice, so nothing is written. The case is resolved in the engine's words, or left for a person where the operation's reply settings or the case's kind mean Completed doesn't settle it."
+    },
+    {
+      "code": "ENGINE_UNREADABLE",
+      "title": "The engine's record of this message could not be read",
+      "prerequisite": "A readable source namespace, production, operation class, delivery header and event log",
+      "next_action": "Collect the evidence again. If it stays unreadable, check that the source production runs and the case's message is there, then decide by hand.",
+      "owner": "Integration team",
+      "reevaluate_when": "The source namespace and the message's headers can be read",
+      "text": "The operation, the header the delivery went on or its event log could not be read, or the header's status isn't one the check knows, so whether the engine is still trying this message is not known. Unknown is not nothing pending: nothing is written."
+    },
+    {
+      "code": "ENGINE_SETTLED",
+      "title": "The engine has finished with this message",
+      "prerequisite": "No copy of the message in the engine's hands, and either every attempt failed before a connection opened or the receiver's acknowledgement feed raised the case",
+      "next_action": "None: a pass.",
+      "owner": "Integration team",
+      "reevaluate_when": "Nothing: a pass",
+      "text": "Every retained log row for the message shows a connection that never opened, or the case came from the acknowledgement feed, which raises a case only after the engine has delivered. The retained log can't prove nothing was lost from it."
+    },
+    {
+      "code": "ENGINE_NOT_IN_SCOPE",
+      "title": "The target is not a stock HL7 TCP operation",
+      "prerequisite": "A stock HL7 TCP operation, or a subclass of one, as the case's target",
+      "next_action": "None: a pass. Where a receiver is reached through a site's own class, the engine's hands are not read, so keep FailureTimeout 0 at such a receiver if it also has an API.",
+      "owner": "Integration team",
+      "reevaluate_when": "Nothing: a pass",
+      "text": "This check reads the engine's hands only at a stock HL7 TCP operation, so at this target the engine's own delivery isn't looked at."
+    },
+    {
+      "code": "RECEIVER_MAY_HOLD_IT",
+      "title": "The receiver may hold this message",
+      "prerequisite": "Every retained log row for the message shows a connection that never opened",
+      "next_action": "Check the receiver's own screen for this message first, then decide by hand and mark the case handled. If it must go again, a person resends it in the Message Viewer.",
+      "owner": "Integration team",
+      "reevaluate_when": "A person has checked the receiver's own screen",
+      "text": "The first attempt reached the receiver (the connection was lost after the frame was written, a read timed out, or the log does not say), and the operation then gave up. A resend could file it twice. Nothing is written, and neither Shutter's API route nor its engine route resends this."
+    },
+    {
+      "code": "HOLD_EXPIRED",
+      "title": "A hold on this patient's messages ran out",
+      "prerequisite": "The case closed before its hold's limit passed",
+      "next_action": "Read the released messages named in the case's notes against the receiver's own screen, and review this patient by hand. The plan is stale: investigate again before anything is sent.",
+      "owner": "Integration team",
+      "reevaluate_when": "A person has reviewed the patient",
+      "text": "Messages held behind this case were released unreviewed when the hold reached its limit, in the order they arrived. They may have reached the receiver before this case's message, so a later resend could put the record backwards."
+    },
+    {
+      "code": "ENGINE_ROUTE",
+      "title": "An engine resend's conditions",
+      "prerequisite": "A receiver declared to give application acknowledgements, a stock HL7 TCP operation, a settled delivery header whose every retained attempt never opened, no copy of it, no retry at the operation, and the engine resend item in the production",
+      "next_action": "None: a pass. A person still approves the resend.",
+      "owner": "Integration team",
+      "reevaluate_when": "Nothing: a pass",
+      "text": "Every condition for resending this message through the engine holds. It goes byte for byte through the stock resend, and the declared acknowledgement says what its Completed means."
+    },
+    {
+      "code": "ENGINE_ROUTE_ABSENT",
+      "title": "The engine resend is not in this build",
+      "prerequisite": "The engine resend item in Shutter's production, enabled",
+      "next_action": "A person resends in the Message Viewer.",
+      "owner": "Integration team",
+      "reevaluate_when": "The engine resend item is in the production and enabled",
+      "text": "This receiver is declared for a resend through the engine, but the item that makes it is absent or disabled here, so Shutter sends nothing."
+    },
+    {
+      "code": "ENGINE_ROUTE_REFUSED",
+      "title": "An engine resend's condition failed",
+      "prerequisite": "A receiver declared to give application acknowledgements, a stock HL7 TCP operation, a settled delivery header whose every retained attempt never opened, no copy of it, and no retry at the operation",
+      "next_action": "Read the failed condition named here. Correct the declaration or the operation if it is wrong, or recover the message by hand.",
+      "owner": "Integration team",
+      "reevaluate_when": "The named condition holds",
+      "text": "A resend through the engine goes only when every condition holds, and the one named here does not, so nothing is sent."
+    },
+    {
+      "code": "ENGINE_ROUTE_NO_API",
+      "title": "No API at this receiver",
+      "prerequisite": "A receiver chosen for the engine route before the plan was made",
+      "next_action": "None: a pass. A person still approves the resend.",
+      "owner": "Integration team",
+      "reevaluate_when": "Nothing: a pass",
+      "text": "There is no API at this receiver: the never-opened rule before the send and the declared acknowledgement after it take the place of the version, the receipt and the dry run."
     }
   ]
 }

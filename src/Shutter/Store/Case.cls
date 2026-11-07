@@ -88,6 +88,11 @@ Property WaitsOnMessage As %String(%JSONFIELDNAME = "waitsOnMessage", MAXLEN = 2
 
 Index WaitsMsgIdx On WaitsOnMessage;
 
+/// The header the engine still holds that this case waits on, "namespace:header id", while blocked ENGINE_STILL_TRYING.
+Property WaitsOnEngine As %String(%JSONFIELDNAME = "waitsOnEngine", MAXLEN = 200);
+
+Index WaitsEngineIdx On WaitsOnEngine;
+
 /// The case whose board this one follows (v1.35, one board per failure signature) while that board runs; "" otherwise.
 Property FollowsCase As %String(%JSONFIELDNAME = "followsCase", MAXLEN = 32);
 
@@ -400,6 +405,12 @@ ClassMethod ReleaseWaitingOnMessage(controlId As %String, outcome As %String = "
 {
     If controlId = "" Quit 0
     Quit ..Reopen("WaitsOnMessage", controlId, "message " _ controlId _ " of this encounter was delivered" _ $SELECT(outcome '= "": " (" _ outcome _ ")", 1: "") _ "; the resend is checked again", host, target)
+}
+
+/// The cases waiting on this header (WaitsOnEngine), reopened now that the engine has settled it and sent nothing.
+ClassMethod ReleaseWaitingOnEngine(headerKey As %String, host As Ens.Host = "", target As %String = "Case Workflow") As %Integer
+{
+    Quit $SELECT(headerKey = "": 0, 1: ..Reopen("WaitsOnEngine", headerKey, "the engine has finished with header " _ headerKey _ "; the resend is checked again", host, target))
 }
 
 /// Release a case held for a schema that is loaded now (v1.34): reopened as a case waiting on a message is, with the reason,
@@ -943,6 +954,9 @@ Storage Default
 </Value>
 <Value name="51">
 <Value>ScenarioRecorded</Value>
+</Value>
+<Value name="52">
+<Value>WaitsOnEngine</Value>
 </Value>
 </Data>
 <DataLocation>^Shutter.Store.CaseD</DataLocation>
