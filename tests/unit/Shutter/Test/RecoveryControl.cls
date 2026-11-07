@@ -524,10 +524,17 @@ Method TestShadowSendsNoEmail()
 {
     Set c = ..PlannedCase()
     Do ..SetMode("enabled")
-    Set p = ##class(Shutter.Store.SiteProfile).Current()
-    Do p.%Remove("version")
-    Do p.%Set("mail", {"allowed_domains": ["example.org"]})
-    Do $$$AssertStatusOK(##class(Shutter.Store.SiteProfile).Store(p.%ToJSON(), "unit test", "unit test"), "a domain is allowed")
+    // The profile's own allowed domain when it has one, as the demo's teams need theirs.
+    Set domains = ##class(Shutter.Store.SiteProfile).AllowedDomains()
+    If $LISTLENGTH(domains) {
+        Set domain = $LIST(domains, 1)
+    } Else {
+        Set domain = "example.org"
+        Set p = ##class(Shutter.Store.SiteProfile).Current()
+        Do p.%Remove("version")
+        Do p.%Set("mail", {"allowed_domains": [(domain)]})
+        Do $$$AssertStatusOK(##class(Shutter.Store.SiteProfile).Store(p.%ToJSON(), "unit test", "unit test"), "a domain is allowed")
+    }
     Set dir = ##class(%File).NormalizeDirectory(##class(%File).TempFilename("d"))
     Do ##class(%File).CreateDirectoryChain(dir)
     Set op = ##class(Shutter.Operation.EscalationMail).%New("UT Mail")
@@ -537,7 +544,7 @@ Method TestShadowSendsNoEmail()
         Do ..SetMode(mode)
         // SetMode reads the profile, so the domain stays.
         Set e = ##class(Shutter.Store.Escalation).%New()
-        Set e.Case = c, e.Seq = $SELECT(mode = "shadow": 1, 1: 2), e.State = "queued", e.ToAddr = "team@example.org", e.Subject = "s", e.Body = "b"
+        Set e.Case = c, e.Seq = $SELECT(mode = "shadow": 1, 1: 2), e.State = "queued", e.ToAddr = "team@" _ domain, e.Subject = "s", e.Body = "b"
         Do $$$AssertStatusOK(e.%Save(), "an escalation")
         Set m = ##class(Shutter.Msg.EscalationSend).%New()
         Set m.EscalationId = e.%Id()
