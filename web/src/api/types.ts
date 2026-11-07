@@ -248,8 +248,11 @@ export interface CaseDetail extends CaseSummary {
   document?: CaseDocument;
 }
 
-/** What a document case shows: metadata only, and nothing of the document's content. */
+/** What a document or report case shows: metadata only, and nothing of its content. */
 export interface CaseDocument {
+  /** "report" for an ORU carrying a report as an attachment; absent for an MDM. */
+  kind?: 'report';
+  report?: { placer?: string; filler?: string; result_status?: string; attachment?: string; orders?: number };
   headline: string;
   trigger: string;
   restricted?: boolean;
