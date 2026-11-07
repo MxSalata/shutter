@@ -21,6 +21,10 @@ describe("the demo's receiver check", () => {
     expect(JSON.parse(block![1]!)).toEqual(words);
   });
 
+  it('names no sender for a send with no answer: a site engine may have sent it', () => {
+    expect(words.attempted).toBe('The send got no answer.');
+  });
+
   it.each([
     ['C-000008', 'later_movement'], // S8: another source moved the patient at the same time
     ['C-000011', 'identity_or_time'], // S13: a doubtful event time

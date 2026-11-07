@@ -19,7 +19,7 @@
   "refused": "The receiver refused this message.",
   "document_asked": "File this document against the patient and episode named here.",
   "result_asked": "File this report against the patient and order named here.",
-  "attempted": "Shutter sent this and got no answer.",
+  "attempted": "The send got no answer.",
   "variants": {
     "manual_compare": {
       "where": "The encounter's details, then its movement history.",

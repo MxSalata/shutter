@@ -203,6 +203,8 @@ Method TestUncertainOutcome()
     Set c = ..Case("transfer", "uncertain_outcome", ..ReadSummary())
     Set out = ##class(Shutter.Util.ReceiverCheck).ForCase(c)
     Do $$$AssertEquals(out.variant, "uncertain", "the outcome is uncertain")
+    Do $$$AssertTrue(out.messageRequest.summary [ "The send got no answer.", "the summary says the send got no answer: " _ out.messageRequest.summary)
+    Do $$$AssertNotTrue(out.messageRequest.summary [ "Shutter sent", "a site's own engine may have sent it")
     Do $$$AssertTrue(out.checks.%Get(0).meanings.%ToJSON() [ "finished", "a match doesn't show the attempt finished")
     Do ..AssertClean(out)
 }
