@@ -5,10 +5,21 @@
 /// whatever the site's model switch says, what a person typed (an approver's comment, a hand closure's reason) stays in
 /// IRIS since no map covers it, and a last sweep of the finished object refuses the file if a value of the map is left.
 /// It fails closed as the view does: a case that cannot be redacted gets no file and no record.
+///
+/// A person with Shutter_Approve can take the file unredacted (DownloadUnredacted), with a typed reason recorded on the case
+/// and a first line saying what it holds. It reads the same rows and passes them through no view, so it learns no token and
+/// calls no model. The redacted file stays the default and owes nothing to it. A download of either kind is not part of the
+/// case's work: its record carries a bundle: ref, which the closure receipt's actors leave out.
 Class Shutter.API.CaseBundle Extends %RegisteredObject
 {
 
 /// The file's first line. Ward, bed, times and user names stay, as they do for a model, and the line says so.
+/// The first line of an approver's file.
+Parameter UNREDACTED = "UNREDACTED: this file holds identifiable patient data: identifiers, names, the date of birth, demographics, note text and what people typed. An approver took it for the reason given in it, and that is recorded on the case. Keep it only where such data may be kept, and send a support handoff the redacted file instead.";
+
+/// The most of a typed reason that is kept.
+Parameter REASONMAX = 2000;
+
 Parameter REDACTION = "REDACTED: patient identifiers, name parts and the date of birth are replaced by this case's tokens, and demographics, note text and what people typed are left out. The map back stays in IRIS. Ward, bed, times, message control ids and staff user names remain, so handle this file as sensitive.";
 
 /// Build the file and record who took it. "" with why set when there is no file: nothing is then recorded. A file with
@@ -22,12 +33,47 @@ ClassMethod Download(case As Shutter.Store.Case, user As %String, Output why As 
         Set text = "", why = "The bundle of case " _ case.CaseId _ " could not be built, so nothing was redacted or sent (" _ ex.Name _ ")"
     }
     If text = "" Quit ""
-    Set sc = case.Note("note", "Case bundle downloaded by " _ user _ ", identifiers redacted; SHA-256 " _ ##class(Shutter.Util.Digest).SHA256Hex(text), user)
+    Set sc = case.Note("note", "Case bundle downloaded by " _ user _ ", identifiers redacted; SHA-256 " _ ##class(Shutter.Util.Digest).SHA256Hex(text), user, "bundle:redacted")
     If $$$ISERR(sc) {
         Set why = "The download of case " _ case.CaseId _ " could not be recorded on the case, so no file was made; try again"
         Quit ""
     }
     Quit text
+}
+
+/// An approver's file, unredacted, and its record: who, why and the file's digest. No reason, no file; and a file with no
+/// record is no file here either.
+ClassMethod DownloadUnredacted(case As Shutter.Store.Case, user As %String, reason As %String, Output why As %String) As %String
+{
+    Set why = "", reason = $EXTRACT($ZSTRIP($GET(reason), "<>WC"), 1, ..#REASONMAX)
+    If reason = "" { Set why = "Say the reason you need the identifiers" Quit "" }
+    Set text = ""
+    Try {
+        Set text = ..UnredactedText(case, user, reason, .why)
+    } Catch ex {
+        Set text = "", why = "The unredacted bundle of case " _ case.CaseId _ " could not be built, so nothing was sent (" _ ex.Name _ ")"
+    }
+    If text = "" Quit ""
+    Set sc = case.Note("note", "Unredacted case bundle downloaded by " _ user _ "; reason: " _ reason _ "; SHA-256 " _ ##class(Shutter.Util.Digest).SHA256Hex(text), user, "bundle:unredacted")
+    If $$$ISERR(sc) {
+        Set why = "The download of case " _ case.CaseId _ " could not be recorded on the case, so no file was made; try again"
+        Quit ""
+    }
+    Quit text
+}
+
+/// The stored rows as the app's routes read them, in one JSON document with the statement alone on the first line.
+ClassMethod UnredactedText(case As Shutter.Store.Case, user As %String, reason As %String, Output why As %String) As %String
+{
+    Set why = "", parts = ..Parts(case, 1), out = {}
+    Set out.format = "shutter-case-bundle-unredacted/1"
+    Set out.generatedAt = ##class(Shutter.Util.Time).NowUTC()
+    Set out.generatedBy = user, out.reason = reason
+    Set out.case = {"caseId": (case.CaseId), "state": (case.State), "disposition": (case.Disposition), "mode": (case.Mode), "event": (case.Event), "receiver": (case.Receiver), "failureKind": (case.FailureKind), "failureReasonCode": (case.FailureReasonCode), "openedAt": (case.OpenedAt), "closedAt": (case.ClosedAt), "version": (case.Version), "operationKey": (case.OperationKey), "patientId": (case.PatientId), "patientIdAuthority": (case.PatientIdAuthority), "encounterId": (case.EncounterId), "priorPatientId": (case.PriorPatientId), "priorEncounterId": (case.PriorEncounterId)}
+    For part = "evidence", "plans", "gateDecisions", "approvals", "attempts", "verifications" { Do out.%Set(part, parts.%Get(part)) }
+    If parts.%GetTypeOf("receipt") = "object" { Set out.receipt = parts.receipt } Else { Do out.%Set("receipt", "", "null") }
+    Set out.notIncluded = ["the case's event log", "the agents' runs", "escalation emails"]
+    Quit "{""redaction"":""" _ ..#UNREDACTED _ """," _ $CHAR(10) _ $EXTRACT(out.%ToJSON(), 2, *)
 }
 
 /// The file's text, redacted and swept, or "" with why set. Learns the case's identifiers from every part first, as the
@@ -59,8 +105,8 @@ ClassMethod Text(case As Shutter.Store.Case, user As %String, Output why As %Str
 }
 
 /// The stored rows as the app's routes read them, with JSON held as text parsed: left as a string, it would only be
-/// tokenised, where parsed it is reduced by its shape.
-ClassMethod Parts(case As Shutter.Store.Case) As %DynamicObject [ Private ]
+/// tokenised, where parsed it is reduced by its shape. An approval's comment goes unless whole says to keep it.
+ClassMethod Parts(case As Shutter.Store.Case, whole As %Boolean = 0) As %DynamicObject [ Private ]
 {
     Set id = case.%Id(), json = "Shutter.Util.Json", parts = {}
     // Every snapshot, oldest first: each plan and approval names the digest of the one it rests on.
@@ -81,7 +127,7 @@ ClassMethod Parts(case As Shutter.Store.Case) As %DynamicObject [ Private ]
     Set iter = approvals.%GetIterator()
     While iter.%GetNext(.i, .row) {
         Do row.%Set("commentPresent", row.comment '= "", "boolean")
-        Do row.%Remove("comment")
+        Do:'whole row.%Remove("comment")
     }
     Set parts.approvals = approvals
     Set attempts = $CLASSMETHOD(json, "Rows", "Shutter.Store.ExecutionAttempt", "SELECT ID FROM Shutter_Store.ExecutionAttempt WHERE ""Case"" = ? ORDER BY ID", id)

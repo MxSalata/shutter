@@ -36,6 +36,7 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
   <Route Url="/cases/:caseId/attempts" Method="GET" Call="CaseAttempts"/>
   <Route Url="/cases/:caseId/closure" Method="GET" Call="CaseClosure"/>
   <Route Url="/cases/:caseId/bundle" Method="POST" Call="CaseBundle"/>
+  <Route Url="/cases/:caseId/bundle-unredacted" Method="POST" Call="CaseBundleUnredacted"/>
   <Route Url="/cases/:caseId/preview-blind-resend" Method="POST" Call="CasePreview"/>
   <Route Url="/cases/:caseId/blocked-reason" Method="GET" Call="CaseBlockedReason"/>
   <Route Url="/cases/:caseId/receiver-check" Method="GET" Call="CaseReceiverCheck"/>
@@ -725,7 +726,24 @@ ClassMethod CaseBundle(caseId As %String) As %Status
     Quit $$$OK
 }
 
-/// The closure record of a closed case.
+/// The same file unredacted, for an approver with a typed reason recorded on the case (CONTRACTS 5). A file, never a link.
+ClassMethod CaseBundleUnredacted(caseId As %String) As %Status
+{
+    If '..Allow("Shutter_Approve", 1) Quit $$$OK
+    Set case = ..CaseOr404(caseId)
+    If '$ISOBJECT(case) Quit $$$OK
+    Set reason = ##class(Shutter.Util.Json).Str(..Body(), "reason")
+    If $ZSTRIP(reason, "<>WC") = "" Quit ..Fail("400 Bad Request", "bad_request", "Say the reason you need the identifiers", {"field": "reason"})
+    Set text = ##class(Shutter.API.CaseBundle).DownloadUnredacted(case, ..User(), reason, .why)
+    If text = "" Quit ..Fail("409 Conflict", "not_recorded", why)
+    Set %response.ContentType = "application/json"
+    Do %response.SetHeader("Content-Disposition", "attachment; filename=""shutter-case-" _ case.CaseId _ "-UNREDACTED.json""")
+    Do %response.SetHeader("Cache-Control", "no-store")
+    Write text
+    Quit $$$OK
+}
+
+/// The closure record of a closed case. Its actors are who took part in the case: taking a file of it (a bundle: ref) is not.
 ClassMethod ClosureObject(case As Shutter.Store.Case) As %DynamicObject
 {
     Set o = {}
@@ -749,7 +767,7 @@ ClassMethod ClosureObject(case As Shutter.Store.Case) As %DynamicObject
     Do unverified.%Push("Consumers beyond the downstream system are outside the production's view and are not verified")
     Set o.verifiedEffects = verified, o.unverified = unverified
     Set actors = []
-    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT DISTINCT %EXACT(Actor) AS Actor FROM Shutter_Store.CaseEvent WHERE ""Case"" = ? ORDER BY Actor", id)
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT DISTINCT %EXACT(Actor) AS Actor FROM Shutter_Store.CaseEvent WHERE ""Case"" = ? AND (Ref IS NULL OR Ref NOT LIKE 'bundle:%') ORDER BY Actor", id)
     While rs.%Next() { Do actors.%Push(rs.%Get("Actor")) }
     Set o.actors = actors
     Set pv = ""
