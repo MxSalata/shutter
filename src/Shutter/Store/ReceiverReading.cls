@@ -37,7 +37,7 @@ Property Retry As %String(MAXLEN = 12);
 Property DefCharEncoding As %String(MAXLEN = 64);
 
 /// The item's effective string, never an assumed one.
-Property ReplyCodeActions As %String(MAXLEN = 1000);
+Property ReplyCodeActions As %String(MAXLEN = "");
 
 /// 1 when ReplyCodeActions is the engine's own default string.
 Property ReplyCodeActionsStock As %Boolean;

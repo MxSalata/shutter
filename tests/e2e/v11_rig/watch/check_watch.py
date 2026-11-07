@@ -60,8 +60,10 @@ class Watch:
         for o in self.outages(receiver):
             self.r.session("SHUTTER", f'Set sc=##class(Shutter.Store.Outage).%OpenId({o["id"]}).Close("the check goes on","the check") Write:\'sc $SYSTEM.Status.GetErrorText(sc)')
 
-    def declare(self, names):
-        receivers = ",".join(json.dumps({"name": n, "system": "Made-up LIMS", "category": "orders_results", "tier": 3, "watch": {"namespace": PLAIN, "item": n}, "runbook": "start the listener", "call": "01632 960123"}) for n in names)
+    def declare(self, names, items=None, runbook="start the listener"):
+        """items: a receiver's item where it isn't the receiver's own name."""
+        items = items or {}
+        receivers = ",".join(json.dumps({"name": n, "system": "Made-up LIMS", "category": "orders_results", "tier": 3, "watch": {"namespace": PLAIN, "item": items.get(n, n)}, "runbook": runbook, "call": "01632 960123"}) for n in names)
         text = '{"receivers":[' + receivers + "]}"
         path = self.r.put_file(text.encode(), "watch-profile.json")
         out = self.r.session("SHUTTER", f'''Set s=##class(%Stream.FileCharacter).%New() Do s.LinkToFile("{path}") Set p=##class(Shutter.Store.SiteProfile).Current() Set d={{}}.%FromJSON(s) Set p.receivers=d.receivers Set sc=##class(Shutter.Store.SiteProfile).Store(p.%ToJSON(),"the watch check","the check") Write !,"<<<",$SELECT(sc:"ok",1:$SYSTEM.Status.GetErrorText(sc)),">>>",!''')
@@ -269,6 +271,45 @@ def old_failures(r, w):
     check("and once closed, it stays closed", w.outages(NORETRY) == [], w.outages(NORETRY))
 
 
+def corrected_block(r, w):
+    step("A watch block corrected to the real item: its old failures open nothing, a new one still does, and a long runbook comes through")
+    named, wrong = "Corrected Case", NORETRY + "t"
+    long_runbook = "start the listener " * 111
+    w.declare([RETRY, ONESHOT, named], {named: wrong}, long_runbook)
+    r.wait_until(lambda: w.reading(named).get("checkedAt"), 30, 1)
+    mark = lambda: r.value("SHUTTER", f'##class(Shutter.Store.ReceiverReading).Find("{named}").ErrorHeaderMark')
+    if r.listening(PORT[NORETRY]):
+        r.listener_down(PORT[NORETRY])
+    time.sleep(1)
+    sent = [f"WT{tag}{i}" for i in range(1, 4)]
+    for c in sent:
+        r.send(IN[NORETRY], r.order(c), c)
+    r.wait_until(lambda: sum(x["control"] in sent and x["status"] == "Error" for x in r.headers(PLAIN, NORETRY)) == 3, 60, 1)
+    errors = [int(x["id"]) for x in r.headers(PLAIN, NORETRY) if x["status"] == "Error"]
+    time.sleep(6)
+    check("the wrong name read successfully with a mark below the failures", int(mark() or 0) < max(errors), (mark(), max(errors)))
+    r.listener_up(PORT[NORETRY], {"mode": "up"})
+    time.sleep(2)
+    w.declare([RETRY, ONESHOT, named], {named: NORETRY}, long_runbook)
+    r.wait_until(lambda: str(mark()) == str(max(errors)), 20, 1)
+    check("the corrected block's mark is the item's highest Error header", str(mark()) == str(max(errors)), (mark(), max(errors)))
+    time.sleep(16)
+    check("no outage from its old failures", w.outages(named) == [], w.outages(named))
+    r.listener_down(PORT[NORETRY])
+    time.sleep(1)
+    c = f"WT{tag}N"
+    r.send(IN[NORETRY], r.order(c), c)
+    r.wait_until(lambda: len(w.outages(named)) >= 1, 30, 1)
+    o = w.outages(named)
+    check("a new never-opened header there still opens", len(o) == 1, o)
+    check("a runbook over 2000 characters opens, whole", len(o) == 1 and o[0]["runbook"] == long_runbook and len(long_runbook) > 2000, [len(x["runbook"]) for x in o])
+    w.close_all(named)
+    r.listener_up(PORT[NORETRY], {"mode": "up"})
+    r.session("SHUTTER", f"""Set rs=##class(%SQL.Statement).%ExecDirect(,"DELETE FROM Shutter_Store.ReceiverReading WHERE Receiver='{NORETRY}'")""")
+    w.declare(RECEIVERS)
+    r.wait_until(lambda: w.reading(NORETRY).get("checkedAt"), 30, 1)
+
+
 def quiet_disconnected(r, w):
     step("A quiet no-retry item that reads disconnected reads can't tell and opens nothing")
     r.listener_down(PORT[NORETRY])
@@ -382,7 +423,7 @@ def main():
             r.install()
             no_watch(r, w)
             w.declare(RECEIVERS)
-        for name, fn in (("retry", retry_outage), ("refusing", refusing), ("hung", hung), ("e02", one_ar_then_silence), ("quiet", quiet_no_retry), ("blip", blip), ("old", old_failures), ("quietoff", quiet_disconnected), ("oneshot", one_shot), ("settings", settings), ("disabled", disabled_and_stopped), ("stamps", stamps)):
+        for name, fn in (("retry", retry_outage), ("refusing", refusing), ("hung", hung), ("e02", one_ar_then_silence), ("quiet", quiet_no_retry), ("blip", blip), ("old", old_failures), ("corrected", corrected_block), ("quietoff", quiet_disconnected), ("oneshot", one_shot), ("settings", settings), ("disabled", disabled_and_stopped), ("stamps", stamps)):
             if not a.only or name in a.only.split(","):
                 fn(r, w)
     except RigBroken as e:

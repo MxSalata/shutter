@@ -180,6 +180,53 @@ Method TestFreshRowAnswersEveryField()
     Do $$$AssertEquals(j.readings.reading, "unknown", "no reading yet reads unknown")
 }
 
+/// The profile sets no length on these lines, so a long one still opens the outage, and reads back whole.
+Method TestLongLinesStillOpen()
+{
+    Set long = "", names = []
+    For i = 1:1:2100 Set long = long _ "x"
+    For i = 1:1:150 Do names.%Push("a person with quite a long name " _ i)
+    Set entry = ..Entry(), entry.runbook = long, entry.call = long, entry.approvers = names
+    Do $$$AssertStatusOK(##class(Shutter.Store.Outage).Open(entry, "down", "a test", "unit", .o, .opened), "opened")
+    Do $$$AssertTrue(opened, "a new row")
+    Set j = ##class(Shutter.Store.Outage).%OpenId(o.%Id()).ToJSON()
+    Do $$$AssertEquals($LENGTH(j.runbook), 2100, "the whole runbook")
+    Do $$$AssertEquals($LENGTH(j.call), 2100, "the whole call line")
+    Do $$$AssertEquals(j.approvers.%Size(), 150, "every approver")
+    Do $$$AssertTrue($LENGTH(names.%ToJSON()) > 2000, "the approvers were over the old length")
+    Set row = ##class(Shutter.Store.ReceiverReading).%New()
+    Set row.Receiver = ..#RECEIVER, row.Reading = "healthy", row.ReplyCodeActions = long
+    Do $$$AssertStatusOK(row.%Save(), "a long reply code string still saves the reading")
+}
+
+/// What a row remembers belongs to the item it was read from.
+Method TestAnotherItemForgetsTheMark()
+{
+    Set w = "Shutter.Operation.ReceiverWatch"
+    For block = "NS2:Unit Out:0", "NS1:Other Out:0", "NS1:Unit Out:1" {
+        Set row = ##class(Shutter.Store.ReceiverReading).%New()
+        Set row.Namespace = "NS1", row.Item = "Unit Out", row.ErrorHeaderMark = 39, row.DownSince = "2026-11-07T03:00:00Z", row.LastHead = 41
+        Do $CLASSMETHOD(w, "ForgetOtherItem", row, $PIECE(block, ":", 1), $PIECE(block, ":", 2))
+        Set kept = $PIECE(block, ":", 3)
+        Do $$$AssertEquals(row.ErrorHeaderMark, $SELECT(kept: 39, 1: ""), "the mark, " _ block)
+        Do $$$AssertEquals(row.DownSince, $SELECT(kept: "2026-11-07T03:00:00Z", 1: ""), "the clock, " _ block)
+        Do $$$AssertEquals(row.LastHead, $SELECT(kept: 41, 1: ""), "the head, " _ block)
+    }
+    // Through a real poll, with the same namespace that can't be read: an unread block leaves the mark alone, another clears it.
+    Set entry = {"name": (..#RECEIVER), "watch": {"namespace": "NOSUCHNS", "item": "Unit Out"}}
+    Set row = ##class(Shutter.Store.ReceiverReading).%New()
+    Set row.Receiver = ..#RECEIVER, row.Namespace = "NOSUCHNS", row.Item = "Unit Out", row.ErrorHeaderMark = 39
+    Do $$$AssertStatusOK(row.%Save(), "a row at this block")
+    Do $$$AssertStatusOK($CLASSMETHOD(w, "PollOne", entry), "polled")
+    Do $$$AssertEquals(##class(Shutter.Store.ReceiverReading).Find(..#RECEIVER).ErrorHeaderMark, 39, "the same block keeps the mark")
+    Do entry.watch.%Set("item", "Unit Out Two")
+    Do $$$AssertStatusOK($CLASSMETHOD(w, "PollOne", entry), "polled")
+    Set row = ##class(Shutter.Store.ReceiverReading).Find(..#RECEIVER)
+    Do row.%Reload()
+    Do $$$AssertEquals(row.ErrorHeaderMark, "", "another item clears it")
+    Do $$$AssertEquals(row.Item, "Unit Out Two", "and the row names the new item")
+}
+
 Method TestOneRowPerReceiver()
 {
     Do $$$AssertStatusOK(##class(Shutter.Store.Outage).Open(..Entry(), "down", "a test", "unit", .a, .opened), "first")

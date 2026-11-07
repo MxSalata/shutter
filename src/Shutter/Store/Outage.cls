@@ -35,13 +35,13 @@ Property CloseReason As %String(MAXLEN = 1000);
 
 Property ClosedBy As %String(MAXLEN = 128);
 
-/// The site's lines, as they read when the outage opened.
-Property Runbook As %String(MAXLEN = 2000);
+/// The site's lines, as they read when the outage opened. The profile sets no length on them, so neither does this.
+Property Runbook As %String(MAXLEN = "");
 
-Property CallLine As %String(MAXLEN = 2000);
+Property CallLine As %String(MAXLEN = "");
 
 /// JSON: who may approve here.
-Property Approvers As %String(MAXLEN = 2000);
+Property Approvers As %String(MAXLEN = "");
 
 Property PausedUntil As %String(MAXLEN = 30);
 

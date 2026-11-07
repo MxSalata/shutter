@@ -50,6 +50,7 @@ ClassMethod PollOne(entry As %DynamicObject) As %Status
     Set now = ##class(Shutter.Util.Time).NowUTC()
     Set row = ##class(Shutter.Store.ReceiverReading).Find(receiver)
     If '$ISOBJECT(row) Set row = ##class(Shutter.Store.ReceiverReading).%New(), row.Receiver = receiver
+    Do ..ForgetOtherItem(row, ns, item)
     Set outage = ##class(Shutter.Store.Outage).ActiveFor(receiver)
     Set facts = ..Read(ns, item)
     Set facts.lastHead = row.LastHead, facts.open = $ISOBJECT(outage)
@@ -70,6 +71,14 @@ ClassMethod PollOne(entry As %DynamicObject) As %Status
     // Only now is that header spent: a refused open judges it again on the next poll.
     Set row.ErrorHeaderMark = freshHeader
     Quit row.%Save()
+}
+
+/// What the row remembers holds only for the item it was read from: when the watch block names another, the mark, the head and
+/// the clock start again, so that item's old failures aren't new and another namespace's ids hide nothing.
+ClassMethod ForgetOtherItem(row As Shutter.Store.ReceiverReading, ns As %String, item As %String)
+{
+    If (row.Namespace = ns) && (row.Item = item) Quit
+    Set row.ErrorHeaderMark = "", row.DownSince = "", row.LastHead = ""
 }
 
 /// What the engine shows about the item, as one object: ItemState's fields, and the settings through the shared read with
