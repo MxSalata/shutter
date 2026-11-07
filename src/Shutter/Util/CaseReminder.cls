@@ -269,7 +269,7 @@ ClassMethod Compose(digest As %DynamicObject, settings As %DynamicObject, Output
 }
 
 /// The Doctor's warnings for settings as they stand, as an array of sentences: none while off.
-ClassMethod Warnings(settings As %DynamicObject, mailServer As %String, domains As %List, teams As %Integer, task As %Boolean) As %DynamicArray
+ClassMethod Warnings(settings As %DynamicObject, mailServer As %String, domains As %List, teams As %Integer, task As %Boolean, lastError As %String = "", runAge As %String = "") As %DynamicArray
 {
     Set out = []
     If 'settings.enabled Quit out
@@ -279,6 +279,8 @@ ClassMethod Warnings(settings As %DynamicObject, mailServer As %String, domains 
     If +teams = 0 Do out.%Push("No team is set, so the first reminder goes to nobody")
     If settings."sign_in_url" = "" Do out.%Push("No sign-in address is set, so the mail has no link")
     If 'task Do out.%Push("The task Shutter case reminders is missing, so nothing runs")
+    If (runAge '= "") && (runAge > ..#HOURSECONDS) Do out.%Push("The reminder task has not run for over an hour")
+    If lastError '= "" Do out.%Push("The last reminder run had a fault: " _ lastError)
     Quit out
 }
 

@@ -349,8 +349,8 @@ Method TestASentReminderIsRecordedAndChangesNothing()
     Set row = ..Digest()
     Do $$$AssertEquals(row.State, "queued", "queued")
     Do $$$AssertEquals(##class(Shutter.Store.CaseReminder).Thresholds(..CaseRowId).%Size(), 0, "not recorded until it goes")
-    Do $$$AssertStatusOK(row.MarkSent("Accepted by relay", "2026-11-04T12:01:00Z"), "sent")
-    Do $$$AssertEquals(row.State, "sent", "sent")
+    Do $$$AssertStatusOK(row.MarkAccepted("Accepted by relay", "2026-11-04T12:01:00Z"), "sent")
+    Do $$$AssertEquals(row.State, "accepted", "accepted by the mail server, and no more than that")
     Do $$$AssertEquals(row.Body, "", "the text with the identifiers goes")
     Do $$$AssertEquals(##class(Shutter.Store.CaseReminder).Thresholds(..CaseRowId).%ToJSON(), "[""team""]", "recorded")
     // A new process reads the same: the record is a table, so a restart keeps it.
@@ -366,11 +366,13 @@ Method TestASentReminderIsRecordedAndChangesNothing()
     If $ISOBJECT(found) {
         Do $$$AssertEquals(found.kind, "note", "as a note")
         Do $$$AssertTrue(found.text [ "team@reminder.example.nhs.uk", "with who it went to")
+        Do $$$AssertTrue(found.text [ "mail server accepted", "says what the mail server did")
+        Do $$$AssertTrue(found.text [ "does not show anyone has read it", "and not that a person read it")
         Do $$$AssertNotTrue(found.text [ "MRN9004", "and no identifier")
     }
     // The same threshold in a second digest records nothing twice.
     Set again = ..Digest()
-    Do $$$AssertStatusOK(again.MarkSent("Accepted by relay", "2026-11-04T13:01:00Z"), "a second send of the same threshold is no error")
+    Do $$$AssertStatusOK(again.MarkAccepted("Accepted by relay", "2026-11-04T13:01:00Z"), "a second send of the same threshold is no error")
     Do $$$AssertEquals(##class(Shutter.Store.CaseReminder).Thresholds(..CaseRowId).%Size(), 1, "still one record")
 }
 
@@ -389,8 +391,8 @@ Method TestTheHourlyLimitCountsSentAndQueued()
 {
     Set row = ..Digest()
     Do $$$AssertEquals(##class(Shutter.Store.ReminderDigest).LastSent("2026-11-04T12:00:00Z").%Get("team@reminder.example.nhs.uk"), "2026-11-04T12:00:00Z", "queued counts")
-    Do row.MarkSent("ok", "2026-11-04T12:05:00Z")
-    Do $$$AssertEquals(##class(Shutter.Store.ReminderDigest).LastSent("2026-11-04T12:10:00Z").%Get("team@reminder.example.nhs.uk"), "2026-11-04T12:05:00Z", "sent counts")
+    Do row.MarkAccepted("ok", "2026-11-04T12:05:00Z")
+    Do $$$AssertEquals(##class(Shutter.Store.ReminderDigest).LastSent("2026-11-04T12:10:00Z").%Get("team@reminder.example.nhs.uk"), "2026-11-04T12:05:00Z", "accepted counts")
 }
 
 Method TestAStuckDigestExpires()
@@ -439,7 +441,7 @@ Method TestTheStateIsReadAgainBeforeSending()
     Set case.Disposition = ""
     Do $$$AssertStatusOK(case.%Save(), "failed again")
     Do $$$AssertEquals(row.ChangedSince(s), "", "still due")
-    Do ..Digest("officer", "none").MarkSent("ok", "2026-11-04T12:01:00Z")
+    Do ..Digest("officer", "none").MarkAccepted("ok", "2026-11-04T12:01:00Z")
     Do $$$AssertTrue(row.ChangedSince(s) [ "has had this reminder", "another digest got there first")
     Set team = ..Digest("team", "none")
     Do $$$AssertTrue(team.ChangedSince(s) [ "new recipient", "the case's team has another mailbox")
@@ -460,7 +462,7 @@ Method TestGatherReadsTheStore()
         Do $$$AssertEquals(mine.patientId, "MRN9004", "its hospital number")
         Do $$$AssertEquals(mine.reminded.%Size(), 0, "nothing sent yet")
     }
-    Do ..Digest().MarkSent("ok", "2026-11-04T12:01:00Z")
+    Do ..Digest().MarkAccepted("ok", "2026-11-04T12:01:00Z")
     Set mine = ..Gathered(s)
     Do $$$AssertEquals(mine.reminded.%ToJSON(), "[""team""]", "a new read sees what was sent")
 }
@@ -483,9 +485,9 @@ Method TestGatherReadsOnlyWhatCanGo()
     Do $$$AssertEquals(##class(Shutter.Util.CaseReminderTask).Gather(officer, "2026-11-04T07:59:59Z").%Size(), 0, "the window is shut: nothing is read")
     Do $$$AssertTrue($ISOBJECT(..Gathered(officer)), "the window is open: it is read")
     // The officer's record alone: the team's mail was refused or held, so the team's reminder is still to go.
-    Do ..Digest("officer").MarkSent("ok", "2026-11-04T12:01:00Z")
+    Do ..Digest("officer").MarkAccepted("ok", "2026-11-04T12:01:00Z")
     Do $$$AssertEquals(..Gathered(officer).reminded.%ToJSON(), "[""officer""]", "the officer's record alone leaves the team's to go")
-    Do ..Digest("team").MarkSent("ok", "2026-11-04T12:02:00Z")
+    Do ..Digest("team").MarkAccepted("ok", "2026-11-04T12:02:00Z")
     Do $$$AssertNotTrue($ISOBJECT(..Gathered(officer)), "both recorded: not read again")
     Do $$$AssertNotTrue($ISOBJECT(..Gathered(alone)), "and with no officer set, the team's is all it can get")
     Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM Shutter_Store.CaseReminder WHERE ""Case"" = ?", ..CaseRowId)
@@ -530,6 +532,11 @@ Method TestTheDoctorsWarnings()
     For want = "mail server", "allowed mail domain", "officer", "team", "sign-in", "task" { Do $$$AssertTrue(text [ want, "warns of " _ want) }
     Set all = ##class(Shutter.Util.CaseReminder).Warnings({"enabled": true, "officer_address": "a@x.nhs.uk", "sign_in_url": "https://x/"}, "relay", $LISTBUILD("x.nhs.uk"), 1, 1)
     Do $$$AssertEquals(all.%Size(), 0, "with everything set: none")
+    Set quiet = ##class(Shutter.Util.CaseReminder).Warnings({"enabled": true, "officer_address": "a@x.nhs.uk", "sign_in_url": "https://x/"}, "relay", $LISTBUILD("x.nhs.uk"), 1, 1, "", 3600)
+    Do $$$AssertEquals(quiet.%Size(), 0, "a run an hour ago: none")
+    Set stopped = ##class(Shutter.Util.CaseReminder).Warnings({"enabled": true, "officer_address": "a@x.nhs.uk", "sign_in_url": "https://x/"}, "relay", $LISTBUILD("x.nhs.uk"), 1, 1, "Connection refused", 3601).%ToJSON()
+    Do $$$AssertTrue(stopped [ "has not run for over an hour", "a task that stopped shows")
+    Do $$$AssertTrue(stopped [ "Connection refused", "and so does a mail server's refusal, independently of any mail")
 }
 
 }

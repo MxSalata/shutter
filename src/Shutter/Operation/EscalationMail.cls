@@ -33,7 +33,7 @@ Method OnEscalationSend(request As Shutter.Msg.EscalationSend, Output response A
     Try {
         If ..Adapter.SMTPServer = "" {
             Set file = ..WriteFile(esc)
-            Do esc.MarkSent("file", file)
+            Do esc.MarkAccepted("file", file)
         } Else {
             Set mail = ..Mail(esc)
             Set sc = ..Adapter.SendMail(mail, .failed)
@@ -44,7 +44,7 @@ Method OnEscalationSend(request As Shutter.Msg.EscalationSend, Output response A
                 For i = 1:1:failed.Count() { Set list = list _ $SELECT(list = "": "", 1: ", ") _ failed.GetAt(i) }
                 Do esc.MarkFailed("Refused for " _ list)
             } Else {
-                Do esc.MarkSent("smtp", "Accepted by " _ ..Adapter.SMTPServer _ " for " _ esc.ToAddr)
+                Do esc.MarkAccepted("smtp", "The mail server " _ ..Adapter.SMTPServer _ " accepted it, which does not show anyone has read it" _ " for " _ esc.ToAddr)
             }
         }
     } Catch ex {
@@ -80,7 +80,7 @@ Method OnReminderSend(request As Shutter.Msg.ReminderSend, Output response As En
         } ElseIf $DATA(failed) && $ISOBJECT(failed) && (failed.Count() > 0) {
             Do row.MarkFailed("Refused for " _ failed.GetAt(1))
         } Else {
-            Do row.MarkSent("Accepted by " _ ..Adapter.SMTPServer)
+            Do row.MarkAccepted("The mail server " _ ..Adapter.SMTPServer _ " accepted it, which does not show anyone has read it")
         }
     } Catch ex {
         Do row.MarkFailed(ex.DisplayString())

@@ -12,8 +12,8 @@ Parameter STALESECONDS = 1800;
 /// One bare address, lowercased.
 Property Recipient As %String(MAXLEN = 320) [ Required ];
 
-/// queued, sent or failed.
-Property State As %String(MAXLEN = 16, VALUELIST = ",queued,sent,failed") [ InitialExpression = "queued" ];
+/// queued; accepted, which is the mail server's answer and says nothing of a person reading it; or failed.
+Property State As %String(MAXLEN = 16, VALUELIST = ",queued,accepted,failed") [ InitialExpression = "queued" ];
 
 Property Subject As %String(MAXLEN = 500);
 
@@ -27,7 +27,7 @@ Property Detail As %String(MAXLEN = 32);
 
 Property CreatedAt As %String(MAXLEN = 30);
 
-Property SentAt As %String(MAXLEN = 30);
+Property AcceptedAt As %String(MAXLEN = 30);
 
 /// The mail server's answer, or why it did not go.
 Property Result As %String(MAXLEN = 2000);
@@ -74,12 +74,12 @@ Method ChangedSince(settings As %DynamicObject) As %String
 
 /// The mail server took it: each case's threshold is recorded with a line on its audit trail, and the text goes. Touches
 /// no case row: the version, the state and the time of the case stay as they are. A threshold already recorded is left.
-Method MarkSent(result As %String, now As %String = {##class(Shutter.Util.Time).NowUTC()}) As %Status
+Method MarkAccepted(result As %String, now As %String = {##class(Shutter.Util.Time).NowUTC()}) As %Status
 {
-    Set ..State = "sent", ..Result = $EXTRACT(result, 1, 2000), ..SentAt = now, ..Body = ""
+    Set ..State = "accepted", ..Result = $EXTRACT(result, 1, 2000), ..AcceptedAt = now, ..Body = ""
     Set sc = ..%Save()
     Quit:$$$ISERR(sc) sc
-    Set ^Shutter.Reminder("last_sent") = now
+    Set ^Shutter.Reminder("last_accepted") = now
     Kill ^Shutter.Reminder("last_error")
     Set it = ##class(Shutter.Util.Json).Parse(..Items, .psc)
     Quit:'$ISOBJECT(it) $$$OK
@@ -89,11 +89,11 @@ Method MarkSent(result As %String, now As %String = {##class(Shutter.Util.Time).
         Continue:'$ISOBJECT(case)
         Set rec = ##class(Shutter.Store.CaseReminder).%New()
         Do rec.CaseSetObjectId(item.id)
-        Set rec.Threshold = item.threshold, rec.Recipient = ..Recipient, rec.DigestId = ..%Id(), rec.SentAt = now
+        Set rec.Threshold = item.threshold, rec.Recipient = ..Recipient, rec.DigestId = ..%Id(), rec.AcceptedAt = now
         // The unique index refuses a threshold already recorded: nothing more to write for it.
         Continue:$$$ISERR(rec.%Save())
         Set word = $SELECT(item.threshold = "officer": "later reminder", 1: "first reminder")
-        Set ev = ##class(Shutter.Store.CaseEvent).Append(case, "note", "", "", "Reminder sent to " _ ..Recipient _ " (" _ word _ ", open " _ item.hours _ " hours or more). It moves the case nowhere.", "system", "reminder:" _ ..%Id())
+        Set ev = ##class(Shutter.Store.CaseEvent).Append(case, "note", "", "", "The mail server accepted a reminder for " _ ..Recipient _ " (" _ word _ ", open " _ item.hours _ " hours or more). That does not show anyone has read it. It moves the case nowhere.", "system", "reminder:" _ ..%Id())
         If $$$ISERR(ev) Set sc = ev
     }
     Quit sc
@@ -108,14 +108,14 @@ Method MarkFailed(reason As %String, quiet As %Boolean = 0) As %Status
     Quit ..%Save()
 }
 
-/// The latest digest per address that counts against the hourly limit, sent or still queued, as an object of addresses
+/// The latest digest per address that counts against the hourly limit, accepted or still queued, as an object of addresses
 /// and times.
 ClassMethod LastSent(now As %String) As %DynamicObject
 {
     Set out = {}
-    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT Recipient, State, SentAt, CreatedAt FROM Shutter_Store.ReminderDigest WHERE State IN ('queued', 'sent') ORDER BY ID")
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT Recipient, State, AcceptedAt, CreatedAt FROM Shutter_Store.ReminderDigest WHERE State IN ('queued', 'accepted') ORDER BY ID")
     While rs.%Next() {
-        Set at = $SELECT(rs.%Get("State") = "sent": rs.%Get("SentAt"), 1: rs.%Get("CreatedAt"))
+        Set at = $SELECT(rs.%Get("State") = "accepted": rs.%Get("AcceptedAt"), 1: rs.%Get("CreatedAt"))
         Set to = rs.%Get("Recipient"), had = out.%Get(to)
         If (had = "") || (at ] had) Do out.%Set(to, at)
     }
@@ -161,7 +161,7 @@ Storage Default
 <Value>CreatedAt</Value>
 </Value>
 <Value name="8">
-<Value>SentAt</Value>
+<Value>AcceptedAt</Value>
 </Value>
 <Value name="9">
 <Value>Result</Value>

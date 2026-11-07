@@ -55,6 +55,8 @@ ClassMethod Run(now As %String = "") As %Integer
         Do ##class(Shutter.Store.ReminderDigest).ExpireStale(now)
         Do ##class(%SQL.Statement).%ExecDirectNoPriv(, "DELETE FROM Shutter_Store.ReminderDigest WHERE CreatedAt < ? AND State <> 'queued'", ##class(Shutter.Util.Time).FromNow(-86400 * ..#KEEPDAYS))
         Set decided = ##class(Shutter.Util.CaseReminder).Decide(..Gather(settings, now), now, settings, ##class(Shutter.Store.ReminderDigest).LastSent(now))
+        // Nothing due and nothing held back: a fault of an earlier run has nothing left to show for.
+        If (decided.digests.%Size() = 0) && (decided.held.%Size() = 0) Kill ^Shutter.Reminder("last_error")
         If decided.digests.%Size() > 0 {
             If ..MailServer() = "" {
                 // No file and no record: an .eml nobody reads would leave identifiers on disk and say a reminder went.
@@ -151,10 +153,11 @@ ClassMethod Status(taskId As %String) As %DynamicObject
     Quit:'settings.enabled r
     Set teams = ##class(Shutter.Store.SiteProfile).Teams().%Size()
     Set task = (taskId '= "") || ''$GET(^Shutter.Config("reminderTask"))
-    Set r.warnings = ##class(Shutter.Util.CaseReminder).Warnings(settings, ..MailServer(), ##class(Shutter.Store.SiteProfile).AllowedDomains(), teams, task)
+    Set e = $GET(^Shutter.Reminder("last_error")), lastError = $SELECT(e '= "": $LIST(e, 2), 1: "")
+    Set lastRun = $GET(^Shutter.Reminder("last_run")), runAge = $SELECT(lastRun '= "": ##class(Shutter.Util.Time).SecondsBetween(lastRun, ##class(Shutter.Util.Time).NowUTC()), 1: "")
+    Set r.warnings = ##class(Shutter.Util.CaseReminder).Warnings(settings, ..MailServer(), ##class(Shutter.Store.SiteProfile).AllowedDomains(), teams, task, lastError, runAge)
     Set r."patient_detail" = settings."patient_detail", r.zone = settings.zone
-    Set r."last_run" = $GET(^Shutter.Reminder("last_run")), r."last_sent" = $GET(^Shutter.Reminder("last_sent"))
-    Set e = $GET(^Shutter.Reminder("last_error"))
+    Set r."last_run" = $GET(^Shutter.Reminder("last_run")), r."last_accepted" = $GET(^Shutter.Reminder("last_accepted"))
     If e '= "" Set r."last_error" = $LIST(e, 1) _ ": " _ $LIST(e, 2)
     Quit r
 }

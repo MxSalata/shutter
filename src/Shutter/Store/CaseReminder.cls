@@ -1,5 +1,5 @@
-/// That a case's reminder for a threshold went out (CONTRACTS 6.4, reminders): one row per case and threshold, written
-/// when the mail server took the digest, so a case is reminded once per threshold and a restart keeps it.
+/// That the mail server accepted a case's reminder for a threshold (CONTRACTS 6.4, reminders): one row per case and threshold,
+/// written when it took the digest, not that anyone read it, so a case is reminded once per threshold and a restart keeps it.
 Class Shutter.Store.CaseReminder Extends %Persistent
 {
 
@@ -14,7 +14,7 @@ Property Recipient As %String(MAXLEN = 320);
 
 Property DigestId As %String(MAXLEN = 20);
 
-Property SentAt As %String(MAXLEN = 30);
+Property AcceptedAt As %String(MAXLEN = 30);
 
 /// The thresholds already sent for a case's row id, as an array.
 ClassMethod Thresholds(caseRowId As %String) As %DynamicArray
@@ -44,7 +44,7 @@ Storage Default
 <Value>DigestId</Value>
 </Value>
 <Value name="6">
-<Value>SentAt</Value>
+<Value>AcceptedAt</Value>
 </Value>
 </Data>
 <DataLocation>^Shutter.Store.CaseReminderD</DataLocation>
