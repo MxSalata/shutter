@@ -372,6 +372,10 @@ Method Run(row As %DynamicObject) As %DynamicObject
         Set inc.Receiver = case.Receiver, inc.Mode = "policy", inc.State = "releasing", inc.OpenedAt = case.OpenedAt
         Set inc.PlanDigest = ##class(Shutter.Util.Json).Str(row.incident, "plan_digest")
         If row.incident.%IsDefined("epoch") Set inc.ReceiverEpoch = row.incident.epoch
+        // What the incident's plan recorded: "current" is the version in force now.
+        Set inc.CatalogueVersion = ..Recorded(row.incident, "catalogue_version", ##class(Shutter.Catalogue.Entry).CatalogueVersion())
+        Set inc.ProfileVersion = ..Recorded(row.incident, "profile_version", ##class(Shutter.Util.Json).Str(##class(Shutter.Store.SiteProfile).Current(), "version", 0))
+        Set inc.PolicyVersion = ..Recorded(row.incident, "policy_version", ##class(Shutter.Operation.Gate).#POLICYVERSION)
         Do $$$AssertStatusOK(inc.%Save(), row.name _ ": the incident is saved")
         Set i%MadeIncidents(inc.%Id()) = ""
         Do $$$AssertStatusOK(case.SetIncident(inc), row.name _ ": the case belongs to the incident")
@@ -605,6 +609,13 @@ ClassMethod Purge(id As %String)
     Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM Shutter_Store.Snapshot WHERE ""Case"" = ?", id)
     Do ##class(Shutter.Store.Case).%DeleteId(id)
     Kill ^Shutter.Counter("event", id), ^Shutter.Counter("plan", id), ^Shutter.Counter("snapshot", id)
+}
+
+/// A version a row's incident recorded: none when the row doesn't say, the one in force when it says current.
+ClassMethod Recorded(incident As %DynamicObject, key As %String, current As %String) As %String
+{
+    Set value = ##class(Shutter.Util.Json).Str(incident, key)
+    Quit $SELECT(value = "current": current, 1: value)
 }
 
 /// Deletes a test incident; its cases are purged by their own rows.
@@ -983,6 +994,36 @@ XData Rows [ MimeType = application/json ]
    "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2", "action": {"expected_version": 0}}, "approval": {"approver": "policy"}, "request": {"chain_kind": "single"},
    "profile": {"policy": {"2": {"single": "automatic"}}, "further_messages": {"admission_not_found": "policy"}},
    "expect": [["authorization", "pass", "APPROVAL_VALID"]]},
+  {"group": "authorization", "name": "an automatic release of a lost admission inside an incident: never by policy, there too",
+   "incident": {"plan_digest": "sha256:ut-incident"}, "case": {"event": "admit"}, "summary": {"ward_state_http_status": 404, "ward_state": null},
+   "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2", "action": {"expected_version": 0}}, "approval": {"approver": "policy"}, "request": {"chain_kind": "single"},
+   "profile": {"policy": {"2": {"single": "automatic"}}},
+   "expect": [["authorization", "block", "POLICY_REQUIRES_APPROVAL"]], "outcome": "block"},
+  {"group": "authorization", "name": "the same admission under the approval a person gave the incident's plan",
+   "incident": {"plan_digest": "sha256:ut-incident"}, "case": {"event": "admit"}, "summary": {"ward_state_http_status": 404, "ward_state": null, "catalogue": {"decision": "policy", "entry": "E2", "outcome": "resend", "matches": [{"id": "E2", "preferred": {"outcome": "resend"}}]}},
+   "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2", "action": {"expected_version": 0}},
+   "approval": {"incident_plan_digest": "sha256:ut-incident", "bound_entry": "E2", "bound_outcome": "resend"},
+   "expect": [["authorization", "pass", "APPROVAL_VALID"]]},
+  {"group": "authorization", "name": "an approval under an incident, the catalogue, profile and gate policy as its plan recorded them",
+   "incident": {"plan_digest": "sha256:ut-incident", "catalogue_version": "current", "profile_version": "current", "policy_version": "current"}, "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2"},
+   "summary": {"catalogue": {"decision": "policy", "entry": "E2", "outcome": "resend", "matches": [{"id": "E2", "preferred": {"outcome": "resend"}}]}},
+   "approval": {"incident_plan_digest": "sha256:ut-incident", "bound_entry": "E2", "bound_outcome": "resend"},
+   "expect": [["authorization", "pass", "APPROVAL_VALID"]], "outcome": "pass"},
+  {"group": "authorization", "name": "an approval under an incident, the catalogue changed since its plan",
+   "incident": {"plan_digest": "sha256:ut-incident", "catalogue_version": "E2:0", "profile_version": "current", "policy_version": "current"}, "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2"},
+   "summary": {"catalogue": {"decision": "policy", "entry": "E2", "outcome": "resend", "matches": [{"id": "E2", "preferred": {"outcome": "resend"}}]}},
+   "approval": {"incident_plan_digest": "sha256:ut-incident", "bound_entry": "E2", "bound_outcome": "resend"},
+   "expect": [["authorization", "block", "APPROVAL_CATALOGUE_CHANGED"]], "outcome": "block"},
+  {"group": "authorization", "name": "an approval under an incident, the site profile changed since its plan",
+   "incident": {"plan_digest": "sha256:ut-incident", "catalogue_version": "current", "profile_version": "-1", "policy_version": "current"}, "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2"},
+   "summary": {"catalogue": {"decision": "policy", "entry": "E2", "outcome": "resend", "matches": [{"id": "E2", "preferred": {"outcome": "resend"}}]}},
+   "approval": {"incident_plan_digest": "sha256:ut-incident", "bound_entry": "E2", "bound_outcome": "resend"},
+   "expect": [["authorization", "block", "APPROVAL_SITE_PROFILE_CHANGED"]], "outcome": "block"},
+  {"group": "authorization", "name": "an approval under an incident, the gate policy changed since its plan: an upgrade during an open incident",
+   "incident": {"plan_digest": "sha256:ut-incident", "catalogue_version": "current", "profile_version": "current", "policy_version": "2000-01-01.1"}, "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2"},
+   "summary": {"catalogue": {"decision": "policy", "entry": "E2", "outcome": "resend", "matches": [{"id": "E2", "preferred": {"outcome": "resend"}}]}},
+   "approval": {"incident_plan_digest": "sha256:ut-incident", "bound_entry": "E2", "bound_outcome": "resend"},
+   "expect": [["authorization", "block", "APPROVAL_POLICY_CHANGED"]], "outcome": "block"},
   {"group": "authorization", "name": "an automatic release of a case whose source cannot be proved",
    "case": {"source_namespace": "UTNOSUCHNAMESPACE", "origin_header_id": "1"}, "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2"}, "approval": {"approver": "policy"}, "request": {"chain_kind": "single"},
    "profile": {"policy": {"2": {"single": "automatic"}}},

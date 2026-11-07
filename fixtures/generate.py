@@ -277,7 +277,11 @@ def scenarios():
             {"fault": "off"},
         ],
         "expected": {"disposition": "resend", "write": True, "final_state": "admitted", "final_ward": "WARD-B",
-                     "failed_operation_key": b[2]["operation_key"], "injected_note": INJECTED_NOTE},
+                     "failed_operation_key": b[2]["operation_key"], "injected_note": INJECTED_NOTE,
+                     "modes": ["board", "rules", "policy"],
+                     "not_defined": {"single": "S4 matches catalogue entry E9, which decides by the board, and Single has no "
+                                               "recordings, so with no agent to answer the case stops for a person and "
+                                               "writes nothing. That stop is kept on purpose: a stop, not a difference."}},
     }, [a, u, b]))
 
     # S5: a later, unrelated update doesn't supersede the transfer
@@ -600,8 +604,11 @@ def scenarios():
                  "final_state": "admitted", "final_ward": "WARD-C"},
                 {"encounter": "ENC-1105", "entries": ["E6"], "chain": "single", "path": "automatic", "writes": 0,
                  "final_state": "discharged", "final_ward": None},
-                {"encounter": "ENC-1106", "entries": ["E2"], "chain": "single", "path": "automatic", "writes": 1,
-                 "final_state": "admitted", "final_ward": "WARD-A"},
+                {"encounter": "ENC-1106", "entries": ["E2"], "chain": "single", "path": "approval", "writes": 1,
+                 "final_state": "admitted", "final_ward": "WARD-A",
+                 "path_why": "A lost admission on the receiver's 404: the answer doesn't prove there is no record entered "
+                             "by hand under another number, so policy never releases it, inside an incident too. It joins "
+                             "the incident's one approval, and the task asks the approver to check the system's own screen."},
             ],
             "failed_operation_keys": [m[2]["operation_key"] for m in first_burst + second_burst],
         },
