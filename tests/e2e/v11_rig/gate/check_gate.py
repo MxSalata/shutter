@@ -340,7 +340,8 @@ def never_opened_passes(s, ns, item, service, port, tag):
     step(f"{tag}: {item}, FailureTimeout 0, nothing listening")
     s.drain(ns, item, port)
     control = f"{tag}01"
-    r.send(service, r.adt("A01", control), control)
+    # A bed of its own: an earlier scene's approved admission holds the rig's usual one.
+    r.send(service, r.adt("A01", control).replace(b"BAY1^01", b"BAY9^09"), control)
     case_id = s.case_of(control)
     check(f"{tag}: a case opens", bool(case_id))
     if not case_id:
