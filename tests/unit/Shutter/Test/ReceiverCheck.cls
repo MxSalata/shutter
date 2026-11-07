@@ -241,6 +241,39 @@ Method TestFailedT02()
     Do $$$AssertNotEquals(..Field(out, "Document number").value, "DOC1", "MSH-10 is not offered as the document number")
 }
 
+/// A document case's card reads the block, not a stored copy: the numbers and the status it holds, and nothing else.
+Method TestADocumentCaseReadsItsBlock()
+{
+    Set c = ..Case("T02", "unmappable", {"later_events": 0}, , ..Stored(..Doc()), "This message is MDM, not ADT: Shutter resends only ADT")
+    Set c.DocumentJSON = {"trigger": "T02", "message_type": "MDM^T02", "document": {"id": "BLOCK-5", "completion": "AU"}}.%ToJSON()
+    Do $$$AssertStatusOK(c.%Save(), "the block saves")
+    Set out = ##class(Shutter.Util.ReceiverCheck).ForCase(c)
+    Do $$$AssertEquals(out.variant, "document", "the event word still chooses the variant")
+    Do $$$AssertEquals(c.Event, "T02", "the event word stays")
+    Do $$$AssertEquals(..Field(out, "Document number").value, "BLOCK-5", "the block's number, not the stored copy's")
+    Do $$$AssertEquals(..Field(out, "Status").value, "AU", "the block's status")
+    Do $$$AssertEquals(..Field(out, "Document time").source, "unavailable", "the block holds no document time, and the stored copy isn't read")
+    Do $$$AssertEquals(out.identity.messageType, "MDM^T02", "the message type")
+    Set c.DocumentJSON = {"trigger": "T02", "message_type": "MDM^T02", "identity_withheld": true}.%ToJSON()
+    Do $$$AssertStatusOK(c.%Save(), "a withheld block saves")
+    Set out = ##class(Shutter.Util.ReceiverCheck).ForCase(c)
+    Do $$$AssertEquals(..Field(out, "Document number").source, "unavailable", "a withheld identity stays withheld")
+    Do ..Purge()
+    Set c = ..Case("R01", "unmappable", {"later_events": 0}, , , "This message is ORU, not ADT: Shutter resends only ADT")
+    Set c.DocumentJSON = {"kind": "report", "trigger": "R01", "message_type": "ORU^R01", "document": {"id": "PL-7"}, "report": {"placer": "PL-7", "filler": "", "result_status": "P", "orders": 2}}.%ToJSON()
+    Do $$$AssertStatusOK(c.%Save(), "a report's block saves")
+    Set out = ##class(Shutter.Util.ReceiverCheck).ForCase(c)
+    Do $$$AssertEquals(out.variant, "result", "a result check")
+    Do $$$AssertEquals(c.Event, "R01", "the event word stays")
+    Do $$$AssertEquals(..Field(out, "Order or report number (OBR-2, placer)").value, "PL-7", "the order's number, named")
+    Do $$$AssertEquals(..Field(out, "Status").value, "P", "the result status")
+    Do $$$AssertEquals(out.identity.messageType, "ORU^R01", "the message type")
+    Set several = 0
+    Set it = out.limitations.%GetIterator()
+    While it.%GetNext(, .line) { If line [ "more than one report" Set several = 1 }
+    Do $$$AssertTrue(several, "two orders say so")
+}
+
 Method TestT02WithoutANumber()
 {
     Set c = ..Case("T02", "unmappable", {"later_events": 0}, , ..Stored(..Doc("CTRL2", "TXA|1|CN|TX")), "This message is MDM, not ADT: Shutter resends only ADT")

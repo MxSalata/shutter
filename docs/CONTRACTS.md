@@ -485,7 +485,9 @@ unknown: [text], limitations: [text], report}`. There is no verified, safe-to-re
 report, recorded in the reason of the existing hand close. A missing value reads "Not available from this message".
 
 `variant`, first match: `withheld` (a merge or a cancel); `document` (MDM^T02: TXA-12, TXA-2, TXA-4, TXA-17) and `result` (ORU^R01:
-OBR-3, else OBR-2, ORC-3, ORC-2; OBR-4, OBR-7, OBR-25), with a limitation when the message carries more than one item;
+OBR-3, else OBR-2, ORC-3, ORC-2; OBR-4, OBR-7, OBR-25), with a limitation when the message carries more than one item; on a document
+case (11.2) those rows come from the block, by the reader's right, and the stored message is not read, so the number and the status
+show, and the type, the test and the times read as missing;
 `other_message` (any other message that isn't ADT: general words, no check of its own); `uncertain` (the latest write has no answer);
 `already_applied` (a receipt from the receiver naming this operation, or `ALREADY_COMMITTED`, never a matching location); `uncertain`
 (the failure's own outcome); `identity_or_time` (unmappable, unreadable, E11, E12, E13, E18, or those gate codes); `refusal`; `history_correction`

@@ -357,7 +357,8 @@ ClassMethod Row(fields As %DynamicArray, label As %String, value As %String, sou
 }
 
 /// The stored message's type, and for a T02 or an ORU^R01 its few named fields: TXA and OBR only, never OBX or NTE. Empty
-/// when no copy is held. items counts the reports or documents the message carries.
+/// when no copy is held. items counts the reports or documents the message carries. A document case reads its block instead,
+/// by the reader's right: the block is what a document profile lets a person see, and the header may be another namespace's.
 ClassMethod MessageFacts(case As Shutter.Store.Case) As %DynamicObject
 {
     Set out = {"messageType": "", "items": 0}
@@ -370,6 +371,11 @@ ClassMethod MessageFacts(case As Shutter.Store.Case) As %DynamicObject
         Set rows = ""
     }
     Set values = ""
+    If case.DocumentJSON '= "" {
+        Do ..BlockFacts(case, .rows, .values, out)
+        For i = 1:1:$LISTLENGTH(rows) { Do out.fields.%Push({"label": ($LIST(rows, i)), "value": ($LISTGET(values, i))}) }
+        Quit out
+    }
     Try {
         Set header = $SELECT(case.SourceHeaderId = "": "", 1: ##class(Ens.MessageHeader).%OpenId(case.SourceHeaderId))
         Quit:'$ISOBJECT(header)
@@ -410,6 +416,27 @@ ClassMethod MessageFacts(case As Shutter.Store.Case) As %DynamicObject
     If out.messageType = "" Set out.messageType = ..TypeOf(case)
     For i = 1:1:$LISTLENGTH(rows) { Do out.fields.%Push({"label": ($LIST(rows, i)), "value": ($LISTGET(values, i))}) }
     Quit out
+}
+
+/// The numbers and the status a document case's block holds. It keeps no type, title or time of the document, so those rows
+/// stay unavailable, and a restricted document's block shows a person without the right none of this.
+ClassMethod BlockFacts(case As Shutter.Store.Case, ByRef rows As %List, Output values As %List, out As %DynamicObject) [ Private ]
+{
+    Set values = "", json = "Shutter.Util.Json"
+    Set block = ##class(Shutter.Util.DocumentCase).View(case)
+    Set out.messageType = ..Narrow($CLASSMETHOD(json, "Str", block, "message_type"))
+    If out.messageType = "" Set out.messageType = ..TypeOf(case)
+    Set doc = block.%Get("document"), report = block.%Get("report")
+    If case.Event = "T02" {
+        If '$ISOBJECT(doc) Quit
+        Do out.%Set("items", 1, "number")
+        Set values = $LISTBUILD(..Narrow($CLASSMETHOD(json, "Str", doc, "id")), "", "", ..Narrow($CLASSMETHOD(json, "Str", doc, "completion")))
+    } ElseIf (case.Event = "R01") && $ISOBJECT(report) {
+        Do out.%Set("items", +$CLASSMETHOD(json, "Str", report, "orders"), "number")
+        Set filler = ..Narrow($CLASSMETHOD(json, "Str", report, "filler")), placer = ..Narrow($CLASSMETHOD(json, "Str", report, "placer"))
+        If (filler '= "") || (placer '= "") Set $LIST(rows, 1) = "Order or report number (" _ $SELECT(filler '= "": "OBR-3, filler", 1: "OBR-2, placer") _ ")"
+        Set values = $LISTBUILD($SELECT(filler '= "": filler, 1: placer), "", "", ..Narrow($CLASSMETHOD(json, "Str", report, "result_status")))
+    }
 }
 
 ClassMethod TypeOf(case As Shutter.Store.Case) As %String [ Private ]
