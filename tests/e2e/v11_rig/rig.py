@@ -385,7 +385,7 @@ Set e=##class(EnsLib.Workflow.RoleDefinition).AddUserToRole("Shutter Approvers",
 
     def headers(self, ns, target):
         """Every header of an HL7 message to this item, oldest first: [{"id", "status", "resent", "description", "control"}]."""
-        code = f"""Set rs=##class(%SQL.Statement).%ExecDirect(,"SELECT ID FROM Ens.MessageHeader WHERE TargetConfigName='{target}' AND MessageBodyClassName='EnsLib.HL7.Message' ORDER BY ID") While rs.%Next() {{ Set h=##class(Ens.MessageHeader).%OpenId(rs.%Get("ID")) Set m=##class(EnsLib.HL7.Message).%OpenId(h.MessageBodyId) Write !,"<<<",rs.%Get("ID"),"|",h.Status,"|",h.Resent,"|",$TRANSLATE(h.Description,"|"," "),"|",$SELECT($ISOBJECT(m):m.GetValueAt("1:10"),1:""),">>>",! }}"""
+        code = f"""Set rs=##class(%SQL.Statement).%ExecDirect(,"SELECT ID FROM Ens.MessageHeader WHERE TargetConfigName='{target}' AND MessageBodyClassName='EnsLib.HL7.Message' ORDER BY ID") While rs.%Next() {{ Set h=##class(Ens.MessageHeader).%OpenId(rs.%Get("ID")) Set m=##class(EnsLib.HL7.Message).%OpenId(h.MessageBodyId) Write !,"<<<",rs.%Get("ID"),"|",##class(Ens.DataType.MessageStatus).LogicalToDisplay(h.Status),"|",h.Resent,"|",$TRANSLATE(h.Description,"|"," "),"|",$SELECT($ISOBJECT(m):m.GetValueAt("1:10"),1:""),">>>",! }}"""
         out = []
         for row in self.rows(ns, code):
             hid, status, resent, description, control = row.split("|", 4)
@@ -406,7 +406,7 @@ Set e=##class(EnsLib.Workflow.RoleDefinition).AddUserToRole("Shutter Approvers",
         return int(self.value(ns, f'##class(Ens.Queue).GetCount("{item}")'))
 
     def host(self, ns, item):
-        """The engine's own row for an item: {"status", "adapter_state", "queue"}, empty when it has none."""
+        """The engine's own row for an item: {"status", "adapter_state", "queue"}, empty when it has none. Its queue is as the engine writes it, and read empty with nothing queued: queue() is the count."""
         code = f"""Set rs=##class(%ResultSet).%New("Ens.Util.Statistics:EnumerateHostStatus") Do rs.Execute() While rs.Next() {{ If rs.Get("Name")="{item}" {{ Write !,"<<<",rs.Get("Status"),"|",rs.Get("AdapterState"),"|",rs.Get("Queue"),">>>",! }} }}"""
         found = self.rows(ns, code)
         if not found:
