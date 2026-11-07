@@ -17,7 +17,8 @@ Shutter does not resend these. They may still open a case and a drafted email fo
 | Orders, results, documents and every other non-ADT message | A case and a draft, up to 2 MB |
 | A receiver with no API, such as one that only takes HL7 over TCP | A case and a draft |
 | Merges (forbidden as shipped: keep it so), and cancels the receiver can't reverse | Withheld for a person |
-| A failed A08 patient-information update | Not recovered |
+
+**Treat a failed A08 patient-information update as not recovered, whatever the case says.** Shutter sends an operation, not the message: fixed fields, no patient details. An A08 counts as an update, so it may still be written. If it is, only the record's version moves at the receiver and the changed details don't arrive, even when the case reads verified or closed. A person corrects those details, as you would today.
 
 ## What Shutter will not notice
 
