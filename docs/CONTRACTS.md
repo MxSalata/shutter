@@ -229,7 +229,7 @@ The business process that builds the downstream operation and delivers it is `Sh
 - PID-3 `MRN1001^^^HOSP^MR~9991001018^^^NHS^NH` (v1.19): the hospital number, typed MR, which Shutter keys on, then an NHS number, typed NH, from the 999 range kept for test data with a valid modulus 11 check digit; the model view gives it a token (`NHS-T1`) and `tests/privacy_check.py` fails when one reaches a recording or the demo's agent output. PID-5 synthetic names (no real people); PID-7 a date of birth; PID-8 a sex code.
 - PV1-2 `I`; PV1-3 `WARD-A^BAY1^01^HOSP` (point of care, room, bed, facility), the patient's location as the PAS holds it after the event, on the A08 and A03 too (v1.19: an update names the current ward and a discharge the ward left); PV1-6 on a transfer, the location the PAS moves the patient from (a transfer after an earlier transfer is from the earlier one's ward, whether or not the downstream system took it); PV1-19 `ENC-1001`; PV1-44 the admit time.
 - Free text that must reach the agents as data (the injected instruction in S4) goes in an OBX segment after PV1, `OBX|1|TX|NOTE^Transfer note^L||<text>||||||F`, which the ADT_A02 structure allows. No NTE segments in A02.
-- Every scenario's timeline is one patient and one encounter, except S9 (v1.5): its third message opens a second encounter of the same patient, `ENC-2009`, listed as `expected.other_encounter`, which the recovery must leave untouched. Admit to Ward A applied; the 09:20 transfer to Ward B fails; at 09:30 the same patient is registered for an outpatient clinic under another visit number (v1.19: an ADT^A04 with PV1-2 `O` and PV1-3 `OPD-3^ROOM2^^HOSP`, indexed and not delivered, since an inpatient has one open spell; it was an A01 to Ward C). That attendance belongs to another encounter and supersedes nothing: the transfer is still due. Times are the same day, `2026-10-15`, 09:00 onwards, except S21 (v1.19), played on Sunday `2026-10-25`, the night British clocks go back: its transfer is timed 01:30 local with no offset, an hour that happens twice, so the matcher's `event_time` is `clock_change` and the gate blocks any write (`EVENT_TIME_IMPLAUSIBLE`).
+- Every scenario's timeline is one patient and one encounter, except S9 (v1.5): its third message opens a second encounter of the same patient, `ENC-2009`, listed as `expected.other_encounter`, which the recovery must leave untouched. Since 6 Nov 2026 its plan must name that visit (`expected.names`): an out-patient attendance doesn't stop a resend and shows on the plan. S27 and S31 have a new in-patient admission on a second visit, which does stop it. Admit to Ward A applied; the 09:20 transfer to Ward B fails; at 09:30 the same patient is registered for an outpatient clinic under another visit number (v1.19: an ADT^A04 with PV1-2 `O` and PV1-3 `OPD-3^ROOM2^^HOSP`, indexed and not delivered, since an inpatient has one open spell; it was an A01 to Ward C). That attendance belongs to another encounter and supersedes nothing: the transfer is still due. Times are the same day, `2026-10-15`, 09:00 onwards, except S21 (v1.19), played on Sunday `2026-10-25`, the night British clocks go back: its transfer is timed 01:30 local with no offset, an hour that happens twice, so the matcher's `event_time` is `clock_change` and the gate blocks any write (`EVENT_TIME_IMPLAUSIBLE`).
 - `fixtures/scenarios.json` lists the scenarios:
 
 ```json
@@ -513,6 +513,27 @@ imported) cannot be validated at all, so the check blocks with `SCHEMA_UNKNOWN` 
 `PARSE_FAILED`; the evidence's `validation` then says `parsed: false`, `error: "unknown schema: ..."`, `schema_known: false`,
 `schema_category` and `schema_fix`. A person imports the schema (12) and reinvestigates the case.
 
+**Further messages for the patient** (`Shutter.Util.FurtherMessages`). `ResendGuard` and the matcher read one visit. Before
+every write Shutter also reads the patient: any message for the same identifier and assigning authority, on any visit, that
+reached the engine after the case's own or is timed after it, sent, queued or pending, from Shutter's index, the newest headers
+the index hasn't walked yet, and the HL7 messages of the namespace the case came from (at most 2,000 headers a read). The evidence
+carries `further_messages`: `{identifier: read|unreadable, stops: [...], shows: [...], unread}`, each row `{why, event, message_type,
+visit_number, event_time, sent_at, control_id, location, where}`. A row stops a write when it is an in-patient movement on another
+visit (`why: other_visit`: A01, A02, A03, a cancel, or an A04 or A05 of patient class I), a change to the record (`record_changed`:
+A06, A07, A23, A29, A37, A44, A45, A47, A49, A50, A51), a merge naming the patient on either side, a cancel of this visit the receiver
+did not apply (`cancel`), or for an admission outside a chain a discharge of this visit the receiver did not apply (`discharge`).
+The gate's ordering check blocks with `FURTHER_MOVEMENT`, naming both visits; `PATIENT_UNREADABLE` when the case has no identifier;
+`FURTHER_NOT_READ` when a namespace couldn't be read in full. These come before `NEWER_MESSAGE_PENDING` in the checks, and the case
+blocks for a person at once, with no wait. Any other ADT message for the patient, such as an out-patient A04, passes
+(`NO_FURTHER_MOVEMENT`) and goes on a resend's plan as a precondition line and in the approval task. The gate reads the snapshot
+at the proposal and reads again at dispatch, and the connector reads once more at the moment of the write, answering `refused`
+with reason `further_movement`. An admission the receiver answers 404 for isn't released by the site's policy (a 404 doesn't
+prove there's no record entered by hand under another number): it waits for a person, and the plan says to check the system's own
+screen. An incident's release of such an admission keeps its own path. A site chooses with `further_messages` (6.4). **What this
+can't see:** a change made by hand at the receiver; a message on a route Shutter's index doesn't watch, once the index has passed it;
+a further message that lands between the connector's read and the receiver's answer; and a merge of a merge. Nothing holds the feed
+during a correction: a hold or a laboratory route can call `Find` as it stands. Proof: S27 to S32, S9, and `Shutter.Test.FurtherMessages`.
+
 **The failsafe at the point of the resend** (v1.29; the requirement of 26 Oct 2026). A resend is already a conditional
 write bound to the version the preflight read, so a PAS message applied at the receiver in between is refused as a version
 conflict, and one that lands after applies in order. What the version cannot see is a newer message of the same encounter
@@ -656,7 +677,8 @@ reads it through `Shutter.Store.SiteProfile`.
                 "close_needs_approver": false},
   "incident": {"threshold": 5, "window_minutes": 10, "quiet_seconds": 60},
   "model_content": {"free_text": false},
-  "feed": {"time_zone": "Europe/London", "prevent_failures": false, "source_skew_seconds": 300}
+  "feed": {"time_zone": "Europe/London", "prevent_failures": false, "source_skew_seconds": 300},
+  "further_messages": {"in_patient_movement": "stop", "admission_not_found": "person"}
 }
 ```
 
@@ -699,6 +721,10 @@ reads it through `Shutter.Store.SiteProfile`.
   a dry run to it (v1.21). Declare all four flags: for a receiver with no capabilities endpoint the route takes the
   declared features, and a flag left out reads as false there (the connector alone reads an absent flag as true, so the
   gate is the stricter of the two).
+- `further_messages` (6.5), how rigid a site wants the patient-level check. `in_patient_movement`: `stop`, or `show` to let a
+  movement on another visit through with a line on the plan; a cancel, merge or discharge the receiver didn't apply on this visit
+  stops either way. `admission_not_found`: `person`, or `policy` to let the tier's own policy release a lost admission on a 404.
+  Absent means `stop` and `person`, which are the safe defaults, and the shipped profile leaves it out.
 - `feed.prevent_failures` (v1.34; "prevent failures", decided on 1 Nov 2026, section 12): `true` or `false`, `false` when
   absent and in the shipped profile. On, the feed holds a message whose HL7 schema category is not loaded here as a case of
   kind `unreadable` instead of delivering what it read by position, and the demo hospital's `PAS In` validates and hands a

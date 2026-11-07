@@ -42,6 +42,17 @@ Method OnWardOperation(request As Shutter.Msg.WardOperation, Output response As 
             $$$TRACE("Resend " _ request.OperationKey _ " refused at the connector: " _ response.Error)
             Quit $$$OK
         }
+        // The same last line for further messages for the patient, on any visit.
+        If $ISOBJECT(guardCase) {
+            Set further = ##class(Shutter.Util.FurtherMessages).Find(guardCase)
+            Set word = ##class(Shutter.Util.FurtherMessages).Describe(guardCase, further)
+            If (word '= "") || ##class(Shutter.Util.FurtherMessages).Unreadable(further) || (##class(Shutter.Util.FurtherMessages).Unread(further) '= "") {
+                Set response.Outcome = "refused", response.ReasonCode = "further_movement"
+                Set response.Error = "Not sent: " _ $SELECT(word '= "": word, ##class(Shutter.Util.FurtherMessages).Unreadable(further): "the patient identifier could not be read", 1: "further messages could not all be read: " _ ##class(Shutter.Util.FurtherMessages).Unread(further))
+                $$$TRACE("Resend " _ request.OperationKey _ " refused at the connector: " _ response.Error)
+                Quit $$$OK
+            }
+        }
     }
     Set body = request.ToWardJSON()
     $$$TRACE($SELECT(request.DryRun: "Rehearsal", 1: "Operation") _ " " _ request.OperationKey _ $SELECT(request.ExpectedVersion '= "": ", expected version " _ request.ExpectedVersion, 1: ""))

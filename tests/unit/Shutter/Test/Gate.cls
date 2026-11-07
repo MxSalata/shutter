@@ -268,6 +268,33 @@ Method TestReversed()
 
 /// Every reason code the gate can give has a row in the table: the codes written in the gate's source, and the
 /// approval's reasons (Shutter.Store.Approval.InvalidReason) as the gate words them.
+/// A further message that reached the index after the snapshot: the dispatch gate reads again and stops the approved write, and
+/// the connector, reading once more at the moment of the write, refuses it with nothing sent.
+Method TestFurtherMessagesAreReadAgainBeforeTheWrite()
+{
+    Set row = ##class(Shutter.Index.Message).%New()
+    Set row.DocId = "UT-GATE-FURTHER", row.PatientId = "MRN-UT1", row.PatientIdAuthority = "HOSP", row.VisitNumber = "ENC-UT-NEW", row.Event = "admit", row.MessageType = "ADT_A01"
+    Set row.ControlId = "UT-NEW", row.EventTime = "2026-10-20T09:00:00Z", row.TimeCreated = "2099-01-01 00:00:00"
+    Do $$$AssertStatusOK(row.%Save(), "the index's row is saved")
+    Try {
+        Set run = ..Run({"name": "the dispatch gate reads again", "approval": {}})
+        Do $$$AssertEquals(..Found(run.checks, "ordering", "FURTHER_MOVEMENT"), "block", "the dispatch gate stops the write")
+        Do $$$AssertTrue(..Detail(run.checks, "ordering", "FURTHER_MOVEMENT") [ "ENC-UT-NEW", "and names the new visit")
+        Set case = ..NewCase({})
+        Set request = ##class(Shutter.Msg.WardOperation).%New()
+        Set request.Purpose = "recovery", request.CaseId = case.CaseId, request.OperationKey = case.OperationKey
+        Set ward = ##class(Shutter.Operation.Ward).%New("UT Ward")
+        Do $$$AssertStatusOK(ward.OnWardOperation(request, .response), "the connector answers")
+        Do $$$AssertEquals(response.Outcome, "refused", "the connector refuses the write")
+        Do $$$AssertEquals(response.ReasonCode, "further_movement", "for this reason")
+        Do $$$AssertTrue(response.Error [ "ENC-UT-NEW", "and says what it found: " _ response.Error)
+        Do $$$AssertEquals(response.HttpStatus, "", "nothing was sent")
+    } Catch ex {
+        Do $$$AssertTrue(0, "no error: " _ ex.DisplayString())
+    }
+    Do ##class(Shutter.Index.Message).%DeleteId(row.%Id())
+}
+
 Method TestEveryReasonCodeHasARow()
 {
     Set asserted = ""
@@ -641,7 +668,7 @@ XData Rows [ MimeType = application/json ]
    "expect": [["identity", "pass", "NO_ENCOUNTER"], ["state_transition", "block", "PATIENT_LEVEL_WRITE"], ["concurrency", "block", "PATIENT_LEVEL_WRITE"]]},
   {"group": "identity", "name": "an admission the receiver does not know yet",
    "case": {"event": "admit"}, "summary": {"ward_state_http_status": 404, "ward_state": null}, "plan": {"action": {"expected_version": 0}},
-   "expect": [["identity", "pass", "NEW_ENCOUNTER"], ["state_transition", "pass", "TRANSITION_ALLOWED"], ["concurrency", "pass", "VERSION_MATCHES"]], "outcome": "pass"},
+   "expect": [["identity", "pass", "NEW_ENCOUNTER"], ["state_transition", "pass", "TRANSITION_ALLOWED"], ["concurrency", "pass", "VERSION_MATCHES"]], "contains": [["identity", "NEW_ENCOUNTER", "does not prove"]], "outcome": "pass"},
   {"group": "identity", "name": "a transfer of an encounter the receiver does not know",
    "summary": {"ward_state_http_status": 404, "ward_state": null},
    "expect": [["identity", "block", "UNKNOWN_ENCOUNTER"], ["state_transition", "unknown", "RECEIVER_UNREADABLE"], ["concurrency", "unknown", "RECEIVER_UNREADABLE"]]},
@@ -706,6 +733,25 @@ XData Rows [ MimeType = application/json ]
   {"group": "ordering", "name": "a resend while a newer message of the encounter is pending in Shutter",
    "summary": {"pending_messages": [{"event": "transfer", "event_time": "2026-10-19T10:00:00Z", "operation_key": "k-later", "control_id": "MSG-9", "ens_header_id": "77", "sent_at": "2026-10-19 09:01:00.000", "receiver": "Downstream Out", "where": "queued for the receiver, no answer yet"}]},
    "expect": [["ordering", "block", "NEWER_MESSAGE_PENDING"]], "outcome": "block"},
+  {"group": "ordering", "name": "a resend with a new admission for the patient on another visit stops and names both visits",
+   "summary": {"further_messages": {"identifier": "read", "stops": [{"why": "other_visit", "event": "admit", "message_type": "ADT_A01", "visit_number": "ENC-OTHER", "event_time": "2026-10-19T10:00:00Z", "control_id": "MSG-9"}], "shows": [], "unread": ""}},
+   "expect": [["ordering", "block", "FURTHER_MOVEMENT"]], "contains": [["ordering", "FURTHER_MOVEMENT", "visit ENC-OTHER"], ["ordering", "FURTHER_MOVEMENT", "visit ENC-UT1"]], "outcome": "block"},
+  {"group": "ordering", "name": "a further movement comes before a pending message in the checks, so the workflow doesn't wait",
+   "summary": {"further_messages": {"identifier": "read", "stops": [{"why": "cancel", "event": "cancel_transfer", "visit_number": "ENC-UT1", "event_time": "2026-10-19T10:00:00Z", "control_id": "MSG-9"}], "shows": [], "unread": ""}, "pending_messages": [{"event": "cancel_transfer", "event_time": "2026-10-19T10:00:00Z", "operation_key": "k-later", "control_id": "MSG-9", "ens_header_id": "77", "sent_at": "2026-10-19 09:01:00.000", "receiver": "Downstream Out", "where": "received, not yet delivered to the receiver"}]},
+   "expect": [["ordering", "block", "FURTHER_MOVEMENT"], ["ordering", "block", "NEWER_MESSAGE_PENDING"]], "contains": [["ordering", "FURTHER_MOVEMENT", "cancel of the transfer"], ["ordering", "FURTHER_MOVEMENT", "MRN-UT1"]], "outcome": "block"},
+  {"group": "ordering", "name": "an out-patient attendance on another visit passes and is counted",
+   "summary": {"further_messages": {"identifier": "read", "stops": [], "shows": [{"why": "shown", "event": "register", "message_type": "ADT_A04", "visit_number": "ENC-OTHER", "event_time": "2026-10-19T10:00:00Z", "control_id": "MSG-9"}], "unread": ""}},
+   "expect": [["ordering", "pass", "NO_FURTHER_MOVEMENT"]], "contains": [["ordering", "NO_FURTHER_MOVEMENT", "shown on the plan"]], "outcome": "pass"},
+  {"group": "ordering", "name": "a patient identifier that can't be read blocks a write",
+   "summary": {"further_messages": {"identifier": "unreadable", "stops": [], "shows": [], "unread": ""}},
+   "expect": [["ordering", "block", "PATIENT_UNREADABLE"]], "outcome": "block"},
+  {"group": "ordering", "name": "further messages that could not all be read block a write",
+   "summary": {"further_messages": {"identifier": "read", "stops": [], "shows": [], "unread": "more than 2000 new messages in HOSPITAL"}},
+   "expect": [["ordering", "block", "FURTHER_NOT_READ"]], "contains": [["ordering", "FURTHER_NOT_READ", "HOSPITAL"]], "outcome": "block"},
+  {"group": "ordering", "name": "a further movement doesn't block a plan that writes nothing",
+   "plan": {"disposition": "escalate", "action": null},
+   "summary": {"further_messages": {"identifier": "read", "stops": [{"why": "other_visit", "event": "admit", "visit_number": "ENC-OTHER"}], "shows": [], "unread": ""}},
+   "expect": [["ordering", "pass", "NOT_APPLICABLE"]], "absent": [["ordering", "FURTHER_MOVEMENT"]], "outcome": "pass"},
   {"group": "ordering", "name": "a resend into a bed whose occupant has left",
    "summary": {"catalogue": {"conditions": {"bed_conflict": "occupant_left"}}, "bed_conflict": {"refused": true, "ward": "WARD-B", "bed": "B2", "since": "2026-10-18T08:10:00Z", "status": "occupant_left", "note": "The occupant's encounter is discharged now, so the bed is free of them", "occupant": {"encounter_id": "ENC-OCC"}, "occupant_movement": {"event": "discharge", "delivery": "applied"}}},
    "expect": [["ordering", "pass", "OCCUPANT_MOVED_OUT"], ["ordering", "pass", "NO_LATER_EVENT"]]},
@@ -924,6 +970,16 @@ XData Rows [ MimeType = application/json ]
    "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2"}, "approval": {"approver": "policy"}, "request": {"chain_kind": "ordered"},
    "profile": {"policy": {"2": {"ordered": "approval"}}},
    "expect": [["authorization", "block", "POLICY_REQUIRES_APPROVAL"]]},
+  {"group": "authorization", "name": "an automatic release of a lost admission: the receiver's 404 proves nothing about a record entered by hand",
+   "case": {"event": "admit"}, "summary": {"ward_state_http_status": 404, "ward_state": null},
+   "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2", "action": {"expected_version": 0}}, "approval": {"approver": "policy"}, "request": {"chain_kind": "single"},
+   "profile": {"policy": {"2": {"single": "automatic"}}},
+   "expect": [["authorization", "block", "POLICY_REQUIRES_APPROVAL"]]},
+  {"group": "authorization", "name": "the same release at a site whose profile lets policy take a lost admission",
+   "case": {"event": "admit"}, "summary": {"ward_state_http_status": 404, "ward_state": null},
+   "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2", "action": {"expected_version": 0}}, "approval": {"approver": "policy"}, "request": {"chain_kind": "single"},
+   "profile": {"policy": {"2": {"single": "automatic"}}, "further_messages": {"admission_not_found": "policy"}},
+   "expect": [["authorization", "pass", "APPROVAL_VALID"]]},
   {"group": "authorization", "name": "an automatic release of a board's plan",
    "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "run:1"}, "approval": {"approver": "policy"},
    "profile": {"policy": {"2": {"single": "automatic"}}},

@@ -1,0 +1,249 @@
+/// Further messages for the patient (Shutter.Util.FurtherMessages; CONTRACTS 6.5), on rows alone where it can be: what stops a
+/// write, what only shows on its plan, and what is no business of this patient's. Then the two reads, on real rows.
+Class Shutter.Test.FurtherMessages Extends %UnitTest.TestCase
+{
+
+Parameter SINCE = "2026-10-26 10:59:31.000";
+
+Parameter LATER = "2026-10-26 11:00:00.000";
+
+Parameter OLDER = "2026-10-26 10:00:00.000";
+
+ClassMethod Subject(event As %String = "transfer") As %DynamicObject
+{
+    Quit {"encounter_id": "ENC-1", "patient_id": "MRN1", "patient_id_authority": "HOSP", "event": (event), "event_time": "2026-10-15T08:20:00Z", "operation_key": "k-own", "control_id": "M-OWN"}
+}
+
+/// One other-visit row for MRN1 at HOSP, changed by a patch, received after the case's own.
+ClassMethod Row(patch As %DynamicObject = "") As %DynamicObject
+{
+    Set r = {"event": "admit", "message_type": "ADT_A01", "visit_number": "ENC-2", "patient_id": "MRN1", "patient_id_authority": "HOSP", "control_id": "M-2", "event_time": "2026-10-15T08:30:00Z", "sent_at": (..#LATER)}
+    If $ISOBJECT(patch) {
+        Set pi = patch.%GetIterator()
+        While pi.%GetNext(.k, .v) { Do r.%Set(k, v) }
+    }
+    Quit r
+}
+
+Method Weigh(rows As %DynamicArray, event As %String = "transfer", chain As %String = "single", movement As %String = "stop") As %DynamicObject
+{
+    Quit ##class(Shutter.Util.FurtherMessages).Classify(..Subject(event), rows, chain, ..#SINCE, movement)
+}
+
+Method AssertStops(patch As %DynamicObject, why As %String, what As %String)
+{
+    Set found = ..Weigh([(..Row(patch))])
+    Do $$$AssertEquals(found.stops.%Size(), 1, what _ " stops")
+    If found.stops.%Size() Do $$$AssertEquals(found.stops.%Get(0).why, why, what _ " stops as " _ why)
+}
+
+Method AssertShows(patch As %DynamicObject, what As %String)
+{
+    Set found = ..Weigh([(..Row(patch))])
+    Do $$$AssertEquals(found.stops.%Size(), 0, what _ " does not stop")
+    Do $$$AssertEquals(found.shows.%Size(), 1, what _ " shows on the plan")
+}
+
+Method AssertNothing(patch As %DynamicObject, what As %String)
+{
+    Set found = ..Weigh([(..Row(patch))])
+    Do $$$AssertEquals(found.stops.%Size() + found.shows.%Size(), 0, what _ " is not a further message for this patient")
+}
+
+/// An in-patient movement on another visit stops, whatever became of it; an out-patient attendance shows.
+Method TestAnotherVisit()
+{
+    Do ..AssertStops({}, "other_visit", "a new admission")
+    Do ..AssertStops({"event": "transfer", "message_type": "ADT_A02"}, "other_visit", "a new ward stay")
+    Do ..AssertStops({"event": "discharge", "message_type": "ADT_A03"}, "other_visit", "an unexpected discharge")
+    Do ..AssertStops({"event": "cancel_admit", "message_type": "ADT_A11"}, "other_visit", "a cancelled admission")
+    Do ..AssertStops({"outcome": "applied"}, "other_visit", "an admission the receiver applied")
+    Do ..AssertStops({"outcome": "unknown"}, "other_visit", "an admission still queued")
+    Do ..AssertStops({"event": "register", "message_type": "ADT_A04", "patient_class": "I"}, "other_visit", "an A04 with in-patient class and no bed")
+    Do ..AssertStops({"event": "preadmit", "message_type": "ADT_A05", "patient_class": "I"}, "other_visit", "an in-patient pre-admission")
+    Do ..AssertShows({"event": "register", "message_type": "ADT_A04", "patient_class": "O"}, "an out-patient A04")
+    Do ..AssertShows({"event": "register", "message_type": "ADT_A04", "patient_class": "E"}, "an emergency attendance")
+    Do ..AssertShows({"event": "update", "message_type": "ADT_A08"}, "an update on another visit")
+    Do ..AssertShows({"event": "person_update", "message_type": "ADT_A31", "visit_number": ""}, "a person update with no visit")
+    Do ..AssertNothing({"event": "R01", "message_type": "ORU_R01"}, "a result")
+}
+
+/// What is the case's own, or older than it on both counts, doesn't count.
+Method TestNotFurther()
+{
+    Do ..AssertNothing({"control_id": "M-OWN"}, "the case's own message")
+    Do ..AssertNothing({"operation_key": "k-own", "control_id": "M-X"}, "the case's own operation under another control id")
+    Do ..AssertNothing({"sent_at": (..#OLDER), "event_time": "2026-10-15T07:00:00Z"}, "an earlier stay")
+    Do ..AssertStops({"sent_at": (..#OLDER), "event_time": "2026-10-15T09:00:00Z"}, "other_visit", "a movement received earlier and timed later")
+    Do ..AssertStops({"sent_at": (..#LATER), "event_time": "2026-10-15T07:00:00Z"}, "other_visit", "a movement received later and timed earlier")
+}
+
+/// The identifier's authority is respected, and an identifier that can't be read says so.
+Method TestIdentity()
+{
+    Do ..AssertNothing({"patient_id": "MRN2"}, "another patient")
+    Do ..AssertNothing({"patient_id_authority": "OTHER"}, "the same number from another authority")
+    Do ..AssertStops({"patient_id_authority": ""}, "other_visit", "a row with no authority, which can't be told apart")
+    Set s = ..Subject(), s."patient_id_authority" = ""
+    Do $$$AssertEquals(##class(Shutter.Util.FurtherMessages).Classify(s, [(..Row())], "single", ..#SINCE).stops.%Size(), 1, "a case with no authority counts the row too")
+    Set s = ..Subject(), s."patient_id" = ""
+    Set found = ##class(Shutter.Util.FurtherMessages).Classify(s, [(..Row({"patient_id": ""}))], "single", ..#SINCE)
+    Do $$$AssertEquals(found.identifier, "unreadable", "no identifier is unreadable, and blocks a write")
+    Do $$$AssertEquals(found.stops.%Size(), 0, "and matches nothing")
+    Set s = ..Subject(), s."patient_id" = "-"
+    Do $$$AssertTrue(##class(Shutter.Util.FurtherMessages).Unreadable(##class(Shutter.Util.FurtherMessages).Classify(s, [], "single", ..#SINCE)), "a dash is unreadable too")
+}
+
+/// A merge stops for the patient on either side of it, and not for anyone else.
+Method TestMerges()
+{
+    Do ..AssertStops({"event": "merge", "message_type": "ADT_A40", "visit_number": ""}, "merge", "a merge into this patient")
+    Do ..AssertStops({"event": "merge", "message_type": "ADT_A40", "visit_number": "", "patient_id": "MRN9", "prior_patient_id": "MRN1", "prior_patient_id_authority": "HOSP"}, "merge", "a merge of this patient into another")
+    Do ..AssertNothing({"event": "merge", "message_type": "ADT_A40", "visit_number": "", "patient_id": "MRN9", "prior_patient_id": "MRN1", "prior_patient_id_authority": "OTHER"}, "a merge of the same number from another authority")
+    Do ..AssertNothing({"event": "merge", "message_type": "ADT_A40", "visit_number": "", "patient_id": "MRN9", "prior_patient_id": "MRN8"}, "a merge of two other patients")
+}
+
+/// A record deleted or renumbered stops, on any visit or none.
+Method TestRecordChanged()
+{
+    Do ..AssertStops({"event": "A29", "message_type": "ADT_A29", "visit_number": ""}, "record_changed", "a person deleted, with no visit")
+    Do ..AssertStops({"event": "A29", "message_type": "ADT_A29", "visit_number": "ENC-1"}, "record_changed", "a person deleted, naming this visit")
+    Do ..AssertStops({"event": "A50", "message_type": "ADT_A50"}, "record_changed", "a visit renumbered")
+    Do ..AssertStops({"event": "update", "message_type": "ADT_A06"}, "record_changed", "an out-patient made an in-patient")
+}
+
+/// On this visit only what the receiver did not apply and can't be waited for stops: the guard and the matcher read the rest.
+Method TestSameVisit()
+{
+    For word = "cancel_admit", "cancel_transfer", "cancel_discharge" {
+        Do ..AssertStops({"event": (word), "visit_number": "ENC-1", "message_type": ""}, "cancel", "a " _ word _ " with no answer")
+        Do ..AssertStops({"event": (word), "visit_number": "ENC-1", "outcome": "unavailable"}, "cancel", "a " _ word _ " that failed")
+        Do ..AssertNothing({"event": (word), "visit_number": "ENC-1", "outcome": "applied"}, "a " _ word _ " the receiver applied, which the ordering check reads,")
+    }
+    Do ..AssertStops({"event": "merge", "visit_number": "ENC-1", "outcome": "unknown"}, "merge", "a merge the receiver has not applied")
+    Do ..AssertNothing({"event": "transfer", "visit_number": "ENC-1", "outcome": "unknown"}, "a later transfer of this visit, which the guard reads,")
+    Do ..AssertNothing({"event": "update", "visit_number": "ENC-1"}, "a later update of this visit")
+    Do ..AssertNothing({"event": "discharge", "visit_number": "ENC-1", "outcome": "unavailable"}, "a failed discharge behind a transfer")
+}
+
+/// A failed admission and a failed discharge: alone, the admission puts someone on a closed unit. A chain sends them in order.
+Method TestDayCase()
+{
+    Set discharge = ..Row({"event": "discharge", "visit_number": "ENC-1", "outcome": "unavailable"})
+    Set found = ..Weigh([(discharge)], "admit")
+    Do $$$AssertEquals(found.stops.%Size(), 1, "a failed admission with a failed discharge stops")
+    Do $$$AssertEquals(found.stops.%Get(0).why, "discharge", "named as the discharge")
+    Do $$$AssertEquals(..Weigh([(discharge)], "admit", "ordered").stops.%Size(), 0, "an ordered chain sends both, in order")
+    Do $$$AssertEquals(..Weigh([(discharge)], "admit", "").stops.%Size(), 1, "no chain counts as single")
+    Do $$$AssertEquals(..Weigh([(..Row({"event": "discharge", "visit_number": "ENC-1", "outcome": "applied"}))], "admit").stops.%Size(), 0, "a discharge the receiver applied is the ordering check's")
+}
+
+/// The first row of a control id and visit wins: a delivery's answer beats the index's row of the same message.
+Method TestDeliveryAnswersForTheIndex()
+{
+    Set delivered = ..Row({"event": "cancel_transfer", "visit_number": "ENC-1", "control_id": "M-9", "outcome": "applied"})
+    Set indexed = ..Row({"event": "cancel_transfer", "visit_number": "ENC-1", "control_id": "M-9"})
+    Do $$$AssertEquals(..Weigh([(delivered), (indexed)]).stops.%Size(), 0, "applied, so the index's copy is not a stop")
+    Do $$$AssertEquals(..Weigh([(indexed)]).stops.%Size(), 1, "with no delivery it is")
+}
+
+/// A site may let another visit's movement through: it then shows. What the receiver never applied on this visit still stops.
+Method TestTheSiteChooses()
+{
+    Set found = ..Weigh([(..Row())], "transfer", "single", "show")
+    Do $$$AssertEquals(found.stops.%Size(), 0, "with show, another visit's movement does not stop")
+    Do $$$AssertEquals(found.shows.%Size(), 1, "and it is on the plan")
+    Set found = ..Weigh([(..Row({"event": "cancel_transfer", "visit_number": "ENC-1"}))], "transfer", "single", "show")
+    Do $$$AssertEquals(found.stops.%Size(), 1, "a withdrawn move on this visit still stops")
+}
+
+/// A person is told both visits, and what is on file. A follower's plan gets none of another patient's.
+Method TestWords()
+{
+    Set case = ##class(Shutter.Store.Case).%New()
+    Set case.EncounterId = "ENC-1", case.Event = "transfer", case.PatientId = "MRN1", case.PatientIdAuthority = "HOSP"
+    Set found = ..Weigh([(..Row()), (..Row({"control_id": "M-3", "visit_number": "ENC-3"}))])
+    Set text = ##class(Shutter.Util.FurtherMessages).Describe(case, found)
+    Do $$$AssertTrue(text [ "visit ENC-2", "names the other visit: " _ text)
+    Do $$$AssertTrue(text [ "visit ENC-1", "names this visit")
+    Do $$$AssertTrue(text [ "MRN1 (HOSP)", "names exactly which patient to review")
+    Do $$$AssertTrue(text [ "an admission", "in words a person reads")
+    Do $$$AssertTrue(text [ "and 1 more", "counts the rest")
+    Do $$$AssertEquals(##class(Shutter.Util.FurtherMessages).Describe(case, ..Weigh([])), "", "nothing to describe")
+    Set summary = {"further_messages": (..Weigh([(..Row({"event": "register", "message_type": "ADT_A04", "patient_class": "O"}))])), "ward_state_http_status": 200}
+    Set lines = ##class(Shutter.Util.FurtherMessages).PlanLines(case, summary)
+    Do $$$AssertEquals(lines.%Size(), 1, "one line on the plan")
+    Do $$$AssertTrue(lines.%Get(0) [ "ENC-2", "naming the out-patient visit: " _ lines.%Get(0))
+    Do $$$AssertTrue(lines.%Get(0) [ "does not stop", "and saying what it does")
+}
+
+/// A lost admission's plan asks about a record entered by hand; a found encounter's does not.
+Method TestAdmissionOnNotFound()
+{
+    Set case = ##class(Shutter.Store.Case).%New()
+    Set case.EncounterId = "ENC-1", case.Event = "admit"
+    Set lines = ##class(Shutter.Util.FurtherMessages).PlanLines(case, {"ward_state_http_status": 404})
+    Do $$$AssertEquals(lines.%Size(), 1, "a line about hand entry")
+    Do $$$AssertTrue(lines.%Get(0) [ "by hand", "asks: " _ lines.%Get(0))
+    Do $$$AssertTrue(lines.%Get(0) [ "own screen", "and says where to look")
+    Do $$$AssertEquals(##class(Shutter.Util.FurtherMessages).PlanLines(case, {"ward_state_http_status": 200}).%Size(), 0, "not when the receiver knows it")
+    Set case.Event = "transfer"
+    Do $$$AssertEquals(##class(Shutter.Util.FurtherMessages).PlanLines(case, {"ward_state_http_status": 404}).%Size(), 0, "not for a transfer, which blocks anyway")
+}
+
+/// The index's patient read, on real rows. An empty time would match nothing, so the read always passes one.
+Method TestForPatient()
+{
+    Set row = ##class(Shutter.Index.Message).%New()
+    Set row.DocId = "UT-FURTHER-1", row.PatientId = "MRN-UT-FURTHER", row.PatientIdAuthority = "HOSP", row.VisitNumber = "ENC-UT-2", row.Event = "admit", row.MessageType = "ADT_A01"
+    Set row.ControlId = "M-UT", row.EventTime = "2026-10-15T08:30:00Z", row.TimeCreated = ..#LATER
+    Set sc = row.%Save()
+    Do $$$AssertStatusOK(sc, "a row saved")
+    Set found = ##class(Shutter.Index.Message).ForPatient("MRN-UT-FURTHER", ..#SINCE)
+    Do $$$AssertEquals(found.%Size(), 1, "the patient's row")
+    Do $$$AssertEquals(found.%Get(0)."visit_number", "ENC-UT-2", "with its visit")
+    Do $$$AssertEquals(##class(Shutter.Index.Message).ForPatient("MRN-UT-FURTHER", "2030-01-01 00:00:00").%Size(), 0, "not when older than the time")
+    Do $$$AssertEquals(##class(Shutter.Index.Message).ForPatient("", ..#SINCE).%Size(), 0, "an empty identifier has no rows")
+    Do $$$AssertEquals(##class(Shutter.Index.Message).ForPatient("-", ..#SINCE).%Size(), 0, "nor a dash")
+    Do ##class(Shutter.Index.Message).%DeleteId(row.%Id())
+}
+
+/// The read of a namespace's messages, which covers what no index does: only this patient's, once per body, and a merge naming
+/// them. More headers than one read walks is not a whole read.
+Method TestScan()
+{
+    Set case = ##class(Shutter.Store.Case).%New()
+    Set case.PatientId = "MRN-UT-SCAN", case.PatientIdAuthority = "HOSP", case.EncounterId = "ENC-UT-1", case.Event = "transfer"
+    Set low = $ZDATETIME($ZTIMESTAMP, 3, 1, 3), first = 0
+    Set mine = ..NewMessage("MSH|^~\&|PAS|HOSP|DOWNSTREAM|HOSP|20261015093000||ADT^A01^ADT_A01|M-UT-SCAN1|P|2.5.1" _ $CHAR(13) _ "EVN|A01|20261015093000" _ $CHAR(13) _ "PID|1||MRN-UT-SCAN^^^HOSP^MR" _ $CHAR(13) _ "PV1|1|I|WARD-C^BAY1^07^HOSP||||||||||||||||ENC-UT-2", .h1, .h2)
+    Set other = ..NewMessage("MSH|^~\&|PAS|HOSP|DOWNSTREAM|HOSP|20261015093000||ADT^A01^ADT_A01|M-UT-SCAN2|P|2.5.1" _ $CHAR(13) _ "EVN|A01|20261015093000" _ $CHAR(13) _ "PID|1||MRN-UT-ELSE^^^HOSP^MR" _ $CHAR(13) _ "PV1|1|I|WARD-C^BAY1^08^HOSP||||||||||||||||ENC-UT-3", .h3, .h4)
+    Set rows = ##class(Shutter.Util.FurtherMessages).Scan(case, h1 - 1, low, .full)
+    Do $$$AssertEquals(full, 1, "the read is whole")
+    Do $$$AssertEquals(rows.%Size(), 1, "this patient's one message, though two headers carry it")
+    If rows.%Size() {
+        Set r = rows.%Get(0)
+        Do $$$AssertEquals(r."visit_number", "ENC-UT-2", "with its visit")
+        Do $$$AssertEquals(r.event, "admit", "and its event")
+        Do $$$AssertEquals(r."patient_class", "I", "and its patient class")
+        Do $$$AssertEquals(r."control_id", "M-UT-SCAN1", "and its control id")
+    }
+    For h = h1, h2, h3, h4 { Do ##class(Ens.MessageHeader).%DeleteId(h) }
+    Do ##class(EnsLib.HL7.Message).%DeleteId(mine), ##class(EnsLib.HL7.Message).%DeleteId(other)
+}
+
+/// A stored message with two headers, as an inbound item and a router leave it.
+Method NewMessage(text As %String, Output h1 As %String, Output h2 As %String) As %String
+{
+    Set body = ##class(EnsLib.HL7.Message).ImportFromString(text, .sc)
+    Do $$$AssertStatusOK(sc, "the message reads")
+    Do body.%Save()
+    For i = 1, 2 {
+        Set h = ##class(Ens.MessageHeader).%New()
+        Set h.MessageBodyClassName = "EnsLib.HL7.Message", h.MessageBodyId = body.%Id(), h.SourceConfigName = "UT", h.TargetConfigName = "UT", h.TimeCreated = $ZDATETIME($ZTIMESTAMP, 3, 1, 3)
+        Do h.%Save()
+        If i = 1 { Set h1 = h.%Id() } Else { Set h2 = h.%Id() }
+    }
+    Quit body.%Id()
+}
+
+}
