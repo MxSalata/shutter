@@ -32,6 +32,25 @@ Method TestTheBuildsListIsNormalisedAndCleared()
 }
 
 /// The live hospital's guard: a namespace with no API service registered is not listening, and asking never throws.
+/// A live story stamps its cases with a scenario id, as the scenario runner does, but it isn't the runner: the gate's exemption for
+/// a recorded scenario in Rules only goes by what the runner recorded, and a story's stamp takes that away.
+Method TestALiveStoryIsNotARecordedRun()
+{
+    Set scenario = $GET(^Shutter.Config("scenario")), run = $GET(^Shutter.Config("scenarioRun"))
+    Set case = ##class(Shutter.Store.Case).%New()
+    Set case.Scenario = "S8", ^Shutter.Config("scenario") = "S8", ^Shutter.Config("scenarioRun") = "S8"
+    Do $$$AssertTrue(##class(Shutter.Scenarios.Runner).IsRecorded(case), "the runner's own run counts")
+    Set player = ##class(Hospital.LivePlayer).%New("Live PAS")
+    Set player.ShutterNamespace = $NAMESPACE
+    Do player.Stamp("S8")
+    Do $$$AssertEquals($GET(^Shutter.Config("scenario")), "S8", "a live story's cases still carry the id")
+    Do $$$AssertNotTrue(##class(Shutter.Scenarios.Runner).IsRecorded(case), "and a story of the same name does not count")
+    Set case.Scenario = ""
+    Set ^Shutter.Config("scenarioRun") = ""
+    Do $$$AssertNotTrue(##class(Shutter.Scenarios.Runner).IsRecorded(case), "no scenario on either side does not count")
+    Set ^Shutter.Config("scenario") = scenario, ^Shutter.Config("scenarioRun") = run
+}
+
 Method TestShutterListening()
 {
     Do $$$AssertNotTrue(##class(Hospital.LivePlayer).ShutterListening("SHUTTERNOSUCHNS"), "no such namespace")

@@ -189,6 +189,11 @@ ClassMethod Prepare(scenario As %String, mode As %String, Output inbound As %Str
     Quit found
 }
 
+ClassMethod IsRecorded(case As Shutter.Store.Case) As %Boolean
+{
+    Quit case.Scenario '= ""
+}
+
 /// The reset before a run, and the mode and scenario recorded (CONTRACTS 4). Returns the time of the reset.
 ClassMethod Begin(scenario As %String, mode As %String, Output error As %String) As %String
 {

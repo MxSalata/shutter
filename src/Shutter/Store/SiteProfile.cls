@@ -394,6 +394,11 @@ ClassMethod AdmissionNotFound() As %String
     Quit ..FurtherSetting("admission_not_found", "person")
 }
 
+ClassMethod FurtherScanSeconds(profile As %DynamicObject = "") As %Integer
+{
+    Quit 30
+}
+
 ClassMethod FurtherSetting(name As %String, default As %String) As %String [ Private ]
 {
     Set fm = ..Current().%Get("further_messages")

@@ -16,6 +16,8 @@ Class Shutter.Util.FurtherMessages
 /// How many HL7 headers one read of a namespace walks. More than this and the read is not whole, which blocks a write.
 Parameter SCANLIMIT = 2000;
 
+Parameter SCANPAGE = 2000;
+
 /// What is known about the case's patient and further messages: {identifier: read or unreadable, stops: [...], shows: [...],
 /// unread: why a namespace could not be read in full, or ""}. Never throws: a read that fails is unread, and blocks a write.
 ClassMethod Find(case As Shutter.Store.Case) As %DynamicObject
@@ -116,7 +118,7 @@ ClassMethod ReadSource(case As Shutter.Store.Case, since As %String, rows As %Dy
 
 /// The HL7 messages in this namespace after a header id and since a time, read from the messages themselves: only this
 /// patient's, by identifier or as a merge's prior record. full is 0 when more headers were there than one read walks.
-ClassMethod Scan(case As Shutter.Store.Case, afterId As %Integer, since As %String, Output full As %Boolean) As %DynamicArray
+ClassMethod Scan(case As Shutter.Store.Case, afterId As %Integer, since As %String, Output full As %Boolean, seconds As %Integer = 30) As %DynamicArray
 {
     Set out = [], full = 1, walked = 0, json = "Shutter.Util.Json"
     Set top = ..#SCANLIMIT + 1
@@ -137,6 +139,11 @@ ClassMethod Scan(case As Shutter.Store.Case, afterId As %Integer, since As %Stri
         Do out.%Push(r)
     }
     Quit out
+}
+
+ClassMethod NotWhole(namespace As %String, seconds As %Integer) As %String
+{
+    Quit "more than " _ ..#SCANLIMIT _ " new messages in " _ namespace
 }
 
 ClassMethod RowOf(body As EnsLib.HL7.Message, id As %String, authority As %String, trigger As %String, event As %String) As %DynamicObject [ Private ]

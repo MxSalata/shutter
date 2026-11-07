@@ -68,6 +68,54 @@ Method TestAnotherVisit()
     Do ..AssertNothing({"event": "R01", "message_type": "ORU_R01"}, "a result")
 }
 
+/// In-patient moves stop: a movement that says it is an emergency or out-patient one moves no in-patient, so it shows. Any other
+/// class, or none, can't be told from an in-patient move, and stops.
+Method TestAnotherVisitsClass()
+{
+    Do ..AssertShows({"event": "discharge", "message_type": "ADT_A03", "patient_class": "E"}, "an emergency department's discharge")
+    Do ..AssertShows({"event": "discharge", "message_type": "ADT_A03", "patient_class": "O"}, "an out-patient discharge")
+    Do ..AssertShows({"event": "admit", "message_type": "ADT_A01", "patient_class": "E"}, "an emergency attendance sent as an admission")
+    Do ..AssertShows({"event": "transfer", "message_type": "ADT_A02", "patient_class": "o"}, "an out-patient move, in small letters")
+    Do ..AssertShows({"event": "cancel_discharge", "message_type": "ADT_A13", "patient_class": "E"}, "a cancelled emergency discharge")
+    Do ..AssertStops({"event": "discharge", "message_type": "ADT_A03", "patient_class": "I"}, "other_visit", "an in-patient discharge")
+    Do ..AssertStops({"event": "transfer", "message_type": "ADT_A02", "patient_class": "I"}, "other_visit", "an in-patient move")
+    Do ..AssertStops({"event": "discharge", "message_type": "ADT_A03", "patient_class": ""}, "other_visit", "a discharge with no class")
+    Do ..AssertStops({"event": "admit", "message_type": "ADT_A01", "patient_class": "U"}, "other_visit", "an admission of unknown class")
+    Do ..AssertStops({"event": "update", "message_type": "ADT_A06", "patient_class": "E"}, "record_changed", "a class change, whatever the class it names")
+}
+
+/// A pre-admission on file before the case is a date on a waiting list, not a move: it shows. One that reached the engine after
+/// the case's own message may be a real new stay, and stops.
+Method TestAWaitingListDate()
+{
+    Do ..AssertShows({"event": "preadmit", "message_type": "ADT_A05", "patient_class": "I", "sent_at": (..#OLDER), "event_time": "2026-10-15T09:00:00Z"}, "a pre-admission received before the case and dated after it")
+    Do ..AssertStops({"event": "preadmit", "message_type": "ADT_A05", "patient_class": "I", "sent_at": (..#LATER), "event_time": "2026-10-15T09:00:00Z"}, "other_visit", "a pre-admission received after the case")
+    Do ..AssertStops({"event": "admit", "message_type": "ADT_A01", "sent_at": (..#OLDER), "event_time": "2026-10-15T09:00:00Z"}, "other_visit", "an admission received before the case and timed after it")
+}
+
+/// The index's rows carry no patient class, so the read takes it from the message itself: what the feed sent decides, as it does
+/// for the rows a scan reads.
+Method TestAnIndexedMovementIsReadWithItsClass()
+{
+    Set case = ##class(Shutter.Store.Case).%New()
+    Set case.CaseId = "UT-FURTHER-CLASS", case.EncounterId = "ENC-UT-CLASS", case.Event = "transfer", case.PatientId = "MRN-UT-CLASS", case.PatientIdAuthority = "HOSP"
+    Set case.EventTime = "2026-10-15T08:20:00Z", case.OperationKey = "k-class", case.SourceMessageId = "M-OWN-CLASS", case.OpenedAt = "2026-10-26T10:59:31Z"
+    For class = "E", "I" {
+        Set body = ##class(EnsLib.HL7.Message).ImportFromString("MSH|^~\&|PAS|HOSP|DOWNSTREAM|HOSP|20261015093000||ADT^A03^ADT_A03|M-UT-CLASS|P|2.5.1" _ $CHAR(13) _ "EVN|A03|20261015093000" _ $CHAR(13) _ "PID|1||MRN-UT-CLASS^^^HOSP^MR" _ $CHAR(13) _ "PV1|1|" _ class _ "|ED^^^HOSP||||||||||||||||ENC-UT-OTHER", .sc)
+        Do $$$AssertStatusOK(sc, "the message reads")
+        Do $$$AssertStatusOK(body.%Save(), "and is stored")
+        Set row = ##class(Shutter.Index.Message).%New()
+        Set row.DocId = body.%Id(), row.PatientId = "MRN-UT-CLASS", row.PatientIdAuthority = "HOSP", row.VisitNumber = "ENC-UT-OTHER", row.Event = "discharge", row.MessageType = "ADT_A03"
+        Set row.ControlId = "M-UT-CLASS", row.EventTime = "2026-10-15T09:30:00Z", row.TimeCreated = "2099-01-01 00:00:00"
+        Do $$$AssertStatusOK(row.%Save(), "the index's row is saved")
+        Set found = ##class(Shutter.Util.FurtherMessages).Find(case)
+        Do $$$AssertEquals(found.stops.%Size(), $SELECT(class = "I": 1, 1: 0), "a discharge of class " _ class _ " on another visit: stops or not")
+        Do $$$AssertEquals(found.shows.%Size(), $SELECT(class = "I": 0, 1: 1), "and shows or not")
+        Do ##class(Shutter.Index.Message).%DeleteId(row.%Id())
+        Do ##class(EnsLib.HL7.Message).%DeleteId(body.%Id())
+    }
+}
+
 /// What is the case's own, or older than it on both counts, doesn't count.
 Method TestNotFurther()
 {
@@ -227,6 +275,37 @@ Method TestScan()
         Do $$$AssertEquals(r."patient_class", "I", "and its patient class")
         Do $$$AssertEquals(r."control_id", "M-UT-SCAN1", "and its control id")
     }
+    For h = h1, h2, h3, h4 { Do ##class(Ens.MessageHeader).%DeleteId(h) }
+    Do ##class(EnsLib.HL7.Message).%DeleteId(mine), ##class(EnsLib.HL7.Message).%DeleteId(other)
+}
+
+/// A busy feed: more headers than one page after the case's own, all another patient's, and this patient's message behind them.
+/// The read walks on to the end and finds it. Only a read that runs out of time with headers left is not whole.
+Method TestScanWalksPastABusyFeed()
+{
+    Set case = ##class(Shutter.Store.Case).%New()
+    Set case.PatientId = "MRN-UT-BUSY", case.PatientIdAuthority = "HOSP", case.EncounterId = "ENC-UT-1", case.Event = "transfer"
+    Set low = $ZDATETIME($ZTIMESTAMP, 3, 1, 3)
+    Set other = ..NewMessage("MSH|^~\&|PAS|HOSP|DOWNSTREAM|HOSP|20261015093000||ADT^A01^ADT_A01|M-UT-BUSY1|P|2.5.1" _ $CHAR(13) _ "EVN|A01|20261015093000" _ $CHAR(13) _ "PID|1||MRN-UT-ELSE^^^HOSP^MR" _ $CHAR(13) _ "PV1|1|I|WARD-C^BAY1^08^HOSP||||||||||||||||ENC-UT-3", .h1, .h2)
+    Set more = ##class(Shutter.Util.FurtherMessages).#SCANPAGE + 100
+    For i = 1:1:more {
+        Set h = ##class(Ens.MessageHeader).%New()
+        Set h.MessageBodyClassName = "EnsLib.HL7.Message", h.MessageBodyId = other, h.SourceConfigName = "UT", h.TargetConfigName = "UT", h.TimeCreated = low
+        Do h.%Save()
+        Set made(h.%Id()) = ""
+    }
+    Set mine = ..NewMessage("MSH|^~\&|PAS|HOSP|DOWNSTREAM|HOSP|20261015093000||ADT^A01^ADT_A01|M-UT-BUSY2|P|2.5.1" _ $CHAR(13) _ "EVN|A01|20261015093000" _ $CHAR(13) _ "PID|1||MRN-UT-BUSY^^^HOSP^MR" _ $CHAR(13) _ "PV1|1|I|WARD-C^BAY1^07^HOSP||||||||||||||||ENC-UT-2", .h3, .h4)
+    Set rows = ##class(Shutter.Util.FurtherMessages).Scan(case, h1 - 1, low, .full, 30)
+    Do $$$AssertEquals(full, 1, "a read with the time for it is whole, past one page")
+    Do $$$AssertEquals(rows.%Size(), 1, "and finds the patient's message behind the others")
+    Set rows = ##class(Shutter.Util.FurtherMessages).Scan(case, h1 - 1, low, .full, 0)
+    Do $$$AssertEquals(full, 0, "a read out of time with headers left is not whole")
+    Do $$$AssertEquals(rows.%Size(), 0, "and has not reached the message")
+    Set words = ##class(Shutter.Util.FurtherMessages).NotWhole("HOSPITAL", 30)
+    Do $$$AssertTrue(words [ "HOSPITAL", "the words name the namespace: " _ words)
+    Do $$$AssertTrue(words [ "further_messages.scan_seconds", "and the setting a site can change: " _ words)
+    Set h = ""
+    For { Set h = $ORDER(made(h)) Quit:h=""  Do ##class(Ens.MessageHeader).%DeleteId(h) }
     For h = h1, h2, h3, h4 { Do ##class(Ens.MessageHeader).%DeleteId(h) }
     Do ##class(EnsLib.HL7.Message).%DeleteId(mine), ##class(EnsLib.HL7.Message).%DeleteId(other)
 }

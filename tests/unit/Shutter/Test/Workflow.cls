@@ -122,6 +122,23 @@ Method TestCaseTaskCarriesNoDigestValue()
     Do $$$AssertTrue(task.%Message [ "Exact action: resend " _ case.OperationKey _ " at receiver version 3", "and the exact action")
 }
 
+/// A line the approver should read that could not be worked out is said to be missing, not left out: the digest doesn't change,
+/// so nothing else on the page would show it.
+Method TestCaseTaskSaysWhatItCouldNotRead()
+{
+    Set case = ##class(Shutter.Store.Case).%New()
+    Set case.CaseId = "UT-WF-2", case.Headline = "Resend the transfer at version 3", case.OperationKey = "PAS^HOSP^MRN-UT1^ENC-UT1^transfer^2026-10-19T09:00:00Z"
+    Set plan = ##class(Shutter.Store.Plan).%New()
+    Set plan.Version = 1, plan.Disposition = "resend", plan.ActionType = "resend", plan.OperationKey = case.OperationKey, plan.ExpectedVersion = 3, plan.Digest = "sha256:abc"
+    Do $$$AssertNotTrue(##class(Shutter.Process.CaseWorkflow).ApprovalTask(case, plan).%Message [ "could not be read", "a clean read says nothing")
+    Set snap = ##class(Shutter.Store.Snapshot).%New()
+    Set snap.Summary = "{not json"
+    Set case.CurrentSnapshot = snap
+    Set message = ##class(Shutter.Process.CaseWorkflow).ApprovalTask(case, plan).%Message
+    Do $$$AssertTrue(message [ "further messages for this patient could not be read", "the task says what it could not read: " _ message)
+    Do $$$AssertTrue(message [ "before deciding", "and what to do about it")
+}
+
 /// The incident's approval task, shared or per chain, starts with an empty PlanDigest form value and carries the
 /// digest and what the approval binds in its text.
 Method TestIncidentTaskCarriesNoDigestValue()

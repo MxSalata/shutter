@@ -427,8 +427,12 @@ Method Run(row As %DynamicObject) As %DynamicObject
         If a.%IsDefined("incident_plan_digest") Do $$$AssertStatusOK(approval.BindIncident(a."incident_plan_digest", ##class(Shutter.Util.Json).Str(a, "bound_entry"), ##class(Shutter.Util.Json).Str(a, "bound_outcome")), row.name _ ": the approval is bound to the incident's")
         Set req.ApprovalId = approval.%Id()
     }
+    // The scenario the runner is playing, as Shutter.Scenarios.Runner's Begin records it, and nothing unless the row says so.
+    Set runBefore = $GET(^Shutter.Config("scenarioRun"))
+    Set ^Shutter.Config("scenarioRun") = ##class(Shutter.Util.Json).Str(row, "scenario_run")
     Set gate = ##class(Shutter.Operation.Gate).%New("Shutter Gate (unit test)")
     Set sc = gate.OnGateRequest(req, .resp)
+    Set ^Shutter.Config("scenarioRun") = runBefore
     Do $$$AssertStatusOK(sc, row.name _ ": the gate ran")
     Set checks = ##class(%DynamicArray).%FromJSON($SELECT(resp.ChecksJSON = "": "[]", 1: resp.ChecksJSON))
     Quit {"response": (resp), "checks": (checks)}
@@ -748,7 +752,7 @@ XData Rows [ MimeType = application/json ]
    "summary": {"further_messages": {"identifier": "unreadable", "stops": [], "shows": [], "unread": ""}},
    "expect": [["ordering", "block", "PATIENT_UNREADABLE"]], "outcome": "block"},
   {"group": "ordering", "name": "further messages that could not all be read block a write",
-   "summary": {"further_messages": {"identifier": "read", "stops": [], "shows": [], "unread": "more than 2000 new messages in HOSPITAL"}},
+   "summary": {"further_messages": {"identifier": "read", "stops": [], "shows": [], "unread": "the read of HOSPITAL ran out of its 30 seconds with messages left"}},
    "expect": [["ordering", "block", "FURTHER_NOT_READ"]], "contains": [["ordering", "FURTHER_NOT_READ", "HOSPITAL"]], "outcome": "block"},
   {"group": "ordering", "name": "a further movement doesn't block a plan that writes nothing",
    "plan": {"disposition": "escalate", "action": null},
@@ -1110,8 +1114,14 @@ XData Rows [ MimeType = application/json ]
    "summary": {"catalogue": {"decision": "board", "matches": [{"id": "E2", "preferred": {"outcome": "resend"}}, {"id": "E9", "preferred": {"outcome": "resend"}}]}},
    "expect": [["catalogue", "pass", "ENTRY_NOT_NAMED"]]},
   {"group": "catalogue", "name": "Rules only's plan names no entry on an entry that stops, in a recorded scenario: the demonstration stays",
-   "case": {"scenario": "S8"}, "summary": {"catalogue": {"decision": "board", "entry": "E7", "outcome": "escalate", "matches": [{"id": "E7", "preferred": {"outcome": "escalate"}}]}},
+   "case": {"scenario": "S8"}, "scenario_run": "S8", "summary": {"catalogue": {"decision": "board", "entry": "E7", "outcome": "escalate", "matches": [{"id": "E7", "preferred": {"outcome": "escalate"}}]}},
    "expect": [["catalogue", "pass", "ENTRY_NOT_NAMED"]]},
+  {"group": "catalogue", "name": "Rules only on a case stamped by a live story, which the scenario runner did not play, gets no exemption",
+   "case": {"scenario": "S8"}, "summary": {"catalogue": {"decision": "board", "entry": "E7", "outcome": "escalate", "matches": [{"id": "E7", "preferred": {"outcome": "escalate"}}]}},
+   "expect": [["catalogue", "block", "ENTRY_NOT_NAMED_WRITE"]], "outcome": "block"},
+  {"group": "catalogue", "name": "Rules only on a case stamped with another scenario than the runner's gets no exemption",
+   "case": {"scenario": "S8"}, "scenario_run": "S9", "summary": {"catalogue": {"decision": "board", "entry": "E7", "outcome": "escalate", "matches": [{"id": "E7", "preferred": {"outcome": "escalate"}}]}},
+   "expect": [["catalogue", "block", "ENTRY_NOT_NAMED_WRITE"]], "outcome": "block"},
   {"group": "catalogue", "name": "Rules only on a real case, which no scenario made, gets no exemption",
    "summary": {"catalogue": {"decision": "board", "entry": "E7", "outcome": "escalate", "matches": [{"id": "E7", "preferred": {"outcome": "escalate"}}]}},
    "expect": [["catalogue", "block", "ENTRY_NOT_NAMED_WRITE"]], "outcome": "block"},

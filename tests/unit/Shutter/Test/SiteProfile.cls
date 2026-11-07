@@ -36,6 +36,11 @@ Method TestFurtherMessages()
     Set p = ##class(Shutter.Store.SiteProfile).Default()
     Do $$$AssertEquals(p."further_messages"."in_patient_movement", "stop", "another visit's movement stops by default")
     Do $$$AssertEquals(p."further_messages"."admission_not_found", "person", "a lost admission waits for a person by default")
+    Do $$$AssertEquals(p."further_messages"."scan_seconds", 30, "a read of a namespace takes up to 30 seconds by default")
+    Do p."further_messages".%Remove("scan_seconds")
+    Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).FurtherScanSeconds(p), 30, "and when the profile doesn't say")
+    Set p."further_messages"."scan_seconds" = 120
+    Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).FurtherScanSeconds(p), 120, "a site's own figure is read")
 }
 
 Method TestTeamsNeedADomain()
@@ -225,6 +230,11 @@ XData Rows [ MimeType = application/json ]
  {"group": "further", "name": "a site lets policy release a lost admission", "patch": {"further_messages": {"admission_not_found": "policy"}}, "expect": ""},
  {"group": "further", "name": "an unknown word is refused", "patch": {"further_messages": {"in_patient_movement": "maybe"}}, "expect": "further_messages.in_patient_movement: must be stop or show"},
  {"group": "further", "name": "an unknown word is refused for the admission too", "patch": {"further_messages": {"admission_not_found": "auto"}}, "expect": "further_messages.admission_not_found: must be person or policy"},
+ {"group": "further", "name": "a site gives the read more time", "patch": {"further_messages": {"scan_seconds": 600}}, "expect": ""},
+ {"group": "further", "name": "the read must have some time", "patch": {"further_messages": {"scan_seconds": 0}}, "expect": "further_messages.scan_seconds: must be a whole number of seconds from 1 to 600"},
+ {"group": "further", "name": "the read's time has a ceiling", "patch": {"further_messages": {"scan_seconds": 601}}, "expect": "further_messages.scan_seconds: must be a whole number of seconds from 1 to 600"},
+ {"group": "further", "name": "the read's time is a number", "patch": {"further_messages": {"scan_seconds": "30"}}, "expect": "further_messages.scan_seconds: must be a whole number of seconds from 1 to 600"},
+ {"group": "further", "name": "the read's time is whole", "patch": {"further_messages": {"scan_seconds": 1.5}}, "expect": "further_messages.scan_seconds: must be a whole number of seconds from 1 to 600"},
  {"group": "further", "name": "a misspelt setting is refused", "patch": {"further_messages": {"in_patient": "stop"}}, "expect": "further_messages.in_patient: unknown setting"},
  {"group": "approvers", "name": "a misspelt switch is refused, not read as off", "patch": {"approvers": {"close_needs_aprover": true}}, "expect": "approvers.close_needs_aprover: unknown setting"},
  {"group": "approvers", "name": "the switch must be true or false", "patch": {"approvers": {"close_needs_approver": "yes"}}, "expect": "approvers.close_needs_approver: must be true or false"},
