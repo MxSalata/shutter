@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Receiver conformance manifest",
+  "description": "What a conformance run may touch. Every encounter, patient, ward and bed is declared before the run; nothing here is a request, a path or a credential.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "environment",
+    "base_url",
+    "allowed_origin",
+    "receiver_identity",
+    "receiver_build",
+    "contract_version",
+    "run_id",
+    "source_system",
+    "patient_authority",
+    "encounters",
+    "wards",
+    "beds",
+    "credential_scope",
+    "isolation_attestation"
+  ],
+  "properties": {
+    "environment": { "const": "TEST" },
+    "base_url": {
+      "type": "string",
+      "pattern": "^https?://[A-Za-z0-9.:\\[\\]-]+(/[A-Za-z0-9._~-]+)*$",
+      "description": "The receiver's API base, for example https://receiver-test.example.invalid/downstream/api. No user, query or fragment."
+    },
+    "allowed_origin": {
+      "type": "string",
+      "pattern": "^https?://[A-Za-z0-9.:\\[\\]-]+$",
+      "description": "Scheme, host and port, written out again; it must equal the base URL's origin."
+    },
+    "receiver_identity": { "type": "string", "pattern": "^[ -~]{1,200}$" },
+    "receiver_build": { "type": "string", "pattern": "^[ -~]{1,200}$" },
+    "contract_version": { "const": "shutter-recovery-v1" },
+    "run_id": { "type": "string", "pattern": "^[A-Za-z0-9._-]{1,60}$" },
+    "source_system": { "const": "SHUTTER-CONFORMANCE" },
+    "patient_authority": { "const": "SHUTTER-TEST" },
+    "encounters": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "patient_id"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^SHUTTER-TEST-[A-Za-z0-9._-]{1,80}$" },
+          "patient_id": { "type": "string", "pattern": "^SYNTHETIC-[A-Za-z0-9._-]{1,80}$" }
+        }
+      }
+    },
+    "wards": {
+      "type": "array",
+      "minItems": 2,
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^SHUTTER-TEST-[A-Za-z0-9._-]{1,40}$" }
+    },
+    "beds": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^TEST-[A-Za-z0-9._-]{1,40}$" }
+    },
+    "credential_scope": {
+      "type": "string",
+      "pattern": "^[ -~]{1,200}$",
+      "description": "What the test credential may do, in the site's words, or exactly \"none\" for an endpoint that takes no credential. The credential itself is read from the environment."
+    },
+    "isolation_attestation": {
+      "type": "string",
+      "pattern": "^[ -~]{1,200}$",
+      "description": "A reference to the approved scope that says this endpoint holds no real patients. The kit cannot establish that itself."
+    }
+  }
+}
