@@ -164,7 +164,7 @@ Method TestTheChainsOneRule()
     // The MDM's rules aren't an ORU's.
     Do $$$AssertTrue('(..Codes(b) [ "VERSION_CONFLICT") && '(..Codes(b) [ "PATIENT_CHANGED") && '(..Codes(b) [ "STATUS_UNPROVEN") && '(..Codes(b) [ "PARENT"), ..Codes(b))
     Set plain = ..Block(text)
-    Do $$$AssertTrue(..Says(plain) [ "No further message for this order or report", ..Says(plain))
+    Do $$$AssertTrue(..Says(plain) [ "No message for this order or report", ..Says(plain))
     Do $$$AssertEquals(..Codes(plain), ",", "no reason at all from a clean read")
 }
 

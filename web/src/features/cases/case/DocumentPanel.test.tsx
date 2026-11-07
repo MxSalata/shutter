@@ -40,13 +40,13 @@ const report: CaseDocument = {
   reasons: [
     {
       code: 'DOC_RESULT_STATUS_CHANGED',
-      words: 'A further message for this order or report has another result status',
+      words: 'Another message for this order or report has a different result status',
     },
   ],
   chain: {
     complete: true,
     says: [
-      'A further message for this report (R01 at header 9, Error) has Final results (F); this one has Preliminary (P).',
+      'Another message for this report (R01 at header 9 of 2026-11-05 09:01:00, Error) has Final results (F); this one has Preliminary (P).',
     ],
   },
 };

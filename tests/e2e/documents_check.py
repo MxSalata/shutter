@@ -737,7 +737,7 @@ if wanted("R09"):
     a, b, s = f"AE-R09A-{tag}", f"AE-R09B-{tag}", f"AE-R09S-{tag}"
     send(oru(a, ed, placer=placer, filler=filler, status="P", app="REFUSE"), "r09a")
     ca = case_of(a)
-    check("the first case has no other status to say", "DOC_RESULT_STATUS_CHANGED" not in reasons(ca) and "No further message" in says(ca), (reasons(ca), says(ca)))
+    check("the first case has no other status to say", "DOC_RESULT_STATUS_CHANGED" not in reasons(ca) and "No message for this order or report" in says(ca), (reasons(ca), says(ca)))
     send(oru(s, ed, placer=placer, filler=filler, status="P", app="REFUSE"), "r09s")
     cs = case_of(s)
     check("a further message under the same status is not this rule", "DOC_RESULT_STATUS_CHANGED" not in reasons(cs), (reasons(cs), says(cs)))

@@ -22,7 +22,7 @@ ClassMethod Words(code As %String) As %String
         "DOC_ENGINE_OWNS_DELIVERY": "The engine still owns this delivery, and may deliver it by itself",
         "DOC_DELIVERY_UNCERTAIN": "The receiver may hold this document already",
         "DOC_BODY_UNAVAILABLE": "The source no longer holds this message, or its source could not be checked",
-        "DOC_RESULT_STATUS_CHANGED": "A further message for this order or report has another result status",
+        "DOC_RESULT_STATUS_CHANGED": "Another message for this order or report has a different result status",
         : "")
 }
 
@@ -133,7 +133,7 @@ ClassMethod Findings(block As %DynamicObject)
     Set chain.says = says, chain.findings = f
 }
 
-/// A report's one chain rule: a further message for the same order or report under another result status, said plainly. It says
+/// A report's one chain rule: a further message for the same order or report under another result status, earlier or later, said plainly, with its time. It says
 /// what the store holds and nothing of which message stands, and no MDM rule applies.
 ClassMethod ReportFindings(block As %DynamicObject) [ Private ]
 {
@@ -151,7 +151,7 @@ ClassMethod ReportFindings(block As %DynamicObject) [ Private ]
             Set sameReport = (r.filler '= "") && (row.filler = r.filler), sameOrder = (r.placer '= "") && (row.placer = r.placer)
             Continue:'sameReport&&'sameOrder
             Do f."status_changes".%Push(row.trigger _ " at header " _ row."header_id" _ ", " _ row.status)
-            Do says.%Push("A further message for this " _ $SELECT(sameReport: "report", 1: "order") _ " (" _ row.trigger _ " at header " _ row."header_id" _ ", " _ row.status _ ") has " _ ..ResultStatusWords(row."result_status") _ "; this one has " _ ..ResultStatusWords(mine) _ ".")
+            Do says.%Push("Another message for this " _ $SELECT(sameReport: "report", 1: "order") _ " (" _ row.trigger _ " at header " _ row."header_id" _ " of " _ $EXTRACT(row."time_created", 1, 19) _ ", " _ row.status _ ") has " _ ..ResultStatusWords(row."result_status") _ "; this one has " _ ..ResultStatusWords(mine) _ ".")
         }
     }
     If +r.orders > 1 Do says.%Push("This message has " _ r.orders _ " orders. The case follows the one with the first attachment.")
@@ -159,7 +159,7 @@ ClassMethod ReportFindings(block As %DynamicObject) [ Private ]
         Do chain.%Set("complete", 0, "boolean")
         Do says.%Push("With no order or report number, Shutter cannot establish a chain.")
     } ElseIf chain.complete {
-        If f."status_changes".%Size() = 0 Do says.%Push("No further message for this order or report under another result status among the " _ chain.read _ " messages to " _ chain.item _ " read back to " _ $EXTRACT(chain.since, 1, 16) _ ". Older messages and other routes are not covered.")
+        If f."status_changes".%Size() = 0 Do says.%Push("No message for this order or report with a different result status among the " _ chain.read _ " messages to " _ chain.item _ " read back to " _ $EXTRACT(chain.since, 1, 16) _ ". Older messages and other routes are not covered.")
         If f."status_changes".%Size() > 0 Do says.%Push("Read: " _ chain.read _ " messages to " _ chain.item _ " back to " _ $EXTRACT(chain.since, 1, 16) _ ".")
     } Else {
         Set why = $SELECT(chain.%IsDefined("note"): chain.note, 1: "")
