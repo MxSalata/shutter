@@ -30,6 +30,10 @@ Property CaseTarget As %String(MAXLEN = 128) [ InitialExpression = "Case Workflo
 
 Property ApprovalTarget As %String(MAXLEN = 128) [ InitialExpression = "Shutter Approvers" ];
 
+/// What the incident's timeline was last told about each task, under "raised|seq" and "failed|seq" (no seq for the
+/// shared task): a try that changes nothing says nothing.
+Property TaskSaid As array Of %String(MAXLEN = 400);
+
 /// Seconds between checks of a released case's state (slower after the first minute).
 Property PollSeconds As %Integer [ InitialExpression = 3 ];
 
@@ -215,7 +219,7 @@ Method BuildPlan(incident As Shutter.Store.Incident) As %Status
 
 /// The task for the chains, or a stop for a person when it cannot be raised: an error here never closes the incident,
 /// because its chains are approved by a person and nothing has gone yet.
-Method AskApproval(incident As Shutter.Store.Incident, chains As %ListOfObjects, seq As %String, again As %Boolean = 0) As %Status
+Method AskApproval(incident As Shutter.Store.Incident, chains As %ListOfObjects, seq As %String) As %Status
 {
     Try {
         Set sc = ..RaiseTask(incident, chains, seq)
@@ -223,15 +227,17 @@ Method AskApproval(incident As Shutter.Store.Incident, chains As %ListOfObjects,
         Set sc = ex.AsStatus()
     }
     Quit:$$$ISOK(sc) $$$OK
-    Quit ..TaskNotRaised(incident, seq, sc, again)
+    Quit ..TaskNotRaised(incident, seq, sc)
 }
 
-/// No task: the incident's timeline and an alert tell a person, once, naming the incident; the chains keep waiting, and
-/// the workflow tries again.
-Method TaskNotRaised(incident As Shutter.Store.Incident, seq As %String, error As %Status, again As %Boolean = 0) As %Status
+/// No task: the incident's timeline and an alert tell a person, naming the incident, once for each cause (the error's
+/// words, whatever numbers it carries); the chains keep waiting, and the workflow tries again.
+Method TaskNotRaised(incident As Shutter.Store.Incident, seq As %String, error As %Status) As %Status
 {
-    If 'again {
-        Set text = ##class(Shutter.Process.IncidentTaskText).NotRaised(incident.IncidentId, seq, $SYSTEM.Status.GetErrorText(error))
+    Set why = $SYSTEM.Status.GetErrorText(error), cause = $EXTRACT($TRANSLATE(why, "0123456789"), 1, 400)
+    If ..TaskSaid.GetAt("failed|" _ seq) '= cause {
+        Do ..TaskSaid.SetAt(cause, "failed|" _ seq)
+        Set text = ##class(Shutter.Process.IncidentTaskText).NotRaised(incident.IncidentId, seq, why)
         Do incident.Note("error", text, "system")
         Do ..SendAlert(##class(Ens.AlertRequest).%New($LISTBUILD(..%ConfigName, text)))
         If incident.State = "classified" Do incident.Transition("awaiting_approval", "Waiting for a person: no approval task is open", "system")
@@ -247,7 +253,7 @@ Method OnRaiseAgain(incident As Shutter.Store.Incident, seq As %String) As %Stat
     Set pending = ..PendingTasks
     // The instance keeps the settings it started with, and the cause may have been the target: the item's own now.
     Set ..ApprovalTarget = ..%New(..%ConfigName).ApprovalTarget
-    Set sc = ..AskApproval(incident, incident.ChainList(), seq, 1)
+    Set sc = ..AskApproval(incident, incident.ChainList(), seq)
     Quit:$$$ISERR(sc) sc
     Quit:(..PendingTasks = pending) $$$OK
     Quit ..Advance(incident)
@@ -273,8 +279,12 @@ Method RaiseTask(incident As Shutter.Store.Incident, chains As %ListOfObjects, s
     Set sc = ..SendRequestAsync(..ApprovalTarget, task, 1, $SELECT(seq = "": "approval", 1: "approval:" _ seq))
     Quit:$$$ISERR(sc) sc
     Set ..PendingTasks = ..PendingTasks + 1
-    // The task is out: a note that fails must not raise it again.
-    Do incident.Note("note", "Approval task raised: " _ task.%Subject, "system")
+    // The task is out: a note that fails must not raise it again. A call that keeps answering with an error raises it
+    // every 5 minutes, and only the first is news.
+    If ..TaskSaid.GetAt("raised|" _ seq) = "" {
+        Do ..TaskSaid.SetAt(1, "raised|" _ seq)
+        Do incident.Note("note", "Approval task raised: " _ task.%Subject, "system")
+    }
     Quit $$$OK
 }
 

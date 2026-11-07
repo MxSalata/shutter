@@ -33,7 +33,7 @@ ClassMethod Message(incident As Shutter.Store.Incident, count As %Integer, failu
     Set part = (shownChains = 0) && (end > 0), more = count - shownChains - part
     Set note = nl _ "Listed here: " _ $SELECT(shownChains: "the first " _ shownChains _ " of " _ count _ " chains", part: "part of the first chain", 1: "no chain") _ ", " _ shownItems _ " of " _ items _ " operations. "
     Set note = note _ "Approving binds " _ $SELECT(count = 1: "the whole chain", 1: "all " _ count _ " chains") _ ", listed here or not. "
-    Set note = note _ $SELECT(more > 0: more _ " more chain" _ $SELECT(more = 1: "", 1: "s") _ " and every operation are", 1: "Every operation is") _ " on the incident page: /shutter/incidents/" _ incident.IncidentId
+    Set note = note _ $SELECT(more > 0: more _ " more chain" _ $SELECT(more = 1: "", 1: "s") _ " and every operation are", 1: "Every operation is") _ " on the incident page: /shutter/index.html#/incidents/" _ incident.IncidentId
     Quit head _ $EXTRACT(lines, 1, end) _ note _ tail
 }
 

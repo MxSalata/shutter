@@ -45,7 +45,7 @@ Method TestAFewChainsAreAllListed()
     Set msg = wf.LastTask.%Message
     For seq = 1:1:4 Do $$$AssertTrue(msg [ ($CHAR(10) _ "Chain " _ seq _ " ("), "chain " _ seq _ " is listed")
     Do $$$AssertTrue(msg [ (inc.IncidentId _ "-4-2"), "with the last item")
-    Do $$$AssertNotTrue(msg [ "/shutter/incidents/", "and nothing points elsewhere")
+    Do $$$AssertNotTrue(msg [ "/shutter/index.html#/incidents/", "and nothing points elsewhere")
     Do $$$AssertTrue(msg [ ("Plan digest: " _ inc.PlanDigest), "the digest is there")
 }
 
@@ -73,7 +73,7 @@ Method TestAStormRaisesOneTaskThatFits()
     Set shown = $LENGTH(msg, $CHAR(10) _ "Chain ") - 1
     Do $$$AssertTrue(msg [ ("the first " _ shown _ " of 30 chains"), "it says how many it lists")
     Do $$$AssertTrue(msg [ ((30 - shown) _ " more chain"), "and how many more")
-    Do $$$AssertTrue(msg [ ("/shutter/incidents/" _ inc.IncidentId), "it points to the incident page")
+    Do $$$AssertTrue(msg [ ("/shutter/index.html#/incidents/" _ inc.IncidentId), "it points to the incident page")
     Do $$$AssertTrue(msg [ "binds all 30 chains", "and says the approval covers them all")
     Do $$$AssertTrue(msg [ "PlanDigest field", "the inbox's instruction is there")
     Do $$$AssertTrue($LENGTH(msg, $CHAR(10) _ "  ") - 1 = (2 * shown), "whole chains only: " _ shown _ " chains, each with its two items")
@@ -118,7 +118,7 @@ Method TestOneLongChainSaysHowManyMore()
     Do $$$AssertNotTrue(task.%Message [ ($CHAR(10) _ "  70. transfer"), "not its last")
     Do $$$AssertTrue(task.%Message [ "of 70 operations", "and it says how many")
     Do $$$AssertTrue(task.%Message [ "part of the first chain", "that it is only part of the chain")
-    Do $$$AssertTrue(task.%Message [ "/shutter/incidents/I-000009", "the page has them all")
+    Do $$$AssertTrue(task.%Message [ "/shutter/index.html#/incidents/I-000009", "the page has them all")
 }
 
 /// The digest moves with a chain the task does not list, so an approval from the text binds that chain too.
@@ -179,6 +179,45 @@ Method TestAnErrorFromTheTasksCallStopsForAPerson()
     Do $$$AssertStatusOK(wf.OnError("", "", "", $$$ERROR($$$GeneralError, "no such role"), "approval"), "the call answers with an error")
     Do $$$AssertEquals(wf.PendingTasks, 0, "no task is open")
     Do ..AssertStillForAPerson(inc, wf, "raise")
+}
+
+/// The Workflow item keeps answering each try with the same error: one error event, one alert and one "raised" note,
+/// however many tries; it goes on trying, and a different error is told once more.
+Method TestACallThatKeepsFailingIsToldOnce()
+{
+    Set inc = ..NewIncident(2, 2)
+    Set wf = ..Workflow(inc)
+    Do $$$AssertStatusOK(wf.AskApproval(inc, inc.ChainList(), ""), "the task is raised")
+    For try = 1:1:4 {
+        Do $$$AssertStatusOK(wf.OnError("", "", "", $$$ERROR($$$GeneralError, "no such role, try " _ try), "approval"), "the call answers with an error")
+        Do $$$AssertEquals(wf.Sent.GetAt(wf.Sent.Count()), "Ens.Alarm|raise", "it will try again")
+        Do $$$AssertStatusOK(wf.OnResponse("", "", "", "", "raise"), "the next try")
+        Do $$$AssertEquals(wf.PendingTasks, 1, "a task is out again")
+    }
+    Do $$$AssertEquals(..Said(inc, "error", "No approval task"), 1, "one error on the timeline")
+    Do $$$AssertEquals(wf.Alerts.Count(), 1, "one alert")
+    Do $$$AssertEquals(..Said(inc, "note", "Approval task raised"), 1, "one note that the task was raised")
+    Do $$$AssertStatusOK(wf.OnError("", "", "", $$$ERROR($$$GeneralError, "the Workflow item is disabled"), "approval"), "another cause")
+    Do $$$AssertEquals(..Said(inc, "error", "No approval task"), 2, "is told")
+    Do $$$AssertEquals(wf.Alerts.Count(), 2, "with its own alert")
+}
+
+/// A chain's own task keeps its own count: two chains, each told once.
+Method TestEachChainsTaskIsToldOnce()
+{
+    Set inc = ..NewIncident(2, 2, "per_chain")
+    Set wf = ..Workflow(inc)
+    Set wf.Refuse = "the target is not there"
+    For seq = 1, 2, 1, 2 { Do $$$AssertStatusOK(wf.AskApproval(inc, inc.ChainList(), seq), "chain " _ seq) }
+    Do $$$AssertEquals(..Said(inc, "error", "No approval task"), 2, "one error for each chain")
+    Do $$$AssertEquals(wf.Alerts.Count(), 2, "one alert for each")
+}
+
+Method Said(inc As Shutter.Store.Incident, kind As %String, start As %String) As %Integer
+{
+    Set n = 0, it = ##class(Shutter.Store.Incident).%OpenId(inc.%Id()).Events().%GetIterator()
+    While it.%GetNext(.k, .e) { If (e.kind = kind) && ($EXTRACT(e.text, 1, $LENGTH(start)) = start) Set n = n + 1 }
+    Quit n
 }
 
 /// Another call's error still abandons, as before.

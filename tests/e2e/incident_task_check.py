@@ -9,8 +9,8 @@ Two storms through the intake route, each with its own patients, on an instance 
   in the Workflow inbox reads it, and the task is completed through the engine with that digest, as the inbox's Approve
   does; every case resolves.
 - 8 failures with the approval target missing: no task can be raised, and the incident waits for a person instead of
-  closing: no case fails, its timeline and an alert name the incident. The target comes back, the next try raises the
-  task, the API approves, and every case resolves.
+  closing: no case fails, its timeline and an alert name the incident, once, through a retry that fails again. The target
+  comes back, the next try raises the task, the API approves, and every case resolves, in order, verified, no key twice.
 
 Writes DIR/result.json as it goes. Exit status: 0 held, 1 a line failed. Standard library only.
 """
@@ -31,6 +31,8 @@ sys.path.insert(0, HERE)
 import storm_scale_check as storm  # noqa: E402
 
 RETRY_SECONDS = 300
+UPDATE_SECONDS = 120
+ROOM = 6
 MISSING_TARGET = "No Such Approvers"
 
 
@@ -43,20 +45,44 @@ def own_patients(plan, first_digit):
     return out
 
 
-def set_target(ctr, value):
-    """Sets or clears the Incident Workflow's approval target and updates the running production."""
+def connections(ctr):
+    """The instance's connections in use, as the licence counts them; None while no terminal can get in."""
+    rc, out, _ = storm.docker("exec", "-i", ctr, "timeout", "60", "iris", "session", "IRIS", "-U", "%SYS",
+                              stdin="Do $SYSTEM.License.ShowSummary()\nHalt\n", timeout=90)
+    found = re.findall(r"Current\s+Connections\s+=\s+(\d+)", out)
+    return int(found[-1]) if rc == 0 and found else None
+
+
+def set_target(ctr, value, log):
+    """Sets or clears the Incident Workflow's approval target and updates the running production.
+
+    The community licence allows 8 connections, and the web gateway keeps two or three for each signed-in user. Updating
+    the production starts the item's new job with a Job command, which has no timeout: at 8 of 8 it waits in state JOBW
+    for as long as the connections stay taken, holding the lock on Ens.Runtime, so a terminal doing this at 8 of 8 hung
+    until it was killed. So it waits for room first, and the terminal is killed if it still does not answer.
+    """
+    deadline = time.monotonic() + 600
+    used = connections(ctr)
+    while (used is None or used > ROOM) and time.monotonic() < deadline:
+        time.sleep(15)
+        used = connections(ctr)
+    log.line("calls.jsonl", role="terminal", method="-", path=f"connections before the update: {used}", status=0)
+    if used is None or used > ROOM:
+        raise SystemExit(f"no room for the production's update: {used} connections in use, after 600 s")
     code = "\n".join([
         'Set p = ##class(Ens.Config.Production).%OpenId("Shutter.Production")',
         'Set item = p.FindItemByConfigName("Incident Workflow")',
         'For i = item.Settings.Count():-1:1 { If item.Settings.GetAt(i).Name = "ApprovalTarget" { Do item.Settings.RemoveAt(i) } }',
         f'If "{value}" \'= "" {{ Set s = ##class(Ens.Config.Setting).%New(), s.Name = "ApprovalTarget", s.Target = "Host", s.Value = "{value}" Do item.Settings.Insert(s) }}',
         'Set sc = item.%Save() If sc Set sc = p.%Save()',
-        'If sc Set sc = ##class(Ens.Director).UpdateProduction(60)',
+        'If sc Set sc = ##class(Ens.Director).UpdateProduction(30, 1)',
         'Write !,"RESULT: ",$SELECT($SYSTEM.Status.IsOK(sc): "ok", 1: $SYSTEM.Status.GetErrorText(sc)),!',
-    ])
-    out = storm.iris_session(ctr, "SHUTTER", code)
+        'Halt',
+    ]) + "\n"
+    rc, out, err = storm.docker("exec", "-i", ctr, "timeout", str(UPDATE_SECONDS), "iris", "session", "IRIS", "-U", "SHUTTER",
+                                stdin=code, timeout=UPDATE_SECONDS + 30)
     if "RESULT: ok" not in out:
-        raise SystemExit("the production's update failed: " + out[-400:])
+        raise SystemExit(f"the production's update failed (exit {rc}): " + (out + err)[-400:])
 
 
 def open_task_message(ctr, incident_id):
@@ -80,6 +106,12 @@ def complete_in_inbox(ctr, incident_id, digest):
         'Write !,"RESULT: ",$SELECT($SYSTEM.Status.IsOK(sc): "ok", 1: $SYSTEM.Status.GetErrorText(sc)),!',
     ])
     return "RESULT: ok" in storm.iris_session(ctr, "SHUTTER", code)
+
+
+def alerts(ctr, incident_id):
+    """Event Log rows that say the incident's task could not be raised, read in a terminal to keep the web gateway's connections down."""
+    code = f'''Set r = ##class(%SQL.Statement).%ExecDirect(, "SELECT COUNT(*) AS N FROM Ens_Util.Log WHERE Text LIKE ?", "No approval task could be raised for incident {incident_id}%") Do r.%Next() Write !,"<<<",r.N,">>>",!'''
+    return int(storm.between_marks(storm.iris_session(ctr, "SHUTTER", code)) or 0)
 
 
 def reset_receiver(args, log):
@@ -159,7 +191,7 @@ def main():
     with open(os.path.join(args.out, "task-message.txt"), "w") as f:
         f.write(message)
     line("its message fits", 0 < len(message) <= 2000, f"{len(message)} characters")
-    line("it points to the incident page", "/shutter/incidents/" + iid in message)
+    line("it points to the incident page", "/shutter/index.html#/incidents/" + iid in message)
     line("it says how many more", re.search(r"\d+ more chains", message), re.findall(r"Listed here:.*", message))
     typed = re.search(r"Plan digest: (\S+)", message)
     _, detail = case_states(operator, iid)
@@ -170,9 +202,10 @@ def main():
     line("every chain resolved", {c.get("state") for c in detail.get("chains", [])} == {"resolved"} and len(detail.get("chains", [])) == 12, detail.get("summary"))
 
     # No task can be raised.
-    set_target(args.ctr, MISSING_TARGET)
+    set_target(args.ctr, MISSING_TARGET, log)
     before = known()
-    post(args, own_patients(storm.storm_plan(8, base + dt.timedelta(seconds=100)), 5), log)
+    waited = own_patients(storm.storm_plan(8, base + dt.timedelta(seconds=100)), 5)
+    post(args, waited, log)
     incident = wait_state(operator, before, ("awaiting_approval", "closed"), 200)
     iid = (incident or {}).get("incidentId", "")
     line("with the target missing the incident is not closed", incident and incident["state"] == "awaiting_approval", incident and incident["state"])
@@ -187,15 +220,23 @@ def main():
     with open(os.path.join(args.out, "no-task-events.json"), "w") as f:
         json.dump(events, f, indent=1)
     line("one error on the timeline names the incident", len(errors) == 1 and iid in errors[0]["text"], errors and errors[0]["text"])
-    sql = storm.Sql(args.url, log)
-    alert = sql.one("SHUTTER", "SELECT COUNT(*) AS N FROM Ens_Util.Log WHERE Text LIKE ?", ("No approval task could be raised for incident " + iid + "%",))
-    line("an alert names the incident in the Event Log", int(alert.get("N") or 0) >= 1, alert)
+    line("an alert names the incident in the Event Log", alerts(args.ctr, iid) >= 1, alerts(args.ctr, iid))
     approver = storm.Role(args.url, "approver", log)
     status, reply, _, _ = approver.call("POST", "/incidents/" + urllib.parse.quote(iid) + "/approvals",
                                         {"planDigest": detail.get("planDigest"), "decision": "approve"}, idempotent=True)
     line("an approval with no task is refused and releases nothing", status == 409, f"HTTP {status} {reply}")
 
-    set_target(args.ctr, "")
+    # Through one retry that fails again: nothing new is said, and still no task.
+    time.sleep(RETRY_SECONDS + 20)
+    _, events, _, _ = operator.call("GET", "/incidents/" + urllib.parse.quote(iid) + "/events")
+    again = alerts(args.ctr, iid)
+    line("a retry that fails says nothing new", len([e for e in (events or []) if e.get("kind") == "error"]) == 1 and again == 1, f"alerts {again}")
+    _, detail = case_states(operator, iid)
+    line("and raises no task", detail.get("tasks") == [] and detail.get("state") == "awaiting_approval", detail.get("state"))
+
+    approver.sign_out()
+    operator.sign_out()
+    set_target(args.ctr, "", log)
     deadline = time.monotonic() + RETRY_SECONDS + 120
     tasks = []
     while time.monotonic() < deadline and not tasks:
@@ -203,13 +244,21 @@ def main():
         _, detail = case_states(operator, iid)
         tasks = detail.get("tasks") or []
     line("the target back, the next try raises the task", len(tasks) == 1, [t.get("subject") for t in tasks])
+    approver = storm.Role(args.url, "approver", log)
     status, reply, _, _ = approver.call("POST", "/incidents/" + urllib.parse.quote(iid) + "/approvals",
                                         {"planDigest": detail.get("planDigest"), "decision": "approve"}, idempotent=True)
     line("the approval is taken", status == 202, f"HTTP {status} {reply}")
     approver.sign_out()
-    incident = wait_state(operator, before, ("closed",), 200)
+    incident = wait_state(operator, before, ("closed",), 300)
     _, detail = case_states(operator, iid)
     line("every chain resolved", {c.get("state") for c in detail.get("chains", [])} == {"resolved"}, detail.get("summary"))
+    items = [i for c in detail.get("chains", []) for i in c.get("items", [])]
+    line("every item verified", len(items) == 8 and all(i.get("verifiedVersion") is not None for i in items), [i.get("verifiedVersion") for i in items])
+    _, events, _, _ = operator.call("GET", "/incidents/" + urllib.parse.quote(iid) + "/events")
+    said = [e["text"] for e in (events or []) if e.get("kind") == "error" or (e.get("text") or "").startswith("Approval task raised")]
+    line("the timeline has one error and one task raised", len(said) == 2, said and [t[:40] for t in said])
+    judged = types.SimpleNamespace(rule=lambda group, name, ok, detail="": line(name, ok, detail), invalid=lambda why: line(why, False), report=lambda *a: None)
+    storm.judge_writes(judged, storm.Sql(args.url, log), waited)
     operator.sign_out()
     failed = [x["name"] for x in lines if not x["ok"]]
     print("FAILED: " + "; ".join(failed) if failed else "All held")
