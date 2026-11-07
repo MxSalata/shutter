@@ -67,7 +67,8 @@ export const REASON_WORDS: Record<string, string> = {
   case_cap_hit: "The read stopped at the most cases allowed, so some of Shutter's cases were not looked at.",
   header_ids_missing: 'Message headers around this period are gone from the source: purged or deleted.',
   window_older_than_kept_headers: 'This period reaches back past the oldest headers the source keeps.',
-  own_messages_purged: "Shutter's own message store no longer reaches back to this period, so a link may be lost.",
+  own_messages_purged:
+    "Shutter's own message store no longer reaches back to this period, so a link may be lost.",
   case_origin_purged: 'A case in this period names a source header that is gone.',
   body_missing: 'A failed delivery has no case, and its message is gone from the source.',
   settling: 'A failure is too new to say it has no case: its forward may still be on its way.',

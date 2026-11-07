@@ -120,7 +120,9 @@ describe('Source failure coverage', () => {
     const posted = answers(overview(), report());
     renderPage();
     await userEvent.click(await screen.findByRole('button', { name: 'Run the census' }));
-    expect(await screen.findByText('Census complete: every delivery in the period was read.')).toBeInTheDocument();
+    expect(
+      await screen.findByText('Census complete: every delivery in the period was read.'),
+    ).toBeInTheDocument();
     expect(screen.getByText('No linked case').previousSibling).toHaveTextContent('1');
     expect(screen.getByText('Exactly linked').previousSibling).toHaveTextContent('2');
     expect(screen.getByRole('link', { name: 'C-000007' })).toHaveAttribute('href', '/cases/C-000007');
@@ -148,7 +150,9 @@ describe('Source failure coverage', () => {
     );
     renderPage();
     await userEvent.click(await screen.findByRole('button', { name: 'Run the census' }));
-    expect(await screen.findByText('Source reads unavailable: this is not zero failures')).toBeInTheDocument();
+    expect(
+      await screen.findByText('Source reads unavailable: this is not zero failures'),
+    ).toBeInTheDocument();
     expect(screen.getByText('Eligible source failures').previousSibling).toHaveTextContent('unknown');
     expect(screen.getByText('No linked case').previousSibling).toHaveTextContent('unknown');
     expect(screen.queryByText('0')).not.toBeInTheDocument();

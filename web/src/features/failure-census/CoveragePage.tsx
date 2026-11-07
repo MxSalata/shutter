@@ -1,4 +1,15 @@
-import { Alert, Anchor, Button, Group, NativeSelect, NumberInput, SimpleGrid, Stack, Table, Text } from '@mantine/core';
+import {
+  Alert,
+  Anchor,
+  Button,
+  Group,
+  NativeSelect,
+  NumberInput,
+  SimpleGrid,
+  Stack,
+  Table,
+  Text,
+} from '@mantine/core';
 import { IconChecklist } from '@tabler/icons-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
@@ -211,8 +222,11 @@ export default function CoveragePage() {
         {data && !data.enabled ? (
           <Alert color="gray" variant="light" title="The census is off">
             <Text size="sm">
-              A site turns it on in the <Anchor component={Link} to="/site-profile">site profile</Anchor>, with{' '}
-              <CodeChip>failure_census.enabled</CodeChip> true.
+              A site turns it on in the{' '}
+              <Anchor component={Link} to="/site-profile">
+                site profile
+              </Anchor>
+              , with <CodeChip>failure_census.enabled</CodeChip> true.
             </Text>
           </Alert>
         ) : null}

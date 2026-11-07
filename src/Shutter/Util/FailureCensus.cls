@@ -340,7 +340,11 @@ ClassMethod Report(run As Shutter.Store.CensusRun, items As %Boolean = 1) As %Dy
         Set list = []
         Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT DeliveryHeaderId, SessionId, OriginHeaderId, Target, SourceNamespace, TimeCreated, SourceStatus, BodyClass, Family, ResendOf, CaseIds, LinkQuality, Eligibility, Explanation FROM Shutter_Store.CensusItem WHERE Run = ? ORDER BY ID", run.%Id())
         While rs.%Next() {
-            Do list.%Push({"sourceNamespace": (rs.%Get("SourceNamespace")), "deliveryHeaderId": (rs.%Get("DeliveryHeaderId")), "target": (rs.%Get("Target")), "sessionId": (rs.%Get("SessionId")), "originHeaderId": (rs.%Get("OriginHeaderId")), "timeCreated": (rs.%Get("TimeCreated")), "sourceStatus": (rs.%Get("SourceStatus")), "bodyClass": (rs.%Get("BodyClass")), "family": (rs.%Get("Family")), "resendOf": (rs.%Get("ResendOf")), "caseIds": (rs.%Get("CaseIds")), "linkQuality": (rs.%Get("LinkQuality")), "eligibility": (rs.%Get("Eligibility")), "explanation": (rs.%Get("Explanation"))})
+            Set row = {"sourceNamespace": (rs.%Get("SourceNamespace")), "target": (rs.%Get("Target")), "timeCreated": (rs.%Get("TimeCreated")), "sourceStatus": (rs.%Get("SourceStatus")), "bodyClass": (rs.%Get("BodyClass")), "family": (rs.%Get("Family")), "caseIds": (rs.%Get("CaseIds")), "linkQuality": (rs.%Get("LinkQuality")), "eligibility": (rs.%Get("Eligibility")), "explanation": (rs.%Get("Explanation"))}
+            // Ids are text in the report, as the app reads them, though they look like numbers.
+            Do row.%Set("deliveryHeaderId", rs.%Get("DeliveryHeaderId"), "string"), row.%Set("sessionId", rs.%Get("SessionId"), "string")
+            Do row.%Set("originHeaderId", rs.%Get("OriginHeaderId"), "string"), row.%Set("resendOf", rs.%Get("ResendOf"), "string")
+            Do list.%Push(row)
         }
         Set r.items = list
     }
