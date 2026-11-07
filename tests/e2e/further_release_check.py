@@ -90,8 +90,15 @@ def main():
     code = ('Set r = ##class(Shutter.Index.Message).%New(), r.DocId = "UT-RELEASE-1", r.PatientId = "MRN1027", r.PatientIdAuthority = "HOSP", '
             'r.VisitNumber = "ENC-3027", r.Event = "admit", r.MessageType = "ADT_A01", r.ControlId = "RELEASE-1", r.EventTime = "2026-10-15T09:40:00Z", '
             'r.TimeCreated = $ZDATETIME($ZTIMESTAMP, 3) Set sc = r.%Save() Write !,"RESULT: ",sc,! Halt')
-    done = subprocess.run(["docker", "exec", "-i", args.container, "iris", "session", "IRIS", "-U", args.namespace], input=code + "\n", capture_output=True, text=True, timeout=120)
-    check("a further message arrives", "RESULT: 1" in done.stdout, done.stdout[-300:])
+    # A terminal takes a licence unit, and the community licence's few are often held for a while by what ran before.
+    for _ in range(18):
+        done = subprocess.run(["docker", "exec", "-i", args.container, "iris", "session", "IRIS", "-U", args.namespace], input=code + "\n", capture_output=True, text=True, timeout=120)
+        if "LICENSE LIMIT" not in done.stdout + done.stderr:
+            break
+        time.sleep(20)
+    check("a further message arrives", "RESULT: 1" in done.stdout, done.stdout[-300:] + done.stderr[-300:])
+    if FAILURES:
+        raise SystemExit("; ".join(FAILURES) + ": stopping before the approval, which would write")
     status, body = approve(case_id)
     check("the approval is taken", status == 202, f"{status} {body}")
     stopped(case_id)

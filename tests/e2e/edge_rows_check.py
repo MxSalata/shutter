@@ -193,7 +193,9 @@ def hand_resend_in_incident(args, operator, approver, listing):
     check("the first item stops at the sequence rule", c["state"] == "blocked" and "sequence rule" in (c.get("headline") or "").lower(),
           f"{c['state']}: {c.get('headline')}")
     _, listing_ = operator.call("GET", "/cases?scenario=S11&limit=50")
-    others = [x for x in (listing_ or {}).get("items", []) if x.get("encounterId") == encounter and x["caseId"] != c["caseId"]]
+    # This run's: an earlier play of S11 on the instance keeps its own cases, whose writes are no part of this.
+    others = [x for x in (listing_ or {}).get("items", []) if x.get("encounterId") == encounter and x["caseId"] != c["caseId"]
+              and x.get("openedAt", "") >= seen["case"].get("openedAt", "")]
     for other in others:
         check(f"the rest of the chain sends nothing ({other.get('event')})", not outcomes_of(operator, other),
               str(outcomes_of(operator, other)))
