@@ -50,8 +50,8 @@ import { LiveHelpMenu } from '@/features/guide/LiveHelpMenu';
 import { LiveWelcome } from '@/trial/LiveWelcome';
 import { trialChrome } from '@/trial/slot';
 import { bannerForm } from '@/trial/visit';
-import { RecoveryBanner } from '@/features/settings/RecoveryControlSection';
 import { LiveBanner } from './LiveBanner';
+import { RecoveryBanner } from './RecoveryBanner';
 
 /**
  * The count beside Cases: how many cases need a person, from the same queries as the Cases page's tiles. Nothing at

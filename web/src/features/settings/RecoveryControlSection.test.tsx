@@ -8,7 +8,8 @@ import type { RecoveryControl } from '@/api/types';
 import { resetMock } from '@/mocks/handlers';
 import { server } from '@/mocks/node';
 import { theme } from '@/theme';
-import { RecoveryBanner, RecoveryControlSection } from './RecoveryControlSection';
+import { RecoveryBanner } from '@/features/shell/RecoveryBanner';
+import { RecoveryControlSection } from './RecoveryControlSection';
 
 const BASE = '/api/shutter';
 
