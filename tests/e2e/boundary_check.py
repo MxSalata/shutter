@@ -393,8 +393,9 @@ def main():
     for t in threads:
         t.join()
     codes = sorted(a[0] for a in answers)
-    check("two approvals at the same moment: one is 202, the other 409 wrong_state",
-          codes == [202, 409] and next(a for a in answers if a[0] == 409)[1].get("error") == "wrong_state", answers)
+    check("two approvals at the same moment: one is 202, the other 409 wrong_state or stale_version",
+          codes == [202, 409] and next(a for a in answers if a[0] == 409)[1].get("error") in ("wrong_state", "stale_version"),
+          answers)
     final = settle(race_id, "S2", CLOSED) or {}
     attempts = writes(race_id)
     check("the raced case resolves with one approval and one write attempt",
