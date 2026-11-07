@@ -11,13 +11,13 @@ Class Shutter.Util.Uninstall
 Parameter GLOBALS = "^Shutter.,^Downstream.,^Hospital.,^Wards.";
 
 /// The comments Shutter's installers give the users they make. A user of the same name without one of them is the site's.
-Parameter USERCOMMENTS = "Shutter demo user|Used by the production's HTTP operation|Shutter public demo user|Used by the Shutter Forwarder item of Hospital.Production";
+Parameter USERCOMMENTS = "Shutter demo user|Used by the production's HTTP operation|Shutter public demo user|Used by the Shutter Forwarder item of Hospital.Production|Reads the warehouse history tables only";
 
 /// The users Shutter's installers can make.
-Parameter USERNAMES = "operator,approver,forwarder,downstream-client,demo,demo-trace,judge";
+Parameter USERNAMES = "operator,approver,forwarder,downstream-client,demo,demo-trace,judge,ShutterWarehouseReader";
 
 /// The credentials Shutter's installers can store in its own namespace.
-Parameter CREDENTIALS = "DownstreamAPI,ShutterIntake";
+Parameter CREDENTIALS = "DownstreamAPI,ShutterIntake,WarehouseReader";
 
 /// The body classes whose messages are Shutter's own, wherever they are.
 Parameter BODYCLASSES = "Shutter.,Hospital.,Downstream.";
@@ -44,7 +44,7 @@ ClassMethod Plan() As %String [ SqlProc ]
     For i = 1:1:$LISTLENGTH(list) Do out.removes.%Push("The role " _ $LIST(list, i))
     Set list = ..NamesLike("Security.Resources")
     For i = 1:1:$LISTLENGTH(list) Do out.removes.%Push("The resource " _ $LIST(list, i))
-    For name = "Shutter retention", "Shutter message purge" { If ..TaskId(name) '= "" Do out.removes.%Push("The task " _ name) }
+    For name = "Shutter retention", "Shutter message purge", "Shutter case reminders" { If ..TaskId(name) '= "" Do out.removes.%Push("The task " _ name) }
     Do ..UsersPlan(out)
     Do out.removes.%Push("Every case, approval, incident and setting of Shutter's, and the folders under " _ ..Folder() _ ": cases are not kept, so export what you must keep first")
     Do out.keeps.%Push("The namespace " _ $NAMESPACE _ " itself and its databases: it may hold other things, and removing it is yours to do")
@@ -503,7 +503,7 @@ ClassMethod TakeTasks(out As %DynamicObject)
 {
     New $NAMESPACE
     Set $NAMESPACE = "%SYS"
-    For name = "Shutter retention", "Shutter message purge" {
+    For name = "Shutter retention", "Shutter message purge", "Shutter case reminders" {
         Set id = ..TaskId(name)
         Continue:id=""
         Set sc = ##class(%SYS.Task).%DeleteId(id)
