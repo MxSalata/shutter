@@ -211,7 +211,7 @@ ClassMethod Item(caseId As %String, threshold As %String, ageHours As %Integer, 
 
 ClassMethod Compose(detail As %String, items As %DynamicArray, Output subject As %String, Output body As %String, url As %String = "https://shutter.example.nhs.uk/")
 {
-    Set s = ##class(Shutter.Util.CaseReminder).Settings({"reminders": {"enabled": true, "patient_detail": (detail), "sign_in_url": (url)}})
+    Set s = ##class(Shutter.Util.CaseReminder).Settings({"reminders": {"enabled": true, "patient_detail": (detail), "sign_in_url": (url)}, "receivers": [{"name": "Downstream Out"}], "teams": [{"receivers": ["Records Out"]}]})
     Do ##class(Shutter.Util.CaseReminder).Compose({"to": "team@example.nhs.uk", "toName": "Bed team", "items": (items)}, s, .subject, .body)
 }
 
@@ -301,6 +301,38 @@ Method TestAnNHSNumberIsNeverShown()
     Set item = ..Item("C-1", "team", 5), item.case.patientId = "1234567890"
     Do ..Compose("identifiers", [(item)], .subject, .body)
     Do $$$AssertTrue(body [ "1234567890", "not an NHS number: shown")
+}
+
+/// A canary in every free text a stored case holds, through the real gathering, at every level: the whole mail is read,
+/// subject and text. What the level allows is the only thing that may show.
+Method TestACanaryInFreeTextNeverReachesTheMail()
+{
+    Set canary = "CANARYJONES94347"
+    Set case = ##class(Shutter.Store.Case).%OpenId(..CaseRowId)
+    Set case.FailureText = "Rejected for " _ canary, case.FailureReasonCode = canary, case.Receiver = "Out " _ canary
+    Set case.PatientId = canary _ " JANE", case.EncounterId = "ENC " _ canary, case.PatientIdAuthority = "HOSP " _ canary
+    Do $$$AssertStatusOK(case.%Save(), "the canaries are stored")
+    Do ##class(Shutter.Store.CaseEvent).Append(case, "note", "", "", "Gate refused: " _ canary, "system", "canary")
+    For detail = "none", "identifiers", "identifiers_initial" {
+        Set s = ##class(Shutter.Util.CaseReminder).Settings({"reminders": {"enabled": true, "patient_detail": (detail)}, "receivers": [{"name": "Downstream Out"}], "feed": {"time_zone": "UTC"}})
+        Set c = ..Gathered(s)
+        Do $$$AssertTrue($ISOBJECT(c), detail _ ": gathered")
+        // And the fields a later change might add to the gathering, if the gathering ever read them.
+        Set c.failureText = canary, c.gateReason = canary, c.reason = canary, c.failureKind = canary
+        Set c.initial = "J"
+        Do ##class(Shutter.Util.CaseReminder).Compose({"to": "team@example.nhs.uk", "toName": "Bed team", "items": [{"threshold": "team", "ageSeconds": 18000, "case": (c)}]}, s, .subject, .body)
+        Do $$$AssertNotTrue(subject [ canary, detail _ ": no canary in the subject")
+        Do $$$AssertNotTrue(body [ canary, detail _ ": no canary in the text")
+        Do $$$AssertNotTrue(body [ "JANE", detail _ ": no name from the hospital number's field")
+        Do $$$AssertTrue(body [ "a receiver the site profile does not list, no failure type recorded", detail _ ": says what it left out")
+    }
+    // The level still rules what is well formed: with good values, none shows none of them.
+    Set case.Receiver = "Downstream Out", case.PatientId = "MRN9004", case.EncounterId = "ENC-9004", case.PatientIdAuthority = "HOSP"
+    Do $$$AssertStatusOK(case.%Save(), "good values")
+    Set s = ##class(Shutter.Util.CaseReminder).Settings({"reminders": {"enabled": true, "patient_detail": "none"}, "receivers": [{"name": "Downstream Out"}], "feed": {"time_zone": "UTC"}})
+    Do ##class(Shutter.Util.CaseReminder).Compose({"to": "t@example.nhs.uk", "items": [{"threshold": "team", "ageSeconds": 18000, "case": (..Gathered(s))}]}, s, .subject, .body)
+    For never = "MRN9004", "ENC-9004", "HOSP" { Do $$$AssertNotTrue(body [ never, "none: no " _ never) }
+    Do $$$AssertTrue(body [ "Downstream Out, delivery failed: 1", "none: the site's own receiver name and the failure type stay")
 }
 
 Method TestWhatTheFeedSentCannotBreakTheMail()

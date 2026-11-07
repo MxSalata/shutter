@@ -278,7 +278,7 @@ function remindersProblem(r: unknown, domains: string[]): string {
       if (!['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].includes(d as string))
         return `reminders.days[${j}]: must be mon, tue, wed, thu, fri, sat or sun`;
   }
-  if ('patient_detail' in r && !(String(r.patient_detail) in DETAIL_LABELS))
+  if ('patient_detail' in r && !Object.hasOwn(DETAIL_LABELS, String(r.patient_detail)))
     return 'reminders.patient_detail: must be none, identifiers or identifiers_initial';
   for (const k of ['officer_name', 'officer_address', 'sign_in_url'])
     if (k in r && typeof r[k] !== 'string') return `reminders.${k}: must be text`;

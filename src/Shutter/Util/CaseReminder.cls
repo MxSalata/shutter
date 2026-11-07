@@ -29,7 +29,33 @@ ClassMethod Settings(profile As %DynamicObject) As %DynamicObject
     Set feed = $SELECT($ISOBJECT(profile): profile.%Get("feed"), 1: "")
     Set s.zone = $SELECT($ISOBJECT(feed): ##class(Shutter.Util.Json).Str(feed, "time_zone"), 1: "")
     If s.zone = "" Set s.zone = "UTC"
+    Set s."known_receivers" = ..KnownReceivers(profile)
     Quit s
+}
+
+/// The names the site gave its receivers and teams' receivers, as an array. A case's receiver can be a caller's words at the
+/// intake API, so only a name the site itself gave reaches a mail.
+ClassMethod KnownReceivers(profile As %DynamicObject) As %DynamicArray [ Private ]
+{
+    Set out = []
+    Quit:'$ISOBJECT(profile) out
+    Set list = profile.%Get("receivers")
+    If $ISOBJECT(list) {
+        Set it = list.%GetIterator()
+        While it.%GetNext(, .x) { If $ISOBJECT(x) Do out.%Push(##class(Shutter.Util.Json).Str(x, "name")) }
+    }
+    Set teams = profile.%Get("teams")
+    If $ISOBJECT(teams) {
+        Set it = teams.%GetIterator()
+        While it.%GetNext(, .t) {
+            Continue:'$ISOBJECT(t)
+            Set names = t.%Get("receivers")
+            Continue:'$ISOBJECT(names)
+            Set ni = names.%GetIterator()
+            While ni.%GetNext(, .n) { Do out.%Push(n) }
+        }
+    }
+    Quit out
 }
 
 /// What is wrong with the profile's reminders, with the field named, or "".
@@ -184,6 +210,13 @@ ClassMethod LooksLikeNHSNumber(id As %String) As %Boolean
     Quit (check '= 10) && (check = +$EXTRACT(d, 10))
 }
 
+/// Whether a value from the feed reads as a record's number and nothing else: one word with a digit in it, not an NHS number.
+/// A name or a sentence in the field does not.
+ClassMethod Identifier(value As %String) As %Boolean [ Private ]
+{
+    Quit $MATCH(value, "^[A-Za-z0-9._/-]{1,40}$") && $MATCH(value, ".*[0-9].*") && '..LooksLikeNHSNumber(value)
+}
+
 /// Text from the feed or the profile as one line of the mail.
 ClassMethod Line(text As %String) As %String [ Private ]
 {
@@ -199,19 +232,21 @@ ClassMethod Hours(seconds As %Integer) As %String [ Private ]
 
 /// A case's line at the site's level of patient detail. Reads only the fields named here: a name, a date of birth, an
 /// address or an NHS number has no way in, whatever the setting. A hospital number that is an NHS number by its shape or
-/// its authority is left out: the case carries PID-3's first repetition when none is typed MR.
+/// its authority is left out, as is a number that does not read as one: the case carries PID-3's first repetition when none
+/// is typed MR.
 ClassMethod CaseLine(c As %DynamicObject, detail As %String) As %String
 {
     Set line = ..Line(c.caseId)
     If detail = "none" Quit line
     Set id = ..Line(c.patientId), authority = ..Line(c.patientIdAuthority)
-    If (id '= "") && (..LooksLikeNHSNumber(id) || ($ZCONVERT(authority, "U") [ "NHS")) {
+    If '$MATCH(authority, "^[A-Za-z0-9._-]{1,40}$") Set authority = ""
+    If (id '= "") && ('..Identifier(id) || ($ZCONVERT(authority, "U") [ "NHS")) {
         Set line = line _ ", hospital number not shown"
     } ElseIf id '= "" {
         Set line = line _ ", hospital number " _ id _ $SELECT(authority '= "": " (" _ authority _ ")", 1: "")
     }
     Set visit = ..Line(c.encounterId)
-    If (visit '= "") && (visit '= "-") Set line = line _ ", visit " _ visit
+    If (visit '= "") && (visit '= "-") Set line = line _ ", visit " _ $SELECT(..Identifier(visit): visit, 1: "not shown")
     If detail = "identifiers_initial" {
         Set initial = $ZCONVERT($EXTRACT(..Line(c.initial), 1), "U")
         If initial ? 1A Set line = line _ ", first name " _ initial
@@ -231,7 +266,12 @@ ClassMethod WindowWords(settings As %DynamicObject) As %String [ Private ]
 /// in the subject. One case in two thresholds is one case.
 ClassMethod Compose(digest As %DynamicObject, settings As %DynamicObject, Output subject As %String, Output body As %String)
 {
-    Set nl = $CHAR(13, 10), oldest = 0, team = 0, officer = 0, cases = 0, lines = "", more = 0
+    Set nl = $CHAR(13, 10), oldest = 0, team = 0, officer = 0, cases = 0, lines = "", more = 0, known = ""
+    Set names = settings.%Get("known_receivers")
+    If $ISOBJECT(names) {
+        Set ni = names.%GetIterator()
+        While ni.%GetNext(, .n) { Set known = known _ $LISTBUILD(..Line(n)) }
+    }
     Set it = digest.items.%GetIterator()
     While it.%GetNext(, .item) {
         If item.threshold = "officer" { Set officer = officer + 1 } Else { Set team = team + 1 }
@@ -240,8 +280,10 @@ ClassMethod Compose(digest As %DynamicObject, settings As %DynamicObject, Output
         If item.waited Set waited(c.caseId) = ""
         Continue:$DATA(seen(c.caseId))
         Set seen(c.caseId) = "", cases = cases + 1
-        Set receiver = ..Line(c.receiver), kind = ..Line($TRANSLATE(c.failureKind, "_", " "))
-        Set group = $SELECT(receiver '= "": receiver, 1: "the downstream system") _ ", " _ $SELECT(kind '= "": kind, 1: "no failure type recorded")
+        // Only the site's own names and the store's own words: no failure text, gate reason or caller's word has a way in.
+        Set receiver = ..Line(c.receiver)
+        Set kind = $CASE(c.failureKind, "delivery_failed": "delivery failed", "uncertain_outcome": "uncertain outcome", "rejected": "rejected", "unmappable": "unmappable", "withheld": "withheld", "unreadable": "unreadable", : "no failure type recorded")
+        Set group = $SELECT(receiver = "": "the downstream system", $LISTFIND(known, receiver): receiver, 1: "a receiver the site profile does not list") _ ", " _ kind
         If '$DATA(count(group)) Set order($INCREMENT(order)) = group, count(group) = 0
         Set count(group) = count(group) + 1
         If cases <= ..#MAXLINES { Set lines = lines _ ..CaseLine(c, settings."patient_detail") _ ", open " _ ..Hours(item.ageSeconds) _ nl } Else { Set more = more + 1 }
