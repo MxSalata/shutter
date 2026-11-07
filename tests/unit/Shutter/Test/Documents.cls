@@ -81,6 +81,59 @@ Method TestAStoredMessageReadsTheSameAsItsText()
     Do $$$AssertEquals(a.trigger, b.trigger)
 }
 
+/// The whole-text path's digests against the store's: a chain row reads as the same content only if these agree.
+Method TestAStoredMessageDigestsAsItsText()
+{
+    Set f = "Shutter.Util.DocumentFacts", text = ..Text()
+    Set msg = ##class(EnsLib.HL7.Message).ImportFromString(text, .isc)
+    Do $$$AssertStatusOK(isc)
+    Do $$$AssertStatusOK(msg.%Save())
+    Set stored = $CLASSMETHOD(f, "FromMessage", msg, .sc)
+    Do $$$AssertStatusOK(sc)
+    Set posted = $CLASSMETHOD(f, "FromText", text, .sc2)
+    Do $$$AssertEquals(stored.digests.body, posted.digests.body, "the body, from the text")
+    Do $$$AssertEquals(stored.digests.content, posted.digests.content, "the content, from the text")
+    Set written = msg.OutputToString(, , .osc)
+    Do $$$AssertStatusOK(osc)
+    Set forwarded = $CLASSMETHOD(f, "FromText", written, .sc3)
+    Do $$$AssertEquals(stored.digests.body, forwarded.digests.body, "the body, as a forwarder posts it")
+    Do $$$AssertEquals(stored.digests.content, forwarded.digests.content, "the content, as a forwarder posts it")
+    Do ##class(EnsLib.HL7.Message).%DeleteId(msg.%Id())
+}
+
+/// Whole text under the service's header: the session's delivery is the message itself, whatever a route did to its bytes, and
+/// what it stored is what other rows are compared with.
+Method TestThePostedTextIsNotComparedWithItsOwnDelivery()
+{
+    Set own = ..Row("200", "T02", "DOC-1^DMS^1.2^ISO", "", "delivered", "delivered")
+    Set own."control_id" = "CTL1"
+    Set copy = ..Row("300", "T02", "DOC-1^DMS^1.2^ISO", "", "delivered", "delivered")
+    Set b = ..Block(..Text(), [ (own), (copy) ])
+    Set b.delivery."session_header" = "200"
+    Do ##class(Shutter.Util.DocumentCase).Conclude(b)
+    Do $$$AssertTrue('(..Codes(b) [ ",DOC_VERSION_CONFLICT,"), "its own delivery and a copy of it: no conflict")
+    Do $$$AssertTrue('(..Codes(b) [ ",DOC_PATIENT_CHANGED,"), "and no other patient")
+    Set says = b.chain.says.%ToJSON()
+    Do $$$AssertTrue(says [ "retransmission", "the copy is told by the stored digests")
+    Do $$$AssertTrue('(says [ "header 200"), "its own delivery is not reported")
+}
+
+/// A session's message under another control id is not known to be this one, so it stays a row, and the sentence says what was compared.
+Method TestAComparisonWithThePostedTextSaysSo()
+{
+    Set other = ..Row("200", "T02", "DOC-1^DMS^1.2^ISO", "", "same", "other")
+    Set b = ..Block(..Text(), [ (other) ])
+    Set b.delivery."session_header" = "200"
+    Do ##class(Shutter.Util.DocumentCase).Conclude(b)
+    Do $$$AssertTrue(..Codes(b) [ ",DOC_VERSION_CONFLICT,", "still a conflict")
+    Do $$$AssertTrue(b.chain.says.%ToJSON() [ "text the source posted", "and it says what was compared")
+    // A forwarder's envelope carries the store's digests.
+    Do b.digests.%Remove("basis")
+    Do ##class(Shutter.Util.DocumentCase).Conclude(b)
+    Do $$$AssertTrue(..Codes(b) [ ",DOC_VERSION_CONFLICT,", "from the store too")
+    Do $$$AssertTrue('(b.chain.says.%ToJSON() [ "text the source posted"), "with nothing to say about it")
+}
+
 Method TestDigestsTellContentFromTheControlId()
 {
     Set one = ..Text(), two = $REPLACE(one, "CTL1", "CTL2"), three = $REPLACE(one, "CANARYOBX", "CHANGED")

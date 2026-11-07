@@ -171,6 +171,23 @@ def case_of(control, seconds=75, receiver=None):
     return found
 
 
+def case_by_id(case_id, seconds=75):
+    """A case by its id, once its workflow has stopped moving."""
+    end = time.time() + seconds
+    full = None
+    while time.time() < end:
+        _, full = api("GET", "/cases/" + case_id)
+        if isinstance(full, dict) and full.get("state") in ("escalated", "blocked", "resolved", "failed"):
+            break
+        time.sleep(2)
+    return full
+
+
+def first_header(c):
+    """The header a forwarder not naming the receiver posts under: the session's first, the service's, not the delivery's."""
+    return value(NS, f'##class(Ens.MessageHeader).%OpenId({c["document"]["delivery"]["header_id"]}).SessionId')
+
+
 def reasons(c):
     return [r["code"] for r in (c or {}).get("document", {}).get("reasons", [])]
 
@@ -238,7 +255,7 @@ if not args.reuse:
     subprocess.run(["docker", "cp", SITE + "/.", f"{CTR}:/tmp/doc_site"], check=True)
     subprocess.run(["docker", "cp", os.path.join(ONB, "mllp.py"), f"{CTR}:/tmp/doc_site/mllp.py"], check=True)
     subprocess.run(["docker", "exec", "-u", "root", CTR, "chown", "-R", "irisowner:irisowner", "/tmp/doc_site"], check=True)
-    lines = [f'Set sc=$SYSTEM.OBJ.Load("/tmp/doc_site/{f}.cls","ck-d") Write !,"[c] ",sc,!' for f in ("DocSite.Swap", "DocSite.Rule", "DocSite.Production")]
+    lines = [f'Set sc=$SYSTEM.OBJ.Load("/tmp/doc_site/{f}.cls","ck-d") Write !,"[c] ",sc,!' for f in ("DocSite.Swap", "DocSite.Touch", "DocSite.Rule", "DocSite.Production")]
     lines.append('Set sc=##class(Ens.Director).StartProduction("DocSite.Production") Write !,"[start] ",$SELECT(sc:"ok",1:$SYSTEM.Status.GetErrorText(sc)),!')
     out = session(NS, "\n".join(lines))
     check(f"{NS} runs DocSite.Production", "[start] ok" in out, out[-600:])
@@ -496,6 +513,34 @@ if wanted("D17"):
     cb = case_of(b)
     check("the same content under a new control id: its own case, not merged", cb and cb["caseId"] != ca["caseId"], cb)
     check("and the chain calls it a possible retransmission", "retransmission" in says(cb), says(cb))
+
+if wanted("D17W"):
+    step("D17W: the whole text under the service's header: compared with what the delivery stored, not with itself")
+    code_of = lambda text: {"source": {"namespace": NS, "production": "DocSite.Production", "route": "Docs In", "header_id": first_header(text[0])}, "receiver": "Docs Out", "failure": {"kind": "delivery_failed", "text": "t", "outcome": "error"}, "message": "\r".join(text[1]) + "\r"}
+    when = time.strftime("%Y%m%d%H%M%S", time.gmtime(time.time() - 60))
+    doc = f"D17W{tag}^DMS"
+    a = f"D17WA-{tag}"
+    segs = mdm("T02", a, doc=doc, when=when)
+    send(segs, "d17wa")
+    ca = case_of(a)
+    code, r = post_intake(code_of((ca, segs)))
+    check("no transformation: the intake takes the text", code == 202, r)
+    c = case_by_id(r["caseId"]) if code == 202 else None
+    check("the text and the stored body give one content digest", ca and c and ca["document"]["digests"]["content"] == c["document"]["digests"]["content"], (ca and ca["document"].get("digests"), c and c["document"].get("digests")))
+    check("and one body digest", ca and c and ca["document"]["digests"]["body"] == c["document"]["digests"]["body"], (ca and ca["document"].get("digests"), c and c["document"].get("digests")))
+    check("so the delivery is no conflict with itself", "DOC_VERSION_CONFLICT" not in reasons(c) and "different content" not in says(c), (reasons(c), says(c)))
+    doc = f"D17X{tag}^DMS"
+    a, b = f"D17XA-{tag}", f"D17XB-{tag}"
+    segs = mdm("T02", a, doc=doc, app="TOUCH", when=when)
+    send(segs, "d17xa")
+    ca = case_of(a)
+    send(mdm("T02", b, doc=doc, app="TOUCH", when=when), "d17xb")
+    case_of(b)
+    code, r = post_intake(code_of((ca, segs)))
+    check("a transformation on the route: the intake takes the service's text", code == 202, r)
+    c = case_by_id(r["caseId"]) if code == 202 else None
+    check("a route's change to the bytes is no version conflict", "DOC_VERSION_CONFLICT" not in reasons(c) and "different content" not in says(c), (reasons(c), says(c)))
+    check("and the copy is still told, from what the delivery stored", "retransmission" in says(c), says(c))
 
 if wanted("D18"):
     step("D18: a DTL changes the patient and the document before the operation")
