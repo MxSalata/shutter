@@ -419,7 +419,7 @@ export function EscalationPanel({
               value={teamId}
               onChange={(e) => setTeamId(e.currentTarget.value)}
               data={[
-                { value: '', label: 'Automatic: the team that lists this receiver, else the first team' },
+                { value: '', label: 'Automatic' },
                 ...teams.map((t) => ({ value: t.id, label: `${t.name} (${t.mailbox})` })),
               ]}
               w={{ base: '100%', xs: 300 }}
