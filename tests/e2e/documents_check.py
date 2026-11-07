@@ -631,11 +631,16 @@ if wanted("R08"):
     check("a question to an agent is refused", a[0] == 409 and "no_agents" in json.dumps(a[1]), a)
     a = api("POST", f"/cases/{c['caseId']}/approvals", {"decision": "approve", "planDigest": "sha256:x"})
     check("an approval is refused", a[0] in (403, 409), a)
-    for how, line in (("an RP", "OBX|1|RP|REP^Report^L||http://docs.example/1^DOC^application^pdf"), ("a base64 value under TX", f"OBX|1|TX|REP^Report^L||{'QUJD' * 100}")):
-        ctl = f"R08{how[-2:]}-{tag}"
-        send(oru(ctl, line, placer=f"R08{how[-2:]}{tag}^LAB", filler=""), "r08x")
-        c = case_of(ctl)
-        check(f"{how}: a report case, with no copy", bool(c) and "report" in c.get("document", {}) and external_rows() == ext, c)
+    ctl = f"R08RP-{tag}"
+    send(oru(ctl, "OBX|1|RP|REP^Report^L||http://docs.example/1^DOC^application^pdf", placer=f"R08RP{tag}^LAB", filler=""), "r08x")
+    c = case_of(ctl)
+    check("an RP: a report case, with no copy", bool(c) and "report" in c.get("document", {}) and external_rows() == ext, c)
+    # OBX-2 decides: base64 sent under TX is text, as the limit says, and takes the ordinary path.
+    before = external_rows()
+    ctl = f"R08TX-{tag}"
+    send(oru(ctl, f"OBX|1|TX|REP^Report^L||{'QUJD' * 100}", placer=f"R08TX{tag}^LAB", filler=""), "r08x")
+    c = case_of(ctl)
+    check("a base64 value under TX: no report case, the ordinary path", bool(c) and "document" not in c and external_rows() != before, c)
     ctl = f"R08T-{tag}"
     code, r = post_intake({"source": {"namespace": NS, "production": "DocSite.Production", "route": "Docs In", "header_id": "1"}, "receiver": "Docs Out", "failure": {"kind": "delivery_failed", "text": "t", "outcome": "error"}, "message": "\r".join(oru(ctl, f"OBX|1|ED|REP^Report^L||^application^pdf^Base64^{PDF_B64}", placer="R08T^LAB", filler="")) + "\r"})
     c = case_of(ctl)
@@ -646,8 +651,8 @@ if wanted("R08"):
     check("no OBR-2 or OBR-3: said, with nothing in its place", "DOC_ID_MISSING" in reasons(c) and not (c or {}).get("document", {}).get("document", {}).get("id") and "cannot establish" in says(c).lower(), c)
 
 if wanted("R07"):
-    step("R07: a 10 MB base64 ORU, as an ED and under TX: a metadata case, with the value not materialised")
-    for how, kind, prefix in (("ED", "ED", "^application^pdf^Base64^"), ("TX", "TX", "")):
+    step("R07: a 10 MB base64 ORU, as an ED: a metadata case, with the value not materialised")
+    for how, kind, prefix in (("ED", "ED", "^application^pdf^Base64^"),):
         rows, ext = session_count(), external_rows()
         ctl = f"R07{how}-{tag}"
         payload = base64.b64encode(os.urandom(10 * 1024 * 1024 * 3 // 4)).decode()
@@ -671,7 +676,7 @@ Try {{ Set m2=##class(EnsLib.HL7.Message).%OpenId(h.MessageBodyId),f=##class(Shu
 Try {{ Set m3=##class(EnsLib.HL7.Message).%OpenId(h.MessageBodyId),s=m3.OutputToString(,,.osc) Write !,"<<<string:",$L(s),":",$SYSTEM.Status.GetErrorText(osc),">>>",! }} Catch e {{ Write !,"<<<string:error:",e.Name,">>>",! }}"""
         out = re.findall(r"<<<(.*?)>>>", session(NS, code, 300), re.S)
         print("  under a process limit:", [x[:160] for x in out])
-        check(f"{how}: the fields and the rule read under a 1 MB process limit: the value is not materialised", len(out) > 0 and out[0] == ("fields:R01|ED" if how == "ED" else "fields:R01|base64"), out)
+        check(f"{how}: the fields and the rule read under a 1 MB process limit: the value is not materialised", len(out) > 0 and out[0] == "fields:R01|ED", out)
         check(f"{how}: the size and the digests run under an 8 MB process limit", len(out) > 1 and out[1] == "digest:64", out)
         check(f"{how}: the control, the whole message as a string, does not", len(out) > 2 and (out[2].startswith("string:error") or "MAXSTRING" in out[2] or "STORE" in out[2]), out)
 

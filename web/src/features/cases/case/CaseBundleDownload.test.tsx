@@ -19,6 +19,8 @@ vi.mock('@/env/mode', async (importOriginal) => ({
 
 const BUNDLE = '{"redaction":"REDACTED: tokens stand in.",\n"format":"shutter-case-bundle/1"}';
 const ROUTE = '/api/shutter/cases/C-000009/bundle';
+const WHOLE = '{"redaction":"UNREDACTED: this file holds identifiable patient data.",\n"format":"shutter-case-bundle-unredacted/1"}';
+const WHOLE_ROUTE = '/api/shutter/cases/C-000009/bundle-unredacted';
 
 function show() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -119,5 +121,48 @@ describe('Download case bundle', () => {
     show();
     expect(await screen.findByRole('button', { name: 'Download case bundle' })).toBeDisabled();
     expect(screen.getByText("Not in the trial's recording")).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Download with identifiers' })).toBeNull();
+  });
+
+  it('offers an approver the unredacted file, which needs a reason and sends it with the CSRF header', async () => {
+    const saved = watchSave();
+    let header: string | null = null;
+    let sent: unknown = null;
+    server.use(
+      http.post(WHOLE_ROUTE, async ({ request }) => {
+        header = request.headers.get('X-Requested-With');
+        sent = await request.json();
+        return new HttpResponse(WHOLE, { headers: { 'Content-Type': 'application/json' } });
+      }),
+    );
+    show();
+    await userEvent.click(await screen.findByRole('button', { name: 'Download with identifiers' }));
+    expect(screen.getByText(/holds identifiable patient data/)).toBeInTheDocument();
+    const go = screen.getByRole('button', { name: 'Download unredacted bundle' });
+    expect(go).toBeDisabled();
+    await userEvent.type(screen.getByLabelText(/Why you need the identifiers/), 'A subject access request');
+    expect(go).toBeEnabled();
+    await userEvent.click(go);
+    await waitFor(() => expect(saved.name).toBe('shutter-case-C-000009-UNREDACTED.json'));
+    expect(header).toBe('Shutter');
+    expect(sent).toEqual({ reason: 'A subject access request' });
+  });
+
+  it("never saves a 200 that doesn't say it is unredacted", async () => {
+    const saved = watchSave();
+    server.use(http.post(WHOLE_ROUTE, () => new HttpResponse(BUNDLE)));
+    show();
+    await userEvent.click(await screen.findByRole('button', { name: 'Download with identifiers' }));
+    await userEvent.type(screen.getByLabelText(/Why you need the identifiers/), 'A subject access request');
+    await userEvent.click(screen.getByRole('button', { name: 'Download unredacted bundle' }));
+    await screen.findByRole('alert');
+    expect(saved.name).toBeUndefined();
+  });
+
+  it('does not offer an operator the unredacted file', async () => {
+    resetMock('operator');
+    show();
+    expect(await screen.findByRole('button', { name: 'Download case bundle' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Download with identifiers' })).toBeNull();
   });
 });

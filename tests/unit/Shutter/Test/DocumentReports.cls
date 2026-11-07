@@ -57,20 +57,19 @@ ClassMethod Says(b As %DynamicObject) As %String
     Quit out
 }
 
-/// The rule: OBX-2 says ED or RP, or an OBX-5 has 256 unbroken base64 characters. Anything else is not a report here.
+/// The rule: OBX-2 says ED or RP. Anything else is not a report here, a value that looks like base64 included.
 Method TestTheRule()
 {
     Set f = "Shutter.Util.DocumentFacts", long = $TRANSLATE($JUSTIFY("", 300), " ", "A")
-    Do $$$AssertEquals($CLASSMETHOD(f, "Attachment", "ED", "^application^pdf^Base64^AAAA"), "ED")
-    Do $$$AssertEquals($CLASSMETHOD(f, "Attachment", "RP", "http://x/y"), "RP")
-    Do $$$AssertEquals($CLASSMETHOD(f, "Attachment", "ed", ""), "ED", "whatever its case")
-    Do $$$AssertEquals($CLASSMETHOD(f, "Attachment", "TX", long), "base64", "a base64 value under another type")
-    Do $$$AssertEquals($CLASSMETHOD(f, "Attachment", "ST", "^application^pdf^Base64^" _ long), "base64", "and in a component")
-    Do $$$AssertEquals($CLASSMETHOD(f, "Attachment", "NM", "5.4"), "")
-    Do $$$AssertEquals($CLASSMETHOD(f, "Attachment", "TX", "Haemoglobin within the reference range"), "")
-    Do $$$AssertEquals($CLASSMETHOD(f, "Attachment", "TX", $TRANSLATE($JUSTIFY("", 255), " ", "A")), "", "255 is not enough")
-    Do $$$AssertEquals($CLASSMETHOD(f, "Attachment", "ST", $TRANSLATE($JUSTIFY("", 100), " ", "A") _ " " _ $TRANSLATE($JUSTIFY("", 200), " ", "A")), "", "a broken run does not count")
-    Do $$$AssertEquals($CLASSMETHOD(f, "Attachment", "", ""), "")
+    Do $$$AssertEquals($CLASSMETHOD(f, "Attachment", "ED"), "ED")
+    Do $$$AssertEquals($CLASSMETHOD(f, "Attachment", "RP"), "RP")
+    Do $$$AssertEquals($CLASSMETHOD(f, "Attachment", "ed"), "ED", "whatever its case")
+    Do $$$AssertEquals($CLASSMETHOD(f, "Attachment", "NM"), "")
+    Do $$$AssertEquals($CLASSMETHOD(f, "Attachment", "TX"), "")
+    Do $$$AssertEquals($CLASSMETHOD(f, "Attachment", ""), "")
+    Do $$$AssertTrue('$CLASSMETHOD(f, "IsReportText", ..Text("OBX|1|TX|N^Note||" _ long)), "base64 under TX is text")
+    Do $$$AssertTrue('$CLASSMETHOD(f, "IsReportText", ..Text("OBX|1|ST|N^Note||^application^pdf^Base64^" _ long)), "and under ST, in a component")
+    Do $$$AssertTrue($CLASSMETHOD(f, "IsReportText", ..Text("OBX|1|TX|N^Note||" _ long _ $CHAR(13) _ ..Ed())), "an ED after it still counts")
 }
 
 Method TestTheTextSaysWhichMessagesAreReports()

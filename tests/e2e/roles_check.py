@@ -5,7 +5,9 @@
 
 Signs in as the demo users `operator` and `approver` (password from SHUTTER_PASSWORD, default "shutter") and checks
 that GET /me names each one's roles; that deciding a case's approval needs Shutter_Approve (403 for the operator);
-that reading a drafted correction's text (GET /cases/{id}/correction-draft) is the approver's; that changing the agent library (PATCH /library/{code}) is refused to the
+that reading a drafted correction's text (GET /cases/{id}/correction-draft) is the approver's; that an unredacted case bundle
+(POST /cases/{id}/bundle-unredacted) is the approver's, with a typed reason and the header, and says so on its first line,
+while the operator's bundle stays redacted; that changing the agent library (PATCH /library/{code}) is refused to the
 operator (403) and allowed to the approver (200), and the item is then put back as it was; that the operator drafts
 and sends an escalation, the edit refusing a second @, a line break in the subject and a field that is not a string,
 and the case's timeline names who sent it and the digest of the text sent; that closing a case by hand (POST
@@ -134,6 +136,26 @@ def main():
         status, body = approver.call("GET", path)
         check("approver: GET /cases/{id}/correction-draft is not refused for the role, and sends nothing",
               status in (200, 404, 409) and error_of(body) in ("", None, "no_plan", "wrong_outcome"), f"{status} {body}")
+
+        # ---- an unredacted bundle is an approver's, with a reason; the ordinary one stays redacted (CONTRACTS 5) ----
+        path = f"/cases/{urllib.parse.quote(any_case)}/bundle-unredacted"
+        why = {"reason": "A subject access request"}
+        status, body = Session(args.url).call("POST", path, why)
+        check("signed out: POST /cases/{id}/bundle-unredacted is 401", status == 401 and error_of(body) == "unauthenticated", f"{status} {body}")
+        status, body = operator.call("POST", path, why)
+        check("operator: POST /cases/{id}/bundle-unredacted is 403 forbidden, naming Shutter_Approve",
+              status == 403 and error_of(body) == "forbidden" and "Shutter_Approve" in (body or {}).get("detail", ""), f"{status} {body}")
+        status, body = approver.call("POST", path, why, csrf=False)
+        check("approver: POST /cases/{id}/bundle-unredacted without X-Requested-With is 403 csrf", status == 403 and error_of(body) == "csrf", f"{status} {body}")
+        status, body = approver.call("POST", path, {"reason": "   "})
+        check("approver: an unredacted bundle with no reason is 400 bad_request", status == 400 and error_of(body) == "bad_request", f"{status} {body}")
+        status, body = approver.call("POST", path, why)
+        check("approver: an unredacted bundle says so first and holds the reason",
+              status == 200 and (body or {}).get("redaction", "").startswith("UNREDACTED:") and (body or {}).get("reason") == why["reason"]
+              and (body or {}).get("format") == "shutter-case-bundle-unredacted/1", f"{status} {str(body)[:300]}")
+        status, body = operator.call("POST", f"/cases/{urllib.parse.quote(any_case)}/bundle")
+        check("operator: POST /cases/{id}/bundle stays redacted",
+              status == 200 and (body or {}).get("redaction", "").startswith("REDACTED:") and "reason" not in (body or {}), f"{status} {str(body)[:300]}")
 
     # ---- the production review: reading and starting one is Shutter_Operate, annotating is Shutter_Approve ----
     signed_out = Session(args.url)

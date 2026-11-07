@@ -298,9 +298,28 @@ Method TestUpdateInsideTheSpan()
     Set facts = ..Facts(..One())
     Do facts."patient_rows".%Push(..Row("ENC-UT1", "update", "2026-10-19T09:10:00Z", "2026-10-19 09:10:01", ..Key("update", "2026-10-19T09:10:00Z")))
     Set seq = ..Decide(..Case(), ..One(), facts)
+    Do $$$AssertEquals(seq."reason_code", "further_message", "an A08 inside the span stops the draft: " _ seq.reason)
+    Do $$$AssertTrue(seq.reason [ "A person reads it first", "and says a person reads it: " _ seq.reason)
+    Do $$$AssertNotTrue(seq.reason [ "after the movements", "whether it came between them or after them: " _ seq.reason)
+    Do $$$AssertNotTrue(seq.%IsDefined("left_alone"), "no list leaves anything alone")
+}
+
+/// The same from the receiver's history alone, when the index holds no row of it.
+Method TestUpdateInTheSnapshotInsideTheSpan()
+{
+    Set summary = ..Summary(..One()), update = {"event": "update", "ward": "WARD-C", "event_time": "2026-10-19T09:10:00Z", "operation_key": (..Key("update", "2026-10-19T09:10:00Z")), "applied_at": "2026-10-19T09:10:00Z"}
+    Do summary."ward_state".history.%Push(update)
+    Set seq = ##class(Shutter.Util.HistoryDraft).Decide(..Case(), summary, "E1", ..Facts(..One()), 1)
+    Do $$$AssertEquals(seq."reason_code", "further_message", "stops: " _ seq.reason)
+}
+
+/// An A08 before the failed movement isn't in the span and isn't further: the draft is drawn.
+Method TestUpdateBeforeTheFailedMovement()
+{
+    Set facts = ..Facts(..One())
+    Do facts."patient_rows".%Push(..Row("ENC-UT1", "update", "2026-10-19T08:30:00Z", "2026-10-19 08:30:01", ..Key("update", "2026-10-19T08:30:00Z")))
+    Set seq = ..Decide(..Case(), ..One(), facts)
     Do $$$AssertTrue(seq.drawn, "drawn: " _ seq.reason)
-    Do $$$AssertEquals(seq."left_alone".%Size(), 1, "one row left alone")
-    Do $$$AssertEquals(seq."left_alone".%Get(0)."event_time", "2026-10-19T09:10:00Z", "at its time")
 }
 
 Method TestDischargeAfterTheSpan()

@@ -1,7 +1,8 @@
 /// One case's bundle for audit and support handoff (Shutter.API.CaseBundle): the first line says it is redacted, it holds
 /// the seven parts, nothing the model view removes is in it, what people typed stays in IRIS, it refuses rather than
-/// sends a case it cannot redact, and each download leaves a record. The test case and its rows are saved under their
-/// own ids and removed afterwards.
+/// sends a case it cannot redact, and each download leaves a record. An approver's unredacted file says so on its first
+/// line, needs a reason, and takes nothing from the redacted one. No download changes a closed case's receipt. The test
+/// case and its rows are saved under their own ids and removed afterwards.
 Class Shutter.Test.CaseBundle Extends %UnitTest.TestCase
 {
 
@@ -234,6 +235,87 @@ Method TestDownloadLeavesARecord()
     Do $$$AssertEquals(actor, "operator", "by who took it")
     Do $$$AssertTrue(line [ ##class(Shutter.Util.Digest).SHA256Hex(text), "with the digest of what left: " _ line)
     Do $$$AssertEquals(..Case().Version, version, "the version does not move")
+}
+
+/// An approver's file says on its first line that it holds identifiable data, and it does: the identifiers, the name, the
+/// note's text and what people typed, with no token in their place.
+Method TestUnredactedSaysSoOnItsFirstLine()
+{
+    Set text = ##class(Shutter.API.CaseBundle).UnredactedText(..Case(), "approver", "The supplier needs the record", .why)
+    Do $$$AssertTrue(text '= "", "a file: " _ $GET(why))
+    Set first = $PIECE(text, $CHAR(10), 1)
+    Do $$$AssertTrue($EXTRACT(first, 1, 25) = "{""redaction"":""UNREDACTED:", "the first line opens with the statement: " _ first)
+    Do $$$AssertTrue(first [ "identifiable", "and says it holds identifiable data")
+    Set o = ##class(%DynamicObject).%FromJSON(text)
+    Do $$$AssertEquals(o.format, "shutter-case-bundle-unredacted/1", "its own format")
+    Do $$$AssertEquals(o.reason, "The supplier needs the record", "the reason it was taken for")
+    For part = "evidence", "plans", "gateDecisions", "approvals", "attempts", "verifications" {
+        Do $$$AssertEquals(o.%Get(part).%Size(), 1, part _ " has its row")
+    }
+    For seen = "MRN9103", "ENC-9103", "LEWIS^ANNE", "Mrs Lewis fell at home", "Spoke to her daughter" {
+        Do $$$AssertTrue(text [ seen, seen _ " is in the file")
+    }
+    Do $$$AssertNotTrue(text [ "MRN-T1", "and no token stands in")
+}
+
+/// No reason, no file and no record, whatever else is right.
+Method TestUnredactedNeedsAReason()
+{
+    For reason = "", "   " {
+        Set text = ##class(Shutter.API.CaseBundle).DownloadUnredacted(..Case(), "approver", reason, .why)
+        Do $$$AssertEquals(text, "", "no file for the reason '" _ reason _ "'")
+        Do $$$AssertTrue(why [ "reason", "the refusal says what is missing: " _ $GET(why))
+    }
+    Do $$$AssertEquals(..Events(), 0, "and nothing is recorded")
+}
+
+/// The reason, who, and the file's digest go on the case, and the version does not move. Taking it learns no token.
+Method TestUnredactedLeavesTheReasonOnTheCase()
+{
+    Set c = ..Case(), version = c.Version, id = ..CaseRowId
+    Set text = ##class(Shutter.API.CaseBundle).DownloadUnredacted(c, "approver", "  The supplier needs the record  ", .why)
+    Do $$$AssertTrue(text '= "", "a file: " _ $GET(why))
+    Set line = "", actor = "", ref = "", tokens = 0
+    &sql(SELECT TOP 1 Text, Actor, Ref INTO :line, :actor, :ref FROM Shutter_Store.CaseEvent WHERE "Case" = :id AND Text LIKE 'Unredacted case bundle%')
+    Do $$$AssertEquals(actor, "approver", "by who took it")
+    Do $$$AssertTrue(line [ "reason: The supplier needs the record", "with the reason: " _ line)
+    Do $$$AssertTrue(line [ ##class(Shutter.Util.Digest).SHA256Hex(text), "and the digest of what left")
+    Do $$$AssertEquals(ref, "bundle:unredacted", "marked as a download")
+    Do $$$AssertEquals(..Case().Version, version, "the version does not move")
+    &sql(SELECT COUNT(*) INTO :tokens FROM Shutter_Store.CaseToken WHERE "Case" = :id)
+    Do $$$AssertEquals(+tokens, 0, "and no token was learnt, since nothing here goes to a model")
+}
+
+/// The ordinary route is what it was, with an unredacted file taken before it.
+Method TestTheRedactedRouteStaysRedacted()
+{
+    Do ##class(Shutter.API.CaseBundle).DownloadUnredacted(..Case(), "approver", "The supplier needs the record", .why)
+    Set text = ##class(Shutter.API.CaseBundle).Download(..Case(), "operator", .why)
+    Do $$$AssertTrue($EXTRACT(text, 1, 23) = "{""redaction"":""REDACTED:", "the first line is the redacted one")
+    Do $$$AssertEquals(##class(%DynamicObject).%FromJSON(text).format, "shutter-case-bundle/1", "with its format")
+    Set upper = $ZCONVERT(text, "U")
+    For gone = "MRN9103", "ENC-9103", "LEWIS", "FELL AT HOME", "DAUGHTER", "THE SUPPLIER" {
+        Do $$$AssertNotTrue(upper [ gone, gone _ " is not in the file")
+    }
+    Set id = ..CaseRowId, ref = ""
+    &sql(SELECT TOP 1 Ref INTO :ref FROM Shutter_Store.CaseEvent WHERE "Case" = :id AND Text LIKE 'Case bundle%')
+    Do $$$AssertEquals(ref, "bundle:redacted", "and its record is marked as a download")
+}
+
+/// A closed case's receipt names who took part in the case. Taking a file is not taking part: neither route moves it, and
+/// a note from anyone else still counts.
+Method TestADownloadLeavesTheReceiptAlone()
+{
+    Set c = ..Case()
+    Set c.State = "resolved", c.Disposition = "resend", c.Outcome = "Committed", c.ClosedAt = "2026-10-15T08:23:00Z"
+    Do c.%Save()
+    Set before = ##class(Shutter.API.Dispatch).ClosureObject(..Case()).%ToJSON()
+    Do $$$AssertTrue(##class(Shutter.API.CaseBundle).Download(..Case(), "ut-auditor", .why) '= "", "a redacted file: " _ $GET(why))
+    Do $$$AssertTrue(##class(Shutter.API.CaseBundle).DownloadUnredacted(..Case(), "ut-records", "A subject access request", .why) '= "", "an unredacted file: " _ $GET(why))
+    Set after = ##class(Shutter.API.Dispatch).ClosureObject(..Case()).%ToJSON()
+    Do $$$AssertEquals(after, before, "the receipt is the same to the byte")
+    Do ..Case().Note("note", "for the record", "ut-reader")
+    Do $$$AssertTrue(##class(Shutter.API.Dispatch).ClosureObject(..Case()).actors.%ToJSON() [ "ut-reader", "and anyone else's note still counts")
 }
 
 }

@@ -731,6 +731,8 @@ Method TestAReferenceCannotBeRecomputed()
     Do $$$AssertTrue(reference ? 1"P-"16AN, "a reference: " _ reference)
     Set printed = "P-" _ $EXTRACT($PIECE(##class(Shutter.Util.Digest).SHA256Hex(row."deployment_id" _ "|" _ c.PatientIdAuthority _ "|" _ c.PatientId), ":", 2), 1, 16)
     Do $$$AssertNotEquals(reference, printed, "the printed deployment id does not give it")
+    Set limits = ##class(Shutter.Util.ShadowReport).Summary(rows).limits
+    Do $$$AssertTrue(limits [ "keeps that link", "the report says a person keeps the linkage within a run: " _ limits)
     Set key = ##class(Shutter.Util.RecoveryControl).Control().ReportKey
     Do $$$AssertTrue($LENGTH(key) >= 32, "the deployment keeps a key of its own")
     Do $$$AssertNotEquals(key, row."deployment_id", "which is not the printed id")
