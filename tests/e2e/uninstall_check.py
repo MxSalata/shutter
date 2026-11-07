@@ -305,14 +305,14 @@ def site_shape():
     check("the SQL form answers the same plan", json.loads(re.findall(r"<<<(.*?)>>>", out, re.S)[-1])["namespace"] == "SHUTTER", out[-300:])
 
     step("A forwarder added by hand, which the onboarding did not add: refused, with nothing changed")
-    out = session("PATHOLOGY", '''Set p=##class(Ens.Config.Production).%New() Set p.Name="OnbHand.Production" Set i=##class(Ens.Config.Item).%New() Set i.Name="Hand Forwarder",i.ClassName="Shutter.Intake.Forwarder" Do p.Items.Insert(i) Set sc=p.%Save() Write !,"[hand] ",sc,!''')
+    out = session("PATHOLOGY", '''Set p=##class(Ens.Config.Production).%New() Set p.Name="OnbHand.Production" Set i=##class(Ens.Config.Item).%New() Set i.Name="Hand Forwarder",i.ClassName="Shutter.Intake.Forwarder",i.Production=p Do p.Items.Insert(i) Set sc=p.%Save() Write !,"[hand] ",sc,!''')
     check("a production names Shutter's forwarder", "[hand] 1" in out, out[-400:])
     refused = obj("SHUTTER", "##class(Shutter.Util.Uninstall).Plan()")
     check("the plan says it would refuse, and names the item", "Hand Forwarder in OnbHand.Production (PATHOLOGY)" in refused["refused"] and refused["ok"] is False, refused["refused"])
     out = session("SHUTTER", f'Set sc=##class(%IPM.Main).Shell("uninstall {MODULE}") Write !,"RESULT: ",$SELECT(sc:"ok",1:$SYSTEM.Status.GetErrorText(sc)),!', 560)
     check("zpm uninstall fails and says why", "Hand Forwarder" in out and "RESULT: ok" not in out, out[-600:])
     check("the case, the item and the module are all still there", value("SHUTTER", '$ORDER(^Shutter.Store.CaseD(""),-1)') == cases and "Shutter Forwarder" in jobs("PATHOLOGY") and value("SHUTTER", '##class(%IPM.Storage.Module).NameExists("' + MODULE + '")') == "1")
-    out = session("PATHOLOGY", 'Set sc=##class(Ens.Config.Production).%DeleteId("OnbHand.Production") Write !,"[gone] ",sc,!')
+    out = session("PATHOLOGY", 'Set sc=##class(Ens.Config.Production).%DeleteId("OnbHand.Production") Do ##class(%SQL.Statement).%ExecDirectNoPriv(,"DELETE FROM Ens_Config.Item WHERE Name = \'Hand Forwarder\'") Write !,"[gone] ",sc,!')
     check("the site takes it out", "[gone] 1" in out, out[-300:])
 
     step("The comparison can see Shutter: the same record, while it is installed")

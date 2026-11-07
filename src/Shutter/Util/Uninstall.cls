@@ -154,10 +154,13 @@ ClassMethod ForeignItems(ns As %String, here As %String, ownProduction As %Strin
         Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT Production, Name, ClassName FROM Ens_Config.Item WHERE ClassName %STARTSWITH 'Shutter.' OR ClassName %STARTSWITH 'Hospital.' OR ClassName %STARTSWITH 'Downstream.'")
         While rs.%Next() {
             Set production = rs.%GetData(1)
+            // A row in no production starts nothing.
+            Continue:production=""
             // Here, the module's own production classes have their definitions too, each with its items.
             If (ns = here) && ((production = ownProduction) || ..OwnBodyClass(production)) Continue
             If $GET(^|here|Shutter.Config("onboard", ns)) = production Continue
-            Set found = found _ $SELECT(found = "": "", 1: "; ") _ rs.%GetData(2) _ " in " _ production _ " (" _ ns _ ")"
+            Set one = rs.%GetData(2) _ " in " _ production _ " (" _ ns _ ")"
+            If '$FIND("; " _ found _ "; ", "; " _ one _ "; ") Set found = found _ $SELECT(found = "": "", 1: "; ") _ one
         }
     } Catch ex {
     }
