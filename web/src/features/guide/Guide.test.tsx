@@ -192,6 +192,16 @@ describe('the guide', () => {
     expect(useAppearance.getState().detail).toBe('technical');
   });
 
+  it('sits just above Approve plan on the step that invites the press', async () => {
+    at('s2/decision');
+    renderApp('/start');
+    const guide = await card();
+    const control = await screen.findByRole('button', { name: 'Approve plan' });
+    const host = guide.closest<HTMLElement>('[data-guide-host]')!;
+    await waitFor(() => expect(host.nextElementSibling).toContainElement(control));
+    expect(host.dataset.guideNear).toBe('true');
+  });
+
   it('does not welcome a visit after the tour was dismissed', async () => {
     saveProgress({ ...INITIAL, dismissed: true });
     useGuide.setState({ progress: { ...INITIAL, dismissed: true } });

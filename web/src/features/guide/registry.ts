@@ -42,6 +42,8 @@ export interface GuideStep {
   place: GuidePlace;
   /** The `data-tour` attribute of the section the step shows. */
   target: string;
+  /** Where the card sits instead while the step invites a press: just above that control, when the section is long. */
+  nearTry?: string;
   /** On a case page: the story step to open before the section is shown. */
   open?: StoryStep;
   /** On a case page: the tab to open. */
@@ -265,6 +267,7 @@ export const CHAPTERS: GuideChapter[] = [
           "The rehearsal applied the exact write and rolled it back. An approver releases it; on other cases, the site's written policy may. The same approval is an EnsLib.Workflow task in IRIS's Workflow inbox, for the role Shutter Approvers.",
         place: { scenario: 'S2', mode: 'board' },
         target: 'case-decision',
+        nearTry: 'case-approve',
         open: 'decision',
         tryIt: { action: 'approve-plan', text: 'Try it: press Approve plan' },
         noApprove: {

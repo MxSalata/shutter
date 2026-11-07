@@ -266,7 +266,7 @@ export function ApprovalPanel({
             ]}
           />
           {awaiting ? (
-            <Stack gap={4}>
+            <Stack gap={4} data-tour="case-approve">
               <Group gap="sm">
                 <Tooltip label={why || 'Approve exactly this plan'} disabled={!why}>
                   <span>
