@@ -238,6 +238,92 @@ export function addressesProblem(list: string, domains: string[] = []): string {
   return '';
 }
 
+const isPlainObject = (x: unknown): x is Record<string, unknown> => isObject(x) && !Array.isArray(x);
+
+const isWhole = (x: unknown): x is number => typeof x === 'number' && Number.isInteger(x);
+
+/**
+ * The port of ReceiverWatchProblem: what is wrong with the keys of one receiver's entry that describe its outages, or "".
+ * Each key is checked only when present, so an entry with none of them validates as it always did.
+ */
+function receiverWatchProblem(r: Record<string, unknown>, at: string, domains: string[]): string {
+  const category = 'category' in r ? r.category : 'current_state';
+  if ('watch' in r) {
+    const w = r.watch;
+    if (!isPlainObject(w)) return `${at}.watch: must be an object`;
+    for (const k of Object.keys(w))
+      if (!['namespace', 'item'].includes(k)) return `${at}.watch.${k}: unknown setting`;
+    for (const f of ['namespace', 'item'])
+      if (typeof w[f] !== 'string' || w[f] === '') return `${at}.watch.${f}: required`;
+  }
+  for (const f of ['runbook', 'call'])
+    if (f in r && typeof r[f] !== 'string') return `${at}.${f}: must be a string`;
+  if ('approvers' in r) {
+    if (!Array.isArray(r.approvers)) return `${at}.approvers: must be an array of names`;
+    for (const [j, m] of members(r.approvers))
+      if (typeof m !== 'string' || m === '') return `${at}.approvers[${j}]: must be a name`;
+  }
+  // What a Completed header proves at this receiver is the site's word, on any category.
+  if ('ack_level' in r && !['connection', 'commit', 'application'].includes(r.ack_level as string))
+    return `${at}.ack_level: must be connection, commit or application`;
+  if ('duplicates' in r) {
+    const d = r.duplicates;
+    if (!isPlainObject(d)) return `${at}.duplicates: must be an object`;
+    for (const k of Object.keys(d))
+      if (!['behaviour', 'code', 'phrase', 'refers_to'].includes(k))
+        return `${at}.duplicates.${k}: unknown setting`;
+    if ('behaviour' in d && !['refuses', 'files_twice', 'unknown'].includes(d.behaviour as string))
+      return `${at}.duplicates.behaviour: must be refuses, files_twice or unknown`;
+    for (const f of ['code', 'phrase'])
+      if (f in d && typeof d[f] !== 'string') return `${at}.duplicates.${f}: must be a string`;
+    if ('refers_to' in d && !['message', 'order', 'result', 'unknown'].includes(d.refers_to as string))
+      return `${at}.duplicates.refers_to: must be message, order, result or unknown`;
+    // A refusal is matched by field, so a declared refusal with neither field could never be recognised.
+    if (d.behaviour === 'refuses' && !d.code && !d.phrase)
+      return `${at}.duplicates.behaviour: refuses needs a code or a phrase`;
+  }
+  if ('engine_resend' in r) {
+    if (typeof r.engine_resend !== 'boolean') return `${at}.engine_resend: must be true or false`;
+    if (r.engine_resend) {
+      if (category !== 'orders_results' && r.ack_level !== 'application')
+        return `${at}.engine_resend: needs ack_level application on a current_state or history_of_record receiver`;
+      // The engine sends the stored body as it stands. fresh is the questionnaire's word for a rewritten MSH-7.
+      if (['rewritten', 'fresh'].includes(r.resend_timestamp as string))
+        return `${at}.engine_resend: refused beside resend_timestamp rewritten, since the stored message goes out unchanged`;
+    }
+  }
+  if ('hold' in r) {
+    const h = r.hold;
+    if (!isPlainObject(h)) return `${at}.hold: must be an object`;
+    if (category === 'orders_results') return `${at}.hold: is for ADT receivers only, not orders_results`;
+    for (const k of Object.keys(h)) if (k !== 'minutes') return `${at}.hold.${k}: unknown setting`;
+    if ('minutes' in h && (!isWhole(h.minutes) || h.minutes < 1 || h.minutes > 60))
+      return `${at}.hold.minutes: must be a whole number from 1 to 60`;
+  }
+  if ('mail' in r) {
+    const mail = r.mail;
+    if (!isPlainObject(mail)) return `${at}.mail: must be an object`;
+    for (const k of Object.keys(mail))
+      if (!['to', 'on'].includes(k)) return `${at}.mail.${k}: unknown setting`;
+    if (!Array.isArray(mail.to) || mail.to.length === 0)
+      return `${at}.mail.to: must be an array of one or more addresses`;
+    for (const [j, m] of members(mail.to)) {
+      if (typeof m !== 'string') return `${at}.mail.to[${j}]: must be an address`;
+      const problem = mailboxProblem(m, domains);
+      if (problem) return `${at}.mail.to[${j}]: ${problem}`;
+    }
+    if (!Array.isArray(mail.on) || mail.on.length === 0)
+      return `${at}.mail.on: must be an array of one or more of open, needs_person and closed`;
+    for (const [j, m] of members(mail.on))
+      if (!['open', 'needs_person', 'closed'].includes(m as string))
+        return `${at}.mail.on[${j}]: must be open, needs_person or closed`;
+  }
+  for (const f of ['resend_approval_minutes', 'settle_minutes', 'window_minutes'])
+    if (f in r && (!isWhole(r[f]) || (r[f] as number) < 1))
+      return `${at}.${f}: must be a whole number of 1 or more`;
+  return '';
+}
+
 /** The port of SiteProfile.Validate: "" when the profile is valid, else the server's message for the first problem. */
 export function validateProfile(p: unknown): string {
   if (!isObject(p)) return 'the profile must be a JSON object';
@@ -439,6 +525,11 @@ export function validateProfile(p: unknown): string {
             return `${at}.sources[${j}]: must be a sending application (MSH-3)`;
       }
     }
+  }
+  // What a receiver's outage needs. After the mail rules, because a receiver's mail.to needs their domains.
+  for (const [i, r] of members(rcv)) {
+    const problem = receiverWatchProblem(r as Record<string, unknown>, `receivers[${i}]`, domains);
+    if (problem) return problem;
   }
   if ('incident' in p) {
     if (!isObject(p.incident)) return 'incident: must be an object';

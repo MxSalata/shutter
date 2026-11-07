@@ -319,6 +319,12 @@ ClassMethod Validate(p As %DynamicObject) As %String
             }
         }
     }
+    // What a receiver's outage needs (CONTRACTS 6.4). After the mail rules, because a receiver's mail.to needs their domains.
+    Set it = rcv.%GetIterator()
+    While it.%GetNext(.i, .r) {
+        Set problem = ..ReceiverWatchProblem(r, "receivers[" _ i _ "]", domains)
+        If problem '= "" Return problem
+    }
     If p.%IsDefined("incident") {
         Set inc = p.%Get("incident")
         If '$ISOBJECT(inc) Quit "incident: must be an object"
@@ -330,6 +336,134 @@ ClassMethod Validate(p As %DynamicObject) As %String
         }
     }
     Quit ""
+}
+
+/// What is wrong with the keys of one receiver's entry that describe its outages, with the field named, or "". Each key
+/// is checked only when present, so an entry with none of them validates as it always did. r has passed Validate's first
+/// loop, so its category is valid or absent, and absent reads as current_state (ReceiverCategory).
+ClassMethod ReceiverWatchProblem(r As %DynamicObject, at As %String, domains As %List) As %String
+{
+    Set category = $SELECT(r.%IsDefined("category"): r.%Get("category"), 1: "current_state")
+    If r.%IsDefined("watch") {
+        If r.%GetTypeOf("watch") '= "object" Quit at _ ".watch: must be an object"
+        Set w = r.%Get("watch")
+        Set wi = w.%GetIterator()
+        While wi.%GetNext(.k, .v) { If '$LISTFIND($LISTBUILD("namespace", "item"), k) Return at _ ".watch." _ k _ ": unknown setting" }
+        For f = "namespace", "item" { If (w.%GetTypeOf(f) '= "string") || (w.%Get(f) = "") Return at _ ".watch." _ f _ ": required" }
+    }
+    For f = "runbook", "call" { If r.%IsDefined(f) && (r.%GetTypeOf(f) '= "string") Return at _ "." _ f _ ": must be a string" }
+    If r.%IsDefined("approvers") {
+        If r.%GetTypeOf("approvers") '= "array" Quit at _ ".approvers: must be an array of names"
+        Set list = r.%Get("approvers")
+        Set ai = list.%GetIterator()
+        While ai.%GetNext(.j, .m) { If (list.%GetTypeOf(j) '= "string") || (m = "") Return at _ ".approvers[" _ j _ "]: must be a name" }
+    }
+    // What a Completed header proves at this receiver is the site's word, on any category.
+    If r.%IsDefined("ack_level") && ((r.%GetTypeOf("ack_level") '= "string") || '$LISTFIND($LISTBUILD("connection", "commit", "application"), r.%Get("ack_level"))) Quit at _ ".ack_level: must be connection, commit or application"
+    If r.%IsDefined("duplicates") {
+        If r.%GetTypeOf("duplicates") '= "object" Quit at _ ".duplicates: must be an object"
+        Set d = r.%Get("duplicates")
+        Set di = d.%GetIterator()
+        While di.%GetNext(.k, .v) { If '$LISTFIND($LISTBUILD("behaviour", "code", "phrase", "refers_to"), k) Return at _ ".duplicates." _ k _ ": unknown setting" }
+        If d.%IsDefined("behaviour") && ((d.%GetTypeOf("behaviour") '= "string") || '$LISTFIND($LISTBUILD("refuses", "files_twice", "unknown"), d.%Get("behaviour"))) Quit at _ ".duplicates.behaviour: must be refuses, files_twice or unknown"
+        For f = "code", "phrase" { If d.%IsDefined(f) && (d.%GetTypeOf(f) '= "string") Return at _ ".duplicates." _ f _ ": must be a string" }
+        If d.%IsDefined("refers_to") && ((d.%GetTypeOf("refers_to") '= "string") || '$LISTFIND($LISTBUILD("message", "order", "result", "unknown"), d.%Get("refers_to"))) Quit at _ ".duplicates.refers_to: must be message, order, result or unknown"
+        // A refusal is matched by field, so a declared refusal with neither field could never be recognised.
+        If (d.%Get("behaviour") = "refuses") && (d.%Get("code") = "") && (d.%Get("phrase") = "") Quit at _ ".duplicates.behaviour: refuses needs a code or a phrase"
+    }
+    If r.%IsDefined("engine_resend") {
+        If r.%GetTypeOf("engine_resend") '= "boolean" Quit at _ ".engine_resend: must be true or false"
+        If r.%Get("engine_resend") {
+            If (category '= "orders_results") && (r.%Get("ack_level") '= "application") Quit at _ ".engine_resend: needs ack_level application on a current_state or history_of_record receiver"
+            // The engine sends the stored body as it stands. fresh is the questionnaire's word for a rewritten MSH-7.
+            If $LISTFIND($LISTBUILD("rewritten", "fresh"), r.%Get("resend_timestamp")) Quit at _ ".engine_resend: refused beside resend_timestamp rewritten, since the stored message goes out unchanged"
+        }
+    }
+    If r.%IsDefined("hold") {
+        If r.%GetTypeOf("hold") '= "object" Quit at _ ".hold: must be an object"
+        If category = "orders_results" Quit at _ ".hold: is for ADT receivers only, not orders_results"
+        Set h = r.%Get("hold")
+        Set hi = h.%GetIterator()
+        While hi.%GetNext(.k, .v) { If k '= "minutes" Return at _ ".hold." _ k _ ": unknown setting" }
+        If h.%IsDefined("minutes") {
+            Set n = h.%Get("minutes")
+            If (h.%GetTypeOf("minutes") '= "number") || (n '= (n \ 1)) || (n < 1) || (n > 60) Quit at _ ".hold.minutes: must be a whole number from 1 to 60"
+        }
+    }
+    If r.%IsDefined("mail") {
+        If r.%GetTypeOf("mail") '= "object" Quit at _ ".mail: must be an object"
+        Set mail = r.%Get("mail")
+        Set mi = mail.%GetIterator()
+        While mi.%GetNext(.k, .v) { If '$LISTFIND($LISTBUILD("to", "on"), k) Return at _ ".mail." _ k _ ": unknown setting" }
+        Set to = mail.%Get("to")
+        If (mail.%GetTypeOf("to") '= "array") || (to.%Size() = 0) Quit at _ ".mail.to: must be an array of one or more addresses"
+        Set ti = to.%GetIterator()
+        While ti.%GetNext(.j, .m) {
+            If to.%GetTypeOf(j) '= "string" Return at _ ".mail.to[" _ j _ "]: must be an address"
+            Set problem = ##class(Shutter.Util.Mail).AddressProblem(m, domains)
+            If problem '= "" Return at _ ".mail.to[" _ j _ "]: " _ problem
+        }
+        Set on = mail.%Get("on")
+        If (mail.%GetTypeOf("on") '= "array") || (on.%Size() = 0) Quit at _ ".mail.on: must be an array of one or more of open, needs_person and closed"
+        Set oi = on.%GetIterator()
+        While oi.%GetNext(.j, .m) { If (on.%GetTypeOf(j) '= "string") || '$LISTFIND($LISTBUILD("open", "needs_person", "closed"), m) Return at _ ".mail.on[" _ j _ "]: must be open, needs_person or closed" }
+    }
+    For f = "resend_approval_minutes", "settle_minutes", "window_minutes" {
+        If r.%IsDefined(f) {
+            Set n = r.%Get(f)
+            If (r.%GetTypeOf(f) '= "number") || (n '= (n \ 1)) || (n < 1) Return at _ "." _ f _ ": must be a whole number of 1 or more"
+        }
+    }
+    Quit ""
+}
+
+/// The entries of the receivers the site asks Shutter to watch: those with a watch block, none on a profile without one.
+ClassMethod WatchedReceivers() As %DynamicArray
+{
+    Set out = []
+    Set list = ..Current().%Get("receivers")
+    If '$ISOBJECT(list) Quit out
+    Set iter = list.%GetIterator()
+    While iter.%GetNext(.i, .r) { If $ISOBJECT(r) && r.%IsDefined("watch") Do out.%Push(r) }
+    Quit out
+}
+
+/// The acknowledgement level the site declares for a receiver: connection when it declares none or isn't named.
+ClassMethod ReceiverAckLevel(name As %String) As %String
+{
+    Set r = ..Receiver(name)
+    Set level = $SELECT($ISOBJECT(r): ##class(Shutter.Util.Json).Str(r, "ack_level"), 1: "")
+    Quit $SELECT(level = "": "connection", 1: level)
+}
+
+/// What the site declares a receiver does with a duplicate, always with behaviour and refers_to: unknown when it doesn't say.
+ClassMethod ReceiverDuplicates(name As %String) As %DynamicObject
+{
+    Set out = {"behaviour": "unknown", "refers_to": "unknown"}
+    Set r = ..Receiver(name)
+    Set d = $SELECT($ISOBJECT(r): r.%Get("duplicates"), 1: "")
+    If '$ISOBJECT(d) Quit out
+    Set iter = d.%GetIterator()
+    While iter.%GetNext(.k, .v) { Do out.%Set(k, v) }
+    Quit out
+}
+
+/// A receiver's minutes: resend_approval_minutes (15), settle_minutes (10) or window_minutes (5), its own figure when it gives one.
+ClassMethod ReceiverMinutes(name As %String, setting As %String) As %Integer
+{
+    Set fallback = $CASE(setting, "resend_approval_minutes": 15, "settle_minutes": 10, "window_minutes": 5)
+    Set r = ..Receiver(name)
+    If $ISOBJECT(r) && (r.%GetTypeOf(setting) = "number") Quit +r.%Get(setting)
+    Quit fallback
+}
+
+/// The minutes of a receiver's hold, 10 when its block doesn't say; 0 with no block, and always on orders_results.
+ClassMethod ReceiverHoldMinutes(name As %String) As %Integer
+{
+    Set r = ..Receiver(name)
+    If '$ISOBJECT(r) || (r.%GetTypeOf("hold") '= "object") || (..ReceiverCategory(name) = "orders_results") Quit 0
+    Set h = r.%Get("hold")
+    Quit $SELECT(h.%GetTypeOf("minutes") = "number": +h.%Get("minutes"), 1: 10)
 }
 
 /// Seed from knowledge/site/profile.json when the file exists and differs from what is stored.
