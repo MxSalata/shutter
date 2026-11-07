@@ -55,6 +55,9 @@ def listener_modes(r):
     r.listener_up(P_UP, {"mode": "up"})
     got = r.probe(P_UP, r.adt("A01", "UP1"))
     check("up answers AA", got.startswith("MSA|AA|UP1"), got)
+    raised("a second listener on a port already listening raises", lambda: r.listener_up(P_UP, {"mode": "hang"}), "already listening")
+    got = r.probe(P_UP, r.adt("A01", "UP2"))
+    check("and the first goes on answering as it was told to", got.startswith("MSA|AA|UP2"), got)
 
     r.listener_up(P_AE, {"mode": "answer", "code": "AE", "words": "Test code not recognised: XQ9", "err": ["ERR|||204|E|||Unknown code"]})
     got = r.probe(P_AE, r.result("AE1"))
@@ -136,6 +139,7 @@ def plain(r):
     check("headers reads a header's status and control id", r.wait_until(errored, 60), r.headers(r.PLAIN, "NoRetry Out"))
     rows = r.log_rows(r.PLAIN, "NoRetry Out", "ErrOutConnectExpired")
     check("log_rows reads the log's rows", bool(rows), r.log_rows(r.PLAIN, "NoRetry Out"))
+    check("and gives a row's type as its word", "Error" in [row["type"] for row in rows], rows)
     host = r.host(r.PLAIN, "NoRetry Out")
     check("host reads the engine's own row", bool(host.get("status")), host)
     print("        NoRetry Out:", json.dumps(host), "queue", r.queue(r.PLAIN, "NoRetry Out"), flush=True)
@@ -175,12 +179,20 @@ def broken_reads(r):
     long_line = 'Set x="' + "a" * 200 + '" Write !,"<<<",x,1/0,">>>",!'
     raised("an error far along a line longer than the terminal raises", lambda: r.rows(r.PLAIN, long_line), "<DIVIDE>")
     check("a good expression still reads", r.value(r.PLAIN, "1+1") == "2")
-    check("a query with no rows still reads as none", r.headers(r.PLAIN, "No Such Item") == [] and r.log_rows(r.PLAIN, "No Such Item") == [])
-    check("a host with no row still reads as none", r.host(r.PLAIN, "No Such Item") == {})
+    known = {"headers": r.headers(r.PLAIN, "NoRetry Out"), "log_rows": r.log_rows(r.PLAIN, "NoRetry Out"), "host": r.host(r.PLAIN, "NoRetry Out")}
+    check("a query with no rows still reads as none, where the same reads find a known item's", bool(known["headers"] and known["log_rows"]) and r.headers(r.PLAIN, "No Such Item") == [] and r.log_rows(r.PLAIN, "No Such Item") == [], known)
+    check("a host with no row still reads as none, where the same read finds a known item's", bool(known["host"]) and r.host(r.PLAIN, "No Such Item") == {}, known["host"])
+    r.session(r.PLAIN, """Set l=##class(Ens.Util.Log).%New() Set l.ConfigName="NoRetry Out",l.Type=4,l.Text="The rig's own row",l.SourceClass="V11Rig",l.SourceMethod="check" Set sc=l.%Save() Write !,"[saved] ",sc,!""")
+    got = r.log_rows(r.PLAIN, "NoRetry Out", "rig's own")
+    check("words holding an apostrophe find the row that has them", bool(got) and all(row["text"] == "The rig's own row" and row["type"] == "Info" for row in got), got)
+    check("an item holding an apostrophe is a query, not a broken one", r.headers(r.PLAIN, "No'Retry") == [] and r.log_rows(r.PLAIN, "No'Retry") == [])
     check("a port with no log still reads as none", r.events(7899) == [])
     check("a port with nothing listening still reads as not listening", r.listening(7899) is False)
     for name, call in (("headers", lambda: r.headers("RIGNOTHERE", "X")), ("log_rows", lambda: r.log_rows("RIGNOTHERE", "X")), ("jobs", lambda: r.jobs("RIGNOTHERE")), ("host", lambda: r.host("RIGNOTHERE", "X"))):
         raised(f"{name} in a namespace that doesn't exist raises", call)
+    for name, call in (("headers", lambda: r.headers("%SYS", "X")), ("log_rows", lambda: r.log_rows("%SYS", "X")), ("jobs", lambda: r.jobs("%SYS")), ("host", lambda: r.host("%SYS", "X"))):
+        raised(f"{name} in %SYS, which has no such table or query, raises", call)
+    check("USER has the tables and no rows, so its reads are real and empty", r.value("USER", "##class(%Dictionary.CompiledClass).%ExistsId(\"Ens.Util.Log\")") == "1" and r.log_rows("USER", "X") == [] and r.headers("USER", "X") == [])
     gone = Rig(r.ctr + "-absent")
     for name, call in (("headers", lambda: gone.headers("USER", "X")), ("log_rows", lambda: gone.log_rows("USER", "X")), ("jobs", lambda: gone.jobs("USER")), ("host", lambda: gone.host("USER", "X")), ("heard", lambda: gone.heard(7701)), ("events", lambda: gone.events(7701)), ("listening", lambda: gone.listening(7701))):
         raised(f"{name} on a container that doesn't exist raises", call)
@@ -223,6 +235,9 @@ def main():
             step(f"A stock instance, {args.image}, Shutter and the site's productions")
             r.start()
             r.install()
+        else:
+            for port in (r.LIMS, r.SECOND, r.ASIDE, r.RETRY, r.NORETRY, r.BOUNDED, r.ONESHOT):
+                r.listener_down(port)
         install_read(r)
         listener_modes(r)
         routed(r)

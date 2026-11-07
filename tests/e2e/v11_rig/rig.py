@@ -40,6 +40,10 @@ RESTART_TRIES, RESTART_PAUSE = 30, 10
 # A terminal session prints an uncaught error as the line, a caret under it, then the error's name, and carries on with the next
 # line and exits 0. It wraps a long line at 80 columns with the caret inside it, so the rest of the line can come between the two.
 SESSION_ERROR = re.compile(r"^[ \t]*\^[ \t]*\r?\n(?:[^\n]*\n)*?(<[A-Z][^>\n]*>[^\n]*)", re.M)
+# A failed query writes no error and reads as no rows, so each read checks and writes this in place of a row.
+READ_FAILED = "read failed|"
+SQL_CHECK = f'If rs.%SQLCODE<0 {{ Write !,"<<<{READ_FAILED}",rs.%SQLCODE," ",rs.%Message,">>>",! }}'
+EXECUTE = f"""Set sc=rs.Execute() If 'sc {{ Write !,"<<<{READ_FAILED}",$SYSTEM.Status.GetErrorText(sc),">>>",! }}"""
 
 
 class RigBroken(Exception):
@@ -75,6 +79,16 @@ def session_error(output):
     """The first uncaught ObjectScript error in a terminal session's output, or "" when there was none."""
     m = SESSION_ERROR.search(output or "")
     return m.group(1) if m else ""
+
+
+def in_string(text):
+    """Text for inside ObjectScript's "...": each double quote doubled."""
+    return text.replace('"', '""')
+
+
+def in_sql_string(text):
+    """Text for inside SQL's '...', itself inside ObjectScript's "...": each quote doubled for the language it would end."""
+    return in_string(text.replace("'", "''"))
 
 
 def hl7_bytes(segments):
@@ -196,6 +210,14 @@ class Rig:
         """What code wrote between <<< and >>>, a piece each."""
         return re.findall(r"<<<(.*?)>>>", self.session(ns, code, timeout), re.S)
 
+    def read_rows(self, ns, code, timeout=400):
+        """rows, for a read that writes READ_FAILED when it can't answer: that raises, so no rows are really none."""
+        found = self.rows(ns, code, timeout)
+        for row in found:
+            if row.startswith(READ_FAILED):
+                raise RigBroken(f"a read in {ns} failed: {row[len(READ_FAILED):]}\nin: {code[:400]}")
+        return found
+
     # ---- The instance and the install ----
 
     def start(self):
@@ -288,8 +310,8 @@ Set e=##class(EnsLib.Workflow.RoleDefinition).AddUserToRole("Shutter Approvers",
 
     def jobs(self, ns):
         """{host: job} for the running hosts: a host that was not restarted keeps its job."""
-        out = self.session(ns, 'Set rs=##class(%ResultSet).%New("Ens.Job:Enumerate") Do rs.Execute() While rs.Next() { Write !,"<<<",rs.Get("ConfigName"),"|",rs.Get("Job"),">>>",! }')
-        return dict(x.split("|", 1) for x in re.findall(r"<<<(.*?)>>>", out))
+        found = self.read_rows(ns, f'Set rs=##class(%ResultSet).%New("Ens.Job:Enumerate") {EXECUTE} While rs.Next() {{ Write !,"<<<",rs.Get("ConfigName"),"|",rs.Get("Job"),">>>",! }}')
+        return dict(x.split("|", 1) for x in found)
 
     def asked_until_done(self, ns, call, word):
         """A licence refusal skips a stop or a start with no sign but the output, so it is asked until it says it did it."""
@@ -331,7 +353,10 @@ Set e=##class(EnsLib.Workflow.RoleDefinition).AddUserToRole("Shutter Approvers",
         return listening_in(self.read_in_container("cat", "/proc/net/tcp"), port)
 
     def listener_up(self, port, spec=None, seconds=7200):
-        """Starts a receiver on this port. What it hears is kept across restarts."""
+        """Starts a receiver on this port, and raises if one is listening there already: the new one couldn't bind, the old one would
+        go on, and noaccept is read only at the start. What it hears is kept across restarts."""
+        if self.listening(port):
+            raise RigBroken(f"port {port} is already listening: take that listener down first, or change its answers with listener_spec")
         self.listener_spec(port, spec or {"mode": "up"})
         subprocess.run(["docker", "exec", "-d", self.ctr, "python3", f"{WORK}/listener.py", str(port), WORK, str(seconds)], check=True)
         for _ in range(30):
@@ -415,19 +440,20 @@ Set e=##class(EnsLib.Workflow.RoleDefinition).AddUserToRole("Shutter Approvers",
 
     def headers(self, ns, target):
         """Every header of an HL7 message to this item, oldest first: [{"id", "status", "resent", "description", "control"}]."""
-        code = f"""Set rs=##class(%SQL.Statement).%ExecDirect(,"SELECT ID FROM Ens.MessageHeader WHERE TargetConfigName='{target}' AND MessageBodyClassName='EnsLib.HL7.Message' ORDER BY ID") While rs.%Next() {{ Set h=##class(Ens.MessageHeader).%OpenId(rs.%Get("ID")) Set m=##class(EnsLib.HL7.Message).%OpenId(h.MessageBodyId) Write !,"<<<",rs.%Get("ID"),"|",##class(Ens.DataType.MessageStatus).LogicalToDisplay(h.Status),"|",h.Resent,"|",$TRANSLATE(h.Description,"|"," "),"|",$SELECT($ISOBJECT(m):m.GetValueAt("1:10"),1:""),">>>",! }}"""
+        code = f"""Set rs=##class(%SQL.Statement).%ExecDirect(,"SELECT ID FROM Ens.MessageHeader WHERE TargetConfigName='{in_sql_string(target)}' AND MessageBodyClassName='EnsLib.HL7.Message' ORDER BY ID") {SQL_CHECK} While rs.%Next() {{ Set h=##class(Ens.MessageHeader).%OpenId(rs.%Get("ID")) Set m=##class(EnsLib.HL7.Message).%OpenId(h.MessageBodyId) Write !,"<<<",rs.%Get("ID"),"|",##class(Ens.DataType.MessageStatus).LogicalToDisplay(h.Status),"|",h.Resent,"|",$TRANSLATE(h.Description,"|"," "),"|",$SELECT($ISOBJECT(m):m.GetValueAt("1:10"),1:""),">>>",! }}"""
         out = []
-        for row in self.rows(ns, code):
+        for row in self.read_rows(ns, code):
             hid, status, resent, description, control = row.split("|", 4)
             out.append({"id": hid, "status": status, "resent": resent, "description": description, "control": control})
         return out
 
     def log_rows(self, ns, item, like=""):
-        """The Ens_Util.Log rows of an item, oldest first, the words filter optional: [{"id", "type", "session", "message", "text"}]."""
-        where = f"ConfigName='{item}'" + (f" AND Text LIKE '%{like}%'" if like else "")
-        code = f"""Set rs=##class(%SQL.Statement).%ExecDirect(,"SELECT ID,Type,SessionId,MessageId,Text FROM Ens_Util.Log WHERE {where} ORDER BY ID") While rs.%Next() {{ Write !,"<<<",rs.%Get("ID"),"|",rs.%Get("Type"),"|",rs.%Get("SessionId"),"|",rs.%Get("MessageId"),"|",rs.%Get("Text"),">>>",! }}"""
+        """The Ens_Util.Log rows of an item, oldest first, the words filter optional: [{"id", "type", "session", "message", "text"}].
+        The type is its word (Error, Warning, Info, Alert...), as headers gives a status."""
+        where = f"ConfigName='{in_sql_string(item)}'" + (f" AND Text LIKE '%{in_sql_string(like)}%'" if like else "")
+        code = f"""Set rs=##class(%SQL.Statement).%ExecDirect(,"SELECT ID,Type,SessionId,MessageId,Text FROM Ens_Util.Log WHERE {where} ORDER BY ID") {SQL_CHECK} While rs.%Next() {{ Write !,"<<<",rs.%Get("ID"),"|",##class(Ens.DataType.LogType).LogicalToDisplay(rs.%Get("Type")),"|",rs.%Get("SessionId"),"|",rs.%Get("MessageId"),"|",rs.%Get("Text"),">>>",! }}"""
         out = []
-        for row in self.rows(ns, code):
+        for row in self.read_rows(ns, code):
             rid, kind, session, message, text = row.split("|", 4)
             out.append({"id": rid, "type": kind, "session": session, "message": message, "text": text})
         return out
@@ -437,8 +463,8 @@ Set e=##class(EnsLib.Workflow.RoleDefinition).AddUserToRole("Shutter Approvers",
 
     def host(self, ns, item):
         """The engine's own row for an item: {"status", "adapter_state", "queue"}, empty when it has none. Its queue is as the engine writes it, and read empty with nothing queued: queue() is the count."""
-        code = f"""Set rs=##class(%ResultSet).%New("Ens.Util.Statistics:EnumerateHostStatus") Do rs.Execute() While rs.Next() {{ If rs.Get("Name")="{item}" {{ Write !,"<<<",rs.Get("Status"),"|",rs.Get("AdapterState"),"|",rs.Get("Queue"),">>>",! }} }}"""
-        found = self.rows(ns, code)
+        code = f"""Set rs=##class(%ResultSet).%New("Ens.Util.Statistics:EnumerateHostStatus") {EXECUTE} While rs.Next() {{ If rs.Get("Name")="{in_string(item)}" {{ Write !,"<<<",rs.Get("Status"),"|",rs.Get("AdapterState"),"|",rs.Get("Queue"),">>>",! }} }}"""
+        found = self.read_rows(ns, code)
         if not found:
             return {}
         status, adapter_state, queue = found[-1].split("|", 2)

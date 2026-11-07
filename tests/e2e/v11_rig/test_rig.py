@@ -259,6 +259,43 @@ def restart_rules():
     r.rows = lambda ns, code, timeout=400: listed if "PopulateVirtualSettings" in code else ["saved|ERROR #5001: no", ]
     refused("set_item raises on a save that fails", lambda: r.set_item("S", "P", "Out", ResponseTimeout=30))
 
+    sent = []
+
+    def session_answers(ns, code, timeout):
+        sent.append(code)
+        return Done(0, session_out)
+
+    r = rigmod.Rig("stub")
+    r.run_session = session_answers
+    session_out = ""
+    check("no rows is still none", r.headers("S", "X") == [] and r.log_rows("S", "X") == [] and r.host("S", "X") == {} and r.jobs("S") == {})
+    check("every SQL read checks its code and every query its status", all("%SQLCODE<0" in c or "Set sc=rs.Execute()" in c for c in sent) and not any("Do rs.Execute()" in c for c in sent), sent)
+    sent.clear()
+    r.headers("S", "No'Out")
+    r.log_rows("S", "No'Out", "can't")
+    check("a quote in the item and the words is doubled", "TargetConfigName='No''Out'" in sent[0] and "ConfigName='No''Out' AND Text LIKE '%can''t%'" in sent[1], sent)
+    sent.clear()
+    r.headers("S", 'No"Out')
+    r.log_rows("S", 'No"Out', 'a"b')
+    r.host("S", 'No"Out')
+    check("and so is a double quote, inside ObjectScript's string", "TargetConfigName='No\"\"Out'" in sent[0] and "ConfigName='No\"\"Out' AND Text LIKE '%a\"\"b%'" in sent[1] and '="No""Out"' in sent[2], sent)
+    session_out = "\n<<<read failed|-30 Table not found>>>\n"
+    refused("headers raises when its SQL fails", lambda: r.headers("S", "X"))
+    refused("log_rows raises when its SQL fails", lambda: r.log_rows("S", "X"))
+    refused("jobs raises when its query fails", lambda: r.jobs("S"))
+    refused("host raises when its query fails", lambda: r.host("S", "X"))
+
+    real_run = rigmod.subprocess.run
+    ran = []
+    try:
+        rigmod.subprocess.run = lambda *a, **k: ran.append(a) or Done(0, "")
+        r = rigmod.Rig("stub")
+        r.listening = lambda port: True
+        refused("a listener on a port already listening raises", lambda: r.listener_up(1, {"mode": "noaccept"}))
+        check("and starts nothing and changes no answer", ran == [], ran)
+    finally:
+        rigmod.subprocess.run = real_run
+
     tcp = "  sl  local_address rem_address   st\n   0: 0100007F:1E15 00000000:0000 0A\n   1: 0100007F:1E16 00000000:0000 01\n"
     check("/proc/net/tcp: a listening socket reads listening", rigmod.listening_in(tcp, 0x1E15))
     check("/proc/net/tcp: an established one does not", not rigmod.listening_in(tcp, 0x1E16))

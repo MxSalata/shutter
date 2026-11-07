@@ -31,7 +31,7 @@ No receiver is declared in a profile here: the profile's form belongs to the sli
 
 ## The listener's modes
 
-`listener_up(port, spec)` starts one, `listener_spec(port, spec)` changes what it answers from the next frame on, `listener_down(port)` stops it.
+`listener_up(port, spec)` starts one, and raises if the port is already listening, `listener_spec(port, spec)` changes what it answers from the next frame on, `listener_down(port)` stops it.
 
 | `spec` | What the listener does |
 | --- | --- |
@@ -49,7 +49,8 @@ No receiver is declared in a profile here: the profile's form belongs to the sli
 
 - **A stop and start proves itself.** `restart_production(ns, production, watch)` asks until the output says both happened, compares the watched host's job number, and raises `RestartNotProven` if it's the same. A long-lived operation keeps its old code until this has happened. For Shutter's production, watch `Gate`.
 - **A licence refusal is never an empty answer.** `session` waits it out (exit 133 or `<LICENSE LIMIT EXCEEDED>`, up to 5 minutes), then raises `RigBroken`.
-- **A read that can't answer raises.** `session`, and every reading built on it, raises `RigBroken` on a missing container or namespace, any other non-zero exit and an uncaught ObjectScript error on any line. So do `events`, `heard` and `listening`. An empty answer is a real one: no rows, or a port with no log.
+- **A read that can't answer raises.** `session`, and every reading built on it, raises `RigBroken` on a missing container or namespace, any other non-zero exit and an uncaught ObjectScript error on any line. So do `events`, `heard` and `listening`. So does a query that fails, such as a table the namespace doesn't have. An empty answer is a real one: no rows, or a port with no log. A quote in an item's name or the words of `log_rows` is doubled for you.
+- **`log_rows` gives a row's type as its word,** as `headers` gives a status: `Error`, `Warning`, `Info`, `Alert`. Match the session as well as the words: its rows aren't filtered by session.
 - **`set_item` does it or says so.** The engine's own list (`item_settings`) gives each setting its target, Host or Adapter. An item or setting it doesn't have raises, so do a failed save or update, and the engine must then read the new value.
 - **REST sessions sign out.** `with rig.api() as a:` signs out on leaving, whatever happened. A session left open can hold a licence unit, and a later terminal session may then be refused.
 - **Name your container and port.** `Rig` refuses an empty name, and `start()` removes only a container of that name.
