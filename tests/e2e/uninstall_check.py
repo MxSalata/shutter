@@ -140,7 +140,7 @@ def compare(before, after, allowed_new=(), allowed_gone=()):
     # IRIS for Health sets these up once, the first time a namespace is enabled for Interoperability. They are the engine's.
     # The engine's own records of what ran, which keep a name as a log does: the event log, the audit log, its interface
     # metrics, the SQL statement and catalogue indexes (no table shows: the sql_table rows), the source journal, its temporary globals and a package's name.
-    engine += [r"^mentions\|[^|]*\|\^(Ens\.Util\.LogD|IRIS\.AuditD|IRIS\.Metrics\.|IRIS\.Temp|rINDEXSQL|rINDEXEXT|ISC\.Src\.Jrn|oddPKG)"]
+    engine += [r"^mentions\|[^|]*\|\^(Ens\.Util\.LogD|IRIS\.AuditD|IRIS\.Metrics\.|IRIS\.Temp|rINDEXSQL|rINDEXEXT|ISC\.Src\.Jrn|oddPKG|IPM\.General\.History)"]
     engine += [r"^(database|namespace)\|%SYS\|FHIR_Validation_Server$", r"^resource\|%SYS\|%HS(Admin_|_BFC_|_FHIRServer_)", r"^role\|%SYS\|%HS_BFC_", r"^task\|%SYS\|FHIR Purge "]
     new = sorted(x for x in after - before if not any(re.search(p, x) for p in list(allowed_new) + engine))
     gone = sorted(x for x in before - after if not any(re.search(p, x) for p in list(allowed_gone) + engine))
