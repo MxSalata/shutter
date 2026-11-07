@@ -519,12 +519,12 @@ reached the engine after the case's own or is timed after it, sent, queued or pe
 the index hasn't walked yet, and the HL7 messages of the namespace the case came from (paged to the last header, for at most the profile's `further_messages.scan_seconds` a read). The evidence
 carries `further_messages`: `{identifier: read|unreadable, stops: [...], shows: [...], unread}`, each row `{why, event, message_type,
 visit_number, event_time, sent_at, control_id, location, where}`. A row stops a write when it is an in-patient movement on another
-visit (`why: other_visit`: A01, A02, A03, a cancel, or an A04 or A05 of patient class I), a change to the record (`record_changed`:
+visit (`why: other_visit`: an A01, A02, A03 or cancel of any patient class but E or O, or an A04 or A05 of class I, unless that A05 was on file before the case's message, which is a date on a waiting list and shows), a change to the record (`record_changed`:
 A06, A07, A23, A29, A37, A44, A45, A47, A49, A50, A51), a merge naming the patient on either side, a cancel of this visit the receiver
 did not apply (`cancel`), or for an admission outside a chain a discharge of this visit the receiver did not apply (`discharge`).
 The gate's ordering check blocks with `FURTHER_MOVEMENT`, naming both visits; `PATIENT_UNREADABLE` when the case has no identifier;
 `FURTHER_NOT_READ` when a namespace's read failed or ran out of its time with headers left. These come before `NEWER_MESSAGE_PENDING` in the checks, and the case
-blocks for a person at once, with no wait. Any other ADT message for the patient, such as an out-patient A04, passes
+blocks for a person at once, with no wait. Any other ADT message for the patient, such as an out-patient A04 or an emergency department's A03, passes
 (`NO_FURTHER_MOVEMENT`) and goes on a resend's plan as a precondition line and in the approval task. The gate reads the snapshot
 at the proposal and reads again at dispatch, and the connector reads once more at the moment of the write, answering `refused`
 with reason `further_movement`. An admission the receiver answers 404 for isn't released by the site's policy (a 404 doesn't

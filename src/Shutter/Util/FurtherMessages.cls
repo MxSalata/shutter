@@ -5,7 +5,8 @@
 /// - stops: an in-patient movement on another visit (a clerk may be working round bad history, and Shutter can't say which
 ///   visit is real, so both are named for a person), a change to the record itself, a cancel or merge of this visit that the
 ///   receiver did not apply, and for an admission outside a chain a discharge the receiver did not apply.
-/// - shows: anything else about the patient in the ADT feed, such as an out-patient attendance. It stops nothing and goes on the plan.
+/// - shows: anything else about the patient in the ADT feed, such as an out-patient attendance or an emergency department's
+///   discharge. It stops nothing and goes on the plan.
 /// The site profile's further_messages.in_patient_movement says show to let another visit's movement through. The gate reads
 /// the snapshot at the proposal and reads again at dispatch, and the connector reads again at the moment of the write.
 /// What this can't see: a change made by hand at the receiver, which is why a lost admission's plan asks for its screen to be
@@ -74,7 +75,8 @@ ClassMethod Indexed(case As Shutter.Store.Case, rows As %DynamicArray) [ Private
     Set low = $SELECT(resetAt = "": "2000-01-01 00:00:00", 1: $TRANSLATE($PIECE(resetAt, "Z", 1), "T", " "))
     Set found = ##class(Shutter.Index.Message).ForPatient(case.PatientId, low), fi = found.%GetIterator()
     While fi.%GetNext(, .r) {
-        If $LISTFIND($LISTBUILD("register", "preadmit"), $CLASSMETHOD(json, "Str", r, "event")) {
+        // The index holds no patient class, and a movement's class decides whether it stops.
+        If $LISTFIND($LISTBUILD("register", "preadmit", "admit", "transfer", "discharge", "cancel_admit", "cancel_transfer", "cancel_discharge"), $CLASSMETHOD(json, "Str", r, "event")) {
             Set body = ##class(EnsLib.HL7.Message).%OpenId($CLASSMETHOD(json, "Str", r, "message_body_id"))
             If $ISOBJECT(body) Set r."patient_class" = ##class(Shutter.Util.OperationKey).Value(body, "PV1", "2")
         }
@@ -204,6 +206,8 @@ ClassMethod Classify(subject As %DynamicObject, rows As %DynamicArray, chainKind
             Continue:'((sent ]] since) || (time ]] eventTime))
             Set why = ..Weigh(r, rowVisit = visit, event, single)
             Continue:(why = "")
+            // A pre-admission on file before the case is a date on a waiting list, not a move.
+            If (why = "other_visit") && ($CLASSMETHOD(json, "Str", r, "event") = "preadmit") && '(sent ]] since) Set why = "shown"
             Set item = {}
             Set item.why = why, item.event = $CLASSMETHOD(json, "Str", r, "event"), item."message_type" = $CLASSMETHOD(json, "Str", r, "message_type"), item."visit_number" = rowVisit
             Set item."event_time" = time, item."sent_at" = sent, item."control_id" = control, item.location = $CLASSMETHOD(json, "Str", r, "location"), item.where = $CLASSMETHOD(json, "Str", r, "where")
@@ -244,8 +248,10 @@ ClassMethod Weigh(r As %DynamicObject, sameVisit As %Boolean, caseEvent As %Stri
     }
     If changes Quit "record_changed"
     If word = "merge" Quit "merge"
-    If $LISTFIND($LISTBUILD("admit", "transfer", "discharge", "cancel_admit", "cancel_transfer", "cancel_discharge"), word) Quit "other_visit"
-    If $LISTFIND($LISTBUILD("register", "preadmit"), word) && ($ZCONVERT($CLASSMETHOD(json, "Str", r, "patient_class"), "U") = "I") Quit "other_visit"
+    Set class = $ZCONVERT($CLASSMETHOD(json, "Str", r, "patient_class"), "U")
+    // In-patient moves stop. One that says it is an emergency or out-patient one moves no in-patient; any other class, or none, can't be told from one.
+    If $LISTFIND($LISTBUILD("admit", "transfer", "discharge", "cancel_admit", "cancel_transfer", "cancel_discharge"), word) Quit $SELECT($LISTFIND($LISTBUILD("E", "O"), class): "shown", 1: "other_visit")
+    If $LISTFIND($LISTBUILD("register", "preadmit"), word) && (class = "I") Quit "other_visit"
     If (type '= "") && ($EXTRACT(type, 1, 4) '= "ADT_") Quit ""
     Quit "shown"
 }
