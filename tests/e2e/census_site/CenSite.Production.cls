@@ -19,7 +19,7 @@ XData ProductionDefinition
     <Setting Target="Adapter" Name="Port">7411</Setting>
     <Setting Target="Host" Name="AlertOnError">1</Setting>
     <Setting Target="Host" Name="FailureTimeout">0</Setting>
-    <Setting Target="Host" Name="ReplyCodeActions">:?R=F:?E=F:~=S:?A=C:*=S:I?=W:T?=C</Setting>
+    <Setting Target="Host" Name="ReplyCodeActions">:?R=F,:?E=F,:~=S,:?A=C,:*=S,:I?=W,:T?=C</Setting>
   </Item>
   <Item Name="Cen Two" ClassName="EnsLib.HL7.Operation.TCPOperation" PoolSize="1" Enabled="true">
     <Setting Target="Adapter" Name="IPAddress">127.0.0.1</Setting>

@@ -1,4 +1,4 @@
-/// One run of the failure coverage census (docs/CONTRACTS.md, section 15): its scope, window, what could be read and what it found.
+/// One run of the failure coverage census (docs/CONTRACTS.md, section 17): its scope, window, what could be read and what it found.
 /// Its rows are Shutter.Store.CensusItem. Written only by the census, and it holds no message content.
 Class Shutter.Store.CensusRun Extends %Persistent
 {

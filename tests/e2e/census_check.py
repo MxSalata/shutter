@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The failure coverage census (docs/CONTRACTS.md, section 15) on real failures in a real watched namespace, on stock classes.
+"""The failure coverage census (docs/CONTRACTS.md, section 17) on real failures in a real watched namespace, on stock classes.
 
     python3 tests/e2e/census_check.py [--port 52880] [--ctr census-check] [--image IMAGE] [--module core] [--keep]
 
@@ -131,9 +131,10 @@ def send(text, name):
     return r.stdout.strip()
 
 
-def deliveries(target, final=True):
-    """(header id, session, status, control) of each request header to the item."""
-    return [[r[0], r[1], int(r[2])] for r in sql_rows("CENSUS", f"SELECT ID, SessionId, Status FROM Ens.MessageHeader WHERE Type = 1 AND TargetConfigName = '{target}' ORDER BY ID", ["ID", "SessionId", "Status"])]
+def deliveries(target):
+    """(header id, session, status) of each request header to the item; completed with the error flag reads as error."""
+    rows = sql_rows("CENSUS", f"SELECT ID, SessionId, Status, IsError FROM Ens.MessageHeader WHERE Type = 1 AND TargetConfigName = '{target}' ORDER BY ID", ["ID", "SessionId", "Status", "IsError"])
+    return [[r[0], r[1], 8 if r[3] == "1" and r[2] == "9" else int(r[2])] for r in rows]
 
 
 def wait_deliveries(target, n, seconds=60):

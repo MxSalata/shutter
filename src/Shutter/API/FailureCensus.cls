@@ -1,17 +1,8 @@
-/// The failure coverage census's routes (docs/CONTRACTS.md, section 15), under /failure-census, all Shutter_Operate. A caller
-/// names a registered receiver and a window, never a namespace or SQL text. The run happens in the Failure Census item.
+/// The failure coverage census's routes (docs/CONTRACTS.md, section 17), under /failure-census, all Shutter_Operate. A caller
+/// names a registered receiver and a window, never a namespace or SQL text. The run happens in the Failure Census item. The
+/// routes are in Shutter.API.Dispatch's map.
 Class Shutter.API.FailureCensus Extends Shutter.API.Dispatch
 {
-
-XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
-{
-<Routes>
-  <Route Url="/" Method="GET" Call="List"/>
-  <Route Url="/" Method="POST" Call="Start"/>
-  <Route Url="/:id.csv" Method="GET" Call="Csv"/>
-  <Route Url="/:id" Method="GET" Call="Get"/>
-</Routes>
-}
 
 /// Whether it is on, what it can run on, its limits and the latest runs.
 ClassMethod List() As %Status

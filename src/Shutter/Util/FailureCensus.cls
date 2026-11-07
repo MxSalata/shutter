@@ -1,4 +1,4 @@
-/// The failure coverage census (docs/CONTRACTS.md, section 15): on demand, off unless the site profile's failure_census.enabled is
+/// The failure coverage census (docs/CONTRACTS.md, section 17): on demand, off unless the site profile's failure_census.enabled is
 /// true, it compares the deliveries a watched receiver's item failed, as the engine shows them, with Shutter's cases, and reports
 /// which have a traceable case, which have none and which cannot be told. It reads the source and writes only its own report: it
 /// never opens or closes a case and never sends anything. A cap hit or a purge makes it incomplete, and a source it cannot read

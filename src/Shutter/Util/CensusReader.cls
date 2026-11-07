@@ -1,4 +1,4 @@
-/// Reads one receiver's deliveries from a watched namespace for the failure coverage census (docs/CONTRACTS.md, section 15), as
+/// Reads one receiver's deliveries from a watched namespace for the failure coverage census (docs/CONTRACTS.md, section 17), as
 /// plain data. It reads only: no lock, no write, no message content copied. Inside the other namespace only Ens, %SQL, %SYS and
 /// the message classes the headers name are called, so the read does not depend on what is mapped there, as with
 /// Shutter.Util.ProductionReader. A source that cannot be read gives readable false and the reason, never a count: a query

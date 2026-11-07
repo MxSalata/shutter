@@ -1,4 +1,4 @@
-/// The failure coverage census (CONTRACTS 15): it compares a watched receiver's failed deliveries with Shutter's cases, and
+/// The failure coverage census (CONTRACTS 17): it compares a watched receiver's failed deliveries with Shutter's cases, and
 /// never opens or closes a case and never sends anything. The fixture here uses real Ens.MessageHeader rows and real cases in
 /// this namespace, under its own item names, all taken away afterwards; tests/e2e/census_check.py plays it on real failures in a
 /// real watched namespace.

@@ -1,4 +1,4 @@
-/// One failed delivery in a census run, or a case whose origin is gone (docs/CONTRACTS.md, section 15). Its key is the source
+/// One failed delivery in a census run, or a case whose origin is gone (docs/CONTRACTS.md, section 17). Its key is the source
 /// namespace, the delivery's header and the target. It holds ids and codes, never message content.
 Class Shutter.Store.CensusItem Extends %Persistent
 {
@@ -43,7 +43,7 @@ Property LinkQuality As %String(MAXLEN = 16);
 /// in_scope, excluded or unknown.
 Property Eligibility As %String(MAXLEN = 16);
 
-/// Why, as a code (CONTRACTS 15).
+/// Why, as a code (CONTRACTS 17).
 Property Explanation As %String(MAXLEN = 64);
 
 /// The row of a run for a delivery's header, or "".
