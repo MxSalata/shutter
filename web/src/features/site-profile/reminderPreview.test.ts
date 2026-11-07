@@ -140,13 +140,13 @@ describe('the reminder in the site profile', () => {
 
 describe('the preview, with made-up patients', () => {
   it('follows the setting for patient detail', () => {
-    expect(reminderPreview({ patient_detail: 'none' }).body).toMatch(/^C-000101$/m);
+    expect(reminderPreview({ patient_detail: 'none' }).body).toMatch(/^C-000101, open 11 hours$/m);
     expect(reminderPreview({ patient_detail: 'none' }).body).not.toMatch(/hospital number/);
     expect(reminderPreview(undefined).body).toMatch(
-      /^C-000101, hospital number TEST-0001 \(DEMO\), visit V-1001$/m,
+      /^C-000101, hospital number TEST-0001 \(DEMO\), visit V-1001, open 11 hours$/m,
     );
     expect(reminderPreview({ patient_detail: 'identifiers_initial' }).body).toMatch(
-      /visit V-1001, first name A$/m,
+      /visit V-1001, first name A, open 11 hours$/m,
     );
   });
 
@@ -162,10 +162,16 @@ describe('the preview, with made-up patients', () => {
     expect(reminderPreview(undefined).body).toMatch(/Sign in to Shutter to see them\./);
   });
 
+  it('says each case\'s age and that the mail waited for the window', () => {
+    const p = reminderPreview({ window_start: '07:30', window_end: '19:00', days: ['mon', 'sat'] });
+    expect(p.body).toMatch(/^C-000102, hospital number TEST-0002 \(DEMO\), visit V-1002, open 5 hours$/m);
+    expect(p.body).toMatch(/Reminders go only from 07:30 to 19:00 on Mon, Sat\. 1 of these cases passed its/);
+  });
+
   it('keeps identifiers out of the subject, and says nobody reviewed it', () => {
     for (const patient_detail of ['none', 'identifiers', 'identifiers_initial']) {
       const p = reminderPreview({ patient_detail });
-      expect(p.subject).toBe('Shutter: 3 cases need a person, the oldest open 11 hours');
+      expect(p.subject).toBe('Shutter: 3 cases need a person, the oldest open 11 hours, waited for the window');
       expect(p.body).toMatch(/nobody reviewed it/);
     }
   });

@@ -114,6 +114,16 @@ ClassMethod InWindow(now As %String, settings As %DynamicObject) As %Boolean
     Quit '(settings."window_start" ] time) && (settings."window_end" ] time)
 }
 
+/// Whether a threshold passed before today's window opened, so the mail came later than the threshold because of the window.
+ClassMethod Waited(openedAt As %String, hours As %Integer, now As %String, settings As %DynamicObject) As %Boolean
+{
+    Set passedAt = ..Shifted(openedAt, hours * 3600)
+    If passedAt = "" Quit 0
+    Set local = ..LocalTime(now, settings.zone), passed = ..LocalTime(passedAt _ "Z", settings.zone)
+    If (local = "") || (passed = "") Quit 0
+    Quit ($EXTRACT(local, 1, 10) _ "T" _ settings."window_start" _ ":00") ] passed
+}
+
 /// Who is due what at a time. cases: objects with caseId, state, disposition, openedAt, teamAddress, teamName, reminded
 /// (the thresholds already sent) and whatever the digest will show. lastSent: the time of the last digest per lowercased
 /// address (Shutter.Store.ReminderDigest.LastSent). The answer: digests, one per address with its items (threshold,
@@ -156,7 +166,7 @@ ClassMethod Decide(cases As %DynamicArray, now As %String, settings As %DynamicO
                 }
             }
             Continue:'at(key)
-            Do out.digests.%Get(at(key) - 1).items.%Push({"threshold": (threshold), "ageSeconds": (age), "case": (c)})
+            Do out.digests.%Get(at(key) - 1).items.%Push({"threshold": (threshold), "ageSeconds": (age), "waited": (..Waited(c.openedAt, settings.%Get(threshold _ "_hours"), now, settings)), "case": (c)})
         }
     }
     Quit out
@@ -209,7 +219,16 @@ ClassMethod CaseLine(c As %DynamicObject, detail As %String) As %String
     Quit line
 }
 
-/// The subject and text of a digest. No identifier goes in the subject. One case in two thresholds is one case.
+/// The window in words, as a person reads it.
+ClassMethod WindowWords(settings As %DynamicObject) As %String [ Private ]
+{
+    Set days = "", it = settings.days.%GetIterator()
+    While it.%GetNext(, .d) { Set days = days _ $SELECT(days = "": "", 1: ", ") _ $ZCONVERT(d, "W") }
+    Quit "from " _ settings."window_start" _ " to " _ settings."window_end" _ " on " _ days
+}
+
+/// The subject and text of a digest: each case's real age, and whether the mail waited for the window. No identifier goes
+/// in the subject. One case in two thresholds is one case.
 ClassMethod Compose(digest As %DynamicObject, settings As %DynamicObject, Output subject As %String, Output body As %String)
 {
     Set nl = $CHAR(13, 10), oldest = 0, team = 0, officer = 0, cases = 0, lines = "", more = 0
@@ -218,22 +237,30 @@ ClassMethod Compose(digest As %DynamicObject, settings As %DynamicObject, Output
         If item.threshold = "officer" { Set officer = officer + 1 } Else { Set team = team + 1 }
         If item.ageSeconds > oldest Set oldest = item.ageSeconds
         Set c = item.case
+        If item.waited Set waited(c.caseId) = ""
         Continue:$DATA(seen(c.caseId))
         Set seen(c.caseId) = "", cases = cases + 1
         Set receiver = ..Line(c.receiver), kind = ..Line($TRANSLATE(c.failureKind, "_", " "))
         Set group = $SELECT(receiver '= "": receiver, 1: "the downstream system") _ ", " _ $SELECT(kind '= "": kind, 1: "no failure type recorded")
         If '$DATA(count(group)) Set order($INCREMENT(order)) = group, count(group) = 0
         Set count(group) = count(group) + 1
-        If cases <= ..#MAXLINES { Set lines = lines _ ..CaseLine(c, settings."patient_detail") _ nl } Else { Set more = more + 1 }
+        If cases <= ..#MAXLINES { Set lines = lines _ ..CaseLine(c, settings."patient_detail") _ ", open " _ ..Hours(item.ageSeconds) _ nl } Else { Set more = more + 1 }
     }
+    Set late = 0, k = ""
+    For { Set k = $ORDER(waited(k)) Quit:k=""  Set late = late + 1 }
     Set they = $SELECT(cases = 1: "1 case needs", 1: cases _ " cases need")
-    Set subject = "Shutter: " _ they _ " a person, the oldest open " _ ..Hours(oldest)
+    Set subject = "Shutter: " _ they _ " a person, the oldest open " _ ..Hours(oldest) _ $SELECT(late > 0: ", waited for the window", 1: "")
     Set name = ..Line(digest.toName)
     Set body = $SELECT(name '= "": "To " _ name _ ",", 1: "Hello,") _ nl _ nl
     Set body = body _ $SELECT(cases = 1: "1 case in Shutter needs", 1: cases _ " cases in Shutter need") _ " a person. This reminder went out by itself and nobody reviewed it. Sending it changed no case's state." _ nl _ nl
     If team > 0 Set body = body _ "First reminder, open " _ settings."team_hours" _ " hours or more: " _ team _ nl
     If officer > 0 Set body = body _ "Later reminder, open " _ settings."officer_hours" _ " hours or more: " _ officer _ nl
-    Set body = body _ "The oldest has been open " _ ..Hours(oldest) _ "." _ nl _ nl
+    Set body = body _ "The oldest has been open " _ ..Hours(oldest) _ "." _ nl
+    If late > 0 {
+        Set who = $SELECT(cases = 1: "This case passed its", late = 1: "1 of these cases passed its", 1: late _ " of these cases passed their")
+        Set body = body _ "Reminders go only " _ ..WindowWords(settings) _ ". " _ who _ " reminder time before today's window opened, so this mail waited for it." _ nl
+    }
+    Set body = body _ nl
     For i = 1:1:$GET(order) { Set body = body _ order(i) _ ": " _ count(order(i)) _ nl }
     Set body = body _ nl _ lines
     If more > 0 Set body = body _ "and " _ more _ " more" _ nl

@@ -74,10 +74,16 @@ export function reminderPreview(r: Reminders | undefined): { subject: string; bo
   const officerHours = r?.officer_hours ?? REMINDER_DEFAULTS.officer_hours;
   const url = r?.sign_in_url ?? '';
   const oldest = Math.max(...SAMPLE.map((c) => c.hours));
+  const start = r?.window_start ?? REMINDER_DEFAULTS.window_start;
+  const end = r?.window_end ?? REMINDER_DEFAULTS.window_end;
+  const days = (r?.days ?? REMINDER_DEFAULTS.days).map((d) => DAY_LABELS[d] ?? d).join(', ');
   const line = (c: (typeof SAMPLE)[number]) => {
-    if (detail === 'none') return c.caseId;
+    const age = `open ${hours(c.hours)}`;
+    if (detail === 'none') return `${c.caseId}, ${age}`;
     const ids = `${c.caseId}, hospital number ${c.id} (DEMO), visit ${c.visit}`;
-    return detail === 'identifiers_initial' ? `${ids}, first name ${c.initial}` : ids;
+    return detail === 'identifiers_initial'
+      ? `${ids}, first name ${c.initial}, ${age}`
+      : `${ids}, ${age}`;
   };
   const groups = new Map<string, number>();
   for (const c of SAMPLE) {
@@ -86,7 +92,7 @@ export function reminderPreview(r: Reminders | undefined): { subject: string; bo
   }
   const later = SAMPLE.filter((c) => c.later).length;
   return {
-    subject: `Shutter: ${SAMPLE.length} cases need a person, the oldest open ${hours(oldest)}`,
+    subject: `Shutter: ${SAMPLE.length} cases need a person, the oldest open ${hours(oldest)}, waited for the window`,
     body: [
       'Hello,',
       '',
@@ -95,6 +101,7 @@ export function reminderPreview(r: Reminders | undefined): { subject: string; bo
       `First reminder, open ${teamHours} hours or more: ${SAMPLE.length - later}`,
       `Later reminder, open ${officerHours} hours or more: ${later}`,
       `The oldest has been open ${hours(oldest)}.`,
+      `Reminders go only from ${start} to ${end} on ${days}. 1 of these cases passed its reminder time before today's window opened, so this mail waited for it.`,
       '',
       ...[...groups].map(([g, n]) => `${g}: ${n}`),
       '',

@@ -227,6 +227,43 @@ Method TestTheDigestsWords()
     Do $$$AssertTrue(body [ "Sign in to Shutter to see it.", "no address: says where to go in words")
 }
 
+/// Each case's real age, and that the mail waited: a Friday evening case in Monday's first mail, at each level of detail.
+Method TestTheDigestSaysTheAgeAndTheWait()
+{
+    Set row = {"settings": {"officer_address": ""}}
+    Set c = {"caseId": "C-1", "state": "blocked", "teamAddress": "team@example.nhs.uk", "openedAt": "2026-11-06T18:30:00Z"}
+    For detail = "none", "identifiers", "identifiers_initial" {
+        Set s = ..RowSettings(row), s."patient_detail" = detail
+        Set r = ##class(Shutter.Util.CaseReminder).Decide([(c)], "2026-11-09T08:00:00Z", s, {})
+        Do ##class(Shutter.Util.CaseReminder).Compose(r.digests.%Get(0), s, .subject, .body)
+        Do $$$AssertTrue(subject [ "the oldest open 61 hours, waited for the window", detail _ ": the subject")
+        Do $$$AssertTrue(body [ "C-1", detail _ ": its line")
+        Do $$$AssertTrue(body [ ", open 61 hours", detail _ ": its age on its line")
+        Do $$$AssertTrue(body [ "Reminders go only from 08:00 to 18:00 on Mon, Tue, Wed, Thu, Fri. This case passed its reminder time before today's window opened, so this mail waited for it.", detail _ ": why it came late")
+    }
+    // Passing the threshold inside today's window: nothing waited.
+    Set c.openedAt = "2026-11-04T08:00:00Z"
+    Set r = ##class(Shutter.Util.CaseReminder).Decide([(c)], "2026-11-04T12:00:00Z", s, {})
+    Do ##class(Shutter.Util.CaseReminder).Compose(r.digests.%Get(0), s, .subject, .body)
+    Do $$$AssertNotTrue(subject [ "waited", "in the window: the subject says no wait")
+    Do $$$AssertNotTrue(body [ "waited for it", "and nor does the text")
+    Do $$$AssertTrue(body [ ", open 4 hours", "with its age")
+    // Friday's window has passed the case by ten minutes, and the next run is Monday's.
+    Do $$$AssertEquals(##class(Shutter.Util.CaseReminder).Waited("2026-11-06T13:50:00Z", 4, "2026-11-09T08:00:00Z", s), 1, "passed at 17:50 on Friday, in Monday's mail")
+    Do $$$AssertEquals(##class(Shutter.Util.CaseReminder).Waited("2026-11-09T04:00:00Z", 4, "2026-11-09T08:00:00Z", s), 0, "passed as the window opened")
+    Do $$$AssertEquals(##class(Shutter.Util.CaseReminder).Waited("2026-11-09T03:59:59Z", 4, "2026-11-09T08:00:00Z", s), 1, "a second before it opened")
+}
+
+/// One of two cases waited: the words count it, and name no case that did not.
+Method TestOneOfTwoWaited()
+{
+    Set a = ..Item("C-1", "team", 30), a.waited = 1
+    Do ..Compose("none", [(a), (..Item("C-2", "team", 4))], .subject, .body)
+    Do $$$AssertTrue(body [ "1 of these cases passed its reminder time", "counted")
+    Do $$$AssertTrue(body [ "C-1, open 30 hours", "the first's age")
+    Do $$$AssertTrue(body [ "C-2, open 4 hours", "the second's age")
+}
+
 Method TestPatientDetail()
 {
     Set items = [(..Item("C-1", "team", 5))]
@@ -421,7 +458,6 @@ Method TestGatherReadsOnlyWhatCanGo()
     Do $$$AssertNotTrue($ISOBJECT(..Gathered(officer)), "both recorded: not read again")
     Do $$$AssertNotTrue($ISOBJECT(..Gathered(alone)), "and with no officer set, the team's is all it can get")
     Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM Shutter_Store.CaseReminder WHERE ""Case"" = ?", ..CaseRowId)
-    Do ##class(Shutter.Store.Case).%OpenId(..CaseRowId, 0).%Reload()
     Do $$$AssertTrue($ISOBJECT(..Gathered(officer)), "no record: read")
     Set case = ##class(Shutter.Store.Case).%OpenId(..CaseRowId)
     Set case.Disposition = "abandoned"
