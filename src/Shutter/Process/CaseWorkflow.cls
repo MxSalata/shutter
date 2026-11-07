@@ -1170,7 +1170,7 @@ Method BedWaitOutcome(case As Shutter.Store.Case, result As Shutter.Msg.GateResu
         While ci.%GetNext(, .c) {
             Continue:'$ISOBJECT(c)
             Set rc = ##class(Shutter.Util.Json).Str(c, "reason_code")
-            // Further messages for the patient come first and are no wait: a person reads what the check names.
+            // Further messages for the patient are no wait: a person reads what the check names.
             If $LISTFIND($LISTBUILD("FURTHER_MOVEMENT", "PATIENT_UNREADABLE", "FURTHER_NOT_READ", "ENGINE_UNREADABLE"), rc) {
                 Set waited = 1, detail = ##class(Shutter.Util.Json).Str(c, "detail")
                 Set case.Headline = "Stopped for a person: " _ ##class(Shutter.Util.Json).Clip(detail, 200)

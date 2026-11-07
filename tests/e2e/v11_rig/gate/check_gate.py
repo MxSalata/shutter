@@ -99,15 +99,15 @@ Set sc=##class(Security.Applications).Create("/beds/api",.a) Write !,"[beds] ",s
         if not got.get("ok"):
             raise RigBroken(f"no connector for {name}: {got}")
 
-    def case_of(self, control, seconds=120):
-        """The case for this message once it has stopped moving, or None."""
+    def case_of(self, control, seconds=120, item=""):
+        """The case for this message, at this receiver if named, once it has stopped moving, or None."""
         enc = f"ENC-{control}"
         end = time.time() + seconds
         a = self.api()
         while time.time() < end:
             _, got = a.get("/cases?limit=500")
             for c in (got.get("items", []) if isinstance(got, dict) else []):
-                if c.get("encounterId") == enc and c.get("state") in ("awaiting_approval", "blocked", "escalated", "resolved", "failed"):
+                if c.get("encounterId") == enc and (not item or c.get("receiver") == item) and c.get("state") in ("awaiting_approval", "blocked", "escalated", "resolved", "failed"):
                     return c["caseId"]
             time.sleep(2)
         return None
@@ -159,15 +159,17 @@ Set sc=##class(Security.Applications).Create("/beds/api",.a) Write !,"[beds] ",s
         time.sleep(4)
 
 
-def still_trying_then_delivered(s, ns, item, service, port, tag):
+def still_trying_then_delivered(s, ns, item, service, port, tag, also_up=0):
     """Engine and approval both on one message: refused while the engine tries, one frame when the listener returns, then a re-plan
     that sees the delivery."""
     r = s.r
     step(f"{tag}: {item}, retrying for ever, nothing listening, the receiver's API up")
     s.drain(ns, item, port)
-    control = f"{tag}01"
+    if also_up and not r.listening(also_up):
+        r.listener_up(also_up, {"mode": "up"})
+    control = f"{tag}{int(time.time()) % 10000}"
     r.send(service, r.adt("A01", control), control)
-    case_id = s.case_of(control)
+    case_id = s.case_of(control, item=item)
     check(f"{tag}: a case opens", bool(case_id))
     if not case_id:
         return
@@ -194,6 +196,40 @@ def still_trying_then_delivered(s, ns, item, service, port, tag):
     check(f"{tag}: the plan's disposition kept", c.get("disposition") == "resend", c.get("disposition"))
     check(f"{tag}: a person's reopen left WaitsOnEngine empty", not c.get("waitsOnEngine"), c.get("waitsOnEngine"))
     check(f"{tag}: still one frame", r.heard(port).count(control) == 1, r.heard(port))
+    r.listener_down(port)
+
+
+def older_case(s, ns, item, service, port, second, tag):
+    """A routed production, where the first header of a session is the service's and the delivery header is another: a case that
+    still carries the first as its origin, as a case opened before the alert route preferred the delivery header does."""
+    r = s.r
+    step(f"{tag}: the origin header is the service's, not the delivery header")
+    s.drain(ns, item, port)
+    if not r.listening(second):
+        r.listener_up(second, {"mode": "up"})
+    control = f"{tag}01"
+    r.send(service, r.adt("A01", control), control)
+    case_id = s.case_of(control, item=item)
+    check(f"{tag}: a case opens", bool(case_id))
+    if not case_id:
+        return
+    delivery = [h["id"] for h in r.headers(ns, item) if h["control"] == control][0]
+    first = r.read_rows(ns, f"""Set rs=##class(%SQL.Statement).%ExecDirect(,"SELECT TOP 1 ID FROM Ens.MessageHeader WHERE SessionId=(SELECT SessionId FROM Ens.MessageHeader WHERE ID={delivery}) ORDER BY ID") While rs.%Next() {{ Write !,"<<<",rs.%Get("ID"),">>>",! }}""")[0]
+    check(f"{tag}: the origin and the delivery header differ", first != delivery, (first, delivery))
+    r.session(r.SHUTTER, f"""Set c=##class(Shutter.Store.Case).ByCaseId("{case_id}") Set c.OriginHeaderId="{first}" Write !,c.%Save(),!""")
+    s.reopen(case_id)
+    time.sleep(3)
+    s.settled(case_id, away_from=("awaiting_approval",))
+    c, words = s.settled(case_id)
+    check(f"{tag}: read on the delivery header: still trying", c.get("waitsOnEngine") == f"{ns}:{delivery}", (c.get("waitsOnEngine"), c.get("headline"), words[-400:]))
+    r.listener_up(port, {"mode": "up"})
+    r.wait_until(lambda: control in r.heard(port), 60)
+    time.sleep(6)
+    s.reopen(case_id)
+    time.sleep(3)
+    c, words = s.settled(case_id, away_from=("blocked",))
+    check(f"{tag}: and then delivered, resolved", c.get("state") == "resolved" and f"(header {delivery})" in (c.get("outcome") or ""), (c.get("state"), c.get("outcome")))
+    check(f"{tag}: one frame", r.heard(port).count(control) == 1, r.heard(port))
     r.listener_down(port)
 
 
@@ -361,7 +397,8 @@ def main():
         if "plain" in only:
             still_trying_then_delivered(s, r.PLAIN, "Retry Out", r.RETRY_IN, r.RETRY, "PL")
         if "routed" in only:
-            still_trying_then_delivered(s, r.ROUTED, "LIMS Out", r.ROUTED_IN, r.LIMS, "RT")
+            still_trying_then_delivered(s, r.ROUTED, "LIMS Out", r.ROUTED_IN, r.LIMS, "RT", also_up=r.SECOND)
+            older_case(s, r.ROUTED, "LIMS Out", r.ROUTED_IN, r.LIMS, r.SECOND, "RO")
         if "delayed" in only:
             delayed(s, r.PLAIN, "Retry Out", r.RETRY_IN, r.RETRY, "DL")
         if "not_established" in only:

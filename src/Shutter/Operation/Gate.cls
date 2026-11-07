@@ -107,6 +107,9 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
     // one of them (v1.34), until they are delivered.
     Set pendingMsgs = summary.%Get("pending_messages")
     If isWrite {
+        // Whether the engine still has this message, or has delivered it (Shutter.Util.EngineCheck). It comes first: what the engine
+        // has done decides whether there is a write to weigh at all. A watched case with no origin header has nothing to read it by.
+        If (case.SourceNamespace '= "") && (case.OriginHeaderId '= "") Do checks.%Push(..EngineRow(case))
         // Further messages for the patient, on any visit (Shutter.Util.FurtherMessages): the snapshot's at the proposal, read
         // again at dispatch, since a snapshot may be hours old by the time a person approves. A hit stops the plan for a person.
         Set further = $SELECT(request.Stage = "proposal": summary.%Get("further_messages"), 1: ##class(Shutter.Util.FurtherMessages).Find(case))
@@ -119,9 +122,6 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
         } ElseIf $ISOBJECT(further) {
             Do ..Check(checks, "ordering", "pass", "NO_FURTHER_MOVEMENT", "No further in-patient movement for this patient" _ $SELECT(##class(Shutter.Util.FurtherMessages).Count(further, "shows") > 0: "; " _ ##class(Shutter.Util.FurtherMessages).Count(further, "shows") _ " other message(s) on file, shown on the plan", 1: ""))
         }
-        // Whether the engine still has this message, or has delivered it (Shutter.Util.EngineCheck). A watched case with no origin
-        // header has nothing to read it by, as before.
-        If (case.SourceNamespace '= "") && (case.OriginHeaderId '= "") Do checks.%Push(..EngineRow(case))
         // The occupied bed (v1.28): a write into a bed another encounter holds waits for them to leave, or never goes.
         Set bedConflict = $SELECT($ISOBJECT(conds): ##class(Shutter.Util.Json).Str(conds, "bed_conflict", "none"), 1: "none")
         If bedConflict '= "none" Do ..BedConflictCheck(checks, case, summary, bedConflict)
