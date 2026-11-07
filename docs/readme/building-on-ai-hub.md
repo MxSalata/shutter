@@ -1,6 +1,6 @@
 # Building on AI Hub and Interoperability: what worked, what was hard
 
-What I found building Shutter, measured on build `2026.3.0AI.154.0`; the longer story is article 1 [link at submission]. On `2027.1.0AI.109.0`, `Run()`'s three arguments, the bare `object` and the missing IPM still hold; the rest wasn't re-run.
+What I found building Shutter, measured on build `2026.3.0AI.154.0`; the longer story is [article 1](https://community.intersystems.com/post/building-shutter-iris-ai-hub-what-worked-what-was-hard-and-what-it-cost). On `2027.1.0AI.109.0`, `Run()`'s three arguments, the bare `object` and the missing IPM still hold; the rest wasn't re-run.
 
 - **Worked well:** typed tools (a `%JSON.Adaptor` parameter gives the model a full JSON Schema and arrives as an instance, so a terminal tool refuses a bad result with reasons); the two policies; FastEmbed knowledge bases, built from Markdown in about 11 seconds; prompt caching.
 - **Hard:** `agent.Run()` takes three arguments (the guide shows four) and calls only `OnRunStart` and `OnRunComplete`, so a token budget is judged after the run, and `MaxIterations` and the provider's timeout bound the loop.
