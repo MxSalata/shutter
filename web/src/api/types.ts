@@ -699,6 +699,15 @@ export interface BlockedReason {
   checks?: GateCheck[];
 }
 
+/** GET /cases/{id}/further-stop (CONTRACTS 6.5). */
+export interface FurtherStop {
+  rows: { line: string; visit: string }[];
+  digest: string;
+  releasable: boolean;
+  whyNot: string;
+  release: { digest: string; by: string; at: string; reason: string; stands: boolean } | null;
+}
+
 export interface BlindResendPreview {
   wouldApply: boolean;
   /** would_apply or would_not_apply for a dry run the receiver rolled back; anything else is not one. */

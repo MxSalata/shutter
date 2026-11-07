@@ -10,6 +10,7 @@ import {
   type AttemptView,
   type BlindResendPreview,
   type BlockedReason,
+  type FurtherStop,
   type RecoveryControl,
   type ReceiverCheck,
   type CaseDetail,
@@ -426,6 +427,42 @@ export function useReinvestigate(caseId: string) {
       api.post<{ caseId: string; state: string }>(
         `/cases/${seg(caseId)}/reinvestigate`,
         { reason },
+        { idempotencyKey },
+      ),
+    onSettled: async () => {
+      await client.invalidateQueries({ queryKey: keys.case(caseId) });
+    },
+  });
+}
+
+/** The rows that stop a write for another visit's movement, read afresh, with the digest a release must name (CONTRACTS 6.5). */
+export function useFurtherStop(caseId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: keys.part(caseId, 'further-stop'),
+    enabled,
+    queryFn: () => api.get<FurtherStop>(`/cases/${seg(caseId)}/further-stop`),
+  });
+}
+
+/**
+ * An approver releases that one stop for the rows they read, with a reason. 409 rows_changed when a fresh read gives other
+ * rows, not_releasable when the stop isn't only another visit's movement. The case then goes through fresh evidence.
+ */
+export function useFurtherRelease(caseId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      digest,
+      reason,
+      idempotencyKey,
+    }: {
+      digest: string;
+      reason: string;
+      idempotencyKey: string;
+    }) =>
+      api.post<{ caseId: string; state: string }>(
+        `/cases/${seg(caseId)}/further-release`,
+        { digest, reason },
         { idempotencyKey },
       ),
     onSettled: async () => {

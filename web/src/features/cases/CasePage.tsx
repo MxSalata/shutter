@@ -47,6 +47,7 @@ import { s8Pair } from './case/compare';
 import { SHOW_EVIDENCE } from './case/evidenceLinks';
 import { rounds } from './case/derive';
 import { nextAction, outcomeCaseOf, provenanceOf, recordedApprovalTime } from './case/outcome';
+import { FurtherStopPanel } from './case/FurtherStopPanel';
 import { useCaseFacts } from './case/useCaseFacts';
 import { AskButton, AskSurface } from './ask/AskSurface';
 import { ConveneBoard } from './case/ConveneBoard';
@@ -405,6 +406,9 @@ function CaseBody({ c }: { c: CaseDetail }) {
               {/* A stopped case's hand-off to the team, with the action it serves, after the board; the main button
                   only when escalating is the action */}
               {stopped ? <EscalationPanel c={c} primary={nextAction(facts).escalate} /> : null}
+              {c.state === 'blocked' && facts.blocked?.code === 'FURTHER_MOVEMENT' ? (
+                <FurtherStopPanel c={c} />
+              ) : null}
               <AbandonPanel c={c} events={events.data} />
               <CaseStory
                 c={c}
