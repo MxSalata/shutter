@@ -30,6 +30,7 @@ import { CaseActionButton } from './case/CaseActionButton';
 import { caseActionOf, type ActionPlace } from './case/caseAction';
 import { closeNeedsApprover } from '../site-profile/profile';
 import { EvidencePanel } from './case/EvidencePanel';
+import { WarehouseHistoryPanel } from './case/WarehouseHistoryPanel';
 import { revealSection } from './case/revealSection';
 import { EscalationPanel } from './case/EscalationPanel';
 import { AbandonPanel } from './case/AbandonPanel';
@@ -421,6 +422,7 @@ function CaseBody({ c }: { c: CaseDetail }) {
               focus={focus}
               onFocused={clearFocus}
             />
+            <WarehouseHistoryPanel caseId={c.caseId} canRead={me?.can?.operate ?? me?.operator ?? false} />
           </Tabs.Panel>
           <Tabs.Panel value="audit" pt="md" {...PANEL}>
             <Stack gap="md">

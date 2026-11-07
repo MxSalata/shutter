@@ -750,6 +750,13 @@ export const handlers = [
   http.get(`${BASE}/cases/:id/snapshot`, ({ params }) =>
     part(String(params.id), (c) => withPrecedents(c.snapshot), 'no_snapshot'),
   ),
+  // Warehouse history is a site's own option: the recorded demo has it off, so the panel is not there
+  http.get(`${BASE}/cases/:id/warehouse-history`, ({ params }) => {
+    if (!session) return signedOut();
+    const id = String(params.id);
+    if (!caseOf(id)) return error(404, 'not_found', `No case ${id}`);
+    return HttpResponse.json({ enabled: false, read: null });
+  }),
   // The precedents these conditions matched at the case's receiver when its evidence was collected (above)
   http.get(`${BASE}/cases/:id/precedents`, ({ params }) => {
     if (!session) return signedOut();

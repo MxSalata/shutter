@@ -5,6 +5,7 @@ import { isApiError } from '@/lib/errors';
 import {
   CLOSED_STATES,
   type ApprovalDecision,
+  type WarehouseHistoryView,
   type ApprovalsView,
   type AttemptView,
   type BlindResendPreview,
@@ -269,6 +270,21 @@ export const useClosure = (id: string, closed: boolean) =>
  */
 export const usePrecedents = (id: string, enabled: boolean) =>
   useCasePart<PrecedentsView>(id, 'precedents', '/precedents', false, enabled);
+
+/** Warehouse history's newest read, and whether it is on at all. A server older than the route answers 404, read as null. */
+export const useWarehouseHistory = (id: string) =>
+  useCasePart<WarehouseHistoryView>(id, 'warehouse-history', '/warehouse-history', false);
+
+/** Read warehouse history now, when a person asks. It changes nothing on the case. */
+export function useReadWarehouseHistory(caseId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<WarehouseHistoryView>(`/cases/${seg(caseId)}/warehouse-history`),
+    onSuccess: async () => {
+      await client.invalidateQueries({ queryKey: keys.part(caseId, 'warehouse-history') });
+    },
+  });
+}
 
 /**
  * Retire a precedent (approver only): it stays on record and counts for nothing. 409 already_retired names who

@@ -203,6 +203,50 @@ ORDER BY EventTimeUTC DESC, SourceRecordedAtUTC DESC, SourceEventId DESC
 
 At most 200 rows are returned. A row 201 means the list is cut short, and the reader says so. Rows with no event time sort last, so they are the first to be cut.
 
+## The reference reader
+
+Shutter ships a small reader for these tables, off by default. A site that wants only the tables and the queries can stop here: the specification stands without it.
+
+Until a site asks for it, there is no reader, no reader user and no tables, and the case page shows nothing of it. To set it up, an administrator runs this once in a terminal session in the namespace Shutter is installed in. The password is the new reader user's own, and must not be one used elsewhere.
+
+```
+Write ##class(Shutter.Warehouse.Setup).Install("the reader's password")
+```
+
+That creates the tables if they are missing, a web application at `/api/shutter-warehouse` that takes a password, the user `ShutterWarehouseReader`, a role, and the stored credential `WarehouseReader`. Publish a batch, state the publication contract, then switch it on:
+
+```
+Write ##class(Shutter.Warehouse.Setup).Enable("your dataset")
+```
+
+`Enable` also takes the longest age to show in minutes (360 by default), whether to show older or undated rows anyway (0 by default), and the host and port of this instance's web server (`localhost` and 52773 by default). `Disable()` switches it off. `Remove()` takes away what `Install` made, except the tables and their rows, which are the site's.
+
+These settings are not in the site profile. An approval rests on the profile's version, so a setting kept there would revoke every waiting approval when it changed.
+
+### The boundary
+
+The reader's user can run SELECT on the two tables and nothing else. Its role has SQL SELECT on those tables and read access to the namespace's databases, with no write access and no administrative resource. Its statements go through `%SQL.Statement`, so IRIS checks that user's privileges on each one.
+
+A test signs in as that user and tries each of these: INSERT, UPDATE, DELETE, DROP, CREATE, reading a Shutter table, reading the class dictionary, an update that skips the SQL privilege check, and setting a global. Every one is refused: the SQL with `SQLCODE -99`, the last two with `<PROTECT>`. The test is in the unit suite, so it runs on every build the suite runs on.
+
+Shutter's own process never runs SQL on these tables. It calls the reader over HTTP with the stored credential, for one patient, with a five-second limit. If the reader is down, the panel says so and nothing else changes.
+
+This is one IRIS schema on the same instance. To use another database, a site's own job copies into that schema. Shutter has no connector for other databases.
+
+### What a read keeps
+
+A person asks for a read on the case page, under Evidence. It is for the case's own patient: the route takes no identifier from the caller. The result is stored against the case with the batch, generation and sequence, the watermark and age, the row count, who read it and when, and at most 200 reduced rows without the patient's identifiers. It goes when the case goes.
+
+A read is refused, and shows no rows, when:
+
+- the batch holds a different number of rows from its `PublishedRows`;
+- a row names another patient (compared exactly, whatever the table's collation did), or breaks the column rules;
+- the batch is older than the last one read in the same generation;
+- the manifest's watermark contradicts itself or is still to come;
+- the schema version or the dataset is not the one expected.
+
+A batch older than the limit, or of unknown age, shows no rows unless the site chose otherwise, and rows shown that way are marked. A new generation is marked as well.
+
 ## What the wording must say
 
 Whatever shows this data keeps its limits beside it:

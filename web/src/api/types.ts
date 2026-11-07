@@ -1466,3 +1466,53 @@ export interface QuestionAsked {
   state: QuestionState;
   askedBy: string;
 }
+
+/** One row of a warehouse history read, reduced: exactly as the site's export gave it, and never the patient again. */
+export interface WarehouseRow {
+  source_event_id: string;
+  revision: number;
+  record_status: 'active' | 'cancelled' | 'retracted';
+  encounter_authority: string | null;
+  encounter_id: string | null;
+  event_kind: string;
+  event_time: string | null;
+  time_precision: string;
+  source_recorded_at: string | null;
+  source_modified_at: string | null;
+  ward: string | null;
+  bed: string | null;
+  supersedes_event_id: string | null;
+}
+
+/** One read of warehouse history (docs/warehouse-history.md): historical context for a person, used by no decision. */
+export interface WarehouseRead {
+  readAt: string;
+  readBy: string;
+  status: 'ok' | 'no_rows' | 'no_batch' | 'no_identity' | 'withheld' | 'invalid' | 'unavailable';
+  /** Why, for invalid and unavailable. */
+  category: string;
+  dataset: string;
+  generation: string;
+  batch: string;
+  sequence: number | null;
+  sourceSystem: string;
+  receiverReference: string;
+  sourceWatermark: string;
+  watermarkKnown: boolean;
+  historyCompleteFrom: string;
+  publishedAt: string;
+  ageMinutes: number | null;
+  freshness: 'within' | 'older' | 'unknown';
+  rowCount: number;
+  truncated: boolean;
+  generationChanged: boolean;
+  queryVersion: string;
+  resultDigest: string;
+  rows: WarehouseRow[];
+}
+
+/** GET and POST /cases/{id}/warehouse-history. */
+export interface WarehouseHistoryView {
+  enabled: boolean;
+  read: WarehouseRead | null;
+}
