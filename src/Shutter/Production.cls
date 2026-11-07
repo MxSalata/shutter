@@ -140,6 +140,8 @@ XData ProductionDefinition
   </Item>
   <Item Name="Case Review" Category="Recovery" ClassName="Shutter.Process.Review" PoolSize="1" Enabled="true" Foreground="false" Comment="One instance per production review: the read-only sweep of a production's settings, errors and failures over a window, stored, then the review agent's ranking of the findings" LogTraceEvents="true" Schedule="">
   </Item>
+  <Item Name="Failure Census" Category="Recovery" ClassName="Shutter.Operation.FailureCensus" PoolSize="1" Enabled="true" Foreground="false" Comment="On demand and off unless the site profile turns it on: compares a watched receiver's failed deliveries with the cases. It reads and reports, and never opens a case or sends anything" LogTraceEvents="true" Schedule="">
+  </Item>
   <Item Name="Case Question" Category="Recovery" ClassName="Shutter.Process.Question" PoolSize="1" Enabled="true" Foreground="false" Comment="One instance per question about a case: the Explain agent, or the board's members and then the coordinator, asked through the Agent Board item with the case's model view and the what-if facts; the answer checked against them before it is stored; nothing written" LogTraceEvents="true" Schedule="">
   </Item>
   <Item Name="Case Intake" Category="Recovery" ClassName="Shutter.Process.Intake" PoolSize="1" Enabled="true" Foreground="false" Comment="A failed delivery another production reported through POST /api/shutter/intake: stores Shutter's own copy of the message, maps it and opens the case through the case workflow" LogTraceEvents="true" Schedule="">

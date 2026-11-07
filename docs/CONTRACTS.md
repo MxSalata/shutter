@@ -2098,6 +2098,62 @@ A demo reset (`Runner.Reset`, demo only) clears a stop too, with the event `demo
 
 **The report.** One row per case that reached Shutter in the period, with its latest observation (`Shutter.Store.ShadowObservation`, one per plan at the proposal gate). The denominator is **cases reaching Shutter**, not all failed deliveries: a failure that never became a case is not in it, and a case not yet investigated stays in it as unobserved. A resend proposal whose proposal gate passed is a **candidate for rehearsal**, and no more: neither a rehearsal nor a dispatch was tested. `recovery_calls_sent`, `rehearsal_performed`, `final_dispatch_tested` and `notification_deliveries` are counted from the permits and the escalations, not assumed from the mode. Patients appear as a reference local to this deployment, a hash keyed by a value the control row keeps and no route returns, since `deployment_id` is printed on every row; no message text. Human review of a proposal isn't built, so the report says nothing about whether a proposal was right. **A report authorises nothing:** it enables nothing, releases no plan and closes no uncertain write.
 
+## 18. The failure coverage census (v1.47)
+
+An observer for a pilot's review: of a watched receiver's delivery failures in a window, which have a traceable Shutter case? It runs
+on demand and is off unless the site turns it on. It never opens or closes a case, never resends, and changes nothing in the
+watched namespace. It compares what the engine shows with what Shutter holds, so it says nothing about a message the engine
+completed and the receiving application later lost, and a completed transport acknowledgement stays outside the failure count. It
+is not a replacement for the index (8) or the production review (13), and it does not backfill: a failure it finds with no case
+stays a line in its report.
+
+**The profile.** `failure_census` in the site profile (6.4), absent in the shipped one: `{"enabled": false, "max_window_hours": 24,
+"max_headers": 10000, "retention_days": 30, "settle_seconds": 120}`. An unknown setting or a value out of range is refused when the
+profile is saved. `retention_days`: each run takes away runs older than this. `settle_seconds`: a failure younger than this with no
+case may still be on its way through the forwarder, so it counts as unassessable.
+
+**The scope.** A receiver onboarded from a namespace on this instance (11.1), or a profile entry naming its `namespace` and `item`:
+the caller names the receiver and the window, never a namespace or SQL text. Shutter's own namespace is not a source. The read runs in
+the **Failure Census** item (`Shutter.Operation.FailureCensus`), since a caller's role need not reach the watched namespace's database.
+
+**What counts.** A delivery is an `Ens.MessageHeader` of type request whose target is the receiver's item, created in the window. A
+failure is one whose status at the read is error, suspended, aborted or discarded, or completed with `IsError` set. Other statuses
+are counted as `notFinished`. A failure whose session holds no HL7 message is `excluded`, since the intake (11) takes HL7 only.
+
+**The link.** Each failure is keyed by source namespace, delivery header and target. The candidates are the cases of that namespace and
+that receiver since the window opened, from the case rows and from `Shutter.Msg.ExternalIntake` with the `CaseStarted` in its session,
+since a further failure of an open case's operation goes on that case (`Case.Open`) and the row keeps only the first origin.
+
+| Quality | Code | When |
+|---|---|---|
+| `exact` | `origin_is_this_delivery` | the case's origin header is this delivery |
+| `exact` | `only_delivery_in_session` | the origin is in this delivery's session, and the session sent the item one message (a resend of one body stays one) |
+| `ambiguous` | `several_deliveries_in_session` | the origin is in the session, and the session sent the item several different messages: the candidates are named, none chosen |
+| `none` | `no_case` | no candidate names this delivery or its session |
+
+A control id plays no part. Several failures on one case are many-to-one: each is linked, and `distinctCases` counts the case once.
+`FailureCensus.ResolvedDelivery` is where a resolver of the delivery header goes in for a forward that names some other header of
+the session.
+
+**Eligibility.** `in_scope`, `excluded` or `unknown`. `unknown` codes: `body_missing` (no case, and the delivery's body is gone),
+`settling` (no case, and younger than `settle_seconds`), `case_origin_purged` (a case opened in the window whose origin header is gone:
+its row names the case and the origin, with no delivery).
+
+**Completeness.** `unknown` when the source cannot be read: a namespace that is gone or dismounted, or a query refused. Every total is
+then null, never 0, with the reason in `sourceError`. `incomplete` for any of these in `reasons`: `header_cap_hit`, `case_cap_hit`,
+`header_ids_missing` (ids are issued upwards, so a hole around the window is a purge or a delete), `window_older_than_kept_headers`,
+`own_messages_purged` (Shutter's own store no longer reaches the window's start, so a further failure's trail may be gone),
+`case_origin_purged`, `body_missing`, `settling`. `complete` otherwise. No percentage is given.
+
+**Routes**, all `Shutter_Operate`; POST with `X-Requested-With: Shutter` and an optional `Idempotency-Key`.
+
+- `GET /failure-census` -> `{enabled, statement, maxWindowHours, maxHeaders, scopes: [{receiver, namespace, item}], items: [the latest 50 reports, without rows]}`.
+- `POST /failure-census` `{receiver, from?, to?}` (ISO UTC; `to` defaults to now, `from` to the longest window before it) -> 201 the report without rows, whatever it found; 409 `not_enabled`; 400 `bad_request` for a receiver not registered or a window refused (not whole times, backwards, over the limit, or ending more than a minute from now); 503 `no_service` and `not_queued`, 502 `no_answer`, 500 `census_failed`.
+- `GET /failure-census/{id}` -> `{runId, receiver, namespace, item, window: {from, to}, cutoff, sourceRead: ok | unavailable, sourceError, completeness, complete, reasons, scanned, truncated, maxHeaders, configVersion, productVersion, requestedBy, startedAt, finishedAt, statement, totals: {deliveries, completed, notFinished, failures, eligible, exact, none, ambiguous, excluded, unassessable, missingIds, evidenceGaps, distinctCases}, items: [{sourceNamespace, deliveryHeaderId, target, sessionId, originHeaderId, timeCreated, sourceStatus, bodyClass, family, resendOf, caseIds, linkQuality, eligibility, explanation}]}`; 404 `not_found`. `eligible` is `exact` + `none` + `ambiguous`. `resendOf` is the header the engine records this one as resent from. A status is as it stood at `cutoff`.
+- `GET /failure-census/{id}.csv` -> `text/csv`: `record_type,run_id,receiver,source_namespace,target,delivery_header_id,session_id,origin_header_id,time_created,source_status,body_class,message_family,resend_of,link_quality,case_ids,eligibility,explanation`. The first row is `run`, with the read's status under `source_status`, the completeness under `eligibility` and the reasons under `explanation`, so a file read alone says what it is worth; then one `item` row each. A cell a spreadsheet would run as a formula starts with an apostrophe.
+
+No message content is copied: the rows hold ids, codes, the body's class and the HL7 structure's family (ADT, ORU).
+
 ## Changes
 
 - v1.47, 7 Nov 2026 (a storm of 200 failures, measured): the shared approval task's message lists the first chains that fit in its 2,000 characters and points to the incident page; an error raising a task no longer abandons the incident, which waits for a person and tries again every 5 minutes (7.3). No API field changes. The incident page lists six chains and offers the rest behind one button.
