@@ -8,7 +8,8 @@ namespaces with their own productions already running (order comms and a LIMS, d
 Shutter.Setup_OnboardPlan, _OnboardApply, OnboardCredential and _OnboardTest: the plan changes nothing; the apply wires the
 namespace and a second apply has nothing to do; no production stops; an item and a schema category named alike in two
 namespaces stay apart; the Doctor reports each namespace; failures open cases with nothing sent; a person fills in one
-receiver's API and a recovery reaches it; a reload keeps it; a message routed to two receivers opens a case for each, and the
+receiver's API and a recovery reaches it; at that receiver, retrying for ever, Shutter writes nothing while the engine holds the
+message and the case closes when the engine delivers it; a reload keeps it; a message routed to two receivers opens a case for each, and the
 Doctor keeps what a refused forward and a later operation leave behind; a reply of each code is sent to a listener to see what
 completes, and an application NACK on its own feed opens a case; and _OnboardRemove takes the namespaces off again. It needs
 Docker and no API key: no model is called. Run from the repository's root. --reuse keeps a running container and what it
@@ -905,6 +906,61 @@ if hit:
         at_receiver = json.loads(resp.read().decode())
     print(json.dumps(at_receiver)[:300])
     check("the bed system holds the admission", at_receiver.get("state") == "admitted" and at_receiver.get("ward") == "WARD-A", at_receiver)
+
+# ---- the engine still has the message ----
+step("Bed Mgmt Out retrying for ever, with an API too: no write, a wait for the engine, one frame, and the case closes by itself")
+
+
+def bed_failure_timeout(seconds):
+    out = session("PAS", f"""Set p=##class(Ens.Config.Production).%OpenId("OnbPas.Production") For i=1:1:p.Items.Count() {{ Set it=p.Items.GetAt(i) If it.Name="Bed Mgmt Out" {{ For j=1:1:it.Settings.Count() {{ Set s=it.Settings.GetAt(j) If s.Name="FailureTimeout" {{ Set s.Value={seconds} }} }} }} }}
+Set sc=p.%Save() Set sc=p.SaveToClass() Set sc=##class(Ens.Director).UpdateProduction(60,1) Write !,"[updated] ",$SELECT(sc:"ok",1:$SYSTEM.Status.GetErrorText(sc)),!""")
+    check(f"FailureTimeout {seconds} is on the item", "[updated] ok" in out, out[-400:])
+
+
+def at_the_api(encounter):
+    import base64
+    req = urllib.request.Request(f"http://127.0.0.1:{args.port}/beds/api/encounters/{encounter}", headers={"Authorization": "Basic " + base64.b64encode(f"beds-client:{PW}".encode()).decode()})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return resp.status
+    except urllib.error.HTTPError as e:
+        return e.code
+
+
+bed_failure_timeout(-1)
+k1 = f"K1{tag}X7"
+print(send(7121, hl7("a01", k1), "a01k1", wait=3))
+hit = wait_case(lambda c: c.get("encounterId") == f"ENC-{k1}" and c.get("state") in ("awaiting_approval", "blocked", "escalated", "resolved", "failed"), 90)
+check("the error alert opens a case", bool(hit))
+if hit:
+    cid = hit[0]["caseId"]
+    _, c = api("GET", "/cases/" + cid)
+    print(json.dumps({k: c.get(k) for k in ("state", "failureKind", "waitsOnEngine", "headline")})[:500])
+    check("it waits for the engine, with no approval asked for", c.get("state") == "blocked" and (c.get("waitsOnEngine") or "").startswith("PAS:") and (c.get("headline") or "").startswith("Waiting for the engine"), c)
+    check("the gate says the engine is still trying", "ENGINE_STILL_TRYING" in gate_codes(cid), gate_codes(cid)[:400])
+    time.sleep(12)
+    _, c = api("GET", "/cases/" + cid)
+    check("sweeps go by and it stays waiting, while the engine holds the message", c.get("state") == "blocked" and bool(c.get("waitsOnEngine")), c.get("state"))
+    check("nothing is written through the API", at_the_api(f"ENC-{k1}") == 404, at_the_api(f"ENC-{k1}"))
+    came_back = subprocess.Popen(["docker", "exec", CTR, "python3", "/tmp/onb_site/listener.py", "7221", "/tmp/onb_site/k1-beds.log", "120"])
+    end = time.time() + 120
+    while time.time() < end:
+        _, c = api("GET", "/cases/" + cid)
+        if c.get("state") in ("resolved", "failed", "escalated", "awaiting_approval"):
+            break
+        time.sleep(2)
+    print(json.dumps({k: c.get(k) for k in ("state", "outcome", "headline", "disposition", "waitsOnEngine")})[:600])
+    check("the listener returns, and the case resolves as delivered by the engine, with nobody reopening it", c.get("state") == "resolved" and "Delivered by the engine" in (c.get("outcome") or ""), (c.get("state"), c.get("outcome")))
+    check("in the words of what the acknowledgement can claim", "accepted on the connection; nothing was resent by Shutter" in (c.get("outcome") or ""), c.get("outcome"))
+    check("the plan's disposition kept and the wait over", c.get("disposition") == "resend" and not c.get("waitsOnEngine"), (c.get("disposition"), c.get("waitsOnEngine")))
+    check("never verified: no receipt was read", "Verified" not in json.dumps(c), json.dumps(c)[:500])
+    time.sleep(5)
+    frames = subprocess.run(["docker", "exec", CTR, "cat", "/tmp/onb_site/k1-beds.log"], capture_output=True, text=True).stdout
+    check("exactly one frame at the listener", frames.count(k1) == 1, frames[-500:])
+    check("and still nothing through the API", at_the_api(f"ENC-{k1}") == 404, at_the_api(f"ENC-{k1}"))
+    subprocess.run(["docker", "exec", CTR, "pkill", "-f", "k1-beds.log"], capture_output=True)
+bed_failure_timeout(0)
+time.sleep(3)
 
 step("An automatic release needs a proved source: a post with an invented header waits for a person, and a real failure still goes")
 check("site policy releases tier 2 by itself", profile_edit(lambda b: b["policy"]["2"].update(single="automatic")) == 200)

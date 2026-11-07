@@ -1,6 +1,6 @@
 /// The Case Releaser's run rows (Shutter.Store.ReleaseRun; CONTRACTS 8.1, v1.35): begin and end, the interrupt at start,
-/// the status, the candidates, the keep count, and a sweep whose check throws. The rows and the case this test writes are
-/// deleted at the end.
+/// the status, the candidates, the keep count, a sweep whose check throws, and the third pass, which judges the cases waiting on
+/// the engine. The rows and the cases this test writes are deleted at the end.
 Class Shutter.Test.Releaser Extends %UnitTest.TestCase
 {
 
@@ -9,6 +9,20 @@ Parameter KEY = "PAS^HOSP^MRN-UT10^ENC-UT10^admit^2026-11-01T12:00:00Z";
 Property Ids As %String [ MultiDimensional ];
 
 Property CaseRowId As %String;
+
+Property Made As %String [ MultiDimensional ];
+
+Method OnAfterOneTest() As %Status
+{
+    Set id = ""
+    For {
+        Set id = $ORDER(i%Made(id))
+        Quit:id=""
+        Do ##class(Shutter.Store.Case).PurgeCase(id)
+    }
+    Kill i%Made
+    Quit $$$OK
+}
 
 Method OnAfterAllTests() As %Status
 {
@@ -133,6 +147,165 @@ Method TestACheckThatThrowsFailsTheRun()
     Do $$$AssertEquals(run.State _ "|" _ run.Error, "done|", "that ended done")
     Do $$$AssertTrue((run.HeldChecked >= 1) && (run.HeldReleased = 0), "it looked at the held case and left it held, since its schema is still missing: " _ run.HeldChecked _ " checked")
     Do $$$AssertEquals(host.Sent.Count(), 0, "and sent nothing")
+}
+
+/// A case waiting on the engine, at a namespace no sweep can read, so the production's own Case Releaser leaves it alone.
+Method WaitingCase(kind As %String = "delivery_failed", reasonCode As %String = "") As Shutter.Store.Case
+{
+    Set case = ##class(Shutter.Store.Case).%New()
+    Set case.CaseId = "UT-RELEASE-" _ $JOB _ "-" _ $INCREMENT(^||Shutter.Test.Releaser)
+    Set case.Event = "transfer", case.FailureKind = kind, case.FailureReasonCode = reasonCode, case.FailureText = "made up", case.EncounterId = "ENC-UT2"
+    Set case.PatientId = "MRN-UT2", case.PatientIdAuthority = "HOSP", case.Receiver = "UT Out", case.State = "blocked", case.Mode = "rules"
+    Set case.OperationKey = "PAS^HOSP^MRN-UT2^ENC-UT2^transfer^" _ case.CaseId, case.Disposition = "resend"
+    Set case.SourceNamespace = "UTNONE", case.OriginHeaderId = "16", case.WaitsOnEngine = "UTNONE:17"
+    Set now = ##class(Shutter.Util.Time).NowUTC()
+    Set case.OpenedAt = now, case.UpdatedAt = now
+    Do $$$AssertStatusOK(case.%Save(), "the case is saved")
+    Set i%Made(case.%Id()) = ""
+    Quit case
+}
+
+/// The gate's own row for a header in this state, as EngineWaitFacts takes it from EngineCheck.Row.
+Method GateRow(custody As %String, ack As %String = "connection", reason As %String = "") As %DynamicObject
+{
+    Set facts = {"scope": "yes", "why": "", "namespace": "UTNONE", "item": "UT Out", "receiver": "UT Out", "ackRoute": false, "deliveryHeader": "17", "headers": [{"headerId": "17", "custody": (custody), "status": "Completed", "itemStatus": "OK", "completedAt": "2026-11-07 03:12:01.123", "why": "", "attempts": ""}], "effectiveAck": (ack), "ackReason": (reason)}
+    Quit ##class(Shutter.Util.EngineCheck).Judge(facts)
+}
+
+Method Delivered(ack As %String = "connection", reason As %String = "", checks As %DynamicArray = "") As %DynamicObject
+{
+    Quit {"answer": "delivered", "why": "", "row": (..GateRow("delivered", ack, reason)), "checks": ($SELECT($ISOBJECT(checks): checks, 1: []))}
+}
+
+Method Host() As Shutter.Test.FakeReleaser
+{
+    Quit ##class(Shutter.Test.FakeReleaser).%New("Case Releaser (unit test)")
+}
+
+Method Again(case As Shutter.Store.Case) As Shutter.Store.Case
+{
+    Quit ##class(Shutter.Store.Case).ByCaseId(case.CaseId)
+}
+
+Method TestCompletedResolvesWithTheSharedSentence()
+{
+    Set case = ..WaitingCase(), host = ..Host()
+    Set releaser = "Shutter.Operation.Releaser"
+    Do $$$AssertEquals($CLASSMETHOD(releaser, "ActOnEngineWait", case, ..Delivered(), host), "resolved", "resolved")
+    Set after = ..Again(case)
+    Do $$$AssertEquals(after.State, "resolved", "the case reads resolved")
+    Do $$$AssertEquals(after.Outcome, ##class(Shutter.Util.EngineWords).DeliveredWords("17", "2026-11-07 03:12:01", "connection"), "Outcome is the shared sentence, which the gate's resolve writes too")
+    Do $$$AssertEquals(after.Disposition, "resend", "the plan's disposition is unchanged")
+    Do $$$AssertEquals(after.WaitsOnEngine, "", "the marker is cleared")
+    Do $$$AssertEquals(host.Sent.Count(), 0, "and nothing is planned again")
+    Do after.%JSONExportToString(.json)
+    Do $$$AssertTrue(json '[ "Verified", "no Verified on the case")
+}
+
+Method TestDeclaredApplicationCarriesTheDeclaredWords()
+{
+    Set case = ..WaitingCase()
+    Do $$$AssertEquals(##class(Shutter.Operation.Releaser).ActOnEngineWait(case, ..Delivered("application"), ..Host()), "resolved", "resolved")
+    Do $$$AssertTrue(..Again(case).Outcome [ "accepted by the receiver's application (its ACK), as declared in the site profile", "the declared words: " _ ..Again(case).Outcome)
+}
+
+Method TestErrorReopensAndClears()
+{
+    Set case = ..WaitingCase(), host = ..Host()
+    Do $$$AssertEquals(##class(Shutter.Operation.Releaser).ActOnEngineWait(case, {"answer": "settled", "why": ""}, host), "released", "released")
+    Do $$$AssertEquals(host.Sent.Count(), 1, "one reinvestigation")
+    Do $$$AssertTrue(host.Sent.GetAt(1) [ case.CaseId, "for this case: " _ host.Sent.GetAt(1))
+    Set after = ..Again(case)
+    Do $$$AssertEquals(after.WaitsOnEngine, "", "the marker is cleared, so the next sweep doesn't send it again")
+    Do $$$AssertNotEquals(after.State, "resolved", "and it isn't resolved")
+}
+
+Method TestStillDeliveredIsLeft()
+{
+    Set case = ..WaitingCase(), host = ..Host(), marker = case.WaitsOnEngine
+    Do $$$AssertEquals(##class(Shutter.Operation.Releaser).ActOnEngineWait(case, {"answer": "engine", "why": ""}, host), "left", "left")
+    Set after = ..Again(case)
+    Do $$$AssertEquals(after.State _ "|" _ after.WaitsOnEngine, "blocked|" _ marker, "still blocked, still waiting")
+    Do $$$AssertEquals(host.Sent.Count(), 0, "nothing sent")
+    // The marked header is Completed and another copy is still in the engine's hands: the gate's row says so, and it waits.
+    Set facts = ..Delivered(), facts.row = ..GateRow("engine")
+    Do $$$AssertEquals(##class(Shutter.Operation.Releaser).ActOnEngineWait(case, facts, host), "left", "a copy still with the engine waits too")
+    Do $$$AssertEquals(..Again(case).State, "blocked", "still blocked")
+}
+
+Method TestAckCaseIsNotResolved()
+{
+    Set case = ..WaitingCase("delivery_failed", "ack_AE"), host = ..Host()
+    Do $$$AssertEquals(##class(Shutter.Operation.Releaser).ActOnEngineWait(case, ..Delivered(), host), "released", "released, not resolved")
+    Set after = ..Again(case)
+    Do $$$AssertNotEquals(after.State, "resolved", "not resolved")
+    Do $$$AssertEquals(after.WaitsOnEngine, "", "the marker is cleared")
+    Do $$$AssertEquals(after.Outcome, "", "and no delivered words on it")
+    Do $$$AssertEquals(host.Sent.Count(), 1, "planned again")
+}
+
+Method TestNotEstablishedIsNotResolved()
+{
+    Set case = ..WaitingCase(), host = ..Host()
+    Do $$$AssertEquals(##class(Shutter.Operation.Releaser).ActOnEngineWait(case, ..Delivered("not_established", ":?E=C"), host), "stopped", "stopped")
+    Set after = ..Again(case)
+    Do $$$AssertEquals(after.State, "blocked", "blocked for a person")
+    Do $$$AssertEquals(after.WaitsOnEngine, "", "the marker is cleared")
+    Do $$$AssertTrue(after.Outcome [ "Receiver acceptance has not been established.", "the words: " _ after.Outcome)
+    Do $$$AssertTrue(after.Headline [ "Stopped for a person", "the headline: " _ after.Headline)
+    Do $$$AssertEquals(host.Sent.Count(), 0, "nothing planned again: the gate would say the same")
+}
+
+/// As at the gate: a Completed header doesn't settle a refusal or an identity conflict.
+Method TestWhatCompletedCantClose()
+{
+    Set case = ..WaitingCase("rejected")
+    Do $$$AssertEquals(##class(Shutter.Operation.Releaser).ActOnEngineWait(case, ..Delivered(), ..Host()), "stopped", "a refusal stays with a person")
+    Do $$$AssertEquals(..Again(case).State, "blocked", "blocked")
+    Set case = ..WaitingCase()
+    Set checks = [{"check": "identity", "result": "block", "reason_code": "PATIENT_MISMATCH", "detail": "made up"}]
+    Do $$$AssertEquals(##class(Shutter.Operation.Releaser).ActOnEngineWait(case, ..Delivered(, , checks), ..Host()), "stopped", "an identity conflict too")
+    Do $$$AssertEquals(..Again(case).State, "blocked", "blocked")
+}
+
+/// The whole pass, reading for real: nothing can be read at a namespace that doesn't exist, so the case is left and counted,
+/// and the count is in the object the Doctor prints as release_sweep.
+Method TestUnreadableIsLeftAndCounted()
+{
+    Set case = ..WaitingCase(), host = ..Host(), marker = case.WaitsOnEngine
+    Do ##class(Shutter.Operation.Releaser).Candidates(.waiting, .held, .engine)
+    Do $$$AssertTrue(engine >= 1, "the sweep counts it as a candidate: " _ engine)
+    Do ##class(Shutter.Operation.Releaser).ReleaseEngineWaits(host, "Case Workflow", .checked, .unreadable)
+    Do $$$AssertTrue(checked >= 1, "looked at: " _ checked)
+    Do $$$AssertTrue(unreadable >= 1, "unreadable: " _ unreadable)
+    Set status = ##class(Shutter.Operation.Releaser).Status()
+    Do $$$AssertTrue(status."engine_unreadable" >= 1, "Status counts it: " _ status.%ToJSON())
+    Do $$$AssertTrue(status.candidates.engine >= 1, "and the candidates")
+    Set after = ..Again(case)
+    Do $$$AssertEquals(after.State _ "|" _ after.WaitsOnEngine, "blocked|" _ marker, "left as it was")
+    Do $$$AssertEquals(host.Sent.Count(), 0, "with nothing sent")
+}
+
+Method TestAMarkerNamingNoHeaderIsUnreadable()
+{
+    Set case = ..WaitingCase()
+    Set case.WaitsOnEngine = "UTNONE"
+    Set facts = ##class(Shutter.Operation.Releaser).EngineWaitFacts(case)
+    Do $$$AssertEquals(facts.answer, "unreadable", facts.%ToJSON())
+    Set case.WaitsOnEngine = "UTNONE:17"
+    Do $$$AssertEquals(##class(Shutter.Operation.Releaser).EngineWaitFacts(case).answer, "unreadable", "and a namespace that doesn't exist")
+}
+
+Method TestBlockingChecksAreTheLatestDecisions()
+{
+    Set case = ..WaitingCase()
+    Do $$$AssertTrue(##class(Shutter.Operation.Releaser).BlockingChecks(case, .checks), "no decision reads as no rows")
+    Do $$$AssertEquals(checks.%Size(), 0, "none")
+    Set rows = [{"check": "identity", "result": "block", "reason_code": "PATIENT_MISMATCH", "detail": "made up"}]
+    Do $$$AssertStatusOK(##class(Shutter.Store.GateDecision).Create(case, "", "proposal", "t", "block", rows, "made up", .d), "a decision")
+    Do $$$AssertStatusOK(##class(Shutter.Store.GateDecision).Create(case, "", "proposal", "t", "pass", [], "made up", .d2), "a later one that passed")
+    Do $$$AssertTrue(##class(Shutter.Operation.Releaser).BlockingChecks(case, .checks), "reads")
+    Do $$$AssertEquals(checks.%Get(0)."reason_code", "PATIENT_MISMATCH", "the rows of the one that blocked")
 }
 
 /// The newest run row's id, or 0.
