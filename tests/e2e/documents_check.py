@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Document-aware exceptions played on a real instance, on stock classes (docs/CONTRACTS.md 11.2, docs/INSTALL.md 9.10).
+"""Document-aware exceptions played on a real instance, on stock classes (docs/CONTRACTS.md 11.2, docs/INSTALL.md 9.10), for
+MDM and for an ORU carrying a report as an attachment.
 
     python3 tests/e2e/documents_check.py --ctr NAME --port PORT --image IMAGE [--reuse] [--keep] [--only D07,D15]
 
@@ -680,7 +681,7 @@ if wanted("R26"):
     def ordinary(c):
         """What the ordinary path gives, with the message's own ids taken out, to compare between receivers."""
         c = c or {}
-        return (c.get("state"), c.get("failureKind"), c.get("operationKey", "").split("^")[0], (c.get("failureText") or "").split(": The source")[0], c.get("counts", {}).get("attempts"), "document" in c)
+        return (c.get("state"), c.get("failureKind"), c.get("operationKey", "").split("^")[0], (c.get("failureText") or "").split(". The source")[0], c.get("counts", {}).get("attempts"), "document" in c)
 
     for what, line, marker in (("numbers", ["OBX|1|NM|K^Potassium^L||5.4|mmol/L|3.5-5.3|H|||F", "OBX|2|NM|NA^Sodium^L||140|mmol/L|||||F"], "5.4"), ("text", "OBX|1|TX|N^Note^L||Plain words that a forwarder posts whole", "Plain words"), ("no OBX", "NTE|1||A note", "A note")):
         shown = {}
@@ -732,14 +733,15 @@ if wanted("R09"):
     step("R09: a further message for the same report under another result status")
     placer, filler = f"R09O{tag}^LAB", f"R09F{tag}^LAB"
     ed = f"OBX|1|ED|REP^Report^L||^application^pdf^Base64^{PDF_B64}"
-    a, b, s = f"R09A-{tag}", f"R09B-{tag}", f"R09S-{tag}"
-    send(oru(a, ed, placer=placer, filler=filler, status="P"), "r09a")
+    # At the refusing receiver, whose message store D28 leaves whole.
+    a, b, s = f"AE-R09A-{tag}", f"AE-R09B-{tag}", f"AE-R09S-{tag}"
+    send(oru(a, ed, placer=placer, filler=filler, status="P", app="REFUSE"), "r09a")
     ca = case_of(a)
     check("the first case has no other status to say", "DOC_RESULT_STATUS_CHANGED" not in reasons(ca) and "No further message" in says(ca), (reasons(ca), says(ca)))
-    send(oru(s, ed, placer=placer, filler=filler, status="P"), "r09s")
+    send(oru(s, ed, placer=placer, filler=filler, status="P", app="REFUSE"), "r09s")
     cs = case_of(s)
     check("a further message under the same status is not this rule", "DOC_RESULT_STATUS_CHANGED" not in reasons(cs), (reasons(cs), says(cs)))
-    send(oru(b, ed, placer=placer, filler=filler, status="F"), "r09b")
+    send(oru(b, ed, placer=placer, filler=filler, status="F", app="REFUSE"), "r09b")
     cb = case_of(b)
     check("two cases, two operation keys", ca and cb and ca["caseId"] != cb["caseId"] and ca["operationKey"] != cb["operationKey"], (ca, cb))
     print("  says:", says(cb))
@@ -751,8 +753,8 @@ if wanted("R09"):
     ca = case_of(a, 60)
     check("the P's case, read again, says the F", "DOC_RESULT_STATUS_CHANGED" in reasons(ca) and "Final results (F)" in says(ca), (reasons(ca), says(ca)))
     # A further message with no attachment of its own still names the order.
-    n = f"R09N-{tag}"
-    send(oru(n, "OBX|1|NM|K^Potassium^L||5.4", placer=placer, filler=f"R09G{tag}^LAB", status="C"), "r09n")
+    n = f"AE-R09N-{tag}"
+    send(oru(n, "OBX|1|NM|K^Potassium^L||5.4", placer=placer, filler=f"R09G{tag}^LAB", status="C", app="REFUSE"), "r09n")
     case_of(n)
     api("POST", f"/cases/{ca['caseId']}/reinvestigate", {"reason": "check"})
     time.sleep(22)
@@ -835,7 +837,7 @@ if wanted("SWITCHES"):
         return json.loads(re.findall(r"<<<(.*?)>>>", out, re.S)[-1])
 
     def onboard(what, options):
-        out = session("SHUTTER", f"""Write !,"<<<",##class(Shutter.Setup).{what}("{NS}","{options}"),">>>",!""", 200)
+        out = session("SHUTTER", f"""Set %v=##class(Shutter.Setup).{what}("{NS}","{options}") Write !,"<<<",%v,">>>",!""", 200)
         return json.loads(re.findall(r"<<<(.*?)>>>", out, re.S)[-1])
 
     def documents_of(name):
@@ -864,6 +866,8 @@ if wanted("SWITCHES"):
     for rc in p["receivers"]:
         if rc["name"].endswith("Docs Plain Out"):
             rc.pop("documents", None)
+            # A person has filled it in, so taking the namespace off keeps the entry.
+            rc.pop("draft", None)
     api("PUT", "/site-profile", p)
     plan = onboard("OnboardPlan", '{""document_receivers"":""Docs Plain Out,No Such Item""}')
     dos = [a["do"] for a in plan["actions"]]
@@ -888,7 +892,7 @@ if wanted("SWITCHES"):
     check("a second run has nothing to do for them", not {"set_document_receivers", "enable_documents"} & {a["do"] for a in again["actions"]}, again["actions"])
     off = onboard("OnboardRemove", "{}")
     print("  remove:", off["removed"][:8], off.get("error"))
-    check("taking the namespace off turns the switch off again", off["ok"] and (documents_of("Docs Plain Out") or {}).get("enabled") is not True, (off, documents_of("Docs Plain Out")))
+    check("taking the namespace off turns the switch off again, and keeps the entry", off["ok"] and any("documents.enabled" in x for x in off["removed"]) and (documents_of("Docs Plain Out") or {}).get("enabled") is False, (off, documents_of("Docs Plain Out")))
 
 # A community licence counts each signed-in session until it times out.
 api("DELETE", "/session")

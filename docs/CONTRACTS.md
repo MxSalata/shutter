@@ -1364,8 +1364,8 @@ needs only the packages `Shutter.Intake` and `Shutter.Util` for the forwarder an
   proves, in_profile, has_api, draft}], other_operations,
   schemas: [{category, named_by, in_namespace, standard, in_shutter, shutter_name, action}], wired, receiver_prefix, actions: [{do,
   says, ...}], todo, warnings, error}`. `do` is `map_package`, `import_schema`, `add_forwarder`, `rename_alert`,
-  `add_alert_intake`, `set_alert_receivers`, `set_alert_on_error` or `draft_receiver`. Options: `production`, `shutter_host`,
-  `shutter_port`, `ssl_config`, `credential`, `receivers`, `alert_on_error`. Options that are not a JSON object answer `{ok: false, error}` in
+  `add_alert_intake`, `set_alert_receivers`, `set_alert_on_error`, `draft_receiver`, `set_document_receivers` or `enable_documents`. Options: `production`, `shutter_host`,
+  `shutter_port`, `ssl_config`, `credential`, `receivers`, `alert_on_error`, `document_receivers` (item names, comma-separated: both switches of 11.2; a name that isn't a chosen receiver is a warning; taking the namespace off turns off what it turned on). Options that are not a JSON object answer `{ok: false, error}` in
   the plan, the apply and the removal, and change nothing. A `receivers` name that matches no item is a warning; with no item chosen the plan warns and
   has no `add_alert_intake`, since an empty `Receivers` means any item. Reading a namespace (`Onboard.Read`) calls only Ens, %SQL,
   %Dictionary and %SYS classes while it is there, as `ProductionReader` does, since no Shutter class resolves there yet.
@@ -1408,15 +1408,15 @@ needs only the packages `Shutter.Intake` and `Shutter.Util` for the forwarder an
   `^Shutter.Config("schemaNamed", category)` until an import clears it. A held forward (kind `unreadable`) keeps its own path above.
 - **The Doctor** adds `watched_namespaces` (each namespace onboarded or named by a case, read there: `{namespace, onboarded, exists, production,
   production_state, forwarder, alert_intake, pass_to, classes, credential, last_forward, last_forward_error, refused_72h, last_refused,
-  last_case, last_case_at, schemas_missing, operations_unwatched, removed, problems, ok}`; `failure_timeout` in the plan's reading is the effective value: the item's, the default settings', else the class's; a namespace taken off is recorded under `^Shutter.Config("onboardRemoved", namespace)` and reads `removed` with no problems) and `receivers_without_item`; `credentials` tries each onboarded namespace's forwarder credential and each
+  last_case, last_case_at, schemas_missing, operations_unwatched, documents_mismatch, removed, problems, ok}`; `documents_mismatch` says, also among the `problems`, each item the forwarder's `DocumentReceivers` names whose profile has `documents.enabled` off, and each the other way round (11.2); `failure_timeout` in the plan's reading is the effective value: the item's, the default settings', else the class's; a namespace taken off is recorded under `^Shutter.Config("onboardRemoved", namespace)` and reads `removed` with no problems) and `receivers_without_item`; `credentials` tries each onboarded namespace's forwarder credential and each
   connector item's; `hl7_schemas.needed` adds the watched namespaces' missing categories. `AlertProcess.Classify` reads a TCP connect
   timeout (`ErrOutConnectExpired`) as `delivery_failed`: nothing was sent.
 
 ### 11.2 Document exceptions
 
-A failed MDM T01 to T11 at a receiver with a document profile becomes the ordinary case with its no-recovery path and a document block. Nothing is resent, no catalogue entry matches it, no agent is convened, and no copy of the document is kept in Shutter. A receiver with no profile behaves exactly as before. The HL7 version pinned is v2.5.1, chapter 9.
+A failed MDM T01 to T11, or a failed ORU carrying a report as an attachment, at a receiver with a document profile becomes the ordinary case with its no-recovery path and a document block. Nothing is resent, no catalogue entry matches it, no agent is convened, and no copy of the message is kept in Shutter. A receiver with no profile behaves exactly as before. The HL7 version pinned is v2.5.1, chapters 7 and 9.
 
-**Switching it on takes both ends.** The receiver's entry in the site profile (6.4) gets `documents`, and the forwarder's `DocumentReceivers` setting names the item. The forwarder reads the delivery there and posts metadata only. With the forwarder not naming it, a whole message posted for such a receiver is read by the route and its text dropped; one over 2 MB is still refused 413. With the profile off, the route answers an envelope `409 documents_off` and the forwarder sends the message the ordinary way.
+**Switching it on takes both ends.** The receiver's entry in the site profile (6.4) gets `documents`, and the forwarder's `DocumentReceivers` setting names the item. The onboarding option `document_receivers` sets both, and the Doctor's `documents_mismatch` lists where they disagree (section 11.1). The forwarder reads the delivery there and posts metadata only. With the forwarder not naming it, a whole message posted for such a receiver is read by the route and its text dropped; one over 2 MB is still refused 413. With the profile off, the route answers an envelope `409 documents_off` and the forwarder sends the message the ordinary way.
 
 **`documents` in a receiver's entry.** Every key is named, so a misspelt switch is refused.
 
@@ -1434,6 +1434,7 @@ A failed MDM T01 to T11 at a receiver with a document profile becomes the ordina
 | `email_details` | `"minimal"` | `minimal`, or `identifiers` to add the hospital number and the document number to the email of a document that isn't restricted |
 | `readback` | `"disabled"` | The only value |
 | `chain_read_limit` | `5000` | Messages to the receiver read for a chain |
+| `report_structures` | `["ORU^R01"]` | The ORU message types (MSH-9) that count as reports here. `[]`: none, so this receiver's ORUs take the ordinary path |
 
 **`POST /intake` with `kind: "document_failure"`** (`Shutter_Intake`): `source` (`namespace`, `production`, `route`, `header_id`, `item`), `receiver`, `failure` as in section 11, `delivery`, `facts` and `chain`, with no text of the message. 202 `{caseId, state, opened}`; 400 `bad_request` naming the field; 409 `documents_off`.
 
@@ -1466,6 +1467,15 @@ A failed MDM T01 to T11 at a receiver with a document profile becomes the ordina
 | `DOC_DUPLICATE_UNDECLARED`, `DOC_RECOVERY_OFF`, `DOC_NOT_ORIGINAL_T02` | no | A sender's check only |
 
 **`Shutter.Util.DocumentEligibility.Check(block, settings, delivery)`** is the one question a later sender must ask, before every send. It answers a code. With `recovery` `none`, it answers `DOC_RECOVERY_OFF`; with no `delivery` object from an engine reader, `DOC_DELIVERY_UNCERTAIN`. Only with every check passing does it answer the code that lets a sender go on, which appears on no screen, email or API answer. Merges and identifier changes aren't read here: the sender's `delivery` must say they were checked and clear.
+
+**A report carried as an attachment.** An ORU counts when any OBX says ED or RP in OBX-2, or has 256 unbroken base64 characters in the part of it read (its first 2,048 characters). The value type decides, and nothing clinical is read. An ORU with only numbers or text, or with no OBX, takes the ordinary path, unchanged, at any receiver.
+
+- **What is read:** MSH as above; OBR-2, OBR-3 and OBR-25; every PID-3 repetition and PV1-19 before the first attachment; and each OBX's first 2,048 characters, for the rule alone, held for no longer than the check. Each stored segment is read directly from where the engine keeps it, so a value of any size isn't materialised. The block gets `kind: "report"` and `report` (`placer`, `filler`, `result_status`, `attachment`, `orders`), with `document.id` the OBR-3, else the OBR-2. No OBX-3, OBX-5, NTE, name or title reaches it. An ORU has no confidentiality field, so it has no restricted view.
+- **Several orders in one message:** the identity is the OBR before the first attachment, and the chain's words say how many orders the message has.
+- **The operation key** is `oru-v1:` and a hash of the same fields, with OBR-2 in TXA-13's place.
+- **The one chain rule:** the ORU messages to the same item that name its OBR-3 or its OBR-2, in any OBR and with or without an attachment, are read as above. One with another OBR-25, a missing one included, adds `DOC_RESULT_STATUS_CHANGED` and a sentence naming both statuses in table 0123's words. It doesn't say which message stands, and it reads nothing of the results. No MDM rule applies: the version, patient, status and parent codes are never raised for a report.
+- **The reasons shown** are `DOC_ID_MISSING` (no OBR-2 or OBR-3), `DOC_CHAIN_INCOMPLETE`, `DOC_RESULT_STATUS_CHANGED`, `DOC_ENGINE_OWNS_DELIVERY`, `DOC_DELIVERY_UNCERTAIN` and `DOC_BODY_UNAVAILABLE`.
+- **A profile not taking the type** answers an envelope `409 documents_off`, as a profile that's off does, and the forwarder sends the message the ordinary way.
 
 **Where the document stays:** in the source's message store, under its retention. A receiver's words and a restricted identity are in `Case.DocumentJSON`, which goes with the case's own purge. The snapshot, the events, the email and the model's view hold neither.
 
