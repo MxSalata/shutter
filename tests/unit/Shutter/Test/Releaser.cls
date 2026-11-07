@@ -184,7 +184,10 @@ Method Host() As Shutter.Test.FakeReleaser
 
 Method Again(case As Shutter.Store.Case) As Shutter.Store.Case
 {
-    Quit ##class(Shutter.Store.Case).ByCaseId(case.CaseId)
+    // The same object while the test holds it, so read again: a release clears the marker by SQL.
+    Set again = ##class(Shutter.Store.Case).ByCaseId(case.CaseId)
+    Do again.%Reload()
+    Quit again
 }
 
 Method TestCompletedResolvesWithTheSharedSentence()
