@@ -34,6 +34,30 @@ Method TestItems()
     Do $$$AssertEquals(##class(Shutter.Util.Uninstall).OwnItem("Gate", "Shutter.Operation.Gate", ""), 0, "nothing to compare with")
 }
 
+/// The refusal leaves alone only what the uninstall takes: not a second item a site added on one of Shutter's classes.
+Method TestWhatTheRefusalLeaves()
+{
+    Set u = "Shutter.Util.Uninstall"
+    Do $$$AssertEquals($CLASSMETHOD(u, "TakenByUninstall", "Shutter.Production", "My Gate", "Shutter.Operation.Gate", "Shutter.Production", "", "", 0), 1, "a production of the module's own goes whole")
+    Do $$$AssertEquals($CLASSMETHOD(u, "TakenByUninstall", "Site.Production", "Gate", "Shutter.Operation.Gate", "Site.Production", "Shutter.Operation.Gate", "", 0), 1, "Shutter's item in the production it went into")
+    Do $$$AssertEquals($CLASSMETHOD(u, "TakenByUninstall", "Site.Production", "My Gate", "Shutter.Operation.Gate", "Site.Production", "", "", 0), 0, "a site's second gate there")
+    Do $$$AssertEquals($CLASSMETHOD(u, "TakenByUninstall", "Site.Other", "Gate", "Shutter.Operation.Gate", "Site.Production", "Shutter.Operation.Gate", "", 0), 0, "the same name in another production")
+    Do $$$AssertEquals($CLASSMETHOD(u, "TakenByUninstall", "Site.Production", "Fwd", "Shutter.Intake.Forwarder", "", "", "Site.Production", 1), 1, "the forwarder the onboarding recorded")
+    Do $$$AssertEquals($CLASSMETHOD(u, "TakenByUninstall", "Site.Production", "Second", "Shutter.Intake.Forwarder", "", "", "Site.Production", 0), 0, "a second forwarder by hand beside it")
+    Do $$$AssertEquals($CLASSMETHOD(u, "TakenByUninstall", "Site.Other", "Fwd", "Shutter.Intake.Forwarder", "", "", "Site.Production", 1), 0, "a name the onboarding recorded, in another production")
+    Do $$$AssertEquals($CLASSMETHOD(u, "TakenByUninstall", "Shutter.Production", "Gate", "Shutter.Operation.Gate", "", "", "", 0), 0, "a production of that name in another namespace")
+}
+
+/// The demo's global prefixes go only where the demo was installed, in Shutter's own production.
+Method TestGlobalPrefixes()
+{
+    Do $$$AssertEquals(##class(Shutter.Util.Uninstall).GlobalPrefixes(1, "Shutter.Production"), ##class(Shutter.Util.Uninstall).#GLOBALS, "the demo")
+    Do $$$AssertEquals(##class(Shutter.Util.Uninstall).GlobalPrefixes(0, "Shutter.Production"), "^Shutter.", "a site install in a namespace of its own")
+    Do $$$AssertEquals(##class(Shutter.Util.Uninstall).GlobalPrefixes(0, "Site.Production"), "^Shutter.", "into a site's production")
+    Do $$$AssertEquals(##class(Shutter.Util.Uninstall).GlobalPrefixes(1, "Site.Production"), "^Shutter.", "never a site's own, whatever the flag says")
+    Do $$$AssertEquals(##class(Shutter.Util.Uninstall).GlobalPrefixes("", "Shutter.Production"), "^Shutter.", "no flag: nothing says the demo was here")
+}
+
 /// A namespace goes only when it is the demo's: its package mapped from Shutter's own code database.
 Method TestNamespaces()
 {

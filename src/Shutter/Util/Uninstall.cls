@@ -6,7 +6,8 @@
 Class Shutter.Util.Uninstall
 {
 
-/// The prefixes of the globals, and so of the tables and configuration, that are Shutter's.
+/// The prefixes of the globals, and so of the tables and configuration, that are Shutter's with the demo. Without it, only
+/// the first is (GlobalPrefixes).
 Parameter GLOBALS = "^Shutter.,^Downstream.,^Hospital.,^Wards.";
 
 /// The comments Shutter's installers give the users they make. A user of the same name without one of them is the site's.
@@ -35,7 +36,8 @@ ClassMethod Plan() As %String [ SqlProc ]
         Do out.removes.%Push("Shutter's items in " _ production _ ", which is updated and not stopped")
         Do out.removes.%Push("The definition of Shutter.Production, which never ran here")
     }
-    For ns = ..DemoNamespaces() Do:ns'="" out.removes.%Push("The namespace " _ ns _ " and its databases, made for the demo")
+    Set demo = ..DemoNamespaces()
+    For i = 1:1:$LISTLENGTH(demo) Do out.removes.%Push("The namespace " _ $LIST(demo, i) _ " and its databases, made for the demo")
     Set list = ..Applications()
     For i = 1:1:$LISTLENGTH(list) Do out.removes.%Push("The web application " _ $LIST(list, i))
     Set list = ..NamesLike("Security.Roles")
@@ -120,6 +122,27 @@ ClassMethod OwnNamespace(ns As %String, mappedFrom As %String, codeDatabase As %
     Quit (mappedFrom '= "") && ($ZCONVERT(mappedFrom, "U") = $ZCONVERT(codeDatabase, "U"))
 }
 
+/// The prefixes whose globals and tables go here: the demo's only where the demo was installed, in Shutter's own production.
+/// Elsewhere a global called ^Hospital.Config or ^Wards.Beds is the site's.
+ClassMethod GlobalPrefixes(demo As %Boolean, production As %String) As %String
+{
+    If demo && (production = "Shutter.Production") Quit ..#GLOBALS
+    Quit $PIECE(..#GLOBALS, ",", 1)
+}
+
+/// Whether the uninstall takes this item out by itself, so that it need not refuse: in this namespace (ownProduction is "" in
+/// any other), the whole of a production of the module's own, and in the production Shutter went into only an item OwnItem
+/// accepts; in the production onboarded in its namespace, only an item the onboarding recorded. A second item a site added
+/// by hand on one of Shutter's classes stays where it is, and could not start once the classes are gone.
+ClassMethod TakenByUninstall(production As %String, name As %String, className As %String, ownProduction As %String, ownClassName As %String, onboarded As %String, recorded As %Boolean) As %Boolean
+{
+    If ownProduction '= "" {
+        If ..OwnBodyClass(production) Quit 1
+        If (production = ownProduction) && ..OwnItem(name, className, ownClassName) Quit 1
+    }
+    Quit (production = onboarded) && recorded
+}
+
 /// Whether a body class is one of Shutter's.
 ClassMethod OwnBodyClass(className As %String) As %Boolean
 {
@@ -136,16 +159,17 @@ ClassMethod Refusal() As %String
 {
     Set found = "", here = $NAMESPACE, ownProduction = ##class(Shutter.Setup).ProductionName()
     Set demo = ..DemoNamespaces(), all = ..AllNamespaces()
+    Do ..OwnItems(.own)
     For i = 1:1:$LISTLENGTH(all) {
         Set ns = $LIST(all, i)
-        If '$LISTFIND(demo, ns) Do ..ForeignItems(ns, here, ownProduction, .found)
+        If '$LISTFIND(demo, ns) Do ..ForeignItems(ns, here, ownProduction, .own, .found)
     }
     If found = "" Quit ""
     Quit "These items use Shutter's classes and were not added by its onboarding, so their productions would not start once the classes are gone: " _ found _ ". Take them out first, then run this again"
 }
 
 /// Adds to found the items in one namespace that use Shutter's classes, outside what the uninstall takes out itself.
-ClassMethod ForeignItems(ns As %String, here As %String, ownProduction As %String, ByRef found As %String) [ Private ]
+ClassMethod ForeignItems(ns As %String, here As %String, ownProduction As %String, ByRef own, ByRef found As %String) [ Private ]
 {
     New $NAMESPACE
     Try {
@@ -153,13 +177,11 @@ ClassMethod ForeignItems(ns As %String, here As %String, ownProduction As %Strin
         Quit:'##class(%Dictionary.CompiledClass).%ExistsId("Ens.Config.Item")
         Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT Production, Name, ClassName FROM Ens_Config.Item WHERE ClassName %STARTSWITH 'Shutter.' OR ClassName %STARTSWITH 'Hospital.' OR ClassName %STARTSWITH 'Downstream.'")
         While rs.%Next() {
-            Set production = rs.%GetData(1)
+            Set production = rs.%GetData(1), name = rs.%GetData(2)
             // A row in no production starts nothing.
             Continue:production=""
-            // Here, the module's own production classes have their definitions too, each with its items.
-            If (ns = here) && ((production = ownProduction) || ..OwnBodyClass(production)) Continue
-            If $GET(^|here|Shutter.Config("onboard", ns)) = production Continue
-            Set one = rs.%GetData(2) _ " in " _ production _ " (" _ ns _ ")"
+            Continue:..TakenByUninstall(production, name, rs.%GetData(3), $SELECT(ns = here: ownProduction, 1: ""), $GET(own(name)), $GET(^|here|Shutter.Config("onboard", ns)), $DATA(^|here|Shutter.Config("onboard", ns, "items", name)) > 0)
+            Set one = name _ " in " _ production _ " (" _ ns _ ")"
             If '$FIND("; " _ found _ "; ", "; " _ one _ "; ") Set found = found _ $SELECT(found = "": "", 1: "; ") _ one
         }
     } Catch ex {
@@ -244,14 +266,22 @@ ClassMethod TakeProduction(out As %DynamicObject)
     }
 }
 
+/// Shutter.Production's items here: own(name) = class.
+ClassMethod OwnItems(Output own) [ Private ]
+{
+    Kill own
+    Set source = ##class(Ens.Config.Production).%OpenId("Shutter.Production")
+    Quit:'$ISOBJECT(source)
+    For i = 1:1:source.Items.Count() Set own(source.Items.GetAt(i).Name) = source.Items.GetAt(i).ClassName
+}
+
 /// The items AddItemsTo put in a production, and its class saved and the running production updated.
 ClassMethod TakeItemsFrom(production As %String, Output taken As %Integer) As %Status
 {
     Set taken = 0, sc = $$$OK
-    Set source = ##class(Ens.Config.Production).%OpenId("Shutter.Production")
     Set target = ##class(Ens.Config.Production).%OpenId(production)
     If '$ISOBJECT(target) Quit sc
-    If $ISOBJECT(source) { For i = 1:1:source.Items.Count() Set own(source.Items.GetAt(i).Name) = source.Items.GetAt(i).ClassName }
+    Do ..OwnItems(.own)
     For i = target.Items.Count():-1:1 {
         Set item = target.Items.GetAt(i)
         Continue:'..OwnItem(item.Name, item.ClassName, $GET(own(item.Name)))
@@ -619,12 +649,14 @@ ClassMethod HoldsDatabase(dir As %String) As %Boolean
 ClassMethod TakeGlobals(out As %DynamicObject)
 {
     Set ns = $NAMESPACE
+    Set prefixes = ..GlobalPrefixes($GET(^Shutter.Config("demo")), ##class(Shutter.Setup).ProductionName())
     Do ..PurgeQueries(ns)
     // Tables on extent sets keep their rows under a hashed name, so they go by class. A class that extends an engine's
     // (a message body) loses only its own rows.
     Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT Name FROM %Dictionary.CompiledClass WHERE ClassType = 'persistent' AND (Name %STARTSWITH 'Shutter.' OR Name %STARTSWITH 'Hospital.' OR Name %STARTSWITH 'Downstream.')")
     While rs.%Next() {
         Set class = rs.%GetData(1)
+        Continue:'$FIND("," _ prefixes _ ",", ",^" _ $PIECE(class, ".", 1) _ ".,")
         // A serial or generated class listed as persistent has no extent of its own to kill.
         Continue:'##class(%Dictionary.CompiledMethod).%ExistsId(class _ "||%KillExtent")
         Set sc = $CLASSMETHOD(class, "%KillExtent")
@@ -633,8 +665,8 @@ ClassMethod TakeGlobals(out As %DynamicObject)
     // The extent manager's record of each class: removing a class leaves it, with every global the class named.
     Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT Name FROM %Dictionary.CompiledClass WHERE Name %STARTSWITH 'Shutter.' OR Name %STARTSWITH 'Hospital.' OR Name %STARTSWITH 'Downstream.'")
     While rs.%Next() { Do ##class(%ExtentMgr.Util).DeleteExtentDefinitionIfExists(rs.%GetData(1), "cls") }
-    For i = 1:1:$LENGTH(..#GLOBALS, ",") {
-        Set prefix = $PIECE(..#GLOBALS, ",", i)
+    For i = 1:1:$LENGTH(prefixes, ",") {
+        Set prefix = $PIECE(prefixes, ",", i)
         // $ORDER starts from a valid name, so the prefix without its dot.
         Set g = $PIECE(prefix, ".", 1)
         For {
@@ -643,8 +675,11 @@ ClassMethod TakeGlobals(out As %DynamicObject)
             Set names(g) = 1
         }
     }
+    // The configuration last: it says which prefixes go, should this be run again.
+    Kill names("^Shutter.Config")
     Set g = ""
     For { Set g = $ORDER(names(g)) Quit:g=""  Kill @g }
+    Kill ^Shutter.Config
     Do out.removed.%Push("Every case, approval, incident and setting of Shutter's in " _ ns)
 }
 
