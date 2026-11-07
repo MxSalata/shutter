@@ -438,6 +438,15 @@ Method StandardCategory(category As %String) As %String [ Private ]
     Quit out
 }
 
+/// Whether the receiver offers a readable history: its capabilities' own word when they mention it, else its entry's explicit
+/// declaration in the site profile, which is how a site whose endpoint does not mention history says it has one. Neither is no.
+ClassMethod HistoryOffered(caps As %DynamicObject, entry As %DynamicObject) As %Boolean
+{
+    If $ISOBJECT(caps) && caps.%IsDefined("history") Quit ##class(Shutter.Util.Json).Bool(caps, "history")
+    Set features = $SELECT($ISOBJECT(entry): entry.%Get("features"), 1: "")
+    Quit $ISOBJECT(features) && ##class(Shutter.Util.Json).Bool(features, "history")
+}
+
 /// The route item (CONTRACTS 6.4): the receiver's own capability profile, read from its capabilities endpoint, or
 /// the features its entry in the site profile declares when it has no such endpoint. An entry without an endpoint that
 /// declares no features vouches for nothing: the route then records the capabilities as unread (status 0), so the gate
@@ -471,6 +480,7 @@ Method Route(receiver As %String) As %DynamicObject
         Set route.capabilities = caps
         Do route.%Set("conditional_writes", ##class(Shutter.Util.Json).Bool(caps, "conditional_writes"), "boolean")
         Do route.%Set("receipts", ##class(Shutter.Util.Json).Bool(caps, "receipts"), "boolean")
+        Do route.%Set("history", ..HistoryOffered(caps, entry), "boolean")
         Do route.%Set("dry_run", ##class(Shutter.Util.Json).Bool(caps, "dry_run"), "boolean")
         Set route.epoch = ##class(Shutter.Util.Json).Str(caps, "epoch")
     } ElseIf undeclared {

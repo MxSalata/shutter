@@ -492,6 +492,24 @@
       "text": "Without a dry run nothing shows that the exact request would apply before it is written, so resending is not offered."
     },
     {
+      "code": "HISTORY_UNSUPPORTED",
+      "title": "The downstream system offers no readable history",
+      "prerequisite": "history shown in the downstream system's capability profile, or declared on its entry in the site profile when the profile says nothing",
+      "next_action": "Escalate for manual handling. Reconcile and superseded remain possible; a resend is not offered to a receiver whose history can't be read.",
+      "owner": "Downstream system team",
+      "reevaluate_when": "The capability profile changes",
+      "text": "Without a readable history a move made outside this feed would not show, so a resend could overwrite it, and nothing could confirm the write afterwards."
+    },
+    {
+      "code": "HISTORY_UNREADABLE",
+      "title": "The downstream system's read holds no history",
+      "prerequisite": "A read of the encounter with its history as a list, as the receiver says it keeps one",
+      "next_action": "Ask the downstream system's team why the encounter's read has no history, then investigate again.",
+      "owner": "Downstream system team",
+      "reevaluate_when": "The encounter's read holds its history",
+      "text": "The receiver says it keeps a history, but this read of the encounter holds none, so what has moved since is unknown. A missing history isn't the same as nothing later."
+    },
+    {
       "code": "DRY_RUN_MISSING",
       "title": "The exact request was never rehearsed",
       "prerequisite": "A dry run of this plan, bound to its approval (WIC-2.5)",
@@ -597,7 +615,7 @@
       "next_action": "Read the matched entry and decide by hand, or investigate again so the plan follows the entry.",
       "owner": "Operator",
       "reevaluate_when": "The case is investigated again",
-      "text": "The plan would resend and names no catalogue entry, but an entry that matches this case calls for something other than a resend. Only Rules only mode, the baseline, passes this."
+      "text": "The plan would resend and names no catalogue entry, but an entry that matches this case calls for something other than a resend. Only Rules only mode in a recorded scenario, the baseline, passes this."
     },
     {
       "code": "NO_BOARD_ANSWER",

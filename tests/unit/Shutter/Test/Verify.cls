@@ -107,6 +107,17 @@ Method TestContextReadsTheSnapshotsTimeline()
     Do $$$AssertEquals(##class(Shutter.Operation.Verify).Judge(ctx, .text, .detail), "unresolved", "so nothing supports the supersession: " _ text)
 }
 
+/// The context carries the encounter's version as the snapshot read it, so a closure can be checked against the read now.
+Method TestContextCarriesTheSnapshotsVersion()
+{
+    Set case = ..Case(), encounter = ..Base().encounter, none = {"error": "no_receipt"}
+    Set summary = {"observed_at": "2026-10-19T13:00:00Z", "ward_state": {"version": 7}}
+    Set ctx = ##class(Shutter.Operation.Verify).Context(case, "", "", summary, 200, encounter, 404, none, ..#NOW, 30)
+    Do $$$AssertEquals(ctx."snapshot_version", 7, "the snapshot's version")
+    Set ctx = ##class(Shutter.Operation.Verify).Context(case, "", "", {"observed_at": "2026-10-19T13:00:00Z"}, 200, encounter, 404, none, ..#NOW, 30)
+    Do $$$AssertEquals(ctx."snapshot_version", "", "and none when the snapshot read none")
+}
+
 /// LaterThan: the latest transfer or discharge after a time, as the committed path cites what followed a write.
 Method TestLaterThan()
 {
@@ -342,6 +353,14 @@ XData Rows [ MimeType = application/json ]
    "ctx": {"disposition": "superseded", "attempt": null, "encounter": {"ward": "WARD-C", "version": 2},
            "later": [{"word": "transfer", "event": "transfer", "ward": "WARD-C", "event_time": "2026-10-19T10:00:00Z", "from": "history", "delivered": true, "plausible": true, "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^transfer^2026-10-19T10:00:00Z"}]},
    "outcome": "verified", "verdict": "not_committed", "retry": false, "equals": "Nothing was resent; the receiver's history shows the later event (transfer to WARD-C at 2026-10-19T10:00:00Z) and no receipt for the stale operation. Current state admitted in WARD-C"},
+  {"group": "superseded", "name": "the stale operation in a history with no receipts kept, and a later transfer: the verdict is committed",
+   "ctx": {"disposition": "superseded", "attempt": null, "receipt_http_status": -1, "receipt": {}, "encounter": {"version": 3, "ward": "WARD-C", "history": [{"version_after": 1, "event": "admit", "ward": "WARD-A", "event_time": "2026-10-18T08:00:00Z", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^admit^2026-10-18T08:00:00Z"}, {"version_after": 2, "event": "transfer", "ward": "WARD-B", "event_time": "2026-10-19T09:00:00Z", "operation_key": "{key}"}, {"version_after": 3, "event": "transfer", "ward": "WARD-C", "event_time": "2026-10-19T10:00:00Z", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^transfer^2026-10-19T10:00:00Z"}]},
+           "later": [{"word": "transfer", "event": "transfer", "ward": "WARD-C", "event_time": "2026-10-19T10:00:00Z", "from": "history", "delivered": true, "plausible": true, "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^transfer^2026-10-19T10:00:00Z"}]},
+   "outcome": "verified", "verdict": "committed", "retry": false, "contains": ["is in the receiver's history", "overtook it", "transfer to WARD-C"], "not_contains": ["not committed"]},
+  {"group": "superseded", "name": "the stale operation in the history, its receipt gone, and a later transfer: the verdict is committed",
+   "ctx": {"disposition": "superseded", "attempt": null, "encounter": {"version": 3, "ward": "WARD-C", "history": [{"version_after": 1, "event": "admit", "ward": "WARD-A", "event_time": "2026-10-18T08:00:00Z", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^admit^2026-10-18T08:00:00Z"}, {"version_after": 2, "event": "transfer", "ward": "WARD-B", "event_time": "2026-10-19T09:00:00Z", "operation_key": "{key}"}, {"version_after": 3, "event": "transfer", "ward": "WARD-C", "event_time": "2026-10-19T10:00:00Z", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^transfer^2026-10-19T10:00:00Z"}]},
+           "later": [{"word": "transfer", "event": "transfer", "ward": "WARD-C", "event_time": "2026-10-19T10:00:00Z", "from": "history", "delivered": true, "plausible": true, "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^transfer^2026-10-19T10:00:00Z"}]},
+   "outcome": "verified", "verdict": "committed", "retry": false, "contains": ["is in the receiver's history", "overtook it"], "not_contains": ["not committed"]},
   {"group": "superseded", "name": "superseded, the receiver's history showing a later discharge (S6)",
    "ctx": {"disposition": "superseded", "attempt": null, "encounter": {"state": "discharged", "ward": "", "version": 2},
            "later": [{"word": "discharge", "event": "discharge", "ward": "", "event_time": "2026-10-19T11:00:00Z", "from": "history", "delivered": true, "plausible": true, "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^discharge^2026-10-19T11:00:00Z"}]},
@@ -357,6 +376,12 @@ XData Rows [ MimeType = application/json ]
   {"group": "superseded", "name": "a catalogue entry closes the case with nothing to send (CLOSED_BY_CATALOGUE)",
    "ctx": {"disposition": "superseded", "attempt": null, "closed_by_catalogue": true, "catalogue_entry": "E6"},
    "outcome": "verified", "verdict": "not_committed", "retry": false, "equals": "Nothing was resent; catalogue entry E6 closes the case with nothing to send, and the receiver holds neither a receipt nor the operation in its history. Current state admitted in WARD-A"},
+  {"group": "superseded", "name": "a catalogue closure with the encounter where the snapshot saw it",
+   "ctx": {"disposition": "superseded", "attempt": null, "closed_by_catalogue": true, "catalogue_entry": "E6", "snapshot_version": 1},
+   "outcome": "verified", "verdict": "not_committed", "retry": false},
+  {"group": "superseded", "name": "a catalogue closure with the encounter moved since the snapshot goes to a person",
+   "ctx": {"disposition": "superseded", "attempt": null, "closed_by_catalogue": true, "catalogue_entry": "E6", "snapshot_version": 1, "encounter": {"version": 2, "state": "admitted", "ward": "WARD-A"}},
+   "outcome": "unresolved", "verdict": "unknown", "retry": false, "contains": ["changed since", "version 1", "version 2", "a person decides"]},
   {"group": "superseded", "name": "a later transfer the feed sent whose delivery failed supports the closure, in the gate's words",
    "ctx": {"disposition": "superseded", "attempt": null,
            "later": [{"word": "transfer", "event": "transfer", "ward": "WARD-C", "event_time": "2026-10-19T10:00:00Z", "from": "timeline", "delivered": false, "plausible": true, "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^transfer^2026-10-19T10:00:00Z"}]},

@@ -37,6 +37,30 @@ Method OnBeforeOneTest(testname As %String) As %Status
     Quit sc
 }
 
+/// What the email asks once the receiver is corrected: Reinvestigate can plan another resend, so it is never described as a
+/// check of the correction; a receiver Shutter cannot read, or a message it does not model, leaves it nothing to verify.
+Method TestWhatTheEmailAsksOnceCorrected()
+{
+    Set d = "Shutter.Util.EscalationDraft"
+    Set words = $CLASSMETHOD(d, "WhenCorrected", "Ward Beds", 1)
+    Do $$$AssertTrue(words [ "mark the case as handled", "it asks for the case to be marked as handled: " _ words)
+    Do $$$AssertTrue(words [ "may plan another resend", "it says Reinvestigate can resend")
+    Do $$$AssertTrue(words [ "with no person", "and that policy may release that")
+    Do $$$AssertNotTrue(words [ "verifies the correction", "it promises no check")
+    Set words = $CLASSMETHOD(d, "WhenCorrected", "Ward Beds", 0)
+    Do $$$AssertTrue(words [ "mark the case as handled", "a receiver Shutter cannot read: " _ words)
+    Do $$$AssertTrue(words [ "cannot verify a correction", "says so")
+    Do $$$AssertNotTrue(words [ "Reinvestigate", "and does not offer Reinvestigate as the way on")
+    Set c = ##class(Shutter.Store.Case).ByCaseId(..#CASEID)
+    Do $$$AssertStatusOK($CLASSMETHOD(d, "Build", c, {"name": "Beds"}, .subject, .body), "a draft for the demo receiver")
+    Do $$$AssertTrue(body [ "may plan another resend", "the body says it")
+    Do $$$AssertNotTrue(body [ "verifies the correction", "and promises no check")
+    Set c.FailureText = "This message is an order, not ADT: nothing is planned"
+    Do $$$AssertTrue(c.NotModelled(), "a message Shutter does not model")
+    Do $$$AssertStatusOK($CLASSMETHOD(d, "Build", c, {"name": "Beds"}, .subject, .body), "a draft for it")
+    Do $$$AssertTrue(body [ "cannot verify a correction", "the body says Shutter cannot verify it")
+}
+
 Method OnAfterOneTest(testname As %String) As %Status
 {
     Do ..Purge(..CaseRowId)

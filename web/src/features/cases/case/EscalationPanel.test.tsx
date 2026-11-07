@@ -318,6 +318,30 @@ describe('EscalationPanel', () => {
     expect(within(dialog).getByRole('button', { name: 'Send' })).toBeDisabled();
   });
 
+  it('says when the team drafted to does not list the receiver, so a person looks before patient identifiers go', async () => {
+    const view = recordedSiteProfile()!;
+    view.profile.teams = [
+      { id: 'integration', name: 'Integration team', mailbox: 'integration@example.nhs.uk' },
+    ];
+    server.use(http.get('/api/shutter/site-profile', () => HttpResponse.json(view)));
+    renderCase('C-000008');
+    const panel = await screen.findByRole('region', { name: 'Escalations' });
+    await within(panel).findByRole('option', { name: /^Automatic/ });
+    await userEvent.click(await within(panel).findByRole('button', { name: /^Escalate to /i }));
+    const dialog = await screen.findByRole('dialog', { name: /^Escalate to / });
+    expect(within(dialog).getByTestId('team-not-listed')).toHaveTextContent(
+      /Integration team does not list .+ in the site profile\. Check it is the right team/,
+    );
+  });
+
+  it('says nothing about the team when it lists the receiver', async () => {
+    renderCase('C-000008');
+    const panel = await screen.findByRole('region', { name: 'Escalations' });
+    await userEvent.click(await within(panel).findByRole('button', { name: /^Escalate to /i }));
+    const dialog = await screen.findByRole('dialog', { name: /^Escalate to / });
+    expect(within(dialog).queryByTestId('team-not-listed')).not.toBeInTheDocument();
+  });
+
   it('allows no address while the site profile names no mail domains', async () => {
     const view = recordedSiteProfile()!;
     view.profile.mail = {};

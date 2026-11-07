@@ -417,11 +417,11 @@ export function validateProfile(p: unknown): string {
   if ('incident' in p) {
     if (!isObject(p.incident)) return 'incident: must be an object';
     for (const [k, n] of members(p.incident)) {
-      if (!['threshold', 'window_minutes', 'quiet_seconds'].includes(k))
+      if (!['threshold', 'window_minutes', 'quiet_seconds', 'max_intake_seconds'].includes(k))
         return `incident.${k}: unknown setting`;
-      const low = k === 'quiet_seconds' ? 0 : 1;
-      if (!numeric(n) || asNumber(n) < low)
-        return `incident.${k}: must be a whole number${k === 'quiet_seconds' ? '' : ' of 1 or more'}`;
+      const zero = k === 'quiet_seconds' || k === 'max_intake_seconds';
+      if (!numeric(n) || asNumber(n) < (zero ? 0 : 1))
+        return `incident.${k}: must be a whole number${zero ? '' : ' of 1 or more'}`;
     }
   }
   return '';

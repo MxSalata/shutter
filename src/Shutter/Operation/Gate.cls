@@ -281,11 +281,18 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
         Set capable = ##class(Shutter.Util.Json).Bool(route, "conditional_writes") && ##class(Shutter.Util.Json).Bool(route, "receipts")
         If 'capable {
             Do ..Check(checks, "capability", "block", "CONNECTOR_INCAPABLE", "The receiver reports no conditional writes: a resend cannot be made safe, so only investigation and reconciliation are open")
+        } ElseIf '##class(Shutter.Util.Json).Bool(route, "history") {
+            // A receiver with no readable history can hold a move made outside this feed, and nothing here would see it: every
+            // read says nothing is later, the resend goes over that move, and the verifier finds out only afterwards.
+            Do ..Check(checks, "capability", "block", "HISTORY_UNSUPPORTED", "The receiver offers no readable history: a move made outside this feed would not show, so a resend could overwrite it. A resend is not offered; investigation, reconciliation and escalation remain")
         } ElseIf '##class(Shutter.Util.Json).Bool(route, "dry_run") {
             // No dry run means the exact action cannot be rehearsed before it is written (v1.21): no resend to this receiver.
             Do ..Check(checks, "capability", "block", "DRY_RUN_UNSUPPORTED", "The receiver reports no dry run: the exact action cannot be rehearsed before it is written, so a resend is not offered; investigation, reconciliation and escalation remain")
+        } ElseIf (wardStatus = 200) && '($ISOBJECT(ward) && (ward.%GetTypeOf("history") = "array")) {
+            // It says it keeps a history, but this read holds none: nothing here can tell what moved, which is unknown, not "nothing later".
+            Do ..Check(checks, "capability", "unknown", "HISTORY_UNREADABLE", "The receiver says it keeps a history, but its read of this encounter holds none, so what moved since is unknown")
         } Else {
-            Do ..Check(checks, "capability", "pass", "CONNECTOR_CAPABLE", "The receiver guarantees conditional writes, receipts and dry runs")
+            Do ..Check(checks, "capability", "pass", "CONNECTOR_CAPABLE", "The receiver guarantees conditional writes, receipts, a readable history and dry runs")
         }
     }
 
@@ -298,9 +305,9 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
         Do ..Check(checks, "catalogue", "unknown", "MATCHER_ERROR", "The matcher failed on this evidence: " _ $EXTRACT(##class(Shutter.Util.Json).Str(cat, "error"), 1, 200))
     } ElseIf decision = "new_pattern" {
         Do ..Check(checks, "catalogue", "block", "NEW_PATTERN", "No catalogue entry matches this evidence: a candidate entry for a reviewer")
-    } ElseIf (plan.CatalogueEntry = "") && isWrite && '((case.Mode = "rules") && (plan.CreatedBy = "rules")) && (..EntriesThatStop(cat) '= "") {
-        // Rules only is the baseline and stays as it is: any other write must name the entry it follows, and the entry the
-        // plan could not name calls for no resend.
+    } ElseIf (plan.CatalogueEntry = "") && isWrite && '((case.Mode = "rules") && (plan.CreatedBy = "rules") && (case.Scenario '= "")) && (..EntriesThatStop(cat) '= "") {
+        // Rules only in a recorded scenario is the baseline, kept to show what a plain resend does: any other write, a real
+        // case in that mode included, must name the entry it follows, and the entry the plan could not name calls for no resend.
         Do ..Check(checks, "catalogue", "block", "ENTRY_NOT_NAMED_WRITE", "The plan writes and names no catalogue entry, but the evidence matched " _ ..EntriesThatStop(cat) _ ", which calls for no resend")
     } ElseIf plan.CatalogueEntry = "" {
         Do ..Check(checks, "catalogue", "pass", "ENTRY_NOT_NAMED", "The plan names no catalogue entry; the evidence matched " _ $SELECT(##class(Shutter.Util.Json).Str(cat, "entry") '= "": ##class(Shutter.Util.Json).Str(cat, "entry"), 1: "several entries"))
@@ -446,7 +453,7 @@ Method Superseding(summary As %DynamicObject, case As Shutter.Store.Case, chainK
 {
     Set found = "", delivered = 1
     Set later = ##class(Shutter.Catalogue.Matcher).Later(summary, case, chainKind)
-    Set words = $SELECT(isWrite: $LISTBUILD("transfer", "discharge", "cancelled", "merge", "admit"), 1: $LISTBUILD("transfer", "discharge"))
+    Set words = $SELECT(isWrite: $LISTBUILD("transfer", "discharge", "cancelled", "cancel_other", "merge", "admit"), 1: $LISTBUILD("transfer", "discharge"))
     For pass = $LISTBUILD("timeline", 1), $LISTBUILD("history", 1), $LISTBUILD("timeline", 0) {
         Set from = $LIST(pass, 1), want = $LIST(pass, 2)
         Set iter = later.%GetIterator()

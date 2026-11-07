@@ -16,7 +16,7 @@ import { layer1Words } from '@/test/words';
 import { theme } from '@/theme';
 import CasePage from '../CasePage';
 import { CaseTimeline } from './CaseTimeline';
-import { EvidencePanel } from './EvidencePanel';
+import { CapabilityPassport, EvidencePanel } from './EvidencePanel';
 import { showEvidence } from './evidenceLinks';
 
 // The trial's wording is chosen by the page's TRIAL flag, switched here per test (live unless a test says so)
@@ -201,6 +201,24 @@ describe('the Evidence tab', () => {
     const later = await section('Later events');
     expect(later).toHaveTextContent('None: the snapshot found no later event for the encounter.');
     expect(citedBy(later)).toBe('Cited by the plan');
+  });
+
+  it('shows whether the receiver offers a history, and nothing about it on a snapshot that never asked', () => {
+    const passport = (data: Record<string, unknown>) =>
+      render(
+        <MantineProvider theme={theme}>
+          <CapabilityPassport data={data} />
+        </MantineProvider>,
+      );
+    const base = { capabilities_http_status: 200, conditional_writes: true, receipts: true, dry_run: true };
+    const none = passport({ ...base, history: false });
+    expect(screen.getByText('History: not guaranteed')).toBeInTheDocument();
+    none.unmount();
+    const offered = passport({ ...base, history: true });
+    expect(screen.getByText('History')).toBeInTheDocument();
+    offered.unmount();
+    passport(base);
+    expect(screen.queryByText(/^History/)).not.toBeInTheDocument();
   });
 
   it('ends with the snapshot as the API sends it', async () => {

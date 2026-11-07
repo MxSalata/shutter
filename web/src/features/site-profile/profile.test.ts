@@ -199,6 +199,10 @@ describe('validateProfile, the port of SiteProfile.Validate', () => {
       'incident.quiet_seconds: must be a whole number',
     ],
     [
+      (p: SiteProfile) => (p.incident = { ...p.incident, max_intake_seconds: -1 }),
+      'incident.max_intake_seconds: must be a whole number',
+    ],
+    [
       (p: SiteProfile) =>
         (p.approvers = { ...p.approvers, close_needs_approver: 'yes' as unknown as boolean }),
       'approvers.close_needs_approver: must be true or false',

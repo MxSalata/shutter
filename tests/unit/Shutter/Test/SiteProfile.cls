@@ -55,8 +55,6 @@ Method TestSeedProfileValidates()
     Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).Validate(p), "", "the shipped seed profile passes the validator")
 }
 
-/// The receiver's category and history policy (v1.23): the validator's values, the derivation, and the deprecated
-/// site-wide flag as the fallback for an entry with neither.
 /// The window in which two sources count as simultaneous: whole seconds, none below 0 or above an hour.
 Method TestSourceSkewSeconds()
 {
@@ -76,6 +74,32 @@ Method TestSourceSkewSeconds()
     Do $$$AssertTrue($CLASSMETHOD(c, "Validate", base) [ "feed.source_skew_seconds", "a string is refused")
 }
 
+/// Two receivers with one name: the first would take every decision and the second's tier and API would be ignored, so the
+/// server refuses it, as the page does.
+Method TestReceiverNamesAreUnique()
+{
+    Set p = ##class(Shutter.Store.SiteProfile).Default()
+    Set name = p.receivers.%Get(0).name
+    Do p.receivers.%Push({"name": (name), "tier": 3})
+    Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).Validate(p), "receivers[1].name: must be unique", "a second receiver with the first's name")
+    Set p.receivers.%Get(1).name = name _ " Two"
+    Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).Validate(p), "", "another name passes")
+}
+
+/// The intake's maximum sits beside the quiet period: a whole number, with 0 for none, and no other setting takes 0.
+Method TestIntakeMaximumSetting()
+{
+    Set p = ##class(Shutter.Store.SiteProfile).Default()
+    Set p.incident."max_intake_seconds" = 900
+    Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).Validate(p), "", "a maximum passes")
+    Set p.incident."max_intake_seconds" = 0
+    Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).Validate(p), "", "0 means none")
+    Set p.incident."max_intake_seconds" = -1
+    Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).Validate(p), "incident.max_intake_seconds: must be a whole number", "a negative one is refused")
+}
+
+/// The receiver's category and history policy (v1.23): the validator's values, the derivation, and the deprecated
+/// site-wide flag as the fallback for an entry with neither.
 Method TestReceiverCategory()
 {
     Set name = $PARAMETER("Shutter.Production", "RECEIVER")

@@ -79,7 +79,7 @@ ClassMethod Material(summary As %DynamicObject) As %DynamicObject
         }
     }
     Set route = summary.%Get("route")
-    If $ISOBJECT(route) Set m.route = {"conditional_writes": ($CLASSMETHOD(json, "Str", route, "conditional_writes")), "receipts": ($CLASSMETHOD(json, "Str", route, "receipts")), "dry_run": ($CLASSMETHOD(json, "Str", route, "dry_run")), "capabilities_http_status": ($CLASSMETHOD(json, "Str", route, "capabilities_http_status"))}
+    If $ISOBJECT(route) Set m.route = {"conditional_writes": ($CLASSMETHOD(json, "Str", route, "conditional_writes")), "receipts": ($CLASSMETHOD(json, "Str", route, "receipts")), "history": ($CLASSMETHOD(json, "Str", route, "history")), "dry_run": ($CLASSMETHOD(json, "Str", route, "dry_run")), "capabilities_http_status": ($CLASSMETHOD(json, "Str", route, "capabilities_http_status"))}
     Set cat = summary.%Get("catalogue")
     If $ISOBJECT(cat) Set m.catalogue = {"decision": ($CLASSMETHOD(json, "Str", cat, "decision")), "entry": ($CLASSMETHOD(json, "Str", cat, "entry")), "outcome": ($CLASSMETHOD(json, "Str", cat, "outcome")), "conditions": (cat.%Get("conditions"))}
     Set inc = summary.%Get("incident")
