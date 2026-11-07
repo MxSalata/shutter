@@ -408,6 +408,28 @@ Method TestACallCutOffIsUncertainAndNotRetried()
     Do $$$AssertEquals(##class(Shutter.Util.RecoveryControl).Read().outstandingCount, 0, "and it's off the list")
 }
 
+/// Job numbers repeat after a restart, so a dead call's number can be this job's own. It is still cut off, not this job's
+/// call in progress: the permit is found, recovery stops and the message that comes round again isn't sent twice.
+Method TestACutOffCallIsFoundWhenItsJobNumberComesBack()
+{
+    Do ..SetMode("enabled")
+    Set c = ..PlannedCase()
+    Job ##class(Shutter.Test.RecoveryControl).JobAdmitAndEnd(c.CaseId, "reused")
+    Do $$$AssertTrue(..WaitFor("^Shutter.TestWire(""job"",""reused"")"), "the job admitted a call")
+    Set id = ^Shutter.TestWire("job", "reused")
+    For i = 1:1:50 { Quit:'$DATA(^$JOB($ZCHILD))  Hang 0.1 }
+    Set permit = ##class(Shutter.Store.DispatchPermit).%OpenId(id)
+    Set permit.Job = $JOB
+    Do $$$AssertStatusOK(permit.%Save(), "the dead call now has the number this job has, as after a restart")
+    Kill permit
+    Do ..Send(..Write(c.CaseId), .result)
+    Do $$$AssertEquals(result.ReasonCode, "recovery_stopped", "the next call finds it, and is refused")
+    Do $$$AssertEquals(..Posts(), 0, "no retry on the wire")
+    Set permit = ##class(Shutter.Store.DispatchPermit).%OpenId(id)
+    Do $$$AssertEquals(permit.State, "uncertain", "the call is uncertain")
+    Do $$$AssertEquals(permit.Orphaned, 1, "and marked cut off")
+}
+
 /// A call nobody answered, with the job alive: uncertain, as the connector says. The case reads it back, so it stops nothing.
 Method TestAnUnansweredCallReadsUncertain()
 {
