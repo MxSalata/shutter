@@ -205,7 +205,7 @@ ClassMethod Classify(chain As Shutter.Store.Chain) As %Status
         Set policy = ##class(Shutter.Store.SiteProfile).Policy(tier, chain.Kind)
         If policy = "board" { Set decides = "board" } Else { Set chain.Policy = policy }
     }
-    Set chain.Entries = entries, chain.Decides = decides
+    Set chain.Entries = ##class(Shutter.Process.IncidentTaskText).ClipEntries(entries), chain.Decides = decides
     If $ISOBJECT(firstCase) Set chain.FirstExpectedVersion = ..VersionOf(firstCase)
     Quit chain.%Save()
 }

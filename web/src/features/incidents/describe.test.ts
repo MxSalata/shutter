@@ -350,6 +350,18 @@ describe('the approval and the plan in a sentence', () => {
   });
 
   it('says what the plan covers, from the chains that need the approval', () => {
+    expect(
+      approvalSentence(
+        Array.from({ length: 100 }, () => ordered),
+        undefined,
+      ),
+    ).toMatch(/^One approval releases 100 chains: .*; and 94 more\.$/);
+    expect(
+      approvalSentence(
+        Array.from({ length: 100 }, () => ordered),
+        undefined,
+      ).split(';'),
+    ).toHaveLength(7);
     expect(planSentence(closed.chains)).toBe('One plan, approved once, covers the ordered chain.');
     expect(planSentence([ordered, { ...ordered, seq: 7 }])).toBe('One plan, approved once, covers 2 chains.');
     expect(planSentence(closed.chains.filter((c) => c.policy === 'automatic'))).toBe(

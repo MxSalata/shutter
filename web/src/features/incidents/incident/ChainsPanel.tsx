@@ -1,5 +1,6 @@
 import { Anchor, Button, Card, Group, Stack, Table, Text, Tooltip } from '@mantine/core';
 import { IconCheck, IconHandStop, IconX } from '@tabler/icons-react';
+import { useState } from 'react';
 import { Link } from 'react-router';
 import { resolveCan } from '@/api/can';
 import type { Chain, ChainItem, IncidentDetail, Me } from '@/api/types';
@@ -12,9 +13,13 @@ import { humanize } from '@/lib/format';
 import { useTechnical } from '@/stores/appearance';
 import { HINT_EVENTS } from '@/theme';
 import { ChainStateBadge, KindBadge, OperationBadge } from '../badges';
-import { CHAIN_STATES, chainLine, describeChain, versions } from '../describe';
+import { CHAIN_STATES, CHAINS_LISTED, chainLine, describeChain, versions } from '../describe';
 import type { Decision } from './DecideModal';
 import { toBecomeApprover } from '@/env/copy';
+
+/** A chain always listed, wherever it falls: one with its own Approve button, or one that stopped for a person to read. */
+const alwaysListed = (chain: Chain) =>
+  chain.state === 'stopped' || (chain.state === 'awaiting_approval' && chain.policy === 'per_chain');
 
 /** What the version step means, said once for every operation's "v1 → v2". */
 const VERSION_HINT =
@@ -102,7 +107,10 @@ function ChainCard({
   const technical = useTechnical();
   const ownApproval = chain.state === 'awaiting_approval' && chain.policy === 'per_chain';
   const why = !resolveCan(me).approve ? `Deciding needs the approver role: ${toBecomeApprover()}` : '';
+  // A very long chain's entries end in how many more, such as "E4,E4,+118": a count, not a catalogue entry.
   const entries = (chain.entries ?? '').split(',').filter(Boolean);
+  const named = entries.filter((e) => !e.startsWith('+'));
+  const more = entries.find((e) => e.startsWith('+'))?.slice(1);
   return (
     <Card padding="sm" withBorder component="article" aria-label={`Chain ${chain.seq}, ${chain.encounterId}`}>
       <Stack gap="xs">
@@ -128,9 +136,14 @@ function ChainCard({
                 ) : null}
                 <CodeChip>{chain.decides}</CodeChip>
                 {chain.policy ? <CodeChip>{chain.policy}</CodeChip> : null}
-                {entries.map((e, i) => (
+                {named.map((e, i) => (
                   <CodeChip key={i}>{e}</CodeChip>
                 ))}
+                {more ? (
+                  <Text size="xs" c="dimmed" span>
+                    and {more} more
+                  </Text>
+                ) : null}
               </Group>
             ) : null}
           </Stack>
@@ -198,7 +211,7 @@ function ChainCard({
 /** Today's tables, for the reader who wants every column: one per chain, behind one disclosure for the panel. */
 function OperationTables({ chains }: { chains: Chain[] }) {
   return (
-    <TechDetail label="Show the operations as tables" kind="explain">
+    <TechDetail label="Show the operations as tables" kind="explain" lazy={chains.length > CHAINS_LISTED}>
       <Stack gap="md">
         {chains.map((chain) => (
           <Stack gap={4} key={chain.seq}>
@@ -277,6 +290,11 @@ export function ChainsPanel({
   onDecide: (d: Decision, chain: Chain) => void;
 }) {
   const byState = Object.entries(inc.progress?.byState ?? {});
+  const [showAll, setShowAll] = useState(false);
+  const listed = showAll
+    ? inc.chains
+    : inc.chains.filter((chain, i) => i < CHAINS_LISTED || alwaysListed(chain));
+  const others = inc.chains.length - listed.length;
   return (
     <Section
       id="chains"
@@ -305,9 +323,14 @@ export function ChainsPanel({
           No chains yet: they form when the intake has closed and every case it took has its evidence.
         </NotYet>
       ) : null}
-      {inc.chains.map((chain) => (
+      {listed.map((chain) => (
         <ChainCard key={chain.seq} chain={chain} me={me} onDecide={onDecide} />
       ))}
+      {others > 0 ? (
+        <Button variant="default" size="xs" w="fit-content" onClick={() => setShowAll(true)}>
+          Show the other {others} {others === 1 ? 'chain' : 'chains'}
+        </Button>
+      ) : null}
       {inc.chains.length ? <OperationTables chains={inc.chains} /> : null}
     </Section>
   );

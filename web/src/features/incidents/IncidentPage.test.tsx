@@ -580,3 +580,92 @@ describe('IncidentPage', () => {
     expect(technical).toBeLessThanOrEqual(plain * 1.5);
   });
 });
+
+describe('an incident with many chains', () => {
+  /** The recorded chains, repeated with their own numbers up to this many, all under the one approval. */
+  const many = (count: number): IncidentDetail => {
+    const inc = waiting();
+    const first = inc.chains[0];
+    return {
+      ...inc,
+      chains: Array.from({ length: count }, (_, i) => ({
+        ...first,
+        seq: i + 1,
+        encounterId: `ENC-${i + 1}`,
+        state: 'awaiting_approval',
+        policy: 'approval',
+        decides: 'policy',
+      })),
+    };
+  };
+  const cards = () => screen.queryAllByRole('article', { name: /^Chain \d+, ENC-/ });
+
+  it('lists six and keeps the approval within reach, with the rest one click away', async () => {
+    served = many(100);
+    renderAt(`/incidents/${closed.incidentId}`);
+    const more = await screen.findByRole('button', { name: 'Show the other 94 chains' });
+    expect(cards()).toHaveLength(6);
+    expect(screen.getByRole('button', { name: 'Approve release' })).toBeInTheDocument();
+    await userEvent.click(more);
+    expect(cards()).toHaveLength(100);
+    expect(screen.queryByRole('button', { name: /Show the other/ })).not.toBeInTheDocument();
+  });
+
+  it('lists all of six, with no button', async () => {
+    served = many(6);
+    renderAt(`/incidents/${closed.incidentId}`);
+    await screen.findByRole('button', { name: 'Approve release' });
+    expect(cards()).toHaveLength(6);
+    expect(screen.queryByRole('button', { name: /Show the other/ })).not.toBeInTheDocument();
+  });
+
+  it('never folds a chain with its own Approve button, or one that stopped', async () => {
+    const inc = many(10);
+    inc.chains[7] = { ...inc.chains[7], policy: 'per_chain' };
+    inc.chains[8] = { ...inc.chains[8], state: 'stopped' };
+    served = inc;
+    renderAt(`/incidents/${closed.incidentId}`);
+    await screen.findByRole('button', { name: 'Show the other 2 chains' });
+    expect(cards()).toHaveLength(8);
+    expect(screen.getByRole('button', { name: 'Approve this chain' })).toBeInTheDocument();
+    expect(screen.getByRole('article', { name: 'Chain 9, ENC-9' })).toBeInTheDocument();
+  });
+
+  it("says a very long chain's left-out entries in words, not as a code", async () => {
+    const inc = many(1);
+    inc.chains[0] = { ...inc.chains[0], entries: 'E4,E44,+118' };
+    served = inc;
+    renderAt(`/incidents/${closed.incidentId}`, 'technical');
+    await screen.findByRole('button', { name: 'Approve release' });
+    expect(screen.getByText('and 118 more')).toBeInTheDocument();
+    expect(screen.queryByText('+118')).not.toBeInTheDocument();
+    expect(screen.getByText('E44')).toBeInTheDocument();
+  });
+});
+
+describe('an incident with no approval task', () => {
+  const words =
+    'No approval task could be raised for incident I-000001: nothing was released and no case failed, and the chains wait for a person.';
+  const events = (recorded.events as IncidentEvent[]).concat({
+    at: '2026-11-06T09:00:00Z',
+    kind: 'error',
+    text: words,
+    actor: 'system',
+  });
+
+  it('says so at the top of the page, in the words of the error', async () => {
+    served = { ...waiting(), tasks: [] };
+    server.use(http.get(`${BASE}/incidents/:id/events`, () => HttpResponse.json(events)));
+    renderAt(`/incidents/${closed.incidentId}`);
+    expect(await screen.findByRole('alert')).toHaveTextContent(words);
+    expect(screen.getByText('This incident is waiting for a person')).toBeInTheDocument();
+  });
+
+  it('says nothing once the task is there', async () => {
+    served = waiting();
+    server.use(http.get(`${BASE}/incidents/:id/events`, () => HttpResponse.json(events)));
+    renderAt(`/incidents/${closed.incidentId}`);
+    await screen.findByText('Timeline');
+    expect(screen.queryByText('This incident is waiting for a person')).not.toBeInTheDocument();
+  });
+});
