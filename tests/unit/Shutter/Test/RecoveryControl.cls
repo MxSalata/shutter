@@ -607,6 +607,22 @@ Method TestTheReport()
     &sql(DELETE FROM Shutter_Store.ShadowObservation WHERE CaseId = :caseId)
 }
 
+/// The demo's purge restarts the plan ids and the case ids: the floor comes down with them, or every new plan would be refused,
+/// and the permits go, or a new C-000001 would count an old one's calls.
+Method TestAPurgeBringsTheFloorDown()
+{
+    Do ..SetMode("enabled")
+    Set c = ..PlannedCase()
+    Do $$$AssertTrue(##class(Shutter.Util.RecoveryControl).Admit("rehearsal", c.CaseId, "Downstream Out", "K", "D", .permit, .code, .text), "a call")
+    Do ##class(Shutter.Util.RecoveryControl).Finish(permit, ##class(Shutter.Msg.WardResult).%New())
+    Do $$$AssertStatusOK(##class(Shutter.Util.RecoveryControl).Stop("a test", "tester", .control), "stopped")
+    Do $$$AssertStatusOK(##class(Shutter.Util.RecoveryControl).ClearStop("over", control.Generation, "a person", .control), "cleared")
+    Do $$$AssertTrue(control.PlanFloor > 0, "the floor is up")
+    Do $$$AssertStatusOK(##class(Shutter.Util.RecoveryControl).StoreEmptied(), "the store is emptied")
+    Do $$$AssertEquals(##class(Shutter.Util.RecoveryControl).Control().PlanFloor, 0, "the floor is down")
+    Do $$$AssertEquals(..Permits().%Size(), 0, "and the permits are gone")
+}
+
 /// A demo reset takes a stop with it; on a site it does nothing.
 Method TestADemoResetClearsOnlyOnTheDemo()
 {

@@ -370,6 +370,26 @@ ClassMethod DemoReset(actor As %String) As %Status
     Quit sc
 }
 
+/// The demo's store was emptied, which restarts the plan and case ids: the floor comes down with them, and the permits
+/// and observations of the old ids go. A stop stays, for the reset to clear.
+ClassMethod StoreEmptied() As %Status
+{
+    LOCK +^Shutter.RecoveryControl:..#LOCKWAIT
+    If '$TEST Quit $$$ERROR($$$GeneralError, "control_busy")
+    Set sc = $$$OK
+    Try {
+        $$$ThrowOnError(##class(Shutter.Store.DispatchPermit).%KillExtent())
+        $$$ThrowOnError(##class(Shutter.Store.ShadowObservation).%KillExtent())
+        Set control = ..Control()
+        Set control.PlanFloor = 0
+        $$$ThrowOnError(control.%Save())
+    } Catch ex {
+        Set sc = ex.AsStatus()
+    }
+    LOCK -^Shutter.RecoveryControl
+    Quit sc
+}
+
 ClassMethod Move(control As Shutter.Store.RecoveryControl, actor As %String, now As %String) [ Private ]
 {
     Set control.Generation = control.Generation + 1, control.PlanFloor = ..NewestPlan()

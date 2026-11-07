@@ -1708,6 +1708,7 @@ ClassMethod PurgeStore() As %String [ SqlProc ]
     // Worklist rows whose task is gone (a task deleted by hand) would show as broken entries in the inbox.
     Do ##class(%SQL.Statement).%ExecDirectNoPriv(, "DELETE FROM EnsLib_Workflow.Worklist WHERE Task NOT IN (SELECT ID FROM EnsLib_Workflow.TaskResponse)")
     Kill ^Shutter.Counter, ^Shutter.Scenarios
+    Do ##class(Shutter.Util.RecoveryControl).StoreEmptied()
     // The counters start again, so a new case may carry a purged case's id: the reset stamp keeps a lead begun before
     // the purge from being followed, and the evidence collector from reading older message-store events.
     Set ^Shutter.Config("resetAt") = ##class(Shutter.Util.Time).NowUTC()
