@@ -1,0 +1,12 @@
+# Building on AI Hub and Interoperability: what worked, what was hard
+
+What I found building Shutter, measured on build `2026.3.0AI.154.0`; the longer story is article 1 [link at submission]. On `2027.1.0AI.109.0`, `Run()`'s three arguments, the bare `object` and the missing IPM still hold; the rest wasn't re-run.
+
+- **Worked well:** typed tools (a `%JSON.Adaptor` parameter gives the model a full JSON Schema and arrives as an instance, so a terminal tool refuses a bad result with reasons); the two policies; FastEmbed knowledge bases, built from Markdown in about 11 seconds; prompt caching.
+- **Hard:** `agent.Run()` takes three arguments (the guide shows four) and calls only `OnRunStart` and `OnRunComplete`, so a token budget is judged after the run, and `MaxIterations` and the provider's timeout bound the loop.
+- **Hard:** a provider must be named `@{config:<Name>}`, and a fresh Config Store needs `%ConfigStore.DescriptorManager.RebuildRegistry()` before `AI.LLM` has a descriptor.
+- **Hard:** `%LogExecution` must be declared `As %Status`, which the guide doesn't show; the image has no IPM, so the build installs it; when two properties of a tool's argument share one schema class, the rest reach the model as a bare `object`, so the description spells out their fields; the Community licence's connections run out under cookie-less HTTP bursts, so scripts keep one cookie.
+- **Interoperability, worked well:** every agent run and approval is a production message and each tool call is in the trace's log, so the Visual Trace and the Message Viewer already show a case end to end.
+- **Interoperability, hard:** a production sends its alerts to the one item named `Ens.Alert`, so the alert intake either takes that name and passes every alert but the consumer's own on to the site's own consumer, or sits as a target of the site's alert router; a Workflow task's form can be filled by the process, but a filled digest would always match, so Shutter leaves it empty and an inbox approval must paste it, or it binds nothing.
+- **AI Hub, would like to see:** `Run()` calling `OnIterationStart` and `OnIterationComplete` ([#12](https://github.com/intersystems-community/ai-hub-eap-bugreports/issues/12)), so a token budget can stop a run between turns rather than after it.
+- **Interoperability, would like to see:** a production setting that names more than one alert target, so a watcher can hear every alert without changing the site's `Ens.Alert` item, which today must be the watcher itself or route to it.
