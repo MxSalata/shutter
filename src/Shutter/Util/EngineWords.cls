@@ -11,6 +11,12 @@ Parameter REASONGETREPLYOFF = "GetReply off";
 /// The reason EffectiveAck gives when the reply settings could not be read, or do not parse as the engine would read them.
 Parameter REASONUNREADABLE = "reply actions unreadable";
 
+/// The reason's words for a string with no action that stops codes its other patterns leave unmatched.
+Parameter REASONNOCATCHALL = "codes no pattern names (no :* that stops them)";
+
+/// The reason's words for a string with no action that stops a reply with no MSA.
+Parameter REASONNONOMSA = "replies with no MSA (no :~ that stops them)";
+
 /// The engine's own value when an operation's ReplyCodeActions is empty.
 Parameter STOCKREPLYACTIONS = ":?R=RF,:?E=S,:~=S,:?A=C,:*=S,:I?=W,:T?=C";
 
@@ -67,9 +73,10 @@ ClassMethod RowKind(row As %DynamicObject) As %String [ Private ]
 /// What a Completed header can honestly claim at this item: application, commit, connection or not_established. The
 /// declared level stands only when getReply is 1 and the effective reply actions complete (C or W) on no code but AA and
 /// CA, with one exception, the engine default's own :I?=W and :T?=C, which assume a reply naming another message or of
-/// another type is still the receiver's answer. Anything else completes on something that is not an acceptance, or
-/// awaits nothing, so the answer is not_established, with reason naming the pattern (as written), or
-/// ..#REASONGETREPLYOFF or ..#REASONUNREADABLE. Pass reason on to DeliveredWords.
+/// another type is still the receiver's answer. A code the string leaves unmatched completes too, with no row in the event
+/// log, so the string must also stop every other reply, with its own :* and :~. Anything else completes on something that is
+/// not an acceptance, or awaits nothing, so the answer is not_established, with reason naming the pattern (as written) or
+/// what is missing, or ..#REASONGETREPLYOFF or ..#REASONUNREADABLE. Pass reason on to DeliveredWords.
 /// <p>replyCodeActions is the item's resolved string: empty means the engine's default, which only a stock class has, and
 /// a caller that could not read it, or whose class overrides the reply handling, passes "unknown". level is the site's
 /// declaration; an empty one, "none" or one not known here reads as connection, so it is never rounded up.</p>
@@ -89,14 +96,18 @@ ClassMethod EffectiveAck(level As %String = "", replyCodeActions As %String = ""
 
 /// Why a reply actions string completes on something other than an acceptance: the offending patterns as written, or
 /// ..#REASONUNREADABLE when a piece does not parse as an action the engine knows (it then falls back to a default of its
-/// own), or "" when the string passes. Codes and actions are read without regard to case and space, as the engine reads
-/// them; a pattern not listed here is refused by being unlisted, so ":?*", ":_", "E=C" and "X=C" need no rule of their own.
+/// own), or what the string lacks to stop other replies, or "" when the string passes. Codes and actions are read without
+/// regard to case and space, as the engine reads them; a pattern not listed here is refused by being unlisted, so ":?*",
+/// ":_", "E=C" and "X=C" need no rule of their own.
+/// <p>The engine returns no action for a reply that matches nothing, and the header then reads Completed. :* and :~ are both
+/// asked for because the engine's two ways of matching differ: only its map lets :* take a reply with no MSA. Each must hold
+/// S, D or F: R alone has no final action, and on the engine's unmapped path a retry that runs out completes.</p>
 ClassMethod NotAcceptance(replyCodeActions As %String) As %String [ Private ]
 {
     Set actions = $ZSTRIP(replyCodeActions, "<>W")
     Quit:actions="unknown" ..#REASONUNREADABLE
     Set:actions="" actions = ..#STOCKREPLYACTIONS
-    Set (found, unreadable) = ""
+    Set (found, unreadable, stopsOther, stopsNoMsa) = ""
     For i = 1:1:$LENGTH(actions, ",") {
         Set piece = $ZSTRIP($PIECE(actions, ",", i), "<>W")
         Continue:piece=""
@@ -114,9 +125,15 @@ ClassMethod NotAcceptance(replyCodeActions As %String) As %String [ Private ]
             Set bad = ((action [ "C") || (action [ "W")) && '$CASE(code, ":AA": 1, ":CA": 1, ":?A": 1, : 0)
         }
         Set:bad found = found _ $SELECT(found="": "", 1: ", ") _ piece
+        Set final = (action [ "S") || (action [ "D") || (action [ "F")
+        Set:(code=":*")&&final stopsOther = 1
+        Set:(code=":~")&&final stopsNoMsa = 1
     }
     Quit:found'="" found
-    Quit $SELECT(unreadable: ..#REASONUNREADABLE, 1: "")
+    Quit:unreadable ..#REASONUNREADABLE
+    Set missing = $SELECT(stopsOther: "", 1: ..#REASONNOCATCHALL)
+    Quit:stopsNoMsa missing
+    Quit missing _ $SELECT(missing="": "", 1: ", ") _ ..#REASONNONOMSA
 }
 
 /// The one sentence for a delivery the engine marked Completed: effectiveAck is EffectiveAck's answer and reason its

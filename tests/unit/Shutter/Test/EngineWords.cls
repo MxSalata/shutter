@@ -118,10 +118,38 @@ Method TestEffectiveAckStands()
     Do ..Ack("verified", default, 1, "connection", "", "a level not known here is not rounded up")
     Do ..Ack("application", ":?R=RF,:?E=S,:~=S,:?A=C,:*=S,:I?=W", 1, "application", "", "the string the log shows, without :T?")
     Do ..Ack("application", ":AA=C,:CA=S,:AE=S,:CE=S,:AR=RF,:CR=RF,:~=S,:*=S", 1, "application", "", "a site that completes on AA alone")
-    Do ..Ack("application", ":AA=W,:CA=C", 1, "application", "", "a warning on AA")
-    Do ..Ack("application", ":?a=c, :?e=s", 1, "application", "", "case and space, as the engine reads them")
-    Do ..Ack("application", ":?A=C,", 1, "application", "", "a trailing comma")
-    Do ..Ack("application", ":?A=C,:?E=RF,:?R=RD,E=F", 1, "application", "", "retries and failures complete on nothing")
+    Do ..Ack("application", ":AA=W,:CA=C,:~=S,:*=S", 1, "application", "", "a warning on AA, with the rest stopped")
+    Do ..Ack("application", ":?a=c, :?e=s, :?r=rf, :~=s, :*=s", 1, "application", "", "case and space, as the engine reads them")
+    Do ..Ack("application", ":?A=C,:?E=S,:?R=RF,:~=S,:*=S,", 1, "application", "", "a trailing comma")
+    Do ..Ack("application", ":?A=C,:?E=RF,:?R=RD,E=F,:~=S,:*=S", 1, "application", "", "retries and failures, with the rest stopped")
+    Do ..Ack("application", ":?A=C,E=F,:*=S,:~=S", 1, "application", "", "the engine's unmapped path")
+    Do ..Ack("application", ":?A=C,:*=RF,:~=D", 1, "application", "", "any final action stops them")
+}
+
+/// A code the string leaves unmatched completes. These strings were run against a stock operation on both builds with
+/// FailureTimeout 2, and a label naming a reply says what then read Completed. The stands above were run too, and none
+/// completed anything but AA and CA.
+Method TestEffectiveAckLeavesACodeUnmatched()
+{
+    Do ..Ack("application", ":AA=C,:CA=C", 1, "not_established", ":*", "an AE, with no :*")
+    Do ..Ack("application", ":AA=C,:CA=C", 1, "not_established", ":~", "and it names both")
+    Do ..Ack("application", ":AA=W,:CA=C", 1, "not_established", ":*", "an AE, with a warning on AA")
+    Do ..Ack("application", ":?A=C", 1, "not_established", ":*", "an AR")
+    Do ..Ack("application", ":?a=c, :?e=s", 1, "not_established", ":*", "an AR, in lower case")
+    Do ..Ack("application", ":?A=C,", 1, "not_established", ":*", "an AR, with a trailing comma")
+    Do ..Ack("application", ":?A=C,:?E=RF,:?R=RD,E=F", 1, "not_established", ":~", "no MSA")
+    Do ..Ack("application", ":?A=C,:?E=S,:?R=RF", 1, "not_established", ":*", "an empty MSA-1")
+    Do ..Ack("application", ":?A=C,:?E=S,:?R=RF,:~=S", 1, "not_established", ":*", "an unknown code, with :~ alone")
+    Do ..Ack("application", ":?A=C,E=F,:*=S", 1, "not_established", ":~", "no MSA, with :* alone on the unmapped path")
+    Do ..Ack("application", ":?A=C,:?E=S,:?R=RF,:*=S", 1, "not_established", ":~", "the map stops no MSA here, but the rule does not depend on which path a string takes")
+    Do ..Ack("application", ":?A=C,:?E=S,E=F,:*=R,:~=S", 1, "not_established", ":*", "an AR, where :* is R alone, once the retry runs out")
+    Do ..Ack("application", ":?A=C,:?E=S,E=F,:*=S,:~=R", 1, "not_established", ":~", "no MSA, where :~ is R alone")
+    Do ..Ack("application", ":?A=C,*=S,~=S", 1, "not_established", ":*", "with no colon the engine ignores them")
+    Do ..Ack("connection", ":?A=C", 1, "not_established", ":*", "connection falls too")
+    Do ..Ack("", ":?A=C", 1, "not_established", ":*", "and an empty level")
+    Do ..Ack("application", ":?A,:?E=S", 1, "not_established", "unreadable", "a piece that does not read comes first")
+    Set answer = ##class(Shutter.Util.EngineWords).EffectiveAck("application", ":?A=C", 1, .reason)
+    Do $$$AssertEquals(##class(Shutter.Util.EngineWords).DeliveredWords(17, "03:12", answer, reason), "IRIS marked this delivery Completed. Receiver acceptance has not been established. This operation's reply actions complete on codes no pattern names (no :* that stops them), replies with no MSA (no :~ that stops them). Header 17 at 03:12.", "the whole sentence")
 }
 
 Method TestEffectiveAckFailsOnAPattern()
@@ -190,7 +218,7 @@ Method TestDeliveredWordsNotEstablished()
 Method TestWordsNeverClaimMore()
 {
     For level = "application", "commit", "connection", "" {
-        For actions = ":?R=RF,:?E=S,:~=S,:?A=C,:*=S,:I?=W,:T?=C", ":?E=C", ":*=C", ":I?=C", "unknown" {
+        For actions = ":?R=RF,:?E=S,:~=S,:?A=C,:*=S,:I?=W,:T?=C", ":?E=C", ":*=C", ":I?=C", ":?A=C", ":?A=C,:?E=S,:?R=RF,:*=S", "unknown" {
             For getReply = 1, 0, "unknown" {
                 Set answer = ##class(Shutter.Util.EngineWords).EffectiveAck(level, actions, getReply, .reason)
                 Set words = ##class(Shutter.Util.EngineWords).DeliveredWords(17, "03:12", answer, reason)
