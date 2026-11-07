@@ -377,7 +377,7 @@ def main():
     c = play.settled(case_id, ('verifying', 'blocked', 'escalated', 'failed', 'resolved'), timeout=60)
     _, attempts = operator.call('GET', f'/cases/{case_id}/attempts')
     listed = attempts if isinstance(attempts, list) else (attempts or {}).get('attempts') or (attempts or {}).get('items') or []
-    check(any(a.get('outcome') == 'uncertain' for a in listed), 'a write nobody answered reads as uncertain, not as not sent', attempts)
+    check(any((a.get('attempt') or a).get('outcome') == 'uncertain' for a in listed), 'a write nobody answered reads as uncertain, not as not sent', attempts)
     _, view = operator.call('GET', '/recovery-control')
     check(view.get('stopped') is False, 'and the case reads it back, so recovery is not stopped', view)
 
