@@ -57,6 +57,25 @@ Method TestSeedProfileValidates()
 
 /// The receiver's category and history policy (v1.23): the validator's values, the derivation, and the deprecated
 /// site-wide flag as the fallback for an entry with neither.
+/// The window in which two sources count as simultaneous: whole seconds, none below 0 or above an hour.
+Method TestSourceSkewSeconds()
+{
+    Set c = "Shutter.Store.SiteProfile"
+    Set base = $CLASSMETHOD(c, "Default")
+    For value = 0, 1, 300, 3600 {
+        Set base.feed = {"time_zone": "UTC"}
+        Do base.feed.%Set("source_skew_seconds", value, "number")
+        Do $$$AssertEquals($CLASSMETHOD(c, "Validate", base), "", value _ " seconds")
+    }
+    For value = -1, 3601, 1.5 {
+        Set base.feed = {"time_zone": "UTC"}
+        Do base.feed.%Set("source_skew_seconds", value, "number")
+        Do $$$AssertTrue($CLASSMETHOD(c, "Validate", base) [ "feed.source_skew_seconds", value _ " seconds is refused")
+    }
+    Set base.feed = {"time_zone": "UTC", "source_skew_seconds": "300"}
+    Do $$$AssertTrue($CLASSMETHOD(c, "Validate", base) [ "feed.source_skew_seconds", "a string is refused")
+}
+
 Method TestReceiverCategory()
 {
     Set name = $PARAMETER("Shutter.Production", "RECEIVER")

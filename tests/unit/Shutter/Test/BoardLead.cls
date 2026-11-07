@@ -277,6 +277,12 @@ ClassMethod E2() As %DynamicObject
     Quit {"decision": "policy", "entry": "E2", "outcome": "resend", "matches": [{"id": "E2", "title": "Not delivered, still current", "decides": "policy", "preferred": {"outcome": "resend", "why": "It is still due."}}]}
 }
 
+/// The catalogue's result for a death on the message.
+ClassMethod E19() As %DynamicObject
+{
+    Quit {"decision": "person", "entry": "E19", "outcome": "escalate", "conditions": {"death_recorded": "yes"}, "matches": [{"id": "E19", "title": "A death on the message", "decides": "person", "preferred": {"outcome": "escalate", "why": "The message records a death."}}]}
+}
+
 /// The case stopped for a person: escalated, nothing planned, and the event and the reason name why.
 Method AssertStopped(caseId As %String, what As %String, words As %String)
 {
@@ -449,6 +455,32 @@ Method TestPolicyDecisionKeepsTheRulesPath()
     Do $$$AssertEquals(disposition, "resend", "the plain resend")
     Do $$$AssertEquals(by, "rules", "from the rules")
     Do ##class(Shutter.Store.Case).PurgeCase(id)
+}
+
+/// A death on the message goes to a person in Site policy mode and in Board mode too, with no board asked: an escalate plan
+/// naming the entry. Rules only is the baseline and stays as it is.
+Method TestADeathOnTheMessageAsksAPersonInEveryModeButRules()
+{
+    For mode = "board", "policy", "rules" {
+        Set c = ..NoAnswerCase("C-TEST-LEAD-N", mode, ..E19())
+        Set wf = ..QuietInstance()
+        Set wf.CaseId = "C-TEST-LEAD-N", wf.Mode = mode
+        Set result = ##class(Shutter.Msg.EvidenceResult).%New()
+        Set result.SnapshotId = c.CurrentSnapshot.%Id(), result.Digest = "sha256:ut", result.SummaryJSON = c.CurrentSnapshot.Summary
+        Do $$$AssertStatusOK(wf.OnEvidence(c, result), mode _ ": the workflow plans")
+        Set after = ##class(Shutter.Store.Case).ByCaseId("C-TEST-LEAD-N")
+        Set id = after.%Id(), disposition = "", entry = "x", by = ""
+        &sql(SELECT TOP 1 Disposition, CatalogueEntry, CreatedBy INTO :disposition, :entry, :by FROM Shutter_Store.Plan WHERE "Case" = :id ORDER BY ID DESC)
+        If mode = "rules" {
+            Do $$$AssertEquals(disposition, "resend", "Rules only: the plain resend, as before")
+            Do $$$AssertEquals(by, "rules", "Rules only: from the rules")
+        } Else {
+            Do $$$AssertEquals(disposition, "escalate", mode _ ": to a person")
+            Do $$$AssertEquals(entry, "E19", mode _ ": naming the entry")
+            Do $$$AssertEquals(by, "policy:E19", mode _ ": from the catalogue, with no board")
+        }
+        Do ##class(Shutter.Store.Case).PurgeCase(id)
+    }
 }
 
 /// The plan's words a follower gets, its createdBy after them.

@@ -269,6 +269,8 @@ Method MessageFields(headerId As %String, Output validation As %DynamicObject) A
         Set info."sending_application" = msg.GetValueAt("MSH:3.1")
         Set info."sending_facility" = msg.GetValueAt("MSH:4.1")
         Set info."receiving_application" = msg.GetValueAt("MSH:5.1")
+        // When the engine received the message, by its own clock: the sender's clock stamps MSH-7 and the event alike.
+        Set info."received_at" = header.TimeCreated
         Set zone = ##class(Shutter.Store.SiteProfile).FeedTimeZone(), withOffset = 0, without = 0
         Set info."message_time" = ##class(Shutter.Util.Time).FromHL7(msg.GetValueAt("MSH:7.1"), zone, .had)
         If msg.GetValueAt("MSH:7.1") '= "" { If had { Set withOffset = withOffset + 1 } Else { Set without = without + 1 } }
@@ -286,6 +288,8 @@ Method MessageFields(headerId As %String, Output validation As %DynamicObject) A
         Set info."patient_identifier" = pid _ "^^^" _ pidAuthority _ "^" _ pidType
         Set info."patient_name" = ##class(Shutter.Util.OperationKey).Value(msg, "PID", "5(1).1") _ ", " _ ##class(Shutter.Util.OperationKey).Value(msg, "PID", "5(1).2")
         Set info."patient_class" = ##class(Shutter.Util.OperationKey).Value(msg, "PV1", "2")
+        // A word only (yes, cleared, no): the date of death stays in the message.
+        Set info."death_recorded" = ##class(Shutter.Util.OperationKey).DeathRecorded(msg)
         Set info."assigned_location" = ##class(Shutter.Util.OperationKey).Value(msg, "PV1", "3.1") _ "^" _ ##class(Shutter.Util.OperationKey).Value(msg, "PV1", "3.2") _ "^" _ ##class(Shutter.Util.OperationKey).Value(msg, "PV1", "3.3") _ "^" _ ##class(Shutter.Util.OperationKey).Value(msg, "PV1", "3.4")
         Set info."visit_number" = ##class(Shutter.Util.OperationKey).Value(msg, "PV1", "19.1")
         Set info."admit_time" = ##class(Shutter.Util.Time).FromHL7(##class(Shutter.Util.OperationKey).Value(msg, "PV1", "44.1"), zone, .had)

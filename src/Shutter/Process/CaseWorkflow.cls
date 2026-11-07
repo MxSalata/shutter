@@ -404,6 +404,9 @@ Method OnEvidence(case As Shutter.Store.Case, result As Shutter.Msg.EvidenceResu
     // A receiver of category orders_results (v1.23) keeps orders and results, which the ADT catalogue does not model:
     // the case goes to a person at once, in every mode, and no model runs for it.
     If ##class(Shutter.Store.SiteProfile).ReceiverCategory($SELECT(case.Receiver '= "": case.Receiver, 1: ..WardTarget)) = "orders_results" Quit ..NotModelledToPerson(case)
+    // A death on the message (catalogue E19) goes to a person in Board mode as in Site policy mode, and no board is asked what
+    // only a person can check. Rules only is the baseline and stays as it is; a judge's forced board still convenes.
+    If (..Mode '= "rules") && '..ForceBoard && (decision = "person") && (##class(Shutter.Util.Json).Str(cat, "entry") = "E19") Quit ..PersonByCatalogue(case, cat)
     If ..Release {
         // The sequence rule (7.4): the item goes at the version the chain expects, or not at all.
         If ..ExpectedVersion '= "" {

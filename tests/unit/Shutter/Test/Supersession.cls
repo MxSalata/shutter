@@ -51,6 +51,72 @@ Method Conditions(case As Shutter.Store.Case, summary As %DynamicObject, chain A
     Quit ##class(Shutter.Catalogue.Matcher).Conditions(case, summary, chain)
 }
 
+/// A row of the store for a timeline test: the feed's operation on the encounter, its header to the receiver, and the
+/// connector's answer. The ids go in rows, for the clean-up.
+Method StoreRow(patient As %String, authority As %String, event As %String, time As %String, outcome As %String, ByRef rows)
+{
+    Set op = ##class(Shutter.Msg.WardOperation).%New()
+    Set op.EncounterId = "ENC-UT-SHARED", op.PatientId = patient, op.PatientIdAuthority = authority, op.Event = event, op.Ward = "WARD-X"
+    Set op.EventTime = time, op.OperationKey = "PAS^" _ authority _ "^" _ patient _ "^ENC-UT-SHARED^" _ event _ "^" _ time
+    Do $$$AssertStatusOK(op.%Save(), "the operation")
+    Set h = ##class(Ens.MessageHeader).%New()
+    Set h.MessageBodyClassName = "Shutter.Msg.WardOperation", h.MessageBodyId = op.%Id(), h.TargetConfigName = "UT Receiver"
+    Set h.TimeCreated = $ZDATETIME($ZTIMESTAMP, 3, 1, 3)
+    Do $$$AssertStatusOK(h.%Save(), "its header")
+    Set r = ##class(Shutter.Msg.WardResult).%New()
+    Set r.Outcome = outcome
+    Do $$$AssertStatusOK(r.%Save(), "the connector's answer")
+    Set a = ##class(Ens.MessageHeader).%New()
+    Set a.MessageBodyClassName = "Shutter.Msg.WardResult", a.MessageBodyId = r.%Id(), a.CorrespondingMessageId = h.%Id(), a.TimeCreated = h.TimeCreated
+    Do $$$AssertStatusOK(a.%Save(), "the answer's header")
+    Set rows($I(rows)) = $LISTBUILD(op.%Id(), h.%Id(), r.%Id(), a.%Id())
+}
+
+/// Two patients share a visit number (a visit number reissued, or two authorities' numbering): the other's later transfer,
+/// refused or failed, is no word on this patient's place. It isn't in the case's timeline, so it can't close the case, and
+/// the index's rows for the visit keep to the patient too. A row of the case's own patient still counts.
+Method TestAnotherPatientOnTheVisitClosesNothing()
+{
+    Set c = ..Case()
+    Set c.EncounterId = "ENC-UT-SHARED", c.PatientId = "MRN-P2", c.PatientIdAuthority = "HOSP", c.Receiver = "UT Receiver"
+    Set c.OperationKey = "PAS^HOSP^MRN-P2^ENC-UT-SHARED^transfer^2026-10-15T08:20:00Z"
+    Kill rows
+    Do ..StoreRow("MRN-P2", "HOSP", "transfer", "2026-10-15T08:20:00Z", "unavailable", .rows)
+    Do ..StoreRow("MRN-P1", "HOSP", "transfer", "2026-10-15T09:00:00Z", "refused", .rows)
+    Do ..StoreRow("MRN-P2", "OTHER", "transfer", "2026-10-15T09:05:00Z", "applied", .rows)
+    Set ix = ##class(Shutter.Index.Message).%New()
+    Set ix.DocId = "999000001", ix.VisitNumber = "ENC-UT-SHARED", ix.PatientId = "MRN-P1", ix.PatientIdAuthority = "HOSP", ix.Event = "transfer", ix.EventTime = "2026-10-15T09:10:00Z", ix.ControlId = "UT-SHARED-1"
+    Do $$$AssertStatusOK(ix.%Save(), "an index row of the other patient")
+    Set iy = ##class(Shutter.Index.Message).%New()
+    Set iy.DocId = "999000002", iy.VisitNumber = "ENC-UT-SHARED", iy.PatientId = "MRN-P2", iy.PatientIdAuthority = "HOSP", iy.Event = "update", iy.EventTime = "2026-10-15T09:15:00Z", iy.ControlId = "UT-SHARED-2"
+    Do $$$AssertStatusOK(iy.%Save(), "an index row of this patient")
+    Try {
+        Set timeline = ##class(Shutter.Index.Timeline).ForCase(c)
+        Set found = "", iter = timeline.%GetIterator()
+        While iter.%GetNext(.i, .ev) { Set found = found _ $SELECT(found = "": "", 1: ",") _ $PIECE(ev."event_time", "T", 2) }
+        Do $$$AssertEquals(found, "08:20:00Z,09:15:00Z", "only this patient's rows, from the feed and the index: " _ found)
+        Set s = ..Summary(c, [], [])
+        Set s.timeline = timeline
+        Do $$$AssertEquals(..Conditions(c, s)."later_applied", "none", "the other patient's transfer doesn't overtake this one")
+        // The same case once its own patient has moved on.
+        Do ..StoreRow("MRN-P2", "HOSP", "transfer", "2026-10-15T09:20:00Z", "applied", .rows)
+        Set s.timeline = ##class(Shutter.Index.Timeline).ForCase(c)
+        Do $$$AssertEquals(..Conditions(c, s)."later_applied", "transfer", "this patient's own later transfer does")
+        // The failsafe at the point of the resend still reads the whole visit: another patient's message in flight holds a write.
+        Do $$$AssertEquals(##class(Shutter.Index.Message).ForVisit("ENC-UT-SHARED").%Size(), 2, "ForVisit with no patient: every row of the visit")
+    } Catch ex {
+        Do $$$AssertTrue(0, "no error: " _ ex.DisplayString())
+    }
+    Do ##class(Shutter.Index.Message).%DeleteId(ix.%Id())
+    Do ##class(Shutter.Index.Message).%DeleteId(iy.%Id())
+    For n = 1:1:rows {
+        Do ##class(Shutter.Msg.WardOperation).%DeleteId($LIST(rows(n), 1))
+        Do ##class(Ens.MessageHeader).%DeleteId($LIST(rows(n), 2))
+        Do ##class(Shutter.Msg.WardResult).%DeleteId($LIST(rows(n), 3))
+        Do ##class(Ens.MessageHeader).%DeleteId($LIST(rows(n), 4))
+    }
+}
+
 Method TestLaterAppliedTransferStillSupersedes()
 {
     Set c = ..Case()

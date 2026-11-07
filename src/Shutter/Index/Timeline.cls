@@ -44,17 +44,24 @@ ClassMethod TypedIn(namespace As %String, case As Shutter.Store.Case, since As %
     Quit rows
 }
 
-/// The feed's operations for the encounter, oldest event first, with the delivery outcome the connector recorded.
+/// The feed's operations for the encounter and the case's patient, oldest event first, with the delivery outcome the
+/// connector recorded. A visit number can be reissued, or numbered by two authorities: another patient's message under it
+/// is no word on this patient's place, so it is not in the case's story. A case that names no patient (a message that
+/// didn't map) sees the visit.
 ClassMethod Typed(case As Shutter.Store.Case, since As %String) As %DynamicArray
 {
     Set out = []
     If ..NoEncounter(case.EncounterId) Quit out
     // One row per feed message for the case's receiver (v1.28): with two receivers each message is delivered twice, and the
     // other receiver's delivery is another case's story. A case without a receiver (older rows) sees every delivery.
+    Set args = 1, args(1) = case.EncounterId, who = ""
+    If case.PatientId '= "" Set who = who _ " AND w.PatientId = ?", args($INCREMENT(args)) = case.PatientId
+    If case.PatientIdAuthority '= "" Set who = who _ " AND w.PatientIdAuthority = ?", args($INCREMENT(args)) = case.PatientIdAuthority
+    Set args($INCREMENT(args)) = since, args($INCREMENT(args)) = case.Receiver, args($INCREMENT(args)) = case.Receiver
     Set sql = "SELECT w.ID AS WID, w.Event, w.Ward, w.EventTime, w.OperationKey, w.SourceMessageId, h.ID AS HeaderId, h.SessionId, h.TimeCreated, h.TargetConfigName AS Receiver "
         _ "FROM Shutter_Msg.WardOperation w JOIN Ens.MessageHeader h ON h.MessageBodyId = CAST(w.ID AS VARCHAR(20)) AND h.MessageBodyClassName = 'Shutter.Msg.WardOperation' "
-        _ "WHERE w.EncounterId = ? AND w.Purpose = 'normal' AND h.TimeCreated >= ? AND (? = '' OR h.TargetConfigName = ?) ORDER BY w.EventTime, w.ID"
-    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, sql, case.EncounterId, since, case.Receiver, case.Receiver)
+        _ "WHERE w.EncounterId = ?" _ who _ " AND w.Purpose = 'normal' AND h.TimeCreated >= ? AND (? = '' OR h.TargetConfigName = ?) ORDER BY w.EventTime, w.ID"
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, sql, args...)
     While rs.%Next() {
         Set ev = {}
         Set ev."event" = rs.%Get("Event"), ev.ward = rs.%Get("Ward"), ev."event_time" = rs.%Get("EventTime")
@@ -96,7 +103,7 @@ ClassMethod FromIndex(case As Shutter.Store.Case, since As %String, typed As %Dy
             Set m = ##class(Shutter.Util.Json).Str(ev, "source_message_id")
             If m '= "" Set controls(m) = 1
         }
-        Set rows = ##class(Shutter.Index.Message).ForVisit(case.EncounterId, since)
+        Set rows = ##class(Shutter.Index.Message).ForVisit(case.EncounterId, since, case.PatientId, case.PatientIdAuthority)
         Set iter = rows.%GetIterator()
         While iter.%GetNext(.i, .row) {
             Set k = ##class(Shutter.Util.Json).Str(row, "operation_key")

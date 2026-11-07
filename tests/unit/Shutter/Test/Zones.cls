@@ -26,6 +26,38 @@ Method TestZoneinfoOffsets()
     Do $$$AssertTrue(##class(Shutter.Util.Time).KnownZone("Europe/Paris"), "Paris is known")
 }
 
+/// A UTC time within an hour of a clock change, in any zone: the hour either side of it reads a different offset. A fixed
+/// offset, UTC and a zone Shutter doesn't know have no clock change to be near; London needs no Embedded Python.
+Method TestNearClockChange()
+{
+    Set t = "Shutter.Util.Time"
+    Do $$$AssertTrue($CLASSMETHOD(t, "NearClockChange", "Europe/London", "2026-10-25T01:30:00Z"), "London, by its own rule")
+    Do $$$AssertNotTrue($CLASSMETHOD(t, "NearClockChange", "Europe/London", "2026-10-25T03:00:00Z"), "London, two hours after")
+    Do $$$AssertNotTrue($CLASSMETHOD(t, "NearClockChange", "UTC", "2026-10-25T01:30:00Z"), "UTC")
+    Do $$$AssertNotTrue($CLASSMETHOD(t, "NearClockChange", "", "2026-10-25T01:30:00Z"), "no zone")
+    Do $$$AssertNotTrue($CLASSMETHOD(t, "NearClockChange", "+01:00", "2026-10-25T01:30:00Z"), "a fixed offset")
+    Do $$$AssertNotTrue($CLASSMETHOD(t, "NearClockChange", "Mars/Olympus", "2026-10-25T01:30:00Z"), "a zone nobody knows")
+    Do $$$AssertNotTrue($CLASSMETHOD(t, "NearClockChange", "Europe/Paris; drop table", "2026-10-25T01:30:00Z"), "a zone name with other characters is not looked up")
+    If '$CLASSMETHOD(t, "PythonZones") {
+        Do $$$AssertTrue(1, "Embedded Python's zoneinfo does not answer on this image: the native rules stand alone, nothing more to test")
+        Quit
+    }
+    // New York's clocks go back at 06:00Z on 1 November 2026: local 01:10 the second time reads as 05:10Z with the first offset.
+    Do $$$AssertEquals($CLASSMETHOD(t, "FromHL7", "20261101011000", "America/New_York"), "2026-11-01T05:10:00Z", "the repeated hour reads with the first offset")
+    Do $$$AssertTrue($CLASSMETHOD(t, "NearClockChange", "America/New_York", "2026-11-01T05:10:00Z"), "New York, the repeated hour")
+    Do $$$AssertTrue($CLASSMETHOD(t, "NearClockChange", "America/New_York", "2026-11-01T06:30:00Z"), "New York, after the change")
+    Do $$$AssertNotTrue($CLASSMETHOD(t, "NearClockChange", "America/New_York", "2026-11-01T08:10:00Z"), "New York, two hours after")
+    Do $$$AssertNotTrue($CLASSMETHOD(t, "NearClockChange", "America/New_York", "2026-07-01T12:00:00Z"), "New York in summer")
+    Do $$$AssertTrue($CLASSMETHOD(t, "NearClockChange", "America/New_York", "2026-03-08T07:30:00Z"), "New York, the skipped hour")
+    Do $$$AssertTrue($CLASSMETHOD(t, "NearClockChange", "Europe/Paris", "2026-10-25T00:30:00Z"), "Paris, the repeated hour")
+    Do $$$AssertTrue($CLASSMETHOD(t, "NearClockChange", "Europe/Paris", "2026-03-29T01:30:00Z"), "Paris, the skipped hour")
+    Do $$$AssertTrue($CLASSMETHOD(t, "NearClockChange", "Australia/Sydney", "2026-04-04T15:30:00Z"), "Sydney, the repeated hour of its autumn")
+    Do $$$AssertTrue($CLASSMETHOD(t, "NearClockChange", "Europe/Belfast", "2026-10-25T00:30:00Z"), "another name for British time")
+    Do $$$AssertNotTrue($CLASSMETHOD(t, "NearClockChange", "Asia/Kolkata", "2026-10-25T00:30:00Z"), "a zone with no clock change")
+    Do $$$AssertNotTrue($CLASSMETHOD(t, "NearClockChange", "Etc/UTC", "2026-10-25T00:30:00Z"), "UTC under its zone name")
+    Do $$$AssertNotTrue($CLASSMETHOD(t, "NearClockChange", "Europe/Paris", "not a time"), "a time that doesn't read")
+}
+
 Method TestNativeRulesStand()
 {
     Do $$$AssertEquals(##class(Shutter.Util.Time).FromHL7("20261015092000", "Europe/London"), "2026-10-15T08:20:00Z", "London keeps its own rule")

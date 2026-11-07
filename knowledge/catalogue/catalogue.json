@@ -1,7 +1,7 @@
 [
  {
   "id": "E1",
-  "version": 4,
+  "version": 5,
   "title": "Superseded by a later transfer",
   "scenarios": [
    "S1",
@@ -9,11 +9,13 @@
    "S11"
   ],
   "pattern": {
+   "event": "transfer",
    "later_applied": [
     "transfer",
     "cancelled"
    ],
-   "encounter_state": "admitted"
+   "encounter_state": "admitted",
+   "simultaneous_sources": "no"
   },
   "decides": "policy",
   "preferred": {
@@ -31,7 +33,7 @@
    "ordering",
    "effect"
   ],
-  "prose": "# E1 Superseded by a later transfer\n\n## Meaning\n\nThe failed transfer was overtaken: the downstream system has applied another transfer for the same encounter whose event\nhappened later. The patient is where the later transfer put them, and the failed one describes a place they have already\nleft. When the later transfer has not reached the downstream system either (its delivery failed or is uncertain), the\nPAS's later word on the patient's place still stands: its own case recovers it, and this one is closed with nothing to\nsend (later_delivery: sent).\n\n## Telling it apart\n\nCompare event times, not arrival times (WIC-1.2): the later transfer's event time must be strictly later. Equal times\nare E7, not this. A later discharge is E6. A later demographic update is not a later movement (ELS-2.2, E10). A later\ntransfer whose time lies in the future of when it was sent or applied supersedes nothing: that is E13, and a person\nchecks the clock.\n\n## Cite\n\nThe superseding event from the downstream system's history (version, ward, event time), or, when the receiver has not\napplied it, the later message in the timeline (its event time, when it was sent and its outcome) and its case; and the\nfailed operation's event time.",
+  "prose": "# E1 Superseded by a later transfer\n\n## Meaning\n\nThe failed transfer was overtaken: the downstream system has applied another transfer for the same encounter whose event\nhappened later. The patient is where the later transfer put them, and the failed one describes a place they have already\nleft. When the later transfer has not reached the downstream system either (its delivery failed or is uncertain), the\nPAS's later word on the patient's place still stands: its own case recovers it, and this one is closed with nothing to\nsend (later_delivery: sent).\n\n## Telling it apart\n\nCompare event times, not arrival times (WIC-1.2): the later transfer's event time must be strictly later. Another\nsource's movement within the site's `source_skew_seconds` of it is E7, not this, since two systems' clocks can't order it.\nA later discharge is E6. A later demographic update is not a later movement (ELS-2.2, E10). A later transfer whose time\nlies in the future of when it was sent or applied supersedes nothing: that is E13, and a person checks the clock.\n\nOnly a failed transfer is overtaken this way. A later transfer says nothing about a failed discharge, update or\nadmission: the patient may never be discharged at the receiver, and an update's fields aren't carried. No entry matches\nthose, so nothing closes them and a person sees them. A failed discharge with a later cancel of it is the same.\n\n## Cite\n\nThe superseding event from the downstream system's history (version, ward, event time), or, when the receiver has not\napplied it, the later message in the timeline (its event time, when it was sent and its outcome) and its case; and the\nfailed operation's event time.",
   "source": "E1.md"
  },
  {
@@ -221,7 +223,7 @@
  },
  {
   "id": "E7",
-  "version": 2,
+  "version": 3,
   "title": "Two sources at the same time",
   "scenarios": [
    "S8"
@@ -232,7 +234,7 @@
   "decides": "board",
   "preferred": {
    "outcome": "escalate",
-   "why": "Another source system applied a movement for the encounter with the same event time, so neither is later and supersession is unknown (ELS-2.5, RP-2.4); a resend would overwrite the other system's placement."
+   "why": "Another source system applied a movement for the encounter within the site's source_skew_seconds of this one, so their clocks can't say which is later and supersession is unknown (ELS-2.5, RP-2.4); a resend would overwrite the other system's placement."
   },
   "alternatives": [
    {
@@ -244,7 +246,7 @@
   "checks": [
    "ordering"
   ],
-  "prose": "# E7 Two sources at the same time\n\n## Meaning\n\nTwo systems moved the same patient at the same recorded time, for example the patient administration system and the\nbed manager. Every mechanical check passes, so rules alone would resend, and the resend would move the patient away\nfrom the placement the other system made.\n\n## Telling it apart\n\nThe other event is from another source system (MSH-3) with exactly the same event time. A strictly later event from\nany source is E1 or E6.\n\n## Cite\n\nBoth events: source system, event time, ward, and the downstream system's current state set by the other system.",
+  "prose": "# E7 Two sources at the same time\n\n## Meaning\n\nTwo systems moved the same patient at about the same recorded time, for example the patient administration system and\nthe bed manager. Two systems' clocks don't agree to the second, so a gap this small says nothing about which came first.\nEvery mechanical check passes, so rules alone would resend, and the resend would move the patient away from the\nplacement the other system made.\n\n## Telling it apart\n\nThe other event is from another source system (MSH-3), within the site profile's `feed.source_skew_seconds` of this one\neither way (300 by default; 0 keeps the exact second). A time that can't be read counts, since nothing shows it was\noutside the window. A demographic update moves nobody, so it doesn't count. A later\nevent from the same source, or from another one past that window, is E1 or E6.\n\n## Cite\n\nBoth events: source system, event time, ward, and the downstream system's current state set by the other system.",
   "source": "E7.md"
  },
  {
@@ -404,7 +406,7 @@
  },
  {
   "id": "E13",
-  "version": 4,
+  "version": 5,
   "title": "An event time the receiver's record can't hold",
   "scenarios": [
    "S13"
@@ -433,7 +435,7 @@
    "ordering",
    "state_transition"
   ],
-  "prose": "# E13 An event time the receiver's record can't hold\n\n## Meaning\n\nThe failed operation's event time doesn't fit the encounter: it is before the patient's admission, more than five\nminutes after the message was sent (MSH-7) or the evidence was taken, more than a day from the time the PAS recorded\nthe event (EVN-2), or within the hour around a clock change where a local time without an offset can't be ordered; or a later event for the\nencounter, applied or sent after the failed one, carries a time more than five minutes after it was sent, applied or\nseen, and believing that time would decide the case (a later transfer or discharge; an update decides nothing).\nShutter orders and supersedes movements by event time, so a wrong time can resend a movement that predates the stay,\nor make genuine failures look overtaken.\n\nSuch a time is not simply bad data, and the likely cause depends on the condition. A time more than a day before the\ntime the PAS recorded the event (EVN-2) is usually a retrospective entry: clinicians digitise paper records later, and\nnotes typed in more than a day after the event carry the genuine event time (EVN-6). A time in the future or before\nthe admission is usually a clock fault, in the PAS, the integration engine or the device that stamped the event, or a\nmistyped time, in this event or in the admission. A local time without an offset within an hour of a clock change may\nbe one that night holds twice, when the clocks go back, or not at all, when they go forward, so only the source can\nsay when it was. Which of these it is, and whether the movement should still be sent, can't be told from the messages,\nand Shutter doesn't correct the time: the case goes to a person with the times named, who decides with the PAS team\nchecking the source.\n\n## Telling it apart\n\nA movement overtaken by a later one with a sound time is E1; a failed movement still due is E2. Here the time itself\nis the question. When the time is plausible but another source moved the patient at the same minute, it is E7. A later\nmovement whose own time is sound supersedes (E1, E6); one timed in the future settles nothing and is this entry.\n\n## Cite\n\nThe failed operation's event time, the admission time (PV1-44 or the receiver's first history entry), EVN-2, MSH-7,\nand the feed's time zone setting. For a later event: its event time beside the time it was sent (the timeline's\n`sent_at`) or applied (the history's `applied_at`) and the time the evidence was taken.",
+  "prose": "# E13 An event time the receiver's record can't hold\n\n## Meaning\n\nThe failed operation's event time doesn't fit the encounter: it is before the patient's admission, more than five\nminutes after the message was sent (MSH-7) or the evidence was taken, more than a day from the time the PAS recorded\nthe event (EVN-2), or within the hour around a clock change where a local time without an offset can't be ordered; or a later event for the\nencounter, applied or sent after the failed one, carries a time more than five minutes after it was sent, applied or\nseen, and believing that time would decide the case (a later transfer or discharge; an update decides nothing).\nShutter orders and supersedes movements by event time, so a wrong time can resend a movement that predates the stay,\nor make genuine failures look overtaken.\n\nSuch a time is not simply bad data, and the likely cause depends on the condition. A time more than a day before the\ntime the PAS recorded the event (EVN-2) is usually a retrospective entry: clinicians digitise paper records later, and\nnotes typed in more than a day after the event carry the genuine event time (EVN-6). A time in the future (of when the message says it was sent, of when the engine received it, or of the\nevidence) or before the admission is usually a clock fault, in the PAS, the integration engine or the device that stamped the event, or a\nmistyped time, in this event or in the admission. A local time without an offset within an hour of a clock change in the feed's zone may be one that night holds twice, when the clocks go back, or not at all, when they go forward, so only the source can\nsay when it was. Which of these it is, and whether the movement should still be sent, can't be told from the messages,\nand Shutter doesn't correct the time: the case goes to a person with the times named, who decides with the PAS team\nchecking the source.\n\n## Telling it apart\n\nA movement overtaken by a later one with a sound time is E1; a failed movement still due is E2. Here the time itself\nis the question. When the time is plausible but another source moved the patient within the site's `source_skew_seconds`, it is E7. A later\nmovement whose own time is sound supersedes (E1, E6); one timed in the future settles nothing and is this entry.\n\n## Cite\n\nThe failed operation's event time, the admission time (PV1-44 or the receiver's first history entry), EVN-2, MSH-7, the\ntime the engine received the message, and the feed's time zone setting. For a later event: its event time beside the time it was sent (the timeline's\n`sent_at`) or applied (the history's `applied_at`) and the time the evidence was taken.",
   "source": "E13.md"
  },
  {
@@ -581,5 +583,29 @@
   ],
   "prose": "# E18 Held until its schema was imported\n\n## Meaning\n\nThe site answered yes to \"prevent failures\" (question 13): a message whose HL7 schema category is not loaded in the\nnamespace that read it is held as a case, and nothing is sent, because IRIS would read its fields by position and the\nreceiver could get values from the wrong place. Once the schema is imported and the inbound item's category set, the\nindex's check releases the case: fresh evidence reads the message against the schema, and the movement, never sent, is\nstill the patient's latest. It goes out as any movement that never arrived does.\n\n## Telling it apart\n\nThe failure is `unreadable` (reason `schema_unknown`), not a refusal or an unavailable receiver: the receiver never saw\nthe message. Until the schema is imported the gate blocks the case with `SCHEMA_UNKNOWN`, and this entry is not reached.\nA later movement of the encounter applied meanwhile (from another source) is not nothing later: the case is E1. Several\nheld movements of one encounter form a chain, which this entry does not cover, so a person decides their order.\n\n## Cite\n\nThe hold (the category and the namespace that lacked it), the import that released it, the receipt lookup (404), the\ndownstream system's current version and state, and the timeline with no later event.",
   "source": "E18.md"
+ },
+ {
+  "id": "E19",
+  "version": 1,
+  "title": "A death on the message",
+  "scenarios": [],
+  "pattern": {
+   "death_recorded": [
+    "yes",
+    "cleared",
+    "unreadable"
+   ]
+  },
+  "decides": "person",
+  "preferred": {
+   "outcome": "escalate",
+   "why": "The message records a death, or clears one (PID-29, PID-30). What Shutter sends to the receiver carries neither field, so no resend or closure can say the receiver's record is right, and only a person can check the patient."
+  },
+  "alternatives": [],
+  "checks": [
+   "identity"
+  ],
+  "prose": "# E19 A death on the message\n\n## Meaning\n\nThe failed message's PID-29 or PID-30 records a death, holds the HL7 null that clears one, or could not be read. The operation Shutter sends\ncarries neither field, so a resend would read as committed with the death not delivered, and a closure as overtaken would\nleave it unread. A movement after a death may also be a real one, or a sign that the death is wrong. Which it is can't be\ntold from the messages, so this entry answers alone, whatever else matches: nothing is sent or closed, and the case goes to\na person who checks the patient with the team that owns the record.\n\n## Telling it apart\n\nOnly the failed message's own fields are read. A death shown by an earlier message of the patient's isn't compared with\nthis one, and an N in PID-30 reads as no death: it says nothing about what the receiver held before.\n\n## Cite\n\nThat the message records or clears a death (`death_recorded`, a word: the date stays in the message), the case's patient\nand visit, and the receiver's current state.",
+  "source": "E19.md"
  }
 ]
