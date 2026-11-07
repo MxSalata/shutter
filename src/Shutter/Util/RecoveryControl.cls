@@ -220,6 +220,7 @@ ClassMethod Admit(kind As %String, caseId As %String, receiver As %String, opera
         Set token = $INCREMENT(^Shutter.Config("recoveryPermit"))
         LOCK +^Shutter.RecoveryPermit(token):0
         If '$TEST Set code = "control_unavailable", text = "The recovery permit could not be held, so nothing is sent" Quit
+        Set ^||Shutter.RecoveryPermit(token) = 1
         Set row = ##class(Shutter.Store.DispatchPermit).%New()
         Set row.Token = token, row.ActionKind = kind, row.CaseId = caseId, row.PlanId = planId, row.OperationKey = operationKey
         Set row.Receiver = receiver, row.BodyDigest = bodyDigest, row.Generation = control.Generation, row.Job = $JOB
@@ -253,21 +254,22 @@ ClassMethod Finish(permit As Shutter.Store.DispatchPermit, response As Shutter.M
         Do ##class(Ens.Util.Log).LogWarning($CLASSNAME(), "Finish", "The recovery permit " _ permit.Token _ " could not be finished: " _ ex.DisplayString())
     }
     LOCK -^Shutter.RecoveryPermit(permit.Token)
+    Kill ^||Shutter.RecoveryPermit(permit.Token)
 }
 
 /// Under the control's lock: a permit still admitted whose sender no longer holds its lock was cut off, by a restart or a
-/// lost job. It is uncertain, never retried, and recovery stops until a person has seen it. A permit of this job is its
-/// own call in progress.
+/// lost job. It is uncertain, never retried, and recovery stops until a person has seen it. A permit this process took is
+/// its own call in progress: known by a process-private mark, since job numbers repeat after a restart.
 ClassMethod ReconcileLocked() [ Private ]
 {
     Set found = 0
-    &sql(DECLARE PermitOpen CURSOR FOR SELECT ID, Token, Job INTO :id, :token, :job FROM Shutter_Store.DispatchPermit WHERE State = 'admitted')
+    &sql(DECLARE PermitOpen CURSOR FOR SELECT ID, Token INTO :id, :token FROM Shutter_Store.DispatchPermit WHERE State = 'admitted')
     &sql(OPEN PermitOpen)
     Quit:SQLCODE'=0
     For {
         &sql(FETCH PermitOpen)
         Quit:SQLCODE'=0
-        Continue:job=$JOB
+        Continue:$DATA(^||Shutter.RecoveryPermit(token))
         Set found = found + 1, open(found) = $LISTBUILD(id, token)
     }
     &sql(CLOSE PermitOpen)
