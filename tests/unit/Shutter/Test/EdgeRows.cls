@@ -125,16 +125,16 @@ Method TestOtherContentBlocks()
     }
 }
 
-/// What the row says isn't covered, held to it: a bed-only correction isn't noticed, and after a block a correction opens
-/// a new case with no link to the first.
+/// What the row says, held to it: a bed-only correction blocks though the digest leaves the bed out, and after a block a
+/// correction opens a new case with no link to the first.
 Method TestStatedLimits()
 {
     Set first = ..Open(..Op(..A02("EDGE1")), .opened)
     Set bedOnly = ..Open(..Op(..A02("EDGE2", , , , , "09")), .opened)
-    Do $$$AssertNotEquals(bedOnly.State, "blocked", "the digest leaves the bed out, so a bed-only correction doesn't block")
+    Do $$$AssertEquals(bedOnly.CaseId, first.CaseId, "a bed-only correction stays on the case")
+    Do $$$AssertEquals(bedOnly.State, "blocked", "and blocks it, though the digest leaves the bed out")
     Do $$$AssertEquals(bedOnly.Bed, first.Bed, "and the first bed stays on the case")
-    Do ..Open(..Op(..A02("EDGE3", "WARD-C")), .opened)
-    Set after = ..Open(..Op(..A02("EDGE4", "WARD-D")), .opened)
+    Set after = ..Open(..Op(..A02("EDGE3", "WARD-C")), .opened)
     Do $$$AssertTrue(opened, "once blocked, the next correction opens its own case")
     Do $$$AssertNotEquals(after.CaseId, first.CaseId, "not the first one")
 }
