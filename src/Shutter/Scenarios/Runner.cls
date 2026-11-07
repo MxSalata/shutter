@@ -189,9 +189,10 @@ ClassMethod Prepare(scenario As %String, mode As %String, Output inbound As %Str
     Quit found
 }
 
+/// Whether this runner played the case: a live story stamps its cases with a scenario id too, and isn't a recorded run.
 ClassMethod IsRecorded(case As Shutter.Store.Case) As %Boolean
 {
-    Quit case.Scenario '= ""
+    Quit (case.Scenario '= "") && (case.Scenario = $GET(^Shutter.Config("scenarioRun")))
 }
 
 /// The reset before a run, and the mode and scenario recorded (CONTRACTS 4). Returns the time of the reset.
@@ -204,7 +205,7 @@ ClassMethod Begin(scenario As %String, mode As %String, Output error As %String)
         Quit ""
     }
     Set ^Shutter.Config("mode") = mode
-    Set ^Shutter.Config("scenario") = scenario
+    Set ^Shutter.Config("scenario") = scenario, ^Shutter.Config("scenarioRun") = scenario
     Quit reset."reset_at"
 }
 
@@ -399,7 +400,7 @@ ClassMethod Reset() As %String [ SqlProc ]
         }
     }
     Set ^Shutter.Config("mode") = "board"
-    Kill ^Shutter.Config("scenario")
+    Kill ^Shutter.Config("scenario"), ^Shutter.Config("scenarioRun")
     Set ^Shutter.Config("resetAt") = resetAt
     Set abandoned = ##class(Shutter.Store.Incident).AbandonOpen("scenario reset")
     // A run record left queued or finished goes with the reset (a queued run whose player stopped would otherwise
