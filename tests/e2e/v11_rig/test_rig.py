@@ -136,6 +136,11 @@ def listener_modes(workdir):
     r.stop()
 
 
+def r_settings(r, listed):
+    r.rows = lambda ns, code, timeout=400: listed
+    return r.item_settings("S", "P", "Out")
+
+
 def restart_rules():
     check("a new job is a restart", rigmod.restart_verdict({"Gate": "101"}, {"Gate": "202"}, "Gate") == "")
     why = rigmod.restart_verdict({"Gate": "101"}, {"Gate": "101"}, "Gate")
@@ -192,6 +197,67 @@ def restart_rules():
         check("a container must be named", False, "no exception")
     except rigmod.RigBroken:
         check("a container must be named", True)
+
+    # As a terminal session on 109 printed them.
+    divide = 'USER>\nSET %v = 1/0\n^\n<DIVIDE>\nUSER>\n\n<<<\nWRITE !,"<<<",%v,">>>",!\n              ^\n<UNDEFINED> *%v\nUSER>\n'
+    missing = "USER>\nSET %v = ##CLASS(No.Such).Thing()\n^\n<CLASS DOES NOT EXIST> *No.Such\nUSER>\n"
+    check("an error in a session's output is found", rigmod.session_error(divide) == "<DIVIDE>", rigmod.session_error(divide))
+    check("and one whose name has spaces", rigmod.session_error(missing) == "<CLASS DOES NOT EXIST> *No.Such", rigmod.session_error(missing))
+    wrapped = 'RIGPLAIN>\nFOR i=1:1:p.Items.Count() { SET it=p.Items.GetAt(i) IF it.Name="NoRetry Out" { W\n^\nRITE !,"<<<item|",it.Name,">>>",! DO it.PopulateVirtualSettings() FOR j=1:1:it.V\nirtualSettings.Count() { SET l=it.VirtualSettings.GetAt(j) WRITE !,"<<<",$LISTGE\nT(l,1),"|",$LISTGET(l,2),"|",$LISTGET(l,3),">>>",! } QUIT } }\n<INVALID OREF>\nRIGPLAIN>\n'
+    check("and on a long line, which the session wraps round the caret", rigmod.session_error(wrapped) == "<INVALID OREF>", rigmod.session_error(wrapped))
+    quoting = "USER>\n<<<1|Error|2|3|ERROR <Ens>ErrOutConnectExpired: <DIVIDE> in a row's words ^ here>>>\nUSER>\n"
+    check("a row quoting an error's name is no error", rigmod.session_error(quoting) == "", rigmod.session_error(quoting))
+
+    def refused(name, call):
+        try:
+            got = call()
+            check(name, False, f"no exception: {got!r}")
+        except rigmod.RigBroken:
+            check(name, True)
+
+    r = rigmod.Rig("stub")
+    r.run_session = lambda ns, code, timeout: Done(0, divide)
+    refused("value of a failing expression raises, though the echo holds the markers", lambda: r.value("USER", "1/0"))
+    refused("rows on a failing line raises, whatever its literals", lambda: r.rows("USER", 'Write !,"<<<never>>>",! Set x=1/0'))
+    refused("headers raises on a failing line", lambda: r.headers("USER", "X"))
+    r.run_session = lambda ns, code, timeout: Done(1, "Access Denied")
+    refused("exit 1, a missing namespace, is not an empty answer", lambda: r.session("NOPE", "Write 1"))
+    refused("log_rows there raises", lambda: r.log_rows("NOPE", "X"))
+    refused("host there raises", lambda: r.host("NOPE", "X"))
+    refused("jobs there raises", lambda: r.jobs("NOPE"))
+
+    real_run = rigmod.subprocess.run
+    try:
+        rigmod.subprocess.run = lambda *a, **k: Done(1, "")
+        r = rigmod.Rig("stub")
+        refused("listening raises when the container can't answer", lambda: r.listening(1))
+        refused("events raises when the container can't answer", lambda: r.events(1))
+        refused("heard raises when the container can't answer", lambda: r.heard(1))
+        rigmod.subprocess.run = lambda *a, **k: Done(0, "")
+        check("events answers nothing for a port with no log", r.events(1) == [])
+    finally:
+        rigmod.subprocess.run = real_run
+
+    r = rigmod.Rig("stub")
+    listed = ["item|Out", "Host|FailureTimeout|-1", "Adapter|ResponseTimeout|30", "Host|Separators||^~\\&"]
+    check("the engine's list gives each setting its target and value", r_settings(r, listed) == {"FailureTimeout": ("Host", "-1"), "ResponseTimeout": ("Adapter", "30"), "Separators": ("Host", "|^~\\&")}, r_settings(r, listed))
+    r.rows = lambda ns, code, timeout=400: []
+    refused("set_item on an item that doesn't exist raises", lambda: r.set_item("S", "P", "No Such Item", InactivityTimeout=77))
+    sent = []
+
+    def answers(ns, code, timeout=400):
+        sent.append(code)
+        if "PopulateVirtualSettings" in code:
+            return listed
+        return ["saved|ok", "saved to its class|ok", "updated|ok"]
+
+    r.rows = answers
+    refused("set_item of a setting the item doesn't have raises", lambda: r.set_item("S", "P", "Out", NoSuch=1))
+    check("and sends no change", all("PopulateVirtualSettings" in c for c in sent), sent)
+    refused("set_item raises when the engine doesn't then read the new value", lambda: r.set_item("S", "P", "Out", ResponseTimeout=3))
+    check("an adapter's setting is saved under Adapter", any('n.Name="ResponseTimeout",n.Target="Adapter"' in c for c in sent), sent)
+    r.rows = lambda ns, code, timeout=400: listed if "PopulateVirtualSettings" in code else ["saved|ERROR #5001: no", ]
+    refused("set_item raises on a save that fails", lambda: r.set_item("S", "P", "Out", ResponseTimeout=30))
 
     tcp = "  sl  local_address rem_address   st\n   0: 0100007F:1E15 00000000:0000 0A\n   1: 0100007F:1E16 00000000:0000 01\n"
     check("/proc/net/tcp: a listening socket reads listening", rigmod.listening_in(tcp, 0x1E15))

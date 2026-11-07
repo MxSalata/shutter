@@ -37,6 +37,16 @@ def step(title):
     print(f"\n[{time.strftime('%H:%M:%S')}] {title}", flush=True)
 
 
+def raised(name, call, says=""):
+    try:
+        got = call()
+    except RigBroken as e:
+        check(name, says in str(e), e)
+        print(f"        {str(e).splitlines()[0][:160]}", flush=True)
+        return
+    check(name, False, f"no exception: {got!r}")
+
+
 def listener_modes(r):
     step("Each listener mode, over the instance's own loopback")
     got = r.probe(P_DOWN)
@@ -132,7 +142,48 @@ def plain(r):
     r.set_item(r.PLAIN, "V11Rig.Plain", "Bounded Out", FailureTimeout=30)
     got = r.value(r.PLAIN, '##class(Ens.Director).GetItemSettingValue("V11Rig.Plain||Bounded Out","Host","FailureTimeout",.sc)')
     check("set_item changes a setting on the running production", got == "30", got)
+    step("set_item says when it did not do it")
+    r.set_item(r.PLAIN, "V11Rig.Plain", "NoRetry Out", ResponseTimeout=3, ReconnectRetry=2)
+    now = r.item_settings(r.PLAIN, "V11Rig.Plain", "NoRetry Out")
+    check("ResponseTimeout and ReconnectRetry are the adapter's, and read back", now["ResponseTimeout"] == ("Adapter", "3") and now["ReconnectRetry"] == ("Adapter", "2"), now)
+    r.listener_up(r.NORETRY, {"mode": "hang"})
+    r.send(r.NORETRY_IN, r.order("PLHANG1"), "plhang1")
+    began = time.time()
+    def timed_out():
+        return [h for h in r.headers(r.PLAIN, "NoRetry Out") if h["control"] == "PLHANG1" and h["status"] == "Error"]
+    done = r.wait_until(timed_out, 25, 1)
+    took = time.time() - began
+    print(f"        a hung receiver with ResponseTimeout 3: the header read Error after {took:.0f} s", flush=True)
+    check("the running operation uses it: a hang errors well inside the default 30 s", done and took < 25, (took, r.headers(r.PLAIN, "NoRetry Out")))
+    r.listener_down(r.NORETRY)
+    last = r.value(r.PLAIN, '##class(Ens.Config.Production).%OpenId("V11Rig.Plain").Items.GetAt(##class(Ens.Config.Production).%OpenId("V11Rig.Plain").Items.Count()).Name')
+    before = r.item_settings(r.PLAIN, "V11Rig.Plain", last)["InactivityTimeout"]
+    raised("an item name that doesn't exist raises", lambda: r.set_item(r.PLAIN, "V11Rig.Plain", "No Such Item", InactivityTimeout=77))
+    after = r.item_settings(r.PLAIN, "V11Rig.Plain", last)["InactivityTimeout"]
+    check(f"and leaves the last item, {last}, as it was", before == after and after[1] != "77", (before, after))
+    raised("a setting the item doesn't have raises", lambda: r.set_item(r.PLAIN, "V11Rig.Plain", "NoRetry Out", NoSuchSetting=1))
+    raised("a production that doesn't exist raises", lambda: r.set_item(r.PLAIN, "V11Rig.Nothing", "NoRetry Out", ResponseTimeout=3), "<INVALID OREF>")
     r.listener_up(r.NORETRY, {"mode": "up"})
+
+
+def broken_reads(r):
+    step("A read that can't answer raises, and an empty answer is a real one")
+    for name, expr in (("1/0", "1/0"), ("a class that doesn't exist", "##class(No.Such).Thing()"), ("$ZZZ(1)", "$ZZZ(1)"), ("an undefined variable", "nothere")):
+        raised(f"value of {name} raises", lambda: r.value(r.PLAIN, expr))
+    raised("rows on a failing line raises, whatever its literals", lambda: r.rows(r.PLAIN, 'Write !,"<<<never>>>",!\nSet x=1/0'))
+    raised("a method that fails inside raises", lambda: r.value(r.PLAIN, "##class(%Library.Integer).Nothing()"))
+    long_line = 'Set x="' + "a" * 200 + '" Write !,"<<<",x,1/0,">>>",!'
+    raised("an error far along a line longer than the terminal raises", lambda: r.rows(r.PLAIN, long_line), "<DIVIDE>")
+    check("a good expression still reads", r.value(r.PLAIN, "1+1") == "2")
+    check("a query with no rows still reads as none", r.headers(r.PLAIN, "No Such Item") == [] and r.log_rows(r.PLAIN, "No Such Item") == [])
+    check("a host with no row still reads as none", r.host(r.PLAIN, "No Such Item") == {})
+    check("a port with no log still reads as none", r.events(7899) == [])
+    check("a port with nothing listening still reads as not listening", r.listening(7899) is False)
+    for name, call in (("headers", lambda: r.headers("RIGNOTHERE", "X")), ("log_rows", lambda: r.log_rows("RIGNOTHERE", "X")), ("jobs", lambda: r.jobs("RIGNOTHERE")), ("host", lambda: r.host("RIGNOTHERE", "X"))):
+        raised(f"{name} in a namespace that doesn't exist raises", call)
+    gone = Rig(r.ctr + "-absent")
+    for name, call in (("headers", lambda: gone.headers("USER", "X")), ("log_rows", lambda: gone.log_rows("USER", "X")), ("jobs", lambda: gone.jobs("USER")), ("host", lambda: gone.host("USER", "X")), ("heard", lambda: gone.heard(7701)), ("events", lambda: gone.events(7701)), ("listening", lambda: gone.listening(7701))):
+        raised(f"{name} on a container that doesn't exist raises", call)
 
 
 def restarts(r):
@@ -176,6 +227,7 @@ def main():
         listener_modes(r)
         routed(r)
         plain(r)
+        broken_reads(r)
         restarts(r)
     except RigBroken as e:
         print(f"\nRIG BROKEN: {e}", flush=True)

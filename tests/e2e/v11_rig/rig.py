@@ -37,6 +37,9 @@ HOME = "/home/irisowner"
 WORK = "/tmp/v11_site"
 LICENCE_WAIT, LICENCE_POLL = 300, 15  # a Community instance can refuse a terminal session for minutes after a busy spell
 RESTART_TRIES, RESTART_PAUSE = 30, 10
+# A terminal session prints an uncaught error as the line, a caret under it, then the error's name, and carries on with the next
+# line and exits 0. It wraps a long line at 80 columns with the caret inside it, so the rest of the line can come between the two.
+SESSION_ERROR = re.compile(r"^[ \t]*\^[ \t]*\r?\n(?:[^\n]*\n)*?(<[A-Z][^>\n]*>[^\n]*)", re.M)
 
 
 class RigBroken(Exception):
@@ -66,6 +69,12 @@ def listening_in(proc_net_tcp, port):
         if len(fields) > 3 and fields[1].upper().endswith(want) and fields[3] == "0A":
             return True
     return False
+
+
+def session_error(output):
+    """The first uncaught ObjectScript error in a terminal session's output, or "" when there was none."""
+    m = SESSION_ERROR.search(output or "")
+    return m.group(1) if m else ""
 
 
 def hl7_bytes(segments):
@@ -142,15 +151,26 @@ class Rig:
         return subprocess.run(["docker", "exec", "-i", self.ctr, "iris", "session", "IRIS", "-U", ns], input=code + "\nHalt\n", capture_output=True, text=True, timeout=timeout, errors="replace")
 
     def session(self, ns, code, timeout=400):
-        """Runs ObjectScript. A licence refusal exits 133 at once with no output, which no caller could tell from an empty answer, so it waits, then says so."""
+        """Runs ObjectScript and returns what it wrote. An empty answer means the code wrote nothing: an instance that can't answer
+        (a missing container or namespace, any other non-zero exit) and an uncaught error on any line raise RigBroken. A licence
+        refusal exits 133 at once with no output, so it waits, then says so."""
         end = time.time() + LICENCE_WAIT
         while True:
-            r = self.run_session(ns, code, timeout)
+            try:
+                r = self.run_session(ns, code, timeout)
+            except (OSError, subprocess.TimeoutExpired) as e:
+                raise RigBroken(f"iris session in {ns} on {self.ctr} did not finish: {e}") from e
             if r.returncode != 133 and "<LICENSE LIMIT EXCEEDED>" not in (r.stdout or ""):
-                return r.stdout
+                break
             if time.time() >= end:
                 raise RigBroken(f"iris session in {ns} was still refused after {LICENCE_WAIT} s: exit {r.returncode}, {(r.stdout or '')[-300:]} {(r.stderr or '')[-300:]}")
             time.sleep(LICENCE_POLL)
+        if r.returncode != 0:
+            raise RigBroken(f"iris session in {ns} on {self.ctr} exited {r.returncode}: {(r.stdout or '')[-300:]} {(r.stderr or '')[-300:]}")
+        error = session_error(r.stdout)
+        if error:
+            raise RigBroken(f"ObjectScript error in {ns}: {error}\nin: {code[:400]}\noutput: {r.stdout[-600:]}")
+        return r.stdout
 
     def value(self, ns, expr, timeout=300):
         out = self.session(ns, f'Set %v = {expr}\nWrite !,"<<<",%v,">>>",!', timeout)
@@ -158,6 +178,16 @@ class Rig:
         if not m:
             raise RigBroken(f"no value for {expr} in {ns}: {out[-800:]}")
         return m[-1]
+
+    def read_in_container(self, *argv):
+        """What a command in the container wrote, or RigBroken: a reading must not look like an empty one when the container can't answer."""
+        try:
+            r = subprocess.run(["docker", "exec", self.ctr, *argv], capture_output=True, text=True, timeout=60, errors="replace")
+        except (OSError, subprocess.TimeoutExpired) as e:
+            raise RigBroken(f"{argv} on {self.ctr} did not finish: {e}") from e
+        if r.returncode != 0:
+            raise RigBroken(f"{argv} on {self.ctr} exited {r.returncode}: {r.stderr[-300:]}")
+        return r.stdout
 
     def obj(self, ns, expr, timeout=300):
         return json.loads(self.value(ns, expr, timeout))
@@ -298,8 +328,7 @@ Set e=##class(EnsLib.Workflow.RoleDefinition).AddUserToRole("Shutter Approvers",
         subprocess.run(["docker", "exec", "-i", self.ctr, "sh", "-c", f"cat > {WORK}/mode-{port}.tmp && mv {WORK}/mode-{port}.tmp {WORK}/mode-{port}"], input=data, check=True)
 
     def listening(self, port):
-        r = subprocess.run(["docker", "exec", self.ctr, "cat", "/proc/net/tcp"], capture_output=True, text=True)
-        return listening_in(r.stdout, port)
+        return listening_in(self.read_in_container("cat", "/proc/net/tcp"), port)
 
     def listener_up(self, port, spec=None, seconds=7200):
         """Starts a receiver on this port. What it hears is kept across restarts."""
@@ -321,9 +350,10 @@ Set e=##class(EnsLib.Workflow.RoleDefinition).AddUserToRole("Shutter Approvers",
         raise RigBroken(f"the listener on {port} did not stop")
 
     def events(self, port):
-        """Everything logged on this port, in order."""
-        r = subprocess.run(["docker", "exec", self.ctr, "sh", "-c", f"cat {WORK}/rx-{port}.jsonl 2>/dev/null"], capture_output=True, text=True)
-        return [json.loads(line) for line in r.stdout.splitlines() if line.strip()]
+        """Everything logged on this port, in order: nothing for a port with no log yet, RigBroken when the container can't answer."""
+        path = f"{WORK}/rx-{port}.jsonl"
+        out = self.read_in_container("sh", "-c", f"if [ -e {path} ]; then cat {path}; fi")
+        return [json.loads(line) for line in out.splitlines() if line.strip()]
 
     def frames(self, port):
         return [e for e in self.events(port) if e.get("event") == "frame"]
@@ -414,18 +444,44 @@ Set e=##class(EnsLib.Workflow.RoleDefinition).AddUserToRole("Shutter Approvers",
         status, adapter_state, queue = found[-1].split("|", 2)
         return {"status": status, "adapter_state": adapter_state, "queue": queue}
 
+    def item_settings(self, ns, production, item):
+        """The engine's own list for one item of a production: {setting: (target, value)}, each with the target it must be saved
+        under, Host or Adapter. Raises when the production has no such item."""
+        code = f"""Set p=##class(Ens.Config.Production).%OpenId("{production}")
+For i=1:1:p.Items.Count() {{ Set it=p.Items.GetAt(i) If it.Name="{item}" {{ Write !,"<<<item|",it.Name,">>>",! Do it.PopulateVirtualSettings() For j=1:1:it.VirtualSettings.Count() {{ Set l=it.VirtualSettings.GetAt(j) Write !,"<<<",$LISTGET(l,1),"|",$LISTGET(l,2),"|",$LISTGET(l,3),">>>",! }} Quit }} }}"""
+        found = self.rows(ns, code)
+        if f"item|{item}" not in found:
+            raise RigBroken(f"{production} in {ns} has no item {item}")
+        out = {}
+        for row in found:
+            if not row.startswith("item|"):
+                target, name, value = row.split("|", 2)
+                out[name] = (target, value)
+        return out
+
     def set_item(self, ns, production, item, **settings):
-        """Changes settings on one item of a running production and updates it. Raises when the update isn't confirmed."""
-        adapter_settings = ("JobPerConnection", "StayConnected", "QSize", "ReadTimeout", "ConnectTimeout", "AllowedIPAddresses", "IPAddress", "Port")
+        """Changes settings on one item of a running production and updates it. The engine's list says which target each belongs
+        to. Raises on an item or a setting it doesn't have, on a save or an update that fails, and when the engine doesn't then
+        read the new value."""
+        known = self.item_settings(ns, production, item)
         lines = [f'Set p=##class(Ens.Config.Production).%OpenId("{production}")', f'For i=1:1:p.Items.Count() {{ Set it=p.Items.GetAt(i) If it.Name="{item}" {{ Quit }} }}']
         for k, v in settings.items():
-            target = "Adapter" if k in adapter_settings else "Host"
-            lines.append(f'Set found=0 For j=1:1:it.Settings.Count() {{ Set s=it.Settings.GetAt(j) If s.Name="{k}" {{ Set s.Value="{v}",found=1 }} }}')
-            lines.append(f"If 'found {{ Set n=##class(Ens.Config.Setting).%New() Set n.Name=\"{k}\",n.Target=\"{target}\",n.Value=\"{v}\" Do it.Settings.Insert(n) }}")
-        lines.append('Set sc=p.%Save() Set sc=p.SaveToClass() Set sc=##class(Ens.Director).UpdateProduction(60,1) Write !,"<<<",$SELECT(sc:"ok",1:$SYSTEM.Status.GetErrorText(sc)),">>>",!')
+            target = known.get(k, ("", ""))[0]
+            if target not in ("Host", "Adapter"):
+                raise RigBroken(f"{item} in {ns} has no Host or Adapter setting {k}")
+            text = str(v).replace('"', '""')
+            lines.append(f'Set found=0 For j=1:1:it.Settings.Count() {{ Set s=it.Settings.GetAt(j) If s.Name="{k}",s.Target="{target}" {{ Set s.Value="{text}",found=1 }} }}')
+            lines.append(f"If 'found {{ Set n=##class(Ens.Config.Setting).%New() Set n.Name=\"{k}\",n.Target=\"{target}\",n.Value=\"{text}\" Do it.Settings.Insert(n) }}")
+        lines.append('Set sc=p.%Save() Write !,"<<<saved|",$SELECT(sc:"ok",1:$SYSTEM.Status.GetErrorText(sc)),">>>",!')
+        lines.append('If sc { Set sc=p.SaveToClass() Write !,"<<<saved to its class|",$SELECT(sc:"ok",1:$SYSTEM.Status.GetErrorText(sc)),">>>",! }')
+        lines.append('If sc { Set sc=##class(Ens.Director).UpdateProduction(60,1) Write !,"<<<updated|",$SELECT(sc:"ok",1:$SYSTEM.Status.GetErrorText(sc)),">>>",! }')
         found = self.rows(ns, "\n".join(lines))
-        if not found or found[-1] != "ok":
+        if found != ["saved|ok", "saved to its class|ok", "updated|ok"]:
             raise RigBroken(f"{item} in {ns} did not update: {found}")
+        now = self.item_settings(ns, production, item)
+        for k, v in settings.items():
+            if now[k][1] != str(v):
+                raise RigBroken(f"{item} in {ns}: {k} reads {now[k][1]!r} after setting it to {v!r}")
 
     def wait_until(self, pred, seconds=120, every=2):
         end = time.time() + seconds
