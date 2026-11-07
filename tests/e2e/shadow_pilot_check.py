@@ -9,7 +9,7 @@ unanswered on request. The check plays S2's messages under fresh identifiers and
   - stopped, across a production restart and a whole instance restart: the feed goes on and no recovery call is sent;
   - a stop takes a reason, records the signed-in user whatever the body says, and an operator can stop but neither clear nor
     enable;
-  - a clear enables nothing and releases no earlier plan;
+  - a clear enables nothing and releases no earlier plan: its approval is refused until it is rejected and reinvestigated;
   - a write nobody answered reads as uncertain, and one a restart cut off stops recovery, with no retry on the wire;
   - shadow: nothing but the feed on the wire, a preview refused, and a report that says candidate for rehearsal.
 
@@ -21,6 +21,7 @@ Signs in as the demo users operator and approver (SHUTTER_PASSWORD, default "shu
 """
 import argparse
 import csv
+import hashlib
 import io
 import json
 import os
@@ -227,12 +228,12 @@ class Play:
             print('     the case is', (c or {}).get('state'), (c or {}).get('headline'), flush=True)
         return got or {}
 
-    def approve(self, case_id):
+    def approve(self, case_id, decision='approve'):
         _, c = self.operator.call('GET', f'/cases/{case_id}')
         _, view = self.operator.call('GET', f'/cases/{case_id}/plan')
         plan = view.get('plan', view) if isinstance(view, dict) else {}
         return self.approver.call('POST', f'/cases/{case_id}/approvals', {
-            'decision': 'approve', 'planDigest': plan.get('digest'), 'expectedVersion': c.get('version'), 'comment': 'a check'})
+            'decision': decision, 'planDigest': plan.get('digest'), 'expectedVersion': c.get('version'), 'comment': 'a check'})
 
 
 def point_connector(ctr):
@@ -269,6 +270,22 @@ def put_mode(api, mode):
     body['recovery'] = {'mode': mode}
     body['expectedVersion'] = view['version']
     return api.call('PUT', '/site-profile', body)
+
+
+def incident_approve(ctr, approver, digest='sha256:shadow-check'):
+    """An approval of an incident waiting for it: a row of its own, gone afterwards, since no chain may run here."""
+    ctr.session([
+        'Set i = ##class(Shutter.Store.Incident).%New(), i.IncidentId = "I-SHADOW", i.State = "awaiting_approval", i.PlanDigest = "sha256:shadow-check"',
+        'Do i.%Save()',
+        'Set c = ##class(Shutter.Store.Chain).%New(), c.Incident = i, c.Seq = 1, c.State = "awaiting_approval", c.Policy = "approval"',
+        'Do c.%Save()',
+    ])
+    out = approver.call('POST', '/incidents/I-SHADOW/approvals', {'decision': 'approve', 'planDigest': digest, 'comment': 'a check'})
+    ctr.session([
+        'Set i = ##class(Shutter.Store.Incident).ByIncidentId("I-SHADOW")',
+        'If $ISOBJECT(i) { Set id = i.%Id() Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM Shutter_Store.Chain WHERE Incident = ?", id) Do ##class(Shutter.Store.Incident).%DeleteId(id) }',
+    ])
+    return out
 
 
 def main():
@@ -326,7 +343,9 @@ def main():
     status, _ = put_mode(operator, 'shadow')
     check(status == 403, 'or change the mode', status)
     status, out = play.approve(waiting)
-    check(status == 409 and out.get('error') == 'recovery_stopped' and 'reinvestigate first' in out.get('detail', ''), 'an approval is refused while stopped', f'{status} {out}')
+    check(status == 409 and out.get('error') == 'recovery_stopped' and 'stopped' in out.get('detail', '') and 'reject it and reinvestigate' in out.get('detail', ''), 'an approval is refused while stopped, in words that hold after a clear', f'{status} {out}')
+    status, out = incident_approve(ctr, approver)
+    check(status == 409 and out.get('error') == 'recovery_stopped' and 'fresh evidence' in out.get('detail', ''), 'and an incident approval, which waits', f'{status} {out}')
     case_id, before = play.run()
     w = ctr.wire()
     check(w['normal'] == before['normal'] + 2, 'the ordinary feed goes on while stopped', w)
@@ -361,11 +380,25 @@ def main():
     check(status == 200 and view.get('stopped') is False and view.get('generation') > generation, 'an approver clears', f'{status} {view}')
     before = ctr.wire()
     status, out = play.approve(waiting)
-    check(status in (200, 202), 'the old plan can be approved', f'{status} {out}')
-    c = play.settled(waiting, ('blocked', 'escalated', 'failed', 'resolved'))
-    w = ctr.wire()
-    check(w['recovery'] == before['recovery'], 'but a clear releases no earlier plan: nothing on the wire', w)
-    check(c.get('state') == 'blocked', 'and the case blocks', c.get('state'))
+    check(status == 409 and out.get('error') == 'plan_predates_control' and 'reject it and reinvestigate' in out.get('detail', ''), 'a clear releases no earlier plan: the approval is refused', f'{status} {out}')
+    _, c = operator.call('GET', f'/cases/{waiting}')
+    check(c.get('state') == 'awaiting_approval', 'and leaves no approval on the record: the case still waits', c.get('state'))
+    _, approvals = operator.call('GET', f'/cases/{waiting}/approvals')
+    check(not any((a.get('decision') == 'approved') for a in (approvals if isinstance(approvals, list) else (approvals or {}).get('approvals') or [])), 'with no approved decision', approvals)
+    check(ctr.wire()['recovery'] == before['recovery'], 'and nothing on the wire', ctr.wire())
+    status, out = incident_approve(ctr, approver, 'nothing')
+    check(status == 409 and out.get('error') == 'plan_changed', 'an incident is no longer held by the stop: its own checks answer', f'{status} {out}')
+    status, out = play.approve(waiting, 'reject')
+    check(status in (200, 202), 'the way on the words give: reject it', f'{status} {out}')
+    c = play.settled(waiting, ('blocked',), timeout=60)
+    status, out = operator.call('POST', f'/cases/{waiting}/reinvestigate', {'reason': 'a check'})
+    check(status in (200, 202), 'and reinvestigate', f'{status} {out}')
+    c = play.settled(waiting, ('awaiting_approval',))
+    status, out = play.approve(waiting)
+    check(status in (200, 202), 'its new plan can be approved', f'{status} {out}')
+    wait('the new plan\'s write on the wire', lambda: ctr.wire()['recovery'] == before['recovery'] + 1, timeout=60)
+    check(ctr.wire()['recovery'] == before['recovery'] + 1, 'and writes once', ctr.wire())
+    play.settled(waiting, ('blocked', 'escalated', 'failed', 'resolved'))
 
     print('-- a write nobody answers', flush=True)
     case_id, before = play.run()
@@ -426,7 +459,11 @@ def main():
     mine = [r for r in rows if r.get('case_id') == case_id]
     check(len(mine) == 1 and mine[0]['candidate_for_rehearsal'] == 'true' and mine[0]['recovery_calls_sent'] == '0' and mine[0]['rehearsal_performed'] == 'false', 'the CSV has its row, with nothing sent', mine)
     check('would have recovered' not in text.lower() and 'MRN' not in text, 'and never says would have recovered, or names a patient')
+    _, c = operator.call('GET', f'/cases/{case_id}')
+    printed = 'P-' + hashlib.sha256(f"{mine[0]['deployment_id']}|{c.get('patientIdAuthority') or ''}|{c.get('patientId')}".encode()).hexdigest()[:16]
+    check(mine[0]['patient_reference'].startswith('P-') and mine[0]['patient_reference'] != printed, 'and its patient reference cannot be worked out from what it prints', mine[0]['patient_reference'])
     _, view = operator.call('GET', '/recovery-control')
+    check('reportKey' not in view and 'ReportKey' not in view, 'and the screen is not given the key', sorted(view))
     before = ctr.wire()
     status, out = put_mode(approver, 'enabled')
     check(status == 200, 'enabled again', f'{status} {out}')

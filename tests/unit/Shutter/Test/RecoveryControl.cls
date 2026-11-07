@@ -451,6 +451,61 @@ Method TestAClearReleasesNoOldPlan()
     Do $$$AssertEquals(##class(Shutter.Util.RecoveryControl).Mode(), "shadow", "a clear stays in shadow mode")
 }
 
+/// What a person is told at an approval is true at the next step: a plan a stop, a clear or a mode change has voided is
+/// refused with its own code, and only a plan made since goes on to the workflow.
+Method TestAnApprovalMeetsNoVoidPlan()
+{
+    Set control = "Shutter.Util.RecoveryControl"
+    Do ..SetMode("enabled")
+    Set c = ..PlannedCase(.plan)
+    Do $$$AssertEquals($CLASSMETHOD(control, "CaseApprovalRefusal", plan, .code), "", "a current plan may be approved")
+    Do $$$AssertEquals(code, "", "with no code")
+    Do $$$AssertStatusOK($CLASSMETHOD(control, "Stop", "a test", "tester", .row), "stopped")
+    Set text = $CLASSMETHOD(control, "CaseApprovalRefusal", plan, .code)
+    Do $$$AssertEquals(code, "recovery_stopped", "refused while stopped")
+    Do $$$AssertTrue(text [ "stopped", "and says stopped: " _ text)
+    Do $$$AssertNotTrue(text [ "disabled", "not disabled")
+    Do $$$AssertTrue(text [ "reject it and reinvestigate", "and the way on, as a waiting case can't be reinvestigated until it is rejected")
+    Do $$$AssertStatusOK($CLASSMETHOD(control, "ClearStop", "over", row.Generation, "a person"), "cleared")
+    Set text = $CLASSMETHOD(control, "CaseApprovalRefusal", plan, .code)
+    Do $$$AssertEquals(code, "plan_predates_control", "the old plan is refused at the approval, not after it")
+    Do $$$AssertTrue(text [ "reject it and reinvestigate", "with the same way on")
+    Set c = ..PlannedCase(.fresh)
+    Do $$$AssertEquals($CLASSMETHOD(control, "CaseApprovalRefusal", fresh, .code), "", "a plan made since may be approved")
+    Do ..SetMode("shadow")
+    Set text = $CLASSMETHOD(control, "CaseApprovalRefusal", fresh, .code)
+    Do $$$AssertEquals(code, "recovery_shadow", "refused in shadow")
+    Do $$$AssertTrue(text [ "Shadow mode", "and says shadow: " _ text)
+    Do ..SetMode("enabled")
+    Do $CLASSMETHOD(control, "CaseApprovalRefusal", fresh, .code)
+    Do $$$AssertEquals(code, "plan_predates_control", "and enabling releases it no more than a clear does")
+    Do ..DamageControl()
+    Set text = $CLASSMETHOD(control, "CaseApprovalRefusal", fresh, .code)
+    Do ..RepairControl()
+    Do $$$AssertEquals(code, "control_unreadable", "a control that can't be read refuses")
+    Do $$$AssertNotTrue(text [ "reinvestigate", "and promises no way on")
+}
+
+/// An incident holds no plan row: its items gather fresh evidence and make their plans when released. So nothing voids it,
+/// and its refusal says it waits, never that it needs reinvestigating.
+Method TestAnIncidentApprovalWaitsOnTheControl()
+{
+    Set control = "Shutter.Util.RecoveryControl"
+    Do ..SetMode("enabled")
+    Do $$$AssertEquals($CLASSMETHOD(control, "IncidentApprovalRefusal", .code), "", "enabled and running: it may be approved")
+    Do $$$AssertStatusOK($CLASSMETHOD(control, "Stop", "a test", "tester", .row), "stopped")
+    Set text = $CLASSMETHOD(control, "IncidentApprovalRefusal", .code)
+    Do $$$AssertEquals(code, "recovery_stopped", "refused while stopped")
+    Do $$$AssertTrue(text [ "fresh evidence", "and says what a release does: " _ text)
+    Do $$$AssertNotTrue(text [ "reinvestigate", "with no route it hasn't got")
+    Do $$$AssertStatusOK($CLASSMETHOD(control, "ClearStop", "over", row.Generation, "a person"), "cleared")
+    Do $$$AssertEquals($CLASSMETHOD(control, "IncidentApprovalRefusal", .code), "", "a clear lets it go on")
+    Do ..SetMode("shadow")
+    Set text = $CLASSMETHOD(control, "IncidentApprovalRefusal", .code)
+    Do $$$AssertEquals(code, "recovery_shadow", "refused in shadow")
+    Do $$$AssertTrue(text [ "Shadow mode", "and says shadow: " _ text)
+}
+
 /// A kind of call the control doesn't know, a control that can't be read and one it can't lock all send nothing.
 Method TestUnknownAndUnreadableSendNothing()
 {
@@ -610,6 +665,31 @@ Method TestTheReport()
     Do ##class(Shutter.Test.NoAnswer).Drop("C-TEST-RECCTL-B")
     Set id = "", caseId = c.CaseId
     &sql(DELETE FROM Shutter_Store.ShadowObservation WHERE CaseId = :caseId)
+}
+
+/// A patient reference can't be worked back from what the report prints: the deployment id is a column of every row, so it
+/// can't be what keys the hash, and the key is in no answer.
+Method TestAReferenceCannotBeRecomputed()
+{
+    Do ..SetMode("shadow")
+    Set c = ..PlannedCase(.plan)
+    Set rows = ##class(Shutter.Util.ShadowReport).Rows(c.OpenedAt, "9", "Downstream Out")
+    Set row = "", it = rows.%GetIterator()
+    While it.%GetNext(, .r) { If r."case_id" = c.CaseId Set row = r }
+    Do $$$AssertTrue($ISOBJECT(row), "the case has a row")
+    Set reference = row."patient_reference"
+    Do $$$AssertTrue(reference ? 1"P-"16AN, "a reference: " _ reference)
+    Set printed = "P-" _ $EXTRACT(##class(Shutter.Util.Digest).SHA256Hex(row."deployment_id" _ "|" _ c.PatientIdAuthority _ "|" _ c.PatientId), 1, 16)
+    Do $$$AssertNotEquals(reference, printed, "the printed deployment id does not give it")
+    Set key = ##class(Shutter.Util.RecoveryControl).Control().ReportKey
+    Do $$$AssertTrue($LENGTH(key) >= 32, "the deployment keeps a key of its own")
+    Do $$$AssertNotEquals(key, row."deployment_id", "which is not the printed id")
+    Set everything = ##class(Shutter.Util.ShadowReport).Csv(rows) _ ##class(Shutter.Util.ShadowReport).Summary(rows).%ToJSON() _ rows.%ToJSON() _ ##class(Shutter.Util.RecoveryControl).Read().%ToJSON()
+    Do $$$AssertNotTrue(everything [ key, "and it is in no report and no answer")
+    Set again = ##class(Shutter.Util.ShadowReport).PatientReference(key, c.PatientIdAuthority, c.PatientId)
+    Do $$$AssertEquals(again, reference, "the same patient reads the same")
+    Do $$$AssertNotEquals(##class(Shutter.Util.ShadowReport).PatientReference("another deployment's key", c.PatientIdAuthority, c.PatientId), reference, "and not across deployments")
+    Do $$$AssertEquals(##class(Shutter.Util.ShadowReport).PatientReference("", c.PatientIdAuthority, c.PatientId), "", "with no key there is no reference, never one from what is printed")
 }
 
 /// The demo's purge restarts the plan ids and the case ids: the floor comes down with them, or every new plan would be refused,
