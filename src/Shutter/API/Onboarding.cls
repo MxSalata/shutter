@@ -7,7 +7,7 @@ Class Shutter.API.Onboarding
 {
 
 /// The options a plan or an apply takes (CONTRACTS 11.1), in the order the digest reads them.
-Parameter OPTIONS = "production,shutter_host,shutter_port,ssl_config,credential,receivers,alert_on_error";
+Parameter OPTIONS = "production,shutter_host,shutter_port,ssl_config,credential,receivers,alert_on_error,document_receivers";
 
 /// The instance's own namespaces, never offered.
 Parameter SYSTEMNAMESPACES = "%SYS,HSCUSTOM,HSLIB,HSSYS,ENSLIB,ENSDEMO";
