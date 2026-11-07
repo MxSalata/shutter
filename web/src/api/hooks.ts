@@ -143,6 +143,19 @@ export function isPlaying(run: ScenarioRun | null | undefined): boolean {
   return run?.state === 'running' || run?.state === 'queued';
 }
 
+/** A case in these states is waiting on a person or an incident, or is closed; in any other it is working now. */
+const AT_REST: readonly CaseState[] = [...CLOSED_STATES, 'awaiting_approval', 'grouped'];
+
+/**
+ * The case a finished run left still working, if any. A new run resets the demo receiver under it, so it would end as
+ * Abandoned and its later approval would be blocked with UNKNOWN_ENCOUNTER: Run waits for it.
+ */
+export function settlingCase(list: ScenarioList | null | undefined): Scenario['latestCase'] {
+  if (list?.run?.state !== 'done') return null;
+  const latest = list.scenarios.find((s) => s.id === list.run?.scenario)?.latestCase ?? null;
+  return latest && !AT_REST.includes(latest.state) ? latest : null;
+}
+
 /** The scenarios and, when the API reports it, the current or last background run (T13). */
 export function useScenarios() {
   return useQuery({
@@ -153,7 +166,8 @@ export function useScenarios() {
         ? { scenarios: data, run: null }
         : { scenarios: data.scenarios ?? [], run: data.run ?? null };
     },
-    refetchInterval: (query) => (isPlaying(query.state.data?.run) ? 2_000 : CALM),
+    refetchInterval: (query) =>
+      isPlaying(query.state.data?.run) || settlingCase(query.state.data) ? 2_000 : CALM,
   });
 }
 
@@ -233,12 +247,21 @@ export function useCase(caseId: string, enabled = true) {
 
 /**
  * A part of a case (events, snapshot, runs, plan...). It refreshes while the case is open; a 404 (no plan yet, no
- * closure yet) is an answer, shown as "not yet", so it reads as null rather than an error.
+ * closure yet) is an answer, shown as "not yet", so it reads as null rather than an error. `notYet` says the case is too
+ * young to have this part: the answer is the same null, with no request, so the browser's console logs no 404.
  */
-function useCasePart<T>(caseId: string, part: string, path: string, open: boolean, enabled = true) {
+function useCasePart<T>(
+  caseId: string,
+  part: string,
+  path: string,
+  open: boolean,
+  enabled = true,
+  notYet = false,
+) {
   return useQuery({
     queryKey: keys.part(caseId, part),
     queryFn: async (): Promise<T | null> => {
+      if (notYet) return null;
       try {
         return await api.get<T>(`/cases/${seg(caseId)}${path}`);
       } catch (e) {
@@ -253,10 +276,13 @@ function useCasePart<T>(caseId: string, part: string, path: string, open: boolea
 
 export const useCaseEvents = (id: string, open: boolean) =>
   useCasePart<CaseEvent[]>(id, 'events', '/events', open);
-export const useSnapshot = (id: string, open: boolean) =>
-  useCasePart<Snapshot>(id, 'snapshot', '/snapshot', open);
+/** A case in this state has no evidence snapshot or plan yet, and it is in this state only once, at its start. */
+export const beforeEvidence = (state: string | undefined) => state === 'detected';
+export const useSnapshot = (id: string, open: boolean, notYet = false) =>
+  useCasePart<Snapshot>(id, 'snapshot', '/snapshot', open, true, notYet);
 export const useRuns = (id: string, open: boolean) => useCasePart<AgentRun[]>(id, 'runs', '/runs', open);
-export const usePlan = (id: string, open: boolean) => useCasePart<PlanView>(id, 'plan', '/plan', open);
+export const usePlan = (id: string, open: boolean, notYet = false) =>
+  useCasePart<PlanView>(id, 'plan', '/plan', open, true, notYet);
 export const useApprovals = (id: string, open: boolean) =>
   useCasePart<ApprovalsView>(id, 'approvals', '/approvals', open);
 export const useAttempts = (id: string, open: boolean) =>
