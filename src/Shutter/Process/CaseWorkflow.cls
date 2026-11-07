@@ -1069,14 +1069,16 @@ Method PolicyPath(case As Shutter.Store.Case, summary As %DynamicObject, cat As 
     Set ..Policy = ##class(Shutter.Store.SiteProfile).Policy(tier, kind)
     // A receiver's 404 doesn't prove it holds no record for the patient: a lost admission waits for a person, unless the
     // site's profile says policy may release it.
+    Set heldBack = 0
     If ('..Release) && (..Policy = "automatic") && ##class(Shutter.Util.FurtherMessages).AdmissionOnNotFound(case, summary) && (##class(Shutter.Store.SiteProfile).AdmissionNotFound() = "person") {
-        Set ..Policy = "approval"
+        Set ..Policy = "approval", heldBack = 1
         Do case.Note("note", "A lost admission on the receiver's 404: a person approves, as the site's profile asks (further_messages.admission_not_found)", "system")
     }
     // A released item is authorised by its incident (7.3): by site policy, or under the incident's approval.
     If ..Release Set ..Policy = $SELECT(..ReleasePolicy = "incident": "incident", ..ReleasePolicy = "automatic": "automatic", 1: ..Policy)
     // An automatic release writes with no person, so the case's source must be proved (CONTRACTS 11); otherwise a person approves.
-    If ..Policy = "automatic" {
+    // A lost admission held back above is asked too, so the person is told both.
+    If (..Policy = "automatic") || heldBack {
         Set unproved = ##class(Shutter.Operation.Origin).Problem(case)
         If unproved '= "" {
             Set ..Policy = "approval"
