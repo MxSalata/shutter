@@ -610,6 +610,8 @@ Method TakeDiagnosis(case As Shutter.Store.Case, lead As Shutter.Store.BoardLead
     Set plan.summary = "Follows the board of case " _ lead.LeaderCaseId _ " (the same failure signature within " _ window _ " s): " _ disposition _ $SELECT(actionType '= "none": " the operation unchanged at receiver version " _ version _ " unless the gate objects", 1: ", a person decides")
     Set plan.why = "The board convened for case " _ lead.LeaderCaseId _ " decided " _ disposition _ $SELECT(words '= "": "; its members: " _ words, 1: "") _ ". This case shares the receiver, the failure, the receiver's answer, the error and the catalogue match, so the decision is taken without another board; this case's own evidence, gate, rehearsal and approval still apply"
     Set plan.preconditions = [], plan."evidence_refs" = [], plan.disagreements = []
+    // The same thinner review, when the leader's board had a member missing.
+    If $ISOBJECT(leaderPlan.%Get("absent_members")) Set plan."absent_members" = leaderPlan.%Get("absent_members")
     Do lead.Followed()
     Do case.Note("note", "Board not convened: the decision of case " _ lead.LeaderCaseId _ "'s board is taken (" _ disposition _ "); " _ lead.Followers _ " case(s) have followed that board", "system", "lead:" _ lead.%Id())
     Quit ..AdoptPlan(case, plan, "lead:" _ lead.LeaderCaseId)
@@ -1078,8 +1080,6 @@ Method PolicyPath(case As Shutter.Store.Case, summary As %DynamicObject, cat As 
         Set ..Policy = "approval", heldBack = 1
         Do case.Note("note", "A lost admission on the receiver's 404: a person approves, as the site's profile asks (further_messages.admission_not_found)", "system")
     }
-    // A released item is authorised by its incident (7.3): by site policy, or under the incident's approval.
-    If ..Release Set ..Policy = $SELECT(..ReleasePolicy = "incident": "incident", ..ReleasePolicy = "automatic": "automatic", 1: ..Policy)
     // An automatic release writes with no person, so the case's source must be proved (CONTRACTS 11); otherwise a person approves.
     // A lost admission held back above is asked too, so the person is told both.
     If (..Policy = "automatic") || heldBack {
@@ -1376,6 +1376,7 @@ Method OnGateProposal(case As Shutter.Store.Case, result As Shutter.Msg.GateResu
             Set case.CandidateEntry = 1
             Do case.Note("note", "The catalogue has no entry for this pattern; the case is flagged as a candidate entry for a reviewer", "gate", "gate:" _ result.DecisionId)
             If 'plan.IsWrite() {
+                If ..ThinClosure(plan) '= "" Quit ..ThinClosureToPerson(case, plan)
                 Set sc = case.Transition("verifying", "No write; verifying the receiver's state (new pattern, candidate entry)", "system")
                 Quit:$$$ISERR(sc) sc
                 Quit ..SendVerify(case)
@@ -1410,10 +1411,32 @@ Method OnGateProposal(case As Shutter.Store.Case, result As Shutter.Msg.GateResu
         Quit:$$$ISERR(sc) sc
         Quit ..SendRequestAsync(..WardTargetFor(case), ..WardOperationFor(case, plan, 1), 1, "rehearsal")
     }
-    // superseded or reconcile: nothing is written; verify what the receiver holds and close.
+    // superseded or reconcile: nothing is written; verify what the receiver holds and close. A board with a member missing
+    // doesn't close a case: a person reads what it found.
+    If ..ThinClosure(plan) '= "" Quit ..ThinClosureToPerson(case, plan)
     Set sc = case.Transition("verifying", "No write; verifying the receiver's state", "system")
     Quit:$$$ISERR(sc) sc
     Quit ..SendVerify(case)
+}
+
+/// The board members a plan that writes nothing lacks, by name, or "" when the board was whole. A write is untouched: a
+/// person approves it anyway, and its task says who was missing.
+Method ThinClosure(plan As Shutter.Store.Plan) As %String
+{
+    If plan.Json = "" Quit ""
+    Set absent = plan.PlanObject().%Get("absent_members"), names = ""
+    If '$ISOBJECT(absent) Quit ""
+    Set iter = absent.%GetIterator()
+    While iter.%GetNext(, .name) { Set names = names _ $SELECT(names = "": "", 1: ", ") _ name }
+    Quit names
+}
+
+/// A partial board's plan to send nothing: not closed, but put to a person, who reinvestigates or marks it handled.
+Method ThinClosureToPerson(case As Shutter.Store.Case, plan As Shutter.Store.Plan) As %Status
+{
+    Set names = ..ThinClosure(plan)
+    Set case.Headline = "A person checks this: the board's plan sends nothing, but " _ names _ " did not answer"
+    Quit case.Transition("escalated", "The board's plan (" _ plan.Disposition _ ") writes nothing, but not every member reviewed it: " _ names _ " did not answer. A case isn't closed on a thinner review, so a person decides; nothing was sent. " _ plan.Summary, "system", "plan:" _ plan.%Id())
 }
 
 /// Whether the evidence's lookups all answered: the receiver's state (200, or 404 for an admission), the receipt (200,
