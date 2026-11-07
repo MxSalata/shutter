@@ -13,9 +13,8 @@
 Class Shutter.Util.FurtherMessages
 {
 
-/// How many HL7 headers one read of a namespace walks. More than this and the read is not whole, which blocks a write.
-Parameter SCANLIMIT = 2000;
-
+/// How many HL7 headers a read of a namespace takes at a time. It goes on to the last header, or until the site's
+/// further_messages.scan_seconds run out, and a read that runs out with headers left is not whole, which blocks a write.
 Parameter SCANPAGE = 2000;
 
 /// What is known about the case's patient and further messages: {identifier: read or unreadable, stops: [...], shows: [...],
@@ -29,11 +28,13 @@ ClassMethod Find(case As Shutter.Store.Case) As %DynamicObject
             Do ..Same(case, rows)
             Do ..Indexed(case, rows)
             // The newest headers Shutter's index has not walked yet: it runs a few seconds behind.
-            Set more = ..Scan(case, +$GET(^Shutter.Index("hwm"), 0), since, .full)
+            // Read here: the source namespace has the class but not this namespace's profile.
+            Set seconds = ##class(Shutter.Store.SiteProfile).FurtherScanSeconds()
+            Set more = ..Scan(case, +$GET(^Shutter.Index("hwm"), 0), since, .full, seconds)
             Do ..Add(rows, more)
-            If 'full Set unread = "more than " _ ..#SCANLIMIT _ " new messages in " _ $NAMESPACE
+            If 'full Set unread = ..NotWhole($NAMESPACE, seconds)
             If (case.SourceNamespace '= "") && (case.SourceNamespace '= $NAMESPACE) {
-                Set unreadThere = ..ReadSource(case, since, rows)
+                Set unreadThere = ..ReadSource(case, since, rows, seconds)
                 If unreadThere '= "" Set unread = $SELECT(unread '= "": unread _ "; ", 1: "") _ unreadThere
             }
         }
@@ -94,7 +95,7 @@ ClassMethod Indexed(case As Shutter.Store.Case, rows As %DynamicArray) [ Private
 
 /// The namespace the case came from: its HL7 messages since the case's own, which no index of Shutter's covers (INSTALL 3.3).
 /// Returns why it could not be read in full, or "".
-ClassMethod ReadSource(case As Shutter.Store.Case, since As %String, rows As %DynamicArray) As %String [ Private ]
+ClassMethod ReadSource(case As Shutter.Store.Case, since As %String, rows As %DynamicArray, seconds As %Integer) As %String [ Private ]
 {
     Set out = ""
     Try {
@@ -106,10 +107,10 @@ ClassMethod ReadSource(case As Shutter.Store.Case, since As %String, rows As %Dy
             If (SQLCODE = 0) && (t '= "") Set from = t
         }
         // Header ids only grow, so the walk starts at the case's own and never reads the namespace's history.
-        Set more = ..Scan(case, +hid, from, .full)
+        Set more = ..Scan(case, +hid, from, .full, seconds)
         Set mi = more.%GetIterator()
         While mi.%GetNext(, .r) { Set r.namespace = case.SourceNamespace, r.where = "received in " _ case.SourceNamespace Do rows.%Push(r) }
-        If 'full Set out = "more than " _ ..#SCANLIMIT _ " new messages in " _ case.SourceNamespace
+        If 'full Set out = ..NotWhole(case.SourceNamespace, seconds)
     } Catch ex {
         Set out = case.SourceNamespace _ " could not be read: " _ $EXTRACT(ex.DisplayString(), 1, 200)
     }
@@ -117,33 +118,39 @@ ClassMethod ReadSource(case As Shutter.Store.Case, since As %String, rows As %Dy
 }
 
 /// The HL7 messages in this namespace after a header id and since a time, read from the messages themselves: only this
-/// patient's, by identifier or as a merge's prior record. full is 0 when more headers were there than one read walks.
-ClassMethod Scan(case As Shutter.Store.Case, afterId As %Integer, since As %String, Output full As %Boolean, seconds As %Integer = 30) As %DynamicArray
+/// patient's, by identifier or as a merge's prior record. It pages on to the last header, so a case's age and a busy feed cost
+/// time and nothing else; full is 0 when seconds ran out with headers left.
+ClassMethod Scan(case As Shutter.Store.Case, afterId As %Integer, since As %String, Output full As %Boolean, seconds As %Integer = "") As %DynamicArray
 {
-    Set out = [], full = 1, walked = 0, json = "Shutter.Util.Json"
-    Set top = ..#SCANLIMIT + 1
-    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT TOP " _ top _ " ID, MessageBodyId, TimeCreated, SourceConfigName, TargetConfigName FROM Ens.MessageHeader WHERE MessageBodyClassName = 'EnsLib.HL7.Message' AND ID > ? AND TimeCreated >= ? ORDER BY ID", afterId, since)
-    While rs.%Next() {
-        Set walked = walked + 1
-        If walked > ..#SCANLIMIT Set full = 0 Quit
-        Set bodyId = rs.%Get("MessageBodyId")
-        Continue:$DATA(seen(bodyId))
-        Set seen(bodyId) = ""
-        Set body = ##class(EnsLib.HL7.Message).%OpenId(bodyId)
-        Continue:'$ISOBJECT(body)
-        Set id = ##class(Shutter.Util.OperationKey).PatientIdentifier(body, .authority)
-        Set trigger = $ZCONVERT(##class(Shutter.Util.OperationKey).Value(body, "MSH", "9.2"), "U"), event = ##class(Shutter.Util.OperationKey).EventForTrigger(trigger)
-        Continue:((id '= case.PatientId) && (event '= "merge"))
-        Set r = ..RowOf(body, id, authority, trigger, event)
-        Set r."ens_header_id" = rs.%Get("ID"), r."sent_at" = rs.%Get("TimeCreated"), r.where = "received"
-        Do out.%Push(r)
+    Set out = [], full = 1, last = +afterId
+    Set deadline = $ZHOROLOG + $SELECT(seconds = "": ##class(Shutter.Store.SiteProfile).#SCANSECONDS, 1: seconds)
+    Set sql = "SELECT TOP " _ ..#SCANPAGE _ " ID, MessageBodyId, TimeCreated FROM Ens.MessageHeader WHERE MessageBodyClassName = 'EnsLib.HL7.Message' AND ID > ? AND TimeCreated >= ? ORDER BY ID"
+    For {
+        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, sql, last, since), walked = 0
+        While rs.%Next() {
+            Set walked = walked + 1, last = rs.%Get("ID")
+            Set bodyId = rs.%Get("MessageBodyId")
+            Continue:$DATA(seen(bodyId))
+            Set seen(bodyId) = ""
+            Set body = ##class(EnsLib.HL7.Message).%OpenId(bodyId)
+            Continue:'$ISOBJECT(body)
+            Set id = ##class(Shutter.Util.OperationKey).PatientIdentifier(body, .authority)
+            Set trigger = $ZCONVERT(##class(Shutter.Util.OperationKey).Value(body, "MSH", "9.2"), "U"), event = ##class(Shutter.Util.OperationKey).EventForTrigger(trigger)
+            Continue:((id '= case.PatientId) && (event '= "merge"))
+            Set r = ..RowOf(body, id, authority, trigger, event)
+            Set r."ens_header_id" = rs.%Get("ID"), r."sent_at" = rs.%Get("TimeCreated"), r.where = "received"
+            Do out.%Push(r)
+        }
+        Quit:walked<..#SCANPAGE
+        If $ZHOROLOG >= deadline Set full = 0 Quit
     }
     Quit out
 }
 
+/// Why a read isn't whole, for a person and for the site that can change it.
 ClassMethod NotWhole(namespace As %String, seconds As %Integer) As %String
 {
-    Quit "more than " _ ..#SCANLIMIT _ " new messages in " _ namespace
+    Quit "the read of " _ namespace _ " ran out of its " _ seconds _ " seconds with messages left (further_messages.scan_seconds)"
 }
 
 ClassMethod RowOf(body As EnsLib.HL7.Message, id As %String, authority As %String, trigger As %String, event As %String) As %DynamicObject [ Private ]

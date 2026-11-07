@@ -3,6 +3,9 @@
 Class Shutter.Store.SiteProfile Extends (%Persistent, %JSON.Adaptor)
 {
 
+/// How long a read of a namespace's messages takes at most at a write, when the profile doesn't say (further_messages.scan_seconds).
+Parameter SCANSECONDS = 30;
+
 Property Name As %String(%JSONFIELDNAME = "name", MAXLEN = 32) [ InitialExpression = "current", Required ];
 
 Index NameIdx On Name [ Unique ];
@@ -34,7 +37,7 @@ ClassMethod Default() As %DynamicObject
     Set p.incident = {"threshold": 5, "window_minutes": 10, "quiet_seconds": 60}
     Set p."model_content" = {"free_text": false}
     Set p.feed = {"time_zone": "Europe/London", "prevent_failures": false}
-    Set p."further_messages" = {"in_patient_movement": "stop", "admission_not_found": "person"}
+    Set p."further_messages" = {"in_patient_movement": "stop", "admission_not_found": "person", "scan_seconds": (..#SCANSECONDS)}
     Quit p
 }
 
@@ -229,6 +232,8 @@ ClassMethod Validate(p As %DynamicObject) As %String
                 If '$LISTFIND($LISTBUILD("stop", "show"), v) Return "further_messages.in_patient_movement: must be stop or show"
             } ElseIf k = "admission_not_found" {
                 If '$LISTFIND($LISTBUILD("person", "policy"), v) Return "further_messages.admission_not_found: must be person or policy"
+            } ElseIf k = "scan_seconds" {
+                If (fm.%GetTypeOf(k) '= "number") || (v '= (v \ 1)) || (v < 1) || (v > 600) Return "further_messages.scan_seconds: must be a whole number of seconds from 1 to 600"
             } Else {
                 Return "further_messages." _ k _ ": unknown setting"
             }
@@ -394,9 +399,14 @@ ClassMethod AdmissionNotFound() As %String
     Quit ..FurtherSetting("admission_not_found", "person")
 }
 
+/// How long one read of a namespace's messages may take at a write, before it counts as not whole and blocks the write:
+/// further_messages.scan_seconds, or the default when the profile doesn't say.
 ClassMethod FurtherScanSeconds(profile As %DynamicObject = "") As %Integer
 {
-    Quit 30
+    If '$ISOBJECT(profile) Set profile = ..Current()
+    Set fm = profile.%Get("further_messages")
+    If $ISOBJECT(fm) && (fm.%GetTypeOf("scan_seconds") = "number") Quit +fm.%Get("scan_seconds")
+    Quit ..#SCANSECONDS
 }
 
 ClassMethod FurtherSetting(name As %String, default As %String) As %String [ Private ]

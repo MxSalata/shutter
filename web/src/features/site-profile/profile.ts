@@ -366,6 +366,9 @@ export function validateProfile(p: unknown): string {
       } else if (k === 'admission_not_found') {
         if (v !== 'person' && v !== 'policy')
           return 'further_messages.admission_not_found: must be person or policy';
+      } else if (k === 'scan_seconds') {
+        if (typeof v !== 'number' || !Number.isInteger(v) || v < 1 || v > 600)
+          return 'further_messages.scan_seconds: must be a whole number of seconds from 1 to 600';
       } else return `further_messages.${k}: unknown setting`;
     }
   }

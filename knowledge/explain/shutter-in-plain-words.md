@@ -218,7 +218,7 @@ SPW-5.68. **NO_FURTHER_MOVEMENT: Nothing else stops this for the patient.** Shut
 
 SPW-5.69. **PATIENT_UNREADABLE: The patient's identifier could not be read.** With no identifier, Shutter can't tell what else has happened to this patient, so nothing is sent. Next: Find the patient from the message itself and decide by hand.
 
-SPW-5.70. **FURTHER_NOT_READ: Further messages for the patient could not all be read.** There were too many new messages to read at the moment of the write, or the source namespace could not be read, so whether something else has happened to this patient is not known. Nothing is sent. Next: Reinvestigate the case when the feed is quieter, or check the patient in the Message Viewer and decide by hand.
+SPW-5.70. **FURTHER_NOT_READ: Further messages for the patient could not all be read.** There were too many new messages to read at the moment of the write, or the source namespace could not be read, so whether something else has happened to this patient is not known. Nothing is sent. Next: Reinvestigate the case, or check the patient in the Message Viewer and decide by hand. A read that keeps running out of time needs more of it: further_messages.scan_seconds in the site profile.
 
 SPW-5.71. **SCHEMA_UNKNOWN: The message's schema is not loaded here.** The message names a schema category that Shutter's namespace does not have, such as a site's own variant of HL7 2.5.1 with extra segments. That is missing evidence, not an invalid message: Shutter cannot validate the message until the schema is imported. Next: Import the site's schema into Shutter's namespace (the Doctor's hl7_schemas check names the category and the command), then reinvestigate the case. Nothing is sent meanwhile.
 

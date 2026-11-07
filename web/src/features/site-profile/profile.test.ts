@@ -226,11 +226,11 @@ describe('validateProfile, the port of SiteProfile.Validate', () => {
   it('accepts the further-message, source-skew and source-proof settings, as the server ships and reads them', () => {
     const p = {
       ...copy(),
-      further_messages: { in_patient_movement: 'stop', admission_not_found: 'person' },
+      further_messages: { in_patient_movement: 'stop', admission_not_found: 'person', scan_seconds: 30 },
       feed: { time_zone: 'UTC', source_skew_seconds: 0, prove_origin: false },
     };
     expect(validateProfile(p)).toBe('');
-    p.further_messages = { in_patient_movement: 'show', admission_not_found: 'policy' };
+    p.further_messages = { in_patient_movement: 'show', admission_not_found: 'policy', scan_seconds: 600 };
     p.feed.source_skew_seconds = 3600;
     expect(validateProfile(p)).toBe('');
   });
@@ -246,6 +246,22 @@ describe('validateProfile, the port of SiteProfile.Validate', () => {
       'further_messages.admission_not_found: must be person or policy',
     ],
     [{ further_messages: { in_patient: 'stop' } }, 'further_messages.in_patient: unknown setting'],
+    [
+      { further_messages: { scan_seconds: 0 } },
+      'further_messages.scan_seconds: must be a whole number of seconds from 1 to 600',
+    ],
+    [
+      { further_messages: { scan_seconds: 601 } },
+      'further_messages.scan_seconds: must be a whole number of seconds from 1 to 600',
+    ],
+    [
+      { further_messages: { scan_seconds: 1.5 } },
+      'further_messages.scan_seconds: must be a whole number of seconds from 1 to 600',
+    ],
+    [
+      { further_messages: { scan_seconds: '30' } },
+      'further_messages.scan_seconds: must be a whole number of seconds from 1 to 600',
+    ],
     [
       { feed: { source_skew_seconds: 3601 } },
       'feed.source_skew_seconds: must be a whole number of seconds from 0 to 3600',

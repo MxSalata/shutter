@@ -639,7 +639,7 @@
       "code": "FURTHER_NOT_READ",
       "title": "Further messages for the patient could not all be read",
       "prerequisite": "Shutter's namespace and the namespace the case came from can be read in full since the case's own message",
-      "next_action": "Reinvestigate the case when the feed is quieter, or check the patient in the Message Viewer and decide by hand.",
+      "next_action": "Reinvestigate the case, or check the patient in the Message Viewer and decide by hand. A read that keeps running out of time needs more of it: further_messages.scan_seconds in the site profile.",
       "owner": "Operator",
       "reevaluate_when": "The case is investigated again",
       "text": "There were too many new messages to read at the moment of the write, or the source namespace could not be read, so whether something else has happened to this patient is not known. Nothing is sent."

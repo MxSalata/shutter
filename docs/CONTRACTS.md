@@ -516,14 +516,14 @@ imported) cannot be validated at all, so the check blocks with `SCHEMA_UNKNOWN` 
 **Further messages for the patient** (`Shutter.Util.FurtherMessages`). `ResendGuard` and the matcher read one visit. Before
 every write Shutter also reads the patient: any message for the same identifier and assigning authority, on any visit, that
 reached the engine after the case's own or is timed after it, sent, queued or pending, from Shutter's index, the newest headers
-the index hasn't walked yet, and the HL7 messages of the namespace the case came from (at most 2,000 headers a read). The evidence
+the index hasn't walked yet, and the HL7 messages of the namespace the case came from (paged to the last header, for at most the profile's `further_messages.scan_seconds` a read). The evidence
 carries `further_messages`: `{identifier: read|unreadable, stops: [...], shows: [...], unread}`, each row `{why, event, message_type,
 visit_number, event_time, sent_at, control_id, location, where}`. A row stops a write when it is an in-patient movement on another
 visit (`why: other_visit`: A01, A02, A03, a cancel, or an A04 or A05 of patient class I), a change to the record (`record_changed`:
 A06, A07, A23, A29, A37, A44, A45, A47, A49, A50, A51), a merge naming the patient on either side, a cancel of this visit the receiver
 did not apply (`cancel`), or for an admission outside a chain a discharge of this visit the receiver did not apply (`discharge`).
 The gate's ordering check blocks with `FURTHER_MOVEMENT`, naming both visits; `PATIENT_UNREADABLE` when the case has no identifier;
-`FURTHER_NOT_READ` when a namespace couldn't be read in full. These come before `NEWER_MESSAGE_PENDING` in the checks, and the case
+`FURTHER_NOT_READ` when a namespace's read failed or ran out of its time with headers left. These come before `NEWER_MESSAGE_PENDING` in the checks, and the case
 blocks for a person at once, with no wait. Any other ADT message for the patient, such as an out-patient A04, passes
 (`NO_FURTHER_MOVEMENT`) and goes on a resend's plan as a precondition line and in the approval task. The gate reads the snapshot
 at the proposal and reads again at dispatch, and the connector reads once more at the moment of the write, answering `refused`
@@ -678,7 +678,7 @@ reads it through `Shutter.Store.SiteProfile`.
   "incident": {"threshold": 5, "window_minutes": 10, "quiet_seconds": 60},
   "model_content": {"free_text": false},
   "feed": {"time_zone": "Europe/London", "prevent_failures": false, "source_skew_seconds": 300},
-  "further_messages": {"in_patient_movement": "stop", "admission_not_found": "person"}
+  "further_messages": {"in_patient_movement": "stop", "admission_not_found": "person", "scan_seconds": 30}
 }
 ```
 
@@ -724,7 +724,9 @@ reads it through `Shutter.Store.SiteProfile`.
 - `further_messages` (6.5), how rigid a site wants the patient-level check. `in_patient_movement`: `stop`, or `show` to let a
   movement on another visit through with a line on the plan; a cancel, merge or discharge the receiver didn't apply on this visit
   stops either way. `admission_not_found`: `person`, or `policy` to let the tier's own policy release a lost admission on a 404.
-  Absent means `stop` and `person`, which are the safe defaults, and the shipped profile says the same.
+  `scan_seconds`: how long, from 1 to 600 seconds, one read of a namespace's messages may take at a write; a read that runs out with
+  headers left blocks the write (`FURTHER_NOT_READ`). Absent means `stop`, `person` and 30, which are the safe defaults, and the shipped
+  profile says the same.
 - `feed.prove_origin`: `true` or `false`, `true` when absent and in the shipped profile: an automatic release needs the case's source proved (section 11). A site whose forwarder reports from another instance turns it off.
 - `feed.prevent_failures` (v1.34; "prevent failures", decided on 1 Nov 2026, section 12): `true` or `false`, `false` when
   absent and in the shipped profile. On, the feed holds a message whose HL7 schema category is not loaded here as a case of

@@ -615,8 +615,8 @@ Say these plainly to whoever owns the feed.
 
 - **Further messages for the patient.** Before a write Shutter reads the patient on every visit it can see, and stops on an
   in-patient movement on another visit (`further_messages` in the site profile; CONTRACTS 6.5). It can't see a change made by hand
-  at the receiver, or a message on a route the index doesn't watch once the index has passed it. In a watched namespace it reads at
-  most 2,000 new messages at a write, and more than that blocks the write (`FURTHER_NOT_READ`). Nothing holds the feed during a
+  at the receiver, or a message on a route the index doesn't watch once the index has passed it. In a watched namespace it reads every
+  HL7 header since the case's own at each write, for at most 30 seconds (`further_messages.scan_seconds`), and a read that runs out blocks the write (`FURTHER_NOT_READ`). Nothing holds the feed during a
   correction, and a person who reinvestigates a stopped case meets the same stop until they close it by hand.
 - **A forwarder sign-in can open a case for any receiver.** An invented movement goes to a person, as the source can't be proved, but a genuine message posted again passes
   that check, so at a tier that releases by policy (9.6) it can write with no approval. A user per namespace does not close this (section 3.5), so that password deserves an integration credential's care.
