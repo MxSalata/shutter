@@ -632,7 +632,8 @@ def chain_items(chains):
 
 def read_encounters(url, plan, chains_before, chains_after, pace, log):
     """Every patient's encounter as the receiver holds it, through its own API, paced. These calls take no session, so
-    they run after the licence has been read. (encounter, what was held, lower and upper bound of events expected.)"""
+    they run after the licence has been read. (encounter, what was held, lower bound of events expected, and the upper
+    bound from chains_after.)"""
     token = base64.b64encode(f"{ADMIN[0]}:{ADMIN[1]}".encode()).decode()
     done = {(c.get("encounterId")): sum(1 for i in c.get("items") or [] if i.get("state") == "resolved") for c in chains_before}
     begun = {(c.get("encounterId")): sum(1 for i in c.get("items") or [] if i.get("releasedAt")) for c in chains_after}
@@ -1096,9 +1097,12 @@ def storm(args, log, result):
                     f"AgentRun rows {runs_before.get('N')} then {runs_after.get('N')}; /costs {totals(costs_before)} then {totals(costs_after)}; new convened nodes {new_nodes}")
 
     # The receiver's API takes no session: last, paced.
+    reads = read_encounters(args.url, plan, detail_end.get("chains") or [], [], args.encounter_pace, log)
+    # A size that stops measuring early leaves its release running, so what has begun is read after the receiver's reads.
     _, detail_after, _, _ = operator.call("GET", incident_path)
     detail_after = detail_after if isinstance(detail_after, dict) else detail_end
-    reads = read_encounters(args.url, plan, detail_end.get("chains") or [], detail_after.get("chains") or [], args.encounter_pace, log)
+    begun = {c.get("encounterId"): sum(1 for i in c.get("items") or [] if i.get("releasedAt")) for c in detail_after.get("chains") or []}
+    reads = [(encounter, held, low, begun.get(encounter, 0)) for encounter, held, low, _ in reads]
     judge_final_state(result, plan, reads, whole_release=not SIZES[args.size]["stop_at"] and not args.board)
 
     rc, out, _ = docker("inspect", "--format", "{{.RestartCount}} {{.State.OOMKilled}} {{.State.Running}}", args.ctr)
