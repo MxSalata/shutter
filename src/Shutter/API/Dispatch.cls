@@ -28,6 +28,7 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
   <Route Url="/cases/:caseId/snapshot" Method="GET" Call="CaseSnapshot"/>
   <Route Url="/cases/:caseId/runs" Method="GET" Call="CaseRuns"/>
   <Route Url="/cases/:caseId/plan" Method="GET" Call="CasePlan"/>
+  <Route Url="/cases/:caseId/correction-draft" Method="GET" Call="CaseCorrectionDraft"/>
   <Route Url="/cases/:caseId/approvals" Method="GET" Call="CaseApprovals"/>
   <Route Url="/cases/:caseId/approvals" Method="POST" Call="CaseApprove"/>
   <Route Url="/cases/:caseId/precedents" Method="GET" Call="CasePrecedents"/>
@@ -668,6 +669,21 @@ ClassMethod CaseAttempts(caseId As %String) As %Status
         Do out.%Push(pair)
     }
     Quit ..Json(out)
+}
+
+/// GET /cases/{id}/correction-draft (CONTRACTS 10): the drafted sequence's text, for an approver, redrawn on every read. It
+/// never reads the receiver and sends nothing; a read of a drawn one is recorded on the case.
+ClassMethod CaseCorrectionDraft(caseId As %String) As %Status
+{
+    If '..Allow("Shutter_Approve") Quit $$$OK
+    Set case = ..CaseOr404(caseId)
+    If '$ISOBJECT(case) Quit $$$OK
+    Set plan = case.CurrentPlan
+    If '$ISOBJECT(plan) Quit ..Fail("404 Not Found", "no_plan", "The case has no plan yet")
+    Set p = plan.PlanObject()
+    If '$ISOBJECT(p.%Get("correction_steps")) Quit ..Fail("409 Conflict", "wrong_outcome", "The case's plan is not a history correction")
+    Set summary = $SELECT($ISOBJECT(case.CurrentSnapshot): case.CurrentSnapshot.SummaryObject(), 1: "")
+    Quit ..Json(##class(Shutter.Util.HistoryDraft).Read(case, ..User(), summary, ##class(Shutter.Util.Json).Str(p, "catalogue_entry")))
 }
 
 ClassMethod CaseClosure(caseId As %String) As %Status

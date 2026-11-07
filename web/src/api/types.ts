@@ -522,10 +522,85 @@ export interface CorrectionSteps {
     operation_key?: string;
     after?: string;
   };
-  later?: { event?: string; ward?: string; event_time?: string }[];
+  later?: {
+    event?: string;
+    ward?: string;
+    event_time?: string;
+    operation_key?: string;
+    source_message_id?: string;
+    ens_header_id?: string;
+  }[];
   current?: { state?: string; ward?: string; version?: number | string };
   receipt?: string;
   steps: string[];
+  /** The drafted sequence's structure (v1.47); a plan from an older server has none. */
+  sequence?: CorrectionSequence;
+}
+
+/** One message of a drafted sequence on the plan: its place and its wards, never its text. */
+export interface CorrectionSequenceStep {
+  n: number;
+  kind: 'cancel' | 'replay';
+  trigger: string;
+  cancels?: {
+    event?: string;
+    ward?: string;
+    event_time?: string;
+    operation_key?: string;
+    source_message_id?: string;
+    ens_header_id?: string;
+  };
+  event?: string;
+  ward?: string;
+  event_time?: string;
+  operation_key?: string;
+  source_message_id?: string;
+  ens_header_id?: string;
+  body_digest?: string;
+  non_ascii?: boolean;
+  after?: { by_source?: string; by_receiver?: string };
+}
+
+/** The sequence a person could send, as it stood at plan time (CONTRACTS 10): structure only, because the model reads the plan. */
+export interface CorrectionSequence {
+  drawn: boolean;
+  reason_code?: string;
+  reason?: string;
+  k?: number;
+  count?: number;
+  receiver_version?: number | string;
+  observed_at?: string;
+  cancels_flag?: boolean | null;
+  resend_timestamp?: string;
+  steps?: CorrectionSequenceStep[];
+  left_alone?: { event?: string; event_time?: string; operation_key?: string }[];
+  end?: { ward?: string; history?: string[] };
+  checked_at?: string;
+}
+
+/** `GET /cases/{id}/correction-draft`, for an approver: the text, redrawn on the read. Its `drawn` wins over the plan's. */
+export interface CorrectionDraftView {
+  caseId: string;
+  drawn: boolean;
+  reason_code?: string;
+  reason?: string;
+  header: string[];
+  messages: {
+    n: number;
+    kind: 'cancel' | 'replay';
+    trigger: string;
+    label: string;
+    /** Segments end with a carriage return, as IRIS gives it; null when withheld. */
+    text: string | null;
+    withheld?: string;
+    after?: string;
+    body_digest?: string;
+  }[];
+  cannot_know: { what: string; why: string; does: string }[];
+  left_alone: string[];
+  never: string[];
+  digest?: string;
+  checked_at?: string;
 }
 
 export interface PlanView {

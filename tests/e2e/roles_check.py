@@ -5,7 +5,7 @@
 
 Signs in as the demo users `operator` and `approver` (password from SHUTTER_PASSWORD, default "shutter") and checks
 that GET /me names each one's roles; that deciding a case's approval needs Shutter_Approve (403 for the operator);
-that changing the agent library (PATCH /library/{code}) is refused to the
+that reading a drafted correction's text (GET /cases/{id}/correction-draft) is the approver's; that changing the agent library (PATCH /library/{code}) is refused to the
 operator (403) and allowed to the approver (200), and the item is then put back as it was; that the operator drafts
 and sends an escalation, the edit refusing a second @, a line break in the subject and a field that is not a string,
 and the case's timeline names who sent it and the digest of the text sent; that closing a case by hand (POST
@@ -124,6 +124,16 @@ def main():
         check("operator: POST /cases/{id}/approvals is 403 forbidden, naming Shutter_Approve",
               status == 403 and error_of(body) == "forbidden" and "Shutter_Approve" in (body or {}).get("detail", ""),
               f"{status} {body}")
+        # ---- the drafted correction's text is an approver's: raw HL7 with a name in it (CONTRACTS 10) ----
+        path = f"/cases/{urllib.parse.quote(any_case)}/correction-draft"
+        status, body = Session(args.url).call("GET", path)
+        check("signed out: GET /cases/{id}/correction-draft is 401", status == 401 and error_of(body) == "unauthenticated", f"{status} {body}")
+        status, body = operator.call("GET", path)
+        check("operator: GET /cases/{id}/correction-draft is 403 forbidden, naming Shutter_Approve",
+              status == 403 and error_of(body) == "forbidden" and "Shutter_Approve" in (body or {}).get("detail", ""), f"{status} {body}")
+        status, body = approver.call("GET", path)
+        check("approver: GET /cases/{id}/correction-draft is not refused for the role, and sends nothing",
+              status in (200, 404, 409) and error_of(body) in ("", None, "no_plan", "wrong_outcome"), f"{status} {body}")
 
     # ---- the production review: reading and starting one is Shutter_Operate, annotating is Shutter_Approve ----
     signed_out = Session(args.url)

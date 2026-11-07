@@ -16,6 +16,7 @@ import {
   type CaseList,
   type CaseState,
   type Closure,
+  type CorrectionDraftView,
   type Costs,
   type Health,
   type Escalation,
@@ -306,6 +307,19 @@ export const useSnapshot = (id: string, open: boolean, notYet = false) =>
 export const useRuns = (id: string, open: boolean) => useCasePart<AgentRun[]>(id, 'runs', '/runs', open);
 export const usePlan = (id: string, open: boolean, notYet = false) =>
   useCasePart<PlanView>(id, 'plan', '/plan', open, true, notYet);
+/**
+ * Reads the drafted correction's text (CONTRACTS 10). A mutation, though it is a GET: the server records every read of
+ * a drawn draft on the case, so only a person's click may send one, never a refresh or an invalidation. Nothing keeps
+ * the text once the block is gone.
+ */
+export function useReadCorrectionDraft(caseId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.get<CorrectionDraftView>(`/cases/${seg(caseId)}/correction-draft`),
+    gcTime: 0,
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.part(caseId, 'events') }),
+  });
+}
 export const useApprovals = (id: string, open: boolean) =>
   useCasePart<ApprovalsView>(id, 'approvals', '/approvals', open);
 export const useAttempts = (id: string, open: boolean) =>

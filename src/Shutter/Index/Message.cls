@@ -190,6 +190,27 @@ ClassMethod MergesSince(since As %String) As %DynamicArray
     Quit out
 }
 
+/// The rows for a patient whose header is not older than a time, event time ascending, as objects: any encounter. The
+/// identifier's authority is respected, so another authority's same number is another patient; a row with no authority
+/// can't be told apart and counts, and nor can an identifier asked for with none, so every authority's row counts then. An
+/// empty identifier has no rows.
+ClassMethod ForPatient(patientId As %String, authority As %String, since As %String = "2000-01-01 00:00:00") As %DynamicArray
+{
+    Set out = []
+    If patientId = "" Quit out
+    If authority = "" {
+        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Shutter_Index.Message WHERE PatientId = ? AND (TimeCreated >= ? OR TimeCreated IS NULL) ORDER BY EventTime, ID", patientId, since)
+    } Else {
+        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Shutter_Index.Message WHERE PatientId = ? AND (PatientIdAuthority = ? OR PatientIdAuthority IS NULL) AND (TimeCreated >= ? OR TimeCreated IS NULL) ORDER BY EventTime, ID", patientId, authority, since)
+    }
+    While rs.%Next() {
+        Set r = ..%OpenId(rs.%Get("ID"))
+        Continue:'$ISOBJECT(r)
+        Do out.%Push(r.ToObject())
+    }
+    Quit out
+}
+
 Method ToObject() As %DynamicObject
 {
     Set o = {}

@@ -326,7 +326,9 @@ Method TestCorrectionSteps()
     Do $$$AssertEquals(steps.current.ward, "WARD-C", "the current placement")
     Do $$$AssertEquals(steps.steps.%Size(), 8, "eight steps")
     Do $$$AssertTrue(steps.steps.%Get(0) [ "Do not resend", "the first step forbids the resend")
-    Do $$$AssertTrue(steps.steps.%Get(4) [ "historic movement", "the insert is a historic movement")
+    Do $$$AssertTrue(steps.steps.%Get(4) [ "own records procedure", "the correction goes through the receiver's own procedure")
+    Do $$$AssertNotTrue(steps.steps.%Get(4) [ "historic movement", "and offers no historic movement update")
+    Do $$$AssertEquals(steps.later.%Get(0)."operation_key", "PAS^HOSP^MRN-UT1^ENC-UT1^transfer^2026-10-19T09:30:00Z", "a later movement keeps its key")
     Do $$$AssertTrue(##class(Shutter.Util.HistoryCorrection).Headline(steps) [ "WARD-B", "the headline names the missing ward")
 }
 
