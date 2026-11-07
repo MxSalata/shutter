@@ -30,6 +30,7 @@ ClassMethod ProfileWithoutMode()
     Do p.%Remove("recovery")
     Set row = ##class(Shutter.Store.SiteProfile).Row()
     If '$ISOBJECT(row) Set row = ##class(Shutter.Store.SiteProfile).%New()
+    // Beside the store, so that it leaves no version in the profile's history.
     Set row.Json = p.%ToJSON()
     Do row.%Save()
 }

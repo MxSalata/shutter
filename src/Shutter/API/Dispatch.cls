@@ -53,6 +53,11 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
   <Route Url="/settings/schemas" Method="POST" Call="SchemasImport"/>
   <Route Url="/site-profile" Method="GET" Call="SiteProfileGet"/>
   <Route Url="/site-profile" Method="PUT" Call="SiteProfilePut"/>
+  <Route Url="/recovery-control" Method="GET" Call="Shutter.API.Recovery:ControlGet"/>
+  <Route Url="/recovery-control/stop" Method="POST" Call="Shutter.API.Recovery:ControlStop"/>
+  <Route Url="/recovery-control/clear" Method="POST" Call="Shutter.API.Recovery:ControlClear"/>
+  <Route Url="/shadow-observations" Method="GET" Call="Shutter.API.Recovery:ReportGet"/>
+  <Route Url="/shadow-observations.csv" Method="GET" Call="Shutter.API.Recovery:ReportCsv"/>
   <Route Url="/site-profile/history" Method="GET" Call="SiteProfileHistory"/>
   <Route Url="/index" Method="GET" Call="IndexStatus"/>
   <Route Url="/index/messages" Method="GET" Call="IndexMessages"/>
@@ -246,6 +251,7 @@ ClassMethod Me() As %Status
     Do can.%Set("approve", $SYSTEM.Security.Check("Shutter_Approve", "USE"), "boolean")
     Do can.%Set("configure", $SYSTEM.Security.Check("Shutter_Configure", "USE"), "boolean")
     Do can.%Set("scenarios", $SYSTEM.Security.Check("Shutter_Scenarios", "USE"), "boolean")
+    Do can.%Set("stopRecovery", $SYSTEM.Security.Check("Shutter_StopRecovery", "USE"), "boolean")
     // May spend the model budget: live questions and convening the board (operators, approvers and judges; not the demo).
     Do can.%Set("liveAgents", $SYSTEM.Security.Check("Shutter_LiveAgents", "USE"), "boolean")
     Set o.can = can
@@ -585,6 +591,7 @@ ClassMethod CaseApprove(caseId As %String) As %Status
     If '$ISOBJECT(body) Set body = {}
     Set decision = $ZCONVERT(##class(Shutter.Util.Json).Str(body, "decision"), "L")
     If '$LISTFIND($LISTBUILD("approve", "reject"), decision) Quit ..Fail("400 Bad Request", "bad_request", "decision must be approve or reject")
+    If (decision = "approve") && (##class(Shutter.Util.RecoveryControl).Refusal(.refused) '= "") Quit ..Fail("409 Conflict", refused, "Recovery is disabled. Enabling it will not release this plan; reinvestigate first.")
     Set r = ..Idempotent(bodyText, .replayed)
     If replayed Quit $$$OK
     If case.State '= "awaiting_approval" {
@@ -698,6 +705,8 @@ ClassMethod CasePreview(caseId As %String) As %Status
     Set case = ..CaseOr404(caseId)
     If '$ISOBJECT(case) Quit $$$OK
     If case.IsClosed() Quit ..Fail("409 Conflict", "wrong_state", "The case is closed")
+    Set refusal = ##class(Shutter.Util.RecoveryControl).Refusal(.refused)
+    If refusal '= "" Quit ..Fail("409 Conflict", refused, refusal _ "; nothing was sent")
     // A preview is a dry run: it goes only to a receiver whose capability profile, as the case's evidence read it, reports one
     // (v1.21); to any other it would be a live write conditional on nothing, so nothing is sent.
     Set snap = case.CurrentSnapshot
@@ -1373,6 +1382,7 @@ ClassMethod IncidentDecide(id As %String, seq As %String) As %Status
     If '$ISOBJECT(body) Set body = {}
     Set decision = $ZCONVERT(##class(Shutter.Util.Json).Str(body, "decision", ##class(Shutter.Util.Json).Str(body, "action")), "L")
     If '$LISTFIND($LISTBUILD("approve", "reject"), decision) Quit ..Fail("400 Bad Request", "bad_request", "decision must be approve or reject")
+    If (decision = "approve") && (##class(Shutter.Util.RecoveryControl).Refusal(.refused) '= "") Quit ..Fail("409 Conflict", refused, "Recovery is disabled. Enabling it will not release this plan; reinvestigate first.")
     Set r = ..Idempotent(bodyText, .replayed)
     If replayed Quit $$$OK
     // The incident keeps releasing its automatic and board chains while a task is open, so its state is not the test:

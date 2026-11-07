@@ -397,6 +397,7 @@ ClassMethod Reset() As %String [ SqlProc ]
     Kill ^Shutter.Config("scenario")
     Set ^Shutter.Config("resetAt") = resetAt
     Set abandoned = ##class(Shutter.Store.Incident).AbandonOpen("scenario reset")
+    Do ##class(Shutter.Util.RecoveryControl).DemoReset($USERNAME)
     // A run record left queued or finished goes with the reset (a queued run whose player stopped would otherwise
     // refuse every later run); one that is playing stays, since that run's own reset comes through here
     Kill:'..Running() ^Shutter.Scenarios("run")

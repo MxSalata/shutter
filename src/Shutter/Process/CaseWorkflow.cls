@@ -1255,6 +1255,7 @@ Method OnGateProposal(case As Shutter.Store.Case, result As Shutter.Msg.GateResu
     Set plan = ##class(Shutter.Store.Plan).%OpenId(..PlanId)
     Set sc = case.Transition("gated", "Gate at proposal: " _ result.Outcome _ ". " _ result.Summary, "gate", "gate:" _ result.DecisionId)
     Quit:$$$ISERR(sc) sc
+    Do ##class(Shutter.Store.ShadowObservation).Capture(case, plan, result)
     // A plan that asks for a person is escalated whatever the gate found; the gate's result stays on the case.
     If (plan.Disposition = "escalate") || (plan.Disposition = "more_evidence") {
         Quit case.Transition("escalated", "The plan asks for a person: " _ plan.Summary _ $SELECT(result.Outcome '= "pass": " (the gate noted: " _ result.Summary _ ")", 1: ""), "system", "plan:" _ plan.%Id())
@@ -1290,6 +1291,12 @@ Method OnGateProposal(case As Shutter.Store.Case, result As Shutter.Msg.GateResu
         Quit case.Transition("blocked", "The gate did not pass the plan; a person must decide", "gate", "gate:" _ result.DecisionId)
     }
     If plan.IsWrite() {
+        // Shadow mode or a stop (CONTRACTS 17): no dry run either, since it is a request to a receiver.
+        Set refusal = ##class(Shutter.Store.ShadowObservation).Words(plan, result)
+        If refusal '= "" {
+            Set case.Headline = refusal
+            Quit case.Transition("escalated", refusal, "system", "plan:" _ plan.%Id())
+        }
         Set sc = case.Transition("rehearsing", "Rehearsing the exact action as a dry run", "system")
         Quit:$$$ISERR(sc) sc
         Quit ..SendRequestAsync(..WardTargetFor(case), ..WardOperationFor(case, plan, 1), 1, "rehearsal")
