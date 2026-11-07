@@ -9,14 +9,11 @@ Include EnsHL7
 Class Shutter.Util.DocumentFacts
 {
 
-/// Characters of a stored OBX read for the rule: past OBX-2 and into OBX-5, and no further.
-Parameter OBXREAD = 2048;
+/// Characters of a stored OBX read for the rule: past OBX-2, and no further.
+Parameter OBXREAD = 64;
 
 /// Characters of another stored segment of an ORU read for its fields.
 Parameter SEGREAD = 32000;
-
-/// The unbroken base64 characters that make an OBX-5 an attachment, whatever OBX-2 says: no number or sentence has them.
-Parameter BASE64RUN = 256;
 
 /// The triggers of HL7 v2.5.1 chapter 9. T12 is a query, and no failed delivery of a document.
 ClassMethod IsTrigger(trigger As %String) As %Boolean
@@ -55,13 +52,12 @@ ClassMethod IsReportMessage(msg As EnsLib.HL7.Message) As %Boolean
     Quit $PIECE(seg.GetValueAt(9), seg.CS, 1) = "ORU"
 }
 
-/// The rule for a report carried as an attachment, one OBX at a time: OBX-2 says ED or RP, or OBX-5 has an unbroken run of base64
-/// in the part read. Answers what made it one (ED, RP or base64), or "" for a number, a sentence or anything else.
-ClassMethod Attachment(type As %String, value As %String) As %String
+/// The rule for a report carried as an attachment, one OBX at a time: OBX-2 says ED or RP. Answers which, or "" for anything
+/// else: base64 sent under TX or ST reads as text.
+ClassMethod Attachment(type As %String) As %String
 {
     Set type = $ZCONVERT(type, "U")
-    If (type = "ED") || (type = "RP") Quit type
-    Quit $SELECT($LOCATE($EXTRACT(value, 1, ..#OBXREAD), "[A-Za-z0-9+/]{" _ ..#BASE64RUN _ "}"): "base64", 1: "")
+    Quit $SELECT((type = "ED") || (type = "RP"): type, 1: "")
 }
 
 /// Whether a message's text is an ORU with an attachment, and its message type.
@@ -83,7 +79,7 @@ ClassMethod ReportLine(name As %String, line As %String, fs As %String, cs As %S
         Set raw("MSH") = 1
     } ElseIf name = "OBX" {
         If '$DATA(raw("at")) {
-            Set how = ..Attachment($PIECE(line, fs, 3), $PIECE(line, fs, 6))
+            Set how = ..Attachment($PIECE(line, fs, 3))
             If how '= "" Set raw("at") = how
         }
     } ElseIf (name = "OBR") {
