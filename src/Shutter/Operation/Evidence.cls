@@ -29,6 +29,8 @@ Method OnEvidenceRequest(request As Shutter.Msg.EvidenceRequest, Output response
     If '$ISOBJECT(case) Set response.Error = "Unknown case " _ request.CaseId Quit $$$OK
     Set now = ##class(Shutter.Util.Time).NowUTC()
     Set snap = ##class(Shutter.Store.Snapshot).Begin(case, ..FreshSeconds)
+    // A document case (CONTRACTS 11.2): metadata only, with no message here to read and no OBX to copy.
+    If case.DocumentJSON '= "" Quit ##class(Shutter.Util.DocumentCase).Collect(case, snap, response)
     Set count = 0
 
     // 1. The operation the case is about, as the production built it.

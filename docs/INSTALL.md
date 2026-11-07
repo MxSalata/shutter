@@ -463,7 +463,7 @@ test environment (section 5, step 7).
 
 **9.5 Check it.** `SELECT Shutter.Setup_Doctor()` has `watched_namespaces`, one entry per namespace onboarded or named by a
 case: `production`, `production_state`, `forwarder`, `alert_intake`, `pass_to`, `classes`, `credential`, `last_forward`,
-`last_forward_error`, `refused_72h`, `last_refused`, `last_case`, `schemas_missing`, `operations_unwatched`, `removed`, `problems`
+`last_forward_error`, `refused_72h`, `last_refused`, `last_case`, `schemas_missing`, `operations_unwatched`, `documents_mismatch`, `removed`, `problems`
 in words and `ok`. `last_forward_error` is the last forward only, and the next good one clears it; `refused_72h` counts every refused
 forward over three days, so a daily read still sees a lost failure. `operations_unwatched` lists HL7 operations added since the last
 apply, whose failures reach the site's consumer and open no case: run the plan and the apply again. A namespace taken off reads
@@ -613,6 +613,36 @@ another message of a session that has already handed one to Shutter gets no case
 
 **Not there: waiting for an ACK that never comes.** Nothing times out a message whose application ACK has not arrived. This is planned, not built.
 
+### 9.10 Document exceptions
+
+By default a failed MDM or ORU gets the ordinary case below, with the message copied whole into Shutter's store and its first 50 OBX and NTE values into the case's snapshot, and one over 2 MB gets no case. To have a receiver's documents and reports open metadata-only cases instead, at any size and with no copy in Shutter, pass the option to the plan and the apply (9.1, 9.2), which sets both switches:
+
+```sql
+SELECT Shutter.Setup_OnboardApply('DOCUMENTS', '{"document_receivers": "Results Out"}')
+```
+
+Or set them by hand:
+
+1. In the site profile, on the receiver's entry, add this. Saving it needs `Shutter_Configure`.
+
+```json
+"documents": {"enabled": true}
+```
+
+2. In the production's Portal page, on the **Shutter Forwarder** item, set **DocumentReceivers** to the operation's item name. The production picks it up on Update.
+
+The Doctor's `documents_mismatch` (9.5) lists any receiver where only one of the two is on.
+
+Then a failed MDM T01 to T11 there opens a case that shows the document number, the parent, every PID-3 identifier, the statuses and the delivery, and says what the message store holds for that document. **Nothing is resent, and no model is involved.** The email is a notice with a link. A restricted document (TXA-18 V or R) shows its identity only to a holder of `Shutter_Approve`, as does the receiver's own wording of a refusal.
+
+**What it can't tell you.** Whether the receiver filed the document, whether it holds another copy, or whether the identifiers name the right patient. Merges and identifier changes aren't read. A chain covers the messages to that one item back to the time the case states, so a retention purge or another route is outside it. A chain's messages are read one by one: a receiver with many messages a day may need a higher `chain_read_limit`, at the cost of a longer read.
+
+**Reports (ORU).** An ORU counts when any OBX says ED or RP in OBX-2, or has 256 unbroken base64 characters near its start, which is how a PDF arrives under another type. Its case shows the order (OBR-2), the report number (OBR-3), the result status (OBR-25) and every PID-3 identifier, with no result and no attachment. An ORU with only numbers or text stays as it is today. `"report_structures"` in `documents` names the message types that count, `["ORU^R01"]` by default.
+
+A further message for the same order or report under another result status is said plainly on the case, both statuses named. That is all it reads of a chain: it doesn't say which message stands, or what changed. An ORU has no confidentiality field, so a report has no restricted view, and the identifiers show to any operator.
+
+The document itself stays in the source's message store, subject to that store's retention. If it's purged, the case stays and says so. Fields and codes: `docs/CONTRACTS.md`, section 11.2.
+
 ## 10. What a watched namespace does not get
 
 Say these plainly to whoever owns the feed.
@@ -652,9 +682,9 @@ Say these plainly to whoever owns the feed.
   session gets the alert in section 9.9.
 - **Alert words Shutter does not know are not read as "not delivered".** A site's own class's words, a `QueueWaitAlert` on a message still being tried, or a
   connection lost after the frame went (`ErrOutConnectionLost`) open a case with an uncertain outcome that matches no entry that resends, so it goes to the board or a person.
-- **Nothing over 2 MB, and nothing that is not HL7.** The intake answers 413 or 400, so a large MDM with its document inline, or a FHIR
-  body, is a warning in the event log and no case. A smaller MDM's document is kept whole in the case's snapshot: a governance
-  question for the trust.
+- **Nothing over 2 MB, and nothing that is not HL7.** The intake answers 413 or 400, so a large MDM or ORU with its document inline, or a FHIR
+  body, is a warning in the event log and no case. A smaller MDM's document is copied whole into Shutter's store, and its first 50
+  OBX and NTE values into the case's snapshot: a governance question for the trust. A receiver with a document profile (section 9.10) avoids both for MDM and for an ORU with an attachment.
 - **The prevent-failures route (section 7) through a stock routing engine** can name the wrong reason: the engine holds the message, but
   the case reads as a schema failure of the standard the message itself names, because the header's source is the router. Use
   it through a process that checks the category, as the demo hospital's does, or test it first with your feed.

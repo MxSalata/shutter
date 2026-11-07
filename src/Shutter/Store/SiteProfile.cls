@@ -197,6 +197,8 @@ ClassMethod Validate(p As %DynamicObject) As %String
             If demo.%IsDefined("namespace") && (demo.%GetTypeOf("namespace") '= "string") Return at _ ".demo.namespace: must be a string"
         }
         If r.%IsDefined("cancels") && (r.%GetTypeOf("cancels") '= "boolean") Return at _ ".cancels: must be true or false"
+        // A receiver's document profile (11.2), off when absent.
+        If r.%IsDefined("documents") { Set dp = ##class(Shutter.Util.DocumentCase).SettingsProblem(r.%Get("documents")) If dp '= "" Return at _ ".documents" _ dp }
         // Whether the receiver takes merges (T31); false when absent, and a merge still needs the site's merges: allowed.
         If r.%IsDefined("merges") && (r.%GetTypeOf("merges") '= "boolean") Return at _ ".merges: must be true or false"
         If r.%IsDefined("api") {

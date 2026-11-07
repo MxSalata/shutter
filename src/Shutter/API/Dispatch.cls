@@ -429,6 +429,7 @@ ClassMethod CaseGet(caseId As %String) As %Status
     Set case = ..CaseOr404(caseId)
     If '$ISOBJECT(case) Quit $$$OK
     Set o = ..Project(case)
+    If case.DocumentJSON '= "" Set o.document = ##class(Shutter.Util.DocumentCase).View(case)
     If $ISOBJECT(case.CurrentPlan) Set o.planCreatedBy = case.CurrentPlan.CreatedBy
     // The case's place in its incident (CONTRACTS 7.5), when one holds it.
     If $ISOBJECT(case.Incident) Set o.incidentId = case.Incident.IncidentId, o.incident = ##class(Shutter.Store.ChainItem).IncidentContext(case)
@@ -1141,6 +1142,7 @@ ClassMethod Intake() As %Status
     Set body = ##class(Shutter.Util.Json).Parse(bodyText, .psc)
     If '$ISOBJECT(body) || $$$ISERR(psc) Quit ..Fail("400 Bad Request", "bad_request", "The body must be a JSON object with message, failure, source and receiver")
     If $CLASSNAME(body) '= "%Library.DynamicObject" Quit ..Fail("400 Bad Request", "bad_request", "The body must be a JSON object with message, failure, source and receiver")
+    If ##class(Shutter.API.DocumentIntake).Takes(body) Quit ##class(Shutter.API.DocumentIntake).Post(body, bodyText)
     Set message = ""
     If body.%GetTypeOf("message") = "string" Set message = body.%Get("message")
     If $ZSTRIP(message, "<>WC") = "" Quit ..Fail("400 Bad Request", "bad_request", "message is required: the HL7 message's text, segments separated by carriage returns")
@@ -1638,6 +1640,7 @@ ClassMethod CaseQuestionAsk(caseId As %String) As %Status
     If '..Allow("Shutter_Operate", 1) Quit $$$OK
     Set case = ..CaseOr404(caseId)
     If '$ISOBJECT(case) Quit $$$OK
+    If case.DocumentJSON '= "" Quit ..Fail("409 Conflict", "no_agents", "A document case has no agents, so a person reads its evidence")
     Set shape = "The body must be a JSON object: {tier, question | suggested: {conversation, turn}, conversation?}"
     Set bodyText = $SELECT($ISOBJECT(%request.Content): %request.Content.Read($$$MaxStringLength), 1: $GET(%request.Content))
     Set body = ##class(Shutter.Util.Json).Parse(bodyText, .psc)

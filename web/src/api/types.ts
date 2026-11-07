@@ -268,6 +268,35 @@ export interface CaseDetail extends CaseSummary {
   links: { visualTrace: string; workflowTrace: string };
   /** The case's place in its incident, when one holds it. */
   incident?: CaseIncident;
+  /** A document case's block (CONTRACTS 11.2), by the reader's right. */
+  document?: CaseDocument;
+}
+
+/** What a document or report case shows: metadata only, and nothing of its content. */
+export interface CaseDocument {
+  /** "report" for an ORU carrying a report as an attachment; absent for an MDM. */
+  kind?: 'report';
+  report?: { placer?: string; filler?: string; result_status?: string; attachment?: string; orders?: number };
+  headline: string;
+  trigger: string;
+  restricted?: boolean;
+  identity_withheld?: boolean;
+  sent_nothing?: boolean;
+  body_stored_in_shutter?: boolean;
+  source_verified?: boolean;
+  reasons?: { code: string; words: string }[];
+  document?: {
+    id?: string;
+    parent?: string;
+    completion?: string;
+    confidentiality?: string;
+    availability?: string;
+  };
+  patient?: { keys?: { id: string; authority?: string; type?: string }[] };
+  size?: { stored_bytes?: number; over_intake_limit?: boolean };
+  delivery?: { status?: string; header_id?: string; time_created?: string; time_processed?: string };
+  refusal?: { ack_code?: string; reason_code?: string; text?: string; text_withheld?: boolean };
+  chain?: { complete?: boolean; says?: string[] };
 }
 
 export interface CaseEvent {
