@@ -29,6 +29,19 @@ const copy = (): SiteProfile => structuredClone(recorded);
 const FEED_ZONE =
   'feed.time_zone: must be UTC, Europe/London, a fixed offset such as +01:00 (up to 14:00), or an IANA zone name this IRIS knows (for example Europe/Paris)';
 
+describe('the failure census setting (CONTRACTS 18)', () => {
+  const base = { receivers: [{ name: 'Out', tier: 2 }] };
+
+  it('a stored profile with it is one the page can save', () => {
+    expect(validateProfile({ ...base, failure_census: { enabled: true } })).not.toContain('failure_census');
+  });
+
+  it('refuses what is not an object', () => {
+    expect(validateProfile({ ...base, failure_census: true })).toBe('failure_census: must be an object');
+    expect(validateProfile({ ...base, failure_census: [] })).toBe('failure_census: must be an object');
+  });
+});
+
 describe('the recovery mode (CONTRACTS 17)', () => {
   const base = (): Record<string, unknown> => ({
     receivers: [{ name: 'Out', tier: 2 }],

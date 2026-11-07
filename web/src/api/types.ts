@@ -989,6 +989,14 @@ export interface SiteProfile {
   recovery?: { mode?: 'shadow' | 'enabled' };
   /** Whether a person's escalation email goes out in shadow mode; it doesn't, unless this says enabled. */
   notifications?: { shadow_delivery?: 'disabled' | 'enabled' };
+  /** The failure census (CONTRACTS 18): off unless enabled; the server checks its limits. */
+  failure_census?: {
+    enabled?: boolean;
+    max_window_hours?: number;
+    max_headers?: number;
+    retention_days?: number;
+    settle_seconds?: number;
+  };
   /** A scheduled mail for cases left open (CONTRACTS 6.4): off unless enabled, in the feed's time zone. */
   reminders?: {
     enabled?: boolean;

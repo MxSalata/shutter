@@ -332,6 +332,7 @@ export function validateProfile(p: unknown): string {
     'recovery',
     'notifications',
     'reminders',
+    'failure_census',
   ];
   for (const key of Object.keys(p)) if (!top.includes(key)) return `${key}: unknown field`;
   if ('version' in p && (!numeric(p.version) || asNumber(p.version) < 0))
@@ -414,6 +415,9 @@ export function validateProfile(p: unknown): string {
       if (k !== 'close_needs_approver' && typeof v !== 'string') return `approvers.${k}: must be a string`;
     }
   }
+  // The census's limits are the server's to check (CONTRACTS 18): the page has no field for them, and keeps them as read.
+  if ('failure_census' in p && (!isObject(p.failure_census) || Array.isArray(p.failure_census)))
+    return 'failure_census: must be an object';
   // Whether Shutter attempts recovery at all, and whether email goes out while it doesn't (CONTRACTS 17).
   if ('recovery' in p) {
     if (!isObject(p.recovery)) return 'recovery: must be an object';
