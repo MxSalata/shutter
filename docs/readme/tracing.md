@@ -2,7 +2,7 @@
 
 The walk-through the README's "Tracing AI agents with Interoperability" paragraph summarises, in full. The idea: [DPI-I-689](https://ideas.intersystems.com/ideas/DPI-I-689).
 
-The idea asks whether Interoperability could do the job of a tracing tool. In Shutter every agent run is a message, so for a workflow in IRIS the production's own trace does that job, with no other service to run; a dedicated tracing tool does more on evaluations, prompt management and dashboards.
+The idea asks whether Interoperability could do the job of a tracing tool such as Langfuse. In Shutter every agent run is a message, so for a workflow in IRIS the production's own trace does that job, with no other service to run; Langfuse does more on evaluations, prompt management and dashboards.
 
 **Follow one decision, step by step,** on your own instance (the replay edition is enough: no key, no cost) or in the online demo's Visual Trace:
 
@@ -19,10 +19,10 @@ The idea asks whether Interoperability could do the job of a tracing tool. In Sh
 4. In the Management Portal's SQL page (namespace `SHUTTER`), signed in as `_SYSTEM` / `SYS`, run the query below with that session number: every tool call of the pass, in order, with its duration, whether it succeeded, whether the authorisation policy refused it, and the board member that made it.
 5. On the case page, **When each agent worked** draws the same rows as a timeline, and the **Settings and costs** page sums them by case.
 
-| A tracing tool records | In Shutter |
+| Langfuse records | In Shutter |
 | --- | --- |
 | A trace (one end-to-end run) | The case's session in the Visual Trace, one lane per step and agent |
-| A generation (one model call) | One `AgentRequest` and `AgentResponse` pair per run, with the model, the duration and the tokens summed over the run's model turns (`Iterations`), and its cost on the `AgentRun`; a tracing tool shows each call separately |
+| A generation (one model call) | One `AgentRequest` and `AgentResponse` pair per run, with the model, the duration and the tokens summed over the run's model turns (`Iterations`), and its cost on the `AgentRun`; Langfuse shows each call separately |
 | Tool calls and retrieval | Each tool call, knowledge searches and refused calls included, as a `ToolCall` row and in the trace's log (`%AI.Policy.Audit`; in replay, one line per run) |
 | Cost | The **Settings and costs** page and `GET /costs`, by case, review and question |
 | The prompt's version | The agent class's configuration version, in the request and each recording's key |

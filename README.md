@@ -161,7 +161,7 @@ The three specialists (conformance, encounter and impact) and the coordinator ar
 | YouTube video | [link at submission] |
 | Developer Community articles | [link at submission] |
 
-**Tracing AI agents with Interoperability (DPI-I-689).** Every agent run is a message, so the production's own trace does a tracing tool's job, with no other service to run: run **S8** in **Board** mode (the replay edition is enough), and **In IRIS: Message trace** opens its session in the Visual Trace, one lane per item, each `AgentResponse` holding the model, mode, tokens and tool calls. In the SQL page (namespace `SHUTTER`), that session's tool calls:
+**Tracing AI agents with Interoperability (DPI-I-689).** Every agent run is a message, so the production's own trace does the job of a tracing tool such as Langfuse, with no other service to run: run **S8** in **Board** mode (the replay edition is enough), and **In IRIS: Message trace** opens its session in the Visual Trace, one lane per item, each `AgentResponse` holding the model, mode, tokens and tool calls. In the SQL page (namespace `SHUTTER`), that session's tool calls:
 
 ```sql
 -- One session's tool calls in order, with the board member that made each (? is the session number)
