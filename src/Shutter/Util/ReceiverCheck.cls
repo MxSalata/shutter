@@ -192,7 +192,7 @@ ClassMethod ForCase(case As Shutter.Store.Case) As %DynamicObject
     Set out.snapshotId = $SELECT($ISOBJECT(snap): "" _ snap.%Id(), 1: "")
     Do out.%Set("profileVersion", +##class(Shutter.Util.Json).Str(profile, "version", 0), "number")
     Set out.guideVersion = words.version
-    Set out.guideDigest = "sha256:" _ ##class(Shutter.Util.Digest).SHA256Hex(text)
+    Set out.guideDigest = ##class(Shutter.Util.Digest).SHA256Hex(text)
     Set out.variant = variant
     Do ..Evidence(case, summary, variant, words, out)
     Set out.identity = ..Identity(case, summary, meta, words)

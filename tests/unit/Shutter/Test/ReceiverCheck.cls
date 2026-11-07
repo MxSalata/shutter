@@ -84,7 +84,7 @@ Method Stored(text As %String) As %String
     Quit h.%Id()
 }
 
-ClassMethod Doc(control As %String = "DOC1", txa As %String = "TXA|1|CN|TX|20261105090000||||||||DOCNUM-77||||||LA") As %String
+ClassMethod Doc(control As %String = "DOC1", txa As %String = "TXA|1|CN|TX|20261105090000||||||||DOCNUM-77|||||LA") As %String
 {
     Quit "MSH|^~\&|DOCS|DOC|DMS|DOC|20261105090500||MDM^T02|" _ control _ "|P|2.5.1\rPID|1||MRN9100^^^HOSP^MR||" _ ..#CANARY _ "^BOB||19800202|M\rPV1|1|O|CLINIC1||||||||||||||||ENC-9100\r" _ txa _ "\rNTE|1||" _ ..#CANARY _ "\rOBX|1|ED|DOC^Letter||^application^pdf^Base64^" _ ..#BASE64 _ "||||||F\r"
 }
@@ -118,6 +118,7 @@ Method TestNoApiReceiver()
     Set c = ..Case("transfer", "delivery_failed", {"ward_state": {}, "ward_state_http_status": 0, "observed_at": "2026-11-02T14:18:46Z", "later_events": 0, "timeline": []})
     Set out = ##class(Shutter.Util.ReceiverCheck).ForCase(c)
     Do $$$AssertEquals(out.variant, "manual_compare", "nothing more specific: compare by hand")
+    Do $$$AssertTrue(out.guideDigest ?1"sha256:"64AN, "one digest of the words: " _ out.guideDigest)
     Do $$$AssertEquals(out.receiverEvidence, "unavailable", "no receiver evidence")
     Do $$$AssertTrue(out.evidenceNote [ "don't show what the receiver holds now", "it says so: " _ out.evidenceNote)
     Do $$$AssertTrue(out.queueWarning [ "may still arrive", "the queue warning")

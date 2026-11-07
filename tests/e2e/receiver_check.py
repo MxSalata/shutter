@@ -35,7 +35,7 @@ def pid(n):
 def t02(n, number):
     t = stamp()
     control = f'DOC{n}{t}'
-    txa = f'TXA|1|CN|TX|{t}||||||||{number}||||||LA'
+    txa = f'TXA|1|CN|TX|{t}||||||||{number}|||||LA'
     return control, (f'MSH|^~\\&|DOCS|DOC|DMS|DOC|{t}||MDM^T02^MDM_T02|{control}|P|2.5.1\rEVN|T02|{t}\r{pid(n)}\r'
                      f'PV1|1|O|CLINIC1||||||||||||||||ENC-{n}\r{txa}\rOBX|1|ED|DOC^Letter||^application^pdf^Base64^{PAYLOAD}||||||F\r'
                      f'NTE|1||{CANARY}NOTE\r')
@@ -107,6 +107,7 @@ def main():
     check(failures, card['variant'] == 'document', f'the document card: {card["variant"]}')
     check(failures, card['receiverEvidence'] == 'unavailable', 'no receiver evidence')
     check(failures, fields(card).get('Document number', {}).get('value') == number, f'TXA-12 is read: {fields(card).get("Document number")}')
+    check(failures, fields(card).get('Status', {}).get('value') == 'LA', f'TXA-17 is read: {fields(card).get("Status")}')
     check(failures, card['identity']['messageType'] == 'MDM^T02', f'the type: {card["identity"]["messageType"]}')
     check(failures, card['identity']['encounterId'] == f'ENC-{base}', 'the encounter')
     check(failures, 'may still arrive' in card['queueWarning'], 'the queue warning')
