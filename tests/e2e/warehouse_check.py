@@ -49,13 +49,15 @@ PLAYS = "board:S1,S2,S3,S4,S5,S6,S7,S8,S9,S10,S13,S15,S16,S21,S22,S23a,S23b,S23c
 CLOSED = {"resolved", "blocked", "escalated", "failed"}
 # Times, ids and digests differ between any two runs, and digests bind times and ids, so what they bind is compared instead.
 # So does the receiver's epoch, which every reset moves, and the count of precedents, which grows with each run played.
+# A note that a case waits (a receiver's Retry-After, the board's rate cap) depends on the clock, so those are left out.
+WAITING_NOTE = re.compile(r"preflight read waits \d+ s|this case waits \d+ s")
 VOLATILE_KEY = re.compile(r"(^id$|id$|at$|time|digest|duration|latency|^ms$|millis|elapsed|expires|session|token|^run|^key$|attempt$|taskid|cost|tokens"
-                          r"|^seq$|^links$|^ref$|epoch|^precedents$)", re.IGNORECASE)
+                          r"|^seq$|^links$|^ref$|epoch|^precedents$|^counts$)", re.IGNORECASE)
 STAMP = re.compile(r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(\.\d+)?Z?")
 CASE_ID = re.compile(r"\b(C|I|Q)-\d{6}\b")
 TAIL_DIGITS = re.compile(r"\b\d{9,}\b")
 # Row ids and digests written inside a sentence or a reference
-INNER = re.compile(r"sha256:[0-9a-f]+|\b(run|ens|snapshot|finding|plan|approval|rehearsal|attempt|epoch)( |:)\d+\b")
+INNER = re.compile(r"sha256:[0-9a-f]+|\b(run|ens|snapshot|finding|plan|approval|rehearsal|attempt|epoch|task)( |:)\d+\b")
 PARTS = ("events", "snapshot", "plan", "approvals", "attempts", "closure", "blocked-reason")
 fails = []
 
@@ -98,8 +100,14 @@ class Iris:
     def session(self, line):
         """One line in a terminal session in the namespace; what it wrote after RESULT: on the line."""
         script = f'{line}\nHalt\n'
-        out = subprocess.run(["docker", "exec", "-i", self.ctr, "iris", "session", "IRIS", "-U", self.ns],
-                             input=script, capture_output=True, text=True, timeout=300).stdout
+        # A terminal is refused while the web sessions hold the licence's units: that is no answer, so ask again
+        for _ in range(40):
+            done = subprocess.run(["docker", "exec", "-i", self.ctr, "iris", "session", "IRIS", "-U", self.ns],
+                                  input=script, capture_output=True, text=True, timeout=300)
+            if "LICENSE LIMIT" not in done.stdout + done.stderr and done.returncode != 133:
+                break
+            time.sleep(5)
+        out = done.stdout
         found = re.findall(r"^RESULT: (.*)$", out, re.M)
         return found[-1].strip() if found else "no result: " + out[-400:]
 
@@ -146,7 +154,8 @@ def case_record(operator, case_id):
         body = normalise(body)
         if part == "events" and isinstance(body, list):
             # The board's members run side by side and finish in either order
-            body = sorted(body, key=lambda e: json.dumps(e, sort_keys=True))
+            body = sorted((e for e in body if not WAITING_NOTE.search(str(e.get("text")))),
+                          key=lambda e: json.dumps(e, sort_keys=True))
         record[part] = {"status": status, "body": body}
     return record, case
 
@@ -295,8 +304,10 @@ def main():
     plays = parse_plays(args.plays)
 
     # A run that stopped half-way may have left this check's own dataset; never anything else
-    iris.sql("DELETE FROM ShutterWH.Movement WHERE DatasetId = ?", DATASET)
-    iris.sql("DELETE FROM ShutterWH.Batch WHERE DatasetId = ?", DATASET)
+    if iris.call("##class(Shutter.Warehouse.Setup).TablesExist()") == "1":
+        for table in ("Movement", "Batch"):
+            result = iris.sql(f"DELETE FROM ShutterWH.{table} WHERE DatasetId = ?", DATASET)
+            check(result.startswith(("0", "100")), f"this check's own rows of an earlier run cleared from {table}: {result}")
 
     # 1. Off by default
     status, _ = basic(args.url, READER_PATH + "/history?dataset=x&authority=y&patient=z", "_SYSTEM", "SYS")
