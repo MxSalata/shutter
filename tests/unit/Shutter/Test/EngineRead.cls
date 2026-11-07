@@ -363,6 +363,36 @@ Method TestCustodyOnRealRows()
     Do $$$AssertEquals(got.answer, "unreadable", "no such header")
 }
 
+/// Reads in a production's namespace take no lock: inside a transaction a lock stays held until the commit, and a held
+/// runtime lock stops that production's own start. Skipped when Shutter's production isn't running here, since a read then
+/// stops before the part that could take one.
+Method TestNoReadTakesALock()
+{
+    Set er = "Shutter.Util.EngineRead", ns = $NAMESPACE, item = ..#ITEM
+    If $CLASSMETHOD(er, "ItemState", ns, item).answer '= "ok" {
+        Do $$$AssertSkipped("no running production with the item " _ item)
+        Quit
+    }
+    Set h = ..Header(..Session(), item, ..Body(), 0, "", "Completed", "2026-11-07 01:02:03.456")
+    TSTART
+    Set state = $CLASSMETHOD(er, "ItemState", ns, item)
+    Set custody = $CLASSMETHOD(er, "Custody", ns, item, h)
+    Set setting = $CLASSMETHOD(er, "ItemSetting", ns, item, "FailureTimeout", "yes")
+    Set held = ""
+    Set rs = ##class(%ResultSet).%New("%SYS.LockQuery:List")
+    Do rs.Execute()
+    While rs.Next() {
+        // This test's own job holds the test manager's locks: only the engine's matter here.
+        If (rs.Get("Owner") = $JOB) && (rs.Get("LockString") [ "Ens.") Set held = held _ " " _ rs.Get("LockString")
+    }
+    Kill rs
+    // Back out before asserting: an assertion writes, and the rollback would take it too.
+    TROLLBACK 1
+    Do ##class(Ens.MessageHeader).%DeleteId(h)
+    Do $$$AssertEquals(state.answer _ "|" _ custody.answer _ "|" _ setting.source, "ok|delivered|class_default", "all three read")
+    Do $$$AssertEquals(held, "", "and hold no lock of the engine's:" _ held)
+}
+
 /// ItemSetting on a live item that isn't the stock operation, the class default on the same class taken as if it were.
 Method TestItemSettingLive()
 {

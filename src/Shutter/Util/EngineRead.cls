@@ -155,7 +155,8 @@ ClassMethod CustodyAnswer(word As %String, itemStatus As %String, enabled As %Bo
 /// One item as the engine shows it, for Custody and for a poll. answer "ok" when the production runs and every field that
 /// says what the item is doing was read; otherwise "unknown", with why and whatever was read before it failed.
 /// { "answer", "why", "production", "productionState", "inProduction", "enabled", "status", "adapterState", "queue",
-/// "lastActivity", "headHeaderId", "activeMessage" }. headHeaderId is the oldest header to the item reading Delivered, by
+/// "lastActivity", "headHeaderId", "activeMessage" }. productionState is "running", "not running" or empty when even that
+/// could not be read. headHeaderId is the oldest header to the item reading Delivered, by
 /// SQL; activeMessage is what the job list shows, a check on it, and empty means unknown rather than none.
 ClassMethod ItemState(ns As %String, item As %String) As %DynamicObject
 {
@@ -174,21 +175,13 @@ ClassMethod ReadItem(ns As %String, item As %String, out As %DynamicObject) [ Pr
     Try {
         New $NAMESPACE
         Set $NAMESPACE = ns
-        // The state from the query rather than Ens.Director's GetProductionStatus, which takes the runtime lock, and inside
-        // a caller's transaction would keep it until the commit.
-        Set running = "", other = "", otherState = ""
-        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT Production, Status, StatusEnum FROM Ens_Config.Production_ProductionStatus()")
-        If rs.%SQLCODE < 0 {
-            Set out.why = "the production's state can't be read: SQLCODE " _ rs.%SQLCODE _ " " _ rs.%Message
-            Quit
-        }
-        While rs.%Next() {
-            If +rs.%Get("StatusEnum") = 1 { Set running = rs.%Get("Production") Continue }
-            If +rs.%Get("StatusEnum") '= 2 Set other = rs.%Get("Production"), otherState = $ZCONVERT(rs.%Get("Status"), "L")
-        }
-        If running = "" {
-            Set out.production = other, out.productionState = $SELECT(otherState '= "": otherState, 1: "stopped")
-            Set out.why = "no production is running in " _ ns _ " (" _ out.productionState _ ")"
+        // Whether it runs, from IsProductionRunning, which only reads. Not GetProductionStatus or the status query that calls
+        // it: they take the runtime lock, waiting up to 10 s for the production's own start, stop or update, and inside a
+        // caller's transaction they keep it until the commit, in a namespace that isn't Shutter's.
+        Set running = ""
+        If '##class(Ens.Director).IsProductionRunning(.running) {
+            Set out.productionState = "not running"
+            Set out.why = "no production is running in " _ ns
             Quit
         }
         Set out.production = running, out.productionState = "running"
