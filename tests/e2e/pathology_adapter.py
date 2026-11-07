@@ -152,6 +152,9 @@ def declare_receiver(rig, namespace, receiver, facts):
         "call": facts["who_to_call"],
         "duplicates": duplicates,
     }
+    if facts["category"] == "orders_results":
+        # What lets a build with the send offer one here. The set still decides what goes, and a build without it reads this nowhere.
+        entry["engine_resend"] = True
     profile["receivers"] = [r for r in profile.get("receivers", []) if r.get("name") != receiver] + [entry]
     profile["expectedVersion"] = str(current["version"])
     code, answer = rig.site_setting("PUT", "/site-profile", profile)
