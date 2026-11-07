@@ -172,7 +172,9 @@ export function CaseStory({
       </Step>
       <Step value="decision" n={4} title="Gate and decision" summary={decisionSummary(facts)}>
         <GatePanel {...planRead} />
-        {me ? <ApprovalPanel c={c} me={me} view={plan} approvals={facts.approvals} /> : null}
+        {me ? (
+          <ApprovalPanel c={c} me={me} view={plan} approvals={facts.approvals} snapshot={facts.snapshot} />
+        ) : null}
       </Step>
       <Step value="written" n={5} title="What was written" summary={writtenSummary(facts)}>
         <RehearsalPanel view={plan} write={write} receiver={c.receiver} />

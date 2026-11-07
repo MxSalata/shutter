@@ -40,6 +40,7 @@ import { usePrefersReducedMotion } from '@/lib/motion';
 import { TONE_COLOURS, TONE_ICONS, toneText, type Tone } from '@/lib/tone';
 import { Reinvestigate } from './Closure';
 import { checksOf } from './derive';
+import { gateFactLabel, laterChecksLine } from './gateWords';
 import { NextActionPrecedents } from './Precedents';
 import { bandKind, bandStartsOpen, rememberBand } from './outcomeBand';
 import {
@@ -58,8 +59,6 @@ import { CorrectionDraft } from './CorrectionDraft';
 import { caseReceiver, correctionStepsOf } from './receiver';
 
 /** The gate's outcome in a word on the badge; the counts are written beside it. */
-const GATE_LABELS: Record<string, string> = { pass: 'Passed', block: 'Blocked', unknown: 'Unknown' };
-
 /** One labelled fact of the receipt: its name, a status badge when it has one, and the words. */
 function Fact({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -188,6 +187,7 @@ export function DecisionCard({
   const checks = gate ? checksOf(gate) : [];
   const gateStatus = gate ? gateOutcome(gate.outcome, checks) : undefined;
   const writesNothing = !!facts.plan?.plan && facts.plan.plan.disposition !== 'resend';
+  const laterLine = gate?.outcome === 'pass' && !writesNothing ? laterChecksLine(checks) : '';
   const release = releaseStatus(facts);
   const next = nextAction(facts);
   const b = facts.blocked;
@@ -555,14 +555,13 @@ export function DecisionCard({
                           {...gateStatus}
                           // Its scope beside a plan that writes nothing, so a green check is not read as leave to write
                           label={
-                            gate.outcome === 'pass' && writesNothing
-                              ? 'Passed: the plan writes nothing'
-                              : (GATE_LABELS[gate.outcome] ?? gateStatus.label)
+                            gateFactLabel(gate.outcome, checks, c.state, writesNothing) ?? gateStatus.label
                           }
                           size="md"
                           w="fit-content"
                         />
                         <CheckStrip checks={checks} />
+                        {laterLine ? <Text size="sm">{laterLine}</Text> : null}
                       </>
                     ) : (
                       <Text size="sm">{facts.plan === undefined ? 'Unknown' : 'Not checked yet'}</Text>

@@ -19,6 +19,8 @@ import { APPROVALS } from '@/lib/status';
 import { describeError, isApiError } from '@/lib/errors';
 import { asObject } from '@/lib/json';
 import { humanize } from '@/lib/format';
+import type { ApprovalEvidence } from './approvalChange';
+import { ApprovalChangeRows } from './ApprovalChangeRows';
 import { approvalsByPlan, earlierApprovalText } from './receipt';
 import { NotYet, Section } from './Section';
 import { capitalReceiverNoun, receiverNoun } from './receiver';
@@ -107,11 +109,14 @@ export function ApprovalPanel({
   me,
   view,
   approvals,
+  snapshot,
 }: {
   c: CaseDetail;
   me: Me;
   view: PlanView | null | undefined;
   approvals: ApprovalsView | null | undefined;
+  /** The evidence, for what the receiver held when it was read. */
+  snapshot: ApprovalEvidence;
 }) {
   const decide = useDecideApproval(c.caseId);
   const [decision, setDecision] = useState<'approve' | 'reject' | null>(null);
@@ -378,6 +383,7 @@ export function ApprovalPanel({
                 {`You approve exactly this: ${humanize(opened.plan.actionType || 'resend').toLowerCase()} the ${humanize(c.event).toLowerCase()}${c.ward ? ` to ${c.ward}` : ''} for ${c.encounterId}, conditional on receiver version ${String(opened.plan.expectedVersion)}.`}
               </Text>
             ) : null}
+            {lastDecision === 'approve' ? <ApprovalChangeRows c={c} snapshot={snapshot} /> : null}
             <KeyValueList
               rows={[
                 ['Case', c.caseId],

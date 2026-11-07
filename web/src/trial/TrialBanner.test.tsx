@@ -112,7 +112,7 @@ describe('the trial banner', () => {
     expect(banner).not.toHaveAttribute('data-compact');
     act(() => compactBanner());
     expect(banner).toHaveAttribute('data-compact');
-    expect(banner).toHaveTextContent('Made-up patients; nothing leaves this browser');
+    expect(banner).toHaveTextContent('Recorded, made-up patients; nothing leaves this browser');
     expect(banner).not.toHaveTextContent(TRIAL_WORDS);
     expect(document.documentElement.dataset.shutterBanner).toBe('compact');
     // The tab's next trial page starts in the one-line form

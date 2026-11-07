@@ -390,6 +390,24 @@ test.describe('the tour with Ask open', () => {
     });
   }
 
+  test("leaves Ask's suggested questions clear of the card on a phone, with no scrolling", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    const guide = await atAskStep(page);
+    await page.locator('[data-tour-action="ask-open"]').click();
+    const panel = await besideAsk(page, guide, 390);
+    const questions = panel.locator('.ask-chip:visible');
+    await expect(questions.first()).toBeVisible();
+    const top = (await guide.boundingBox())!.y;
+    const count = await questions.count();
+    expect(count).toBeGreaterThan(0);
+    for (let i = 0; i < count; i++) {
+      const box = (await questions.nth(i).boundingBox())!;
+      expect(box.y + box.height).toBeLessThanOrEqual(top);
+    }
+  });
+
   test('keeps the card before its section from 1440 px, with Ask beside the case', async ({ page }) => {
     await page.setViewportSize({ width: 1600, height: 900 });
     const guide = await atAskStep(page);

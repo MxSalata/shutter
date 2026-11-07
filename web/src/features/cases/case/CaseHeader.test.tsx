@@ -49,6 +49,21 @@ describe('CaseHeader', () => {
     expect(screen.getByText('chain 2, item 1 · ordered · resolved')).toBeInTheDocument();
   });
 
+  it('links a follower to the case whose board it follows, while it waits and after it took the decision', () => {
+    const { unmount } = renderHeader({ ...base, followsCase: 'C-000007' });
+    expect(screen.getByRole('link', { name: 'C-000007' })).toHaveAttribute('href', '/cases/C-000007');
+    expect(screen.getByText('Follows the board of')).toBeInTheDocument();
+    unmount();
+    renderHeader({ ...base, planCreatedBy: 'lead:C-000007' });
+    expect(screen.getByRole('link', { name: 'C-000007' })).toHaveAttribute('href', '/cases/C-000007');
+    expect(screen.getByText(/^Took its decision/)).toBeInTheDocument();
+  });
+
+  it('names no board on a case that follows none', () => {
+    renderHeader({ ...base, planCreatedBy: 'run:12' });
+    expect(screen.queryByText('Follows the board of')).not.toBeInTheDocument();
+  });
+
   it('labels the disposition as a proposal, and shows an escalated state once', () => {
     const { unmount } = renderHeader({ ...base, state: 'blocked', disposition: 'resend' });
     expect(screen.getByText('Blocked')).toBeInTheDocument();
