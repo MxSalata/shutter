@@ -151,6 +151,27 @@ Method Instance() As Shutter.Process.CaseWorkflow
 /// case fails, so the signature attracts no new follower, and the cases already following it are told at once and take
 /// what a case with no board answer gets (OnLeadReady on a failed lead) instead of waiting out the bound. A case that follows it is told
 /// through the production, so the proof that it is told is the scenario runs; here nobody follows, and nobody is told.
+/// The stamps are whole seconds. A replayed board begins and ends within one, so the next scenario's reset can carry the
+/// same stamp as the lead of the run before it, and that run's case must not take the earlier board's decision.
+Method TestALeadInTheSecondOfTheResetIsNotFollowed()
+{
+    Set bl = "Shutter.Store.BoardLead"
+    Kill ^Shutter.Config("leadWindowSeconds"), ^Shutter.Config("resetAt")
+    Set sig = "sha256:test-lead-tie-" _ $JOB _ "-" _ ($PIECE($ZTIMESTAMP, ",", 2) \ 1)
+    Set ..Sigs(sig) = ""
+    Set leader = ..Case("Downstream Out", "x")
+    Set leader.CaseId = "C-TEST-LEADER"
+    Do $$$AssertStatusOK($CLASSMETHOD(bl, "Begin", sig, leader, {"receiver": "Downstream Out"}, .lead), "a lead begins")
+    Set done = $CLASSMETHOD(bl, "Finish", "C-TEST-LEADER", "done", {"disposition": "escalate", "action": {"type": "none"}})
+    Do $$$AssertEquals(done.State, "done", "the board has decided")
+    Set ^Shutter.Config("resetAt") = ##class(Shutter.Util.Time).FromNow(-5)
+    Do $$$AssertTrue($ISOBJECT($CLASSMETHOD(bl, "Current", sig)), "a lead begun after the last reset is followed")
+    Set ^Shutter.Config("resetAt") = lead.StartedAt
+    Do $$$AssertNotTrue($ISOBJECT($CLASSMETHOD(bl, "Current", sig)), "a lead stamped in the second of the reset is not followed")
+    Kill ^Shutter.Config("resetAt")
+    Do $$$AssertTrue($ISOBJECT($CLASSMETHOD(bl, "Current", sig)), "with no reset the lead is followed")
+}
+
 Method TestLeaderFailureFinishesTheLead()
 {
     Set bl = "Shutter.Store.BoardLead"
