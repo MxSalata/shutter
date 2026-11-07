@@ -209,7 +209,13 @@ ClassMethod Refresh(block As %DynamicObject, receiver As %String) [ Private ]
             Do block.%Set("source_body_available", 0, "boolean")
         } ElseIf (item '= "") && (header.TargetConfigName '= item) {
             // The whole-text path names a header the source chose, not the delivery: where it is, not what was delivered.
+            // The session's delivery is what Findings compares other rows with.
             Do block.%Set("source_verified", 0, "boolean")
+            Set own = ##class(Shutter.Util.DocumentFacts).DeliveryHeader(header.SessionId, item, .ambiguous)
+            If $ISOBJECT(own) {
+                Set block.delivery."session_header" = own.%Id()
+                Do block.delivery.%Set("ambiguous", ''ambiguous, "boolean")
+            }
         } Else {
             Do block.%Set("source_verified", 1, "boolean")
             Set item = header.TargetConfigName, src.item = item

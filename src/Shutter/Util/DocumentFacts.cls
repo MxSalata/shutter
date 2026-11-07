@@ -100,7 +100,7 @@ ClassMethod FromText(text As %String, Output sc As %Status) As %DynamicObject
         Set out = ..Build(.raw, rs, cs, ss)
         Set out.size = ..Size($LENGTH(text))
         Set body = ##class(Shutter.Util.DocumentDigest).OfText(text, .content)
-        Set out.digests = {"body": (body), "content": (content)}
+        Set out.digests = {"body": (body), "content": (content), "basis": "posted_text"}
     } Catch ex {
         Set sc = ex.AsStatus(), out = ""
     }

@@ -42,12 +42,20 @@ ClassMethod Findings(block As %DynamicObject)
     Do f.%Set("version_conflict", 0, "boolean"), f.%Set("patient_conflict", 0, "boolean"), f.%Set("parent_seen", 0, "boolean")
     Set parentStatus = "", rows = chain.%Get("rows"), myControl = block."control_id", myDigest = block.digests.body, myContent = block.digests.content, myBinding = block.patient.binding
     Set anyRestricted = ##class(Shutter.Util.DocumentCase).IsRestricted(doc.confidentiality)
+    // A posted text compares with other rows through what its own delivery stored, when the chain has it: a route can change the bytes.
+    Set delivered = $SELECT($ISOBJECT(block.%Get("delivery")): block.delivery."session_header", 1: ""), ownSeen = 0
     If $ISOBJECT(rows) {
+        Set it = rows.%GetIterator()
+        While it.%GetNext(, .r) {
+            Continue:'..IsOwnRow(r, myHeader, delivered, myControl)
+            Set ownSeen = 1
+            If r."content_digest" '= "" Set myContent = r."content_digest", myBinding = r."patient_binding"
+        }
         Set it = rows.%GetIterator()
         While it.%GetNext(, .r) {
             Set hid = r."header_id"
             If ##class(Shutter.Util.DocumentCase).IsRestricted(r.confidentiality) Set anyRestricted = 1
-            Continue:(hid = myHeader)
+            Continue:..IsOwnRow(r, myHeader, delivered, myControl)
             Set t = r.trigger, what = t _ " at header " _ hid _ ", " _ r.status
             If (self '= "") && (r."document_id" = self) {
                 If $CASE(t, "T07": 1, "T08": 1, : 0) Do f.edited.%Push(what), says.%Push("An edit (" _ what _ ") exists for this document.")
@@ -77,6 +85,7 @@ ClassMethod Findings(block As %DynamicObject)
             If (myControl '= "") && (r."control_id" = myControl) && (r."content_digest" '= myContent) && (r."content_digest" '= "") Do f.%Set("version_conflict", 1, "boolean"), says.%Push("The control id " _ myControl _ " is on different content at header " _ hid _ ".")
         }
     }
+    If f."version_conflict" && 'ownSeen && (block.digests.basis = "posted_text") Do says.%Push("That comparison is with the text the source posted, as its delivery was not found among the messages read, so a change made on the route would read as different content.")
     Do block.%Set("restricted", anyRestricted, "boolean")
     Set t = block.trigger
     If $CASE(t, "T05": 1, "T06": 1, "T09": 1, "T10": 1, : 0) {
@@ -105,6 +114,13 @@ ClassMethod Findings(block As %DynamicObject)
         Do says.%Push("Chain coverage is incomplete" _ $SELECT(why = "": ".", 1: ": " _ why _ "."))
     }
     Set chain.says = says, chain.findings = f
+}
+
+/// Whether a chain row is the delivery itself: the header the case names, or the session's delivery under the same control id.
+ClassMethod IsOwnRow(row As %DynamicObject, myHeader As %String, delivered As %String, myControl As %String) As %Boolean [ Private ]
+{
+    If row."header_id" = myHeader Quit 1
+    Quit (delivered '= "") && (row."header_id" = delivered) && (row."control_id" = myControl)
 }
 
 /// What a person reads: the codes that hold now, most serious first. The sender's own codes are not here.

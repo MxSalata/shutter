@@ -1412,7 +1412,7 @@ needs only the packages `Shutter.Intake` and `Shutter.Util` for the forwarder an
   connector item's; `hl7_schemas.needed` adds the watched namespaces' missing categories. `AlertProcess.Classify` reads a TCP connect
   timeout (`ErrOutConnectExpired`) as `delivery_failed`: nothing was sent.
 
-### 11.2 Document exceptions (v1.47)
+### 11.2 Document exceptions
 
 A failed MDM T01 to T11 at a receiver with a document profile becomes the ordinary case with its no-recovery path and a document block. Nothing is resent, no catalogue entry matches it, no agent is convened, and no copy of the document is kept in Shutter. A receiver with no profile behaves exactly as before. The HL7 version pinned is v2.5.1, chapter 9.
 
@@ -1445,7 +1445,7 @@ A failed MDM T01 to T11 at a receiver with a document profile becomes the ordina
 
 **Restricted** means TXA-18 is V, R or a value the standard doesn't list, on the message or any message of its chain. The case's own columns then carry no patient, and the snapshot and email carry no identity. An absent TXA-18 isn't restricted, since the field is optional, and it does stop a sender.
 
-**The chain** is read live from the source's message store: the requests to the receiver's item, newest first, up to the limit, by the forwarder when it forwards and again by the evidence where this instance has that namespace. There is no index, so no lag. `chain.complete` is false, and the case says why, when the limit is reached, a body can't be read, there are over 50 linked messages, the document has no number, or the namespace isn't here. A complete read still covers only what was read, back to its `since`, on that item.
+**The chain** is read live from the source's message store: the requests to the receiver's item, newest first, up to the limit, by the forwarder when it forwards and again by the evidence where this instance has that namespace. There is no index, so no lag. `chain.complete` is false, and the case says why, when the limit is reached, a body can't be read, there are over 50 linked messages, the document has no number, or the namespace isn't here. A complete read still covers only what was read, back to its `since`, on that item. A whole text posted by a forwarder not naming the receiver has digests of that text: its session's delivery under the same control id counts as the message itself, and other rows are compared with what that delivery stored. With no such row in the chain, a route's changes read as different content, and the case says the comparison was with the posted text.
 
 **The reason table.** No catalogue entry; deterministic, from the block.
 
