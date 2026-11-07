@@ -122,11 +122,11 @@ Method TestUnreadableIsRefreshable()
     Do $$$AssertNotTrue(wf.OnlyRefreshable(result), "a wait isn't")
 }
 
-/// Scope read live, in a namespace that exists with no production running: nothing can be read, and the words say so.
-Method TestLiveReadWithNoProductionIsUnreadable()
+/// The live read, of an item this namespace can't name: nothing can be read, and the words say so.
+Method TestLiveReadOfNoItemIsUnreadable()
 {
     Set case = ..NewCase()
-    Set case.SourceNamespace = $NAMESPACE, case.OriginHeaderId = "1", case.Receiver = "UT No Such Item"
+    Set case.SourceNamespace = $NAMESPACE, case.OriginHeaderId = "999999999", case.Receiver = "UT No Such Item"
     Set row = ##class(Shutter.Util.EngineCheck).Row(case)
     Do $$$AssertEquals(row."reason_code", "ENGINE_UNREADABLE", "unreadable: " _ row.%ToJSON())
     Do $$$AssertEquals(row.result, "unknown", "which blocks a write")

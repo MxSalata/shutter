@@ -136,9 +136,9 @@ ClassMethod Judge(facts As %DynamicObject) As %DynamicObject
     Quit ..Answer("pass", "ENGINE_SETTLED", "The engine has finished with this message, and every attempt in its retained log failed before a connection opened")
 }
 
-/// What the gate's two engine blocks mean for the case: true when this row is one of them, with the case moved. Still trying:
-/// blocked, waiting on the engine. Delivered: resolved with the engine's words and the plan's disposition kept, or blocked for
-/// a person when those words can't establish acceptance or the case is one a Completed header doesn't settle.
+/// What the gate's engine blocks mean for the case. Still trying: blocked, waiting on the engine. May hold it: blocked for a
+/// person, the receiver's screen in the headline. Delivered: resolved with the engine's words and the plan's disposition kept, or
+/// blocked for a person when those words can't establish acceptance or the case is one a Completed header doesn't settle.
 ClassMethod Settle(case As Shutter.Store.Case, row As %DynamicObject, checks As %DynamicArray, ref As %String) As %Status
 {
     Set code = ##class(Shutter.Util.Json).Str(row, "reason_code")
@@ -147,6 +147,10 @@ ClassMethod Settle(case As Shutter.Store.Case, row As %DynamicObject, checks As 
     If code = "ENGINE_STILL_TRYING" {
         Set case.WaitsOnEngine = ##class(Shutter.Util.Json).Str(engine, "marker")
         Set case.Headline = "Waiting for the engine: it is still trying this message at " _ case.Receiver
+        Quit case.Transition("blocked", detail, "gate", ref)
+    }
+    If code = "RECEIVER_MAY_HOLD_IT" {
+        Set case.Headline = "Stopped for a person: the receiver may hold this message, so check its own screen first"
         Quit case.Transition("blocked", detail, "gate", ref)
     }
     Set words = ##class(Shutter.Util.Json).Str(engine, "words")

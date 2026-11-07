@@ -1171,13 +1171,13 @@ Method BedWaitOutcome(case As Shutter.Store.Case, result As Shutter.Msg.GateResu
             Continue:'$ISOBJECT(c)
             Set rc = ##class(Shutter.Util.Json).Str(c, "reason_code")
             // Further messages for the patient come first and are no wait: a person reads what the check names.
-            If $LISTFIND($LISTBUILD("FURTHER_MOVEMENT", "PATIENT_UNREADABLE", "FURTHER_NOT_READ", "RECEIVER_MAY_HOLD_IT", "ENGINE_UNREADABLE"), rc) {
+            If $LISTFIND($LISTBUILD("FURTHER_MOVEMENT", "PATIENT_UNREADABLE", "FURTHER_NOT_READ", "ENGINE_UNREADABLE"), rc) {
                 Set waited = 1, detail = ##class(Shutter.Util.Json).Str(c, "detail")
                 Set case.Headline = "Stopped for a person: " _ ##class(Shutter.Util.Json).Clip(detail, 200)
                 Return case.Transition("blocked", detail, "gate", "gate:" _ result.DecisionId)
             }
-            // The engine still has the message, or has delivered it (Shutter.Util.EngineCheck).
-            If (rc = "ENGINE_STILL_TRYING") || (rc = "ENGINE_DELIVERED") Set waited = 1 Return ##class(Shutter.Util.EngineCheck).Settle(case, c, checks, "gate:" _ result.DecisionId)
+            // The engine still has the message, or has delivered it, or the receiver may hold it (Shutter.Util.EngineCheck).
+            If (rc = "ENGINE_STILL_TRYING") || (rc = "ENGINE_DELIVERED") || (rc = "RECEIVER_MAY_HOLD_IT") Set waited = 1 Return ##class(Shutter.Util.EngineCheck).Settle(case, c, checks, "gate:" _ result.DecisionId)
             If (rc = "WAITING_FOR_OCCUPANT_CASE") || (rc = "OCCUPANT_CASE_FAILED") || (rc = "NEWER_MESSAGE_PENDING") Set code = rc Quit
         }
     }
