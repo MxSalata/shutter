@@ -119,6 +119,9 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
         } ElseIf $ISOBJECT(further) {
             Do ..Check(checks, "ordering", "pass", "NO_FURTHER_MOVEMENT", "No further in-patient movement for this patient" _ $SELECT(##class(Shutter.Util.FurtherMessages).Count(further, "shows") > 0: "; " _ ##class(Shutter.Util.FurtherMessages).Count(further, "shows") _ " other message(s) on file, shown on the plan", 1: ""))
         }
+        // Whether the engine still has this message, or has delivered it (Shutter.Util.EngineCheck). A watched case with no origin
+        // header has nothing to read it by, as before.
+        If (case.SourceNamespace '= "") && (case.OriginHeaderId '= "") Do checks.%Push(..EngineRow(case))
         // The occupied bed (v1.28): a write into a bed another encounter holds waits for them to leave, or never goes.
         Set bedConflict = $SELECT($ISOBJECT(conds): ##class(Shutter.Util.Json).Str(conds, "bed_conflict", "none"), 1: "none")
         If bedConflict '= "none" Do ..BedConflictCheck(checks, case, summary, bedConflict)
@@ -366,6 +369,12 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
     Do case.Note("artifact", "Gate (" _ request.Stage _ "): " _ text, "system", "gate:" _ response.DecisionId)
     $$$TRACE("Gate " _ request.Stage _ " for " _ case.CaseId _ " plan v" _ plan.Version _ ": " _ outcome)
     Quit $$$OK
+}
+
+/// The ordering check's row for what the engine shows about the case's message.
+ClassMethod EngineRow(case As Shutter.Store.Case) As %DynamicObject
+{
+    Quit ##class(Shutter.Util.EngineCheck).Row(case)
 }
 
 /// Whether the plan follows a matched catalogue entry whose chosen outcome is "none": the entry closes the case with

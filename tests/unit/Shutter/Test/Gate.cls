@@ -295,6 +295,12 @@ Method TestFurtherMessagesAreReadAgainBeforeTheWrite()
     Do ##class(Shutter.Index.Message).%DeleteId(row.%Id())
 }
 
+/// The engine check through the gate itself: every answer, in the ordering group, and the outcome it makes.
+Method TestEngine()
+{
+    Do ..RunRows("engine")
+}
+
 Method TestEveryReasonCodeHasARow()
 {
     Set asserted = ""
@@ -427,7 +433,9 @@ Method Run(row As %DynamicObject) As %DynamicObject
         If a.%IsDefined("incident_plan_digest") Do $$$AssertStatusOK(approval.BindIncident(a."incident_plan_digest", ##class(Shutter.Util.Json).Str(a, "bound_entry"), ##class(Shutter.Util.Json).Str(a, "bound_outcome")), row.name _ ": the approval is bound to the incident's")
         Set req.ApprovalId = approval.%Id()
     }
-    Set gate = ##class(Shutter.Operation.Gate).%New("Shutter Gate (unit test)")
+    // A row's "engine" is what Shutter.Util.EngineCheck.Read would have found, since no production runs here.
+    If row.%IsDefined("engine") Set ^||Shutter.Test.EngineFacts = row.engine.%ToJSON()
+    Set gate = $CLASSMETHOD($SELECT(row.%IsDefined("engine"): "Shutter.Test.EngineGate", 1: "Shutter.Operation.Gate"), "%New", "Shutter Gate (unit test)")
     Set sc = gate.OnGateRequest(req, .resp)
     Do $$$AssertStatusOK(sc, row.name _ ": the gate ran")
     Set checks = ##class(%DynamicArray).%FromJSON($SELECT(resp.ChecksJSON = "": "[]", 1: resp.ChecksJSON))
@@ -982,6 +990,60 @@ XData Rows [ MimeType = application/json ]
    "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2", "action": {"expected_version": 0}}, "approval": {"approver": "policy"}, "request": {"chain_kind": "single"},
    "profile": {"policy": {"2": {"single": "automatic"}}, "further_messages": {"admission_not_found": "policy"}},
    "expect": [["authorization", "pass", "APPROVAL_VALID"]]},
+  {"group": "engine", "name": "the scope reads no: the check passes and reads nothing",
+   "case": {"source_namespace": "RIG", "origin_header_id": "16"}, "engine": {"scope": "no", "why": "", "namespace": "RIG", "item": "LIMS Out", "receiver": "LIMS Out", "ackRoute": false, "deliveryHeader": "17", "headers": [], "effectiveAck": "", "ackReason": ""}, 
+   "expect": [["ordering", "pass", "ENGINE_NOT_IN_SCOPE"]], "outcome": "pass"},
+  {"group": "engine", "name": "the scope can't be read: a write never passes",
+   "case": {"source_namespace": "RIG", "origin_header_id": "16"}, "engine": {"scope": "unreadable", "why": "the item is not read", "namespace": "RIG", "item": "LIMS Out", "receiver": "LIMS Out", "ackRoute": false, "deliveryHeader": "17", "headers": [], "effectiveAck": "", "ackReason": ""}, 
+   "expect": [["ordering", "unknown", "ENGINE_UNREADABLE"]], "outcome": "unknown"},
+  {"group": "engine", "name": "a header in the engine's hands",
+   "case": {"source_namespace": "RIG", "origin_header_id": "16"}, "engine": {"scope": "yes", "why": "", "namespace": "RIG", "item": "LIMS Out", "receiver": "LIMS Out", "ackRoute": false, "deliveryHeader": "17", "headers": [{"headerId": "17", "custody": "engine", "status": "Delivered", "itemStatus": "Retry", "completedAt": "", "why": "", "attempts": ""}], "effectiveAck": "", "ackReason": ""}, "contains": [["ordering", "ENGINE_STILL_TRYING", "status Delivered, operation Retry"]],
+   "expect": [["ordering", "block", "ENGINE_STILL_TRYING"]], "outcome": "block"},
+  {"group": "engine", "name": "a subclass that overrides reply handling is read as the stock class is",
+   "case": {"source_namespace": "RIG", "origin_header_id": "16"}, "engine": {"scope": "base", "why": "", "namespace": "RIG", "item": "LIMS Out", "receiver": "LIMS Out", "ackRoute": false, "deliveryHeader": "17", "headers": [{"headerId": "17", "custody": "engine", "status": "Queued", "itemStatus": "OK", "completedAt": "", "why": "", "attempts": ""}], "effectiveAck": "", "ackReason": ""}, 
+   "expect": [["ordering", "block", "ENGINE_STILL_TRYING"]], "outcome": "block"},
+  {"group": "engine", "name": "the origin settled and a hand resend's copy in the engine's hands",
+   "case": {"source_namespace": "RIG", "origin_header_id": "16"}, "engine": {"scope": "yes", "why": "", "namespace": "RIG", "item": "LIMS Out", "receiver": "LIMS Out", "ackRoute": false, "deliveryHeader": "17", "headers": [{"headerId": "17", "custody": "settled", "status": "Error", "itemStatus": "OK", "completedAt": "", "why": "", "attempts": "never_opened"}, {"headerId": "18", "custody": "engine", "status": "Delivered", "itemStatus": "OK", "completedAt": "", "why": "", "attempts": ""}], "effectiveAck": "", "ackReason": ""}, 
+   "expect": [["ordering", "block", "ENGINE_STILL_TRYING"]], "outcome": "block"},
+  {"group": "engine", "name": "a Completed header on an alert route, whenever it completed",
+   "case": {"source_namespace": "RIG", "origin_header_id": "16"}, "engine": {"scope": "yes", "why": "", "namespace": "RIG", "item": "LIMS Out", "receiver": "LIMS Out", "ackRoute": false, "deliveryHeader": "17", "headers": [{"headerId": "17", "custody": "delivered", "status": "Completed", "itemStatus": "OK", "completedAt": "2026-11-07 03:12:01.123", "why": "", "attempts": ""}], "effectiveAck": "connection", "ackReason": ""}, "contains": [["ordering", "ENGINE_DELIVERED", "nothing to resend"]],
+   "expect": [["ordering", "block", "ENGINE_DELIVERED"]], "outcome": "block"},
+  {"group": "engine", "name": "a Completed copy on an alert route",
+   "case": {"source_namespace": "RIG", "origin_header_id": "16"}, "engine": {"scope": "yes", "why": "", "namespace": "RIG", "item": "LIMS Out", "receiver": "LIMS Out", "ackRoute": false, "deliveryHeader": "17", "headers": [{"headerId": "17", "custody": "settled", "status": "Error", "itemStatus": "OK", "completedAt": "", "why": "", "attempts": "never_opened"}, {"headerId": "18", "custody": "delivered", "status": "Completed", "itemStatus": "OK", "completedAt": "", "why": "", "attempts": ""}], "effectiveAck": "connection", "ackReason": ""}, 
+   "expect": [["ordering", "block", "ENGINE_DELIVERED"]], "outcome": "block"},
+  {"group": "engine", "name": "a Completed header where the reply actions complete a refusal",
+   "case": {"source_namespace": "RIG", "origin_header_id": "16"}, "engine": {"scope": "yes", "why": "", "namespace": "RIG", "item": "LIMS Out", "receiver": "LIMS Out", "ackRoute": false, "deliveryHeader": "17", "headers": [{"headerId": "17", "custody": "delivered", "status": "Completed", "itemStatus": "OK", "completedAt": "", "why": "", "attempts": ""}], "effectiveAck": "not_established", "ackReason": ":?E=C"}, "contains": [["ordering", "ENGINE_DELIVERED", "Receiver acceptance has not been established"], ["ordering", "ENGINE_DELIVERED", ":?E=C"]],
+   "expect": [["ordering", "block", "ENGINE_DELIVERED"]], "outcome": "block"},
+  {"group": "engine", "name": "a Completed header on the acknowledgement feed",
+   "case": {"source_namespace": "RIG", "origin_header_id": "16"}, "engine": {"scope": "yes", "why": "", "namespace": "RIG", "item": "LIMS Out", "receiver": "LIMS Out", "ackRoute": true, "deliveryHeader": "17", "headers": [{"headerId": "17", "custody": "delivered", "status": "Completed", "itemStatus": "OK", "completedAt": "", "why": "", "attempts": ""}], "effectiveAck": "", "ackReason": ""}, 
+   "expect": [["ordering", "pass", "ENGINE_SETTLED"]], "outcome": "pass"},
+  {"group": "engine", "name": "a settled header that never opened",
+   "case": {"source_namespace": "RIG", "origin_header_id": "16"}, "engine": {"scope": "yes", "why": "", "namespace": "RIG", "item": "LIMS Out", "receiver": "LIMS Out", "ackRoute": false, "deliveryHeader": "17", "headers": [{"headerId": "17", "custody": "settled", "status": "Error", "itemStatus": "OK", "completedAt": "", "why": "", "attempts": "never_opened"}], "effectiveAck": "", "ackReason": ""}, 
+   "expect": [["ordering", "pass", "ENGINE_SETTLED"]], "outcome": "pass"},
+  {"group": "engine", "name": "a settled header the receiver was reached on",
+   "case": {"source_namespace": "RIG", "origin_header_id": "16"}, "engine": {"scope": "yes", "why": "", "namespace": "RIG", "item": "LIMS Out", "receiver": "LIMS Out", "ackRoute": false, "deliveryHeader": "17", "headers": [{"headerId": "17", "custody": "settled", "status": "Error", "itemStatus": "OK", "completedAt": "", "why": "", "attempts": "reached_receiver"}], "effectiveAck": "", "ackReason": ""}, "contains": [["ordering", "RECEIVER_MAY_HOLD_IT", "the receiver's own screen"]],
+   "expect": [["ordering", "block", "RECEIVER_MAY_HOLD_IT"]], "outcome": "block"},
+  {"group": "engine", "name": "a settled header with words the table doesn't hold",
+   "case": {"source_namespace": "RIG", "origin_header_id": "16"}, "engine": {"scope": "yes", "why": "", "namespace": "RIG", "item": "LIMS Out", "receiver": "LIMS Out", "ackRoute": false, "deliveryHeader": "17", "headers": [{"headerId": "17", "custody": "settled", "status": "Error", "itemStatus": "OK", "completedAt": "", "why": "", "attempts": "unknown"}], "effectiveAck": "", "ackReason": ""}, 
+   "expect": [["ordering", "block", "RECEIVER_MAY_HOLD_IT"]], "outcome": "block"},
+  {"group": "engine", "name": "a settled header with no rows",
+   "case": {"source_namespace": "RIG", "origin_header_id": "16"}, "engine": {"scope": "yes", "why": "", "namespace": "RIG", "item": "LIMS Out", "receiver": "LIMS Out", "ackRoute": false, "deliveryHeader": "17", "headers": [{"headerId": "17", "custody": "settled", "status": "Error", "itemStatus": "OK", "completedAt": "", "why": "", "attempts": "no_rows"}], "effectiveAck": "", "ackReason": ""}, 
+   "expect": [["ordering", "block", "RECEIVER_MAY_HOLD_IT"]], "outcome": "block"},
+  {"group": "engine", "name": "a settled copy the receiver was reached on",
+   "case": {"source_namespace": "RIG", "origin_header_id": "16"}, "engine": {"scope": "yes", "why": "", "namespace": "RIG", "item": "LIMS Out", "receiver": "LIMS Out", "ackRoute": false, "deliveryHeader": "17", "headers": [{"headerId": "17", "custody": "settled", "status": "Error", "itemStatus": "OK", "completedAt": "", "why": "", "attempts": "never_opened"}, {"headerId": "18", "custody": "settled", "status": "Error", "itemStatus": "OK", "completedAt": "", "why": "", "attempts": "reached_receiver"}], "effectiveAck": "", "ackReason": ""}, 
+   "expect": [["ordering", "block", "RECEIVER_MAY_HOLD_IT"]], "outcome": "block"},
+  {"group": "engine", "name": "a header whose status the table doesn't name",
+   "case": {"source_namespace": "RIG", "origin_header_id": "16"}, "engine": {"scope": "yes", "why": "", "namespace": "RIG", "item": "LIMS Out", "receiver": "LIMS Out", "ackRoute": false, "deliveryHeader": "17", "headers": [{"headerId": "17", "custody": "unreadable", "status": "Discarded", "itemStatus": "OK", "completedAt": "", "why": "the header reads Discarded", "attempts": ""}], "effectiveAck": "", "ackReason": ""}, "contains": [["ordering", "ENGINE_UNREADABLE", "the header reads Discarded"]],
+   "expect": [["ordering", "unknown", "ENGINE_UNREADABLE"]], "outcome": "unknown"},
+  {"group": "engine", "name": "a watched case with no origin header never reaches the check",
+   "case": {"source_namespace": "RIG"}, "engine": {"scope": "unreadable", "why": "", "namespace": "RIG", "item": "LIMS Out", "receiver": "LIMS Out", "ackRoute": false, "deliveryHeader": "17", "headers": [], "effectiveAck": "", "ackReason": ""},
+   "expect": [["ordering", "pass", "NO_LATER_EVENT"]], "absent": [["ordering", "ENGINE_UNREADABLE"], ["ordering", "ENGINE_NOT_IN_SCOPE"]]},
+  {"group": "engine", "name": "a plan that writes nothing never reaches the check",
+   "case": {"source_namespace": "RIG", "origin_header_id": "16"}, "engine": {"scope": "unreadable", "why": "", "namespace": "RIG", "item": "LIMS Out", "receiver": "LIMS Out", "ackRoute": false, "deliveryHeader": "17", "headers": [], "effectiveAck": "", "ackReason": ""}, "plan": {"disposition": "escalate", "action": {"type": "none"}},
+   "expect": [["ordering", "pass", "NOT_APPLICABLE"]], "absent": [["ordering", "ENGINE_UNREADABLE"]]},
+  {"group": "engine", "name": "the live read, at a namespace that does not exist, blocks",
+   "case": {"source_namespace": "UTNOSUCHNAMESPACE", "origin_header_id": "1"},
+   "expect": [["ordering", "unknown", "ENGINE_UNREADABLE"]], "outcome": "unknown"},
   {"group": "authorization", "name": "an automatic release of a case whose source cannot be proved",
    "case": {"source_namespace": "UTNOSUCHNAMESPACE", "origin_header_id": "1"}, "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2"}, "approval": {"approver": "policy"}, "request": {"chain_kind": "single"},
    "profile": {"policy": {"2": {"single": "automatic"}}},
