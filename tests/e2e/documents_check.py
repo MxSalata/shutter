@@ -753,9 +753,10 @@ if wanted("R09"):
     ca = case_of(a, 60)
     check("the P's case, read again, says the F", "DOC_RESULT_STATUS_CHANGED" in reasons(ca) and "Final results (F)" in says(ca), (reasons(ca), says(ca)))
     # A further message with no attachment of its own still names the order.
-    n = f"AE-R09N-{tag}"
+    # This one is delivered, so it opens no case, and the receiver's listener says nothing about it that the walk below would find.
+    n = f"R09N-{tag}"
     send(oru(n, "OBX|1|NM|K^Potassium^L||5.4", placer=placer, filler=f"R09G{tag}^LAB", status="C", app="REFUSE"), "r09n")
-    case_of(n)
+    time.sleep(3)
     api("POST", f"/cases/{ca['caseId']}/reinvestigate", {"reason": "check"})
     time.sleep(22)
     ca = case_of(a, 60)
