@@ -120,6 +120,10 @@ Property Incident As Shutter.Store.Incident(%JSONINCLUDE = "none");
 /// recordings of agent runs for a scenario replay on any instance.
 Property Scenario As %String(%JSONFIELDNAME = "scenario", MAXLEN = 32);
 
+/// Whether the scenario runner played this case, set when it opens: a live story stamps its cases with a scenario id too, and
+/// isn't a recorded run. Rules only's exemption at the gate asks this, and a later story can't change it.
+Property ScenarioRecorded As %Boolean(%JSONINCLUDE = "none") [ InitialExpression = 0 ];
+
 Index ScenarioIdx On Scenario;
 
 /// The production session of the failed delivery: the Visual Trace link.
@@ -224,6 +228,7 @@ ClassMethod Open(op As %DynamicObject, failureKind As %String, failureText As %S
     Set case.SourceHeaderId = sourceHeaderId
     Set case.Mode = $SELECT(mode = "": "board", 1: mode)
     Set case.Scenario = $GET(^Shutter.Config("scenario"))
+    Set case.ScenarioRecorded = (case.Scenario '= "") && (case.Scenario = $GET(^Shutter.Config("scenarioRun")))
     Set now = ##class(Shutter.Util.Time).NowUTC()
     Set case.OpenedAt = now, case.UpdatedAt = now
     // A held message's headline is the hold itself ("Held: the schema X is not loaded here ..."), as the feed wrote it.
@@ -935,6 +940,9 @@ Storage Default
 </Value>
 <Value name="50">
 <Value>LeadSignature</Value>
+</Value>
+<Value name="51">
+<Value>ScenarioRecorded</Value>
 </Value>
 </Data>
 <DataLocation>^Shutter.Store.CaseD</DataLocation>

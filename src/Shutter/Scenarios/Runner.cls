@@ -189,12 +189,6 @@ ClassMethod Prepare(scenario As %String, mode As %String, Output inbound As %Str
     Quit found
 }
 
-/// Whether this runner played the case: a live story stamps its cases with a scenario id too, and isn't a recorded run.
-ClassMethod IsRecorded(case As Shutter.Store.Case) As %Boolean
-{
-    Quit (case.Scenario '= "") && (case.Scenario = $GET(^Shutter.Config("scenarioRun")))
-}
-
 /// The reset before a run, and the mode and scenario recorded (CONTRACTS 4). Returns the time of the reset.
 ClassMethod Begin(scenario As %String, mode As %String, Output error As %String) As %String
 {

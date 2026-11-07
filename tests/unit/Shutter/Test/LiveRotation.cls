@@ -32,23 +32,38 @@ Method TestTheBuildsListIsNormalisedAndCleared()
 }
 
 /// The live hospital's guard: a namespace with no API service registered is not listening, and asking never throws.
-/// A live story stamps its cases with a scenario id, as the scenario runner does, but it isn't the runner: the gate's exemption for
-/// a recorded scenario in Rules only goes by what the runner recorded, and a story's stamp takes that away.
+/// A live story stamps its cases with a scenario id, as the scenario runner does, but it isn't the runner: only a case that opens
+/// under the runner's own run records it, for the gate's exemption in Rules only, and a later story leaves that case as it was.
 Method TestALiveStoryIsNotARecordedRun()
 {
     Set scenario = $GET(^Shutter.Config("scenario")), run = $GET(^Shutter.Config("scenarioRun"))
-    Set case = ##class(Shutter.Store.Case).%New()
-    Set case.Scenario = "S8", ^Shutter.Config("scenario") = "S8", ^Shutter.Config("scenarioRun") = "S8"
-    Do $$$AssertTrue(##class(Shutter.Scenarios.Runner).IsRecorded(case), "the runner's own run counts")
+    Set ^Shutter.Config("scenario") = "S8", ^Shutter.Config("scenarioRun") = "S8"
+    Set played = ..OpenCase("played")
+    Do $$$AssertEquals(played.Scenario, "S8", "a case under the runner's run carries the scenario")
+    Do $$$AssertEquals(played.ScenarioRecorded, 1, "and records that the runner played it")
     Set player = ##class(Hospital.LivePlayer).%New("Live PAS")
     Set player.ShutterNamespace = $NAMESPACE
     Do player.Stamp("S8")
-    Do $$$AssertEquals($GET(^Shutter.Config("scenario")), "S8", "a live story's cases still carry the id")
-    Do $$$AssertNotTrue(##class(Shutter.Scenarios.Runner).IsRecorded(case), "and a story of the same name does not count")
-    Set case.Scenario = ""
-    Set ^Shutter.Config("scenarioRun") = ""
-    Do $$$AssertNotTrue(##class(Shutter.Scenarios.Runner).IsRecorded(case), "no scenario on either side does not count")
+    Set story = ..OpenCase("story")
+    Do $$$AssertEquals(story.Scenario, "S8", "a live story's case still carries the id")
+    Do $$$AssertEquals(story.ScenarioRecorded, 0, "and doesn't record a run, though it is the same scenario")
+    Do played.%Reload()
+    Do $$$AssertEquals(played.ScenarioRecorded, 1, "the runner's case keeps what it recorded")
+    Set ^Shutter.Config("scenarioRun") = "S8", ^Shutter.Config("scenario") = ""
+    Do player.Stamp("")
+    Do $$$AssertEquals($GET(^Shutter.Config("scenarioRun")), "S8", "a blank stamp doesn't end a run")
+    Set none = ..OpenCase("none")
+    Do $$$AssertEquals(none.ScenarioRecorded, 0, "and a case with no stamp records nothing")
+    Do ##class(Shutter.Store.Case).%DeleteId(played.%Id()), ##class(Shutter.Store.Case).%DeleteId(story.%Id()), ##class(Shutter.Store.Case).%DeleteId(none.%Id())
     Set ^Shutter.Config("scenario") = scenario, ^Shutter.Config("scenarioRun") = run
+}
+
+Method OpenCase(name As %String) As Shutter.Store.Case
+{
+    Set visit = "ENC-UT-LIVE-" _ name
+    Set op = {"operation_key": ("PAS^HOSP^MRN-UT-LIVE^" _ visit _ "^transfer^2026-10-19T09:00:00Z"), "encounter_id": (visit), "patient_id": "MRN-UT-LIVE", "patient_id_authority": "HOSP", "source_system": "PAS", "event": "transfer", "event_time": "2026-10-19T09:00:00Z", "ward": "WARD-B", "payload_digest": "sha256:ut"}
+    Do $$$AssertStatusOK(##class(Shutter.Store.Case).Open(op, "delivery_failed", "unit test", "", "", "rules", .case, .opened), name _ ": the case opens")
+    Quit case
 }
 
 Method TestShutterListening()

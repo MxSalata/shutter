@@ -432,7 +432,7 @@ Method Stamp(id As %String)
 {
     Set ns = ..ShutterNamespace
     Set ^|ns|Shutter.Config("scenario") = id
-    // A story isn't a recorded run, even of the same scenario (Shutter.Scenarios.Runner's IsRecorded); no stamp takes nothing away.
+    // A story isn't a recorded run, even of the same scenario (Shutter.Store.Case's ScenarioRecorded); no stamp takes nothing away.
     If id '= "" Kill ^|ns|Shutter.Config("scenarioRun")
 }
 
