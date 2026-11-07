@@ -353,6 +353,26 @@ describe('SiteProfilePage', () => {
     expect(puts[0].body.feed).toMatchObject({ prevent_failures: true });
   });
 
+  it('lets a site show an A08 location rather than stop on it, and keeps the other further-message settings', async () => {
+    const view = recordedSiteProfile()!;
+    view.profile.further_messages = { in_patient_movement: 'show', scan_seconds: 60 };
+    server.use(http.get(`${BASE}/site-profile`, () => HttpResponse.json(view)));
+    renderPage();
+    const select = await screen.findByRole('combobox', { name: 'A later or failed A08 names another ward or bed' });
+    expect(select).toHaveValue('stop');
+    await userEvent.selectOptions(select, 'show');
+    await userEvent.click(screen.getByRole('button', { name: 'Review and save…' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(
+      within(dialog).getByText(
+        "An A08's location: from now on, a failed or later A08 that names another ward or bed goes on the plan and doesn't stop the write",
+      ),
+    ).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 8' }));
+    expect(await screen.findByText('Version 8 saved')).toBeInTheDocument();
+    expect(puts[0].body.further_messages).toEqual({ in_patient_movement: 'show', scan_seconds: 60, a08_location: 'show' });
+  });
+
   it('confirms the shipped answers with no change, which records who answered', async () => {
     renderPage();
     await userEvent.click(await screen.findByRole('button', { name: 'Confirm these answers…' }));

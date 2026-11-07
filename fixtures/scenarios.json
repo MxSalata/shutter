@@ -411,6 +411,93 @@
     }
   },
   {
+    "id": "S33",
+    "title": "A failed A08 that moves the patient's bed",
+    "summary": "Admit to Ward A bed BAY1-01 applied; the 09:20 A08 names bed BAY1-09 and fails. An update carries no location, so a resend would verify and close with the bed move undone. It stops for a person, naming the patient and both beds.",
+    "steps": [
+      {
+        "file": "S33-01-A01.hl7"
+      },
+      {
+        "fault": "fail_before_accept"
+      },
+      {
+        "file": "S33-02-A08.hl7",
+        "expect": "delivery_fails"
+      },
+      {
+        "wait": 5
+      },
+      {
+        "fault": "off"
+      }
+    ],
+    "expected": {
+      "disposition": "resend",
+      "write": false,
+      "final_state": "admitted",
+      "final_ward": "WARD-A",
+      "case_by_key": true,
+      "blocked_by": "A08_LOCATION_DIFFERS",
+      "final_reason": "A08_LOCATION_DIFFERS",
+      "failed_operation_key": "PAS^HOSP^MRN1033^ENC-1033^update^2026-10-15T08:20:00Z",
+      "names": [
+        "MRN1033",
+        "BAY1-09",
+        "BAY1-01"
+      ],
+      "modes": [
+        "policy",
+        "rules"
+      ]
+    }
+  },
+  {
+    "id": "S34",
+    "title": "A failed transfer, then a later A08 that moves the patient's bed",
+    "summary": "Admit to Ward A applied; the 09:20 transfer to Ward B bed BAY2-04 fails; a 09:35 A08 applies and names bed BAY2-09. That A08 is a further movement the receiver never took, so the older transfer isn't current: the resend stops for a person, naming the patient and the A08.",
+    "steps": [
+      {
+        "file": "S34-01-A01.hl7"
+      },
+      {
+        "fault": "fail_before_accept"
+      },
+      {
+        "file": "S34-02-A02.hl7",
+        "expect": "delivery_fails"
+      },
+      {
+        "wait": 5
+      },
+      {
+        "fault": "off"
+      },
+      {
+        "file": "S34-03-A08.hl7"
+      }
+    ],
+    "expected": {
+      "disposition": "resend",
+      "write": false,
+      "final_state": "admitted",
+      "final_ward": "WARD-A",
+      "case_by_key": true,
+      "blocked_by": "FURTHER_MOVEMENT",
+      "final_reason": "FURTHER_MOVEMENT",
+      "failed_operation_key": "PAS^HOSP^MRN1034^ENC-1034^transfer^2026-10-15T08:20:00Z",
+      "names": [
+        "MRN1034",
+        "ADT_A08",
+        "BAY2-09"
+      ],
+      "modes": [
+        "policy",
+        "rules"
+      ]
+    }
+  },
+  {
     "id": "S32",
     "title": "A new admission under a new visit number, while the plan awaits approval",
     "summary": "S27's new admission arrives after the plan went to the approver. The approval doesn't carry it through: the check is read again at dispatch, and the write stops and names both visits.",

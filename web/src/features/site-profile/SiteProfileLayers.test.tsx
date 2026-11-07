@@ -185,6 +185,7 @@ describe('the questions', () => {
       'model_content.free_text',
       'merges',
       'feed.prevent_failures',
+      'further_messages.a08_location',
     ];
     const plain = renderPage();
     await screen.findByRole('table', { name: 'Who releases each write' });
@@ -316,6 +317,7 @@ describe('On this page', () => {
       'Feed, model, merges, 10 to 13',
       'Recovery, 14',
       'Reminders, 15',
+      'An A08 location, 16',
       'Versions',
     ]);
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'On this page' }), 'site-approvals');

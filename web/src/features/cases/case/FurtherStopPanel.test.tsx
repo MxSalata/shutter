@@ -39,14 +39,14 @@ const VIEW = {
 };
 const C = { caseId: 'C-000099', state: 'blocked', version: 3 } as unknown as CaseDetail;
 
-function show(view: unknown = VIEW) {
+function show(view: unknown = VIEW, c: CaseDetail = C) {
   server.use(http.get('/api/shutter/cases/:id/further-stop', () => HttpResponse.json(view as object)));
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <MantineProvider theme={theme}>
       <Notifications />
       <QueryClientProvider client={client}>
-        <FurtherStopPanel c={C} />
+        <FurtherStopPanel c={c} />
       </QueryClientProvider>
     </MantineProvider>,
   );
@@ -107,6 +107,17 @@ describe('FurtherStopPanel', () => {
     expect(screen.queryByRole('button', { name: 'Release this stop…' })).not.toBeInTheDocument();
   });
 
+  it('says this visit, not another, when every row is on the case\'s own visit', async () => {
+    const line = 'For patient MRN1034 (HOSP), a later A08 on this visit named another place.';
+    show(
+      { ...VIEW, rows: [{ line, visit: 'ENC-1034' }], releasable: false, whyNot: 'It needs correcting by hand.' },
+      { ...C, encounterId: 'ENC-1034' } as CaseDetail,
+    );
+    expect(await screen.findByText(line)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'A later message on this visit' })).toBeInTheDocument();
+    expect(screen.queryByText(/on another visit/)).not.toBeInTheDocument();
+  });
+
   it('says when an earlier release no longer holds', async () => {
     show({
       ...VIEW,
@@ -127,7 +138,7 @@ describe('FurtherStopPanel', () => {
     render(
       <MantineProvider theme={theme}>
         <QueryClientProvider client={client}>
-          <FurtherStopPanel c={C} />
+          <FurtherStopPanel c={c} />
         </QueryClientProvider>
       </MantineProvider>,
     );

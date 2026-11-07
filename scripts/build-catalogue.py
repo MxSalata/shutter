@@ -34,6 +34,7 @@ CONDITIONS = {
     "receiver_category": {"current_state", "history_of_record", "orders_results"},
     "bed_conflict": {"none", "occupant_leaving", "occupant_left", "occupant_staying", "unknown"},
     "death_recorded": {"no", "yes", "cleared", "unreadable"},
+    "a08_location": {"none", "same", "different"},
 }
 OUTCOMES = {"resend", "resend_chain", "resend_latest", "reconcile", "none", "escalate", "resend_unconditional", "correct_history", "resend_after_occupant"}
 DECIDES = {"policy", "board", "person"}

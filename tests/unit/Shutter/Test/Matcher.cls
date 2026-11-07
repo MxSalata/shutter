@@ -29,7 +29,8 @@ ClassMethod Vocabulary() As %DynamicObject
         "chain": ["single", "ordered", "interleaved"],
         "receiver_category": ["current_state", "history_of_record", "orders_results"],
         "bed_conflict": ["none", "occupant_leaving", "occupant_left", "occupant_staying", "unknown"],
-        "death_recorded": ["no", "yes", "cleared", "unreadable"]
+        "death_recorded": ["no", "yes", "cleared", "unreadable"],
+        "a08_location": ["none", "same", "different"]
     }
 }
 
@@ -114,6 +115,39 @@ Method TestSimultaneousSources()
 /// without one; the fact occupant_case names the case about the occupant's movement out.
 /// A profile's source_skew_seconds decides how far apart two sources still count as simultaneous: 0 keeps the exact second,
 /// and a wider window reaches further. Put back afterwards.
+/// A failed A08's own PV1-3 against what the receiver holds, compared by ward and bed only.
+Method TestA08Location()
+{
+    Do ..RunRows("a08")
+}
+
+/// The condition is the fact: the site's further_messages.a08_location decides what the gate does with it, so show leaves it.
+Method TestA08LocationUnderTheSiteSetting()
+{
+    Set row = ##class(Shutter.Store.SiteProfile).Row()
+    Do $$$AssertTrue($ISOBJECT(row), "the tests' profile row")
+    Set saved = row.Json
+    Set move = {"case": {"event": "update"}, "summary": {"message": {"a08_ward": "WARD-A", "a08_bed": "BAY1-09"}, "ward_state": {"ward": "WARD-A", "bed": "BAY1-01"}}}
+    Set p = ##class(Shutter.Util.Json).Parse(saved, .sc)
+    Set fm = p.%Get("further_messages")
+    If '$ISOBJECT(fm) Set fm = {}, p."further_messages" = fm
+    Set fm."a08_location" = "show"
+    Set row.Json = p.%ToJSON()
+    Do $$$AssertStatusOK(row.%Save(), "a profile that shows it")
+    Do $$$AssertEquals(..Conditions(move)."a08_location", "different", "show leaves the condition as the fact")
+    Set row.Json = saved
+    Do $$$AssertStatusOK(row.%Save(), "the profile put back")
+}
+
+/// The receiver's own null, which a row's merge can't write: a ward-level placement holds no bed, so an A08 naming one differs.
+Method TestA08LocationAtWardLevel()
+{
+    Set case = ..Case({"event": "update"})
+    Set s = ..Summary({"summary": {"message": {"a08_ward": "WARD-A", "a08_bed": "BAY1-09"}, "ward_state": {"ward": "WARD-A"}}}, case)
+    Do s.%Get("ward_state").%Set("bed", "", "null")
+    Do $$$AssertEquals(##class(Shutter.Catalogue.Matcher).Conditions(case, s)."a08_location", "different", "a bed where the receiver holds none")
+}
+
 Method TestSourceSkewFromTheProfile()
 {
     Set row = ##class(Shutter.Store.SiteProfile).Row()
@@ -451,6 +485,23 @@ ClassMethod Rows() As %DynamicArray
 XData Rows [ MimeType = application/json ]
 {
 [
+  {"group": "a08", "name": "a failed A08 naming another bed", "case": {"event": "update"}, "summary": {"message": {"a08_ward": "WARD-A", "a08_bed": "BAY1-09"}, "ward_state": {"ward": "WARD-A", "bed": "BAY1-01"}}, "expect": {"a08_location": "different"}},
+  {"group": "a08", "name": "a failed A08 naming another ward", "case": {"event": "update"}, "summary": {"message": {"a08_ward": "WARD-B", "a08_bed": "BAY1-01"}, "ward_state": {"ward": "WARD-A", "bed": "BAY1-01"}}, "expect": {"a08_location": "different"}},
+  {"group": "a08", "name": "a failed A08 naming the receiver's own ward and bed", "case": {"event": "update"}, "summary": {"message": {"a08_ward": "WARD-A", "a08_bed": "BAY1-01"}, "ward_state": {"ward": "WARD-A", "bed": "BAY1-01"}}, "expect": {"a08_location": "same"}},
+  {"group": "a08", "name": "a failed A08 with no PV1-3", "case": {"event": "update"}, "summary": {"ward_state": {"ward": "WARD-A", "bed": "BAY1-01"}}, "expect": {"a08_location": "none"}},
+  {"group": "a08", "name": "an A08 naming only the ward says nothing about the bed", "case": {"event": "update"}, "summary": {"message": {"a08_ward": "WARD-A"}, "ward_state": {"ward": "WARD-A", "bed": "BAY1-01"}}, "expect": {"a08_location": "same"}},
+  {"group": "a08", "name": "a receiver that reports no bed is compared by the ward", "case": {"event": "update"}, "summary": {"message": {"a08_ward": "WARD-A", "a08_bed": "BAY1-09"}, "ward_state": {"ward": "WARD-A"}}, "expect": {"a08_location": "same"}},
+  {"group": "a08", "name": "another ward at a receiver that reports no bed", "case": {"event": "update"}, "summary": {"message": {"a08_ward": "WARD-B", "a08_bed": "BAY1-09"}, "ward_state": {"ward": "WARD-A"}}, "expect": {"a08_location": "different"}},
+  {"group": "a08", "name": "a failed transfer is no A08, whatever the message says", "summary": {"message": {"a08_ward": "WARD-B", "a08_bed": "BAY1-09"}, "ward_state": {"ward": "WARD-A", "bed": "BAY1-01"}}, "expect": {"a08_location": "none"}},
+  {"group": "a08", "name": "the receiver could not be read", "case": {"event": "update"}, "summary": {"message": {"a08_ward": "WARD-B"}, "ward_state_http_status": 503, "ward_state": {"ward": "WARD-A"}}, "expect": {"a08_location": "none"}},
+  {"group": "a08", "name": "the receiver doesn't know the encounter", "case": {"event": "update"}, "summary": {"message": {"a08_ward": "WARD-B"}, "ward_state_http_status": 404}, "expect": {"a08_location": "none"}},
+  {"group": "a08", "name": "the receiver has discharged the patient", "case": {"event": "update"}, "summary": {"message": {"a08_ward": "WARD-B"}, "ward_state": {"state": "discharged", "ward": "WARD-A"}}, "expect": {"a08_location": "none"}},
+  {"group": "a08", "name": "a transfer applied after the A08: the receiver has moved on and the A08's location is older", "case": {"event": "update"}, "summary": {"message": {"a08_ward": "WARD-A"}, "ward_state": {"ward": "WARD-C", "history": [{"event": "transfer", "ward": "WARD-C", "event_time": "2026-10-19T10:00:00Z", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^transfer^2026-10-19T10:00:00Z"}]}}, "expect": {"a08_location": "none"}},
+  {"group": "a08", "name": "an update applied after the A08 changes nothing", "case": {"event": "update"}, "summary": {"message": {"a08_ward": "WARD-A", "a08_bed": "BAY1-09"}, "ward_state": {"ward": "WARD-A", "bed": "BAY1-01", "history": [{"event": "update", "event_time": "2026-10-19T10:00:00Z", "operation_key": "PAS^HOSP^MRN-UT1^ENC-UT1^update^2026-10-19T10:00:00Z"}]}}, "expect": {"a08_location": "different"}},
+  {"group": "a08", "name": "the A08 repeats an earlier movement that failed too: its own case delivers that", "case": {"event": "update"}, "summary": {"message": {"a08_ward": "WARD-B", "a08_bed": "BAY2-04"}, "ward_state": {"ward": "WARD-A", "bed": "BAY1-01"}, "timeline": [{"event": "transfer", "ward": "WARD-B", "bed": "BAY2-04", "event_time": "2026-10-19T08:30:00Z", "outcome": "unavailable", "operation_key": "k-1", "source": "feed", "later": false}]}, "expect": {"a08_location": "same"}},
+  {"group": "a08", "name": "an earlier failed movement to another bed explains nothing", "case": {"event": "update"}, "summary": {"message": {"a08_ward": "WARD-B", "a08_bed": "BAY2-09"}, "ward_state": {"ward": "WARD-A", "bed": "BAY1-01"}, "timeline": [{"event": "transfer", "ward": "WARD-B", "bed": "BAY2-04", "event_time": "2026-10-19T08:30:00Z", "outcome": "unavailable", "operation_key": "k-1", "source": "feed", "later": false}]}, "expect": {"a08_location": "different"}},
+  {"group": "a08", "name": "an earlier movement the receiver applied explains nothing", "case": {"event": "update"}, "summary": {"message": {"a08_ward": "WARD-B", "a08_bed": "BAY2-04"}, "ward_state": {"ward": "WARD-A", "bed": "BAY1-01"}, "timeline": [{"event": "transfer", "ward": "WARD-B", "bed": "BAY2-04", "event_time": "2026-10-19T08:30:00Z", "outcome": "applied", "operation_key": "k-1", "source": "feed", "later": false}]}, "expect": {"a08_location": "different"}},
+  {"group": "a08", "name": "a cancel that failed explains nothing", "case": {"event": "update"}, "summary": {"message": {"a08_ward": "WARD-B", "a08_bed": "BAY2-04"}, "ward_state": {"ward": "WARD-A", "bed": "BAY1-01"}, "timeline": [{"event": "cancel_transfer", "ward": "WARD-B", "bed": "BAY2-04", "event_time": "2026-10-19T08:30:00Z", "outcome": "unavailable", "operation_key": "k-1", "source": "feed", "later": false}]}, "expect": {"a08_location": "different"}},
   {"group": "other", "name": "a receiver whose category is history_of_record", "case": {"receiver": "UT Records"}, "expect": {"receiver_category": "history_of_record"}},
   {"group": "other", "name": "a receiver whose category is orders_results", "case": {"receiver": "UT Orders"}, "expect": {"receiver_category": "orders_results"}},
   {"group": "other", "name": "a receiver the profile does not name", "case": {"receiver": "UT Nowhere"}, "expect": {"receiver_category": "current_state"}},

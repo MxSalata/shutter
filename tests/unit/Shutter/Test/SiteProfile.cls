@@ -36,6 +36,7 @@ Method TestFurtherMessages()
     Set p = ##class(Shutter.Store.SiteProfile).Default()
     Do $$$AssertEquals(p."further_messages"."in_patient_movement", "stop", "another visit's movement stops by default")
     Do $$$AssertEquals(p."further_messages"."admission_not_found", "person", "a lost admission waits for a person by default")
+    Do $$$AssertEquals(p."further_messages"."a08_location", "stop", "an A08 naming another place stops by default")
     Do $$$AssertEquals(p."further_messages"."scan_seconds", 30, "a read of a namespace takes up to 30 seconds by default")
     Do p."further_messages".%Remove("scan_seconds")
     Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).FurtherScanSeconds(p), 30, "and when the profile doesn't say")
@@ -227,6 +228,9 @@ XData Rows [ MimeType = application/json ]
 {
 [
  {"group": "further", "name": "a site lets another visit's movement show", "patch": {"further_messages": {"in_patient_movement": "show"}}, "expect": ""},
+ {"group": "further", "name": "a site lets an A08's location show", "patch": {"further_messages": {"a08_location": "show"}}, "expect": ""},
+ {"group": "further", "name": "a site keeps the stop on an A08's location", "patch": {"further_messages": {"a08_location": "stop"}}, "expect": ""},
+ {"group": "further", "name": "an unknown word is refused for an A08's location", "patch": {"further_messages": {"a08_location": "maybe"}}, "expect": "further_messages.a08_location: must be stop or show"},
  {"group": "further", "name": "a site lets policy release a lost admission", "patch": {"further_messages": {"admission_not_found": "policy"}}, "expect": ""},
  {"group": "further", "name": "an unknown word is refused", "patch": {"further_messages": {"in_patient_movement": "maybe"}}, "expect": "further_messages.in_patient_movement: must be stop or show"},
  {"group": "further", "name": "an unknown word is refused for the admission too", "patch": {"further_messages": {"admission_not_found": "auto"}}, "expect": "further_messages.admission_not_found: must be person or policy"},

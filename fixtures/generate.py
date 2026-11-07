@@ -60,6 +60,9 @@ PATIENTS = {
     "S30": ("MRN1030", "ENC-1030", "SYNTH^NED", "19710408", "M"),
     "S31": ("MRN1031", "ENC-1031", "SYNTH^OLA", "19890911", "F"),
     "S32": ("MRN1032", "ENC-1032", "SYNTH^PIP", "19741203", "M"),
+    # S33 and S34: a site that moves beds by A08
+    "S33": ("MRN1033", "ENC-1033", "SYNTH^QUIN", "19680125", "F"),
+    "S34": ("MRN1034", "ENC-1034", "SYNTH^RHYS", "19820517", "M"),
     # S11, the outage burst: six patients in one scenario
     "S11-P1": ("MRN1101", "ENC-1101", "SYNTH^KAI", "19880404", "M"),
     "S11-P2": ("MRN1102", "ENC-1102", "SYNTH^LENA", "19790908", "F"),
@@ -443,6 +446,53 @@ def scenarios():
                      "failed_operation_key": b[2]["operation_key"], "names": ["ENC-1031", "ENC-2031"],
                      "modes": ["policy"]},
     }, [a, b, d]))
+
+    # S33: a site that moves beds by A08: the A08 fails, and an update carries no location, so a resend would close with the bed
+    # move undone
+    a = message("S33", 1, "A01", "0900", ward="WARD-A")
+    u = message("S33", 2, "A08", "0920", ward="WARD-A", bed="09")
+    out.append(({
+        "id": "S33",
+        "title": "A failed A08 that moves the patient's bed",
+        "summary": "Admit to Ward A bed BAY1-01 applied; the 09:20 A08 names bed BAY1-09 and fails. An update carries no location, "
+                   "so a resend would verify and close with the bed move undone. It stops for a person, naming the patient "
+                   "and both beds.",
+        "steps": [
+            {"file": a[0]},
+            {"fault": "fail_before_accept"},
+            {"file": u[0], "expect": "delivery_fails"},
+            {"wait": 5},
+            {"fault": "off"},
+        ],
+        "expected": {"disposition": "resend", "write": False, "final_state": "admitted", "final_ward": "WARD-A",
+                     "case_by_key": True, "blocked_by": "A08_LOCATION_DIFFERS", "final_reason": "A08_LOCATION_DIFFERS",
+                     "failed_operation_key": u[2]["operation_key"], "names": ["MRN1033", "BAY1-09", "BAY1-01"],
+                     "modes": ["policy", "rules"]},
+    }, [a, u]))
+
+    # S34: the same site: a failed A02, then a later A08 moves the patient on, and the A02 would look current
+    a = message("S34", 1, "A01", "0900", ward="WARD-A")
+    b = message("S34", 2, "A02", "0920", ward="WARD-B", prior="WARD-A")
+    u = message("S34", 3, "A08", "0935", ward="WARD-B", bed="09")
+    out.append(({
+        "id": "S34",
+        "title": "A failed transfer, then a later A08 that moves the patient's bed",
+        "summary": "Admit to Ward A applied; the 09:20 transfer to Ward B bed BAY2-04 fails; a 09:35 A08 applies and names bed "
+                   "BAY2-09. That A08 is a further movement the receiver never took, so the older transfer isn't current: the "
+                   "resend stops for a person, naming the patient and the A08.",
+        "steps": [
+            {"file": a[0]},
+            {"fault": "fail_before_accept"},
+            {"file": b[0], "expect": "delivery_fails"},
+            {"wait": 5},
+            {"fault": "off"},
+            {"file": u[0]},
+        ],
+        "expected": {"disposition": "resend", "write": False, "final_state": "admitted", "final_ward": "WARD-A",
+                     "case_by_key": True, "blocked_by": "FURTHER_MOVEMENT", "final_reason": "FURTHER_MOVEMENT",
+                     "failed_operation_key": b[2]["operation_key"], "names": ["MRN1034", "ADT_A08", "BAY2-09"],
+                     "modes": ["policy", "rules"]},
+    }, [a, b, u]))
 
     # S32: the new admission arrives while the plan waits for its approval, so only the read at dispatch can catch it
     a = message("S32", 1, "A01", "0900", ward="WARD-A")
