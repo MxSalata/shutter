@@ -45,6 +45,7 @@ import { keys, useCan, useCase } from '@/api/hooks';
 import type { CaseDetail, CaseState, PlanView } from '@/api/types';
 import { TechDetail } from '@/components/TechDetail';
 import { ENV } from '@/env/mode';
+import { compactBanner } from '@/trial/visit';
 import { REPLAY_DONE } from '@/lib/events';
 import { HOSPITAL_NAME } from '@/lib/hospital';
 import { guideCard, guideTarget, useGuideDock } from '@/lib/guideDock';
@@ -1011,15 +1012,16 @@ export function Guide() {
   const reduced = useReducedMotion();
   const pos = positionOf(progress);
   const message = useAnnouncement(phase, pos, !!pos && approvedForYou === pos.path);
-  const [welcomeScope] = useState<GuideScope>(() =>
-    ENV.openGuide === 'engineer' ? 'engineer' : progress.scope,
-  );
+  const [welcomeScope] = useState<GuideScope>(progress.scope);
 
-  // On arrival with ?trial=tour or ?trial=engineer the welcome opens with that tour chosen; on a first entry, by itself
+  // On arrival with ?trial=tour or ?trial=engineer that tour starts; on a first entry the welcome opens by itself
   useEffect(() => {
     const s = useGuide.getState();
     if (s.phase !== 'closed') return;
-    if (ENV.openGuide || (!s.snoozed && welcomeDue(s.progress))) s.openWelcome();
+    if (ENV.openGuide) {
+      s.begin(ENV.openGuide);
+      compactBanner();
+    } else if (!s.snoozed && welcomeDue(s.progress)) s.openWelcome();
   }, []);
 
   // Focus goes back where the reader was when a modal or the tour closes

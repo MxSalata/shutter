@@ -112,16 +112,14 @@ test.describe('the guide', () => {
 
   test("starts the engineers' tour with Technical on, from its address", async ({ page }) => {
     await page.goto('./?trial=engineer#/scenarios');
-    const welcome = page.getByRole('dialog', { name: 'Welcome to the Shutter trial' });
-    await expect(welcome.getByRole('radio', { name: /For integration engineers/ })).toBeChecked();
-    await welcome.getByRole('button', { name: 'Start the tour' }).click();
+    await expect(page.getByRole('dialog', { name: 'Welcome to the Shutter trial' })).toBeHidden();
     const guide = page.getByRole('region', { name: 'Guide' });
     await expect(guide).toContainText("Engineers' tour · A transfer recovered (S2)");
     await expect(guide).toContainText('Step 1 of 6');
     await expect(
       page.getByRole('radiogroup', { name: 'Detail' }).getByRole('radio', { name: 'Technical' }),
     ).toBeChecked();
-    // The address no longer opens the welcome on a reload
+    // The address no longer starts the tour on a reload
     await expect(page).toHaveURL(/\?trial#\//);
   });
 

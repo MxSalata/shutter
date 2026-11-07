@@ -1,7 +1,8 @@
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { notifications } from '@mantine/notifications';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { server } from '@/mocks/node';
@@ -13,9 +14,9 @@ import { useGuide } from '@/features/guide/store';
 import { GUIDE_KEY } from '@/features/guide/storage';
 import { LIVE_WELCOME_KEY } from './LiveWelcome';
 import { journal } from './journal';
-import { journalLine, TRIAL_ONLY_WORDS, TRIAL_WORDS } from './words';
+import { journalLine, TRIAL_ONLY_WORDS, TRIAL_RELOADED_WORDS, TRIAL_WORDS } from './words';
 import { provideTrialChrome } from './slot';
-import { bannerForm, compactBanner, enterTrialPage } from './visit';
+import { bannerForm, compactBanner, enterTrialPage, noteTrialAction } from './visit';
 
 /** The page's environment, switched per test: a live page, a trial page of a build IRIS serves, the demo build. */
 const page = vi.hoisted(() => ({ trial: true, demoBuild: false }));
@@ -138,6 +139,18 @@ describe('the trial banner', () => {
     expect(await within(popover).findByText('Run a scenario')).toBeInTheDocument();
     expect(within(popover).getByText('Save the site profile')).toBeInTheDocument();
     expect(within(popover).getByText('Approve or reject a plan')).toBeInTheDocument();
+  });
+
+  it('says once, after a page load, that what the tab did has gone', async () => {
+    const show = vi.spyOn(notifications, 'show');
+    noteTrialAction('POST', '/api/shutter/cases/C-000002/approvals');
+    await renderShell(true);
+    expect(show).toHaveBeenCalledTimes(1);
+    expect(show.mock.calls[0]![0].message).toBe(TRIAL_RELOADED_WORDS);
+    cleanup();
+    await renderShell(true);
+    expect(show).toHaveBeenCalledTimes(1);
+    show.mockRestore();
   });
 
   it("opens What's different? from the keyboard and closes it on Escape, focus back on the button", async () => {
