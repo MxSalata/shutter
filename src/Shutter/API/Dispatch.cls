@@ -76,7 +76,7 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
   <Route Url="/production-reviews/:id/annotations" Method="POST" Call="ProductionReviewAnnotate"/>
   <Route Url="/failure-census" Method="GET" Call="Shutter.API.FailureCensus:List"/>
   <Route Url="/failure-census" Method="POST" Call="Shutter.API.FailureCensus:Start"/>
-  <Route Url="/failure-census/:id.csv" Method="GET" Call="Shutter.API.FailureCensus:Csv"/>
+  <Route Url="/failure-census/([^/.]+)\.csv" Method="GET" Call="Shutter.API.FailureCensus:Csv"/>
   <Route Url="/failure-census/:id" Method="GET" Call="Shutter.API.FailureCensus:Get"/>
 </Routes>
 }
