@@ -681,6 +681,36 @@ function receiverChanges(a: SiteReceiver, b: SiteReceiver, p: SiteProfile): Chan
   if (!same(a.api, b.api)) out.push({ path: 'api', text: `${name}, its endpoints changed` });
   if (!same(a.features, b.features))
     out.push({ path: 'features', text: `${name}, its declared features changed` });
+  // The outage keys. A person still approves every engine resend, so none of these counts as less oversight, and the
+  // ones holding contact details read as changed, with no value.
+  if (!same(a.engine_resend, b.engine_resend))
+    out.push({
+      path: 'engine_resend',
+      text: `${name}, the engine resend: ${b.engine_resend === true ? 'on' : 'off'}`,
+    });
+  const values: [keyof SiteReceiver, string][] = [
+    ['ack_level', 'what a Completed header proves'],
+    ['resend_approval_minutes', 'minutes an approval to resend lasts'],
+    ['settle_minutes', 'minutes to settle'],
+    ['window_minutes', 'minutes in the window'],
+  ];
+  for (const [key, label] of values)
+    if (!same(a[key], b[key]))
+      out.push({
+        path: String(key),
+        text: `${name}, ${label}: from ${show({}, a[key])} to ${show({}, b[key])}`,
+      });
+  const blocks: [keyof SiteReceiver, string][] = [
+    ['watch', 'its watch changed'],
+    ['mail', 'its outage mail changed'],
+    ['approvers', 'its approvers changed'],
+    ['duplicates', 'how it treats duplicates changed'],
+    ['hold', 'its hold changed'],
+    ['runbook', 'its runbook changed'],
+    ['call', 'who to call changed'],
+  ];
+  for (const [key, words] of blocks)
+    if (!same(a[key], b[key])) out.push({ path: String(key), text: `${name}, ${words}` });
   return out;
 }
 
