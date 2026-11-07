@@ -384,7 +384,7 @@ Method TestTheLastCheckBeforeSending()
 /// The gathering reads the stored case: its state, its team, what has been sent.
 Method TestGatherReadsTheStore()
 {
-    Set s = ##class(Shutter.Util.CaseReminder).Settings({"reminders": {"enabled": true}, "feed": {"time_zone": "UTC"}})
+    Set s = ##class(Shutter.Util.CaseReminder).Settings({"reminders": {"enabled": true, "officer_address": "officer@reminder.example.nhs.uk"}, "feed": {"time_zone": "UTC"}})
     Set mine = ..Gathered(s)
     Do $$$AssertTrue($ISOBJECT(mine), "a blocked case is gathered")
     If $ISOBJECT(mine) {
@@ -405,6 +405,28 @@ Method TestGatherIncludesACaseExactlyAtTheThreshold()
     Set case.OpenedAt = "2026-11-04T08:00:00Z"
     Do $$$AssertStatusOK(case.%Save(), "opened exactly four hours before")
     Do $$$AssertTrue($ISOBJECT(..Gathered(s)), "gathered")
+}
+
+/// Outside the window it reads no case at all, and a case with every reminder it can get is not read again.
+Method TestGatherReadsOnlyWhatCanGo()
+{
+    Set officer = ##class(Shutter.Util.CaseReminder).Settings({"reminders": {"enabled": true, "officer_address": "officer@reminder.example.nhs.uk"}, "feed": {"time_zone": "UTC"}})
+    Set alone = ##class(Shutter.Util.CaseReminder).Settings({"reminders": {"enabled": true}, "feed": {"time_zone": "UTC"}})
+    Do $$$AssertEquals(##class(Shutter.Util.CaseReminderTask).Gather(officer, "2026-11-04T07:59:59Z").%Size(), 0, "the window is shut: nothing is read")
+    Do $$$AssertTrue($ISOBJECT(..Gathered(officer)), "the window is open: it is read")
+    // The officer's record alone: the team's mail was refused or held, so the team's reminder is still to go.
+    Do ..Digest("officer").MarkSent("ok", "2026-11-04T12:01:00Z")
+    Do $$$AssertEquals(..Gathered(officer).reminded.%ToJSON(), "[""officer""]", "the officer's record alone leaves the team's to go")
+    Do ..Digest("team").MarkSent("ok", "2026-11-04T12:02:00Z")
+    Do $$$AssertNotTrue($ISOBJECT(..Gathered(officer)), "both recorded: not read again")
+    Do $$$AssertNotTrue($ISOBJECT(..Gathered(alone)), "and with no officer set, the team's is all it can get")
+    Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM Shutter_Store.CaseReminder WHERE ""Case"" = ?", ..CaseRowId)
+    Do ##class(Shutter.Store.Case).%OpenId(..CaseRowId, 0).%Reload()
+    Do $$$AssertTrue($ISOBJECT(..Gathered(officer)), "no record: read")
+    Set case = ##class(Shutter.Store.Case).%OpenId(..CaseRowId)
+    Set case.Disposition = "abandoned"
+    Do $$$AssertStatusOK(case.%Save(), "abandoned")
+    Do $$$AssertNotTrue($ISOBJECT(..Gathered(officer)), "an abandoned case is not read")
 }
 
 Method Gathered(s As %DynamicObject) As %DynamicObject

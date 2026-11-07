@@ -71,15 +71,20 @@ ClassMethod Run(now As %String = "") As %Integer
     Quit queued
 }
 
-/// The cases that have reached the first threshold and need a person, oldest first, as Decide reads them.
+/// The cases that have reached the first threshold and need a person, oldest first, as Decide reads them: none while the
+/// window is shut, and no case that has had every reminder it can get, since blocked and failed cases stay so for good.
 ClassMethod Gather(settings As %DynamicObject, now As %String) As %DynamicArray
 {
     Set out = []
+    Quit:'##class(Shutter.Util.CaseReminder).InWindow(now, settings) out
     Set back = -(settings."team_hours" * 3600)
     // To the second, as the store's times are: with a fraction, a case exactly at the threshold would sort after it.
     Set cutoff = $PIECE(##class(Shutter.Util.Time).PlusMillis(now, back * 1000), ".", 1) _ "Z"
     Set states = ##class(Shutter.Util.CaseReminder).#NEEDSPERSON
-    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Shutter_Store.""Case"" WHERE State %INLIST ? AND OpenedAt <= ? ORDER BY OpenedAt, ID", $LISTFROMSTRING(states), cutoff)
+    // Both thresholds, or the team's alone with no officer set: the officer's record alone leaves the team's still to go,
+    // as when the team's mail was refused or held by the hourly limit.
+    Set thresholds = $SELECT(settings."officer_address" = "": 1, 1: 2)
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT c.ID FROM Shutter_Store.""Case"" c WHERE c.State %INLIST ? AND c.OpenedAt <= ? AND (c.Disposition IS NULL OR c.Disposition <> 'abandoned') AND (SELECT COUNT(*) FROM Shutter_Store.CaseReminder r WHERE r.""Case"" = c.ID) < ? ORDER BY c.OpenedAt, c.ID", $LISTFROMSTRING(states), cutoff, thresholds)
     While rs.%Next() {
         Set case = ##class(Shutter.Store.Case).%OpenId(rs.%Get("ID"), 0)
         Continue:'$ISOBJECT(case)
