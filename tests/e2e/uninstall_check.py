@@ -249,6 +249,32 @@ def production_runs(ns, production, keep_jobs):
     check("its items were not restarted: the same job numbers", all(a and a == b for a, b in same.values()), same)
 
 
+def hand_item_refused(here, ns, production, name, cls, keep):
+    """A second item on one of Shutter's classes, added by hand inside a production the uninstall only edits. The uninstall
+    would not take it out, and it could not start once the classes are gone, so it must refuse. Definition rows only: the
+    running production is not updated, so its job numbers still count."""
+    out = session(ns, f'''Set p=##class(Ens.Config.Production).%OpenId("{production}") Set i=##class(Ens.Config.Item).%New() Set i.Name="{name}",i.ClassName="{cls}",i.Production=p Do p.Items.Insert(i) Set sc=p.%Save() Write !,"[hand] ",sc,!''')
+    check(f"{production} has a hand-added {name} on {cls}", "[hand] 1" in out, out[-400:])
+    refused = obj(here, "##class(Shutter.Util.Uninstall).Plan()")
+    check(f"the plan says it would refuse, and names {name}", f"{name} in {production} ({ns})" in refused["refused"] and refused["ok"] is False, refused["refused"])
+    out = session(here, f'Set sc=##class(%IPM.Main).Shell("uninstall {MODULE}") Write !,"RESULT: ",$SELECT(sc:"ok",1:$SYSTEM.Status.GetErrorText(sc)),!', 560)
+    check("zpm uninstall fails and says why", name in out and "RESULT: ok" not in out, out[-600:])
+    check("the module and the item it wired are still there", value(here, '##class(%IPM.Storage.Module).NameExists("' + MODULE + '")') == "1" and keep in jobs(ns), jobs(ns))
+    out = session(ns, f'''Set p=##class(Ens.Config.Production).%OpenId("{production}") For n=p.Items.Count():-1:1 {{ Set i=p.Items.GetAt(n) If i.Name="{name}" {{ Set id=i.%Id() Do p.Items.RemoveAt(n) Do ##class(Ens.Config.Item).%DeleteId(id) }} }} Set sc=p.%Save() Write !,"[gone] ",sc,!''')
+    check("the site takes it out", "[gone] 1" in out, out[-300:])
+
+
+def site_globals(ns):
+    """Globals of the site's whose names begin like the demo's. Neither the demo nor Shutter wrote them."""
+    out = session(ns, 'Set ^Hospital.SiteOwn="site",^Wards.Beds="site",^Downstream.SiteOwn="site" Write !,"[own] ",^Wards.Beds,!')
+    check(f"{ns} holds globals of its own named like the demo's", "[own] site" in out, out[-300:])
+
+
+def site_globals_stay(ns):
+    got = value(ns, '$GET(^Hospital.SiteOwn)_$GET(^Wards.Beds)_$GET(^Downstream.SiteOwn)')
+    check(f"{ns} still holds them, where the demo was never installed", got == "sitesitesite", got)
+
+
 def site_shape():
     step("A hospital namespace running its own production, and the namespace Shutter will go in")
     make_namespace("PATHOLOGY")
@@ -259,6 +285,7 @@ def site_shape():
     check("IPM is there", "[ipm] 1" in out, out[-400:])
     lims_up("PATHOLOGY")
     check("the site's order reaches its LIMS before Shutter is there", "ERR" not in send_order("PATHOLOGY", "ORDA1") and order_delivered("PATHOLOGY", "ORDA1"))
+    site_globals("SHUTTER")
     namespaces = ["USER", "PATHOLOGY", "SHUTTER"]
     step("The instance as it is before the install")
     before = snapshot(namespaces)
@@ -315,6 +342,9 @@ def site_shape():
     out = session("PATHOLOGY", 'Set sc=##class(Ens.Config.Production).%DeleteId("OnbHand.Production") Do ##class(%SQL.Statement).%ExecDirectNoPriv(,"DELETE FROM Ens_Config.Item WHERE Name = \'Hand Forwarder\'") Write !,"[gone] ",sc,!')
     check("the site takes it out", "[gone] 1" in out, out[-300:])
 
+    step("A second forwarder added by hand inside the onboarded production: refused too, since only the recorded one is taken")
+    hand_item_refused("SHUTTER", "PATHOLOGY", "OnbPath.Production", "Second Forwarder", "Shutter.Intake.Forwarder", "Shutter Forwarder")
+
     step("The comparison can see Shutter: the same record, while it is installed")
     during = snapshot(namespaces)
     check("the record finds the name in Shutter's own globals", "mentions|SHUTTER|^Shutter.Config" in during, sorted(x for x in during if x.startswith("mentions"))[:40])
@@ -326,6 +356,7 @@ def site_shape():
     keep = jobs("PATHOLOGY")
     uninstall("SHUTTER")
     production_runs("PATHOLOGY", "OnbPath.Production", keep)
+    site_globals_stay("SHUTTER")
     check("the site's order still reaches its LIMS", "ERR" not in send_order("PATHOLOGY", "ORDA2") and order_delivered("PATHOLOGY", "ORDA2"))
     check("the site's alert consumer has its name back", "Ens.Alert" in jobs("PATHOLOGY"), jobs("PATHOLOGY"))
     check("no class of Shutter's resolves in PATHOLOGY", value("PATHOLOGY", '##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Intake.Forwarder")') == "0")
@@ -369,6 +400,11 @@ def demo_shape():
     out = session("USER", 'Write !,"<<<",##class(Shutter.Setup).HardenPortal(),">>>",!')
     check("the portal is hardened, as the public demo does", "Shutter_Portal" in out or "apps" in out, out[-500:])
 
+    step("The plan names each demo namespace in a line of its own")
+    plan = obj("USER", "##class(Shutter.Util.Uninstall).Plan()")
+    for ns in ("HOSPITAL", "RECORDS"):
+        check(f"the plan names {ns}", f"The namespace {ns} and its databases, made for the demo" in plan["removes"], plan["removes"])
+
     step("The uninstall")
     uninstall("USER")
     check("/shutter answers 404", http_code("/shutter/index.html") == 404)
@@ -391,6 +427,7 @@ def into_shape():
     out = session("PATHOLOGY", 'Set sc=$SYSTEM.OBJ.Load("/tmp/zpm.xml","ck") Write !,"[ipm] ",sc,!')
     check("IPM is there", "[ipm] 1" in out, out[-400:])
     lims_up("PATHOLOGY")
+    site_globals("PATHOLOGY")
     namespaces = ["USER", "PATHOLOGY"]
     before = snapshot(namespaces)
     print(len(before), "lines", flush=True)
@@ -404,10 +441,14 @@ def into_shape():
     check("the record finds the name in Shutter's own globals", "mentions|PATHOLOGY|^Shutter.Config" in during, sorted(x for x in during if x.startswith("mentions"))[:40])
     check("and an item in the site's production", "item|PATHOLOGY|OnbPath.Production/Gate/Shutter.Operation.Gate" in during or any(x.startswith("item|PATHOLOGY|OnbPath.Production/Gate/") for x in during), sorted(during - before)[:40])
 
+    step("A second gate added by hand inside the site's production: refused, since only Shutter's own items are taken")
+    hand_item_refused("PATHOLOGY", "PATHOLOGY", "OnbPath.Production", "My Gate", "Shutter.Operation.Gate", "Gate")
+
     step("The uninstall")
     keep = jobs("PATHOLOGY")
     uninstall("PATHOLOGY")
     production_runs("PATHOLOGY", "OnbPath.Production", keep)
+    site_globals_stay("PATHOLOGY")
     check("none of Shutter's items run", not [k for k in jobs("PATHOLOGY") if k in ("Gate", "Verifier", "Shutter API", "HL7 Index")], jobs("PATHOLOGY"))
     check("the site's order still reaches its LIMS", "ERR" not in send_order("PATHOLOGY", "ORDA3") and order_delivered("PATHOLOGY", "ORDA3"))
     src = value("PATHOLOGY", '##class(%Dictionary.XDataDefinition).%OpenId("OnbPath.Production||ProductionDefinition").Data.Read(200000)["Shutter"')
