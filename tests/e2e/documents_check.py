@@ -641,6 +641,7 @@ if wanted("R08"):
     send(oru(ctl, f"OBX|1|TX|REP^Report^L||{'QUJD' * 100}", placer=f"R08TX{tag}^LAB", filler=""), "r08x")
     c = case_of(ctl)
     check("a base64 value under TX: no report case, the ordinary path", bool(c) and "document" not in c and external_rows() != before, c)
+    ext = external_rows()
     ctl = f"R08T-{tag}"
     code, r = post_intake({"source": {"namespace": NS, "production": "DocSite.Production", "route": "Docs In", "header_id": "1"}, "receiver": "Docs Out", "failure": {"kind": "delivery_failed", "text": "t", "outcome": "error"}, "message": "\r".join(oru(ctl, f"OBX|1|ED|REP^Report^L||^application^pdf^Base64^{PDF_B64}", placer="R08T^LAB", filler="")) + "\r"})
     c = case_of(ctl)
