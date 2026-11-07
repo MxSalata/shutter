@@ -98,6 +98,8 @@ Method InvalidReason(plan As Shutter.Store.Plan, snapshot As Shutter.Store.Snaps
     If ..IncidentPlanDigest '= "" {
         Set inc = $SELECT($ISOBJECT(..Case): ..Case.Incident, 1: "")
         If '$ISOBJECT(inc) || (inc.PlanDigest '= ..IncidentPlanDigest) Quit "incident_plan_changed"
+        // This approval's own epoch is the one read just before the dispatch: what the person bound is the plan's.
+        If (inc.ReceiverEpoch '= "") && (receiverEpoch '= "") && (inc.ReceiverEpoch '= receiverEpoch) Quit "receiver_reset"
         If plan.CatalogueEntry '= ..BoundEntry Quit "item_changed"
         Set cat = $SELECT($ISOBJECT(snapshot): snapshot.SummaryObject().%Get("catalogue"), 1: "")
         If '$ISOBJECT(cat) || (##class(Shutter.Util.Json).Str(cat, "entry") '= ..BoundEntry) || (##class(Shutter.Util.Json).Str(cat, "outcome") '= ..BoundOutcome) Quit "item_changed"

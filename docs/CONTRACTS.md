@@ -181,7 +181,7 @@ The canonical payload is the JSON object with exactly these keys in this order, 
 The gate's capability check requires `conditional_writes`, `receipts`, `history` and `dry_run` for a write (v1.21; `history` since policy version 2026-11-06.1): a receiver that reports no dry run blocks every resend with `DRY_RUN_UNSUPPORTED`, and one that offers no history with `HISTORY_UNSUPPORTED` (a receiver without conditional writes answers `CONNECTOR_INCAPABLE`, which comes first and alone); reconcile and superseded stay open. A write needs a history because a move made outside the feed shows nowhere else, and because the verifier reads the operation there: a resend to a receiver without one could only end `failed`, after the write. An endpoint that does not mention `history` takes the entry's own `features.history` (6.4), and neither saying so means none. An encounter read (200) whose `history` is not an array answers unknown, `HISTORY_UNREADABLE`, even from a receiver that offers one; a 404 for an admission has no history to read. The connector is the second line: it refuses to send a dry run to a receiver whose site profile entry declares `dry_run: false` (outcome `refused`, reason `dry_run_unsupported`, nothing sent), and the case then blocks at the rehearsal as for any refusal.
 
 - `POST /downstream/api/capabilities` `{"conditional_writes": false}` is the demo switch (demo instances only, like the reset, and with `Downstream_Admin`, v1.39): afterwards any operation that carries `expected_version` is refused with 422 `{"error": "unsupported_precondition"}`, and the read says `"conditional_writes": false`. `{"conditional_writes": true}` restores it; the reset restores it too.
-- `epoch` is an integer that increments at every reset. It appears here, in every encounter read (`"epoch"` beside `"version"`) and in every receipt. An approval binds the epoch it was given, so an approval from before a reset cannot authorise a dispatch after it even when the version numbers happen to match.
+- `epoch` is an integer that increments at every reset. It appears here, in every encounter read (`"epoch"` beside `"version"`) and in every receipt. An approval binds the epoch it was given, so an approval from before a reset cannot authorise a dispatch after it even when the version numbers happen to match. An approval under an incident binds the plan's epoch.
 - `last_contract_check` is whatever the downstream system recorded last (the HTTP check writes it); null when never run.
 - `POST /downstream/api/capabilities` also takes `last_contract_check` as `{"at": "<ISO 8601 UTC>", "result": "<text>"}`, both fields required (v1.5): the test tools write it after a contract check. Any other field is refused with 422 `{"error": "invalid_request"}`, and nothing changes when any part of a request is refused. On an instance that is not a demo the POST answers 403 `{"error": "not_a_demo_instance"}`.
 
@@ -993,12 +993,19 @@ the framework). The Dockerfile runs it, and a site with Java runs it once by han
   item stopped and why.
 - A released item whose case is blocked while it waits on another case (`waitsOn`, the occupied bed) or on a newer message
   of its encounter (`waitsOnMessage`) is still working for the chain (v1.29): the chain waits with it, the incident is told once,
-  and the item is judged when the case closes after its release. An escalated item stops the chain as before.
+  and the item is judged when the case closes after its release. An escalated item stops the chain as before. So does a wait on
+  a case this incident still holds back for another of its chains, which could only go once this chain had stopped: the chain
+  stops, the incident says why, the other chains go on, and that case's closing reopens the waiting one, which plans alone on
+  fresh evidence under the site's policy for a single case.
 - Every item keeps its own trace, approval record and closure; the incident's record lists each chain's outcome:
   `resolved`, `stopped` (with the item), `escalated` (a board chain or a no-match).
 - Chain states: `pending`, `awaiting_approval`, `approved`, `rejected`, `releasing`, `resolved`, `stopped`, `escalated`;
   item states: `pending`, `released`, `resolved`, `blocked`, `escalated`, `failed`, `stopped` (never released). An item's
-  expected version is the previous item's verified version; the first item of a chain a person approved goes at the
+  expected version is the previous item's verified version: the `version_after` of its write's receipt, or of the receipt
+  the verification read (a write whose answer was lost, a reconcile); on a receiver with no receipts, the write's answer or
+  the history entry with the operation's key; and only an item closed with none of these (superseded, nothing written)
+  takes the encounter as the verification read it. So a reconcile whose receipt is older than the encounter stops the next
+  item for a person. The first item of a chain a person approved goes at the
   chain's first expected version from the plan, and the first item of an automatic or board chain goes on fresh
   evidence. A released case whose fresh evidence shows another version blocks (the sequence rule) and its chain stops.
   Chains are released one at a time in sequence order; approved chains go while the others' approvals are pending. A

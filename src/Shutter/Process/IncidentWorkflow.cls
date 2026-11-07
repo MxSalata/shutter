@@ -371,8 +371,11 @@ Method OnPoll(incident As Shutter.Store.Incident) As %Status
     }
     // A released case blocked while it waits on another case or on a message (v1.29) is still working for the chain's
     // purposes: it is reopened when what it waits for closes, so the chain waits with it instead of stopping. An escalated
-    // one is a person's, and the chain stops as before.
-    If (case.State = "blocked") && ((case.WaitsOnCase '= "") || (case.WaitsOnMessage '= "")) {
+    // one is a person's, and the chain stops as before. So does a wait on a case this incident still holds back: its
+    // chain can only be released once this one has stopped, and that case's closing still reopens this one.
+    If (case.State = "blocked") && ..HeldBackByThisIncident(case, incident) {
+        Do incident.Note("release", "Case " _ case.CaseId _ " waits on case " _ case.WaitsOnCase _ ", which this incident has not released yet. Waiting would never end, so this chain stops and the incident goes on; case " _ case.CaseId _ " is checked again when case " _ case.WaitsOnCase _ " closes", "system")
+    } ElseIf (case.State = "blocked") && ((case.WaitsOnCase '= "") || (case.WaitsOnMessage '= "")) {
         If '..WaitNoted {
             Set ..WaitNoted = 1
             Do incident.Note("release", "Case " _ case.CaseId _ " waits on " _ $SELECT(case.WaitsOnCase '= "": "case " _ case.WaitsOnCase, 1: "message " _ case.WaitsOnMessage) _ "; the chain waits with it", "system")
@@ -409,6 +412,16 @@ Method OnPoll(incident As Shutter.Store.Incident) As %Status
     Quit ..Advance(incident)
 }
 
+/// Whether the case waits on a case of this incident that is still grouped: held for another chain, not working.
+ClassMethod HeldBackByThisIncident(case As Shutter.Store.Case, incident As Shutter.Store.Incident) As %Boolean
+{
+    If case.WaitsOnCase = "" Quit 0
+    Set other = ##class(Shutter.Store.Case).ByCaseId(case.WaitsOnCase)
+    If '$ISOBJECT(other) || (other.State '= "grouped") Quit 0
+    Set held = other.StoredIncident()
+    Quit $ISOBJECT(held) && (held.%Id() = incident.%Id())
+}
+
 /// Every PollSeconds for the first minute, every 15 s for the next ten minutes, then every minute (a person
 /// may be deciding a board chain's approval).
 Method PollInterval() As %Integer
@@ -418,8 +431,11 @@ Method PollInterval() As %Integer
     Quit 60
 }
 
-/// The receiver's version after a resolved case: its last write's response, else the verification's read of the
-/// encounter, else the version the item expected.
+/// The receiver's version after a resolved case, for the next item of its chain to go at (CONTRACTS 7.3): the receipt of
+/// its write, else the receipt the verification read (a write whose answer was lost, a reconcile), else, on a receiver
+/// with no receipts, what the write's answer gave or the history entry with the operation's key. Only a closure with
+/// none of these (superseded: nothing was written) takes the encounter as the verification read it, and then the version
+/// the item expected. So a write by anything else before the verification's read stops the chain at the sequence rule.
 Method VersionAfter(case As Shutter.Store.Case, item As Shutter.Store.ChainItem) As %String
 {
     Set json = "Shutter.Util.Json", cid = case.%Id(), v = ""
@@ -427,8 +443,13 @@ Method VersionAfter(case As Shutter.Store.Case, item As Shutter.Store.ChainItem)
     If rs.%Next() {
         Set a = ##class(Shutter.Store.ExecutionAttempt).%OpenId(rs.%Get("ID"))
         If $ISOBJECT(a) {
-            Set r = $CLASSMETHOD(json, "Parse", a.ResponseJSON, .psc)
-            If $ISOBJECT(r) Set v = $CLASSMETHOD(json, "Str", r, "version_after", $CLASSMETHOD(json, "Str", r, "version", $CLASSMETHOD(json, "Str", r, "encounter_version")))
+            Set r = $CLASSMETHOD(json, "Parse", a.ReceiptJSON, .psc)
+            If $ISOBJECT(r) Set v = $CLASSMETHOD(json, "Str", r, "version_after")
+            If v = "" {
+                Set r = $CLASSMETHOD(json, "Parse", a.ResponseJSON, .psc)
+                If $ISOBJECT(r) Set v = $CLASSMETHOD(json, "Str", r, "version_after", $CLASSMETHOD(json, "Str", r, "version", $CLASSMETHOD(json, "Str", r, "encounter_version")))
+                If (v = "") && $ISOBJECT(r) && $ISOBJECT(r.%Get("encounter")) Set v = $CLASSMETHOD(json, "Str", r.%Get("encounter"), "version")
+            }
         }
     }
     If v = "" {
@@ -437,11 +458,30 @@ Method VersionAfter(case As Shutter.Store.Case, item As Shutter.Store.ChainItem)
             Set ver = ##class(Shutter.Store.Verification).%OpenId(rs.%Get("ID"))
             If $ISOBJECT(ver) {
                 Set d = $CLASSMETHOD(json, "Parse", ver.DetailJSON, .psc)
-                If $ISOBJECT(d) && $ISOBJECT(d.%Get("encounter")) Set v = $CLASSMETHOD(json, "Str", d.%Get("encounter"), "version")
+                If $ISOBJECT(d) {
+                    Set receipt = d.%Get("receipt"), encounter = d.%Get("encounter")
+                    If (+$CLASSMETHOD(json, "Str", d, "receipt_http_status") = 200) && $ISOBJECT(receipt) Set v = $CLASSMETHOD(json, "Str", receipt, "version_after")
+                    If (v = "") && $ISOBJECT(encounter) {
+                        Set v = ..HistoryVersion(encounter, case.OperationKey)
+                        If v = "" Set v = $CLASSMETHOD(json, "Str", encounter, "version")
+                    }
+                }
             }
         }
     }
     If v = "" Set v = item.ExpectedVersion
+    Quit v
+}
+
+/// The version the history entry with the operation's key landed at, or "".
+ClassMethod HistoryVersion(encounter As %DynamicObject, key As %String) As %String
+{
+    Set history = encounter.%Get("history")
+    If '$ISOBJECT(history) Quit ""
+    Set iter = history.%GetIterator(), v = ""
+    While iter.%GetNext(.i, .h) {
+        If $ISOBJECT(h) && (##class(Shutter.Util.Json).Str(h, "operation_key") = key) Set v = ##class(Shutter.Util.Json).Str(h, "version_after")
+    }
     Quit v
 }
 
