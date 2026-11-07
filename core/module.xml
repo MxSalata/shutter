@@ -49,6 +49,7 @@
       <Resource Name="Shutter.Setup.CLS"/>
       <Resource Name="Shutter.Store.PKG"/>
       <Resource Name="Shutter.Util.PKG"/>
+      <Resource Name="Shutter.Warehouse.PKG"/>
       <!-- The downstream system (the demo bed-management system) the production delivers to. -->
       <Resource Name="Downstream.PKG"/>
       <!-- The demo hospital's production (shape A): runs in the HOSPITAL namespace through a package mapping, so a judge
