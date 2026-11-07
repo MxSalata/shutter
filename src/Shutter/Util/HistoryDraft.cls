@@ -41,7 +41,7 @@ ClassMethod Gather(case As Shutter.Store.Case) As %DynamicObject
     Set facts.pending = ##class(Shutter.Util.ResendGuard).Pending(case)
     Set resetAt = $GET(^Shutter.Config("resetAt"))
     Set since = $SELECT(resetAt = "": "2000-01-01 00:00:00", 1: $TRANSLATE($PIECE(resetAt, "Z", 1), "T", " "))
-    Set rows = ##class(Shutter.Index.Message).ForPatient(case.PatientId, case.PatientIdAuthority, since)
+    Set rows = ##class(Shutter.Index.Message).ForPatientOfAuthority(case.PatientId, case.PatientIdAuthority, since)
     Set facts."patient_rows" = rows
     // The index keeps one identifier per message, so a message under another of the failed message's identifiers is asked for too.
     Set failedText = "", ri = rows.%GetIterator()
@@ -49,7 +49,7 @@ ClassMethod Gather(case As Shutter.Store.Case) As %DynamicObject
     Set others = ..Identifiers(failedText), oi = others.%GetIterator()
     While oi.%GetNext(, .o) {
         Continue:((o.id = case.PatientId) && (o.authority = case.PatientIdAuthority))
-        Set more = ##class(Shutter.Index.Message).ForPatient(o.id, o.authority, since), mi = more.%GetIterator()
+        Set more = ##class(Shutter.Index.Message).ForPatientOfAuthority(o.id, o.authority, since), mi = more.%GetIterator()
         While mi.%GetNext(, .r) { Do rows.%Push(r) }
     }
     // A merge case that names this patient as its prior side: the survivor's messages carry the other number.

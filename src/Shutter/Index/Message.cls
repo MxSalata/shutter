@@ -194,7 +194,7 @@ ClassMethod MergesSince(since As %String) As %DynamicArray
 /// identifier's authority is respected, so another authority's same number is another patient; a row with no authority
 /// can't be told apart and counts, and nor can an identifier asked for with none, so every authority's row counts then. An
 /// empty identifier has no rows.
-ClassMethod ForPatient(patientId As %String, authority As %String, since As %String = "2000-01-01 00:00:00") As %DynamicArray
+ClassMethod ForPatientOfAuthority(patientId As %String, authority As %String, since As %String = "2000-01-01 00:00:00") As %DynamicArray
 {
     Set out = []
     If patientId = "" Quit out
