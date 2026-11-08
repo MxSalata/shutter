@@ -81,23 +81,25 @@ export function CaseTechLine({ c }: { c: CaseSummary }) {
           {c.production ? <Fact hint="The production it came in by">{c.production}</Fact> : null}
         </Group>
       ) : null}
-      <Group gap={4} wrap="wrap" data-testid="case-tech-trace">
-        {c.ensSessionId ? (
-          <TraceId href={c.links?.visualTrace ?? ''} what={`the Visual Trace of session ${c.ensSessionId}`}>
-            {`session ${c.ensSessionId}`}
-          </TraceId>
-        ) : null}
-        {c.sourceHeaderId ? (
-          <TraceId
-            href={base ? messageContentsLink(base, c.sourceHeaderId) : ''}
-            what={`message ${c.sourceHeaderId}, the HL7 message whose delivery failed`}
-          >
-            {`header ${c.sourceHeaderId}`}
-          </TraceId>
-        ) : null}
-        {entry ? <CodeChip fz="xs">{`catalogue ${entry}`}</CodeChip> : null}
-        {plan ? <Fact hint="The current plan's version and the start of its digest">{plan}</Fact> : null}
-      </Group>
+      {c.ensSessionId || c.sourceHeaderId || entry || plan ? (
+        <Group gap={4} wrap="wrap" data-testid="case-tech-trace">
+          {c.ensSessionId ? (
+            <TraceId href={c.links?.visualTrace ?? ''} what={`the Visual Trace of session ${c.ensSessionId}`}>
+              {`session ${c.ensSessionId}`}
+            </TraceId>
+          ) : null}
+          {c.sourceHeaderId ? (
+            <TraceId
+              href={base ? messageContentsLink(base, c.sourceHeaderId) : ''}
+              what={`message ${c.sourceHeaderId}, the HL7 message whose delivery failed`}
+            >
+              {`header ${c.sourceHeaderId}`}
+            </TraceId>
+          ) : null}
+          {entry ? <CodeChip fz="xs">{`catalogue ${entry}`}</CodeChip> : null}
+          {plan ? <Fact hint="The current plan's version and the start of its digest">{plan}</Fact> : null}
+        </Group>
+      ) : null}
     </Stack>
   );
 }

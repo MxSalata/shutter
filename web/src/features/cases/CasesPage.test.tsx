@@ -463,6 +463,14 @@ describe('the Technical line: the message, where it came in, the trace and the p
     expect(within(trace).queryByRole('link')).not.toBeInTheDocument();
   });
 
+  it('leaves out the trace line of a case with no session, header or plan', () => {
+    renderUi(<CasesTable items={[{ ...base, ensSessionId: '', sourceHeaderId: '' }]} />, {
+      detail: 'technical',
+    });
+    expect(screen.getByTestId('case-tech')).toBeInTheDocument();
+    expect(screen.queryByTestId('case-tech-trace')).not.toBeInTheDocument();
+  });
+
   it("adds nothing of the patient: not the hospital number, the authority or the message's patient fields", () => {
     renderUi(<CasesTable items={[recorded]} />, { detail: 'technical' });
     const line = screen.getByTestId('case-tech');
