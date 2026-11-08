@@ -141,7 +141,7 @@ Method TestTheStoredRun()
     Set last = ##class(Shutter.Store.AgentRun).LastLive()
     Do $$$AssertTrue($ISOBJECT(last) && (last.model = "hidden"), "the health route's last live run: " _ $SELECT($ISOBJECT(last): last.%ToJSON(), 1: "none"))
     // A row as an older build stored it, written past the class.
-    Set id = run.%Id(), err = "ID 'AI.LLM." _ k1 _ "'"
+    Set id = run.%Id(), err = "ID 'AI.LLM." _ k1 _ "'", run = ""
     &sql(UPDATE Shutter_Store.AgentRun SET Model = :k2, ProviderConfig = :k1, Error = :err WHERE ID = :id)
     Do $$$AssertTrue(##class(Shutter.Util.Secret).RepairRuns() >= 1, "the repair changes it")
     Set run = ##class(Shutter.Store.AgentRun).%OpenId(id, 0)

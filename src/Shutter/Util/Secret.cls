@@ -86,14 +86,13 @@ ClassMethod RepairRuns() As %Integer
 {
     Set n = 0
     Try {
-        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID, Model, ProviderConfig FROM Shutter_Store.AgentRun WHERE Model IS NOT NULL OR ProviderConfig IS NOT NULL")
+        // By SQL on both sides, so a copy of the row already open in this process is not what is written back.
+        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID, Model, ProviderConfig, Error FROM Shutter_Store.AgentRun WHERE Model IS NOT NULL OR ProviderConfig IS NOT NULL")
         While (rs.%SQLCODE = 0) && rs.%Next() {
-            Continue:'(..Looks(rs.%Get("Model")) || ..Looks(rs.%Get("ProviderConfig")))
-            Set run = ##class(Shutter.Store.AgentRun).%OpenId(rs.%Get("ID"))
-            Continue:'$ISOBJECT(run)
-            Set run.Error = ..Scrub(run.Error, $LISTBUILD(run.Model, run.ProviderConfig))
-            Set run.Model = ..Clean(run.Model), run.ProviderConfig = ..Clean(run.ProviderConfig)
-            If $$$ISOK(run.%Save()) Set n = n + 1
+            Set model = rs.%Get("Model"), config = rs.%Get("ProviderConfig")
+            Continue:'(..Looks(model) || ..Looks(config))
+            Set u = ##class(%SQL.Statement).%ExecDirectNoPriv(, "UPDATE Shutter_Store.AgentRun SET Model = ?, ProviderConfig = ?, Error = ? WHERE ID = ?", ..Clean(model), ..Clean(config), ..Scrub(rs.%Get("Error"), $LISTBUILD(model, config)), rs.%Get("ID"))
+            If u.%SQLCODE = 0 Set n = n + 1
         }
     } Catch ex {
     }
