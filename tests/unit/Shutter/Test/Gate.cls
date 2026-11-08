@@ -297,7 +297,8 @@ Method TestFurtherMessagesAreReadAgainBeforeTheWrite()
 
 /// The site's choice for another visit's in-patient movement, through the gate at dispatch on a real index row: stop holds the
 /// write and names the other visit; show, and a profile that doesn't say (the shipped default since v1.47), let it through
-/// with the other visit counted for the plan. A cancel on the case's own visit stops whichever the site chose.
+/// with the other visit counted for the plan when the snapshot the approval stands on showed it. A cancel on the case's own
+/// visit stops whichever the site chose.
 Method TestFurtherMovementStopOrShow()
 {
     Set row = ##class(Shutter.Index.Message).%New()
@@ -312,7 +313,7 @@ Method TestFurtherMovementStopOrShow()
         Do ..OnAfterOneTest()
         For setting = "show", "unset" {
             Set profile = $SELECT(setting = "show": {"further_messages": {"in_patient_movement": "show"}}, 1: {"further_messages": null})
-            Set run = ..Run({"name": ("a site whose profile says " _ setting), "approval": {}, "profile": (profile)})
+            Set run = ..Run({"name": ("a site whose profile says " _ setting), "approval": {}, "profile": (profile), "summary": {"further_messages": {"identifier": "read", "stops": [], "shows": [{"why": "other_visit", "event": "admit", "message_type": "ADT_A01", "visit_number": "ENC-UT-NEW", "event_time": "2026-10-20T09:00:00Z", "control_id": "UT-NEW-2"}], "unread": ""}}})
             Do $$$AssertEquals(..Found(run.checks, "ordering", "FURTHER_MOVEMENT"), "", setting _ ": no further-movement block")
             Do $$$AssertEquals(..Found(run.checks, "ordering", "NO_FURTHER_MOVEMENT"), "pass", setting _ ": the check passes")
             Do $$$AssertTrue(..Detail(run.checks, "ordering", "NO_FURTHER_MOVEMENT") [ "shown on the plan", setting _ ": and counts the other visit for the plan")
@@ -324,6 +325,57 @@ Method TestFurtherMovementStopOrShow()
         Do $$$AssertStatusOK(row.%Save(), "the row is a cancel on the case's own visit")
         Set run = ..Run({"name": "a cancel on the case's own visit, with show", "approval": {}, "profile": {"further_messages": {"in_patient_movement": "show"}}})
         Do $$$AssertEquals(..Found(run.checks, "ordering", "FURTHER_MOVEMENT"), "block", "show: a cancel of this visit still stops")
+    } Catch ex {
+        Do $$$AssertTrue(0, "no error: " _ ex.DisplayString())
+    }
+    Do ##class(Shutter.Index.Message).%DeleteId(row.%Id())
+}
+
+/// A new admission on another visit that reaches the engine after the plan went for approval, on a site that shows another
+/// visit's movement (S32 on a show profile): the approval was given on a plan that did not show it, so the dispatch gate
+/// doesn't pass the write. It answers unknown with FURTHER_MOVEMENT_NEW, naming the new visit, which the workflow refreshes:
+/// the fresh snapshot shows the row, its material digest changes and the approval is void. The connector, reading at the
+/// moment of the write, refuses it too. A site that says stop still stops, with FURTHER_MOVEMENT.
+Method TestANewVisitAfterTheApprovalOnAShowProfile()
+{
+    Set row = ##class(Shutter.Index.Message).%New()
+    Set row.DocId = "UT-GATE-FURTHER-3", row.PatientId = "MRN-UT1", row.PatientIdAuthority = "HOSP", row.VisitNumber = "ENC-UT-NEW", row.Event = "admit", row.MessageType = "ADT_A01"
+    Set row.ControlId = "UT-NEW-3", row.EventTime = "2026-10-20T09:00:00Z", row.TimeCreated = "2099-01-01 00:00:00"
+    Do $$$AssertStatusOK(row.%Save(), "the index's row is saved")
+    Try {
+        For setting = "show", "unset" {
+            Set profile = $SELECT(setting = "show": {"further_messages": {"in_patient_movement": "show"}}, 1: {"further_messages": null})
+            Set run = ..Run({"name": ("a new visit after the approval, " _ setting), "approval": {}, "profile": (profile)})
+            Do $$$AssertEquals(..Found(run.checks, "ordering", "FURTHER_MOVEMENT_NEW"), "unknown", setting _ ": the dispatch gate doesn't pass a visit the plan did not show")
+            Do $$$AssertTrue(..Detail(run.checks, "ordering", "FURTHER_MOVEMENT_NEW") [ "ENC-UT-NEW", setting _ ": and names the new visit")
+            Do $$$AssertEquals(..Found(run.checks, "ordering", "NO_FURTHER_MOVEMENT"), "", setting _ ": no pass beside it")
+            Do $$$AssertTrue(run.response.Outcome '= "pass", setting _ ": the write does not go (" _ run.response.Outcome _ ")")
+            Set wf = ##class(Shutter.Process.CaseWorkflow).%New("Case Workflow")
+            Do $$$AssertTrue(wf.OnlyRefreshable(run.response), setting _ ": the workflow refreshes the evidence, so the approval is judged again (" _ run.response.Summary _ ")")
+            Do ..OnAfterOneTest()
+        }
+        Set run = ..Run({"name": "a new visit after the approval, stop", "approval": {}, "profile": {"further_messages": {"in_patient_movement": "stop"}}})
+        Do $$$AssertEquals(..Found(run.checks, "ordering", "FURTHER_MOVEMENT"), "block", "stop: the gate still blocks")
+        Do $$$AssertEquals(..Found(run.checks, "ordering", "FURTHER_MOVEMENT_NEW"), "", "stop: with the stop alone")
+        Do ..OnAfterOneTest()
+        Set run = ..Run({"name": "a new visit at the proposal, show", "profile": {"further_messages": {"in_patient_movement": "show"}}, "summary": {"further_messages": {"identifier": "read", "stops": [], "shows": [{"why": "other_visit", "event": "admit", "message_type": "ADT_A01", "visit_number": "ENC-UT-NEW", "event_time": "2026-10-20T09:00:00Z", "control_id": "UT-NEW-3"}], "unread": ""}}})
+        Do $$$AssertEquals(..Found(run.checks, "ordering", "NO_FURTHER_MOVEMENT"), "pass", "proposal: the snapshot's own row shows on the plan")
+        Do $$$AssertEquals(..Found(run.checks, "ordering", "FURTHER_MOVEMENT_NEW"), "", "proposal: nothing is new to the snapshot itself")
+        Do ..OnAfterOneTest()
+        // The connector: the case's snapshot doesn't show the new visit, so the write is refused with nothing sent.
+        Do ..ChangeProfile({"further_messages": {"in_patient_movement": "show"}})
+        Set case = ..NewCase({})
+        Set snap = ##class(Shutter.Store.Snapshot).Begin(case, 300)
+        Do $$$AssertStatusOK(snap.Seal(..Fill(..BaseSummary(), case.OperationKey)), "the snapshot is sealed")
+        Do $$$AssertStatusOK(case.SetSnapshot(snap), "and is the case's")
+        Set request = ##class(Shutter.Msg.WardOperation).%New()
+        Set request.Purpose = "recovery", request.CaseId = case.CaseId, request.OperationKey = case.OperationKey
+        Set ward = ##class(Shutter.Operation.Ward).%New("UT Ward")
+        Do $$$AssertStatusOK(ward.OnWardOperation(request, .response), "the connector answers")
+        Do $$$AssertEquals(response.Outcome, "refused", "show: the connector refuses a visit the snapshot did not show")
+        Do $$$AssertEquals(response.ReasonCode, "further_movement", "for this reason")
+        Do $$$AssertTrue(response.Error [ "ENC-UT-NEW", "and says what it found: " _ response.Error)
+        Do $$$AssertEquals(response.HttpStatus, "", "nothing was sent")
     } Catch ex {
         Do $$$AssertTrue(0, "no error: " _ ex.DisplayString())
     }
