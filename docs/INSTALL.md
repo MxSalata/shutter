@@ -655,8 +655,11 @@ another message of a session that has already handed one to Shutter gets no case
 
 Say these plainly to whoever owns the feed.
 
-- **Further messages for the patient.** Before a write Shutter reads the patient on every visit it can see, and stops on an
-  in-patient movement on another visit (`further_messages` in the site profile; CONTRACTS 6.5). It can't see a change made by hand
+- **Further messages for the patient.** Before a write Shutter reads the patient on every visit it can see. By default an
+  in-patient movement on another visit shows on the plan and doesn't stop the resend; a cancel, merge or discharge on the case's own
+  visit, or a change to the record, still stops it. A stored profile that doesn't name the setting reads it so after an upgrade. To have another visit's
+  movement stop the write for a person, as 1.1.0 and 1.1.1 did, set `"further_messages": {"in_patient_movement": "stop"}` in the site profile's JSON (`GET` and `PUT /api/shutter/site-profile`,
+  section 9; the Site profile page keeps it as stored). The demo's profile keeps the stop (CONTRACTS 6.4 and 6.5). It can't see a change made by hand
   at the receiver, or a message on a route the index doesn't watch once the index has passed it. In a watched namespace it reads every
   HL7 header since the case's own at each write, for at most 30 seconds (`further_messages.scan_seconds`), and a read that runs out blocks the write (`FURTHER_NOT_READ`). Nothing holds the feed during a
   correction, and a person who reinvestigates a stopped case meets the same stop until they close it by hand.
