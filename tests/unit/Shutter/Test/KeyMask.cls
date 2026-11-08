@@ -215,7 +215,7 @@ ClassMethod Calls(code As %String, method As %String) As %Boolean
     Set code = $TRANSLATE(code, $CHAR(13))
     For i = 1:1:$LENGTH(code, $CHAR(10)) {
         Set line = $ZSTRIP($PIECE(code, $CHAR(10), i), "<W")
-        Continue:($EXTRACT(line, 1, 2) = "//") || ($EXTRACT(line, 1) = ";") || ($EXTRACT(line, 1, 2) = "#;")
+        Continue:(($EXTRACT(line, 1, 2) = "//") || ($EXTRACT(line, 1) = ";") || ($EXTRACT(line, 1, 2) = "#;"))
         If line [ ("##class(Shutter.Util.Secret)." _ method _ "(") Return 1
     }
     Quit 0
