@@ -200,7 +200,12 @@ ClassMethod Classify(chain As Shutter.Store.Chain) As %Status
     // Interleaved chains are the board's whatever the entries say (7.2).
     If (chain.Kind = "interleaved") && (decides = "policy") Set decides = "board"
     Set chain.Policy = "path"
-    If decides = "policy" {
+    // An item showing another visit's movement (Shutter.Util.ShownVisit) is for a person to read, and the incident's task
+    // lists chains, not those lines: the chain keeps its policy match but goes on each case's own path, where the case asks
+    // a person with the line on its plan.
+    Set shown = $SELECT(decides = "policy": ##class(Shutter.Util.ShownVisit).InChain(chain), 1: "")
+    If shown '= "" Do chain.Incident.Note("note", "Chain " _ chain.Seq _ " leaves the shared approval for each case's own path: case " _ shown _ " shows another visit's movement for the patient, which a person must read", "system")
+    If (decides = "policy") && (shown = "") {
         Set tier = ##class(Shutter.Store.SiteProfile).TierOf(chain.Incident.Receiver)
         Set policy = ##class(Shutter.Store.SiteProfile).Policy(tier, chain.Kind)
         If policy = "board" { Set decides = "board" } Else { Set chain.Policy = policy }

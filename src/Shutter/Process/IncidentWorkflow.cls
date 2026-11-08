@@ -174,7 +174,7 @@ Method Classify(incident As Shutter.Store.Incident) As %Status
     Set shared = 0, perChain = 0, automatic = 0, own = 0
     For i = 1:1:n {
         Set ch = chains.GetAt(i)
-        If ch.Decides '= "policy" {
+        If (ch.Decides '= "policy") || (ch.Policy = "path") {
             Set ch.State = "approved", own = own + 1
         } ElseIf ch.Policy = "automatic" {
             Set ch.State = "approved", automatic = automatic + 1
