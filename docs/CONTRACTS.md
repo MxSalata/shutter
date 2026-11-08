@@ -429,7 +429,7 @@ step from SQL is `Shutter.Util.Workflow.Decide(caseId, action, digest, comment)`
 Shutter_Util.Workflow_Decide(...)`): the actor is the SQL session's user, never an argument, the same role check
 applies, and an approval with an empty digest is refused (`no_digest`). An approver who decides in the Management
 Portal's Workflow inbox pastes the plan digest from the task's message into its `PlanDigest` field; the task's form
-starts empty, so pressing Approve without it binds nothing and the case blocks (or the incident's chains are rejected). The body of `POST /cases/{id}/approvals` is `{decision: "approve" | "reject", planDigest, expectedVersion, comment?}` (v1.39, written down): `expectedVersion` is the case's `version` the caller read and is required; 400 `bad_request` for a decision outside the two; 409 `wrong_state` (with `approval` when a decision was already taken) unless the case awaits approval; 409 `stale_version` with `currentDigest` when `planDigest` is not the current plan's digest, and with `currentVersion` when `expectedVersion` is missing or is not the case's version, so the caller reads the case again and decides on what it sees.
+starts empty, so pressing Approve without it binds nothing and the case blocks (or the incident's chains are rejected). The body of `POST /cases/{id}/approvals` is `{decision: "approve" | "reject", planDigest, expectedVersion, comment?}` (v1.39, written down): `expectedVersion` is the case's `version` the caller read and is required; 400 `bad_request` for a decision outside the two; 409 `wrong_state` (with `approval` when a decision was already taken) unless the case awaits approval, and also when another decision reached the case's Workflow task first, another approver has accepted the task, or no task is open: two decisions on one task at the same instant are taken one at a time, so one stands, and the other's 409 carries `approval` with the decision, approver and time of the one that stands; 409 `stale_version` with `currentDigest` when `planDigest` is not the current plan's digest, and with `currentVersion` when `expectedVersion` is missing or is not the case's version, so the caller reads the case again and decides on what it sees.
 
 `POST /cases/{id}/close` with `{reason}` (v1.14; `Shutter_Operate`, `X-Requested-With`, an `Idempotency-Key`) answers 202 `{caseId, state: "closing", requestedBy, reason}` and sends `Shutter.Msg.CaseClose` to the Case Workflow item: the case resolves with disposition `handled_by_hand`, its state event names the reason and the latest escalation, the current approval is revoked and an open approval task is cancelled; 400 `bad_request` when the body is not a JSON object or `reason` is empty, 404 `not_found`, 409 `wrong_state` unless the case is escalated, blocked or failed, and 409 `stale_version` (with `currentVersion`) when the body's optional `expectedVersion` is not the case's version. Every draft or queued escalation email of the case is cancelled, whatever its seq, so the team is not asked to correct a case already handled, and the state event says how many ("; 2 pending emails cancelled"); a failed one stays failed as history; and no escalation of a case that is no longer blocked, escalated or failed can be edited or sent (`PATCH` and `send` answer 409 `wrong_state`, naming the case's state) (v1.21). It is how a case the team corrected by hand (a withheld merge or cancel, an escalation the PAS team acted on) is closed; `reinvestigate` stays for a correction the receiver's state can prove. The record of a hand closure is the
 state event (its actor is who closed it, its time when, its text the reason and the escalation followed, its `ref` that
@@ -1033,6 +1033,10 @@ the framework). The Dockerfile runs it, and a site with Java runs it once by han
 - An error raising a task, or the Workflow item answering its call with an error, closes nothing: the chains stay
   `awaiting_approval`, no case fails, an `error` event and an alert name the incident, once for each cause, and the workflow
   tries again every 5 minutes, reading the approval target afresh. Until a task exists an approval answers 409 `wrong_state`.
+  The Workflow item defers its reply before it makes the task, so an error inside it never answers the call: the workflow
+  makes no call while the target's Workflow role is not defined, and 30 seconds after a call it checks that the item made
+  the task. A request the item finished with, 10 seconds or more before, and no task made from it is that error; a request
+  still queued is checked again 5 minutes later, so a slow item never gets a second task.
 
 ### 7.4 Release
 
@@ -1087,7 +1091,7 @@ the framework). The Dockerfile runs it, and a site with Java runs it once by han
   rule), the plan's digest (the plan is recorded in full and its digest is recomputable from it, 7.2), the approvals,
   progress.
 - `POST /incidents/{id}/approvals` with `planDigest`, `decision` (`approve` or `reject`; `action` is accepted too),
-  `comment`; `Idempotency-Key`; 409 `plan_changed` when the digest moved, 409 `wrong_state` when nothing awaits approval; the 202 reply carries `approver`, the signed-in user (section 5).
+  `comment`; `Idempotency-Key`; 409 `plan_changed` when the digest moved, 409 `wrong_state` when nothing awaits approval, and when another decision reached the incident's or chain's task first (its `approval` names that decision, approver and time); the 202 reply carries `approver`, the signed-in user (section 5).
   `POST /incidents/{id}/chains/{seq}/approvals` for `per_chain`.
 - `GET /incidents/{id}/events`; `GET /incidents/{id}/approvals`. `GET /incidents/{id}` also carries the plan, the
   approvals, the Workflow tasks and the workflow trace link.

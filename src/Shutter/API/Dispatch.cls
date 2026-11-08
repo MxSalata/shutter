@@ -652,7 +652,7 @@ ClassMethod CaseApprove(caseId As %String) As %Status
     If '$ISOBJECT(out) Set out = {"result": (result)}
     If out.%GetTypeOf("error") '= "unassigned" {
         If $LISTFIND($LISTBUILD("not_in_role", "forbidden"), ##class(Shutter.Util.Json).Str(out, "code")) Quit ..Fail("403 Forbidden", "forbidden", out.error)
-        Quit ..Fail("409 Conflict", "wrong_state", out.error)
+        Quit ..DecisionRefused(out, case)
     }
     Set reply = {}
     Set reply.taskId = out."task_id", reply.decision = decision, reply.caseId = caseId, reply.approver = out.user
@@ -661,6 +661,31 @@ ClassMethod CaseApprove(caseId As %String) As %Status
     Set %response.Status = "202 Accepted"
     Write text
     Quit $$$OK
+}
+
+/// The 409 for a decision the task refused. When another decision reached the task first (decided), another approver
+/// has accepted it (assigned_to_other) or it is no longer open (no_task), the reply carries the approval block a
+/// decision on a decided case gets (CONTRACTS 5): from the task when it names its decision, else from the case's
+/// current approval, so the approver who lost the race is told who decided, what and when.
+ClassMethod DecisionRefused(out As %DynamicObject, case As Shutter.Store.Case = "") As %Status
+{
+    Set code = ##class(Shutter.Util.Json).Str(out, "code"), extra = {}
+    If $LISTFIND($LISTBUILD("decided", "assigned_to_other", "no_task"), code) {
+        Set action = ##class(Shutter.Util.Json).Str(out, "action")
+        If action '= "" {
+            Set extra.approval = {}
+            Set extra.approval.decision = $CASE(action, "Approve": "approved", "Reject": "rejected", "Cancel": "cancelled", : $ZCONVERT(action, "L"))
+            Set extra.approval.approver = out.user, extra.approval.decidedAt = out.completedAt
+        } ElseIf $ISOBJECT(case) {
+            Do case.%Reload()
+            Set a = case.CurrentApproval
+            If $ISOBJECT(a) && (a.Decision '= "") {
+                Set extra.approval = {} Set extra.approval.decision = a.Decision, extra.approval.approver = a.Approver, extra.approval.decidedAt = a.DecidedAt, extra.approval.planDigest = a.PlanDigest
+                Quit ..Fail("409 Conflict", "wrong_state", out.error _ "; " _ a.Decision _ " by " _ a.Approver _ " at " _ a.DecidedAt, extra)
+            }
+        }
+    }
+    Quit ..Fail("409 Conflict", "wrong_state", out.error, extra)
 }
 
 ClassMethod CaseAttempts(caseId As %String) As %Status
@@ -1466,7 +1491,7 @@ ClassMethod IncidentDecide(id As %String, seq As %String) As %Status
     If '$ISOBJECT(out) Set out = {"result": (result)}
     If out.%GetTypeOf("error") '= "unassigned" {
         If $LISTFIND($LISTBUILD("not_in_role", "forbidden"), ##class(Shutter.Util.Json).Str(out, "code")) Quit ..Fail("403 Forbidden", "forbidden", out.error)
-        Quit ..Fail("409 Conflict", "wrong_state", out.error)
+        Quit ..DecisionRefused(out)
     }
     Set reply = {}
     Set reply.taskId = out."task_id", reply.decision = decision, reply.incidentId = id, reply.approver = out.user

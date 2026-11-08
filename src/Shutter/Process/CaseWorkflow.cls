@@ -1076,6 +1076,17 @@ Method PolicyPath(case As Shutter.Store.Case, summary As %DynamicObject, cat As 
     }
     // A released item is authorised by its incident (7.3): by site policy, or under the incident's approval.
     If ..Release Set ..Policy = $SELECT(..ReleasePolicy = "incident": "incident", ..ReleasePolicy = "automatic": "automatic", 1: ..Policy)
+    // Another visit's movement the profile shows goes on the plan for a person to read (Shutter.Util.ShownVisit), so no
+    // write carries it with nobody reading: an automatic release waits for a person, and an item released by its incident
+    // that shows one on fresh evidence stops, since the incident's approval never listed it.
+    If ((..Policy = "automatic") || (..Policy = "incident")) && ##class(Shutter.Util.ShownVisit).In(summary) {
+        If ..Release && (..ReleasePolicy '= "path") {
+            Set case.Headline = "Not covered by the incident's approval: another visit's movement is shown for this patient"
+            Quit case.Transition("blocked", "Chain " _ ..ChainSeq _ " item " _ ..ChainPosition _ " of incident " _ ..IncidentId _ ": fresh evidence shows another visit's movement for this patient, which the incident's " _ $SELECT(..Policy = "incident": "approval", 1: "policy") _ " did not show anyone; nothing was dispatched, and a person must look", "system", "incident:" _ ..IncidentId)
+        }
+        Set ..Policy = "approval", heldBack = 1
+        Do case.Note("note", "Another visit's movement is shown for this patient (further_messages.in_patient_movement show): a person approves, so that someone reads it", "system")
+    }
     // An automatic release writes with no person, so the case's source must be proved (CONTRACTS 11); otherwise a person approves.
     // A lost admission held back above is asked too, so the person is told both.
     If (..Policy = "automatic") || heldBack {
@@ -1520,7 +1531,9 @@ Method OnApprovalTimeout(case As Shutter.Store.Case, round As %Integer) As %Stat
     If round '= ..Round { $$$TRACE("An approval wait from round " _ round _ " ended; the case is in round " _ ..Round) Quit $$$OK }
     If case.State '= "awaiting_approval" { $$$TRACE("The approval wait ended; the case is " _ case.State _ ", so nothing is due") Quit $$$OK }
     Set wait = ..WaitWords(..ApprovalWaitSeconds)
-    Do ..CancelOpenTask(case, "system", "no decision within " _ wait)
+    Do ..CancelOpenTask(case, "system", "no decision within " _ wait, .decided)
+    // A decision that reached the task first stands, and its answer is on its way to this instance.
+    If decided { $$$TRACE("The approval wait ended as a decision reached the task; its answer decides the case") Quit $$$OK }
     Set case.Headline = "No approval within " _ wait _ "; a person must decide"
     Quit case.Transition("escalated", "The approval task got no answer within " _ wait _ "; it is cancelled, and the plan waits for a reinvestigation or a hand close", "system")
 }
@@ -1748,13 +1761,19 @@ Method OnAbandon(request As Shutter.Msg.CaseAbandon, Output response As %Library
 /// case. The engine records the actor as the person who closed it when the Workflow role lets it; the actor "system" (the
 /// approval wait ran out) is nobody's name, so no task is assigned to it, and the event says system. The task's comment
 /// and the case's approval event say why ("Cancelled: <why>"). Nothing here fails the caller: a refusal is logged and
-/// noted on the case.
-Method CancelOpenTask(case As Shutter.Store.Case, actor As %String, why As %String) As %Status
+/// noted on the case. A task decided meanwhile, or one a decision holds, is left as it is, with decided set.
+Method CancelOpenTask(case As Shutter.Store.Case, actor As %String, why As %String, Output decided As %Boolean) As %Status
 {
+    Set decided = 0
     Set task = ##class(Shutter.Util.Workflow).OpenTaskFor(case.CaseId)
     If '$ISOBJECT(task) Quit $$$OK
     Set who = $SELECT(actor = "": "a person", 1: actor)
     Set taskId = task.%Id()
+    // A decision taken meanwhile stands: the task is cancelled only while it is still open, under the decision lock.
+    Set refused = ##class(Shutter.Util.Workflow).Claim(task)
+    If refused '= "" { Set decided = 1 $$$TRACE("Approval task " _ taskId _ " was not cancelled: " _ refused) Quit $$$OK }
+    // The lock is given back whatever happens, or this long-lived job would hold it and every later decision be busy.
+    Try {
     If (actor '= "") && (actor '= "system") {
         // The engine records who closed it; a refusal (the user is outside the Workflow role) changes nothing below.
         Set asc = ##class(EnsLib.Workflow.Engine).AssignTask(task, actor)
@@ -1771,6 +1790,10 @@ Method CancelOpenTask(case As Shutter.Store.Case, actor As %String, why As %Stri
     } Else {
         Do case.Note("approval", "Approval task " _ taskId _ " cancelled: " _ why, who, "task:" _ taskId)
     }
+    } Catch ex {
+        $$$LOGWARNING("The approval task " _ taskId _ " of case " _ case.CaseId _ " could not be cancelled: " _ ex.DisplayString())
+    }
+    Do ##class(Shutter.Util.Workflow).Release(task)
     Quit $$$OK
 }
 

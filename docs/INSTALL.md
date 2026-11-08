@@ -234,7 +234,8 @@ that production is stopped, purged or rerouted.
 Load the module's classes into the production's namespace without the demo installer
 (`$SYSTEM.OBJ.LoadDir("/path/to/module/src/", "ck", , 1)`), then
 `SELECT Shutter.Setup_InstallInto('Your.Production', '/path/to/module/')`, with your site's own production name in
-place of `Your.Production` (not the demo's `Hospital.Production`). It refuses an empty or unknown production name, and
+place of `Your.Production` (not the demo's `Hospital.Production`). It refuses an empty or unknown production name, a name in the
+`Hospital.`, `Downstream.` or `Shutter.` packages (Shutter's own demo classes), and
 then:
 
 - records the name in `^Shutter.Config("production")` and runs the namespace-level parts of a non-demo install (no
@@ -409,10 +410,11 @@ long-lived jobs keep the earlier code until then.
 **Upgrading to 1.1.2.** Run the install once, or load the newer tree, and restart the production as above. Then:
 
 - **Another visit's in-patient movement shows on the plan by default** instead of stopping the resend (section 10). A
-  stored profile that doesn't name `further_messages.in_patient_movement` reads `show` after the upgrade, so at a tier the
-  site releases by policy such a write now goes with no person. To keep the stop of 1.1.0 and 1.1.1, set
+  stored profile that doesn't name `further_messages.in_patient_movement` reads `show` after the upgrade. A write that
+  shows such a movement still waits for a person at a tier the site releases by policy, and an incident's chain that
+  shows one leaves the shared approval for its own case. To keep the stop of 1.1.0 and 1.1.1, set
   `"further_messages": {"in_patient_movement": "stop"}` in the site profile's JSON before the upgrade. A demo install keeps
-  the stop.
+  the stop, whoever saved its profile.
 - **A large incident's approval.** An incident above about four chains, which 1.1.1 abandoned with every case `failed`,
   now raises one task that lists the first chains and binds them all (CONTRACTS 7.3).
 
@@ -686,7 +688,7 @@ Say these plainly to whoever owns the feed.
 
 - **Further messages for the patient.** Before a write Shutter reads the patient on every visit it can see. By default an
   in-patient movement on another visit shows on the plan and doesn't stop the resend; a cancel, merge or discharge on the case's own
-  visit, or a change to the record, still stops it. A stored profile that doesn't name the setting reads it so after an upgrade. To have another visit's
+  visit, or a change to the record, still stops it. A stored profile that doesn't name the setting reads it so after an upgrade on a site's install, and stop on a demo's. To have another visit's
   movement stop the write for a person, as 1.1.0 and 1.1.1 did, set `"further_messages": {"in_patient_movement": "stop"}` in the site profile's JSON (`GET` and `PUT /api/shutter/site-profile`,
   section 9; the Site profile page keeps it as stored). The demo's profile keeps the stop (CONTRACTS 6.4 and 6.5). It can't see a change made by hand
   at the receiver, or a message on a route the index doesn't watch once the index has passed it. In a watched namespace it reads every
