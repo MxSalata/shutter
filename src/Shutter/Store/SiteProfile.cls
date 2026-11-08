@@ -25,7 +25,9 @@ Property UpdatedBy As %String(%JSONFIELDNAME = "updatedBy", MAXLEN = 160);
 /// current, no authoritative source, unconditional resends forbidden, merges forbidden (they go to the PAS team, T31),
 /// a person's approval for every single and ordered chain at every tier (v1.1.0, 8 Nov 2026: "approval on every tier by
 /// default"; the board for interleaved chains, whose plan a person then approves), and an operator may close a case by hand.
-/// The demo keeps the earlier table as its own, labelled setting (Shutter.Setup.DemoProfilePolicy).
+/// The demo keeps the earlier table as its own, labelled setting (Shutter.Setup.DemoProfilePolicy). Another visit's
+/// in-patient movement shows on the plan rather than stopping the write (v1.47, 8 Nov 2026: "Relax it by default"); a site
+/// that wants the stop says further_messages.in_patient_movement: stop, and the demo keeps the stop it had.
 ClassMethod Default() As %DynamicObject
 {
     Set p = {}
@@ -39,7 +41,7 @@ ClassMethod Default() As %DynamicObject
     Set p.incident = {"threshold": 5, "window_minutes": 10, "quiet_seconds": 60}
     Set p."model_content" = {"free_text": false}
     Set p.feed = {"time_zone": "Europe/London", "prevent_failures": false}
-    Set p."further_messages" = {"in_patient_movement": "stop", "admission_not_found": "person", "scan_seconds": (..#SCANSECONDS)}
+    Set p."further_messages" = {"in_patient_movement": "show", "admission_not_found": "person", "scan_seconds": (..#SCANSECONDS)}
     Quit p
 }
 
@@ -539,10 +541,10 @@ ClassMethod SourceSkewSeconds() As %Integer
     Quit 300
 }
 
-/// What a further in-patient movement for the patient on another visit does to a write: stop (the default) or show.
+/// What a further in-patient movement for the patient on another visit does to a write: stop, or show (the default since v1.47).
 ClassMethod FurtherMovement() As %String
 {
-    Quit ..FurtherSetting("in_patient_movement", "stop")
+    Quit ..FurtherSetting("in_patient_movement", "show")
 }
 
 /// Who releases a failed admission the receiver answers 404 for: person (the default) or policy, the tier's own.

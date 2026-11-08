@@ -67,6 +67,18 @@ Method TestLivePolicy()
     Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).FurtherMovement(), "show", "it reads the shipped show until the install runs")
     Do $$$AssertStatusOK(##class(Shutter.Setup).DemoProfilePolicy(seed, 1), "a reinstall of the demo")
     Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).FurtherMovement(), "stop", "and the demo's stop is back")
+    // An older live hospital's profile (its own tier 2, no further_messages): a reinstall adds the demo's stop and nothing else.
+    Set tier2 = p.policy.%Get("2"), tier2.single = "approval"
+    Do $$$AssertStatusOK(##class(Shutter.Store.SiteProfile).Store(p.%ToJSON(), seed _ " (demo) (live hospital)", "test", "", .v), "an older live hospital's profile")
+    Do $$$AssertStatusOK(##class(Shutter.Setup).DemoProfilePolicy(seed, 1), "a reinstall of the live hospital")
+    Set row = ##class(Shutter.Store.SiteProfile).Row()
+    Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).FurtherMovement(), "stop", "the demo's stop is back")
+    Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).Policy(2, "single"), "approval", "and the live hospital's tier 2 stands")
+    Do $$$AssertEquals(row.Source, seed _ " (demo) (live hospital)", "with its mark")
+    Set version = row.Version
+    Do $$$AssertStatusOK(##class(Shutter.Setup).DemoProfilePolicy(seed, 1), "again: idempotent")
+    Do $$$AssertStatusOK(##class(Shutter.Setup).LiveProfilePolicy(seed, 1), "and the live policy after it")
+    Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).Row().Version, version, "the version did not move")
     // A person's own profile is theirs.
     Set p = ##class(Shutter.Store.SiteProfile).Default()
     Do $$$AssertStatusOK(##class(Shutter.Store.SiteProfile).Store(p.%ToJSON(), "api", "approver", "", .v), "a profile a person saved")
