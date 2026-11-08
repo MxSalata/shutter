@@ -69,6 +69,38 @@ test.describe('the trial report @health', () => {
     );
   });
 
+  test("lists each group's checks first, with its facts apart under Details", async ({ page }) => {
+    await signIn(page);
+    await go(page, '/health');
+    const production = page.getByRole('region', { name: 'Production', exact: true });
+    const tables = production.getByRole('table');
+    await expect(tables).toHaveCount(2);
+    const checks = tables.nth(0);
+    const details = tables.nth(1);
+    await expect(checks.getByRole('row')).toHaveCount(4);
+    await expect(
+      checks
+        .getByRole('row')
+        .filter({ has: page.getByRole('rowheader', { name: 'Production class compiled' }) }),
+    ).toContainText('Yes');
+    const heading = production.getByRole('heading', { level: 3, name: 'Details' });
+    await expect(heading).toBeVisible();
+    await expect(details).toHaveAccessibleName('Details');
+    await expect(details.getByRole('row')).toHaveCount(6);
+    await expect(details.getByRole('rowheader', { name: 'ADT inbound folder' })).toBeVisible();
+    // The details sit under the last check, past the Details heading, and carry no mark
+    const lastCheck = await checks.getByRole('row').last().boundingBox();
+    const headingBox = await heading.boundingBox();
+    expect(headingBox!.y).toBeGreaterThan(lastCheck!.y + lastCheck!.height - 1);
+    await expect(details.locator('th svg')).toHaveCount(0);
+    await expect(checks.locator('th svg')).toHaveCount(4);
+    // A group of facts alone shows only its Details, and no count
+    const install = page.getByRole('region', { name: 'Installation and licence' });
+    await expect(install.getByRole('table')).toHaveCount(1);
+    await expect(install.getByRole('heading', { level: 3, name: 'Details' })).toBeVisible();
+    await expect(install).not.toContainText(/\bpass\b/);
+  });
+
   test('has one line of links to the groups, which move focus to the heading', async ({ page }) => {
     await signIn(page);
     await go(page, '/health');

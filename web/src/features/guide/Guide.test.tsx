@@ -18,7 +18,7 @@ import { INITIAL, type GuideProgress } from './controller';
 import { APPROVED_FOR_YOU, Guide, REPLAY_DONE } from './Guide';
 import { TrialHelpMenu } from './HelpMenu';
 import { welcomeActions } from './registry';
-import { forgetProgress, GUIDE_KEY, saveProgress } from './storage';
+import { forgetProgress, GUIDE_KEY, saveProgress, WELCOME_SNOOZE_KEY, welcomeSnoozed } from './storage';
 import { useGuide } from './store';
 
 beforeAll(() => {
@@ -152,6 +152,23 @@ describe('the guide', () => {
     await userEvent.click(within(await welcome()).getByRole('button', { name: "Don't show again" }));
     await noDialog();
     expect(stored()).toMatchObject({ version: 2, dismissed: true, at: null });
+  });
+
+  it('puts the welcome off for the visit on Explore on my own or its close button, past a reload', async () => {
+    renderApp();
+    await userEvent.click(within(await welcome()).getByRole('button', { name: 'Explore on my own' }));
+    await noDialog();
+    // A reload: the page starts again and reads the device
+    expect(localStorage.getItem(WELCOME_SNOOZE_KEY)).not.toBeNull();
+    expect(welcomeSnoozed()).toBe(true);
+    localStorage.removeItem(WELCOME_SNOOZE_KEY);
+    act(() => useGuide.setState({ snoozed: false, phase: 'welcome' }));
+    await userEvent.click(within(await welcome()).getByRole('button', { name: 'Exit guide' }));
+    await noDialog();
+    expect(useGuide.getState().snoozed).toBe(true);
+    expect(welcomeSnoozed()).toBe(true);
+    // Neither is a dismissal for good
+    expect(stored()).toBeNull();
   });
 
   it('does not welcome a visit after the tour was dismissed', async () => {

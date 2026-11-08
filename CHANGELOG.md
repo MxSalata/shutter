@@ -14,7 +14,8 @@ AI Hub features measured with no model call and on the publisher from an MCP cli
 - **A receipt whose bed is null says nothing about the bed.** The receipt check read a JSON null bed as a different bed
   (`RECEIPT_PAYLOAD_DIFFERS`), so a person got a case the receipt had settled (held-out case F03). Beds are now compared
   only when both the receipt and the operation state one; a null, missing or empty bed reads as not stated, and a stated
-  different bed still stops the close. A unit test covers each.
+  different bed still stops the close. A unit test covers each. With this check loaded over 1.1.1's code, the board's
+  reconcile closed F03 in all three held-out runs, with nothing written (8 Nov 2026, AI Hub build 109).
 - **Per-call trace lines in a replay.** A replayed run writes one trace line per recorded tool call, as a live run does,
   with the tool, ok, denied or failed, the milliseconds and the word replay, and no argument, result or error text, so
   each call is a step of its own in the Visual Trace. The tracing walk-through shows the steps and the page size that
@@ -36,9 +37,18 @@ AI Hub features measured with no model call and on the publisher from an MCP cli
 - **Another visit's movement shows on the plan by default.** `further_messages.in_patient_movement` is `show` in the
   shipped profile and when a profile doesn't say: an in-patient movement on another visit goes on the plan beside the
   resend instead of stopping it, while a cancel, merge or discharge on the case's own visit, or a change to the record,
-  still stops it. A site that wants the stop sets `stop`. The demo keeps the stop, labelled in its profile, the live
-  hospital's included, so S27, S31 and S32 stop as before. A stored profile that doesn't name the setting reads `show`
-  after the upgrade (`docs/INSTALL.md`, section 8).
+  still stops it. A site that wants the stop sets `stop`. A fresh demo install keeps the stop, labelled in its profile,
+  the live hospital's included, so S27, S31 and S32 stop as before. A stored profile that doesn't name the setting reads
+  `show` after the upgrade, also on a demo whose profile a person or the onboarding saved (`docs/INSTALL.md`, section
+  8). Not yet in 1.1.2: nobody reads a shown movement at a tier released by policy or under an incident's shared
+  approval, and one that arrives after the approval passes the write unseen, where 1.1.1 stopped it; a site that uses
+  incidents or releases a tier by policy should set `stop`.
+- **Further messages in an onboarded namespace read the feed's zone.** The read of a patient's further messages runs in the
+  watched namespace, which maps only Shutter's intake and utility classes, so a message time with no UTC offset looked up
+  the feed's zone in a class that namespace can't reach, the read failed and the write stopped for a person
+  (`FURTHER_NOT_READ`), with nothing written. The read now carries the zone from Shutter's namespace (`Shutter.Util.Time`,
+  `Shutter.Util.FurtherMessages`), and a unit test reads a time in a namespace with no zone of its own. On build 154 the onboarding check
+  passed 238 of 238 and the 26 scenarios played as expected with the fix.
 - **Another provider, by hand.** `docs/readme/another-provider.md`: the board run on OpenAI's `gpt-4.1` through AI Hub on
   build 109, S2 and S8 as expected twice, with the steps as tested and their undo, runs unpriced and outside the day's
   budget, and the places the install assumes Anthropic. Current OpenAI models refuse the `max_tokens` the runner sends.
@@ -51,6 +61,29 @@ AI Hub features measured with no model call and on the publisher from an MCP cli
   figures, every term defined; six limits inline and the rest in `docs/readme/limits.md` as a table of effect, workaround
   and status; the fuller rows in `docs/edge-cases.md`; a pilot in the order it works in `first-steps.md`; and the
   held-out cases on release 1.1.1 in `fair-test.md`.
+- **The trial's judges' path.** The S8 card plays in the chosen mode and says so, `?trial=judge` opens Scenarios in Rules
+  only on the S8 card with no welcome, and the Rules only note says S8 is exempted on purpose and that the gate holds the
+  resend on a real case. The Evaluation page puts the held-out fair test above the board's own score, with always
+  escalating, both single investigator figures and release 1.1.1's board; **Explore on my own** keeps the welcome away
+  for the visit, and the boundary table's scroll area takes the focus where it scrolls sideways.
+- **The README review fixes.** The trial route has its own line, the first screen is shorter, only the identifiers
+  Shutter knows for the case are said to become tokens, and `SELECT Shutter.Setup_ClearProvider()`, which an install
+  keeps, is the way to send nothing out; the pilot maps the trust's users to the two roles first.
+- **The production review's agent never reads a patient's words.** An error group's signature goes to it as an IRIS
+  error code or a digest, never the logged text, and a case aggregate's key goes as it is only when Shutter knows the
+  word (an item of the production, a failure kind or state, an outcome or reason code Shutter writes, an acknowledgement
+  code or an HTTP status); anything else, a surname or a postcode included, goes as its digest with its count. The
+  stored review keeps every word, and the record key and `SnapshotDigest` don't move. The scenario routes
+  (`POST /scenarios/reset` and `/scenarios/{id}/run`) answer 403 `not_a_demo_instance` and change nothing off the demo,
+  and an end-to-end check plays two patients no fixture holds in Board mode with no key: nothing is written.
+- **The MCP page.** The forwarder's `tool_not_found` is credited to the MCP Inspector's own tool-list check, with the
+  sidecar's `isError` answer to a `tools/call` sent anyway.
+- **Docs truth for 1.1.2.** The README's first screen gives the trial first, then the online demo, then
+  `./install.sh --replay`, and a Measured box with each figure's release; `docs/readme/model-fails.md` maps each agent
+  run status to what the case does, with the real bounds; the safety and limits pages say what 1.1.2 does as shipped;
+  the F03 null-bed runs are published with the fair test; contracts v1.48. `docs/INSTALL.md` shows `InstallInto` with a
+  site's own production name.
+- **The health page.** Each group lists its checks first and its facts apart under **Details**.
 
 ## 1.1.1 (8 November 2026)
 

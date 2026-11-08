@@ -99,17 +99,32 @@ ClassMethod Finding(code As %String, item As %String = "", itemClass As %String 
 
 /// A text with its placeholders filled: {item}, {setting}, {found} and {count}. An empty item (an error the production
 /// itself logged, a message with no item) reads "the production itself", and a "(s)" plural follows the count: "1 error",
-/// "445 errors".
+/// "445 errors". One pass over the rule's own text: a value put in is never read again, so a found that holds "(s)" or
+/// "{count}" (an error signature is an application's text) stands in the words exactly as in found, which is how the
+/// review's request finds it there to withhold it.
 ClassMethod Fill(text As %String, values As %DynamicObject) As %String
 {
     If text = "" Quit ""
-    Set iter = values.%GetIterator()
-    While iter.%GetNext(.key, .value) {
-        If (key = "item") && (value = "") Set value = "the production itself"
-        Set text = $REPLACE(text, "{" _ key _ "}", value)
+    Set plural = $SELECT('values.%IsDefined("count"): "(s)", +values.count = 1: "", 1: "s")
+    Set out = "", pos = 1, len = $LENGTH(text)
+    While pos <= len {
+        Set c = $EXTRACT(text, pos)
+        If c = "{" {
+            Set close = $FIND(text, "}", pos)
+            Set key = $SELECT(close: $EXTRACT(text, pos + 1, close - 2), 1: "")
+            If (key '= "") && (key ? 1.AN) && values.%IsDefined(key) {
+                Set value = values.%Get(key)
+                If (key = "item") && (value = "") Set value = "the production itself"
+                Set out = out _ value, pos = close
+                Continue
+            }
+        } ElseIf $EXTRACT(text, pos, pos + 2) = "(s)" {
+            Set out = out _ plural, pos = pos + 3
+            Continue
+        }
+        Set out = out _ c, pos = pos + 1
     }
-    If values.%IsDefined("count") Set text = $REPLACE(text, "(s)", $SELECT(+values.count = 1: "", 1: "s"))
-    Quit text
+    Quit out
 }
 
 /// The table. subject says what a finding of the code is about (an item, the production, the namespace or the purge

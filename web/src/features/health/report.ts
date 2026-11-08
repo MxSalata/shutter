@@ -486,11 +486,38 @@ export function credentialChecks(value: unknown): CredentialCheck[] {
   });
 }
 
+/**
+ * Whether a row is a check (something that passes, fails or wants a look, drawn with its mark among the group's checks)
+ * or a detail (a name, a path, a number, a setting or a fact about the installation, listed apart under "Details" with
+ * no mark, so it can never be read as a check that failed).
+ */
+export type RowKind = 'check' | 'detail';
+
+/** Facts about the installation that the report sends as a yes or no: a detail, never a check. */
+const FACT_KEYS = new Set(['demo']);
+
+/**
+ * A row's kind, by the kind rule: a row to fix or to look at is a check wherever it sits (an install item missing from
+ * the production, a value the report did not send, a credential check that threw); a row with no mark is a detail; so is
+ * a fact the report sends as a yes or no (the demo installation), and the downstream system's two pieces outside a demo
+ * installation, where they are facts about the demo rather than checks of the hospital's own; every other marked row is
+ * a check (a core check, another yes or no, the stored credentials tried, a provider piece with its reason).
+ */
+export function rowKind(key: string, info: RowInfo, report: Report): RowKind {
+  if (info.tone === 'blocking' || info.tone === 'attention') return 'check';
+  if (info.mark === 'none') return 'detail';
+  if (FACT_KEYS.has(key)) return 'detail';
+  if (report.demo !== true && CORE.some((c) => c.key === key && c.demoOnly)) return 'detail';
+  return 'check';
+}
+
 export interface Row {
   key: string;
   label: string;
   value: unknown;
   info: RowInfo;
+  /** A check, drawn with its mark among the group's checks, or a detail, in the group's Details list. */
+  kind: RowKind;
   /** A row that is not a report key: the default board, drawn from the agent library. */
   virtual?: 'default-board';
 }
@@ -502,6 +529,7 @@ export interface GroupStatus {
 
 export interface Group {
   def: GroupDef;
+  /** Every row, checks and details, in the table's order. */
   rows: Row[];
   /**
    * The group's count: its core checks passing (and the rows to fix besides them), else the rows to fix, else the pieces
@@ -541,11 +569,13 @@ export function groupReport(report: Report, trial: boolean): { verdict: Verdict;
         report.shutter_production === report.production
       )
         continue;
+      const info = rowInfo(key, report[key], report, trial);
       rows.push({
         key,
         label: labelFor(key, report),
         value: report[key],
-        info: rowInfo(key, report[key], report, trial),
+        info,
+        kind: rowKind(key, info, report),
       });
       if (key === 'board_members')
         rows.push({
@@ -553,6 +583,7 @@ export function groupReport(report: Report, trial: boolean): { verdict: Verdict;
           label: 'Default board',
           value: null,
           info: { mark: 'none', tone: null, missing: false },
+          kind: 'detail',
           virtual: 'default-board',
         });
     }

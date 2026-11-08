@@ -147,6 +147,56 @@ describe('HealthPage on a live system', () => {
     expect(screen.queryByRole('region', { name: 'Other' })).toBeNull();
   });
 
+  it('lists the checks first and the facts apart under Details, so a fact is never read as a failed check', async () => {
+    renderHealth({
+      ...REPORT,
+      interoperability: true,
+      production_state: 'running',
+      shutter_production: 'Shutter.Production',
+      adt_in: '/usr/irissys/mgr/shutter/in/',
+      edition: 'aihub',
+      missing_items: [],
+      disabled_items: [],
+    });
+    const production = await screen.findByRole('region', { name: 'Production' });
+    const tables = within(production).getAllByRole('table');
+    expect(tables).toHaveLength(2);
+    const [checks, details] = tables;
+    expect(
+      within(checks)
+        .getAllByRole('rowheader')
+        .map((h) => h.textContent),
+    ).toEqual(['Interoperability enabled in the namespace', 'Production class compiled', 'Production state']);
+    expect(within(production).getByRole('heading', { level: 3, name: 'Details' })).toBeInTheDocument();
+    expect(details).toHaveAccessibleName('Details');
+    expect(
+      within(details)
+        .getAllByRole('rowheader')
+        .map((h) => h.textContent),
+    ).toEqual(["Shutter's production", 'ADT inbound folder', 'Edition', 'Missing items', 'Disabled items']);
+    // The checks come first; a detail is its label and value, with no mark and no tone
+    expect(checks.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    for (const tr of within(details).getAllByRole('row')) {
+      expect(tr).toHaveAttribute('data-kind', 'detail');
+      expect(tr).not.toHaveAttribute('data-tone');
+      expect(tr.querySelector('th svg')).toBeNull();
+    }
+    for (const tr of within(checks).getAllByRole('row')) {
+      expect(tr).toHaveAttribute('data-kind', 'check');
+      expect(tr.querySelector('th svg')).not.toBeNull();
+    }
+    expect(within(details).getByRole('rowheader', { name: 'Missing items' }).closest('tr')).toHaveTextContent(
+      'None',
+    );
+    // The count and the group link count the checks only
+    expect(production).toHaveTextContent('3 of 3 pass');
+    expect(
+      within(screen.getByRole('navigation', { name: 'Groups' })).getByRole('button', {
+        name: 'Production 3 of 3 pass',
+      }),
+    ).toBeInTheDocument();
+  });
+
   it('shows an install item missing from the production in the Production group, not behind Other', async () => {
     renderHealth({ ...REPORT, interoperability: true, missing_items: ['Scenario Player'], edition: 'core' });
     await screen.findByRole('region', { name: 'Ready' });
@@ -306,6 +356,38 @@ describe('HealthPage in the trial', () => {
         within(agents).getByRole('rowheader', { name: 'Default board' }).closest('tr'),
       ).toHaveTextContent('3 specialist agents and the coordinator agent'),
     );
+  });
+
+  it('shows a group of facts as Details alone, and keeps every count to the checks', async () => {
+    renderHealth();
+    const install = await screen.findByRole('region', { name: 'Installation and licence' });
+    expect(within(install).getAllByRole('table')).toHaveLength(1);
+    expect(within(install).getByRole('table')).toHaveAccessibleName('Details');
+    expect(
+      within(install).getByRole('rowheader', { name: 'Demo installation' }).closest('tr'),
+    ).toHaveTextContent('Yes');
+    expect(install).not.toHaveTextContent(/\bpass\b/);
+    // Production: its four checks, each ticked, then six facts; "4 of 4" counts the checks only
+    const production = screen.getByRole('region', { name: 'Production' });
+    const [checks, details] = within(production).getAllByRole('table');
+    expect(within(checks).getAllByRole('row')).toHaveLength(4);
+    expect(checks.querySelectorAll('th svg')).toHaveLength(4);
+    expect(within(details).getAllByRole('row')).toHaveLength(6);
+    expect(details.querySelector('th svg')).toBeNull();
+    expect(production).toHaveTextContent('4 of 4 pass');
+    // The Agents group: two checks, then the counts and the board
+    const agents = screen.getByRole('region', { name: 'Agents and AI Hub' });
+    const [hub, counts] = within(agents).getAllByRole('table');
+    expect(
+      within(hub)
+        .getAllByRole('rowheader')
+        .map((h) => h.textContent),
+    ).toEqual(['AI Hub installed', 'AI Hub runner compiled']);
+    expect(
+      within(counts)
+        .getAllByRole('rowheader')
+        .map((h) => h.textContent),
+    ).toEqual(['Enabled agents', 'Default board', 'Recorded agent runs', 'API mimic setting']);
   });
 
   it('writes the licence as one sentence, with its raw fields in the group detail', async () => {

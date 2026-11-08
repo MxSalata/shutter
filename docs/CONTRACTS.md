@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.47, 8 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.48, 8 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -403,7 +403,7 @@ caller's process passes; the operator and the approver read the watched hospital
 | signed in | `GET /me`, which answers `{username, operator, approver, can: {operate, approve, configure, scenarios, liveAgents}}` from the resources the user holds (`can` since v1.34: the app shows only what the user may do; `liveAgents` is `Shutter_LiveAgents`, below) |
 | `Shutter_Operate` | every other `GET`; `POST /cases/{id}/preview-blind-resend`, `/reinvestigate` (v1.39: the reopened case's agent runs count against the requester's share, and without `Shutter_LiveAgents`, or while the provider refuses the key, they answer from recordings only, `ModeOverride` `replay` as a question's do in 14, and a board with no recording leaves the case escalated for a person, with the reason, and plans nothing; the 202 `{caseId, state: "reopening", requestedBy, liveAgents}` says which) and `/close` (unless the site keeps the two-person rule, below); `POST /cases/{id}/escalations`, `PATCH /cases/{id}/escalations/{seq}` and `POST /cases/{id}/escalations/{seq}/send`; `GET /production-reviews`, `GET /production-reviews/targets` and `GET /production-reviews/{id}`; `POST /production-reviews` (section 13: the review reads only; its agent part takes `Shutter_LiveAgents`, below, and is skipped without it); `GET /cases/{id}/whatif`, `GET /cases/{id}/questions`, `GET /cases/{id}/questions/suggested`, `GET /cases/{id}/questions/{qid}` and `POST /cases/{id}/questions` (section 14: a question reads only, and a live run spends model credit); `GET /settings/schemas` (section 12) |
 | `Shutter_Approve` | `POST /cases/{id}/approvals`; `POST /incidents/{id}/approvals` and `/incidents/{id}/chains/{seq}/approvals`; `POST /cases/{id}/close` where the site profile's `approvers.close_needs_approver` is true; `POST /cases/{id}/abandon` (always an approver's) |
-| `Shutter_Scenarios` | `POST /scenarios/{id}/run` and `/scenarios/reset`, and `Shutter.Setup_PurgeStore` (v1.34: the demo controls; the operator and approver roles hold it, the public demo's role does not) |
+| `Shutter_Scenarios` | `POST /scenarios/{id}/run` and `/scenarios/reset`, and `Shutter.Setup_PurgeStore` (v1.34: the demo controls; the operator and approver roles hold it, the public demo's role does not; on an instance that is not a demo, `^Shutter.Config("demo")` 0, the two routes answer 403 `not_a_demo_instance` and change nothing, as the purge already refused) |
 | `Shutter_LiveAgents` | Spending the model budget (v1.34, the judges): `POST /cases/{id}/board` (the board convenes live on a blocked, escalated or failed case, 14.5), `POST /cases/{id}/questions` running live, the agent part of `POST /production-reviews` (13.5, v1.39: skipped without it, never refused) and a reinvestigation's live runs (v1.39: recordings only without it); without it a question is answered from recordings only, and one with no recording is refused `409 no_recorded_answer` at once. Operators, approvers and the role `Shutter_Judge` (the public demo's role plus this) hold it; `Shutter_Demo` does not. Every live run counts against the day's budget and the caller's share (9) |
 | `Shutter_Configure` | `PUT /site-profile`; `PATCH /library/{code}`; `POST /settings/schemas` (section 12); `POST /production-reviews/{id}/annotations` and `DELETE /production-reviews/annotations/{annotationId}` (section 13) (v1.34: what changes the site; the approver role holds it, the public demo's role does not) |
 | `Shutter_Intake` | `POST /intake` (section 11) |
@@ -1069,6 +1069,14 @@ the framework). The Dockerfile runs it, and a site with Java runs it once by han
   evidence names another entry or outcome (`APPROVAL_ITEM_CHANGED`) or the incident's plan digest is no longer the one
   it bound, or the case no longer belongs to the incident (`APPROVAL_INCIDENT_PLAN_CHANGED`): the case blocks and the
   chain stops at that item (v1.21).
+- Any error in the incident's workflow during a release, other than one raising an approval task (7.3), abandons the
+  whole incident (`IncidentWorkflow.OnResponse`, `OnError`): a released case it can't find again ("Released case ... not
+  found"), or a failure moving on to the next item, stops its open chains, fails its cases still `detected`,
+  `collecting`, `investigating` or `grouped` with the reason, and closes it. As built in 1.1.2 (v1.48).
+- A receiver that goes down again during a release stops each remaining chain in turn: the released item's preflight
+  read, tried `MaxRefreshes` + 1 times (4 by default), or its write finds the receiver down, the case stops for a person,
+  the chain's later items are escalated ("Not released: ..."), and the next chain is released and stops the same way. No
+  write is retried blindly, so nothing is written twice. As built in 1.1.2 (v1.48).
 
 ### 7.5 The API
 
@@ -1231,7 +1239,7 @@ that tries to reach past its case leaves a mark, and `Shutter.Bridge.ToolCall.De
 
 - A merge's prior identifiers (v1.14: `prior_patient_id`, `prior_encounter_id`, `prior_patient_identifier`, `prior_visit_number`, and every MRG group's in `prior_identifiers`, each paired with the surviving patient identifier of its PATIENT group as `into`) are tokens like the case's own (PID or MRN or NHS by the identifier type, ENC, VISIT; the prior name's parts NAME); `merge_groups`, `patient_class` and the validation's version fields pass through.
 
-**The production review's agent** (v1.22; 13.6) is the one other place something leaves for a model, and it does not go through `ModelView.Reduce`: there is nothing to tokenise, by construction. Its context holds the review id, the namespace, the production and its state, the window, the summary, the findings without `evidence.example`, `annotationId`, `rank` and `explanation`, and the case aggregates per item (counts by failure kind, outcome, reason code and state; the newest case ids). The sweep never reads `CaseEvent.Text`, the operation key's patient and encounter pieces, `FailureText` or message content, so none can reach the context; item names, setting values, counts, header ids and case ids are operational identifiers, as the board's evidence carries them, and the error example text stays in the operator's `GET`. Nothing comes back to restore: the agent speaks in finding ids.
+**The production review's agent** (v1.22; 13.6) is the one other place something leaves for a model, and it does not go through `ModelView.Reduce`: there is nothing to tokenise, by construction. Its context holds the review id, the namespace, the production and its state, the window, the summary, the findings without `evidence.example`, `annotationId`, `rank` and `explanation` (an `ERRORS_GROUPED` signature, the event log's own text before its first colon, which an application can fill with a name, reaches the model only as an IRIS error code such as `ERROR #5001` or `ERROR <Ens>ErrBPTerminated`, and otherwise as `[withheld text <12 hex digits of its SHA-256>]` in `found` and in the words that quote it; the stored finding keeps it), and the case aggregates per item (counts by failure kind, outcome, reason code and state; the newest case ids). The aggregates' keys come from the cases' own fields, which `POST /intake` and a connector's `reason_code` can fill with any text, as free text or as one word that looks like a code (a surname, a postcode), so the model reads only what Shutter itself knows as it is: an item key that names an item of the production (or `(none)`), a failure kind or a state from the case's own lists, an outcome of the connector's or the intake's (`applied`, `uncertain`, `rejected`, `error`, ... and an acknowledgement's code such as `AR`), and a reason code that Shutter, its connector or the downstream contract writes (`alert`, `schema_unknown`, `merge`, `cancel_unsupported`, `ward_unavailable`, `duplicate_message`, ..., `ack_AE`, `ack_AR`, `ack_CE` and `ack_CR`), with `HTTP_` and three digits for either of the last two; every other key, a code's shape included, goes as the same `[withheld text ...]` digest, with its count. A site's receiver with codes of its own sees them as digests, still counted apart; the stored review keeps every key. The words of a check fill their placeholders in one pass, so a signature that holds `(s)` or `{count}` stands in them as in `found` and is withheld there too. The sweep never reads `CaseEvent.Text`, the operation key's patient and encounter pieces, `FailureText` or message content, so none can reach the context; item names, setting values, counts, header ids and case ids are operational identifiers, as the board's evidence carries them, and the error example text stays in the operator's `GET`. Nothing comes back to restore: the agent speaks in finding ids.
 
 **The day's model budget (v1.34).** `SHUTTER_DAILY_BUDGET_USD`, read by the installer and at every start of the production
 (`Setup.ApplyEnvironment`, 12) into `^Shutter.Config("dailyBudgetUsd")`
@@ -1252,7 +1260,9 @@ refused `budget_exhausted` with "Your share of the day's model budget ... is spe
 is spent (`until` = `budget.resetsAt`), `provider_auth` when a live run failed with an authentication error (a 401, a bad or
 deactivated key) within the last 15 minutes (`until` = the next 00:00 UTC, when a key a site deactivates for the day comes
 back; the flag clears on the next live run the provider accepts, and after 15 minutes one run tries again), and null when
-live runs can go; `detail` is the sentence to show. While the provider refuses the key the Agent item refuses runs that would
+live runs can go; `detail` is the sentence to show. As built in 1.1.2 (v1.48), the flag is set only by a run whose status is `error` with an authentication
+error's words (`LiveAgents.NoteRun`), and the live runner reports a provider's own error as `model_error` (`AIHub.cls`, its
+`Catch`), so a key the provider refuses doesn't set it yet: each run still calls the provider and ends `model_error`. While the provider refuses the key the Agent item refuses runs that would
 call a model with the status `provider_auth` and makes no call (a board whose members were all refused so has no board
 answer, 6.6, as for `budget_exhausted`), `POST /cases/{id}/board` answers `409 live_unavailable` with `live`
 (the availability object) before the budget is looked at, and a question from a caller with the live agents is answered from
@@ -2130,6 +2140,10 @@ with the other stores.
 
 ## Changes
 
+- 8 Nov 2026, release 1.1.2 (v1.48): two release behaviours stated as built (7.4): any error in an incident's workflow
+  during a release, other than raising an approval task, abandons the incident; a receiver that goes down again during a
+  release stops each remaining chain in turn at its next item, with nothing written twice; and `provider_auth` (12) stated
+  as built: only a run with status `error` sets it, so a key the provider refuses, which ends `model_error`, doesn't set it yet.
 - 8 Nov 2026, release 1.1.2 (v1.47): the receipt check compares beds only when the receipt and the operation both state
   one: a bed that is JSON null, missing or empty is not stated, so a receipt whose bed is null no longer reads as a
   different bed (`RECEIPT_PAYLOAD_DIFFERS`), and a stated different bed still does. A replayed run writes one trace line per

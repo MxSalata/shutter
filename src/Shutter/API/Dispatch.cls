@@ -338,9 +338,22 @@ ClassMethod PlayerEnabled() As %Boolean
     Quit (state = 1) && (name = prod)
 }
 
+/// The scenarios play on a demo instance only (^Shutter.Config("demo"), the flag GET /status reports): a run resets the
+/// receivers first and a reset abandons every open incident and moves resetAt, so on a site install, where the operator
+/// and the approver still hold Shutter_Scenarios, both are refused with 403 not_a_demo_instance and nothing changes, as
+/// the demo receiver refuses its own reset and Shutter.Setup.PurgeStore refuses the purge. Writes the refusal and
+/// returns 0, or returns 1.
+ClassMethod DemoOnly() As %Boolean
+{
+    If $GET(^Shutter.Config("demo")) Quit 1
+    Do ..Fail("403 Forbidden", "not_a_demo_instance", "Scenarios run and reset on a demo instance only: this instance is a site install, where a reset would abandon its open incidents")
+    Quit 0
+}
+
 ClassMethod ScenarioRun(id As %String) As %Status
 {
     If '..Allow("Shutter_Scenarios", 1) Quit $$$OK
+    If '..DemoOnly() Quit $$$OK
     If '##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Scenarios.Runner") Quit ..Fail("503 Service Unavailable", "no_runner", "The scenario runner is not installed")
     Set bodyText = $SELECT($ISOBJECT(%request.Content): %request.Content.Read($$$MaxStringLength), 1: $GET(%request.Content))
     Set body = ##class(Shutter.Util.Json).Parse(bodyText, .psc)
@@ -393,6 +406,7 @@ ClassMethod ScenarioRun(id As %String) As %Status
 ClassMethod ScenarioReset() As %Status
 {
     If '..Allow("Shutter_Scenarios", 1) Quit $$$OK
+    If '..DemoOnly() Quit $$$OK
     If '##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Scenarios.Runner") Quit ..Fail("503 Service Unavailable", "no_runner", "The scenario runner is not installed")
     Set result = $CLASSMETHOD("Shutter.Scenarios.Runner", "Reset")
     Set out = ##class(Shutter.Util.Json).Parse(result, .sc)
