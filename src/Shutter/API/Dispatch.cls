@@ -525,8 +525,9 @@ ClassMethod Technical(case As Shutter.Store.Case, o As %DynamicObject, ByRef see
         If $ISOBJECT(header) && (header.MessageBodyClassName '= "") && $CLASSMETHOD(header.MessageBodyClassName, "%Extends", "EnsLib.HL7.Message") {
             Set msg = $CLASSMETHOD(header.MessageBodyClassName, "%OpenId", header.MessageBodyId)
             If $ISOBJECT(msg) {
-                Set type = msg.GetValueAt("MSH:9.1")
-                If msg.GetValueAt("MSH:9.2") '= "" Set type = type _ "^" _ msg.GetValueAt("MSH:9.2")
+                // By position (segment 1 is MSH): a path by segment name finds nothing in a message with no DocType
+                Set type = msg.GetValueAt("1:9.1")
+                If msg.GetValueAt("1:9.2") '= "" Set type = type _ "^" _ msg.GetValueAt("1:9.2")
             }
         }
     } Catch {
@@ -550,7 +551,8 @@ ClassMethod Technical(case As Shutter.Store.Case, o As %DynamicObject, ByRef see
         Set args = 1, args(1) = case.EnsSessionId
         If case.Receiver '= "" Set sql = sql _ " AND i.Receiver = ?", args = 2, args(2) = case.Receiver
         Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, sql _ " ORDER BY h.ID", args...)
-        If rs.%Next() && (rs.%Get("T") '= "") Set t = rs.%Get("T"), o.failedAt = $PIECE(t, " ", 1) _ "T" _ $PIECE(t, " ", 2) _ "Z"
+        // TimeCreated drops trailing zeros ("19:00:02.5"): written back to the millisecond, "19:00:02.500"
+        If rs.%Next() && (rs.%Get("T") '= "") Set o.failedAt = $TRANSLATE($ZDATETIME($ZDATETIMEH(rs.%Get("T"), 3), 3, 1, 3), " ", "T") _ "Z"
     }
     // The current plan: its version, its digest and its catalogue entry
     Set planId = case.CurrentPlanGetObjectId()
