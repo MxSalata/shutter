@@ -26,7 +26,7 @@ cd shutter
 | Your machine's web app | `approver` / `shutter`, or `operator` / `shutter` | `approver` approves; `operator` runs and reads, and can't approve |
 | The [online demo](https://shutter.mxsalata.com) | `demo` / `shutter` | Reads, asks, approves a case that waits; runs no scenario |
 
-The board runs live for the judges' account, whose sign-in the organisers pass to the judges within a model budget of 15 USD a day.
+The judges' account (the organisers pass on its sign-in) runs the board live within a 15 USD daily model budget.
 
 **Measured:**
 
@@ -34,8 +34,8 @@ The board runs live for the judges' account, whose sign-in the organisers pass t
 | --- | --- | --- |
 | 11 one-failure scenarios (S1 to S10, S13) | Board: 11 of 11 as expected, live on build 154 and in replay. Rules only: 4 right, 6 wrong resends stopped, S8 overwrites WARD-C | [comparison](https://github.com/MxSalata/shutter/blob/main/docs/readme/comparison.md#what-it-shows) |
 | 12 sealed cases on release 1.0.0's code; loss per case 0 (right) to 20 (wrong write) | Board and single investigator (one agent): 0.167. Site policy and Rules only (no agents) wrote a cancelled transfer | [fair test](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md) |
-| The same on release 1.1.1's code | Proposals as on 1.0.0 in 36 of 36 runs; the gate held two right plans, F03 (fixed in 1.1.2: 3 of 3 right) and F07 (a stop 1.1.2 relaxes by default). Sonnet 5.5 specialists: the same, 0.331 USD a run against 0.527 | [release 1.1.x](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#release-11x) |
-| Safety | No wrong write in the 144 agent runs above; an approval sent twice writes once (34 of 34 boundary checks, CI on 1.1.0) | [boundary](https://github.com/MxSalata/shutter/blob/main/docs/readme/first-steps.md#the-approval-boundary-attacked-over-http) |
+| The same on release 1.1.1's code | Same proposals, 36 of 36; the gate held two right plans (loss 0.667; 0.500 with F03 settled): F03, a null bed read as another bed (1.1.2's receipt check: 3 of 3 right), and F07, another visit's discharge (shown by 1.1.2's default; not yet played). Sonnet 5.5 specialists: graded as the all-Opus board, 0.331 USD a run against 0.527 | [release 1.1.x](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#release-11x) |
+| Safety | No wrong write, proposed or made, in rows 2 and 3's 144 agent-mode case runs; an approval sent twice writes once (34 of 34 boundary checks, CI on 1.1.1) | [fair test](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md), [boundary](https://github.com/MxSalata/shutter/blob/main/docs/readme/first-steps.md#the-approval-boundary-attacked-over-http) |
 
 **How Shutter answers the contest task:**
 
@@ -51,17 +51,17 @@ The board runs live for the judges' account, whose sign-in the organisers pass t
 
 **Video** not yet published | **Articles** [Building Shutter on IRIS AI Hub](https://community.intersystems.com/post/building-shutter-iris-ai-hub-what-worked-what-was-hard-and-what-it-cost) | **Open Exchange** [Shutter](https://openexchange.intersystems.com/package/Shutter)
 
-Instead of a **Resend** in the Message Viewer, Shutter makes each failed delivery a case: **the board**, four AI Hub agents (three specialists and a coordinator), reads its sealed evidence and proposes a plan; **the gate**, deterministic checks, decides whether the plan may write; **a person, or the site's written policy,** releases it; **one conditional write** follows, checked against the receiver's receipt and history.
+Instead of a **Resend** in the Message Viewer, Shutter makes each failed delivery a case: **the board**, four AI Hub agents, reads its sealed evidence and proposes a plan; **the gate**, deterministic checks, decides whether the plan may write; **a person, or the site's written policy,** releases it; **one conditional write** follows, checked against the receiver's receipt and history.
 
 ## Take the agents away
 
-**S8:** the matcher flags two moves at one moment as catalogue entry E7 with no model; Rules only resends anyway (exempted from the gate on purpose) and Ward B overwrites Ward C; the board escalates ([comparison](https://github.com/MxSalata/shutter/blob/main/docs/readme/comparison.md)).
+**S8:** the matcher flags two moves at one moment as catalogue entry E7 with no model; Rules only resends anyway (exempted in this recorded scenario only; on real cases the gate holds it) and Ward B overwrites Ward C; the board escalates ([comparison](https://github.com/MxSalata/shutter/blob/main/docs/readme/comparison.md)).
 
 ![S8 in plain terms: the bed manager has the patient in Ward C; Rules only writes Ward B over it with every check passed; the board leaves them in Ward C and asks a person](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/s8-plain.png)
 
 What do the agents add? Not the flag: the board checks the entry against this case's evidence, says why it applies or doesn't, and keeps any dissent (in S8, the conformance specialist's resend, and why it was overruled). Each agent is given the catalogue's entry and preferred outcome, and the coordinator took it in 24 of 25 recorded plans: agents applying written policy, not answering unaided ([what that does and does not show](https://github.com/MxSalata/shutter/blob/main/docs/readme/evaluation.md)). **Site policy** (the catalogue, no agent) played 10 of the board's 11 scenarios (S7 has no such mode): 8 settled with no model call, and S4 and S8 went to the board ([on build 109](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt-109.md#every-scenario-on-build-109)). Under the shipped site profile each of its resends waits for a person.
 
-**Twelve held-out cases,** made-up failed ADT deliveries written inside the project by an author who had not read the catalogue, against release 1.0.0's code, frozen before they were written. Cases, outcomes and scoring rule were hashed on 6 November 2026 before any run and published with the results, so the seal rests on my word. Three runs a case, live on `claude-opus-5-5`; mean loss per case, from 0 right to 20 for a wrong write executed. Both agent modes beat always escalating and wrote nothing wrong; the board did no better than the single investigator, at 3.7 times its cost.
+**Twelve held-out cases,** made-up failed ADT deliveries written inside the project by an author who had not read the catalogue, against release 1.0.0's code, frozen before they were written. Cases, outcomes and scoring rule were hashed on 6 November 2026 before any run and published with the results, so the seal rests on my word. Three runs a case, live on `claude-opus-5-5`; loss 0 (right) to 20 (wrong write made). Both agent modes beat always escalating and wrote nothing wrong; the board did no better than the single investigator, at 3.7 times its cost.
 
 | Mode | Mean loss | With defensible answers free | Right | Defensible | False closure | Wrong write stopped | Wrong write executed | USD a run |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -104,7 +104,7 @@ git clone https://github.com/MxSalata/shutter.git && cd shutter
 
 ### On your machine or in the trial, first
 
-The gate is the same in every mode, with one recorded exemption: S8 in **Rules only**, exempted on purpose to show a plain resend (on a real case the gate holds it). **Single investigator** runs live only ([the modes](https://github.com/MxSalata/shutter/blob/main/docs/readme/first-steps.md#the-modes)).
+The gate holds in every mode but S8's recorded **Rules only** run (above). **Single investigator** runs live only ([the modes](https://github.com/MxSalata/shutter/blob/main/docs/readme/first-steps.md#the-modes)).
 
 1. In **Scenarios**, run **S2** in **Board** mode. About 20 seconds later (a minute live) the case under **Latest case** on S2's row (C-000002 in the trial, C-000001 on a fresh install) is waiting for approval: **Decide on the resend**, **Review the plan and decide**, **Approve plan**, **Approve this plan**. One conditional write, then "Verified".
 2. Run **S8** in **Rules only**, then in **Board**, as in the judges' steps: the case page sets the two side by side.
