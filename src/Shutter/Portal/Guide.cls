@@ -195,6 +195,8 @@ ClassMethod Items(production As %String = "") As %DynamicObject
             Try {
                 Set row.enabled = ''rs.%Get("Enabled"), row.pool = rs.%Get("PoolSize")
                 If ##class(Ens.Config.DefaultSettings).%GetSetting(production, name, cls, "", "Enabled", .on) Set row.enabled = ''on
+                // As Ens.Director starts the item: a system default PoolSize that is a positive whole number wins.
+                If ##class(Ens.Config.DefaultSettings).%GetSetting(production, name, cls, "", "PoolSize", .size), ..PoolSetting(size) Set row.pool = +size
                 Kill s
                 Do ..ItemSettings(rs.%Get("ID"), .s)
                 If kind = "agent" {
@@ -369,14 +371,47 @@ ClassMethod Shown(ByRef s, allow As %String = {..#OPERATIONSETTINGS}) As %Dynami
 }
 
 /// Whether a setting stays off the page: a name that speaks of credentials, keys, certificates, servers, addresses or
-/// files, or a value that looks like a secret or carries an address.
+/// files, or a value that looks like a secret or carries an address. A name is read as its words (NameWords), so a word
+/// counts where one of the name's words begins or ends with it (SSLConfig, ApiKey, SMTPServer) and not inside another
+/// word (UncertainSettleSeconds); a name of one word is searched whole.
 ClassMethod Hidden(name As %String, value As %String) As %Boolean
 {
-    Set n = $ZCONVERT(name, "L"), v = $ZCONVERT(value, "L")
-    For word = "credential", "password", "secret", "token", "key", "ssl", "tls", "cert", "server", "host", "port", "url", "user", "path", "file", "folder", "directory", "email", "from", "smtp", "proxy", "address" {
-        If n [ word Return 1
+    Set words = ..NameWords(name), whole = $ZCONVERT(name, "L")
+    For word = "credential", "pass", "pwd", "secret", "token", "key", "auth", "ssl", "tls", "cert", "server", "host", "port", "url", "user", "path", "file", "folder", "directory", "email", "from", "smtp", "proxy", "address" {
+        If ($LISTLENGTH(words) < 2) && (whole [ word) Return 1
+        For k = 1:1:$LISTLENGTH(words) {
+            Set w = $LIST(words, k), n = $LENGTH(word)
+            If ($EXTRACT(w, 1, n) = word) || ($EXTRACT(w, *-(n-1), *) = word) Return 1
+        }
     }
-    Quit ''..LooksSecret(v)
+    Quit ''..LooksSecret(value)
+}
+
+/// A setting's name as its words, in lower case: split where a capital follows a small letter or a digit, before the
+/// last capital of a run that a small letter follows (SSLConfig is ssl, config), and at anything not a letter or digit.
+ClassMethod NameWords(name As %String) As %List
+{
+    Set words = "", w = ""
+    For i = 1:1:$LENGTH(name) {
+        Set c = $EXTRACT(name, i), prev = $EXTRACT(name, i - 1), next = $EXTRACT(name, i + 1)
+        If c '? 1AN {
+            If w '= "" Set words = words _ $LISTBUILD($ZCONVERT(w, "L")), w = ""
+            Continue
+        }
+        If (w '= "") && (c ? 1U) && ((prev ? 1L) || (prev ? 1N) || ((prev ? 1U) && (next ? 1L))) {
+            Set words = words _ $LISTBUILD($ZCONVERT(w, "L")), w = ""
+        }
+        Set w = w _ c
+    }
+    If w '= "" Set words = words _ $LISTBUILD($ZCONVERT(w, "L"))
+    Quit words
+}
+
+/// Whether a system default PoolSize counts, as Ens.Director's getProductionItems takes one: above nought and a whole
+/// number in its plain form (03 and 2.0 are not).
+ClassMethod PoolSetting(size As %String) As %Boolean
+{
+    Quit (size > 0) && (size \ 1 = size)
 }
 
 /// A value that looks like a secret or an address: a key's prefix, a wallet reference, a password, a URL or an address.

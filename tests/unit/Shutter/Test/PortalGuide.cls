@@ -104,7 +104,33 @@ Method TestOperationSettingsAllowList()
     Do $$$AssertTrue($CLASSMETHOD(guide, "Hidden", "RetryInterval", "https://user:pw@host/"), "an address is hidden")
     Do $$$AssertNotTrue($CLASSMETHOD(guide, "Hidden", "ReplyCodeActions", ":?R=RF,:?E=S,:~=S,:?A=C,:*=S"), "reply codes are shown")
     Do $$$AssertEquals($CLASSMETHOD(guide, "Clean", "sk-ant-api03-abc"), "hidden", "a Model set to a key by mistake")
+    // A word inside another word hides nothing: the Verifier's UncertainSettleSeconds is shown.
+    Kill s
+    Set s("Host", "UncertainSettleSeconds") = 60
+    Set shown = $CLASSMETHOD(guide, "Shown", .s)
+    Do $$$AssertEquals(shown.%ToJSON(), "[{""name"":""UncertainSettleSeconds"",""value"":60}]", "UncertainSettleSeconds is shown: " _ shown.%ToJSON())
+    For name = "UncertainSettleSeconds", "FailureTimeout", "RetryInterval", "ReplyCodeActions", "AlertOnError", "AlertRetryGrace", "QueueCountAlert", "QueueWaitAlert", "InactivityTimeout", "FreshSeconds", "ConnectTimeout", "ResponseTimeout" {
+        Do $$$AssertNotTrue($CLASSMETHOD(guide, "Hidden", name, 5), "on the list and shown: " _ name)
+    }
+    // Where a name's words begin or end with one, and a name of one word searched whole.
+    For name = "SSLConfig", "ApiKey", "APIKey", "MyApikey", "apikey", "SMTPServer", "HTTPServer", "Credentials", "OAuth2Token", "PrivateKeyPath", "BaseURL", "FromAddress", "Passphrase", "SSLCheckServerIdentity", "ClientSecretRef", "TLS_Version", "CertFile", "ProxyHost", "UserName", "DBPassword", "mailserver" {
+        Do $$$AssertTrue($CLASSMETHOD(guide, "Hidden", name, 5), "hidden by its name: " _ name)
+    }
+    Do $$$AssertEquals($LISTTOSTRING($CLASSMETHOD(guide, "NameWords", "SSLCheckServerIdentity")), "ssl,check,server,identity", "a name's words")
+    Do $$$AssertEquals($LISTTOSTRING($CLASSMETHOD(guide, "NameWords", "OAuth2Token")), "o,auth2,token", "after a digit")
+    Do $$$AssertEquals($LISTTOSTRING($CLASSMETHOD(guide, "NameWords", "TLS_Version")), "tls,version", "at a mark")
     Do $$$AssertEquals($CLASSMETHOD(guide, "Clean", "claude-opus-5-5"), "claude-opus-5-5", "a model id")
+}
+
+/// A system default PoolSize counts as Ens.Director counts it: a whole number above nought, in its plain form.
+Method TestPoolSetting()
+{
+    Set guide = "Shutter.Portal.Guide"
+    Do $$$AssertTrue($CLASSMETHOD(guide, "PoolSetting", 4), "a whole number")
+    Do $$$AssertTrue($CLASSMETHOD(guide, "PoolSetting", "12"), "as text")
+    For v = 0, "", "-1", "2.5", "x", " 3", "03", "2.0" {
+        Do $$$AssertNotTrue($CLASSMETHOD(guide, "PoolSetting", v), "not taken: [" _ v _ "]")
+    }
 }
 
 /// The model in effect and where it comes from, in the runner's order, and a configuration it may not read says so.
@@ -167,6 +193,7 @@ Method TestReadsTheProductionItems()
         Do $$$AssertEquals(o.name, "Test Out", "the operation")
         Do $$$AssertEquals(o.class, "Shutter.Operation.Ward", "its class")
         Do $$$AssertEquals(''o.enabled, 0, "disabled")
+        Do $$$AssertEquals(o.pool, 4, "its pool from the system default setting, as Ens.Director starts it")
         Set shown = ""
         Set it = o.settings.%GetIterator()
         While it.%GetNext(, .one) { Set shown = shown _ one.name _ "=" _ one.value _ ";" }
@@ -251,6 +278,12 @@ Method MakeProduction() As %Status
             Do p.Items.Insert(i)
         }
         Set sc = p.%Save()
+        // A system default PoolSize, which Ens.Director takes over the item's own.
+        If $SYSTEM.Status.IsOK(sc) {
+            Set ds = ##class(Ens.Config.DefaultSettings).%New()
+            Set ds.ProductionName = ..#PRODUCTION, ds.ItemName = "Test Out", ds.HostClassName = "*", ds.SettingName = "PoolSize", ds.SettingValue = 4
+            Set sc = ds.%Save()
+        }
     } Catch ex {
         Set sc = ex.AsStatus()
     }
@@ -261,6 +294,7 @@ Method RemoveProduction()
 {
     Try {
         Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM Ens_Config.Item WHERE Production = ?", ..#PRODUCTION)
+        Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM Ens_Config.DefaultSettings WHERE ProductionName = ?", ..#PRODUCTION)
         Do ##class(Ens.Config.Production).%DeleteId(..#PRODUCTION)
     } Catch ex {
     }

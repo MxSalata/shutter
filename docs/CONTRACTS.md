@@ -1929,7 +1929,9 @@ board's case in the Visual Trace, the latest cases, and links to the portal's pa
   runs. A figure it can't read leaves its tile out, and with no S8 case the box says so.
 - **The production's operations.** Two panels read the running production's items (`Shutter.Production` when none runs)
   from `Ens_Config.Item` and each item's settings in effect (`Ens.Config.Item`'s `PopulateVirtualSettings`: the
-  production's value, else the system default setting, else the class's), opened with no lock. **Agents**: every item of
+  production's value, else the system default setting, else the class's), opened with no lock; an item's enabled and pool
+  size are a system default setting's when one is set, as `Ens.Director` starts the item (a pool size only when it is a
+  whole number above nought). **Agents**: every item of
   `Shutter.Bridge.Operation.Agent` or a subclass, with enabled, pool size, the model in effect and where it comes from
   (as the live runner picks it: the API mimic's while it is on; else the item's `Model`, then its configuration's model,
   the item's `ProviderConfig` or else the instance's `AI.LLM.Shutter`, whose model is `SHUTTER_MODEL`; then the agent
@@ -1937,7 +1939,8 @@ board's case in the Visual Trace, the latest cases, and links to the portal's pa
   `MaxIterations`, `TokenBudget`, `RequestTimeoutSeconds` and the item's last run (by the run's request header); a line
   says where a model is set. **Operations**: every other business operation, with enabled, pool size, class and only the
   settings `OPERATIONSETTINGS` names (timeouts, retry, reply codes, alerts), never one whose name or value looks like a
-  credential, key, certificate, server, address or file. Of a configuration it reads only `model` and `model_provider`,
+  credential, key, certificate, server, address or file (a name is read as its words, so `SSLConfig` and `ApiKey` stay
+  off and `UncertainSettleSeconds` shows). Of a configuration it reads only `model` and `model_provider`,
   with no secret resolved, and only with `%Admin_ConfigStore`; without it, `AI.LLM.Shutter`'s model comes from Shutter's
   record and another configuration reads "not readable". An item it can't read is a row that says so.
 - **Sessions.** A request with no session behind it ends the one it opened, so a caller that keeps no cookie can't use up
