@@ -1,0 +1,66 @@
+# First steps, step by step
+
+The README's "On your machine or in the trial, first" in full: the four modes, the first two scenarios, three ways to try to break the approval, the online demo's four steps, what to look at in S2, S8 and S20, what CI attacks at the approval boundary, and the terms. Sign-ins are under [Try it](https://github.com/MxSalata/shutter#try-it).
+
+## The tours
+
+The quick tour ([open it](https://mxsalata.github.io/shutter/?trial=tour)): 9 steps, about 4 minutes. The engineers' tour ([open it](https://mxsalata.github.io/shutter/?trial=engineer)): 6 steps, about 3 minutes, with Detail on Technical.
+
+## The modes
+
+The mode chooses who proposes the plan; the gate and the rehearsal are the same in every mode, and nothing is written until a person or the site's written policy releases it. **Board**: three specialist agents review the evidence in parallel, then a coordinator agent proposes one plan. **Site policy**: the scenario catalogue and the site's profile settle the cases they know, the cases the catalogue sends straight to a person (such as S13 and S21) are escalated with no board, and the board takes the rest. **Single investigator**: one generalist agent proposes the plan (with live agents only: no run of it is recorded, so without a key a case takes the rules path, and the trial greys it). **Rules only**: no agents; the message is resent unchanged unless the gate objects, the baseline to compare with.
+
+## On your machine or in the trial, first
+
+1. In the trial, choose **Explore on my own** on the welcome; on your machine, if a prompt offers the trial, choose **Not now**, and leave the site profile notice for later: the shipped profile serves every scenario. In **Scenarios**, run **S2** in **Board** mode. About 20 seconds later (a minute live) **Open C-000002** shows its case waiting for approval. There, **Decide on the resend**, **Review the plan and decide**, **Approve plan**, **Approve this plan**: one conditional write, then "Verified".
+2. Run **S8** in **Rules only** and approve (in the trial its recorded case is already approved and written): WARD-B overwrites the bed manager's WARD-C. In **Board** it escalates, writing nothing. The case page sets the two side by side. In the trial, **In IRIS: Message trace** on C-000008 opens a recorded screenshot.
+
+**Try to break it,** with S2's case waiting for approval: run S2 again for each; in the trial, reload. The first also works in the trial (under your name, choose the role); the rest need your machine:
+
+- Sign in as `operator` / `shutter`: **Approve plan** is disabled ("Deciding needs the approver role"), and the API answers 403.
+- Open the **Approve plan** dialog in two tabs and confirm in each: one write; the second answers 409 ("The case is resolved, not awaiting approval").
+- Sign in to the Management Portal as `approver` / `shutter`, the role's member (`_SYSTEM` is not one, so its inbox is empty), and open the Workflow inbox at http://localhost:52773/csp/healthshare/shutter/_DeepSee.UserPortal.Workflow.zen. Select the task, press **Accept**, then **Approve** with `PlanDigest` empty or wrong: the case blocks and nothing is dispatched ("The approval carried no plan digest, so it binds nothing", or "named another plan digest"). **Reinvestigate** recovers it; the digest in the new task's message then approves it: one write, verified.
+
+## On the online demo, first
+
+1. **See the agents decide.** With the judges' account, **Convene the board** on a blocked, escalated or failed case: the board investigates it again, live, on fresh evidence. Without it, the banner links the hospital's own S8 case, or S8's recorded board in the trial.
+2. Press **Break the feed** on the hospital's banner. Its bed manager goes down for a minute and eight movements for four new patients fail; a strip follows Shutter grouping them into one incident and, once the bed manager is back, releasing them in order. Unlike a Resend of each message, each item goes in event order, conditional on the version recorded when the previous one was verified, stopping at the first surprise. In the demo's rehearsal on 3 November 2026 it ended as **one incident waiting for one approval**, with no model call: this outage needed no agent to plan its chains. On **Incidents**, **Approve release** sends them in order.
+3. Open a case that **waits for approval** and press **Approve plan**: one conditional write, then "Verified" from the receiver's history.
+4. On any case, **In IRIS: Message trace** opens its session in the Visual Trace.
+
+## What to look at
+
+![The Scenarios page: the evidence, then three scenarios to try first](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/scenarios-start.png)
+
+- **S2, a transfer that never arrived.** The gate passes the board's resend, the receiver's dry run says it would apply, and the approval waits as a Workflow task. "Acknowledged" is never "Verified". The web app's **Approve plan** completes that same `EnsLib.Workflow` task as the signed-in approver; from the IRIS Workflow inbox, signed in to the portal as `approver`, press **Accept**, then copy the plan digest from the task's message (it is **Plan digest** on the case page too) into the task's `PlanDigest` field.
+
+![S2's approval as a task in the IRIS Workflow inbox, with the plan digest in its message and Approve and Reject beside it](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/workflow-inbox-s2.png)
+
+**Designed for a PC and a phone.** One web app: the browser tests hold 57 screens and states to a phone's width with no sideways scroll, and walk the main flows there. S2 at phone size, in the trial:
+
+![S2 at phone size: the case waiting, the approve dialog, and the outcome verified at the receiver](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/phone-s2.png)
+
+- **S8, the case this gate doesn't catch.** The plan records the conformance specialist's dissent and why it was overruled. The case page sets Rules only and the board side by side:
+
+![S8 played twice: Rules only overwrites WARD-C; the board escalates and writes nothing](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/s8-rules-and-board.png)
+
+- **S20, a nurse moves the patient by hand** while S2's resend awaits approval. The approval is bound to the receiver's version, so nothing is sent (`APPROVAL_RECEIVER_CHANGED`) and her entry stands: the binding alone stops it, so S20 plays in Rules only mode.
+- **Beside the cases:** Ask about this case (agents that cannot write), a read-only review of a production, precedents, each agent's timeline and the evaluation.
+
+![Incident I-000001 from S11: eight failed deliveries, six chains, all verified at the receiver in 1 min 42 s](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/incident-s11.png)
+
+All 26 scenarios (S1 to S25 without S14, with S23 in three parts), step by step, and where each part of the task shows: [docs/readme/scenarios.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/scenarios.md).
+
+## The approval boundary, attacked over HTTP
+
+On every push to `main` that changes code, CI tries an approval naming another plan or a stale version (409), an operator's approval (403), one approval sent twice (one write), a Workflow inbox approval with an empty or another digest (blocked, no write), the receiver changed after approval (S20, no write), and a resend of a delivery the receiver already holds (S3, no write). The script: [boundary_check.py](https://github.com/MxSalata/shutter/blob/main/tests/e2e/boundary_check.py).
+
+## Terms
+
+- **Case:** one failed or withheld delivery and everything decided about it.
+- **Receiver:** the system the failed message was going to; in the demo, a bed manager, called the downstream system in the code and the item `Downstream Out`.
+- **Catalogue:** the failures Shutter knows and the safe outcome of each.
+- **Incident and chain:** many failures to one receiver, grouped; a chain is one encounter's messages, in event order.
+- **Rehearsal:** the receiver's dry run of the exact write, with nothing kept.
+- **Verified:** this operation read in the receiver's receipt and history at the time, never from an acknowledgement; ward and bed aren't compared.
+- **PAS:** the patient administration system, the hospital's source of admissions and transfers.

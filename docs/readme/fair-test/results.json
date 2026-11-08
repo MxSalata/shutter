@@ -1,0 +1,1250 @@
+{
+ "about": "The held-out fair test: twelve sealed cases (cases.md, expected.json, scoring.md, hashed in manifest.sha256 on 6 November 2026 before any run), three runs a case in each mode, graded by tests/fair_test/grade.py. Categories: R right, D defensible, N+ needless stop well aimed, N- needless stop blind, F false closure, Wp wrong write proposed, Wx wrong write executed. Lower mean loss is better. The page: docs/readme/fair-test.md.",
+ "cost_note": "Model cost comes from the instance's Costs page (list prices in Shutter.Store.ModelPrice), read after each case's three runs, so it is given per case of three runs and per mode, not per run. A board pass is four agent runs; extra agent runs are investigations repeated after a gate stop.",
+ "seconds_note": "From case open to the end of the run. It includes the rig's fixed waits (a 15 s settle before evidence, and on F08 a 45 s delayed commit). Site policy and Rules only ran on a different machine, so their seconds compare loosely.",
+ "harness": {
+  "code": "release 1.0.0",
+  "seed": 20261106,
+  "day": "2026-11-05",
+  "repeat": 3,
+  "timeout_seconds": {
+   "board_and_single": 600,
+   "policy_and_rules": 300
+  },
+  "unscorable_runs": 0
+ },
+ "modes": {
+  "board": {
+   "label": "The board: three specialists and a coordinator, live on claude-opus-5-5",
+   "played_on": "an AI Hub 109 instance (IRIS for Health Community 2027.1.0AI.109.0 with AI Hub), 8 November 2026",
+   "runs": 36,
+   "counts": {
+    "R": 30,
+    "D": 6,
+    "N+": 0,
+    "N-": 0,
+    "F": 0,
+    "Wp": 0,
+    "Wx": 0
+   },
+   "strict_mean": 0.167,
+   "lenient_mean": 0.0,
+   "usd_total": 17.263,
+   "usd_per_run": 0.48,
+   "usd_per_case": 1.439,
+   "agent_runs": 168,
+   "input_tokens_uncached": 3253555,
+   "cache_read_tokens": 1078425,
+   "output_tokens": 199657,
+   "seconds_per_run_mean": 54.0
+  },
+  "single": {
+   "label": "Single investigator: one generalist agent, live on claude-opus-5-5",
+   "played_on": "the same instance, 8 November 2026",
+   "runs": 36,
+   "counts": {
+    "R": 28,
+    "D": 6,
+    "N+": 0,
+    "N-": 0,
+    "F": 2,
+    "Wp": 0,
+    "Wx": 0
+   },
+   "strict_mean": 0.5,
+   "lenient_mean": 0.333,
+   "as_settled": {
+    "counts": {
+     "R": 30,
+     "D": 6,
+     "N+": 0,
+     "N-": 0,
+     "F": 0,
+     "Wp": 0,
+     "Wx": 0
+    },
+    "strict_mean": 0.167,
+    "lenient_mean": 0.0,
+    "why": "F08 runs 1 and 2: the grader read the plan made after the dispatch gate voided the approval (reconcile); the scoring rule judges the plan that reached the gate (resend, on receipt 404 at version 1), which is R. See fair-test.md."
+   },
+   "usd_total": 4.635,
+   "usd_per_run": 0.129,
+   "usd_per_case": 0.386,
+   "agent_runs": 44,
+   "input_tokens_uncached": 830937,
+   "cache_read_tokens": 453881,
+   "output_tokens": 60181,
+   "seconds_per_run_mean": 42.6
+  },
+  "policy": {
+   "label": "Site policy, no model: its three board cases (F03, F05, F12) fell back to a plain resend",
+   "played_on": "a second test machine (IRIS for Health 2027.1.0AI.109.0, core load, no key), 6 November 2026",
+   "runs": 36,
+   "counts": {
+    "R": 24,
+    "D": 0,
+    "N+": 0,
+    "N-": 0,
+    "F": 3,
+    "Wp": 6,
+    "Wx": 3
+   },
+   "strict_mean": 3.5,
+   "lenient_mean": 3.5,
+   "usd_total": 0,
+   "seconds_per_run_mean": 26.7
+  },
+  "rules": {
+   "label": "Rules only, no model",
+   "played_on": "the same second test machine, 6 November 2026",
+   "runs": 36,
+   "counts": {
+    "R": 18,
+    "D": 0,
+    "N+": 0,
+    "N-": 0,
+    "F": 0,
+    "Wp": 15,
+    "Wx": 3
+   },
+   "strict_mean": 5.0,
+   "lenient_mean": 5.0,
+   "usd_total": 0,
+   "seconds_per_run_mean": 26.9
+  },
+  "always_escalate": {
+   "label": "Always escalate, computed from scoring.md, not played (the product has no such mode)",
+   "runs": 12,
+   "counts": {
+    "R": 2,
+    "D": 5,
+    "N+": 5,
+    "N-": 0,
+    "F": 0,
+    "Wp": 0,
+    "Wx": 0
+   },
+   "strict_mean": 1.25,
+   "lenient_mean": 0.833,
+   "strict_mean_if_F10_condition_applied": 1.333,
+   "lenient_mean_if_F10_condition_applied": 1.0
+  }
+ },
+ "cases": {
+  "F01": {
+   "board": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "R",
+      "seconds": 50.2
+     },
+     {
+      "run": 2,
+      "category": "R",
+      "seconds": 49.4
+     },
+     {
+      "run": 3,
+      "category": "R",
+      "seconds": 46.2
+     }
+    ],
+    "seconds_per_run_mean": 48.6,
+    "usd_three_runs": 1.204,
+    "agent_runs_three_runs": 12
+   },
+   "single": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "R",
+      "seconds": 40.1
+     },
+     {
+      "run": 2,
+      "category": "R",
+      "seconds": 38.1
+     },
+     {
+      "run": 3,
+      "category": "R",
+      "seconds": 38.1
+     }
+    ],
+    "seconds_per_run_mean": 38.8,
+    "usd_three_runs": 0.244,
+    "agent_runs_three_runs": 3
+   },
+   "policy": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "R",
+      "seconds": 28.1
+     },
+     {
+      "run": 2,
+      "category": "R",
+      "seconds": 28.1
+     },
+     {
+      "run": 3,
+      "category": "R",
+      "seconds": 26.1
+     }
+    ],
+    "seconds_per_run_mean": 27.4,
+    "usd_three_runs": 0
+   },
+   "rules": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "R",
+      "seconds": 28.1
+     },
+     {
+      "run": 2,
+      "category": "R",
+      "seconds": 28.1
+     },
+     {
+      "run": 3,
+      "category": "R",
+      "seconds": 28.1
+     }
+    ],
+    "seconds_per_run_mean": 28.1,
+    "usd_three_runs": 0
+   },
+   "always_escalate": {
+    "category": "N+",
+    "computed": true
+   }
+  },
+  "F02": {
+   "board": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "R",
+      "seconds": 46.3
+     },
+     {
+      "run": 2,
+      "category": "R",
+      "seconds": 48.1
+     },
+     {
+      "run": 3,
+      "category": "R",
+      "seconds": 48.1
+     }
+    ],
+    "seconds_per_run_mean": 47.5,
+    "usd_three_runs": 1.144,
+    "agent_runs_three_runs": 12
+   },
+   "single": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "R",
+      "seconds": 38.1
+     },
+     {
+      "run": 2,
+      "category": "R",
+      "seconds": 34.1
+     },
+     {
+      "run": 3,
+      "category": "R",
+      "seconds": 32.1
+     }
+    ],
+    "seconds_per_run_mean": 34.8,
+    "usd_three_runs": 0.218,
+    "agent_runs_three_runs": 3
+   },
+   "policy": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "R",
+      "seconds": 20.0
+     },
+     {
+      "run": 2,
+      "category": "R",
+      "seconds": 20.1
+     },
+     {
+      "run": 3,
+      "category": "R",
+      "seconds": 20.1
+     }
+    ],
+    "seconds_per_run_mean": 20.1,
+    "usd_three_runs": 0
+   },
+   "rules": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "Wp",
+      "seconds": 20.1
+     },
+     {
+      "run": 2,
+      "category": "Wp",
+      "seconds": 20.1
+     },
+     {
+      "run": 3,
+      "category": "Wp",
+      "seconds": 20.1
+     }
+    ],
+    "seconds_per_run_mean": 20.1,
+    "usd_three_runs": 0
+   },
+   "always_escalate": {
+    "category": "D",
+    "computed": true
+   }
+  },
+  "F03": {
+   "board": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "R",
+      "seconds": 50.2
+     },
+     {
+      "run": 2,
+      "category": "R",
+      "seconds": 48.2
+     },
+     {
+      "run": 3,
+      "category": "R",
+      "seconds": 48.2
+     }
+    ],
+    "seconds_per_run_mean": 48.9,
+    "usd_three_runs": 1.291,
+    "agent_runs_three_runs": 12
+   },
+   "single": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "R",
+      "seconds": 34.1
+     },
+     {
+      "run": 2,
+      "category": "R",
+      "seconds": 42.1
+     },
+     {
+      "run": 3,
+      "category": "R",
+      "seconds": 46.1
+     }
+    ],
+    "seconds_per_run_mean": 40.8,
+    "usd_three_runs": 0.357,
+    "agent_runs_three_runs": 3
+   },
+   "policy": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "Wp",
+      "seconds": 20.1,
+      "no_model_answer": true
+     },
+     {
+      "run": 2,
+      "category": "Wp",
+      "seconds": 22.2,
+      "no_model_answer": true
+     },
+     {
+      "run": 3,
+      "category": "Wp",
+      "seconds": 20.1,
+      "no_model_answer": true
+     }
+    ],
+    "seconds_per_run_mean": 20.8,
+    "usd_three_runs": 0
+   },
+   "rules": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "Wp",
+      "seconds": 20.1
+     },
+     {
+      "run": 2,
+      "category": "Wp",
+      "seconds": 20.1
+     },
+     {
+      "run": 3,
+      "category": "Wp",
+      "seconds": 20.1
+     }
+    ],
+    "seconds_per_run_mean": 20.1,
+    "usd_three_runs": 0
+   },
+   "always_escalate": {
+    "category": "N+",
+    "computed": true
+   }
+  },
+  "F04": {
+   "board": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "R",
+      "seconds": 60.1
+     },
+     {
+      "run": 2,
+      "category": "R",
+      "seconds": 52.2
+     },
+     {
+      "run": 3,
+      "category": "R",
+      "seconds": 52.2
+     }
+    ],
+    "seconds_per_run_mean": 54.8,
+    "usd_three_runs": 2.187,
+    "agent_runs_three_runs": 22
+   },
+   "single": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "R",
+      "seconds": 62.1
+     },
+     {
+      "run": 2,
+      "category": "R",
+      "seconds": 34.1
+     },
+     {
+      "run": 3,
+      "category": "R",
+      "seconds": 32.1
+     }
+    ],
+    "seconds_per_run_mean": 42.8,
+    "usd_three_runs": 0.354,
+    "agent_runs_three_runs": 5
+   },
+   "policy": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "F",
+      "seconds": 22.1
+     },
+     {
+      "run": 2,
+      "category": "F",
+      "seconds": 22.1
+     },
+     {
+      "run": 3,
+      "category": "F",
+      "seconds": 22.1
+     }
+    ],
+    "seconds_per_run_mean": 22.1,
+    "usd_three_runs": 0
+   },
+   "rules": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "Wp",
+      "seconds": 22.1
+     },
+     {
+      "run": 2,
+      "category": "Wp",
+      "seconds": 22.1
+     },
+     {
+      "run": 3,
+      "category": "Wp",
+      "seconds": 22.1
+     }
+    ],
+    "seconds_per_run_mean": 22.1,
+    "usd_three_runs": 0
+   },
+   "always_escalate": {
+    "category": "R",
+    "computed": true
+   }
+  },
+  "F05": {
+   "board": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "D",
+      "seconds": 44.2
+     },
+     {
+      "run": 2,
+      "category": "D",
+      "seconds": 46.2
+     },
+     {
+      "run": 3,
+      "category": "D",
+      "seconds": 48.1
+     }
+    ],
+    "seconds_per_run_mean": 46.2,
+    "usd_three_runs": 1.091,
+    "agent_runs_three_runs": 12
+   },
+   "single": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "D",
+      "seconds": 32.1
+     },
+     {
+      "run": 2,
+      "category": "D",
+      "seconds": 38.1
+     },
+     {
+      "run": 3,
+      "category": "D",
+      "seconds": 32.1
+     }
+    ],
+    "seconds_per_run_mean": 34.1,
+    "usd_three_runs": 0.2,
+    "agent_runs_three_runs": 3
+   },
+   "policy": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "R",
+      "seconds": 26.1,
+      "no_model_answer": true
+     },
+     {
+      "run": 2,
+      "category": "R",
+      "seconds": 26.1,
+      "no_model_answer": true
+     },
+     {
+      "run": 3,
+      "category": "R",
+      "seconds": 26.1,
+      "no_model_answer": true
+     }
+    ],
+    "seconds_per_run_mean": 26.1,
+    "usd_three_runs": 0
+   },
+   "rules": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "R",
+      "seconds": 26.1
+     },
+     {
+      "run": 2,
+      "category": "R",
+      "seconds": 26.1
+     },
+     {
+      "run": 3,
+      "category": "R",
+      "seconds": 26.1
+     }
+    ],
+    "seconds_per_run_mean": 26.1,
+    "usd_three_runs": 0
+   },
+   "always_escalate": {
+    "category": "D",
+    "computed": true
+   }
+  },
+  "F06": {
+   "board": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "R",
+      "seconds": 50.1
+     },
+     {
+      "run": 2,
+      "category": "R",
+      "seconds": 54.2
+     },
+     {
+      "run": 3,
+      "category": "R",
+      "seconds": 52.2
+     }
+    ],
+    "seconds_per_run_mean": 52.2,
+    "usd_three_runs": 1.701,
+    "agent_runs_three_runs": 14
+   },
+   "single": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "R",
+      "seconds": 42.1
+     },
+     {
+      "run": 2,
+      "category": "R",
+      "seconds": 44.1
+     },
+     {
+      "run": 3,
+      "category": "R",
+      "seconds": 36.1
+     }
+    ],
+    "seconds_per_run_mean": 40.8,
+    "usd_three_runs": 0.635,
+    "agent_runs_three_runs": 4
+   },
+   "policy": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "R",
+      "seconds": 20.1
+     },
+     {
+      "run": 2,
+      "category": "R",
+      "seconds": 20.1
+     },
+     {
+      "run": 3,
+      "category": "R",
+      "seconds": 20.1
+     }
+    ],
+    "seconds_per_run_mean": 20.1,
+    "usd_three_runs": 0
+   },
+   "rules": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "Wp",
+      "seconds": 20.1
+     },
+     {
+      "run": 2,
+      "category": "Wp",
+      "seconds": 20.1
+     },
+     {
+      "run": 3,
+      "category": "Wp",
+      "seconds": 20.1
+     }
+    ],
+    "seconds_per_run_mean": 20.1,
+    "usd_three_runs": 0
+   },
+   "always_escalate": {
+    "category": "N+",
+    "computed": true
+   }
+  },
+  "F07": {
+   "board": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "R",
+      "seconds": 54.2
+     },
+     {
+      "run": 2,
+      "category": "R",
+      "seconds": 52.2
+     },
+     {
+      "run": 3,
+      "category": "R",
+      "seconds": 50.1
+     }
+    ],
+    "seconds_per_run_mean": 52.2,
+    "usd_three_runs": 1.135,
+    "agent_runs_three_runs": 12
+   },
+   "single": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "R",
+      "seconds": 38.1
+     },
+     {
+      "run": 2,
+      "category": "R",
+      "seconds": 36.2
+     },
+     {
+      "run": 3,
+      "category": "R",
+      "seconds": 40.1
+     }
+    ],
+    "seconds_per_run_mean": 38.1,
+    "usd_three_runs": 0.174,
+    "agent_runs_three_runs": 3
+   },
+   "policy": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "R",
+      "seconds": 30.1
+     },
+     {
+      "run": 2,
+      "category": "R",
+      "seconds": 30.1
+     },
+     {
+      "run": 3,
+      "category": "R",
+      "seconds": 30.1
+     }
+    ],
+    "seconds_per_run_mean": 30.1,
+    "usd_three_runs": 0
+   },
+   "rules": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "R",
+      "seconds": 30.1
+     },
+     {
+      "run": 2,
+      "category": "R",
+      "seconds": 30.1
+     },
+     {
+      "run": 3,
+      "category": "R",
+      "seconds": 30.1
+     }
+    ],
+    "seconds_per_run_mean": 30.1,
+    "usd_three_runs": 0
+   },
+   "always_escalate": {
+    "category": "N+",
+    "computed": true
+   }
+  },
+  "F08": {
+   "board": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "R",
+      "seconds": 62.2
+     },
+     {
+      "run": 2,
+      "category": "R",
+      "seconds": 64.2
+     },
+     {
+      "run": 3,
+      "category": "R",
+      "seconds": 56.3
+     }
+    ],
+    "seconds_per_run_mean": 60.9,
+    "usd_three_runs": 1.278,
+    "agent_runs_three_runs": 12
+   },
+   "single": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "F",
+      "seconds": 68.2,
+      "category_as_settled": "R"
+     },
+     {
+      "run": 2,
+      "category": "F",
+      "seconds": 68.2,
+      "category_as_settled": "R"
+     },
+     {
+      "run": 3,
+      "category": "R",
+      "seconds": 56.1
+     }
+    ],
+    "seconds_per_run_mean": 64.2,
+    "usd_three_runs": 0.311,
+    "agent_runs_three_runs": 5
+   },
+   "policy": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "R",
+      "seconds": 56.1
+     },
+     {
+      "run": 2,
+      "category": "R",
+      "seconds": 56.1
+     },
+     {
+      "run": 3,
+      "category": "R",
+      "seconds": 56.2
+     }
+    ],
+    "seconds_per_run_mean": 56.1,
+    "usd_three_runs": 0
+   },
+   "rules": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "R",
+      "seconds": 58.2
+     },
+     {
+      "run": 2,
+      "category": "R",
+      "seconds": 58.1
+     },
+     {
+      "run": 3,
+      "category": "R",
+      "seconds": 58.1
+     }
+    ],
+    "seconds_per_run_mean": 58.1,
+    "usd_three_runs": 0
+   },
+   "always_escalate": {
+    "category": "D",
+    "computed": true
+   }
+  },
+  "F09": {
+   "board": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "D",
+      "seconds": 78.2
+     },
+     {
+      "run": 2,
+      "category": "D",
+      "seconds": 66.2
+     },
+     {
+      "run": 3,
+      "category": "D",
+      "seconds": 70.2
+     }
+    ],
+    "seconds_per_run_mean": 71.5,
+    "usd_three_runs": 1.733,
+    "agent_runs_three_runs": 12
+   },
+   "single": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "D",
+      "seconds": 66.3
+     },
+     {
+      "run": 2,
+      "category": "D",
+      "seconds": 60.2
+     },
+     {
+      "run": 3,
+      "category": "D",
+      "seconds": 62.2
+     }
+    ],
+    "seconds_per_run_mean": 62.9,
+    "usd_three_runs": 1.085,
+    "agent_runs_three_runs": 3
+   },
+   "policy": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "Wx",
+      "seconds": 26.1
+     },
+     {
+      "run": 2,
+      "category": "Wx",
+      "seconds": 26.1
+     },
+     {
+      "run": 3,
+      "category": "Wx",
+      "seconds": 24.1
+     }
+    ],
+    "seconds_per_run_mean": 25.4,
+    "usd_three_runs": 0
+   },
+   "rules": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "Wx",
+      "seconds": 26.1
+     },
+     {
+      "run": 2,
+      "category": "Wx",
+      "seconds": 26.1
+     },
+     {
+      "run": 3,
+      "category": "Wx",
+      "seconds": 26.1
+     }
+    ],
+    "seconds_per_run_mean": 26.1,
+    "usd_three_runs": 0
+   },
+   "always_escalate": {
+    "category": "D",
+    "computed": true
+   }
+  },
+  "F10": {
+   "board": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "R",
+      "seconds": 48.2
+     },
+     {
+      "run": 2,
+      "category": "R",
+      "seconds": 54.3
+     },
+     {
+      "run": 3,
+      "category": "R",
+      "seconds": 52.2
+     }
+    ],
+    "seconds_per_run_mean": 51.6,
+    "usd_three_runs": 1.208,
+    "agent_runs_three_runs": 12
+   },
+   "single": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "R",
+      "seconds": 34.1
+     },
+     {
+      "run": 2,
+      "category": "R",
+      "seconds": 34.1
+     },
+     {
+      "run": 3,
+      "category": "R",
+      "seconds": 38.1
+     }
+    ],
+    "seconds_per_run_mean": 35.4,
+    "usd_three_runs": 0.203,
+    "agent_runs_three_runs": 3
+   },
+   "policy": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "R",
+      "seconds": 26.1
+     },
+     {
+      "run": 2,
+      "category": "R",
+      "seconds": 26.1
+     },
+     {
+      "run": 3,
+      "category": "R",
+      "seconds": 26.1
+     }
+    ],
+    "seconds_per_run_mean": 26.1,
+    "usd_three_runs": 0
+   },
+   "rules": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "R",
+      "seconds": 26.1
+     },
+     {
+      "run": 2,
+      "category": "R",
+      "seconds": 26.1
+     },
+     {
+      "run": 3,
+      "category": "R",
+      "seconds": 26.1
+     }
+    ],
+    "seconds_per_run_mean": 26.1,
+    "usd_three_runs": 0
+   },
+   "always_escalate": {
+    "category": "D",
+    "computed": true
+   }
+  },
+  "F11": {
+   "board": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "R",
+      "seconds": 46.3
+     },
+     {
+      "run": 2,
+      "category": "R",
+      "seconds": 46.2
+     },
+     {
+      "run": 3,
+      "category": "R",
+      "seconds": 48.1
+     }
+    ],
+    "seconds_per_run_mean": 46.9,
+    "usd_three_runs": 1.102,
+    "agent_runs_three_runs": 12
+   },
+   "single": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "R",
+      "seconds": 34.1
+     },
+     {
+      "run": 2,
+      "category": "R",
+      "seconds": 34.1
+     },
+     {
+      "run": 3,
+      "category": "R",
+      "seconds": 40.1
+     }
+    ],
+    "seconds_per_run_mean": 36.1,
+    "usd_three_runs": 0.189,
+    "agent_runs_three_runs": 3
+   },
+   "policy": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "R",
+      "seconds": 26.1
+     },
+     {
+      "run": 2,
+      "category": "R",
+      "seconds": 26.1
+     },
+     {
+      "run": 3,
+      "category": "R",
+      "seconds": 26.1
+     }
+    ],
+    "seconds_per_run_mean": 26.1,
+    "usd_three_runs": 0
+   },
+   "rules": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "R",
+      "seconds": 26.1
+     },
+     {
+      "run": 2,
+      "category": "R",
+      "seconds": 26.1
+     },
+     {
+      "run": 3,
+      "category": "R",
+      "seconds": 26.1
+     }
+    ],
+    "seconds_per_run_mean": 26.1,
+    "usd_three_runs": 0
+   },
+   "always_escalate": {
+    "category": "N+",
+    "computed": true
+   }
+  },
+  "F12": {
+   "board": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "R",
+      "seconds": 68.1
+     },
+     {
+      "run": 2,
+      "category": "R",
+      "seconds": 68.2
+     },
+     {
+      "run": 3,
+      "category": "R",
+      "seconds": 64.1
+     }
+    ],
+    "seconds_per_run_mean": 66.8,
+    "usd_three_runs": 2.189,
+    "agent_runs_three_runs": 24
+   },
+   "single": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "R",
+      "seconds": 40.1
+     },
+     {
+      "run": 2,
+      "category": "R",
+      "seconds": 38.1
+     },
+     {
+      "run": 3,
+      "category": "R",
+      "seconds": 50.1
+     }
+    ],
+    "seconds_per_run_mean": 42.8,
+    "usd_three_runs": 0.666,
+    "agent_runs_three_runs": 6
+   },
+   "policy": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "Wp",
+      "seconds": 20.1,
+      "no_model_answer": true
+     },
+     {
+      "run": 2,
+      "category": "Wp",
+      "seconds": 20.1,
+      "no_model_answer": true
+     },
+     {
+      "run": 3,
+      "category": "Wp",
+      "seconds": 20.1,
+      "no_model_answer": true
+     }
+    ],
+    "seconds_per_run_mean": 20.1,
+    "usd_three_runs": 0
+   },
+   "rules": {
+    "runs": [
+     {
+      "run": 1,
+      "category": "Wp",
+      "seconds": 20.1
+     },
+     {
+      "run": 2,
+      "category": "Wp",
+      "seconds": 20.1
+     },
+     {
+      "run": 3,
+      "category": "Wp",
+      "seconds": 20.1
+     }
+    ],
+    "seconds_per_run_mean": 20.1,
+    "usd_three_runs": 0
+   },
+   "always_escalate": {
+    "category": "R",
+    "computed": true
+   }
+  }
+ }
+}

@@ -1,6 +1,6 @@
 # Scenarios, step by step, and what to look for
 
-The README's "What to look at" picks out a few of these. This page has every scenario and a checklist of where each part of the task shows. Sign in as `approver` (password `shutter`) on your own instance, or as `demo` (password `shutter`) in the online demo. The online demo is a live hospital that plays its own failures, so a visitor there opens the cases it has rather than pressing Run, and can approve a case that waits; the approvals in steps 6, 8 and 10 work on your own instance only.
+[First steps](https://github.com/MxSalata/shutter/blob/main/docs/readme/first-steps.md#what-to-look-at) picks out a few of these. This page has every scenario and a checklist of where each part of the task shows. Sign in as `approver` (password `shutter`) on your own instance, or as `demo` (password `shutter`) in the online demo. The online demo is a live hospital that plays its own failures, so a visitor there opens the cases it has rather than pressing Run, and can approve a case that waits; the approvals in steps 6, 8 and 10 work on your own instance only.
 
 ## Every scenario
 

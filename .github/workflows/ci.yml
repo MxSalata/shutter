@@ -199,7 +199,7 @@ jobs:
       # publish.
       - name: Both module.xml files are plain ASCII
         run: python3 scripts/check-ascii.py module.xml core/module.xml
-      # The writing rules: no em or en dashes, no tool's name and no Co-Authored-By trailer, in every tracked file but
+      # The writing rules: no em or en dashes and no Co-Authored-By trailer, in every tracked file but
       # the built www/ and the vendored installer, and in the messages of the commits a push brings.
       - name: The files and the pushed commit messages keep the writing rules
         run: |

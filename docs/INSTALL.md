@@ -7,11 +7,23 @@ the productions a hospital already runs; the README's `docker compose up` is the
 
 ## 1. In one page
 
+### What Shutter does at your site
+
+| Your receiver | What a failed message becomes today |
+| --- | --- |
+| An API with state, receipt, capabilities and conditional writes, described in the site profile | ADT: a case, the evidence, a plan and the gate, then a resend once its checks pass. Orders, results and documents: a case and a drafted email |
+| MLLP or TCP with no API | Any message type: a case, the evidence, a diagnosis where the agents can run, and a drafted email. Never a resend |
+| FHIR, or anything else that isn't HL7 | A warning in the event log and no case |
+| Any receiver, a message over 2 MB | A warning in the event log and no case |
+| Any receiver, a transport ACK and then lost downstream | Nothing: Shutter doesn't hear of it (section 10) |
+
+A production review needs none of this configured.
+
 - **The demo install is not a hospital install.** The image loads the `iris-shutter` module with `demo=1`: demo
   users, the demo bed-management system (`Downstream.*`), the scenario player, a namespace-wide message purge, and
   `Shutter.Production` as the auto-start production.
 - **Shape A, recommended: Shutter in its own namespace, the hospital's productions hooked in.** The hospital's
-  productions keep running untouched. A forwarder in each watched production hands Shutter a failed message over
+  productions keep their own processes and routes unchanged. A forwarder in each watched production hands Shutter a failed message over
   HTTP; Shutter stores its own copy, opens the case and records where the original lives.
 - **Shape B: Shutter's items inside a production the hospital already runs**, in that namespace, through
   `Setup.InstallInto`. One production to look at, with Shutter's queues, settings and upgrades beside the hospital's.
@@ -120,6 +132,17 @@ site. IPM (`zpm`) is per namespace and a stock image has none: load `vendor/ipm/
 disabled (the six named in section 1), so it has no feed of its own until the intake route or the site's own items bring it
 one. **Load only in the namespace made for Shutter.** A load in a namespace running another production is refused and says
 so, since starting `Shutter.Production` there would stop it; name that production (`-Dproduction=...`) for shape B.
+
+**From the registry.** The IPM in `vendor/ipm` starts with no registry, so `zpm "install iris-shutter"` answers "No repositories are configured and enabled in this namespace" until you run `zpm "repo -reset-defaults"`. `zpm "load"` from a clone doesn't need it. This demo install, from a clone of this repository, took about 2.5 minutes on clean 154 and 109 containers on 7 Nov 2026, and started `Shutter.Production` and `Hospital.Production`:
+
+```
+Do $SYSTEM.OBJ.Load("<module>/src/Shutter/Setup.cls", "ck")
+Write ##class(Shutter.Setup).CreateNamespace("SHUTTER")
+zn "SHUTTER"
+Do $SYSTEM.OBJ.Load("<module>/vendor/ipm/zpm-0.10.10.xml", "ck")
+zpm "repo -reset-defaults"
+zpm "install iris-shutter"
+```
 
 **3.2 The hook.** A failure reaches Shutter through `POST /api/shutter/intake`. The caller signs in with HTTP Basic
 authentication as a user holding `Shutter_Forwarder` (the resource `Shutter_Intake`), sends the header
