@@ -22,7 +22,6 @@ import os
 import re
 import subprocess
 import sys
-import threading
 import time
 import urllib.error
 import urllib.request
@@ -172,12 +171,13 @@ def state_of_things():
     return {"cases": rows, "events": events, "attempts": attempts, "headers": headers, "heard": heard}
 
 
-def settled_state(seconds=120):
-    """The state once the cases have stopped moving, read twice."""
+def settled_state(seconds=180):
+    """The state once the cases have stopped moving, read twice 20 s apart: longer than the 15 s a new case waits for the
+    feed to settle, during which it doesn't move, so two reads inside that wait can't pass for settled."""
     end = time.time() + seconds
     last = state_of_things()
     while time.time() < end:
-        time.sleep(6)
+        time.sleep(20)
         now = state_of_things()
         if now == last:
             return now
@@ -368,9 +368,10 @@ check("and a receiver with no alert is told apart by nothing but its missing cas
 step("Several failures on one case: many to one")
 W3 = iso(-1)
 when = time.strftime("%Y%m%d%H%M%S", time.gmtime(time.time() - 300))
-threads = [threading.Thread(target=send, args=(a01("TWO", f"MANY-{i}", "MANYENC", when), f"many{i}")) for i in range(2)]
-[x.start() for x in threads]
-[x.join() for x in threads]
+# One after the other: the site's service takes one connection at a time, so two sent at once could lose one before it
+# reached the namespace (seen once in four runs, with only one connection in the service's log).
+for i in range(2):
+    send(a01("TWO", f"MANY-{i}", "MANYENC", when), f"many{i}")
 wait_deliveries("Cen Two", 4)
 time.sleep(10)
 T3 = iso(2)
