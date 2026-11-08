@@ -1,6 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { INITIAL } from './controller';
-import { forgetProgress, GUIDE_KEY, loadProgress, saveProgress } from './storage';
+import {
+  forgetProgress,
+  GUIDE_KEY,
+  loadProgress,
+  saveProgress,
+  snoozeWelcome,
+  WELCOME_SNOOZE_KEY,
+  WELCOME_SNOOZE_MS,
+  welcomeSnoozed,
+} from './storage';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -39,5 +48,34 @@ describe('the guide storage', () => {
     expect(loadProgress()).toEqual(p);
     forgetProgress();
     expect(loadProgress()).toEqual(INITIAL);
+  });
+
+  it('keeps Explore on my own for the visit on the device, so a reload or a link into the trial does not welcome again', () => {
+    const now = Date.parse('2026-11-08T15:00:00Z');
+    expect(welcomeSnoozed(now)).toBe(false);
+    snoozeWelcome(now);
+    expect(localStorage.getItem(WELCOME_SNOOZE_KEY)).toBe(String(now));
+    // A reload, or a second tab, reads it from the device
+    forgetProgress();
+    expect(welcomeSnoozed(now + 60_000)).toBe(true);
+    // A later visit is welcomed again
+    expect(welcomeSnoozed(now + WELCOME_SNOOZE_MS)).toBe(false);
+    // A damaged value puts nothing off
+    localStorage.setItem(WELCOME_SNOOZE_KEY, 'soon');
+    expect(welcomeSnoozed(now)).toBe(false);
+  });
+
+  it('keeps Explore on my own for the page when storage refuses', () => {
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('refused');
+    });
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('refused');
+    });
+    const now = Date.now();
+    snoozeWelcome(now);
+    expect(welcomeSnoozed(now + 1)).toBe(true);
+    forgetProgress();
+    expect(welcomeSnoozed(now + 1)).toBe(false);
   });
 });

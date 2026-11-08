@@ -1,5 +1,16 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { envFrom, liveHref, pageEnv, rememberTrialRole, TRIAL_ROLE_KEY, trialHref, trialUser } from './mode';
+import {
+  envFrom,
+  JUDGE_PATH_HASH,
+  liveHref,
+  normalisedSearch,
+  pageEnv,
+  rememberTrialRole,
+  startAddress,
+  TRIAL_ROLE_KEY,
+  trialHref,
+  trialUser,
+} from './mode';
 
 describe('envFrom', () => {
   it('is the live system with nothing in the address', () => {
@@ -9,6 +20,7 @@ describe('envFrom', () => {
       canLeave: false,
       role: 'approver',
       openGuide: false,
+      judgePath: false,
       detail: null,
     });
   });
@@ -22,6 +34,13 @@ describe('envFrom', () => {
     expect(envFrom('?trial=tour', false).openGuide).toBe('quick');
     expect(envFrom('?trial=engineer', false).openGuide).toBe('engineer');
     expect(envFrom('?trial=other', false).openGuide).toBe(false);
+  });
+
+  it("takes the judges' path with ?trial=judge, live or on the demo build, and opens no tour", () => {
+    expect(envFrom('?trial=judge', false)).toMatchObject({ trial: true, judgePath: true, openGuide: false });
+    expect(envFrom('?trial=judge', true).judgePath).toBe(true);
+    expect(envFrom('?trial', true).judgePath).toBe(false);
+    expect(envFrom('?as=judge', true).judgePath).toBe(false);
   });
 
   it('picks the starting role with ?as=, and the approver for an unknown one', () => {
@@ -62,6 +81,25 @@ describe('the addresses of the trial and of the live system', () => {
   it("sign the trial's roles in as the mock's users of the same name", () => {
     expect(trialUser('demo')).toEqual({ username: 'demo', password: 'shutter' });
     expect(trialUser(envFrom('?as=other', true).role).username).toBe('approver');
+  });
+});
+
+describe("the judges' path's address", () => {
+  it('opens Scenarios in Rules only mode, whatever page it named, and a reload of it is a plain trial page', () => {
+    expect(JUDGE_PATH_HASH).toBe('#/scenarios?mode=rules');
+    expect(startAddress('?trial=judge', '')).toEqual({ search: '?trial', hash: '#/scenarios?mode=rules' });
+    expect(startAddress('?trial=judge&as=operator', '#/cases/C-000008')).toEqual({
+      search: '?trial&as=operator',
+      hash: '#/scenarios?mode=rules',
+    });
+    expect(normalisedSearch('?detail=technical&trial=judge')).toBe('?detail=technical&trial');
+    // What the reload loads: no judges' path, and the page it is on
+    expect(envFrom('?trial', true).judgePath).toBe(false);
+    expect(startAddress('?trial', '#/scenarios?mode=rules')).toEqual({
+      search: '?trial',
+      hash: '#/scenarios?mode=rules',
+    });
+    expect(startAddress('?trial=tour', '#/cases')).toEqual({ search: '?trial', hash: '#/cases' });
   });
 });
 

@@ -153,7 +153,24 @@ interface Featured {
   see: (entry?: string) => string;
   /** The rest, behind "More about <id>", where the short text leaves something out. */
   more?: string;
+  /**
+   * The card follows the mode chosen under Run mode, with its words for each mode it can be played in there: its Run
+   * plays in that mode and says so ("Run S8 in Rules only"). Its own `mode` is the one it shows otherwise.
+   */
+  byMode?: Partial<Record<Mode, Pick<Featured, 'title' | 'see' | 'more' | 'diagramNote'>>>;
+  /**
+   * A line above the diagram, where the mode's run does not end as the diagram draws: the diagram is how the scenario
+   * should end (scenarioDiagram.ts), so S8 in Rules only, which writes, says so in words.
+   */
+  diagramNote?: string;
 }
+
+/** Above S8's diagram in Rules only: the diagram draws the end S8 should have, and Rules only writes instead. */
+export const S8_RULES_DIAGRAM_NOTE = 'Should end: a person decides. Rules only writes instead.';
+
+/** S8 played by Rules only: the resend the scenario is exempted for, so that a plain resend can be seen writing. */
+export const S8_RULES_SEE =
+  'Rules only, exempted here on purpose to show a plain resend: every check passed and WARD-B was written over WARD-C. On a real case the gate holds it.';
 
 const FIRST: Featured[] = [
   {
@@ -169,6 +186,24 @@ const FIRST: Featured[] = [
     title: 'The board withholds a write',
     see: (entry) =>
       `A resend would write over the bed manager's ward with every check passed. The evidence cannot tell which movement is current, so the coordinator agent escalates to a person${entry ? `, citing catalogue entry ${entry},` : ''} and keeps the dissent.`,
+    byMode: {
+      rules: {
+        title: 'Rules only writes over a ward',
+        see: () => S8_RULES_SEE,
+        diagramNote: S8_RULES_DIAGRAM_NOTE,
+        more: 'Two systems moved the same patient at the same recorded time. With no agents, the plan is a plain resend; play S8 in Board mode next to see the coordinator agent escalate the same failure to a person.',
+      },
+      policy: {
+        title: 'The policy leaves it to the board',
+        see: (entry) =>
+          `The site's written policy does not settle two movements at the same time, so the board takes the case: the evidence cannot tell which movement is current, and the coordinator agent escalates to a person${entry ? `, citing catalogue entry ${entry}` : ''}.`,
+      },
+      single: {
+        title: 'One agent weighs a write',
+        see: () =>
+          "A resend would write over the bed manager's ward with every check passed. One generalist agent reads all the evidence and proposes the plan; the gate checks it as in every mode.",
+      },
+    },
   },
   {
     id: 'S20',
@@ -227,9 +262,12 @@ export function TryFirst({
   onRun,
   demo = false,
   whyId,
+  chosen,
 }: {
   /** The scenarios, once read; the section and its heading render before that, as the guide's first target. */
   scenarios: Scenario[] | undefined;
+  /** The mode chosen under Run mode, which a card with words for it follows (S8). */
+  chosen?: Mode;
   failed: boolean;
   /** Why a scenario cannot be played in a mode now, or "" when it can. */
   why: (s: Scenario, mode: Mode) => string;
@@ -244,7 +282,13 @@ export function TryFirst({
 }) {
   const casesRead = useCases({ limit: 100 });
   const cases = casesRead.data?.items ?? [];
-  const list = demo ? DEMO_FIRST : FIRST;
+  // A card that follows the chosen mode takes that mode and its words for it (the demo's cards keep their own)
+  const list = demo
+    ? DEMO_FIRST
+    : FIRST.map((f) => {
+        const words = chosen && f.byMode ? f.byMode[chosen] : undefined;
+        return words ? { ...f, ...words, mode: chosen!, follows: true } : { ...f, follows: !!f.byMode };
+      });
   const first = list
     .map((f) => ({ ...f, s: scenarios?.find((s) => s.id === f.id) }))
     .filter((f): f is Featured & { s: Scenario } => !!f.s)
@@ -299,9 +343,11 @@ export function TryFirst({
         </Text>
       ) : (
         <SimpleGrid cols={{ base: 1, md: 3 }} spacing="md" verticalSpacing={{ base: 'md', md: 0 }}>
-          {first.map(({ s, mode, title, see, more, inMode, latest }) => {
+          {first.map(({ s, mode, title, see, more, diagramNote, inMode, latest, ...f }) => {
             const reason = why(s, mode);
             const modeName = MODE_NAMES[mode];
+            // A card that follows the chosen mode names it on its Run: "Run S8 in Rules only"
+            const follows = 'follows' in f && f.follows;
             return (
               <Card key={s.id} padding="md" data-first={s.id} className="first-card">
                 <Stack gap="sm" style={{ flex: 1 }}>
@@ -316,6 +362,11 @@ export function TryFirst({
                       {title}
                     </Title>
                     <Text size="sm">{s.title}</Text>
+                    {diagramNote ? (
+                      <Text size="xs" fw={600}>
+                        {diagramNote}
+                      </Text>
+                    ) : null}
                     <ScenarioDiagram scenario={s} mode={mode} />
                   </Stack>
                   <Stack gap={4}>
@@ -345,7 +396,7 @@ export function TryFirst({
                           aria-describedby={demo ? whyId : undefined}
                           data-tour-action={`run-${s.id}`}
                         >
-                          Run {s.id}
+                          {follows ? `Run ${s.id} in ${modeName}` : `Run ${s.id}`}
                         </Button>
                       </span>
                     </Tooltip>

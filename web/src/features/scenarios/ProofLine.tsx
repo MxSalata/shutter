@@ -27,8 +27,8 @@ export function ProofLine({ proof = PROOF }: { proof?: Pick<Proof, 'board' | 'pl
         {parts.tested && p ? ' ' : null}
         {p ? (
           <>
-            Played end to end on {p.of} {p.ofThem ? 'of them' : 'recorded failures'}: the{' '}
-            <Term term="board">board</Term> {p.board}, <Term term="simple-rules">Rules only</Term> {p.rules}.
+            Played end to end on {p.of} {p.counted}: the <Term term="board">board</Term> {p.board},{' '}
+            <Term term="simple-rules">Rules only</Term> {p.rules}.
           </>
         ) : null}
         {technical && parts.bases ? ` ${parts.bases}` : null}{' '}
