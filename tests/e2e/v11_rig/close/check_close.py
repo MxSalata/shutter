@@ -97,7 +97,7 @@ class Close:
         return json.loads(self.r.read_rows("SHUTTER", code)[0])
 
     def case_events(self, cid):
-        code = f'''Set c=##class(Shutter.Store.Case).ByCaseId("{cid}") Set rs=##class(%SQL.Statement).%ExecDirect(,"SELECT Kind, Detail FROM Shutter_Store.CaseEvent WHERE ""Case"" = ? ORDER BY ID",c.%Id()) While rs.%Next() {{ Write !,"<<<",rs.%Get("Kind"),"|",$TRANSLATE(rs.%Get("Detail"),$CHAR(10)," "),">>>",! }}'''
+        code = f'''Set c=##class(Shutter.Store.Case).ByCaseId("{cid}") Set rs=##class(%SQL.Statement).%ExecDirect(,"SELECT Kind, Text FROM Shutter_Store.CaseEvent WHERE ""Case"" = ? ORDER BY ID",c.%Id()) If rs.%SQLCODE<0 {{ Write !,"<<<SQL ",rs.%SQLCODE,">>>",! }} While rs.%Next() {{ Write !,"<<<",rs.%Get("Kind"),"|",$TRANSLATE(rs.%Get("Text"),$CHAR(10)," "),">>>",! }}'''
         return self.r.read_rows("SHUTTER", code)
 
 
