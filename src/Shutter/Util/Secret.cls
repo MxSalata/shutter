@@ -15,11 +15,13 @@ Parameter HIDDEN = "hidden";
 /// PEM block (-----BEGIN), HTTP Basic credentials (basic and a base64 run holding a digit, +, / or =, or a capital
 /// after a small letter, which a plain word does not), a credential written as a name and its value (key=, token=,
 /// apikey:, secret= and the like), one run of 24 or more letters and digits holding both, as a random key is, a wallet
-/// reference, a password, a URL or an address.
-ClassMethod Looks(value As %String) As %Boolean
+/// reference, a password, a URL or an address. With <var>model</var> set, the value is an agent item's Model, where a
+/// lone "@" is a model's version (name@version, as one cloud names its models), not an address; every other shape counts.
+ClassMethod Looks(value As %String, model As %Boolean = 0) As %Boolean
 {
     Set v = $ZCONVERT(value, "L")
-    For word = "sk-ant", "secret://", "password", "bearer ", "://", "@", "ghp_", "gho_", "github_pat_", "xox", "-----begin", "sk_live_", "sk_test_", "rk_live_", "rk_test_", "glpat-" {
+    If 'model && (v [ "@") Quit 1
+    For word = "sk-ant", "secret://", "password", "bearer ", "://", "ghp_", "gho_", "github_pat_", "xox", "-----begin", "sk_live_", "sk_test_", "rk_live_", "rk_test_", "glpat-" {
         If v [ word Return 1
     }
     // Where a word starts, so task-runner and chf_rate are not keys.
@@ -40,6 +42,18 @@ ClassMethod Clean(value As %String) As %String
     Quit $SELECT(..Looks(value): ..#HIDDEN, 1: value)
 }
 
+/// Whether an agent item's Model looks like a key: the same rule, with a model's name@version let through.
+ClassMethod LooksModel(value As %String) As %Boolean
+{
+    Quit ..Looks(value, 1)
+}
+
+/// An agent item's Model, or "hidden" when it looks like a key.
+ClassMethod CleanModel(value As %String) As %String
+{
+    Quit $SELECT(..Looks(value, 1): ..#HIDDEN, 1: value)
+}
+
 /// The run's settings that came from the item: a ProviderConfig or a Model that looks like a key becomes "hidden" in
 /// <var>spec</var>, so no runner, line or row ever gets the value. Returns the first such setting's name
 /// (ProviderConfig, then Model), or "" when neither looks like one.
@@ -47,7 +61,7 @@ ClassMethod MaskSpec(spec As %RegisteredObject) As %String
 {
     Set found = ""
     If (spec.ProviderConfig '= "") && ..Looks(spec.ProviderConfig) Set spec.ProviderConfig = ..#HIDDEN, found = "ProviderConfig"
-    If (spec.Model '= "") && ..Looks(spec.Model) {
+    If (spec.Model '= "") && ..LooksModel(spec.Model) {
         Set spec.Model = ..#HIDDEN
         If found = "" Set found = "Model"
     }
@@ -62,21 +76,23 @@ ClassMethod Refusal(setting As %String) As %String
 }
 
 /// The response as it leaves the operation: its Model and ProviderConfig cleaned, and each of the item's own values in
-/// <var>raw</var> (a list) that looks like a key taken out of its Error, so neither the trace, the message, nor any row
-/// made from it carries one.
-ClassMethod MaskResponse(response As %RegisteredObject, raw As %List = "")
+/// <var>raw</var> (a list) and its <var>model</var> that looks like a key taken out of its Error, so neither the trace,
+/// the message, nor any row made from it carries one.
+ClassMethod MaskResponse(response As %RegisteredObject, raw As %List = "", model As %String = "")
 {
-    Set response.Model = ..Clean(response.Model), response.ProviderConfig = ..Clean(response.ProviderConfig)
-    If response.Error '= "" Set response.Error = ..Scrub(response.Error, raw)
+    Set response.Model = ..CleanModel(response.Model), response.ProviderConfig = ..Clean(response.ProviderConfig)
+    If response.Error '= "" Set response.Error = ..Scrub(response.Error, raw, model)
 }
 
-/// <var>text</var> with every value in <var>raw</var> (a list) that looks like a key replaced by "hidden".
-ClassMethod Scrub(text As %String, raw As %List = "") As %String
+/// <var>text</var> with every value in <var>raw</var> (a list) that looks like a key, and <var>model</var> when it looks
+/// like one as a Model, replaced by "hidden".
+ClassMethod Scrub(text As %String, raw As %List = "", model As %String = "") As %String
 {
     For i = 1:1:$LISTLENGTH(raw) {
         Set v = $LISTGET(raw, i)
         If (v '= "") && ..Looks(v) Set text = $REPLACE(text, v, ..#HIDDEN)
     }
+    If (model '= "") && ..LooksModel(model) Set text = $REPLACE(text, model, ..#HIDDEN)
     Quit text
 }
 
@@ -90,8 +106,8 @@ ClassMethod RepairRuns() As %Integer
         Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID, Model, ProviderConfig, Error FROM Shutter_Store.AgentRun WHERE Model IS NOT NULL OR ProviderConfig IS NOT NULL")
         While (rs.%SQLCODE = 0) && rs.%Next() {
             Set model = rs.%Get("Model"), config = rs.%Get("ProviderConfig")
-            Continue:'(..Looks(model) || ..Looks(config))
-            Set u = ##class(%SQL.Statement).%ExecDirectNoPriv(, "UPDATE Shutter_Store.AgentRun SET Model = ?, ProviderConfig = ?, Error = ? WHERE ID = ?", ..Clean(model), ..Clean(config), ..Scrub(rs.%Get("Error"), $LISTBUILD(model, config)), rs.%Get("ID"))
+            Continue:'(..LooksModel(model) || ..Looks(config))
+            Set u = ##class(%SQL.Statement).%ExecDirectNoPriv(, "UPDATE Shutter_Store.AgentRun SET Model = ?, ProviderConfig = ?, Error = ? WHERE ID = ?", ..CleanModel(model), ..Clean(config), ..Scrub(rs.%Get("Error"), $LISTBUILD(config), model), rs.%Get("ID"))
             If u.%SQLCODE = 0 Set n = n + 1
         }
     } Catch ex {

@@ -61,7 +61,7 @@ Method OnInit() As %Status
         Set runnerThere = (..Runner = "") || ##class(%Dictionary.CompiledClass).%ExistsId(..Runner)
         // A key typed into ProviderConfig or Model reads "hidden" here, as everywhere else (Shutter.Util.Secret).
         Set provider = $SELECT(mock '= "": "the API mimic (" _ mock _ ")", ..ProviderConfig '= "": ##class(Shutter.Util.Secret).Clean(..ProviderConfig), ##class(Shutter.Setup).ProviderConfigured(): ##class(Shutter.Util.Secret).Clean($GET(^Shutter.Config("aihub", "provider"))), 1: "none configured")
-        $$$LOGINFO(..%ConfigName _ " starts in " _ mode _ " mode" _ $SELECT($ZCONVERT(..Mode, "L") = "auto": " (auto)", 1: "") _ "; runner " _ ..Runner _ $SELECT(runnerThere: "", 1: " (not installed)") _ "; provider " _ provider _ "; model " _ $SELECT(..Model '= "": ##class(Shutter.Util.Secret).Clean(..Model), 1: "the configuration's") _ "; one call bounded at " _ ##class(Shutter.Setup).ProviderTimeoutSeconds() _ " s")
+        $$$LOGINFO(..%ConfigName _ " starts in " _ mode _ " mode" _ $SELECT($ZCONVERT(..Mode, "L") = "auto": " (auto)", 1: "") _ "; runner " _ ..Runner _ $SELECT(runnerThere: "", 1: " (not installed)") _ "; provider " _ provider _ "; model " _ $SELECT(..Model '= "": ##class(Shutter.Util.Secret).CleanModel(..Model), 1: "the configuration's") _ "; one call bounded at " _ ##class(Shutter.Setup).ProviderTimeoutSeconds() _ " s")
         If (mode = "live") && (mock = "") && (..ProviderConfig = "") && '##class(Shutter.Setup).ProviderConfigured() $$$LOGWARNING(..%ConfigName _ ": live mode with no provider configured; every live run will fail until ANTHROPIC_API_KEY or a provider configuration is set (SELECT Shutter.Setup_ConfigureProvider)")
         If (mode '= "replay") && 'runnerThere $$$LOGWARNING(..%ConfigName _ ": the runner " _ ..Runner _ " is not installed (the aihub module); live and record runs will fail, replay still works")
     } Catch ex {
@@ -131,7 +131,7 @@ Method OnAgentRequest(request As Shutter.Bridge.Msg.AgentRequest, Output respons
         }
         If reserveKey '= "" Do ##class(Shutter.Util.Budget).Settle(reserveKey)
     }
-    Do ##class(Shutter.Util.Secret).MaskResponse(response, $LISTBUILD(..ProviderConfig, ..Model))
+    Do ##class(Shutter.Util.Secret).MaskResponse(response, $LISTBUILD(..ProviderConfig), ..Model)
     Do ##class(Shutter.Util.LiveAgents).NoteRun(spec.Mode, response.Status, response.Error)
     Do ##class(Shutter.Bridge.Runner).Stamp(spec, response)
     If response.Mode = "" Set response.Mode = spec.Mode

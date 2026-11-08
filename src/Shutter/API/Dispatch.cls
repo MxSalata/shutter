@@ -1592,7 +1592,7 @@ ClassMethod Settings() As %Status
             For j = 1:1:item.Settings.Count() {
                 Set st = item.Settings.GetAt(j)
                 Set name = st.Name
-                Do a.%Set($ZCONVERT($EXTRACT(name, 1), "L") _ $EXTRACT(name, 2, *), ##class(Shutter.Util.Secret).Clean(st.Value))
+                Do a.%Set($ZCONVERT($EXTRACT(name, 1), "L") _ $EXTRACT(name, 2, *), $SELECT(name = "Model": ##class(Shutter.Util.Secret).CleanModel(st.Value), 1: ##class(Shutter.Util.Secret).Clean(st.Value)))
             }
             Set a.effectiveMode = ##class(Shutter.Bridge.Operation.Agent).ResolveMode(##class(Shutter.Util.Json).Str(a, "mode", "auto"), mock)
             // Who answers a run that goes to a model: the mimic while its switch is set, else the item's provider

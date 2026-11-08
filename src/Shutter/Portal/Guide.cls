@@ -295,7 +295,7 @@ ClassMethod Runs(item As %DynamicObject, mock As %String, instanceConfig As %Str
     If (raw '= "") && ..LooksSecret(raw) {
         Set out.config = "hidden", out.provider = "hidden"
         If item.model '= "" {
-            Set out.model = ..Clean(item.model), out.from = "from the item's Model setting"
+            Set out.model = ..CleanModel(item.model), out.from = "from the item's Model setting"
         } Else {
             Set out.model = "not readable", out.from = "from its provider configuration"
         }
@@ -319,11 +319,11 @@ ClassMethod Runs(item As %DynamicObject, mock As %String, instanceConfig As %Str
         }
     }
     If item.model '= "" {
-        Set out.model = ..Clean(item.model), out.from = "from the item's Model setting"
+        Set out.model = ..CleanModel(item.model), out.from = "from the item's Model setting"
     } ElseIf (fqn '= "") && 'readable {
         Set out.model = "not readable", out.from = "from its provider configuration"
     } ElseIf cmodel '= "" {
-        Set out.model = ..Clean(cmodel), out.from = $SELECT(own '= "": "from its provider configuration", 1: "from the instance's configuration, SHUTTER_MODEL")
+        Set out.model = ..CleanModel(cmodel), out.from = $SELECT(own '= "": "from its provider configuration", 1: "from the instance's configuration, SHUTTER_MODEL")
     } Else {
         Set cls = $SELECT(item.agentClass '= "": item.agentClass, 1: "Shutter.Agent.Base")
         Set m = ""
@@ -332,7 +332,7 @@ ClassMethod Runs(item As %DynamicObject, mock As %String, instanceConfig As %Str
         } Catch ex {
             Set m = ""
         }
-        Set out.model = $SELECT(m '= "": ..Clean(m), 1: "none"), out.from = $SELECT(m '= "": "from the agent class " _ cls, 1: "its agent class is not installed here (the replay edition)")
+        Set out.model = $SELECT(m '= "": ..CleanModel(m), 1: "none"), out.from = $SELECT(m '= "": "from the agent class " _ cls, 1: "its agent class is not installed here (the replay edition)")
     }
     Quit out
 }
@@ -466,6 +466,12 @@ ClassMethod LooksSecret(value As %String) As %Boolean
 ClassMethod Clean(value As %String) As %String
 {
     Quit ##class(Shutter.Util.Secret).Clean(value)
+}
+
+/// An agent item's Model for the page, or "hidden" when it looks like a key: a model's name@version shows.
+ClassMethod CleanModel(value As %String) As %String
+{
+    Quit ##class(Shutter.Util.Secret).CleanModel(value)
 }
 
 /// The page. app is this page's web application, whose portal pages it links to.
