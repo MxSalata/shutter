@@ -101,6 +101,8 @@ Method TestAReleasedItemWithAFreshLineStops()
 /// counts it alone.
 Method TestAnIncidentChainLeavesTheSharedApproval()
 {
+    // The demo's profile releases tier 2 single chains automatically: the shared approval is the site's choice here.
+    Do ..SetPolicy("approval")
     Set inc = ..NewIncident()
     Set shownCase = ..NewCase(inc.IncidentId _ "-1", "ENC-UT-SVI1", 1, inc)
     Set plainCase = ..NewCase(inc.IncidentId _ "-2", "ENC-UT-SVI2", 0, inc)
@@ -132,6 +134,26 @@ Method TestAnIncidentChainLeavesTheSharedApproval()
         While ci.%GetNext(, .co) { If co.seq = shown.Seq Set found = co.policy }
     }
     Do $$$AssertEquals(found, "path", "the recorded plan has the chain on its own path")
+}
+
+/// The same incident where the site's policy releases these chains automatically, as the demo's profile does: the chain
+/// showing another visit's movement goes on each case's own path too, so its case asks a person; the plain chain is
+/// released by policy, and no task is raised.
+Method TestAnAutomaticIncidentChainTakesItsOwnPath()
+{
+    Do ..SetPolicy("automatic")
+    Set inc = ..NewIncident()
+    Do ..NewCase(inc.IncidentId _ "-1", "ENC-UT-SVJ1", 1, inc)
+    Do ..NewCase(inc.IncidentId _ "-2", "ENC-UT-SVJ2", 0, inc)
+    Set wf = ##class(Shutter.Test.FakeIncidentWorkflow).%New("Incident Workflow")
+    Set wf.IncidentId = inc.IncidentId
+    Do $$$AssertStatusOK(wf.Classify(inc), "the incident is classified")
+    Set inc = ##class(Shutter.Store.Incident).%OpenId(inc.%Id())
+    Set got = "", chains = inc.ChainList()
+    For i = 1:1:chains.Count() { Set ch = chains.GetAt(i), got(ch.EncounterId) = ch.Decides _ " " _ ch.Policy }
+    Do $$$AssertEquals($GET(got("ENC-UT-SVJ2")), "policy automatic", "the plain chain is released by policy")
+    Do $$$AssertEquals($GET(got("ENC-UT-SVJ1")), "policy path", "the chain showing another visit's movement goes on each case's own path")
+    Do $$$AssertNotTrue($ISOBJECT(wf.LastTask), "no approval task is raised")
 }
 
 /// A single-chain E2 case of the demo receiver (a transfer that never arrived, the receiver admitted at version 1 and
@@ -185,8 +207,7 @@ Method NewIncident() As Shutter.Store.Incident
     Quit inc
 }
 
-/// The site's policy for tier 2 single chains, set for the test (the stored profile is put back after it); the shipped
-/// profile's approval stays for the other tests.
+/// The site's policy for tier 2 single chains, set for the test; the stored profile is put back after it.
 Method SetPolicy(word As %String)
 {
     Set row = ##class(Shutter.Store.SiteProfile).Row()
