@@ -136,11 +136,20 @@ describe('EvaluationPage', () => {
       name: "Held out: 12 sealed cases, 3 runs each, on release 1.0.0's code",
     });
     expect(visible(card.querySelector('p')!)).toBe(
-      'Strict mean loss, lower is better: the board 0.167, the single investigator 0.167, Site policy with no model 3.500; with no model, F09 was written wrongly in every run. fair-test.md',
+      'Strict mean loss, lower is better: the board 0.167, the single investigator 0.167 with two F08 runs settled (0.500 as graded), Site policy with no model 3.500, always escalating 1.250; with no model, F09 was written wrongly in every run. fair-test.md',
     );
     expect(within(card).getByRole('link', { name: 'fair-test.md' })).toHaveAttribute(
       'href',
       'https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md',
+    );
+    // Release 1.1.1's own figure for the board, so the 1.0.0 figure is not read as the trial's release
+    const later = card.querySelectorAll('p')[1]!;
+    expect(visible(later)).toBe(
+      "On 1.1.1's code the board proposed the same and the gate also held F03 and F07: 0.667 as graded. Release 1.1.x",
+    );
+    expect(within(later as HTMLElement).getByRole('link', { name: 'Release 1.1.x' })).toHaveAttribute(
+      'href',
+      'https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#release-11x',
     );
     // Above the self-graded tile: the board's proposals on its own recorded scenarios
     const own = within(headline()).getByText('recorded failures where the board chose the expected action');
@@ -538,6 +547,15 @@ describe('EvaluationPage', () => {
     expect(receiver).toHaveTextContent('APPROVAL_RECEIVER_CHANGED, no write');
   });
 
+  it("lets a keyboard scroll the boundary's table where it is wider than the page: its scroll area takes the focus, named", () => {
+    renderPage();
+    const section = screen.getByRole('region', { name: 'What the boundary refuses' });
+    // Nothing in the table can take the focus, so its scroll area must (axe: scrollable-region-focusable)
+    const area = within(section).getByRole('region', { name: 'What the boundary refuses, scrolls sideways' });
+    expect(area).toHaveAttribute('tabindex', '0');
+    expect(within(area).getAllByRole('row')).toHaveLength(boundary.checks.length + 1);
+  });
+
   it('gives the document as the page reads it, with Copy as JSON, opened in Technical', () => {
     const { unmount } = renderPage();
     expect(screen.getByRole('button', { name: 'As the API sends it' })).toHaveAttribute(
@@ -578,10 +596,11 @@ describe('EvaluationPage', () => {
     const tech = renderPage(undefined, { detail: 'technical' });
     await within(headline()).findByRole('link', { name: 'Compare the two cases' });
     const technical = wordsAbove(tech.container);
-    // At most 295 words in Plain, which includes the catalogue line beside the result, the held-out card and where the
-    // single investigator was measured (245 before those two); Technical at most 1.5 times that
-    expect(words.copy).toBeLessThanOrEqual(295);
-    expect(technical.copy).toBeLessThanOrEqual(442);
+    // At most 325 words in Plain, which includes the catalogue line beside the result, the held-out card (with the
+    // baseline, both single investigator figures and release 1.1.1's) and where the single investigator was measured
+    // (245 before those); Technical at most 1.5 times that
+    expect(words.copy).toBeLessThanOrEqual(325);
+    expect(technical.copy).toBeLessThanOrEqual(487);
     // Every visible word, the headings, the controls and the figures with it: Technical adds at most half again
     expect(technical.all).toBeGreaterThan(words.all);
     expect(technical.all).toBeLessThanOrEqual(1.5 * words.all);

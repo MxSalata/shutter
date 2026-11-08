@@ -748,7 +748,7 @@ describe('ScenariosPage, its rows and its proof', () => {
     const line = (await screen.findByText(/^Tested on/)).closest<HTMLElement>('[data-proof-line]')!;
     // The words a reader sees (the definitions the terms carry for screen readers aside)
     expect(visibleText(line)).toContain(
-      `Tested on ${board.scored} recorded board runs, each against its scenario's expected action: the board chose it every time. Played end to end on ${played.of} of them: the board ${played.board}, Rules only ${played.rules}.`,
+      `Tested on ${board.scored} recorded board passes, each against its scenario's expected action: the board chose it every time. Played end to end on ${played.of} of the scenarios: the board ${played.board}, Rules only ${played.rules}.`,
     );
     expect(within(line).getByRole('link', { name: 'See the evaluation' })).toHaveAttribute(
       'href',

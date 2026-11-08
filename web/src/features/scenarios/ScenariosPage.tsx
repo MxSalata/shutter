@@ -97,9 +97,9 @@ const modeLabel = (mode: Mode) => ALL_MODES.find((m) => m.value === mode)?.label
 
 /** A filter or a mode stays on the page: the address changes, Back keeps its place, and the page does not jump to its top. */
 
-/** What every mode keeps, said once above the modes. */
+/** What every mode keeps, said once above the modes, with the one exemption S8's card shows. */
 const MODES_INTRO =
-  "The mode chooses who proposes the plan; the gate and the rehearsal are the same in every mode, and a person or the site's policy releases it.";
+  "The mode chooses who proposes the plan; the gate and the rehearsal are the same in every mode, except one check that Rules only skips on purpose in a played scenario, so that S8 can show a plain resend; a person or the site's policy releases it.";
 
 /** Whether the scenario is defined for the mode: one that names its modes isn't for the others. */
 const definedFor = (s: Scenario, mode: Mode) => !s.expected?.modes || s.expected.modes.includes(mode);

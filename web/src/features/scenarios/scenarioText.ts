@@ -64,12 +64,16 @@ export function recordedLine(played: { board: PlayedResult; rules: PlayedResult 
 /** The proof line's parts, each left out when the evaluation cannot give its figures. */
 export interface ProofParts {
   /**
-   * "Tested on 24 recorded board runs, each against its scenario's expected action: the board chose it every time." A
-   * run is one recorded pass of the board over one scenario's failure, so the count is of runs, not of scenarios.
+   * "Tested on 24 recorded board passes, each against its scenario's expected action: the board chose it every time."
+   * A pass is the evaluation's unit (its "scored passes"): one recorded pass of the board over one case, so the count
+   * is of passes, not of scenarios or agent runs.
    */
   tested: string | null;
-  /** Played end to end on the same failures: how many, the board's and Rules only's expected outcomes. */
-  played: { of: number; board: number; rules: number; ofThem: boolean } | null;
+  /**
+   * Played end to end: how many scenarios, what they are counted as ("of the scenarios" after the passes, "recorded
+   * failures" alone), and the board's and Rules only's expected outcomes.
+   */
+  played: { of: number; board: number; rules: number; counted: string } | null;
   /** The bases in an engineer's words, for Technical. */
   bases: string | null;
 }
@@ -78,7 +82,7 @@ export interface ProofParts {
 export function proofParts(proof: Pick<Proof, 'board' | 'played'>): ProofParts {
   const { board, played } = proof;
   const tested = board
-    ? `Tested on ${board.scored} recorded board runs, each against its scenario's expected action: the board chose it ${
+    ? `Tested on ${board.scored} recorded board passes, each against its scenario's expected action: the board chose it ${
         board.matched === board.scored ? 'every time' : `in ${board.matched} of them`
       }.`
     : null;
@@ -88,7 +92,14 @@ export function proofParts(proof: Pick<Proof, 'board' | 'played'>): ProofParts {
   ].filter(Boolean);
   return {
     tested,
-    played: played ? { of: played.of, board: played.board, rules: played.rules, ofThem: !!board } : null,
+    played: played
+      ? {
+          of: played.of,
+          board: played.board,
+          rules: played.rules,
+          counted: board ? 'of the scenarios' : 'recorded failures',
+        }
+      : null,
     bases: bases.length ? `(${bases.join('; ')})` : null,
   };
 }

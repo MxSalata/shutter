@@ -13,7 +13,7 @@ import { layer1WordCount } from '@/test/words';
 import { theme } from '@/theme';
 import ScenariosPage from './ScenariosPage';
 import { SCENARIOS_LEAD } from './scenarioText';
-import { S8_RULES_SEE } from './TryFirst';
+import { S8_RULES_DIAGRAM_NOTE, S8_RULES_SEE } from './TryFirst';
 import { PLAIN_BUDGET, TECHNICAL_BUDGET } from './wordBudget';
 
 /** The page as the trial shows it: the recorded cases, answered in the browser. */
@@ -131,6 +131,16 @@ describe('ScenariosPage in the trial', () => {
     expect(within(steps[4]).getByRole('link', { name: 'Incident I-000001' })).toBeInTheDocument();
   });
 
+  it('says under Run mode that S8 in Rules only is exempted on purpose, as its card does', async () => {
+    renderTrial('plain', '/?mode=rules');
+    await screen.findByRole('region', { name: 'Try these three first' });
+    expect(
+      screen.getByText(
+        "Every Run button below uses it. The mode chooses who proposes the plan; the gate and the rehearsal are the same in every mode, except one check that Rules only skips on purpose in a played scenario, so that S8 can show a plain resend; a person or the site's policy releases it.",
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("plays S8's card in the mode chosen under Run mode, and says so on its Run", async () => {
     renderTrial('plain', '/?mode=rules');
     const first = await screen.findByRole('region', { name: 'Try these three first' });
@@ -139,6 +149,12 @@ describe('ScenariosPage in the trial', () => {
     const card = run.closest<HTMLElement>('[data-first="S8"]')!;
     expect(within(card).getByRole('heading', { name: 'Rules only writes over a ward' })).toBeInTheDocument();
     expect(card).toHaveTextContent(S8_RULES_SEE);
+    // The diagram draws how S8 should end (a person decides); the card says so where Rules only writes instead
+    const diagram = within(card).getByRole('img', { name: /^S8 in a diagram:/ });
+    expect(diagram).toHaveAccessibleName(/It should end: a person decides, nothing written\.$/);
+    const note = within(card).getByText(S8_RULES_DIAGRAM_NOTE);
+    expect(note.compareDocumentPosition(diagram) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(S8_RULES_DIAGRAM_NOTE).toBe('Should end: a person decides. Rules only writes instead.');
     expect(
       within(card).getByRole('link', { name: 'Open C-000021, the latest S8 case in Rules only mode' }),
     ).toHaveAttribute('href', '/cases/C-000021');
@@ -159,11 +175,10 @@ describe('ScenariosPage in the trial', () => {
     fireEvent.click(screen.getByRole('radio', { name: /^Board/ }));
     const run = await within(first).findByRole('button', { name: 'Run S8 in Board mode' });
     expect(run).toHaveTextContent(/^Run S8 in Board$/);
-    expect(
-      within(run.closest<HTMLElement>('[data-first="S8"]')!).getByRole('heading', {
-        name: 'The board withholds a write',
-      }),
-    ).toBeInTheDocument();
+    const card = run.closest<HTMLElement>('[data-first="S8"]')!;
+    expect(within(card).getByRole('heading', { name: 'The board withholds a write' })).toBeInTheDocument();
+    // In Board the diagram's end is what happens, so it needs no note
+    expect(within(card).queryByText(S8_RULES_DIAGRAM_NOTE)).not.toBeInTheDocument();
   });
 
   it('says a run plays from its recording in the browser', async () => {

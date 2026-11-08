@@ -332,9 +332,15 @@ function HeldOutCard() {
           {`Held out: ${h.cases} sealed cases, ${h.repeats} runs each, on release ${h.release}'s code`}
         </Title>
         <Text size="sm">
-          {`Strict mean loss, lower is better: the board ${h.board}, the single investigator ${h.single}, Site policy with no model ${h.policy}; with no model, ${h.wroteWrongly} was written wrongly in every run.`}{' '}
+          {`Strict mean loss, lower is better: the board ${h.board}, the single investigator ${h.single} with two ${h.disputed} runs settled (${h.singleGraded} as graded), Site policy with no model ${h.policy}, always escalating ${h.escalate}; with no model, ${h.wroteWrongly} was written wrongly in every run.`}{' '}
           <Anchor href={h.url} target="_blank" rel="noreferrer" underline="always">
             fair-test.md
+          </Anchor>
+        </Text>
+        <Text size="sm">
+          {`On ${h.v111.release}'s code the board proposed the same and the gate also held ${h.v111.held.join(' and ')}: ${h.v111.boardGraded} as graded.`}{' '}
+          <Anchor href={h.v111.url} target="_blank" rel="noreferrer" underline="always">
+            Release 1.1.x
           </Anchor>
         </Text>
       </Stack>
@@ -1099,7 +1105,18 @@ export default function EvaluationPage({
           title="What the boundary refuses"
           note={`What ${refusals.script} tries over HTTP against the approval boundary, and the answer each attempt must get. It runs in ${refusals.runs}, and on any instance of your own (it plays the scenarios it names, so not on one someone else is using).`}
         >
-          <Table.ScrollContainer minWidth={800} className="stack-scroll">
+          {/* Nothing in the table takes the focus, so where it scrolls sideways its scroll area does, named */}
+          <Table.ScrollContainer
+            minWidth={800}
+            className="stack-scroll"
+            scrollAreaProps={{
+              viewportProps: {
+                tabIndex: 0,
+                role: 'region',
+                'aria-label': 'What the boundary refuses, scrolls sideways',
+              },
+            }}
+          >
             <StackTable verticalSpacing="xs" className="stack-table">
               <StackTable.Thead>
                 <StackTable.Tr>

@@ -157,8 +157,16 @@ interface Featured {
    * The card follows the mode chosen under Run mode, with its words for each mode it can be played in there: its Run
    * plays in that mode and says so ("Run S8 in Rules only"). Its own `mode` is the one it shows otherwise.
    */
-  byMode?: Partial<Record<Mode, Pick<Featured, 'title' | 'see' | 'more'>>>;
+  byMode?: Partial<Record<Mode, Pick<Featured, 'title' | 'see' | 'more' | 'diagramNote'>>>;
+  /**
+   * A line above the diagram, where the mode's run does not end as the diagram draws: the diagram is how the scenario
+   * should end (scenarioDiagram.ts), so S8 in Rules only, which writes, says so in words.
+   */
+  diagramNote?: string;
 }
+
+/** Above S8's diagram in Rules only: the diagram draws the end S8 should have, and Rules only writes instead. */
+export const S8_RULES_DIAGRAM_NOTE = 'Should end: a person decides. Rules only writes instead.';
 
 /** S8 played by Rules only: the resend the scenario is exempted for, so that a plain resend can be seen writing. */
 export const S8_RULES_SEE =
@@ -182,6 +190,7 @@ const FIRST: Featured[] = [
       rules: {
         title: 'Rules only writes over a ward',
         see: () => S8_RULES_SEE,
+        diagramNote: S8_RULES_DIAGRAM_NOTE,
         more: 'Two systems moved the same patient at the same recorded time. With no agents, the plan is a plain resend; play S8 in Board mode next to see the coordinator agent escalate the same failure to a person.',
       },
       policy: {
@@ -334,7 +343,7 @@ export function TryFirst({
         </Text>
       ) : (
         <SimpleGrid cols={{ base: 1, md: 3 }} spacing="md" verticalSpacing={{ base: 'md', md: 0 }}>
-          {first.map(({ s, mode, title, see, more, inMode, latest, ...f }) => {
+          {first.map(({ s, mode, title, see, more, diagramNote, inMode, latest, ...f }) => {
             const reason = why(s, mode);
             const modeName = MODE_NAMES[mode];
             // A card that follows the chosen mode names it on its Run: "Run S8 in Rules only"
@@ -353,6 +362,11 @@ export function TryFirst({
                       {title}
                     </Title>
                     <Text size="sm">{s.title}</Text>
+                    {diagramNote ? (
+                      <Text size="xs" fw={600}>
+                        {diagramNote}
+                      </Text>
+                    ) : null}
                     <ScenarioDiagram scenario={s} mode={mode} />
                   </Stack>
                   <Stack gap={4}>

@@ -5,7 +5,7 @@ import { audit } from './axe';
  * The judges' path, each test in a fresh browser at 1280 and 390 px, as a judge arrives: from the S8 card in Rules only
  * to the write over the bed manager's ward, then the same card in Board to C-000008 escalated; `?trial=judge` landing on
  * S8 in Rules only with no welcome, before and after a reload; and the held-out card on the Evaluation. With E2E_SHOTS
- * set, each step is saved there.
+ * set, each step is saved there. The Evaluation is also audited at the widths where its boundary table scrolls sideways.
  */
 
 /** Waits until the page has stopped scrolling (a landing scrolls smoothly), then saves the screen when asked to. */
@@ -99,6 +99,10 @@ for (const width of [1280, 390])
       await expect(runS8(page, 'Rules only')).toBeFocused();
       await expect(runS8(page, 'Rules only')).toBeInViewport();
       await expect(welcome(page)).toHaveCount(0);
+      // The diagram draws how S8 should end; in Rules only the card says in words that it writes instead
+      await expect(
+        s8Card(page).getByText('Should end: a person decides. Rules only writes instead.'),
+      ).toBeVisible();
       await shot(page, `judge-landing-${width}`);
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
       expect(await audit(page)).toEqual([]);
@@ -118,7 +122,10 @@ for (const width of [1280, 390])
       await expect(welcome(page)).toHaveCount(0);
       const card = page.getByRole('region', { name: /^Held out: 12 sealed cases/ });
       await expect(card).toContainText(
-        'the board 0.167, the single investigator 0.167, Site policy with no model 3.500',
+        'the board 0.167, the single investigator 0.167 with two F08 runs settled (0.500 as graded), Site policy with no model 3.500, always escalating 1.250',
+      );
+      await expect(card).toContainText(
+        "On 1.1.1's code the board proposed the same and the gate also held F03 and F07",
       );
       await card.scrollIntoViewIfNeeded();
       await shot(page, `evaluation-held-out-${width}`);
@@ -126,3 +133,23 @@ for (const width of [1280, 390])
       expect(await audit(page)).toEqual([]);
     });
   });
+
+// From 768 to about 1000 px the boundary's table is wider than its column and scrolls sideways: its scroll area must take
+// the focus (axe: scrollable-region-focusable), in light and in dark
+for (const width of [768, 992])
+  for (const colorScheme of ['light', 'dark'] as const)
+    test(`the Evaluation passes axe at ${width} px in ${colorScheme} @scenarios`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.emulateMedia({ colorScheme });
+      await page.goto('./?trial=judge');
+      await expect(runS8(page, 'Rules only')).toBeFocused();
+      await page.goto('./?trial#/evaluation');
+      await expect(page.getByRole('heading', { name: 'Evaluation', exact: true })).toBeVisible();
+      const area = page.getByRole('region', { name: 'What the boundary refuses, scrolls sideways' });
+      await area.scrollIntoViewIfNeeded();
+      // It does scroll sideways here, so the check is of the case axe flagged
+      expect(await area.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
+      await expect(area).toHaveAttribute('tabindex', '0');
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+      expect(await audit(page)).toEqual([]);
+    });
