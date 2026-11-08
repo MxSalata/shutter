@@ -10,6 +10,22 @@ export const SCENARIOS_LEAD = {
 };
 
 /**
+ * How many scenarios Shutter defines (fixtures/scenarios.json; scenarioText.test checks the figure against it). The trial
+ * lists only the ones with recordings, so it says how many of these it has and where the rest are.
+ */
+export const SCENARIOS_DEFINED = 32;
+
+/**
+ * The count beside "Every scenario": "32 in all.", or, in the trial's list of recordings when it is short of them, "26 of
+ * the 32 scenarios have recordings here; the rest run on an install."
+ */
+export function scenarioCount(listed: number, trial: boolean, defined = SCENARIOS_DEFINED): string {
+  return trial && listed < defined
+    ? `${listed} of the ${defined} scenarios have recordings here; the rest run on an install.`
+    : `${listed} in all.`;
+}
+
+/**
  * A scenario's description as the list shows it: its first sentence in full, and the rest behind "More about <id>",
  * never cut mid-sentence. The split is at the first full stop followed by a space, so a version number ("HL7 2.4
  * messages", "2.5.1.") stays whole.

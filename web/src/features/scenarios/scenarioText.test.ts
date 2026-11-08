@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest';
 import type { Scenario } from '@/api/types';
 import { PROOF, playedFor } from '@/lib/proof';
 import definitions from '../../../../fixtures/scenarios.json';
-import { hl7Events, proofParts, recordedLine, splitSummary } from './scenarioText';
+import {
+  hl7Events,
+  proofParts,
+  recordedLine,
+  scenarioCount,
+  SCENARIOS_DEFINED,
+  splitSummary,
+} from './scenarioText';
 
 const scenarios = definitions as unknown as Scenario[];
 const def = (id: string) => scenarios.find((s) => s.id === id)!;
@@ -110,5 +117,20 @@ describe('proofParts', () => {
       bases: '(9 scenarios, played end to end)',
     });
     expect(proofParts({ board: null, played: null })).toEqual({ tested: null, played: null, bases: null });
+  });
+});
+
+describe('scenarioCount', () => {
+  it('counts the scenarios Shutter defines', () => {
+    expect(SCENARIOS_DEFINED).toBe(scenarios.length);
+  });
+
+  it('says in the trial how many of them have recordings and where the rest run', () => {
+    expect(scenarioCount(26, true)).toBe(
+      `26 of the ${scenarios.length} scenarios have recordings here; the rest run on an install.`,
+    );
+    expect(scenarioCount(scenarios.length, true)).toBe(`${scenarios.length} in all.`);
+    expect(scenarioCount(scenarios.length, false)).toBe(`${scenarios.length} in all.`);
+    expect(scenarioCount(26, false)).toBe('26 in all.');
   });
 });

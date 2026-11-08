@@ -61,7 +61,7 @@ import { MoreAbout } from './MoreAbout';
 import { ScenarioDiagram } from './ScenarioDiagram';
 import { StartHere } from './StartHere';
 import { ModeName, ScenariosHero, TryFirst } from './TryFirst';
-import { hl7Events, recordedLine, SCENARIOS_LEAD, splitSummary } from './scenarioText';
+import { hl7Events, recordedLine, scenarioCount, SCENARIOS_LEAD, splitSummary } from './scenarioText';
 
 const ALL_MODES: { value: Mode; label: string; hint: string }[] = [
   {
@@ -682,7 +682,7 @@ function AllScenarios({
             Every scenario
           </Title>
           <Text size="md" c="dimmed">
-            {scenarios.length} in all. Filter by what should happen in {modeLabel(mode)} mode.
+            {scenarioCount(scenarios.length, TRIAL)} Filter by what should happen in {modeLabel(mode)} mode.
           </Text>
         </Group>
         <Chip.Group multiple={false} value={chosen} onChange={(v) => setOutcome(v as string)}>
