@@ -9,6 +9,28 @@ Class Shutter.Test.IncidentTask Extends %UnitTest.TestCase
 /// The incidents made by the current test, for the clean-up.
 Property Made As %String [ MultiDimensional ];
 
+/// Whether this run made the approval target's Workflow role, where no install had (it is removed afterwards).
+Property MadeRole As %Boolean [ InitialExpression = 0 ];
+
+/// The workflow raises a task only for a Workflow role that exists (IncidentTaskCheck.RoleMissing): the role of the
+/// workflow's own approval target, which an install makes, is made here for the run where it is missing.
+Method OnBeforeAllTests() As %Status
+{
+    Set role = ##class(Shutter.Process.IncidentWorkflow).%New("Incident Workflow").ApprovalTarget
+    If '##class(EnsLib.Workflow.RoleDefinition).%ExistsId(role) {
+        Set sc = ##class(EnsLib.Workflow.RoleDefinition).CreateRole(role)
+        Quit:$$$ISERR(sc) sc
+        Set ..MadeRole = 1
+    }
+    Quit $$$OK
+}
+
+Method OnAfterAllTests() As %Status
+{
+    If ..MadeRole Do ##class(EnsLib.Workflow.RoleDefinition).%DeleteId(##class(Shutter.Process.IncidentWorkflow).%New("Incident Workflow").ApprovalTarget)
+    Quit $$$OK
+}
+
 Method OnAfterOneTest() As %Status
 {
     Set id = ""
@@ -57,8 +79,9 @@ Method TestAStormRaisesOneTaskThatFits()
     Set wf = ..Workflow(inc)
     Do $$$AssertStatusOK(wf.AskApproval(inc, inc.ChainList(), ""), "the task is raised")
     Do $$$AssertEquals(wf.PendingTasks, 1, "one task")
-    Do $$$AssertEquals(wf.Sent.Count(), 1, "one request")
+    Do $$$AssertEquals(wf.Sent.Count(), 2, "one request, and the check that its task was made")
     Do $$$AssertEquals(wf.Sent.GetAt(1), wf.ApprovalTarget _ "|approval", "under the shared completion key")
+    Do $$$AssertEquals($PIECE(wf.Sent.GetAt(2), ":", 1), "Ens.Alarm|taskcheck", "the check")
     Set task = wf.LastTask
     Do $$$AssertTrue($ISOBJECT(task), "the engine's checks took it")
     Quit:'$ISOBJECT(task)
@@ -211,6 +234,180 @@ Method TestEachChainsTaskIsToldOnce()
     For seq = 1, 2, 1, 2 { Do $$$AssertStatusOK(wf.AskApproval(inc, inc.ChainList(), seq), "chain " _ seq) }
     Do $$$AssertEquals(..Said(inc, "error", "No approval task"), 2, "one error for each chain")
     Do $$$AssertEquals(wf.Alerts.Count(), 2, "one alert for each")
+}
+
+/// The approval target's Workflow role is not defined (deleted, or the target renamed): the Workflow item would defer
+/// its reply and make no task, so no call goes, and the incident stops for a person as for any error raising the task.
+/// Once the role is there, the next try raises one task.
+Method TestAMissingRoleStopsForAPerson()
+{
+    Set inc = ..NewIncident(2, 2)
+    Set wf = ..Workflow(inc)
+    Set wf.ApprovalTarget = "UT No Such Role " _ $JOB
+    Do $$$AssertNotTrue(##class(EnsLib.Workflow.RoleDefinition).%ExistsId(wf.ApprovalTarget), "the role is not defined")
+    Do $$$AssertStatusOK(wf.AskApproval(inc, inc.ChainList(), ""), "the error does not reach the workflow's abandon")
+    Do $$$AssertEquals(wf.PendingTasks, 0, "no task is open")
+    Do $$$AssertEquals(wf.Sent.Count(), 1, "no request went to the Workflow item")
+    Do $$$AssertEquals(wf.Sent.GetAt(1), "Ens.Alarm|raise", "and it will try again")
+    Do ..AssertWaits(inc, wf, "is not defined")
+    // The next try reads the item's own target, whose role is there: one task.
+    Do $$$AssertStatusOK(wf.OnResponse("", "", "", "", "raise"), "the next try")
+    Do $$$AssertEquals(wf.PendingTasks, 1, "raises the task")
+    Do $$$AssertEquals(..Requests(wf), 1, "once")
+    Do $$$AssertEquals(##class(Shutter.Store.Incident).%OpenId(inc.%Id()).State, "awaiting_approval", "the incident waits for the answer")
+}
+
+/// The same for a chain's own task, under its own key.
+Method TestAMissingRoleStopsAChainsOwnTask()
+{
+    Set inc = ..NewIncident(1, 2, "per_chain")
+    Set wf = ..Workflow(inc)
+    Set wf.ApprovalTarget = "UT No Such Role " _ $JOB
+    Do $$$AssertStatusOK(wf.AskApproval(inc, inc.ChainList(), 1), "the error does not reach the workflow's abandon")
+    Do $$$AssertEquals(wf.PendingTasks, 0, "no task is open")
+    Do $$$AssertEquals(wf.Sent.GetAt(wf.Sent.Count()), "Ens.Alarm|raise:1", "and it will try again")
+    Do ..AssertWaits(inc, wf, "is not defined")
+}
+
+/// The Workflow item took the task's request and made no task (an error inside it, which never answers the call): the
+/// check after the call stops for a person as for any error raising the task, and the next try raises one task.
+Method TestATaskTheItemDidNotMakeStopsForAPerson()
+{
+    Set inc = ..NewIncident(2, 2)
+    Set wf = ..Workflow(inc)
+    Set req = ..Request(inc, "", 6, 60, .header)
+    Do inc.Transition("awaiting_approval", "1 approval task(s) raised for the Workflow role", "system")
+    Do wf.TaskSent.SetAt(req.%Id(), "")
+    Set wf.PendingTasks = 1
+    Do $$$AssertStatusOK(wf.OnResponse("", "", "", "", "taskcheck::" _ req.%Id()), "the check")
+    Do $$$AssertEquals(wf.PendingTasks, 0, "no task is open")
+    Do $$$AssertEquals(wf.Sent.GetAt(wf.Sent.Count()), "Ens.Alarm|raise", "it will try again")
+    Do ..AssertWaits(inc, wf, "made no task")
+    // A second check of the same request, or one of a request since replaced, changes nothing.
+    Do $$$AssertStatusOK(wf.OnResponse("", "", "", "", "taskcheck::" _ req.%Id()), "the same check again")
+    Do $$$AssertEquals(wf.PendingTasks, 0, "still no task counted")
+    Do $$$AssertEquals(wf.Alerts.Count(), 1, "and no second alert")
+    Do $$$AssertStatusOK(wf.OnResponse("", "", "", "", "raise"), "the next try")
+    Do $$$AssertEquals(wf.PendingTasks, 1, "raises the task")
+    Do $$$AssertEquals(..Requests(wf), 1, "once")
+    Do ..Unsend(req, header)
+}
+
+/// A chain's own request, deferred by the item with no task, under its own key.
+Method TestAChainsTaskTheItemDidNotMakeStopsForAPerson()
+{
+    Set inc = ..NewIncident(1, 2, "per_chain")
+    Set wf = ..Workflow(inc)
+    Set req = ..Request(inc, 1, 6, 60, .header)
+    Do inc.Transition("awaiting_approval", "1 approval task(s) raised for the Workflow role", "system")
+    Do wf.TaskSent.SetAt(req.%Id(), 1)
+    Set wf.PendingTasks = 1
+    Do $$$AssertStatusOK(wf.OnResponse("", "", "", "", "taskcheck:1:" _ req.%Id()), "the check")
+    Do $$$AssertEquals(wf.PendingTasks, 0, "no task is open")
+    Do $$$AssertEquals(wf.Sent.GetAt(wf.Sent.Count()), "Ens.Alarm|raise:1", "it will try again")
+    Do ..AssertWaits(inc, wf, "made no task")
+    Do ..Unsend(req, header)
+}
+
+/// The check leaves alone a task the item made (open or answered), a request the item has not finished with (it checks
+/// again later), one it finished with only seconds ago, and a request since answered with an error or sent again.
+Method TestTheCheckLeavesAMadeTaskAlone()
+{
+    Set inc = ..NewIncident(2, 2)
+    Set wf = ..Workflow(inc)
+    Set role = wf.ApprovalTarget
+    // A task made from the request.
+    Set task = ##class(Shutter.Test.Workflow).SavedTask(role, inc.IncidentId)
+    Do $$$AssertTrue($ISOBJECT(task), "a task as the engine saves it")
+    Quit:'$ISOBJECT(task)
+    Set reqId = task.%TaskStatus.RequestGetObjectId()
+    Set header = ..Header(reqId, 6, 60)
+    Do wf.TaskSent.SetAt(reqId, "")
+    Set wf.PendingTasks = 1
+    Do $$$AssertStatusOK(wf.OnResponse("", "", "", "", "taskcheck::" _ reqId), "the check")
+    Do $$$AssertEquals(wf.PendingTasks, 1, "the task stays counted")
+    Do $$$AssertEquals(wf.Alerts.Count(), 0, "no alert")
+    Do $$$AssertEquals(wf.Sent.Count(), 0, "nothing sent")
+    Do ##class(Ens.MessageHeader).%DeleteId(header)
+    Do ##class(Shutter.Test.Workflow).DeleteTask(task)
+    // Queued, or being delivered: checked again later, nothing else.
+    For status = 2, 3 {
+        Set req = ..Request(inc, "", status, 60, .header)
+        Do wf.TaskSent.SetAt(req.%Id(), "")
+        Do $$$AssertStatusOK(wf.OnResponse("", "", "", "", "taskcheck::" _ req.%Id()), "the check at status " _ status)
+        Do $$$AssertEquals(wf.PendingTasks, 1, "the task stays counted")
+        Do $$$AssertEquals(wf.Sent.GetAt(wf.Sent.Count()), "Ens.Alarm|taskcheck::" _ req.%Id(), "it checks again")
+        Do ..Unsend(req, header)
+    }
+    // Deferred a moment ago: the item may still be making it.
+    Set req = ..Request(inc, "", 6, 1, .header)
+    Do wf.TaskSent.SetAt(req.%Id(), "")
+    Do $$$AssertStatusOK(wf.OnResponse("", "", "", "", "taskcheck::" _ req.%Id()), "the check")
+    Do $$$AssertEquals(wf.PendingTasks, 1, "the task stays counted")
+    Do $$$AssertEquals(wf.Sent.GetAt(wf.Sent.Count()), "Ens.Alarm|taskcheck::" _ req.%Id(), "it checks again")
+    // Answered with an error since (OnError), or sent again: the check is not this request's.
+    Do $$$AssertStatusOK(wf.OnError("", "", "", $$$ERROR($$$GeneralError, "no such role"), "approval"), "the call answers with an error")
+    Set events = ##class(Shutter.Store.Incident).%OpenId(inc.%Id()).Events().%Size()
+    Do ##class(Ens.MessageHeader).%DeleteId(header)
+    Set header = ..Header(req.%Id(), 8, 60)
+    Do $$$AssertStatusOK(wf.OnResponse("", "", "", "", "taskcheck::" _ req.%Id()), "the check after the error")
+    Do $$$AssertEquals(wf.PendingTasks, 0, "counted down once, by the error")
+    Do $$$AssertEquals(wf.Alerts.Count(), 1, "one alert, the error's")
+    Do $$$AssertEquals(##class(Shutter.Store.Incident).%OpenId(inc.%Id()).Events().%Size(), events, "no more events")
+    Do ..Unsend(req, header)
+}
+
+/// The words of a stop for a person: the incident and its chains wait, no case failed, one error event names the
+/// incident and the cause, and one alert names the incident.
+Method AssertWaits(inc As Shutter.Store.Incident, wf As Shutter.Test.FakeIncidentWorkflow, cause As %String)
+{
+    Set now = ##class(Shutter.Store.Incident).%OpenId(inc.%Id())
+    Do $$$AssertEquals(now.State, "awaiting_approval", "the incident is not closed: it waits for a person")
+    Do $$$AssertEquals(now.ChainAt(1).State, "awaiting_approval", "its chain still waits")
+    Do $$$AssertEquals(now.ChainAt(1).ItemAt(1).Case.State, "grouped", "no case failed")
+    Do $$$AssertEquals(..Said(inc, "error", "No approval task"), 1, "one error on the timeline")
+    Set found = "", it = now.Events().%GetIterator()
+    While it.%GetNext(.k, .e) { If e.kind = "error" Set found = e.text }
+    Do $$$AssertTrue(found [ inc.IncidentId, "it names the incident: " _ $EXTRACT(found, 1, 200))
+    Do $$$AssertTrue(found [ cause, "and the cause: " _ $EXTRACT(found, 1, 400))
+    Do $$$AssertEquals(wf.Alerts.Count(), 1, "one alert")
+    Do $$$AssertTrue(wf.Alerts.GetAt(1) [ inc.IncidentId, "names the incident")
+}
+
+/// How many task requests the workflow sent.
+Method Requests(wf As Shutter.Test.FakeIncidentWorkflow) As %Integer
+{
+    Set n = 0
+    For i = 1:1:wf.Sent.Count() { If $PIECE(wf.Sent.GetAt(i), "|", 1) '= "Ens.Alarm" Set n = n + 1 }
+    Quit n
+}
+
+/// A saved task request for the incident's shared task (seq "") or a chain's, with a header at this status, processed
+/// this many seconds ago: what the Workflow item leaves when it defers its reply and makes no task (status 6).
+Method Request(inc As Shutter.Store.Incident, seq As %String, status As %Integer, age As %Integer, Output header As %String) As EnsLib.Workflow.TaskRequest
+{
+    Set req = ##class(Shutter.Process.IncidentWorkflow).ApprovalTask(inc, seq, 1, 2, "")
+    Do $$$AssertStatusOK(req.%Save(), "the request is saved")
+    Set header = ..Header(req.%Id(), status, age)
+    Quit req
+}
+
+/// A request's header, as the engine keeps it, at this status, created and processed this many seconds ago.
+Method Header(requestId As %String, status As %Integer, age As %Integer) As %String
+{
+    Set h = ##class(Ens.MessageHeader).%New()
+    Set h.Type = 1, h.MessageBodyClassName = "EnsLib.Workflow.TaskRequest", h.MessageBodyId = requestId
+    Set h.SourceConfigName = "Incident Workflow", h.TargetConfigName = "UT Shutter.Test.IncidentTask"
+    Set then = ##class(%Library.UTC).Normalize($SYSTEM.SQL.Functions.DATEADD("s", -age, ##class(%Library.UTC).NowUTC()))
+    Set h.TimeCreated = then, h.TimeProcessed = then, h.Status = status
+    Do $$$AssertStatusOK(h.%Save(), "its header, at status " _ status)
+    Quit h.%Id()
+}
+
+Method Unsend(req As EnsLib.Workflow.TaskRequest, header As %String)
+{
+    If header '= "" Do ##class(Ens.MessageHeader).%DeleteId(header)
+    Do ##class(EnsLib.Workflow.TaskRequest).%DeleteId(req.%Id())
 }
 
 Method Said(inc As Shutter.Store.Incident, kind As %String, start As %String) As %Integer
