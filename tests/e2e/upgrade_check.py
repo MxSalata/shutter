@@ -3,15 +3,18 @@
 is loaded over it from the same folder, as a site does after pulling the repository. Nothing of the site's is lost and the
 uninstall (the module's Clean phase) never runs.
 
-    python3 tests/e2e/upgrade_check.py --image IMAGE --ctr NAME --old DIR [--port N] [--shape site|demo] [--as-version V] [--keep]
+    python3 tests/e2e/upgrade_check.py --image IMAGE --ctr NAME --old DIR [--port N] [--shape site|demo|into] [--as-version V] [--keep]
 
 DIR is the earlier release's tree (git archive v1.0.0, say). The shapes:
 
     site  A hospital namespace runs its own production and is onboarded; Shutter, with the demo off, has its own namespace.
           A case is opened through the onboarding's marked test failure and a person saves the site profile.
     demo  The demo in USER, as a plain load does; a scenario opens a case and a person saves the site profile.
+    into  Shutter's items inside a hospital's own running production (-Ddemo=0 -Dproduction=), in the hospital's namespace;
+          a case is opened in the store and a person saves the site profile. The site's own items must come through the
+          install's second run over its production unchanged.
 
-After the upgrade it checks the case, the profile, the running productions (a site's production keeps its job numbers),
+After the upgrade it checks the case (the count, and that the first one still opens with its state), the profile, the running productions (a site's production keeps its job numbers),
 the module's version, and then that a real uninstall still takes Shutter off the upgraded instance. It needs Docker and
 no API key: no model is called. Run from the repository's root. Exit status 1 when a check fails.
 """
@@ -28,6 +31,8 @@ SITE = os.path.join(HERE, "onboard_site")
 ROOT = os.path.dirname(os.path.dirname(HERE))
 HOME = "/home/irisowner"
 PKG = f"{HOME}/pkg"
+# The names of the items an install into a site's production adds (Setup.cls, INSTALLITEMS, in 1.0.0 and since).
+INSTALL_ITEMS = ["HL7 Index", "Case Releaser", "Receiver Watch", "Escalation Mail", "Case Workflow", "Case Review", "Case Question", "Incident Workflow", "Evidence Collector", "Agent Conformance", "Agent Encounter", "Agent Impact", "Agent Coordinator", "Agent Board", "Gate", "Shutter Approvers", "Shutter API", "Verifier", "Case Intake", "Case Intake Store", "Second Parser"]
 PW = "Upgrade-2026x"
 
 ap = argparse.ArgumentParser()
@@ -35,7 +40,7 @@ ap.add_argument("--image", required=True)
 ap.add_argument("--ctr", required=True)
 ap.add_argument("--old", required=True)
 ap.add_argument("--port", type=int, default=0)
-ap.add_argument("--shape", choices=["site", "demo"], default="site")
+ap.add_argument("--shape", choices=["site", "demo", "into"], default="site")
 ap.add_argument("--as-version", default="", help="the version this tree's module.xml is given in the container, as a release would bump it")
 ap.add_argument("--keep", action="store_true")
 args = ap.parse_args()
@@ -128,6 +133,27 @@ def case_line(ns):
     return m[-1] if m else out[-400:]
 
 
+def first_case(ns):
+    """The first case, opened as an object: its id and state. A storage change that left the rows unreadable shows here."""
+    out = session(ns, 'Set rs=##class(%SQL.Statement).%ExecDirectNoPriv(,"SELECT MIN(ID) FROM Shutter_Store.""Case""") Do rs.%Next() Set c=##class(Shutter.Store.Case).%OpenId(rs.%GetData(1)) Write !,"<<<",$SELECT($ISOBJECT(c):c.CaseId_"|"_c.State_"|"_c.FailureKind,1:"no row"),">>>",!')
+    m = re.findall(r"<<<(.*?)>>>", out)
+    return m[-1] if m else out[-400:]
+
+
+def receiver_watch(ns, production):
+    """The item new in 1.1 is in the production's definition after the upgrade. Whether it runs before a restart is printed."""
+    got = value(ns, f'##class(%SQL.Statement).%ExecDirectNoPriv(,"SELECT ID FROM Ens_Config.Item WHERE Production = \'{production}\' AND Name = \'Receiver Watch\'").%Next()')
+    check(f"the Receiver Watch is in {production}'s definition after the upgrade", got == "1", got)
+    print(f"  note  the Receiver Watch runs before any restart: {'yes' if 'Receiver Watch' in jobs(ns) else 'no'}", flush=True)
+
+
+def site_items(ns, production):
+    """The site's own items in its production's definition: name, class, enabled, pool size and settings."""
+    names = ",".join("'" + x + "'" for x in INSTALL_ITEMS + ["Shutter Forwarder"])
+    out = session(ns, f'Set rs=##class(%SQL.Statement).%ExecDirectNoPriv(,"SELECT ID FROM Ens_Config.Item WHERE Production = \'{production}\' AND Name NOT IN ({names})") While rs.%Next() {{ Set i=##class(Ens.Config.Item).%OpenId(rs.%GetData(1)) Set t="" For n=1:1:i.Settings.Count() {{ Set t=t_i.Settings.GetAt(n).Target_"."_i.Settings.GetAt(n).Name_"="_i.Settings.GetAt(n).Value_";" }} Write !,"<<<",i.Name,"|",i.ClassName,"|",i.Enabled,"|",i.PoolSize,"|",t,">>>",! }}')
+    return sorted(re.findall(r"<<<(.*?)>>>", out))
+
+
 def save_profile(ns):
     """A person saves the site profile: the current one, stored again under a person's source."""
     out = session(ns, 'Set row=##class(Shutter.Store.SiteProfile).Row() Set sc=##class(Shutter.Store.SiteProfile).Store(row.Json,"saved by a person","siteapprover","",.v) Write !,"<<<",sc,"|",v,">>>",!')
@@ -198,6 +224,7 @@ Set sc=$SYSTEM.OBJ.Delete("Shutter.Setup","-d")''')
     time.sleep(5)
     before_cases = case_line("SHUTTER")
     check("the store holds the case", not before_cases.startswith("0|") and "|" in before_cases, before_cases)
+    before_first = first_case("SHUTTER")
     before_profile = save_profile("SHUTTER")
     before_status = status("SHUTTER")
     check("Shutter.Production runs", before_status == "Shutter.Production|1", before_status)
@@ -208,6 +235,8 @@ Set sc=$SYSTEM.OBJ.Delete("Shutter.Setup","-d")''')
 
     the_upgrade("SHUTTER", " -Ddemo=0", old_version)
     check("the case is still there", case_line("SHUTTER") == before_cases, (before_cases, case_line("SHUTTER")))
+    check("the first case still opens, with its state", before_first != "no row" and first_case("SHUTTER") == before_first, (before_first, first_case("SHUTTER")))
+    receiver_watch("SHUTTER", "Shutter.Production")
     check("the person's site profile is still the current one, unchanged", profile_line("SHUTTER") == before_profile, (before_profile, profile_line("SHUTTER")))
     check("Shutter.Production runs after the upgrade", status("SHUTTER") == "Shutter.Production|1", status("SHUTTER"))
     print("the Gate's job before and after the upgrade (a new one means the new code runs):", gate_before, jobs("SHUTTER").get("Gate"), flush=True)
@@ -241,6 +270,7 @@ def demo_shape():
     time.sleep(5)
     before_cases = case_line("USER")
     check("the store holds a case", not before_cases.startswith("0|") and "|" in before_cases, before_cases)
+    before_first = first_case("USER")
     before_profile = save_profile("USER")
     check("Shutter.Production runs", status("USER") == "Shutter.Production|1", status("USER"))
     check("the demo hospital runs", status("HOSPITAL").startswith("Hospital.Production|1"), status("HOSPITAL"))
@@ -248,6 +278,8 @@ def demo_shape():
 
     the_upgrade("USER", "", old_version)
     check("the cases are still there", case_line("USER") == before_cases, (before_cases, case_line("USER")))
+    check("the first case still opens, with its state", before_first != "no row" and first_case("USER") == before_first, (before_first, first_case("USER")))
+    receiver_watch("USER", "Shutter.Production")
     check("the person's site profile is still the current one, unchanged", profile_line("USER") == before_profile, (before_profile, profile_line("USER")))
     check("Shutter.Production runs after the upgrade", status("USER") == "Shutter.Production|1", status("USER"))
     check("the demo hospital still runs", status("HOSPITAL").startswith("Hospital.Production|1"), status("HOSPITAL"))
@@ -256,12 +288,68 @@ def demo_shape():
     check("the HOSPITAL namespace went with the demo", value("%SYS", '##class(Config.Namespaces).Exists("HOSPITAL")') == "0")
 
 
+def into_shape():
+    step("A hospital namespace running its own production, which Shutter's items will go inside")
+    out = session("USER", f'''Set sc=$SYSTEM.OBJ.Load("{HOME}/old/src/Shutter/Setup.cls","ck-d")
+Write !,"[ns] ",##class(Shutter.Setup).CreateNamespace("PATHOLOGY"),"|",!
+Set sc=$SYSTEM.OBJ.Delete("Shutter.Setup","-d")''')
+    check("the namespace PATHOLOGY is made", "ok|" in out, out[-500:])
+    session("%SYS", f'Set sc=##class(Security.Users).Create("siteapprover","%Developer","{PW}","A person of the site","USER","","",0,1) Write !,sc,!')
+    lines = ['Set sc=##class(EnsLib.HL7.SchemaXML).Import("/tmp/onb_site/TRUSTLAB-pathology.xml") Write !,"[s] ",sc,!']
+    for f in ["OnbSite.AlertLog", "OnbPath.Rule", "OnbPath.Production"]:
+        lines.append(f'Set sc=$SYSTEM.OBJ.Load("/tmp/onb_site/{f}.cls","ck-d") Write !,"[c] ",sc,!')
+    lines.append('Set sc=##class(Ens.Director).StartProduction("OnbPath.Production") Write !,"[start] ",$SELECT(sc:"ok",1:$SYSTEM.Status.GetErrorText(sc)),!')
+    lines.append('Set sc=$SYSTEM.OBJ.Load("/tmp/zpm.xml","ck") Write !,"[ipm] ",sc,!')
+    out = session("PATHOLOGY", "\n".join(lines))
+    check("PATHOLOGY runs OnbPath.Production, and IPM is there", "[start] ok" in out and "[ipm] 1" in out, out[-600:])
+    site_before = site_items("PATHOLOGY", "OnbPath.Production")
+    check("the site's own items are read", len(site_before) >= 3, site_before)
+
+    step("The earlier release, inside the site's production, and used")
+    extra = " -Ddemo=0 -Dproduction=OnbPath.Production"
+    load("PATHOLOGY", extra)
+    old_version = module_version("PATHOLOGY")
+    print("installed:", old_version, flush=True)
+    check("Shutter's items run inside the site's production", "Gate" in jobs("PATHOLOGY"), jobs("PATHOLOGY"))
+    # A case in the store, as the intake opens one: a delivery failure of one operation.
+    out = session("PATHOLOGY", 'Set op={"operation_key":"upgrade-check-1","encounter_id":"E1","patient_id":"P1","patient_id_authority":"HOSP","source_system":"PAS","event":"A01","event_time":"2026-11-08T10:00:00Z"} Set sc=##class(Shutter.Store.Case).Open(op,"delivery_failed","The receiver refused the connection","","","board",.c,.o) Write !,"[case] ",sc,"|",$SELECT($ISOBJECT(c):c.CaseId,1:""),!')
+    check("a case is opened in the store", "[case] 1|" in out, out[-500:])
+    before_cases = case_line("PATHOLOGY")
+    before_first = first_case("PATHOLOGY")
+    before_profile = save_profile("PATHOLOGY")
+    site_jobs = jobs("PATHOLOGY")
+    site_mid = site_items("PATHOLOGY", "OnbPath.Production")
+    check("the install left the site's own items as they were", site_mid == site_before, (site_before, site_mid))
+    print("before:", before_cases, before_first, before_profile, site_jobs, flush=True)
+
+    the_upgrade("PATHOLOGY", extra, old_version)
+    check("the case is still there", case_line("PATHOLOGY") == before_cases, (before_cases, case_line("PATHOLOGY")))
+    check("the first case still opens, with its state", before_first != "no row" and first_case("PATHOLOGY") == before_first, (before_first, first_case("PATHOLOGY")))
+    check("the person's site profile is still the current one, unchanged", profile_line("PATHOLOGY") == before_profile, (before_profile, profile_line("PATHOLOGY")))
+    check("OnbPath.Production still runs", status("PATHOLOGY") == "OnbPath.Production|1", status("PATHOLOGY"))
+    now = jobs("PATHOLOGY")
+    same = {k: (site_jobs.get(k), now.get(k)) for k in ("OrderComms In", "Path Router", "LIMS Out")}
+    check("the site's items were not restarted: the same job numbers", all(a and a == b for a, b in same.values()), same)
+    site_after = site_items("PATHOLOGY", "OnbPath.Production")
+    check("the site's own items are unchanged in the definition: names, classes, enabled, pool sizes and settings", site_after == site_before, (site_before, site_after))
+    check("Shutter's Gate still runs inside it", "Gate" in now, now)
+    receiver_watch("PATHOLOGY", "OnbPath.Production")
+
+    uninstall_after("PATHOLOGY")
+    check("OnbPath.Production still runs after the uninstall", status("PATHOLOGY") == "OnbPath.Production|1", status("PATHOLOGY"))
+    now = jobs("PATHOLOGY")
+    same = {k: (site_jobs.get(k), now.get(k)) for k in ("OrderComms In", "Path Router", "LIMS Out")}
+    check("and its items keep their job numbers", all(a and a == b for a, b in same.values()), same)
+    check("none of Shutter's items run there", not [k for k in now if k in INSTALL_ITEMS], now)
+    check("the site's own items are still as they were", site_items("PATHOLOGY", "OnbPath.Production") == site_before, site_items("PATHOLOGY", "OnbPath.Production"))
+
+
 start_instance()
 print(session("USER", 'Write !,"<<<",$ZVERSION,">>>",!')[-200:], flush=True)
 # The earlier tree, in the folder the module loads from and a copy for the namespace helper.
 put_tree(os.path.abspath(args.old))
 subprocess.run(["docker", "exec", "-u", "root", CTR, "sh", "-c", f"cp -r {PKG} {HOME}/old && chown -R irisowner:irisowner {HOME}/old"], check=True)
-{"site": site_shape, "demo": demo_shape}[args.shape]()
+{"site": site_shape, "demo": demo_shape, "into": into_shape}[args.shape]()
 print(f"\n{passed} passed, {len(failed)} failed")
 for f in failed:
     print("  FAILED:", f)
