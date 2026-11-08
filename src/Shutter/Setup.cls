@@ -1501,7 +1501,7 @@ ClassMethod SeedAll(root As %String) As %Status [ Private ]
 /// the board, never the feed or the demo (ADT In, ADT to Downstream, Downstream Out, ADT to Records, Records Out,
 /// Scenario Player). Case Intake and Case Intake Store are added once Shutter.Production defines them. A new recovery
 /// item is listed here too.
-Parameter INSTALLITEMS = "HL7 Index,Case Releaser,Escalation Mail,Case Workflow,Case Review,Case Question,Incident Workflow,Evidence Collector,Agent Conformance,Agent Encounter,Agent Impact,Agent Coordinator,Agent Board,Gate,Shutter Approvers,Shutter API,Verifier,Case Intake,Case Intake Store,Second Parser";
+Parameter INSTALLITEMS = "HL7 Index,Case Releaser,Receiver Watch,Escalation Mail,Case Workflow,Case Review,Case Question,Incident Workflow,Evidence Collector,Agent Conformance,Agent Encounter,Agent Impact,Agent Coordinator,Agent Board,Gate,Shutter Approvers,Shutter API,Verifier,Case Intake,Case Intake Store,Second Parser";
 
 /// Adds Shutter's items (INSTALLITEMS) to the named production, each as Shutter.Production's compiled definition has
 /// it (class, pool size, enabled, foreground, comment, category, trace flag, schedule and settings), when the
@@ -1690,7 +1690,7 @@ ClassMethod PurgeStore() As %String [ SqlProc ]
     // another instance's files.
     Set emails = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT Seq, Result FROM Shutter_Store.Escalation WHERE Transport = 'file'")
     While emails.%Next() { Do ##class(Shutter.Store.Escalation).RemoveFile(emails.%Get("Result"), emails.%Get("Seq")) }
-    For cls = "Shutter.Store.CaseToken", "Shutter.Store.ChainItem", "Shutter.Store.Chain", "Shutter.Store.IncidentEvent", "Shutter.Store.Incident", "Shutter.Store.Verification", "Shutter.Store.ExecutionAttempt", "Shutter.Store.Approval", "Shutter.Store.Rehearsal", "Shutter.Store.GateDecision", "Shutter.Store.Plan", "Shutter.Store.Finding", "Shutter.Store.CaseQuestion", "Shutter.Store.AgentRun", "Shutter.Store.SnapshotItem", "Shutter.Store.Snapshot", "Shutter.Store.CaseEvent", "Shutter.Store.Escalation", "Shutter.Store.Case", "Shutter.Store.Precedent", "Shutter.Store.BoardLead", "Shutter.Store.ReviewAnnotation", "Shutter.Store.Review", "Shutter.Store.Idempotency", "Shutter.Bridge.ToolCall" {
+    For cls = "Shutter.Store.CaseToken", "Shutter.Store.ChainItem", "Shutter.Store.Chain", "Shutter.Store.IncidentEvent", "Shutter.Store.Incident", "Shutter.Store.Verification", "Shutter.Store.ExecutionAttempt", "Shutter.Store.Approval", "Shutter.Store.Rehearsal", "Shutter.Store.GateDecision", "Shutter.Store.Plan", "Shutter.Store.Finding", "Shutter.Store.CaseQuestion", "Shutter.Store.AgentRun", "Shutter.Store.SnapshotItem", "Shutter.Store.Snapshot", "Shutter.Store.CaseEvent", "Shutter.Store.Escalation", "Shutter.Store.Case", "Shutter.Store.Precedent", "Shutter.Store.BoardLead", "Shutter.Store.ReviewAnnotation", "Shutter.Store.Review", "Shutter.Store.Idempotency", "Shutter.Bridge.ToolCall", "Shutter.Store.OutageEvent", "Shutter.Store.Outage", "Shutter.Store.ReceiverReading" {
         Set sc = $CLASSMETHOD(cls, "%KillExtent")
         If $$$ISERR(sc) Quit
         Set n = n + 1
@@ -1877,6 +1877,9 @@ ClassMethod Doctor(refresh As %Boolean = 0) As %String [ SqlProc ]
     // Each watched namespace, read there (v1.42), and the receivers whose connector item a site has yet to add.
     Set r."watched_namespaces" = ##class(Shutter.Util.Onboard).Watched()
     Set r."receivers_without_item" = ##class(Shutter.Util.Onboard).ReceiversWithoutItem()
+    // The receivers' outages (CONTRACTS 17): what each watched item's settings read, the set gate's and the hold's lines when
+    // the build has them, and the blocks a profile declares that no part of this build acts on.
+    Try { Set r.outages = ..OutageDoctor() } Catch ex { Set r.outages = {"error": (ex.DisplayString())} }
     // The hold for a schema not loaded (v1.34, "prevent failures"): the profile's setting and the held cases by category.
     Do r.%Set("prevent_failures", ##class(Shutter.Store.SiteProfile).PreventFailures(), "boolean")
     Set r."held_messages" = ##class(Shutter.Util.Schemas).Held()
@@ -1948,6 +1951,128 @@ ClassMethod Doctor(refresh As %Boolean = 0) As %String [ SqlProc ]
         Set r."webapps_checked" = "install record"
     }
     Quit r.%ToJSON()
+}
+
+/// The Doctor's outage lines (CONTRACTS 17): { open, by_state, receivers: [ per watched item ], policy_version,
+/// set_policy_version, hold, approvers_missing, routers_validating, alert_on_error_off, declared_not_in_build }. receivers is
+/// empty on a profile with no watch block. The watched items' settings come from the Receiver Watch's stored reading, which its
+/// production job wrote; SaveReplies, the routers and AlertOnError are read in the watched namespace, and where this process
+/// may not switch there they read unknown with the reason. set_policy_version and hold are "" when the build has no set gate or
+/// no hold.
+ClassMethod OutageDoctor() As %DynamicObject
+{
+    Set out = {}
+    Set open = 0, states = {}
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT State, COUNT(*) AS N FROM Shutter_Store.Outage GROUP BY State")
+    While rs.%Next() {
+        Do states.%Set(rs.%Get("State"), +rs.%Get("N"))
+        If rs.%Get("State") '= "closed" Set open = open + rs.%Get("N")
+    }
+    Set out.open = open, out."by_state" = states
+    Set receivers = [], missing = [], namespaces = ""
+    Set iter = ##class(Shutter.Store.SiteProfile).WatchedReceivers().%GetIterator()
+    While iter.%GetNext(.i, .entry) {
+        Set name = entry.%Get("name"), watch = entry.%Get("watch")
+        Set ns = watch.%Get("namespace"), item = watch.%Get("item")
+        Set reading = ##class(Shutter.Store.ReceiverReading).Last(name)
+        Set line = {"receiver": (name), "namespace": (ns), "item": (item), "reading": (reading.reading)}
+        For key = "checkedAt", "defCharEncoding", "replyCodeActions", "replyCodeActionsStock", "failureTimeout", "retry", "getReply" {
+            Do line.%Set(key, reading.%Get(key), $CASE(reading.%GetTypeOf(key), "null": "null", "boolean": "boolean", "number": "number", : "string"))
+        }
+        If (reading.%GetTypeOf("replyCodeActionsStock") = "boolean") && 'reading.replyCodeActionsStock && (##class(Shutter.API.Outages).S(reading, "replyCodeActions") '= "") {
+            Set line."reply_actions_note" = "this operation's reply actions are the site's own: what an AE, AR or timeout does here follows this string"
+        }
+        Set line.settingSources = reading.settingSources
+        Set save = ..WatchedSetting(ns, item, "SaveReplies")
+        Set line.saveReplies = save.value, line.saveRepliesSource = save.source
+        If save.why '= "" Set line.saveRepliesWhy = save.why
+        Do receivers.%Push(line)
+        If ##class(Shutter.Store.Outage).ApproversOf(entry).%Size() = 0 Do missing.%Push(name)
+        If (ns '= "") && '$LISTFIND(namespaces, ns) Set namespaces = namespaces _ $LISTBUILD(ns)
+    }
+    Set out.receivers = receivers, out."approvers_missing" = missing
+    Set out."policy_version" = $PARAMETER("Shutter.Operation.Gate", "POLICYVERSION")
+    Set out."set_policy_version" = $SELECT(##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Util.ResendSet"): $PARAMETER("Shutter.Util.ResendSet", "SETPOLICYVERSION"), 1: "")
+    Set out.hold = ..HoldLine()
+    Set routers = [], quiet = []
+    Set ptr = 0
+    While $LISTNEXT(namespaces, ptr, ns) { Do ..NamespaceLines(ns, routers, quiet) }
+    Set out."routers_validating" = routers, out."alert_on_error_off" = quiet
+    Set out."declared_not_in_build" = ..DeclaredNotInBuild()
+    Quit out
+}
+
+/// One setting of a watched item through the shared read, or unknown with the reason when it can't be read here.
+ClassMethod WatchedSetting(ns As %String, item As %String, setting As %String) As %DynamicObject
+{
+    Try {
+        Set answer = ##class(Shutter.Util.EngineRead).ItemSetting(ns, item, setting, ##class(Shutter.Util.EngineScope).IsStockTcp(ns, item))
+    } Catch ex {
+        Set answer = {"source": "unknown", "value": "", "why": (ex.DisplayString())}
+    }
+    Quit answer
+}
+
+/// The hold's line, through the hold's own store when this build has it: "" otherwise, so nothing claims a hold that isn't there.
+ClassMethod HoldLine() As %DynamicAbstractObject
+{
+    Set class = "Shutter.Store.HoldEntry"
+    If '##class(%Dictionary.CompiledClass).%ExistsId(class) Quit ""
+    If '##class(%Dictionary.CompiledMethod).%ExistsId(class _ "||DoctorLine") Quit {"error": "the hold's store has no DoctorLine"}
+    Try {
+        Set line = $CLASSMETHOD(class, "DoctorLine")
+    } Catch ex {
+        Set line = {"error": (ex.DisplayString())}
+    }
+    Quit line
+}
+
+/// In one watched namespace: the HL7 routers with validation on, and the operations and routers with AlertOnError off, so a
+/// failure the intake never hears is named. Where the namespace can't be read here, one entry says so.
+ClassMethod NamespaceLines(ns As %String, routers As %DynamicArray, quiet As %DynamicArray)
+{
+    Try {
+        New $NAMESPACE
+        Set $NAMESPACE = ns
+        Set production = ##class(Ens.Director).GetActiveProductionName()
+        If production = "" Do quiet.%Push({"namespace": (ns), "unknown": "no current production"}) Quit
+        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT Name, ClassName FROM Ens_Config.Item WHERE Production = ? AND Enabled = 1", production)
+        While rs.%Next() {
+            Set name = rs.%Get("Name"), class = rs.%Get("ClassName")
+            Continue:'##class(%Dictionary.CompiledClass).%ExistsId(class)
+            Set router = $CLASSMETHOD(class, "%Extends", "EnsLib.HL7.MsgRouter.RoutingEngine")
+            Continue:'router&&'$CLASSMETHOD(class, "%Extends", "Ens.BusinessOperation")
+            If router {
+                Set sc = $$$OK, v = ##class(Ens.Director).GetItemSettingValue(name, "Host", "Validation", .sc)
+                If $$$ISOK(sc) && (v '= "") Do routers.%Push({"namespace": (ns), "item": (name), "validation": (v)})
+            }
+            Set sc = $$$OK, v = ##class(Ens.Director).GetItemSettingValue(name, "Host", "AlertOnError", .sc)
+            If $$$ISOK(sc) && 'v Do quiet.%Push({"namespace": (ns), "item": (name)})
+        }
+    } Catch ex {
+        Do quiet.%Push({"namespace": (ns), "unknown": (ex.DisplayString())})
+    }
+}
+
+/// The receivers whose profile entry declares engine_resend, hold or mail, each with whether this build has the part that acts
+/// on it: "declared; not in this build" when it doesn't, so a block never appears to enable recovery.
+ClassMethod DeclaredNotInBuild(list As %DynamicArray = "") As %DynamicArray
+{
+    Set out = []
+    If '$ISOBJECT(list) Set list = ##class(Shutter.Store.SiteProfile).Current().%Get("receivers")
+    If '$ISOBJECT(list) Quit out
+    Set iter = list.%GetIterator()
+    While iter.%GetNext(.i, .r) {
+        Continue:'$ISOBJECT(r)
+        For block = "engine_resend", "hold", "mail" {
+            Continue:'r.%IsDefined(block)
+            Continue:(block = "engine_resend")&&'r.%Get(block)
+            Set class = $CASE(block, "engine_resend": "Shutter.Operation.EngineResend", "hold": "Shutter.Store.HoldEntry", : "Shutter.Operation.OutageMail")
+            Set here = ##class(%Dictionary.CompiledClass).%ExistsId(class)
+            Do out.%Push({"receiver": (r.%Get("name")), "block": (block), "state": ($SELECT(here: "declared; in this build", 1: "declared; not in this build"))})
+        }
+    }
+    Quit out
 }
 
 /// The live hospital's status as its player writes it in the hospital's namespace (CONTRACTS 4.4, v1.34): {enabled,

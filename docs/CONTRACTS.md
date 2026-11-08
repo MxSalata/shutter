@@ -1551,7 +1551,7 @@ demo items, switched off on a site install with the others.
   `.eml` files of the rows it drops, never the folder. Since v1.22 it also empties the production review's two stores,
   `Shutter.Store.Review` and `Shutter.Store.ReviewAnnotation` (13.4), and the review counter goes with the other counters
   it clears, so the next review is `PR-000001` again. Since v1.39 it also empties `Shutter.Store.Precedent` and `Shutter.Store.BoardLead`,
-  since the case counter starts again at `C-000001` and their rows would name cases that never existed, and sets
+  since the case counter starts again at `C-000001` and their rows would name cases that never existed; since v1.1.0 the three outage stores too (17.7); and it sets
   `^Shutter.Config("resetAt")` to the time of the purge, as a scenario reset does, so nothing from before it is read as
   this instance's history.
 - **The aihub module's install** (v1.21) fails when the environment carries a provider key (`ANTHROPIC_API_KEY`) and the
@@ -1562,7 +1562,7 @@ demo items, switched off on a site install with the others.
   -Dproduction=Your.Production"`), in that production's namespace with the core classes loaded: refuses an empty name or a
   production that does not exist, records it in `^Shutter.Config("production")`, runs the namespace-level parts of a
   non-demo install (no message purge), and adds to the production, when it has none of that name, each of Shutter's
-  items as `Shutter.Production` defines it (`Setup.INSTALLITEMS`: HL7 Index, Escalation Mail, Case Workflow, Case Review (13), Incident
+  items as `Shutter.Production` defines it (`Setup.INSTALLITEMS`: HL7 Index, Case Releaser, Receiver Watch (17), Escalation Mail, Case Workflow, Case Review (13), Incident
   Workflow, Evidence Collector, the agent items when their class is compiled, Gate, Shutter Approvers, Shutter API,
   Verifier, Case Intake, Case Intake Store; never the feed or the demo items), writes the default settings keyed to it
   (the receiver's address on Evidence Collector and Verifier, no wildcard row) and, when it is running, updates it in
@@ -1905,6 +1905,156 @@ board's case in the Visual Trace, the latest cases, and links to the portal's pa
   runs. A figure it can't read leaves its tile out, and with no S8 case the box says so.
 - **Sessions.** A request with no session behind it ends the one it opened, so a caller that keeps no cookie can't use up
   the licence units; a visitor already in a portal session keeps it.
+
+## 17. Receiver outages (v1.1.0)
+
+One incident per watched receiver: an outage, opened and closed by a read-only poll from Shutter's own production job, never
+by a connection to the receiver. It is a store of its own, `Shutter.Store.Outage`, beside `Shutter.Store.OutageEvent` (what
+happened to it, append only) and `Shutter.Store.ReceiverReading` (the last reading per watched receiver, overwritten by each
+poll). A receiver is watched when its profile entry has a `watch` block (6.4); with none, the item `Receiver Watch` does
+nothing, and every route below answers empty lists.
+
+### 17.1 The item
+
+`Receiver Watch` (`Shutter.Operation.ReceiverWatch`, a business service on `Ens.InboundAdapter`, `CallInterval` 5,
+`PoolSize` 1) is in `Shutter.Production` and in `Setup.INSTALLITEMS`, so a site's own production gets it from
+`InstallInto` (12) and the Doctor's `missing_items` names it when it is absent. Per watched receiver it reads, in the
+watched namespace, the production's state, the item's status, adapter state, queue, head message (the oldest header to the
+item reading Delivered) and the job list's active message as a check, and the item's `FailureTimeout`, `DefCharEncoding`,
+`ReplyCodeActions`, `GetReply` and `StayConnected` through `EngineRead.ItemSetting` (a class default only on the engine's
+exact "No Setting" answer at a stock HL7 TCP operation; anything else reads unknown). Every value is stamped, and a failed
+read is stored as unknown, never as healthy.
+
+### 17.2 The states
+
+`retry` is read off the item: `unlimited` (`FailureTimeout` -1), `bounded` (above 0: it retries, then gives up) and `none`
+(0). "The no-retry path" means an item that finishes with a message by itself, `bounded` or `none`, or whose setting can't be
+read. Durations are elapsed time, never a number of polls. This table is the one definition of the states.
+
+| State | Meaning | Enters on | Leaves on |
+| --- | --- | --- | --- |
+| `open` | Down, Refusing, Not answering or Can't tell; the engine owns everything queued | every poll across 30 s reading `Status` Error or Retry with the adapter disconnected; the Refusing or Not answering reading (the head unchanged across two polls with the rows below); at a no-retry item, one new Error header whose every attempt says the connection never opened | the retry path: connected and `Status` OK (`draining`); the no-retry path: queue 0, no head message, no header of the window Queued or Delivered, on two polls 5 s apart (`closing`), whatever `Status` and the adapter read; on the same path, `settle_minutes` (10) since the open with the two quiet polls never seen (`needs_person`, a busy feed); a person marks it down on purpose (`paused`) |
+| `draining` | The engine is making progress through the backlog | connected and `Status` OK, with no Refusing or Not answering reading | queue 0 and no header of the window Queued or Delivered, twice (`closing`); `Status` Error or Retry or disconnected (`open`, the quiet clock reset); `settle_minutes` with the queue never at 0 (`needs_person`) |
+| `closing` | Every header of the window settled and read; the set computed where the build has a set gate | the drain rule, the no-retry path, or Read again | with a set gate: set empty, `closed`; set non-empty, `offered`. With no set gate: no Error header of the window, `closed`; any, `needs_person` ("N messages failed and were not offered; a person reads the trace", `set.status` `not_computed`, `set.reason` "no set gate in this build") |
+| `offered` | The never-opened list is on the card; at a receiver with `engine_resend` an approval is offered | `closing` | approval given (`sending`); the set's digest moved (recomputed, stays `offered`); a person closes with a reason (`closed`); a dirty read (`open`) |
+| `sending` | One at a time, each row of the ledger written before the call | approval | run done (`closed`); a send not Completed, a stop or a restart mid-run (`needs_person`) |
+| `needs_person` | Something a person must do: a stopped run, a busy feed, an unreadable check, an expired approval | as above | read again and offer again (`closing`); a person closes (`closed`) |
+| `paused` | Down on purpose until a time | a person's act | the time, or a person (`open` or `closed`) |
+| `closed` | | | never |
+
+`kind` (`down`, `refusing`, `not_answering`, `cant_tell`) can change between polls. A dirty read during `draining` or
+`offered` returns the row to `open`; `closed` is reached only from `closing` or by a person. The window runs from the open
+minus `window_minutes` (5) to the drain; its headers are those to the item with `TimeCreated` inside it. Every change of
+state runs under `LOCK ^Shutter.Outage(id)` on the row's `Version`, and a stale copy changes nothing.
+
+### 17.3 The routes
+
+All under `/api/shutter`, JSON in and out.
+
+- `GET /outages?state=open|all` (`Shutter_Operate`; `open`, the default, is every row not `closed`) answers
+  `{ "items": [Outage], "receivers": [Reading] }`, newest first. 400 `bad_request` for another state.
+- `Reading`, the always-on line, one per watched receiver: `{ "receiver", "namespace", "item", "reading":
+  "healthy|slow|down|refusing|not_answering|cant_tell|unknown", "status", "adapterState", "queue", "headHeaderId",
+  "activeMessage", "failureTimeout", "retry": "unlimited|bounded|none|unknown", "defCharEncoding", "replyCodeActions",
+  "replyCodeActionsStock", "getReply", "stayConnected", "settingSources": { "<setting>": "item|class_default|unknown" },
+  "checkedAt", "unknownFields": [..], "why" }`. `replyCodeActions` is the item's resolved string and
+  `replyCodeActionsStock` true when it is the engine's default; `why` says why a reading is unknown. A receiver not read
+  yet reads `unknown` with `why` "not read yet"; a row its watcher has not written for 60 s reads `unknown` with its last
+  `checkedAt`.
+- `GET /outages/:id` (`Shutter_Operate`) answers one `Outage`, 404 `not_found` for another id: `{ "id", "receiver",
+  "namespace", "item", "state", "kind", "openedAt", "drainedAt", "closedAt", "runbook", "call", "approvers": [..],
+  "pausedUntil", "overdueAt", "readings": Reading, "window": { "from", "to" }, "settled": { "completed", "suspended",
+  "error", "other" }, "alerts": [ { "at", "kind", "text" } ], "lists": { "queued": [Row], "offered": [Row], "reached":
+  [Row], "refused": [Row] }, "openCases": [ { "caseId", "reason", "owner" } ], "version", "set": { "digest", "computedAt",
+  "setPolicyVersion", "status": "computed|not_computed|withheld", "reason" }, "approvable": false, "approval": null,
+  "sentByShutter": 0, "acts": ["pause", "close"], "words": { "first", "do", "call", "critical" } }`. `Row` is `{
+  "headerId", "controlId", "timeCreated", "status", "attempts", "reason", "patient": { "id", "authority" }, "sibling": {
+  "headerId", "status", "at" } }`. Every field is present from the first moment: empty lists, zero counts, null where
+  nothing has filled it. `Outage.ToJSON()` serialises the row, and the route adds `words`.
+- `set.status` and `set.reason` are the one name for the set's state on every surface: `not_computed` with its reason ("no
+  set gate in this build", or the condition that failed), `withheld` with "down on purpose", `computed` with its digest.
+- `acts` holds `pause` and `close` while the row is not closed, and nothing once it is; a build with Read again appends
+  `read_again`. A page shows only the acts the row lists. `approvable` is true only when the build has the send and the
+  receiver has `engine_resend`; `approval`, when present, is `{ "id", "by", "givenAt", "goodUntil", "digest", "note" }`. A
+  list of what to send again is `lists.offered[].controlId` in order.
+- `POST /outages/:id/acts` (`Shutter_Approve`, the CSRF header) with `{ "act": "pause", "until": "<UTC time>" }` or `{
+  "act": "close", "reason": "..." }`, and optionally `"version"`. 200 with the outage as `GET /outages/:id` gives it; 400
+  `bad_request` for an act the row doesn't list, a pause with no time, or one not in the future, or a close with no reason or
+  one over 1,000 characters; 409 `wrong_state` on a closed row, `version_changed` (with `currentVersion`) on a stale
+  version; 413 `too_large` for a body over 8,192 characters, refused before it is parsed. A pause moves the row to
+  `paused`, sets `pausedUntil`, and withholds any set (`set.status` `withheld`, `set.reason` "down on purpose"); a close
+  records the reason and the person. The person is the signed-in user, never a name from the body. An `Idempotency-Key`
+  replays the stored reply (5). An operator's session reads every route and is refused here with 403.
+
+### 17.4 The card's words
+
+`words` is composed on every read from the row, its reading, the receiver's profile entry and what the build holds, so the
+words follow the build (`Shutter.API.Outages.Words`, a pure method with a table test):
+
+- `first`, by kind. Down: since when, what is queued, then what the engine does, from the setting as read: at `unlimited`
+  "At this operation the engine retries without limit (FailureTimeout -1, read off the item): it goes on attempting them, in
+  order, when the listener is back; a refusal, a stopped production or a changed setting can still stop one."; at `none` or
+  `bounded` that the engine does not retry, or retries for at most N s, and that the failed messages will not go by
+  themselves, then by tier: with `approvable` the one approval; without it "Shutter will not send these messages. Review them
+  in the Message Viewer using the site's recovery procedure.", and with no set gate in the build "N messages failed and were
+  not offered; a person reads the trace." Where the setting could not be read: "Whether this operation retries could not be
+  read: treat them as not going by themselves until a person checks the item." Refusing: the head message refused, the
+  engine trying it again, "Shutter resends nothing". Not answering: the head message "has been written to it at least once
+  and may already be held there". Can't tell: "Whether the listener is back cannot be read from the engine at this receiver:
+  it will show on the next send.", then by tier as Down. On return: "The engine's connection recovered at HH:MM." (only at a
+  retrying item, where the adapter read connected), "Delivery backlog drained at HH:MM. Application processing has not been
+  independently checked.", "Nothing remains queued. N deliveries Completed; M was Suspended and still needs action." Closed:
+  "Transport outage closed.", with "N delivery exceptions still need review." while cases stay open. Where the item's
+  `ReplyCodeActions` is not the engine's default, the string is printed with "This operation's reply actions are the site's
+  own: what an AE, AR or timeout does here follows this string". Always last: "Recovery attempts initiated by Shutter: 0.",
+  with "The integration engine may still be delivering or retrying." while anything is queued or being tried, and "Nothing
+  is sent to the receiver to check this."
+- `do`: "Do: " and the site's runbook line; at Refusing "Do: a person decides in the Message Viewer; Shutter does not
+  suspend or discard."; while paused, "Down on purpose until ..." in its place. At a retrying receiver (`unlimited` or
+  `bounded`): "Entering one by hand first is your downtime procedure's call; at this receiver a duplicate is" refused, with
+  its words, filed twice, or unknown, from the profile's `duplicates`. Open an hour or more: "Down longer than the site's
+  limit: the lab's downtime procedure applies."
+- `call`: "Call: " and the site's call line as written, who may approve here (the entry's `approvers`, else
+  `approvers.escalation`), and "An operator can do nothing here, which is safe."
+- `critical`, at an `orders_results` receiver: "Shutter does not assess clinical urgency. If delayed reporting may require
+  clinical action, contact the laboratory using the site's critical-results and downtime procedure. Do not re-enter or amend
+  a result solely from this page." Null elsewhere.
+
+No word names a supplier, a patient, a result value or "Verified".
+
+### 17.5 Forwarded endpoints, and the one security contract
+
+`/summaries` goes to `Shutter.API.Summaries` and `/assist` to `Shutter.API.Assist` (`Map Prefix ... Forward` in the
+`UrlMap`). A build without the class answers 404 `not_in_build` on its prefix (`Dispatch.OnPreDispatch`), and the other routes
+are unaffected. A class reached by `Forward` inherits none of `Dispatch`'s checks, so every route here and every forwarded
+endpoint keeps one contract:
+
+- it applies the same server-side session and resource checks as the main API, through
+  `##class(Shutter.API.Dispatch).Allow(resource, change)`: no session 401, the wrong resource 403;
+- every changing request requires the CSRF header `X-Requested-With: Shutter` (403 `csrf` without it);
+- an idempotent action uses the existing `Idempotency-Key`, and a replayed key answers the stored reply;
+- a body is bounded before it is parsed;
+- the server selects the agent item, the subject type and the storing method from an allowlist, never from the request.
+
+### 17.6 The Doctor's lines
+
+The Doctor's `outages`: `{ "open", "by_state", "receivers": [ { "receiver", "namespace", "item", "reading", "checkedAt",
+"defCharEncoding", "replyCodeActions", "replyCodeActionsStock", "reply_actions_note", "failureTimeout", "retry", "getReply",
+"settingSources", "saveReplies", "saveRepliesSource" } ], "approvers_missing": [receiver], "policy_version",
+"set_policy_version", "hold", "routers_validating": [ { "namespace", "item", "validation" } ], "alert_on_error_off": [ {
+"namespace", "item" } ], "declared_not_in_build": [ { "receiver", "block", "state" } ] }`. `receivers` is empty on a profile
+with no watch block. The watched items' settings come from the stored reading; `SaveReplies`, the routers and `AlertOnError`
+are read in the watched namespace, and where the calling process may not switch there they read unknown with the reason.
+`set_policy_version` is the set gate's `SETPOLICYVERSION` beside the gate's `POLICYVERSION`, and "" when the build has no
+`Shutter.Util.ResendSet`; `hold` is the hold store's `DoctorLine()` (held count, the oldest hold's age, the site's item and
+shim present), and "" when the build has no `Shutter.Store.HoldEntry`. `declared_not_in_build` names each `engine_resend`
+(true), `hold` or `mail` block a profile declares, with "declared; not in this build" when no part of the build acts on it,
+so a block never appears to enable recovery.
+
+### 17.7 The reset
+
+The demo's `PurgeStore` empties `Shutter.Store.OutageEvent`, `Shutter.Store.Outage` and `Shutter.Store.ReceiverReading`
+with the other stores.
 
 ## Changes
 

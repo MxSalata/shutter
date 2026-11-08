@@ -74,10 +74,37 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
   <Route Url="/production-reviews/annotations/:annotationId" Method="DELETE" Call="ProductionReviewAnnotationDelete"/>
   <Route Url="/production-reviews/:id" Method="GET" Call="ProductionReviewGet"/>
   <Route Url="/production-reviews/:id/annotations" Method="POST" Call="ProductionReviewAnnotate"/>
+  <Route Url="/outages" Method="GET" Call="Outages"/>
+  <Route Url="/outages/:id" Method="GET" Call="OutageGet"/>
+  <Route Url="/outages/:id/acts" Method="POST" Call="OutageAct"/>
+  <Map Prefix="/summaries" Forward="Shutter.API.Summaries"/>
+  <Map Prefix="/assist" Forward="Shutter.API.Assist"/>
 </Routes>
 }
 
 // ---- plumbing ----
+
+/// The forwarded prefixes and the class each goes to. A build without the class answers 404 on its prefix, never a 500.
+ClassMethod ForwardClass(url As %String) As %String
+{
+    For prefix = "/summaries", "/assist" {
+        If (url = prefix) || ($EXTRACT(url, 1, $LENGTH(prefix) + 1) = (prefix _ "/")) Return $CASE(prefix, "/summaries": "Shutter.API.Summaries", : "Shutter.API.Assist")
+    }
+    Quit ""
+}
+
+/// Before any route: a forwarded prefix whose class is not in this build answers 404 not_in_build. A class that is there runs its
+/// own checks, as CONTRACTS 17 says every forwarded endpoint must (Allow, the CSRF header, the Idempotency-Key, a bounded body).
+ClassMethod OnPreDispatch(pUrl As %String, pMethod As %String, ByRef pContinue As %Boolean) As %Status
+{
+    Set pContinue = 1
+    Set class = ..ForwardClass(pUrl)
+    If (class '= "") && '##class(%Dictionary.CompiledClass).%ExistsId(class) {
+        Do ..Fail("404 Not Found", "not_in_build", "This build has no " _ $PIECE(pUrl, "/", 2))
+        Set pContinue = 0
+    }
+    Quit $$$OK
+}
 
 /// The base class refuses anonymous callers before any route runs; here the sign-in route must run
 /// for them, and every other route checks the caller's resources itself (Allow).
@@ -680,7 +707,7 @@ ClassMethod CaseClosure(caseId As %String) As %Status
             If ##class(Shutter.Util.Json).Str(detail, "history_note") '= "" Do unverified.%Push(detail."history_note")
         }
     } Else { Do o.%Set("verification", "", "null") }
-    Do unverified.%Push("Consumers beyond the downstream system are outside the production's view and are not verified")
+    Do unverified.%Push(..ClosureLimit(case.Receiver))
     Set o.verifiedEffects = verified, o.unverified = unverified
     Set actors = []
     Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT DISTINCT %EXACT(Actor) AS Actor FROM Shutter_Store.CaseEvent WHERE ""Case"" = ? ORDER BY Actor", id)
@@ -690,6 +717,15 @@ ClassMethod CaseClosure(caseId As %String) As %Status
     &sql(SELECT TOP 1 PolicyVersion INTO :pv FROM Shutter_Store.GateDecision WHERE "Case" = :id ORDER BY ID DESC)
     Set o.policyVersion = $GET(pv)
     Quit ..Json(o)
+}
+
+/// The closure's sentence on what was not verified, by the receiver's category: an ADT receiver's reads as it always has; at an
+/// orders and results receiver Shutter reads nothing, so nothing there was verified.
+ClassMethod ClosureLimit(receiver As %String, category As %String = "") As %String
+{
+    If category = "" Set category = ##class(Shutter.Store.SiteProfile).ReceiverCategory(receiver)
+    If category = "orders_results" Quit "Shutter can't read this receiver, so nothing there was verified; what it and any system beyond it hold is outside the production's view"
+    Quit "Consumers beyond the downstream system are outside the production's view and are not verified"
 }
 
 ClassMethod CasePreview(caseId As %String) As %Status
@@ -1426,6 +1462,64 @@ ClassMethod IncidentDecide(id As %String, seq As %String) As %Status
     Set %response.Status = "202 Accepted"
     Write text
     Quit $$$OK
+}
+
+// ---- receiver outages (CONTRACTS 17) ----
+
+/// The receivers' outages, newest first: state open (the default: not closed) or all, with the always-on reading of every
+/// watched receiver.
+ClassMethod Outages() As %Status
+{
+    If '..Allow() Quit $$$OK
+    Set state = $GET(%request.Data("state", 1), "open")
+    If '$LISTFIND($LISTBUILD("open", "all"), state) Quit ..Fail("400 Bad Request", "bad_request", "state must be open or all")
+    Quit ..Json(##class(Shutter.API.Outages).List(state))
+}
+
+/// One outage, with its readings, lists, set, acts and the card's words.
+ClassMethod OutageGet(id As %String) As %Status
+{
+    If '..Allow() Quit $$$OK
+    Set row = ..OutageOr404(id)
+    If '$ISOBJECT(row) Quit $$$OK
+    Quit ..Json(##class(Shutter.API.Outages).One(row))
+}
+
+/// A person's act: { "act": "pause", "until" } or { "act": "close", "reason" }, as the row's acts list them. An approver's;
+/// an operator reads and cannot act. The body is bounded before it is parsed; an Idempotency-Key replays the stored reply.
+ClassMethod OutageAct(id As %String) As %Status
+{
+    If '..Allow("Shutter_Approve", 1) Quit $$$OK
+    Set row = ..OutageOr404(id)
+    If '$ISOBJECT(row) Quit $$$OK
+    Set max = ##class(Shutter.API.Outages).#MAXBODY
+    Set bodyText = ""
+    If $ISOBJECT(%request.Content) {
+        If %request.Content.Size > max Quit ..Fail("413 Payload Too Large", "too_large", "The body is longer than " _ max _ " characters")
+        Set bodyText = %request.Content.Read(max + 1)
+    } Else {
+        Set bodyText = $GET(%request.Content)
+    }
+    If $LENGTH(bodyText) > max Quit ..Fail("413 Payload Too Large", "too_large", "The body is longer than " _ max _ " characters")
+    Set body = ##class(Shutter.Util.Json).Parse(bodyText, .psc)
+    If '$ISOBJECT(body) || 'body.%IsA("%DynamicObject") Quit ..Fail("400 Bad Request", "bad_request", "The body must be a JSON object")
+    Set r = ..Idempotent(bodyText, .replayed)
+    If replayed Quit $$$OK
+    Set status = ##class(Shutter.API.Outages).Act(row, body, ..User(), .reply)
+    Set text = reply.%ToJSON()
+    If +status < 300 Do ..Remember(bodyText, status, text)
+    Set %response.Status = status
+    Set %response.ContentType = "application/json"
+    Write text
+    Quit $$$OK
+}
+
+ClassMethod OutageOr404(id As %String) As Shutter.Store.Outage
+{
+    Set row = ""
+    If id?1.N Set row = ##class(Shutter.Store.Outage).%OpenId(id)
+    If '$ISOBJECT(row) Do ..Fail("404 Not Found", "not_found", "No outage " _ id)
+    Quit row
 }
 
 /// "Break the feed" (CONTRACTS 4.4, v1.35): asks the live hospital for a storm. 202 with the storm's record (state
