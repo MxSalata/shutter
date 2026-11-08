@@ -43,9 +43,15 @@ Property ReadyTimeoutSeconds As %Integer [ InitialExpression = 180 ];
 /// How long after an error raising a task the workflow tries again.
 Parameter RAISEAGAINSECONDS = 300;
 
-/// The task request last sent for the shared task (key "") and for each chain's own (its seq), by its id, until the
-/// call answers with an error: what a taskcheck alarm is for (IncidentTaskCheck).
+/// The task request last sent for the shared task and for each chain's own, by its id, under TaskKey, until the call
+/// answers with an error: what a taskcheck alarm is for (IncidentTaskCheck).
 Property TaskSent As array Of %String(MAXLEN = 40);
+
+/// TaskSent's key for the shared task (seq "", which an array cannot hold) or a chain's own.
+ClassMethod TaskKey(seq As %String) As %String [ CodeMode = expression ]
+{
+$SELECT(seq = "": "shared", 1: seq)
+}
 
 /// How long after a task's call the workflow checks that the Workflow item made the task.
 Parameter TASKCHECKSECONDS = 30;
@@ -111,7 +117,7 @@ Method OnError(request As %Library.Persistent, ByRef response As %Library.Persis
         Set incident = ##class(Shutter.Store.Incident).ByIncidentId(..IncidentId)
         If $ISOBJECT(incident) && (incident.State '= "closed") && ($PIECE(pCompletionKey, ":", 1) = "approval") {
             Set ..PendingTasks = ..PendingTasks - 1
-            Do ..TaskSent.RemoveAt($PIECE(pCompletionKey, ":", 2))
+            Do ..TaskSent.RemoveAt(..TaskKey($PIECE(pCompletionKey, ":", 2)))
             Do ..TaskNotRaised(incident, $PIECE(pCompletionKey, ":", 2), pErrorStatus)
             Quit
         }
@@ -274,12 +280,12 @@ Method OnRaiseAgain(incident As Shutter.Store.Incident, seq As %String) As %Stat
 /// with an error, or sent again, is not this check's.
 Method OnTaskCheck(incident As Shutter.Store.Incident, seq As %String, requestId As %String) As %Status
 {
-    Quit:((requestId = "") || (..TaskSent.GetAt(seq) '= requestId)) $$$OK
+    Quit:((requestId = "") || (..TaskSent.GetAt(..TaskKey(seq)) '= requestId)) $$$OK
     Set lost = ##class(Shutter.Process.IncidentTaskCheck).Lost(requestId, ##class(Shutter.Process.IncidentTaskCheck).SubjectPrefix(incident.IncidentId, seq))
     Quit:lost="" $$$OK
     If lost = "wait" Quit ..Alarm(..#RAISEAGAINSECONDS, "taskcheck:" _ seq _ ":" _ requestId)
     Set ..PendingTasks = ..PendingTasks - 1
-    Do ..TaskSent.RemoveAt(seq)
+    Do ..TaskSent.RemoveAt(..TaskKey(seq))
     Quit ..TaskNotRaised(incident, seq, $$$ERROR($$$GeneralError, lost))
 }
 
@@ -306,7 +312,7 @@ Method RaiseTask(incident As Shutter.Store.Incident, chains As %ListOfObjects, s
     Set sc = ..SendRequestAsync(..ApprovalTarget, task, 1, $SELECT(seq = "": "approval", 1: "approval:" _ seq))
     Quit:$$$ISERR(sc) sc
     Set ..PendingTasks = ..PendingTasks + 1
-    Do ..TaskSent.SetAt(task.%Id(), seq)
+    Do ..TaskSent.SetAt(task.%Id(), ..TaskKey(seq))
     Set check = ..Alarm(..#TASKCHECKSECONDS, "taskcheck:" _ seq _ ":" _ task.%Id())
     If $$$ISERR(check) $$$LOGWARNING("Incident " _ incident.IncidentId _ " will not check that its approval task was made: " _ $SYSTEM.Status.GetErrorText(check))
     // The task is out: a note that fails must not raise it again. A call that keeps answering with an error raises it
