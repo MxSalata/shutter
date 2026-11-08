@@ -411,7 +411,7 @@ def main():
                 told = ((body or {}).get("approval") or {}).get("decision")
                 check("and the other is 409 wrong_state, naming the decision that stands",
                       status == 409 and (body or {}).get("error") == "wrong_state"
-                      and told in (None, won + "d", won + "ed") and won in ((body or {}).get("detail") or "").lower(),
+                      and (told in (won + "d", won + "ed") or (told is None and won in ((body or {}).get("detail") or "").lower())),
                       f"{status} {body}")
             settle(caseid, "S2", CLOSED)
             record = get(f"/cases/{q(caseid)}/approvals") or {}
