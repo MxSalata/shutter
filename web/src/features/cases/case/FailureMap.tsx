@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import { StatusBadge } from '@/components/StatusBadge';
 import { TONE_ICONS } from '@/lib/tone';
 import { useDetail } from '@/stores/appearance';
-import type { FailureMap as Map } from './failureMap';
+import type { FailureMap as Map } from './failureMapModel';
 
 /**
  * One system on the path: its name, what it is where neither the name nor the header's sentence says, and the

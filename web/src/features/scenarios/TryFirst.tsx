@@ -160,7 +160,7 @@ interface Featured {
   byMode?: Partial<Record<Mode, Pick<Featured, 'title' | 'see' | 'more' | 'diagramNote'>>>;
   /**
    * A line above the diagram, where the mode's run does not end as the diagram draws: the diagram is how the scenario
-   * should end (scenarioDiagram.ts), so S8 in Rules only, which writes, says so in words.
+   * should end (scenarioDiagramModel.ts), so S8 in Rules only, which writes, says so in words.
    */
   diagramNote?: string;
 }

@@ -26,7 +26,7 @@ import type { Tone } from '@/lib/tone';
 import { CaseHeader } from './case/CaseHeader';
 import { Lifecycle, REPLAYED_STAGES, type StageKey } from './case/Lifecycle';
 import { FailureMap } from './case/FailureMap';
-import { failureMapOf } from './case/failureMap';
+import { failureMapOf } from './case/failureMapModel';
 import { CaseActionButton } from './case/CaseActionButton';
 import { caseActionOf, type ActionPlace } from './case/caseAction';
 import { closeNeedsApprover } from '../site-profile/profile';

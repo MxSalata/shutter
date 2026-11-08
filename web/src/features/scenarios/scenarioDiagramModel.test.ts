@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Mode, Scenario, ScenarioExpected } from '@/api/types';
-import { endOf, scenarioDiagram, type DiagramNode } from './scenarioDiagram';
+import { endOf, scenarioDiagram, type DiagramNode } from './scenarioDiagramModel';
 import definitions from '../../../../fixtures/scenarios.json';
 
 const scenarios = definitions as unknown as Scenario[];

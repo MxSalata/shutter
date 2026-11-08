@@ -13,7 +13,7 @@ import { caseOutcome } from '@/lib/status';
 import { useAppearance } from '@/stores/appearance';
 import { theme } from '@/theme';
 import CasePage from '../CasePage';
-import { failureMapOf } from './failureMap';
+import { failureMapOf } from './failureMapModel';
 import { deliveredByEngineWords, notCheckedAtReceiver } from './receiver';
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));

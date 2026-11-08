@@ -1,7 +1,7 @@
 import { useTechnical } from '@/stores/appearance';
 import './ScenarioDiagram.css';
 import type { Mode, Scenario } from '@/api/types';
-import { scenarioDiagram, type DiagramEnd, type DiagramNode } from './scenarioDiagram';
+import { scenarioDiagram, type DiagramEnd, type DiagramNode } from './scenarioDiagramModel';
 
 /** The drawing's measures, in px: one row of marks, a row of captions under them, and the join between marks. */
 const HEIGHT = 38;
