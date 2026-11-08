@@ -161,4 +161,49 @@ Method TestPlanAnswersAndChangesNothing()
     Do $$$AssertEquals($GET(^Shutter.Config("version")), before, "nothing changed")
 }
 
+/// A step that fails stops the run there: the steps after it, the Globals step last of all, are not run, so the
+/// configuration a run again reads stays, and the answer names the step. Stub steps of this class, on a marker of the test's.
+Method TestAFailedStepStopsTheRun()
+{
+    Set u = "Shutter.Util.Uninstall"
+    Set ^Shutter.Config("uninstallTest") = 1
+    Set out = {"removed": [], "kept": [], "errors": [], "stopped": ""}
+    Do $CLASSMETHOD(u, "RunSteps", out, $LISTBUILD("Fine", "Fails", "Globals"), $CLASSNAME())
+    Do $$$AssertEquals(out.stopped, "Fails", "the failed step is named")
+    Do $$$AssertEquals(out.errors.%Get(0), "Fails: the stub step failed", "and why")
+    Do $$$AssertEquals($GET(^Shutter.Config("uninstallTest")), 1, "the configuration survives: the Globals step did not run")
+    Do $$$AssertEquals(out.removed.%Size(), 1, "the step before it ran")
+    Do $$$AssertTrue(out.kept.%Get(0) [ "Globals", "the steps left are said")
+    Set out = {"removed": [], "kept": [], "errors": [], "stopped": ""}
+    Do $CLASSMETHOD(u, "RunSteps", out, $LISTBUILD("Thrown", "Globals"), $CLASSNAME())
+    Do $$$AssertEquals(out.stopped, "Thrown", "a step that throws stops it too")
+    Do $$$AssertEquals($GET(^Shutter.Config("uninstallTest")), 1, "and the configuration survives")
+    Set out = {"removed": [], "kept": [], "errors": [], "stopped": ""}
+    Do $CLASSMETHOD(u, "RunSteps", out, $LISTBUILD("Fine", "Globals"), $CLASSNAME())
+    Do $$$AssertEquals(out.stopped, "", "with no failure nothing is named")
+    Do $$$AssertEquals($DATA(^Shutter.Config("uninstallTest")), 0, "and the last step ran")
+    Kill ^Shutter.Config("uninstallTest")
+}
+
+ClassMethod TakeFine(out As %DynamicObject)
+{
+    Do out.removed.%Push("fine")
+}
+
+ClassMethod TakeFails(out As %DynamicObject)
+{
+    Do out.errors.%Push("Fails: the stub step failed")
+}
+
+ClassMethod TakeThrown(out As %DynamicObject)
+{
+    Throw ##class(%Exception.General).%New("the stub step threw")
+}
+
+/// The stub of the last step: only the test's marker goes.
+ClassMethod TakeGlobals(out As %DynamicObject)
+{
+    Kill ^Shutter.Config("uninstallTest")
+}
+
 }
