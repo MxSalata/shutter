@@ -25,7 +25,7 @@ function Cell({ value, unknown = false }: { value: boolean; unknown?: boolean })
       </Text>
     );
   return value ? (
-    <Text span size="sm" fw={600} c="teal.7">
+    <Text span size="sm" fw={600}>
       Yes
     </Text>
   ) : (
