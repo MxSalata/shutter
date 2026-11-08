@@ -414,12 +414,13 @@ long-lived jobs keep the earlier code until then.
 
 **Upgrading to 1.1.2.** Run the install once, or load the newer tree, and restart the production as above. Then:
 
-- **Another visit's in-patient movement shows on the plan by default** instead of stopping the resend (section 10). A
-  stored profile that doesn't name `further_messages.in_patient_movement` reads `show` after the upgrade. A write that
-  shows such a movement still waits for a person at a tier the site releases by policy, and an incident's chain that
-  shows one leaves the shared approval for its own case. To keep the stop of 1.1.0 and 1.1.1, set
-  `"further_messages": {"in_patient_movement": "stop"}` in the site profile's JSON before the upgrade. A demo install keeps
-  the stop, whoever saved its profile.
+- **An upgrade keeps the further-movement stop.** On a new install another visit's in-patient movement shows on the
+  plan instead of stopping the resend (section 10). On a site install over 1.1.1 or earlier, a stored profile that
+  doesn't name `further_messages.in_patient_movement` gets `stop` written into it, as a new version with
+  "(kept stop on upgrade to 1.1.2)" in its source, so the site behaves as before; a profile that names the setting is
+  left as it is. To take the new default, a person saves `"further_messages": {"in_patient_movement": "show"}`. Even then a
+  write that shows such a movement waits for a person at a tier the site releases by policy, and an incident's chain that
+  shows one leaves the shared approval for its own case. A demo install keeps the stop.
 - **A large incident's approval.** An incident above about four chains, which 1.1.1 abandoned with every case `failed`,
   now raises one task that lists the first chains and binds them all (CONTRACTS 7.3).
 

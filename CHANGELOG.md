@@ -38,9 +38,9 @@ AI Hub features measured with no model call and on the publisher from an MCP cli
   shipped profile and when a profile doesn't say: an in-patient movement on another visit goes on the plan beside the
   resend instead of stopping it, while a cancel, merge or discharge on the case's own visit, or a change to the record,
   still stops it. A site that wants the stop sets `stop`. A fresh demo install keeps the stop, labelled in its profile,
-  the live hospital's included, so S27, S31 and S32 stop as before. A stored profile that doesn't name the setting reads
-  `show` after the upgrade, also on a demo whose profile a person or the onboarding saved (`docs/INSTALL.md`, section
-  8). A write that shows such a movement is never released by policy: at a tier whose policy is `automatic` it waits
+  the live hospital's included, so S27, S31 and S32 stop as before. An upgrade never relaxes the check by itself: a site install
+  over 1.1.1 or earlier writes `stop` into a stored profile that doesn't name the setting, so a running site keeps
+  1.1.1's stop until a person saves `show`; a new install gets `show` (`docs/INSTALL.md`, section 8). A write that shows such a movement is never released by policy: at a tier whose policy is `automatic` it waits
   for a person, and an incident's chain that shows one leaves the shared approval for its case's own path. A
   movement that arrives after the approval is compared with the approved plan at dispatch, and a new one holds the write
   (`FURTHER_MOVEMENT_NEW`) until the plan is read again and approved again.
