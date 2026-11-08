@@ -101,6 +101,8 @@ ClassMethod ReadSource(case As Shutter.Store.Case, since As %String, rows As %Dy
 {
     Set out = ""
     Try {
+        // An onboarded namespace maps Shutter.Intake and Shutter.Util only, so the feed's zone is read here, before the move.
+        Set ^||Shutter.FeedZone = ##class(Shutter.Store.SiteProfile).FeedTimeZone()
         New $NAMESPACE
         Set $NAMESPACE = case.SourceNamespace
         Set from = since, hid = case.OriginHeaderId, t = ""
@@ -116,6 +118,7 @@ ClassMethod ReadSource(case As Shutter.Store.Case, since As %String, rows As %Dy
     } Catch ex {
         Set out = case.SourceNamespace _ " could not be read: " _ $EXTRACT(ex.DisplayString(), 1, 200)
     }
+    Kill ^||Shutter.FeedZone
     Quit out
 }
 
