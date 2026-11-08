@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { skipWelcome } from './guide';
 import { go, signIn } from './helpers';
 
@@ -137,3 +137,50 @@ test.describe('Settings and costs on a phone @settings', () => {
     expect(Math.max(...widths)).toBeLessThanOrEqual(0);
   });
 });
+
+/** Saves a picture of the access section for the review's record when E2E_SHOTS names a folder. */
+async function accessShot(page: Page, name: string) {
+  if (!process.env.E2E_SHOTS) return;
+  await page
+    .getByRole('region', { name: 'Your access', exact: true })
+    .screenshot({ path: `${process.env.E2E_SHOTS}/${name}.png` });
+}
+
+for (const { width, height } of [
+  { width: 1280, height: 900 },
+  { width: 390, height: 844 },
+])
+  for (const colorScheme of ['light', 'dark'] as const)
+    test.describe(`Your access at ${width}, ${colorScheme} @settings`, () => {
+      test.use({ viewport: { width, height }, colorScheme });
+
+      test("compares the trial's sign-in with the roles Shutter installs, read only", async ({ page }) => {
+        await signIn(page);
+        await go(page, '/settings');
+        const section = page.getByRole('region', { name: 'Your access', exact: true });
+        // One line on the first layer, which names the role the trial's sign-in matches, opens the table
+        const line = section.getByRole('button', { name: /^Each sign-in compared/ });
+        await expect(line).toHaveText('Each sign-in compared: yours matches Approver');
+        await expect(line).toHaveAttribute('aria-expanded', 'false');
+        await line.click();
+        const table = section.getByRole('table', { name: 'Your access' });
+        await expect(table.getByRole('row')).toHaveCount(10);
+        // The trial signs in as the approver: its column is the approver's, cell for cell
+        const configure = table.getByRole('row', { name: /^Change the site's settings/ });
+        await expect(configure.locator('td[data-label="Approver"]')).toHaveText('Yes');
+        await expect(configure.locator('td[data-label="You"]')).toHaveText('Yes');
+        await expect(configure.locator('td[data-label="Demo viewer"]')).toHaveText('No');
+        await expect(section.getByTestId('access-you')).toContainText(
+          'It matches Approver (Shutter_Approver)',
+        );
+        await expect(section.getByTestId('access-judges')).toContainText("What the judges' account adds");
+        // A comparison to read: nothing in it changes who you are
+        await expect(section.getByRole('button', { name: /switch|sign in as|become/i })).toHaveCount(0);
+        await expect(section.getByRole('textbox')).toHaveCount(0);
+        const sideways = await page.evaluate(
+          () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        );
+        expect(sideways).toBeLessThanOrEqual(0);
+        await accessShot(page, `access-${width}-${colorScheme}`);
+      });
+    });

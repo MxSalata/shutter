@@ -1,6 +1,7 @@
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { AccessReport, AccessRow } from '@/api/types';
@@ -69,31 +70,37 @@ function renderAccess(report: AccessReport | null) {
   );
 }
 
-const cellsOf = (r: HTMLElement) => within(r).getAllByRole('cell').map((c) => c.textContent);
+/** Opens the table from the section's one line, as a reader does in Plain, and returns it. */
+async function openTable() {
+  await userEvent.click(await screen.findByRole('button', { name: /^Each sign-in compared/ }));
+  return screen.findByRole('table', { name: 'Your access' });
+}
+
+const cellsOf = (r: HTMLElement) =>
+  within(r)
+    .getAllByRole('cell')
+    .map((c) => c.textContent);
 
 describe('AccessSection', () => {
   it('shows what each sign-in may do beside what the user may, with the four roles and a You column', async () => {
     renderAccess(judgeReport());
-    const table = await screen.findByRole('table', { name: 'Your access' });
-    expect(within(table).getAllByRole('columnheader').map((h) => h.textContent)).toEqual([
-      'What',
-      'Demo viewer',
-      'Judge',
-      'Operator',
-      'Approver',
-      'You',
-    ]);
+    const table = await openTable();
+    expect(
+      within(table)
+        .getAllByRole('columnheader')
+        .map((h) => h.textContent),
+    ).toEqual(['What', 'Demo viewer', 'Judge', 'Operator', 'Approver', 'You']);
     const rows = within(table).getAllByRole('row').slice(1);
     expect(rows.map((r) => within(r).getByRole('rowheader').textContent)).toEqual([
       'View cases, incidents, evidence and plans',
       'Approve or reject a plan',
       'Run and reset the scenarios',
-      'Convene the board and ask the agents new questions, which spends the model budget',
-      "Change the site's settings: the site profile, the agent library, the schemas, the review annotations",
-      'The Workflow inbox in the Management Portal',
+      'Convene the board and ask new questions, which spends the model budget',
+      "Change the site's settings",
+      "The Management Portal's Workflow inbox",
       'The Shutter in IRIS page',
-      'The Visual Trace in the Management Portal',
-      'The MCP publisher: cases, incidents, evidence and plans for an MCP client',
+      "The Management Portal's Visual Trace",
+      'Read cases through the MCP publisher',
     ]);
     expect(cellsOf(rows[2])).toEqual(['No', 'No', 'Yes', 'Yes', 'No']);
     expect(cellsOf(rows[3])).toEqual(['No', 'Yes', 'Yes', 'Yes', 'Yes']);
@@ -103,10 +110,10 @@ describe('AccessSection', () => {
   it("says which installed role the user's column is, and what the judges' account adds while the demo is on", async () => {
     renderAccess(judgeReport());
     expect(await screen.findByTestId('access-you')).toHaveTextContent(
-      'Your column is read from the resources your sign-in holds. It matches Judge (Shutter_Judge).',
+      "Your column is your sign-in's own. It matches Judge (Shutter_Judge).",
     );
     expect(screen.getByTestId('access-judges')).toHaveTextContent(
-      "What the judges' account adds to the demo viewer: the agents run for real, on new questions and a convened board, under the day's model budget.",
+      "What the judges' account adds: the agents run for real, on new questions and a convened board, under the day's budget.",
     );
   });
 
@@ -124,10 +131,12 @@ describe('AccessSection', () => {
   it('marks a row this instance has nothing to hold for, for everyone', async () => {
     const r = judgeReport();
     r.rows = r.rows.map((x) =>
-      x.id === 'guide' ? { ...x, available: false, you: false, roles: Object.fromEntries(ROLES.map((n) => [n, false])) } : x,
+      x.id === 'guide'
+        ? { ...x, available: false, you: false, roles: Object.fromEntries(ROLES.map((n) => [n, false])) }
+        : x,
     );
     renderAccess(r);
-    const table = await screen.findByRole('table', { name: 'Your access' });
+    const table = await openTable();
     const guide = within(table).getByRole('rowheader', { name: 'The Shutter in IRIS page' }).closest('tr')!;
     expect(cellsOf(guide)).toEqual(['Not on this instance']);
     // The row is left out of the matching, so the judge's column still matches
@@ -141,7 +150,7 @@ describe('AccessSection', () => {
     r.roles = r.roles.map((x) => ({ ...x, installed: false }));
     r.rows = r.rows.map((x) => ({ ...x, roles: Object.fromEntries(ROLES.map((n) => [n, false])) }));
     renderAccess(r);
-    const table = await screen.findByRole('table', { name: 'Your access' });
+    const table = await openTable();
     const view = within(table).getAllByRole('row')[1];
     expect(cellsOf(view)).toEqual(['Not recorded', 'Not recorded', 'Not recorded', 'Not recorded', 'Yes']);
     expect(screen.getByTestId('access-you')).toHaveTextContent(
@@ -149,9 +158,25 @@ describe('AccessSection', () => {
     );
   });
 
+  it('keeps the table behind one line in Plain, which says the role the user matches, and opens it on Technical', async () => {
+    const plain = renderAccess(judgeReport());
+    const line = await screen.findByRole('button', { name: /^Each sign-in compared/ });
+    expect(line).toHaveTextContent('Each sign-in compared: yours matches Judge');
+    expect(line).toHaveAttribute('aria-expanded', 'false');
+    expect(layer1Words(plain.container).join(' ')).toBe('Your access Each sign-in compared: yours matches Judge');
+    plain.unmount();
+    useAppearance.setState({ detail: 'technical' });
+    renderAccess(judgeReport());
+    expect(await screen.findByRole('button', { name: /^Each sign-in compared/ })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    expect(screen.getByRole('table', { name: 'Your access' })).toBeInTheDocument();
+  });
+
   it('names roles, never a person, and keeps "live" out of the first layer', async () => {
     renderAccess(judgeReport());
-    await screen.findByRole('table', { name: 'Your access' });
+    await openTable();
     const words = layer1Words(document.body).join(' ');
     expect(words).not.toMatch(/\blive\b/i);
     expect(words).not.toMatch(/username|password/i);
@@ -161,7 +186,7 @@ describe('AccessSection', () => {
     useAppearance.setState({ detail: 'technical' });
     renderAccess(judgeReport());
     const detail = await screen.findByRole('button', {
-      name: 'The roles behind the columns, and the resources each row needs',
+      name: 'The roles and resources behind each column',
     });
     expect(detail).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByText('Shutter_Trace')).toBeInTheDocument();
@@ -169,14 +194,18 @@ describe('AccessSection', () => {
     expect(screen.getByText(/as recorded at 2026-11-08 19:30:00 UTC/)).toBeInTheDocument();
   });
 
-  it('reads the trial mock as the signed-in judge: the judge column is the user\'s', async () => {
+  it("reads the trial mock as the signed-in judge: the judge column is the user's", async () => {
     renderAccess(null);
     expect(await screen.findByTestId('access-you')).toHaveTextContent('It matches Judge (Shutter_Judge).');
     expect(screen.getByTestId('access-judges')).toBeInTheDocument();
   });
 
   it('says when the access could not be read', async () => {
-    server.use(http.get('/api/shutter/access', () => HttpResponse.json({ error: 'boom', detail: 'no' }, { status: 500 })));
+    server.use(
+      http.get('/api/shutter/access', () =>
+        HttpResponse.json({ error: 'boom', detail: 'no' }, { status: 500 }),
+      ),
+    );
     renderAccess(null);
     expect(await screen.findByText('Your access could not be read')).toBeInTheDocument();
   });

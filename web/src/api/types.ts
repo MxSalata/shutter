@@ -55,15 +55,7 @@ export interface AccessRole {
 
 /** What a person can do in Shutter, as one row of the access table. */
 export type AccessRowId =
-  | 'view'
-  | 'approve'
-  | 'scenarios'
-  | 'liveAgents'
-  | 'configure'
-  | 'inbox'
-  | 'guide'
-  | 'trace'
-  | 'publisher';
+  'view' | 'approve' | 'scenarios' | 'liveAgents' | 'configure' | 'inbox' | 'guide' | 'trace' | 'publisher';
 
 export interface AccessRow {
   id: AccessRowId;

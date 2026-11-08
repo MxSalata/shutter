@@ -2282,3 +2282,8 @@ body {
 .case-tab-panel :is([data-tour], section[id]) {
   scroll-margin-top: calc(var(--shutter-header-h) + 3.5rem);
 }
+
+/* "Your access" (Settings): the signed-in user's own column, set apart from the roles' columns in every appearance */
+.access-table .access-you {
+  background: var(--mantine-color-teal-light);
+}

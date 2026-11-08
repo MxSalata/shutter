@@ -3,6 +3,7 @@ import type { AccessReport, AccessRow } from '@/api/types';
 import {
   ACCESS_COLUMNS,
   ACCESS_ROW_WORDS,
+  compareLine,
   JUDGES_SENTENCE,
   matchingRoles,
   needsWords,
@@ -10,7 +11,12 @@ import {
   yourColumnSentence,
 } from './access';
 
-const row = (id: AccessRow['id'], cells: Record<string, boolean>, you: boolean, available = true): AccessRow => ({
+const row = (
+  id: AccessRow['id'],
+  cells: Record<string, boolean>,
+  you: boolean,
+  available = true,
+): AccessRow => ({
   id,
   needs: [[`Shutter_${id}:U`]],
   available,
@@ -69,17 +75,32 @@ describe('matchingRoles', () => {
   });
 });
 
+describe('compareLine', () => {
+  it('names the role the user matches, in few words', () => {
+    expect(compareLine(judgeReport())).toBe('Each sign-in compared: yours matches Judge');
+  });
+
+  it('says so for a role of its own, and names none while nothing is recorded', () => {
+    const r = judgeReport();
+    r.rows = r.rows.map((x) => ({ ...x, you: x.id === 'view' }));
+    expect(compareLine(r)).toBe('Each sign-in compared: yours is a role of its own');
+    expect(compareLine({ read: 'none', rows: [] })).toBe('Each sign-in compared');
+  });
+});
+
 describe('yourColumnSentence', () => {
   it('names the matching role with its column head', () => {
     expect(yourColumnSentence(judgeReport())).toBe(
-      'Your column is read from the resources your sign-in holds. It matches Judge (Shutter_Judge).',
+      "Your column is your sign-in's own. It matches Judge (Shutter_Judge).",
     );
   });
 
   it('says so for a role of its own', () => {
     const r = judgeReport();
     r.rows = r.rows.map((x) => ({ ...x, you: x.id === 'view' }));
-    expect(yourColumnSentence(r)).toMatch(/matches none of the roles Shutter installs, so your sign-in has a role of its own\.$/);
+    expect(yourColumnSentence(r)).toMatch(
+      /matches none of the roles Shutter installs, so your sign-in has a role of its own\.$/,
+    );
   });
 
   it("says the roles' columns are not recorded yet, and when they will be", () => {
@@ -108,7 +129,11 @@ describe('the words', () => {
       'Shutter_Operator',
       'Shutter_Approver',
     ]);
-    const words = [...Object.values(ACCESS_ROW_WORDS), ...ACCESS_COLUMNS.map((c) => c.label), JUDGES_SENTENCE].join(' ');
+    const words = [
+      ...Object.values(ACCESS_ROW_WORDS),
+      ...ACCESS_COLUMNS.map((c) => c.label),
+      JUDGES_SENTENCE,
+    ].join(' ');
     expect(words).not.toMatch(/\blive\b/i);
     expect(rowWords('liveAgents')).toMatch(/spends the model budget/);
     expect(rowWords('somethingNew')).toBe('somethingNew');

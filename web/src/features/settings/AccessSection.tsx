@@ -6,7 +6,15 @@ import { ErrorAlert } from '@/components/ErrorAlert';
 import { Section } from '@/components/Section';
 import { StackTable } from '@/components/StackTable';
 import { TechDetail } from '@/components/TechDetail';
-import { ACCESS_COLUMNS, JUDGES_SENTENCE, needsWords, roleLabel, rowWords, yourColumnSentence } from './access';
+import {
+  ACCESS_COLUMNS,
+  compareLine,
+  JUDGES_SENTENCE,
+  needsWords,
+  roleLabel,
+  rowWords,
+  yourColumnSentence,
+} from './access';
 
 /** One cell: whether a role, or the signed-in user, may do the row; "Not recorded" while the roles' columns are not. */
 function Cell({ value, unknown = false }: { value: boolean; unknown?: boolean }) {
@@ -32,7 +40,9 @@ function Row({ row, unknown }: { row: AccessRow; unknown: boolean }) {
   if (!row.available)
     return (
       <StackTable.Tr>
-        <StackTable.Th scope="row">{words}</StackTable.Th>
+        <StackTable.Th scope="row" className="stack-row-head">
+          {words}
+        </StackTable.Th>
         <StackTable.Td data-label="On this instance" colSpan={ACCESS_COLUMNS.length + 1}>
           <Text span size="sm" c="dimmed">
             Not on this instance
@@ -42,7 +52,9 @@ function Row({ row, unknown }: { row: AccessRow; unknown: boolean }) {
     );
   return (
     <StackTable.Tr>
-      <StackTable.Th scope="row">{words}</StackTable.Th>
+      <StackTable.Th scope="row" className="stack-row-head">
+        {words}
+      </StackTable.Th>
       {ACCESS_COLUMNS.map((c) => (
         <StackTable.Td key={c.role} data-label={c.label} ta="center">
           <Cell value={!!row.roles[c.role]} unknown={unknown} />
@@ -63,7 +75,9 @@ function OtherRoles({ report }: { report: AccessReport }) {
   return (
     <Stack gap={2}>
       {others.map((r) => {
-        const has = report.rows.filter((row) => row.available && row.roles[r.role]).map((row) => rowWords(row.id));
+        const has = report.rows
+          .filter((row) => row.available && row.roles[r.role])
+          .map((row) => rowWords(row.id));
         return (
           <Text key={r.role} size="sm">
             <CodeChip>{r.role}</CodeChip>
@@ -83,7 +97,10 @@ function AccessTable({ report }: { report: AccessReport }) {
   const unknown = report.read === 'none';
   return (
     <Stack gap="sm">
-      <StackTable aria-label="Your access" className="stack-table stack-table-wide">
+      <Text size="sm" c="dimmed">
+        What each sign-in may do, beside yours. Read only: nothing here changes who you are.
+      </Text>
+      <StackTable aria-label="Your access" className="stack-table access-table">
         <StackTable.Thead>
           <StackTable.Tr>
             <StackTable.Th>What</StackTable.Th>
@@ -92,7 +109,9 @@ function AccessTable({ report }: { report: AccessReport }) {
                 {c.label}
               </StackTable.Th>
             ))}
-            <StackTable.Th ta="center">You</StackTable.Th>
+            <StackTable.Th ta="center" className="access-you">
+              You
+            </StackTable.Th>
           </StackTable.Tr>
         </StackTable.Thead>
         <StackTable.Tbody>
@@ -109,7 +128,7 @@ function AccessTable({ report }: { report: AccessReport }) {
           {JUDGES_SENTENCE}
         </Text>
       ) : null}
-      <TechDetail label="The roles behind the columns, and the resources each row needs" kind="data">
+      <TechDetail label="The roles and resources behind each column" kind="data">
         <Stack gap="xs">
           <Text size="sm">
             The columns are the roles Shutter installs:{' '}
@@ -127,7 +146,7 @@ function AccessTable({ report }: { report: AccessReport }) {
                 : ''}
             . Your column is read from the resources your sign-in holds, as the rest of the app reads them.
             {report.portalHardened
-              ? " The Management Portal is hardened for the public demo: its pages need the resource Shutter_Portal as well, so the portal rows read so."
+              ? ' The Management Portal is hardened for the public demo: its pages need the resource Shutter_Portal as well, so the portal rows read so.'
               : ''}
           </Text>
           <OtherRoles report={report} />
@@ -156,16 +175,13 @@ function AccessTable({ report }: { report: AccessReport }) {
 /**
  * "Your access" (CONTRACTS 5, `GET /access`): what each sign-in to Shutter may do, beside what the signed-in user may. A
  * comparison to read, never a switch: nothing here changes who the user is or what they hold, and the reply names roles,
- * never anyone.
+ * never anyone. The page's first layer keeps one line, which says which role the user's column matches; the table opens
+ * from it (and on Technical), as the cases' table does in Costs.
  */
 export function AccessSection() {
   const access = useAccess();
   return (
-    <Section
-      id="access"
-      title="Your access"
-      note="What each sign-in to Shutter may do, beside what yours may. A comparison to read: nothing here changes who you are or what you hold."
-    >
+    <Section id="access" title="Your access">
       {access.isPending ? (
         <Text size="sm" c="dimmed">
           Reading your access…
@@ -178,7 +194,11 @@ export function AccessSection() {
           onRetry={() => void access.refetch()}
         />
       ) : null}
-      {access.data ? <AccessTable report={access.data} /> : null}
+      {access.data ? (
+        <TechDetail label={compareLine(access.data)} kind="data">
+          <AccessTable report={access.data} />
+        </TechDetail>
+      ) : null}
     </Section>
   );
 }
