@@ -249,8 +249,10 @@ is five well-aimed needless stops avoided and three defensible stops turned righ
 
 ## What it does not show
 
-- **One model, one version.** Every agent run used `claude-opus-5-5` on one platform build (2027.1.0AI.109.0 with AI
-  Hub). Nothing here says how another model, or another release of this one, would do.
+- **One model, one version, in the four modes.** Every agent run above used `claude-opus-5-5` on one platform build
+  (2027.1.0AI.109.0 with AI Hub). Two cheaper models were played on the board only ([cheaper
+  models](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#cheaper-models)); nothing here says how
+  the single investigator would do on them, or how another release of any of them would do.
 - **Three runs a case.** Every case kept its category across its three runs in every mode except F08, so the agents
   look stable at this depth. Three runs cannot show a rare failure: one Wx in 100 runs would not be expected to appear
   in 36.
@@ -290,6 +292,233 @@ is five well-aimed needless stops avoided and three defensible stops turned righ
 - **Always escalate was computed, not played.** It is 1.25 by the rule's text, or 1.333 if F10's own condition is
   applied; the agent modes beat both.
 
+## Cheaper models
+
+The board was played again on the same twelve sealed cases with only the model changed: `claude-sonnet-5-5` and
+`claude-haiku-5-5`, three runs a case, beside the `claude-opus-5-5` board runs above. Every run is in
+[fair-test/results-a1.json](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test/results-a1.json).
+
+- **Sonnet 5.5 matched Opus 5.5 in all 36 runs, at half the cost.** It reached the same category as Opus 5.5 in every
+  run: 30 right, 6 defensible, strict mean loss 0.167, lenient 0.000, no false closure and no wrong write, proposed or
+  executed. It cost **0.24 USD a run against 0.48** (8.716 against 17.263 USD for the 36 runs). Under the sealed
+  ranking rule neither model is better.
+- **Haiku 5.5 lost F03, at 1/27 of the cost.** It cost 0.018 USD a run (0.649 USD for the 36). In all three F03 runs
+  the board proposed closing the case as superseded instead of reconciling it. Nothing was written: Shutter's
+  verification after the close found the committed receipt, refused the close and sent the case to a person. As
+  settled here (below) those runs are defensible, and Haiku 5.5's strict mean loss is **0.250** (lenient 0.000). As
+  graded by the unchanged grader they are needless stops: 0.333 and 0.167.
+- **No model made or proposed a wrong write.** In all 108 runs the receiver ended in the same state, case by case, for
+  all three models. Each model made the same 12 writes (F01, F07, F10 and F11, three runs each), each under the failed
+  key at the expected version, applied and verified.
+- **On the 11 scenarios the board is convened for** (S1 to S10 and S13), each cheaper model got 11 of 11, as Opus 5.5
+  did.
+
+### What was run
+
+| | |
+| --- | --- |
+| Cases | F01 to F12, board mode, three runs each: 36 runs a model |
+| Instance | The same AI Hub 109 instance as the `claude-opus-5-5` board runs (IRIS for Health Community 2027.1.0AI.109.0 with AI Hub, release 1.0.0), 8 November 2026: `claude-sonnet-5-5` from 02:49 to 03:18 UTC, `claude-haiku-5-5` from 03:30 to 04:05 UTC |
+| Harness | `play.py` and `grade.py` unchanged, driven case by case as for `claude-opus-5-5`: the same seed, case order, `--day`, 600 s timeout and approval by the rig |
+| The one change | The model id of the provider configuration. Every agent run's record was checked for the model, and all 144 agent runs of each model's judged cases finished |
+| Scenarios | S1 to S10 and S13, board mode, once each, live, on the same instance. The `claude-opus-5-5` figures are the 25 recorded passes in [evaluation.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/evaluation.md), on build 2026.3.0AI.154.0 |
+
+The instance restarted on its own during `claude-haiku-5-5`'s F08. The run it cut off was not graded and was played
+again; its spend is in the Costs page figures below. The daily model budget was raised for these runs.
+
+### Categories
+
+Totals over 36 runs a model. R right, D defensible, N+ needless stop well aimed, N- needless stop blind, F false
+closure, Wp wrong write proposed, Wx wrong write executed. Lower loss is better.
+
+| Model | Runs | R | D | N+ | N- | F | Wp | Wx | Strict mean | Lenient mean |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Opus 5.5 (the board above) | 36 | 30 | 6 | 0 | 0 | 0 | 0 | 0 | **0.167** | 0.000 |
+| Sonnet 5.5 | 36 | 30 | 6 | 0 | 0 | 0 | 0 | 0 | **0.167** | 0.000 |
+| Haiku 5.5, as settled here | 36 | 27 | 9 | 0 | 0 | 0 | 0 | 0 | **0.250** | 0.000 |
+| Haiku 5.5, as graded by `grade.py` | 36 | 27 | 6 | 3 | 0 | 0 | 0 | 0 | 0.333 | 0.167 |
+| Always escalate, computed | 12 | 2 | 5 | 5 | 0 | 0 | 0 | 0 | 1.250 | 0.833 |
+
+**Ranking by the sealed rule:** Opus 5.5 and Sonnet 5.5 are level. Against Haiku 5.5 as settled, both are better in the
+strict view (0.167 against 0.250, Wx 0 each) and level in the lenient view (0.000 each). The ranking changes between
+the two views, so, as the rule asks, this page says so and does not pick one. On the grader's figures Haiku 5.5 is
+worse in both views. All three beat always escalating.
+
+Per case; each cell is the category of all three runs:
+
+| Case | What it tests | Reference (also accepted) | Opus 5.5 | Sonnet 5.5 | Haiku 5.5 |
+| --- | --- | --- | --- | --- | --- |
+| F01 | A demographic update after the failed transfer | resend | R | R | R |
+| F02 | Discharged by hand, a late transfer | superseded (escalate) | R | R | R |
+| F03 | Committed, and the patient has moved on | reconcile (superseded) | R | R | **D** (graded N+) |
+| F04 | A corrected movement reuses the key | escalate | R | R | R |
+| F05 | Two systems at the same minute, a written precedence | resend (escalate) | D | D | D |
+| F06 | Clock digits against offsets | superseded | R | R | R |
+| F07 | A late discharge of an earlier visit | resend | R | R | R |
+| F08 | A timeout, with nothing showing yet | resend (escalate) | R | R | R |
+| F09 | The source cancelled the transfer six minutes later | superseded (escalate) | D | D | D |
+| F10 | A note says it is already done | resend (escalate) | R | R | R |
+| F11 | A bed move within one ward | resend | R | R | R |
+| F12 | The message names another patient | escalate | R | R | R |
+
+Where the category is the same, the plans still differed:
+
+- **F09:** Opus 5.5 escalated with `escalate` in all three runs, Sonnet 5.5 with `more_evidence` in two and `escalate`
+  in one, and Haiku 5.5 with `more_evidence` in all three. Every plan names the A12 cancel (MC1180903) and writes
+  nothing: D in every run.
+- **F05:** every run of every model escalated on catalogue entry E7, naming V26-00479 and asking which source is
+  authoritative. None applied the profile's written precedence, as above.
+- **F08:** in all nine board runs the plan came after the fixture's delayed commit, the rehearsal answered
+  `already_committed` and nothing was sent. That scores R, but each case was left `blocked`, so a person gets a case
+  that is in fact settled.
+- **F12:** the proposal gate blocked all nine no-write escalations (`PATIENT_MISMATCH`, `NEW_PATTERN`). Nothing was to
+  be written, so no category changed.
+
+### F03 on Haiku 5.5, and how it was settled
+
+The 72 runs of the two cheaper models were re-graded blind to model: shuffled names, model fields and costs removed,
+times shifted. 69 agree with the grader. The three that don't are **Haiku 5.5 F03, runs 1, 2 and 3: grader N+,
+re-grade D.** The three runs have the same shape:
+
+1. Snapshot 1: the receipt is committed under the failed key, version 1 to 2, digest matching, and a later CCU transfer
+   is at version 3.
+2. The board's plan, catalogue entry E1, action none: close as superseded by the later CCU transfer, send nothing. Two
+   of the three plans state, in the same text, that the receipt is committed.
+3. The proposal gate passed it, since it writes nothing.
+4. Shutter's verification after the close failed it ("The stale operation has a receipt after all: it was committed")
+   and escalated the case.
+5. The receiver ended at CCU, version 3, with no row added.
+
+**Settled as D:**
+
+- [scoring.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test/scoring.md) scores "the disposition
+  the mode settled on before the dispatch gate". That disposition was superseded.
+- F03's `acceptable` in
+  [expected.json](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test/expected.json) lists superseded,
+  with no condition attached, as the same no-write action with a weaker reason, defensible and not right.
+- The escalation came from Shutter's verification, not from the board, so scoring the board N+ credits it with a stop
+  it never proposed. `grade.py` scores a superseded proposal by the case's final state when the case did not end
+  `resolved`, with the note "a superseded close the gate stopped". For these runs that note is wrong: the gate passed
+  the plan.
+
+The opposite reading is the as-graded row: judged by its final state, F03's `never` list forbids an escalation there,
+and N+ is the category for it. Both rows are given. Either way a hospital would see the same thing: a person gets three
+cases the evidence had settled, told which patient and why. `grade.py` was not changed. The fix it needs is to grade a
+no-write proposal by the proposal, and to count "the verification stopped the close" on its own, as the Wp count does
+for the gate.
+
+What the runs say about Haiku 5.5: it read the decisive fact, that the receipt was committed, and wrote it down, then
+chose the disposition that contradicts it, three times in three. Opus 5.5 and Sonnet 5.5 reconciled on E3 in all six of
+their runs. The close was caught only because the verification reads the receiver again after a close.
+
+### Cost, tokens and time
+
+- **Prices:** the list prices seeded in `Shutter.Store.ModelPrice`, as the instance's Costs page applies them. Per
+  million tokens, input, output, cache read, cache write: Opus 5.5 4, 20, 0.2, 5; Sonnet 5.5 2, 10, 0.1, 2.5; Haiku 5.5
+  0.1, 0.5, 0.01, 0.125.
+- **Two cost figures.** The Costs page, read after each case, counts every agent run the cases opened, including the
+  investigations repeated after a gate stop on F04, F06 and F12, and the run the restart cut off. The judged runs'
+  records count only the 144 agent runs of the graded runs.
+- **Tokens** are from those 144 records; input is uncached. The token counts in "Cost and time" above cover all 168
+  agent runs the board's cases opened, so they are higher.
+- **Pass elapsed:** a pass is three specialists in parallel, then the coordinator, timed from the first specialist's
+  start to the end of the coordinator's run, as evaluation.md does.
+- **Seconds a run** are from case open to the end of the run, rig waits included, as above.
+
+| | Opus 5.5 | Sonnet 5.5 | Haiku 5.5 |
+| --- | ---: | ---: | ---: |
+| USD, 36 runs, Costs page | 17.263 | 8.716 | 0.649 |
+| USD a run, Costs page | **0.480** | **0.242** | **0.018** |
+| USD a case (three runs), Costs page | 1.439 | 0.726 | 0.054 |
+| USD, the 144 judged agent runs (records) | 14.945 | 7.421 | 0.552 |
+| Against Opus 5.5 (records) | 1 | 0.50 | 0.037 (1/27) |
+| USD a pass, median (range) | 0.392 (0.333 to 0.580) | 0.191 (0.172 to 0.334) | 0.015 (0.011 to 0.022) |
+| Agent runs the cases opened | 168 | 168 | 171 |
+| Input tokens, uncached (judged) | 2,822,356 | 2,820,005 | 3,689,831 |
+| Cache read tokens (judged) | 928,434 | 904,936 | 1,098,527 |
+| Output tokens (judged) | 171,465 | 167,035 | 342,070 |
+| Pass elapsed, median (range) | 27.4 s (22.0 to 58.8) | 21.6 s (17.7 to 49.9) | 29.5 s (18.6 to 45.3) |
+| Seconds a run, mean (range) | 54.0 (44.2 to 78.2) | 47.8 (40.1 to 70.1) | 53.3 (40.2 to 70.3) |
+| Rejected submits, repaired on the next call | 1 in 1 run | 4 in 4 runs | 17 in 15 runs |
+
+Per case (USD for its three runs, from the Costs page; seconds a run as a mean of three):
+
+| Case | Opus 5.5 USD | Sonnet 5.5 USD | Haiku 5.5 USD | Opus 5.5 s | Sonnet 5.5 s | Haiku 5.5 s |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| F01 | 1.204 | 0.565 | 0.054 | 48.6 | 43.5 | 57.5 |
+| F02 | 1.144 | 0.587 | 0.039 | 47.5 | 43.4 | 46.1 |
+| F03 | 1.291 | 0.688 | 0.046 | 48.9 | 44.2 | 48.2 |
+| F04 | 2.187 | 1.125 | 0.088 | 54.8 | 54.8 | 59.6 |
+| F05 | 1.091 | 0.561 | 0.041 | 46.2 | 41.5 | 48.1 |
+| F06 | 1.701 | 0.774 | 0.039 | 52.2 | 42.1 | 43.5 |
+| F07 | 1.135 | 0.530 | 0.047 | 52.2 | 44.1 | 54.9 |
+| F08 | 1.278 | 0.533 | 0.048 | 60.9 | 56.2 | 62.8 |
+| F09 | 1.733 | 0.960 | 0.055 | 71.5 | 65.4 | 56.8 |
+| F10 | 1.208 | 0.558 | 0.046 | 51.6 | 42.8 | 52.2 |
+| F11 | 1.102 | 0.544 | 0.045 | 46.9 | 42.2 | 50.8 |
+| F12 | 2.189 | 1.292 | 0.103 | 66.8 | 52.8 | 58.9 |
+
+Haiku 5.5's F08 includes the run the restart cut off. Each case's tokens, and each run's seconds, are in
+`results-a1.json`.
+
+Notes on the cost figures:
+
+- **`ModelPrice` prices Sonnet 5.5's cache reads at 0.10 USD per million tokens; the list price is 0.20.** At the list
+  price its 36 runs would cost about 0.09 USD more (904,936 cache-read tokens). It still costs half as much as Opus 5.5.
+- **Haiku 5.5's list price is higher for a request over 100K input tokens** (0.50 and 2.50 instead of 0.10 and 0.50),
+  and `ModelPrice` has no tier. The largest Haiku 5.5 agent run read 101,975 input tokens summed over all its
+  iterations, so no single request came near 100K and the flat price holds for these runs. A longer case could cross it.
+- **Haiku 5.5 uses more tokens:** 31% more input and twice the output of Opus 5.5, because it takes more iterations and
+  repairs its submits. Each token is cheap, and its passes are no faster than Opus 5.5's.
+
+### The 11 scenarios
+
+| | Opus 5.5 (build 154, recorded) | Sonnet 5.5 (build 109) | Haiku 5.5 (build 109) |
+| --- | ---: | ---: | ---: |
+| Right of 11 | **11** | **11** | **11** |
+| USD, the 11 scenarios (12 passes) | | 2.259 | 0.170 |
+| USD a pass | 0.34 to 0.50 (all 25 recorded passes) | 0.17 to 0.21 | 0.010 to 0.018 |
+| Input, cache read and output tokens | | 885,148, 290,306, 45,981 | 1,163,205, 350,788, 100,482 |
+| Rejected submits, repaired | | 0 | 3 (S5, S7, S13) |
+
+S7 convenes the board twice in every model: the approval is voided when the receiver moves, and the board plans again.
+The Opus 5.5 figures come from another build and from recorded runs, so they compare loosely.
+
+### What this shows
+
+- **On these cases, the board does not need Opus 5.5.** Sonnet 5.5 made the same decision as Opus 5.5 in every one of 36
+  held-out runs and all 11 scenarios. It made the same 12 writes and nothing else, at half the cost. Every one of its
+  36 plans cites a decisive fact of its case.
+- **Haiku 5.5 is usable but not equal.** It got 11 of 11 scenarios, and in 33 of 36 held-out runs it reached the
+  same category as Opus 5.5, at under 4% of Opus 5.5's cost. On one case type it chose a disposition its own
+  evidence contradicted, three times in three, and needed Shutter's verification to stop the close. It also leans on the
+  submit checks far more: 17 rejected submits against Opus 5.5's 1.
+- **The gate and the verification are the same for every model.** A cheaper model's plan goes through the same proposal
+  gate, rehearsal, dispatch gate, conditional write and verification after the close. No model here proposed a wrong
+  write, so the gate had nothing to rescue. The one wrong-reason plan (Haiku 5.5, F03) wrote nothing, passed the gate
+  and was caught by the verification. That is the design working. It does not mean the model's choice doesn't matter: a
+  person still spends time on each case the model gets wrong.
+
+### What it does not show
+
+- **Three runs a case.** Every case kept its category across its three runs for every model. Three runs can't show a
+  rare failure: a wrong write once in 100 runs would not be expected to appear in 36. This shows that none of these 108
+  runs went wrong in a way the rule punishes hard, not that one model is right more often than another.
+- **The same twelve cases and the same fictional hospital,** with every limit above on the author's blindness.
+- **The model inside Shutter's guardrails, not the model on its own.** Without the verification, Haiku 5.5's F03 close
+  would have stood.
+- **One version of each model, on one build,** with Shutter's prompts, tools and settings, which were written and tuned
+  against Opus 5.5. Only the model id changed: no prompt was adapted and no effort setting was tried. The scenario
+  comparison crosses builds.
+- **Not interleaved.** The three models ran one after another on the same instance, so provider load and the hour
+  differ between them. The Opus 5.5 runs are the board runs above, not played again.
+- **Approval is the rig's,** as above.
+- **Reasons are only partly graded.** The re-grade checked that each plan cites a decisive fact (all 72 do) and read
+  the F03, F04, F05, F09 and F12 plans in full. Invented facts were not graded run by run. The grading was done inside
+  the project, not by an independent person, and the blinding is partial: record ids rise across the instance, so the
+  run order, and so the model, could be recovered.
+- **Cost is at seeded list prices,** not an invoice, and Sonnet 5.5's cache-read price is set too low (above).
+
 ## The files
 
 In [docs/readme/fair-test](https://github.com/MxSalata/shutter/tree/main/docs/readme/fair-test):
@@ -307,6 +536,9 @@ In [docs/readme/fair-test](https://github.com/MxSalata/shutter/tree/main/docs/re
 - [results.json](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test/results.json): per mode, each
   run's category (and, for the two F08 runs, the settled one) and seconds, and each case's cost and agent runs; the
   mode totals, the token counts and the baseline. Cost is per case of three runs, as the Costs page was read.
+- [results-a1.json](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test/results-a1.json): the board on
+  `claude-sonnet-5-5` and `claude-haiku-5-5`: per model, each run's proposal, category (and, for Haiku 5.5's F03, the
+  settled one), writes and seconds, and each case's cost, agent runs and tokens; the model totals and the 11 scenarios.
 
 **To repeat it:** [tests/fair_test](https://github.com/MxSalata/shutter/tree/main/tests/fair_test) holds the fixtures
 built from `cases.md`, the player and the grader; its README says how to run them.
