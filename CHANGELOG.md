@@ -14,7 +14,8 @@ AI Hub features measured with no model call and on the publisher from an MCP cli
 - **A receipt whose bed is null says nothing about the bed.** The receipt check read a JSON null bed as a different bed
   (`RECEIPT_PAYLOAD_DIFFERS`), so a person got a case the receipt had settled (held-out case F03). Beds are now compared
   only when both the receipt and the operation state one; a null, missing or empty bed reads as not stated, and a stated
-  different bed still stops the close. A unit test covers each.
+  different bed still stops the close. A unit test covers each. With this check loaded over 1.1.1's code, the board's
+  reconcile closed F03 in all three held-out runs, with nothing written (8 Nov 2026, AI Hub build 109).
 - **Per-call trace lines in a replay.** A replayed run writes one trace line per recorded tool call, as a live run does,
   with the tool, ok, denied or failed, the milliseconds and the word replay, and no argument, result or error text, so
   each call is a step of its own in the Visual Trace. The tracing walk-through shows the steps and the page size that
@@ -36,9 +37,12 @@ AI Hub features measured with no model call and on the publisher from an MCP cli
 - **Another visit's movement shows on the plan by default.** `further_messages.in_patient_movement` is `show` in the
   shipped profile and when a profile doesn't say: an in-patient movement on another visit goes on the plan beside the
   resend instead of stopping it, while a cancel, merge or discharge on the case's own visit, or a change to the record,
-  still stops it. A site that wants the stop sets `stop`. The demo keeps the stop, labelled in its profile, the live
-  hospital's included, so S27, S31 and S32 stop as before. A stored profile that doesn't name the setting reads `show`
-  after the upgrade (`docs/INSTALL.md`, section 8).
+  still stops it. A site that wants the stop sets `stop`. A fresh demo install keeps the stop, labelled in its profile,
+  the live hospital's included, so S27, S31 and S32 stop as before. A stored profile that doesn't name the setting reads
+  `show` after the upgrade, also on a demo whose profile a person or the onboarding saved (`docs/INSTALL.md`, section
+  8). Not yet in 1.1.2: nobody reads a shown movement at a tier released by policy or under an incident's shared
+  approval, and one that arrives after the approval passes the write unseen, where 1.1.1 stopped it; a site that uses
+  incidents or releases a tier by policy should set `stop`.
 - **Another provider, by hand.** `docs/readme/another-provider.md`: the board run on OpenAI's `gpt-4.1` through AI Hub on
   build 109, S2 and S8 as expected twice, with the steps as tested and their undo, runs unpriced and outside the day's
   budget, and the places the install assumes Anthropic. Current OpenAI models refuse the `max_tokens` the runner sends.

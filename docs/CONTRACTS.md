@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.47, 8 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.48, 8 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -1069,6 +1069,14 @@ the framework). The Dockerfile runs it, and a site with Java runs it once by han
   evidence names another entry or outcome (`APPROVAL_ITEM_CHANGED`) or the incident's plan digest is no longer the one
   it bound, or the case no longer belongs to the incident (`APPROVAL_INCIDENT_PLAN_CHANGED`): the case blocks and the
   chain stops at that item (v1.21).
+- Any error in the incident's workflow during a release, other than one raising an approval task (7.3), abandons the
+  whole incident (`IncidentWorkflow.OnResponse`, `OnError`): a released case it can't find again ("Released case ... not
+  found"), or a failure moving on to the next item, stops its open chains, fails its cases still `detected`,
+  `collecting`, `investigating` or `grouped` with the reason, and closes it. As built in 1.1.2 (v1.48).
+- A receiver that goes down again during a release stops each remaining chain in turn: the released item's preflight
+  read, tried `MaxRefreshes` + 1 times (4 by default), or its write finds the receiver down, the case stops for a person,
+  the chain's later items are escalated ("Not released: ..."), and the next chain is released and stops the same way. No
+  write is retried blindly, so nothing is written twice. As built in 1.1.2 (v1.48).
 
 ### 7.5 The API
 
@@ -1252,7 +1260,9 @@ refused `budget_exhausted` with "Your share of the day's model budget ... is spe
 is spent (`until` = `budget.resetsAt`), `provider_auth` when a live run failed with an authentication error (a 401, a bad or
 deactivated key) within the last 15 minutes (`until` = the next 00:00 UTC, when a key a site deactivates for the day comes
 back; the flag clears on the next live run the provider accepts, and after 15 minutes one run tries again), and null when
-live runs can go; `detail` is the sentence to show. While the provider refuses the key the Agent item refuses runs that would
+live runs can go; `detail` is the sentence to show. As built in 1.1.2 (v1.48), the flag is set only by a run whose status is `error` with an authentication
+error's words (`LiveAgents.NoteRun`), and the live runner reports a provider's own error as `model_error` (`AIHub.cls`, its
+`Catch`), so a key the provider refuses doesn't set it yet: each run still calls the provider and ends `model_error`. While the provider refuses the key the Agent item refuses runs that would
 call a model with the status `provider_auth` and makes no call (a board whose members were all refused so has no board
 answer, 6.6, as for `budget_exhausted`), `POST /cases/{id}/board` answers `409 live_unavailable` with `live`
 (the availability object) before the budget is looked at, and a question from a caller with the live agents is answered from
@@ -2130,6 +2140,10 @@ with the other stores.
 
 ## Changes
 
+- 8 Nov 2026, release 1.1.2 (v1.48): two release behaviours stated as built (7.4): any error in an incident's workflow
+  during a release, other than raising an approval task, abandons the incident; a receiver that goes down again during a
+  release stops each remaining chain in turn at its next item, with nothing written twice; and `provider_auth` (12) stated
+  as built: only a run with status `error` sets it, so a key the provider refuses, which ends `model_error`, doesn't set it yet.
 - 8 Nov 2026, release 1.1.2 (v1.47): the receipt check compares beds only when the receipt and the operation both state
   one: a bed that is JSON null, missing or empty is not stated, so a receipt whose bed is null no longer reads as a
   different bed (`RECEIPT_PAYLOAD_DIFFERS`), and a stated different bed still does. A replayed run writes one trace line per
