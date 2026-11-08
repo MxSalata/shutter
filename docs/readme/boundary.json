@@ -45,6 +45,13 @@
       "proves": "The approval binds the receiver's dry run of this exact plan, which would apply at the version the write is conditional on, and the dispatch gate passed APPROVAL_VALID and REHEARSED under the same policy version the approval bound. Without that dry run the gate blocks the write (DRY_RUN_MISSING, DRY_RUN_FAILED, DRY_RUN_STALE: Shutter's unit tests)."
     },
     {
+      "id": "simultaneous_decisions",
+      "title": "An approval and a rejection of one case at the same instant",
+      "scenario": "S2, rules only",
+      "answer": "one 202, the other 409 wrong_state naming the decision",
+      "proves": "The same approver approves in one tab and rejects in another at once. One decision stands: exactly one is accepted, the other is refused with the decision that stands, and the case's one approval and its Workflow task record the same decision."
+    },
+    {
       "id": "receiver_changed",
       "title": "The receiving system changed after the approval",
       "scenario": "S20, rules only",
