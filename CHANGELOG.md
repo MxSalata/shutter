@@ -14,7 +14,8 @@ AI Hub features measured with no model call and on the publisher from an MCP cli
 - **A receipt whose bed is null says nothing about the bed.** The receipt check read a JSON null bed as a different bed
   (`RECEIPT_PAYLOAD_DIFFERS`), so a person got a case the receipt had settled (held-out case F03). Beds are now compared
   only when both the receipt and the operation state one; a null, missing or empty bed reads as not stated, and a stated
-  different bed still stops the close. A unit test covers each.
+  different bed still stops the close. A unit test covers each. With this check loaded over 1.1.1's code, the board's
+  reconcile closed F03 in all three held-out runs, with nothing written (8 Nov 2026, AI Hub build 109).
 - **Per-call trace lines in a replay.** A replayed run writes one trace line per recorded tool call, as a live run does,
   with the tool, ok, denied or failed, the milliseconds and the word replay, and no argument, result or error text, so
   each call is a step of its own in the Visual Trace. The tracing walk-through shows the steps and the page size that

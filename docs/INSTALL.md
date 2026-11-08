@@ -44,7 +44,8 @@ A production review needs none of this configured.
   Hub build: the core, the demo receiver's classes, and the live agents with their tools, policies, schemas and knowledge
   bases. Its manifest requires IRIS 2026.3 or later with Interoperability (the organisers' line: the agents need the `%AI`
   package, which the early access builds 2026.3.0AI.154.0 and 2027.1.0AI.109.0 have and 2026.2 has not), so
-  `zpm "install iris-shutter"` on either installs everything and an earlier version refuses it.
+  `zpm "install iris-shutter"` on either installs everything (the registry's latest published version, section 3.1) and an
+  earlier version refuses it.
 - **The core alone,** for a plain IRIS for Health Community 2026.2 that replays recorded agent runs, is the module
   `iris-shutter-core` in the repository's `core/` folder: loaded by path (`zpm "load <repository>/core"`), never published;
   the image build loads one or the other by what the base image has (`WITH_AIHUB`). Without the agents the gate, the
@@ -64,7 +65,7 @@ A production review needs none of this configured.
   rest itself: the `RECORDS` and `HOSPITAL` namespaces, the records system's web application and the hospital's production.
   It doesn't build the Second Parser's jar (below), so that item stays disabled and S25 is decided without its second
   opinion. `scripts/stock-install-check.sh` runs this path; CI runs it on 2026.2 with the core.
-- **`zpm "uninstall iris-shutter"` takes off everything the install and the onboarding added,** in every namespace, and
+- **`zpm "uninstall iris-shutter"` takes off everything the install and the onboarding added** (from 1.1.2), in every namespace, and
   stops no production of the site's: a site production Shutter went into is updated in place, keeps running, and its own
   alert item gets its name back. Every case, approval, incident and setting goes with it, so export what you must keep
   first. `SELECT Shutter_Util.Uninstall_Plan()` says what would go and changes nothing.
@@ -143,7 +144,7 @@ disabled (the six named in section 1), so it has no feed of its own until the in
 one. **Load only in the namespace made for Shutter.** A load in a namespace running another production is refused and says
 so, since starting `Shutter.Production` there would stop it; name that production (`-Dproduction=...`) for shape B.
 
-**From the registry.** The IPM in `vendor/ipm` starts with no registry, so `zpm "install iris-shutter"` answers "No repositories are configured and enabled in this namespace" until you run `zpm "repo -reset-defaults"`. `zpm "load"` from a clone doesn't need it. This demo install, from a clone of this repository, took about 2.5 minutes on clean 154 and 109 containers on 7 Nov 2026, and started `Shutter.Production` and `Hospital.Production`:
+**From the registry.** The IPM in `vendor/ipm` starts with no registry, so `zpm "install iris-shutter"` answers "No repositories are configured and enabled in this namespace" until you run `zpm "repo -reset-defaults"`. `zpm "install iris-shutter"` installs the latest version published on the registry, which can be behind this repository: on 8 Nov 2026 the registry served 1.1.1, which has no uninstall and no `Uninstall_Plan` (both are 1.1.2's). `zpm "list"` shows the version installed; for the exact version of a clone, use `zpm "load <module>"` instead. `zpm "load"` from a clone doesn't need the registry. This demo install, from a clone of this repository, took about 2.5 minutes on clean 154 and 109 containers on 7 Nov 2026, and started `Shutter.Production` and `Hospital.Production`:
 
 ```
 Do $SYSTEM.OBJ.Load("<module>/src/Shutter/Setup.cls", "ck")
