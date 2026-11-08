@@ -51,8 +51,7 @@ ClassMethod ShippedPolicy() As %DynamicObject
     Quit {"1": {"single": "approval", "ordered": "approval", "interleaved": "board"}, "2": {"single": "approval", "ordered": "approval", "interleaved": "board"}, "3": {"single": "approval", "ordered": "approval", "interleaved": "board"}}
 }
 
-/// The demo's release policy, the shipped table until v1.1.0 (8 Nov 2026: "the demo keeps its own setting,
-/// labelled"): tiers 1 and 2 released by policy for single chains and tier 1 for ordered ones, so the demo's scenarios show
+/// The demo's release policy, the shipped table until v1.1.0, kept as the demo's own, labelled setting: tiers 1 and 2 released by policy for single chains and tier 1 for ordered ones, so the demo's scenarios show
 /// a resend the policy releases; approvals elsewhere, the board for interleaved chains. The live hospital then makes tier 2
 /// single an approval too (Shutter.Setup.LiveProfilePolicy). Applied by a demo install only, and marked in the profile's
 /// source, so the Site profile page says whose answers they are.

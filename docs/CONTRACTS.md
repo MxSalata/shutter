@@ -682,8 +682,7 @@ reads it through `Shutter.Store.SiteProfile`.
 }
 ```
 
-**The shipped policy asks a person at every tier** (v1.47, 8 Nov 2026: "approval on every tier by default; the demo
-keeps its own setting, labelled"): `approval` for single and ordered chains at tiers 1 to 3, the board for interleaved ones,
+**The shipped policy asks a person at every tier** (v1.47): `approval` for single and ordered chains at tiers 1 to 3, the board for interleaved ones,
 whose plan a person then approves. A site that wants a tier released by policy says so in its own profile. **The demo keeps
 the earlier table as its own setting:** a demo install (`Shutter.Setup.Install` with `demo` 1) whose profile is still the
 seed's stores `Shutter.Store.SiteProfile.DemoPolicy()` (tiers 1 and 2 single and tier 1 ordered `automatic`, tier 2 ordered
