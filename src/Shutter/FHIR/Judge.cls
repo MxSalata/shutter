@@ -24,10 +24,12 @@
 /// its subject and identifier the binding's (case-sensitive); the vread, the response ETag and the response Location
 /// must name V. A version that commits after a 412 or a refusal is failed.</li>
 /// <li>V is committed. The current resource decides whether the case resolves: V itself (verified), a supported
-/// continuation of it (verified_continued: a later move to a mapped ward, or a plain finish, with Shutter's entry kept
-/// and completed after its own start, one open entry, no overlapping periods), or anything else (committed_review). The
-/// marker is never looked for on the current version: on IRIS the next writer's PUT replaces meta.tag. The Patient and
-/// every bound Location are read again and must still be the case's.</li>
+/// continuation of it (verified_continued: a later move to a mapped ward that starts where Shutter's entry ends, or a
+/// plain finish, with Shutter's entry kept and completed after its own start, one open entry, no overlapping periods, no
+/// gap, no modifierExtension and no implicitRules anywhere), or anything else (committed_review). The marker is never
+/// looked for on the current version: on IRIS the next writer's PUT replaces meta.tag. The Patient and every bound
+/// Location (the prior and the target always among them, each read exactly once) are read again and must still be the
+/// case's.</li>
 /// </ol>
 /// Outcomes: verified, verified_continued, committed_review, not_found, unknown, failed. detail carries reason (one code),
 /// committed_version, current_version, base_version, head_version, path, retry (another read inside the settle window
@@ -74,8 +76,10 @@ ClassMethod Judge(ctx As %DynamicObject, Output text As %String, Output detail A
 ///  "patient": {"http_status": 200, "body": "..."},
 ///  "locations": [{"reference": "Location/ward-b", "http_status": 200, "body": "..."}]}
 /// </pre>
-/// expected_body is the approved outbound text (Shutter.FHIR.Plan's Build of base_body). "Final" means
-/// attempt.seconds_since is at least settle_final_seconds: the last read of the settle window.
+/// expected_body is the approved outbound text (Shutter.FHIR.Plan's Build of base_body). binding.locations must hold
+/// the prior and the target location (the dispatch's re-read set) and may hold more mapped ones; locations must hold
+/// exactly one read of each bound one, else the context is invalid (a walk that skipped a read must never verify).
+/// "Final" means attempt.seconds_since is at least settle_final_seconds: the last read of the settle window.
 ClassMethod Decide(ctx As %DynamicObject, detail As %DynamicObject) As %String
 {
     // 1. The context.
@@ -243,6 +247,9 @@ ClassMethod ContextProblem(ctx As %DynamicObject, Output base As %DynamicObject,
     While iter.%GetNext(.i, .l) {
         If '..IsObject(l) || (..Str(l, "reference") = "") || (..Str(l, "checked_identifier") = "") Return "a bound location is incomplete"
     }
+    For key = "prior_location", "target_location" {
+        If '..Bound(..Str(b, key), locs) Return "the bound locations leave out the " _ $PIECE(key, "_", 1) _ " " _ b.%Get(key)
+    }
     Set sof = b.%Get("server_owned_fields")
     If '..IsArray(sof) Quit "the binding has no server_owned_fields"
     Set iter = sof.%GetIterator()
@@ -273,7 +280,21 @@ ClassMethod ContextProblem(ctx As %DynamicObject, Output base As %DynamicObject,
     Set type = ctx.%GetTypeOf("vread")
     If (type '= "unassigned") && (type '= "null") && ((type '= "object") || (ctx.vread.%GetTypeOf("http_status") '= "number")) Quit "the vread is not a read"
     If '..IsArray(ctx.%Get("locations")) Quit "no location reads"
+    Set iter = locs.%GetIterator()
+    While iter.%GetNext(.i, .l) {
+        Set count = 0, it2 = ctx.locations.%GetIterator()
+        While it2.%GetNext(.j, .r) { Set:(..IsObject(r) && (..Str(r, "reference") = l.reference)) count = count + 1 }
+        If count '= 1 Return "the bound location " _ l.reference _ " has " _ count _ " reads, not one"
+    }
     Quit ""
+}
+
+/// Whether a reference is in the bound locations.
+ClassMethod Bound(ref As %String, locs As %DynamicArray) As %Boolean [ Private ]
+{
+    Set iter = locs.%GetIterator()
+    While iter.%GetNext(.i, .l) { If ..IsObject(l) && (..Str(l, "reference") = ref) Return 1 }
+    Quit 0
 }
 
 /// Whether a server-owned field may be set aside in the comparisons: never the clinical paths, the identity, the
@@ -336,13 +357,17 @@ ClassMethod HistoryProblem(read As %DynamicObject, id As %String, Output kinds, 
 /// entry. Shutter's entry is the location entry with the target reference and the event time as its start, as V wrote
 /// it. The checks, in the order their reasons are given: the entry is there; it is not completed at or before its own
 /// start; the Encounter is not entered in error; the prior location is not open again; no two open entries and no
-/// overlapping periods from Shutter's start on; and the rest is a shape this rule knows (in-progress with one open entry,
-/// Shutter's or a later one at a mapped location other than the prior; or finished with every entry completed; every
-/// reference literal and every time an instant with an offset).
+/// overlapping periods from Shutter's start on; and the rest is a shape this rule knows: no modifierExtension anywhere
+/// in W and no implicitRules (either may change what the record means); every reference literal and every time an
+/// instant with an offset; in-progress with one open entry, or finished with every entry completed; and when Shutter's
+/// entry is completed, at most one entry after it, at a mapped location other than the prior, starting exactly where
+/// Shutter's entry ends (the same instant: no gap), open when in progress.
 ClassMethod Continuation(w As %DynamicObject, b As %DynamicObject, Output path As %String) As %String [ Private ]
 {
     Set path = "/location", target = b."target_location", prior = b."prior_location", event = b."event_time"
     Set bad = "", status = ..Str(w, "status"), type = w.%GetTypeOf("location")
+    If w.%GetTypeOf("implicitRules") '= "unassigned" Set bad = "/implicitRules"
+    If bad = "" Set bad = ..FindKey(w, "modifierExtension")
     If (type = "unassigned") || (type = "null") Quit "entry_gone"
     If type '= "array" Quit "unfamiliar_shape"
     Do ..Instant(event, .sStart)
@@ -386,19 +411,44 @@ ClassMethod Continuation(w As %DynamicObject, b As %DynamicObject, Output path A
         }
     }
     If bad '= "" Set path = bad Quit "unfamiliar_shape"
-    If status = "finished" {
-        If opens > 0 Quit "unfamiliar_shape"
+    If (status '= "finished") && (status '= "in-progress") Set path = "/status" Quit "unfamiliar_shape"
+    If (status = "finished") && (opens > 0) Set path = "/location" Quit "unfamiliar_shape"
+    If (status = "in-progress") && (opens = 0) Set path = "/location" Quit "unfamiliar_shape"
+    If ent(s, "open") Quit ""
+    // Shutter's entry is completed after its own start. At most one entry follows it: the next move, at a mapped
+    // location other than the prior, starting at the instant Shutter's entry ends, and the open one when in progress.
+    Set next = 0
+    For j = 1:1:n {
+        Continue:((j = s) || (ent(j, "start") < sStart))
+        Set path = ent(j, "path")
+        If next Return "unfamiliar_shape"
+        Set next = j
+    }
+    If next = 0 {
+        // In progress, the one open entry is older than Shutter's move (the overlap check above normally says so).
+        If status = "in-progress" Set path = "/location" Quit "overlapping_periods"
         Quit ""
     }
-    If status '= "in-progress" Set path = "/status" Quit "unfamiliar_shape"
-    If opens = 0 Set path = "/location" Quit "unfamiliar_shape"
-    If ent(s, "open") Quit ""
-    // Shutter's entry is completed after its own start; the one open entry is a later move to a mapped location.
-    For j = 1:1:n {
-        Continue:('ent(j, "open"))
-        Set path = ent(j, "path")
-        If '..Mapped(ent(j, "ref"), b) Return "unfamiliar_shape"
-        If ent(j, "start") < sStart Return "overlapping_periods"
+    Set path = ent(next, "path")
+    If (ent(next, "ref") = prior) || '..Mapped(ent(next, "ref"), b) Quit "unfamiliar_shape"
+    If ent(next, "start") '= ent(s, "end") Quit "unfamiliar_shape"
+    If (status = "in-progress") && 'ent(next, "open") Set path = "/location" Quit "overlapping_periods"
+    Quit ""
+}
+
+/// The JSON pointer of the first member named key anywhere in a value, or "" when there is none.
+ClassMethod FindKey(node, key As %String, path As %String = "") As %String [ Private ]
+{
+    If '$ISOBJECT(node) Quit ""
+    Set isArray = node.%IsA("%DynamicArray")
+    Set iter = node.%GetIterator()
+    While iter.%GetNext(.k, .v) {
+        Set p = path _ "/" _ $SELECT(isArray: k, 1: ..Escape(k))
+        If 'isArray && (k = key) Return p
+        If $ISOBJECT(v) {
+            Set found = ..FindKey(v, key, p)
+            If found '= "" Return found
+        }
     }
     Quit ""
 }
