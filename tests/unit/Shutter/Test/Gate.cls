@@ -522,8 +522,22 @@ Method Run(row As %DynamicObject) As %DynamicObject
     }
     // A row's "engine" is what Shutter.Util.EngineCheck.Read would have found, since no production runs here.
     If row.%IsDefined("engine") Set ^||Shutter.Test.EngineFacts = row.engine.%ToJSON()
+    // A row's "index" is messages the index has for the patient now, after the snapshot was sealed: saved for the gate's run alone.
+    Set indexIds = []
+    If row.%IsDefined("index") {
+        Set ii = row.index.%GetIterator()
+        While ii.%GetNext(, .ix) {
+            Set im = ##class(Shutter.Index.Message).%New()
+            Set im.DocId = "UT-GATE-ROW-" _ $JOB _ "-" _ $INCREMENT(^||Shutter.Test.Gate), im.PatientId = "MRN-UT1", im.PatientIdAuthority = "HOSP", im.TimeCreated = "2099-01-01 00:00:00"
+            Set im.VisitNumber = ix."visit_number", im.Event = ix.event, im.MessageType = ix."message_type", im.ControlId = ix."control_id", im.EventTime = ix."event_time"
+            Do $$$AssertStatusOK(im.%Save(), row.name _ ": the index's row is saved")
+            Do indexIds.%Push(im.%Id())
+        }
+    }
     Set gate = $CLASSMETHOD($SELECT(row.%IsDefined("engine"): "Shutter.Test.EngineGate", 1: "Shutter.Operation.Gate"), "%New", "Shutter Gate (unit test)")
     Set sc = gate.OnGateRequest(req, .resp)
+    Set ii = indexIds.%GetIterator()
+    While ii.%GetNext(, .iid) { Do ##class(Shutter.Index.Message).%DeleteId(iid) }
     Do $$$AssertStatusOK(sc, row.name _ ": the gate ran")
     Set checks = ##class(%DynamicArray).%FromJSON($SELECT(resp.ChecksJSON = "": "[]", 1: resp.ChecksJSON))
     Quit {"response": (resp), "checks": (checks)}
@@ -839,6 +853,10 @@ XData Rows [ MimeType = application/json ]
   {"group": "ordering", "name": "an out-patient attendance on another visit passes and is counted",
    "summary": {"further_messages": {"identifier": "read", "stops": [], "shows": [{"why": "shown", "event": "register", "message_type": "ADT_A04", "visit_number": "ENC-OTHER", "event_time": "2026-10-19T10:00:00Z", "control_id": "MSG-9"}], "unread": ""}},
    "expect": [["ordering", "pass", "NO_FURTHER_MOVEMENT"]], "contains": [["ordering", "NO_FURTHER_MOVEMENT", "shown on the plan"]], "outcome": "pass"},
+  {"group": "ordering", "name": "a new admission on another visit after the approval, on a site that shows another visit's movement",
+   "approval": {}, "profile": {"further_messages": {"in_patient_movement": "show"}},
+   "index": [{"visit_number": "ENC-UT-ROW", "event": "admit", "message_type": "ADT_A01", "control_id": "UT-ROW-1", "event_time": "2026-10-20T09:00:00Z"}],
+   "expect": [["ordering", "unknown", "FURTHER_MOVEMENT_NEW"]], "contains": [["ordering", "FURTHER_MOVEMENT_NEW", "visit ENC-UT-ROW"], ["ordering", "FURTHER_MOVEMENT_NEW", "visit ENC-UT1"]], "absent": [["ordering", "NO_FURTHER_MOVEMENT"]]},
   {"group": "ordering", "name": "a patient identifier that can't be read blocks a write",
    "summary": {"further_messages": {"identifier": "unreadable", "stops": [], "shows": [], "unread": ""}},
    "expect": [["ordering", "block", "PATIENT_UNREADABLE"]], "outcome": "block"},
