@@ -81,6 +81,8 @@ What do the agents add? Not the flag: the matcher had already marked S8, and onl
 - The web app: `demo` / `shutter`.
 - The Management Portal's Visual Trace, read only, as `demo-trace` / `Shutter-Demo-IRIS-Portal`: open https://shutter.mxsalata.com/csp/healthshare/shutter/Shutter.Portal.Guide.cls (or "Shutter in IRIS" in the web app); it first asks you to sign in with GitHub or an emailed one-time code, then signs you in as that user.
 
+The same page also lists the production's agents (the model each runs when live, its mode, turns, token budget and last run) and its other operations with the settings that hold no secret and no address.
+
 **On your machine:** `install.sh` checks Docker, Compose, memory, disk, the ports and the image, and changes nothing until every check passes ([Windows or Apple silicon](https://github.com/MxSalata/shutter/blob/main/docs/readme/running.md#notes-on-the-install)).
 
 ```sh
@@ -102,7 +104,7 @@ Shutter is ready after 3 min 21 s:
 ```
 
 - **Builds:** judges, please use the AI Hub Community build `2027.1.0AI.109.0`, the one the [Early Access portal](https://evaluation.intersystems.com/Eval/early-access/AIHub) offers since 2 November 2026. Shutter is also verified on `2026. If only build 154 is loaded, `./install.sh` uses it; with both 109 and 154 loaded it uses 109. For 154 then, run `cp .env.example .env`, set `SHUTTER_IMAGE=irishealth-community:2026.3.0AI.154.0` in it, and run `./install.sh`. Port 52773 or 1972 already in use? `SHUTTER_WEB_PORT=8080 SHUTTER_SUPERSERVER_PORT=1973 ./install.sh` (kept in the `.env` it creates), then use that port in every address below.3.0AI.154.0`, the contest's first ([receipt](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt.md)). If you already loaded build 154 (or 109), `./install.sh` with no flag finds that image and uses it.
-- For live agents, set `ANTHROPIC_API_KEY` in `.env` (Anthropic's API only, so with another provider's key it replays too); without a key the board replays, and the case page says so. `SHUTTER_MODEL=claude-sonnet-5-5` in `.env`, set before the first start, halves the cost; on the held-out cases it decided as `claude-opus-5-5` did ([cheaper models](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#cheaper-models)). The replay edition is the same without live agents or knowledge search. Allow Docker at least 5 GB of memory, the minimum, and about 25 GB of free disk.
+- For live agents, set `ANTHROPIC_API_KEY` in `.env` (Anthropic's API only, so with another provider's key it replays too); without a key the board replays, and the case page says so. `SHUTTER_MODEL=claude-sonnet-5-5` in `.env`, set before the first start, halves the cost; on the held-out cases it decided as `claude-opus-5-5` did ([cheaper models](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#cheaper-models)), and each board member's model can be set on its production item (its `Model` setting). The replay edition is the same without live agents or knowledge search. Allow Docker at least 5 GB of memory, the minimum, and about 25 GB of free disk.
 - **Sign-ins on your machine:** the web app as `approver` / `shutter` (approves) or `operator` / `shutter`; the Management Portal as `_SYSTEM` / `SYS`, namespace `SHUTTER`, or as `approver` / `shutter` for the Workflow inbox.
 
 ### On your machine or in the trial, first
