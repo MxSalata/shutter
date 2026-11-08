@@ -125,7 +125,8 @@ ClassMethod RecordKeyFor(namespace As %String, production As %String, fingerprin
 /// The agent's request for a review: the findings as the sweep wrote them, less what is not for the model (the error
 /// example text, which may quote an HL7 segment; the annotation id; the rank and explanation it is to fill), and the
 /// per-item case aggregates (counts and case ids only: the sweep never reads note text, operation-key pieces or failure
-/// text, so no patient or encounter identifier reaches the context by construction). Who asked (v1.39) is the run's
+/// text, so no patient or encounter identifier reaches the context by construction; an error group's signature, the one
+/// piece of log text in a finding, goes as ModelSignature shows it). Who asked (v1.39) is the run's
 /// requester, for the budget's share; nobody named means the feed's own ("system", no share). A class method, so a
 /// test can build the same request outside the production.
 ClassMethod BuildAgentRequest(review As Shutter.Store.Review, result As %DynamicObject, maxIterations As %Integer = 3, tokenBudget As %Integer = 60000, requestedBy As %String = "") As Shutter.Bridge.Msg.AgentRequest
@@ -161,6 +162,15 @@ ClassMethod BuildAgentRequest(review As Shutter.Store.Review, result As %Dynamic
             Do copy.%Remove("annotationId"), copy.%Remove("rank"), copy.%Remove("explanation")
             Set ev = copy.%Get("evidence")
             If $ISOBJECT(ev) Do ev.%Remove("example")
+            // An error group's signature is the event log's own text before its first colon, which an application can
+            // fill with a patient's name: the model sees an IRIS error code as it is and any other signature as a digest,
+            // in found and in the words that quote it. The stored finding keeps the text for the operator's GET.
+            If (copy.code = "ERRORS_GROUPED") && (copy.found '= "") {
+                Set signature = copy.found, shown = ..ModelSignature(signature)
+                For key = "found", "why", "suggested", "action" {
+                    Do copy.%Set(key, $REPLACE(##class(Shutter.Util.Json).Str(copy, key), signature, shown))
+                }
+            }
             Do findings.%Push(copy)
         }
     }
@@ -170,6 +180,18 @@ ClassMethod BuildAgentRequest(review As Shutter.Store.Review, result As %Dynamic
     Set context.cases = agg
     Set req.Context = context.%ToJSON()
     Quit req
+}
+
+/// An error signature as the review's agent sees it: an IRIS error code (ERROR #5001, ERROR <Ens>ErrBPTerminated) as it
+/// is, since the system writes those and they carry nothing of a message; any other text, which an application wrote
+/// and may have filled with a name or a number, as "[withheld text h]", h the first 12 hex digits of its SHA-256, the
+/// same on every review, so one signature still reads as one. "" stays "".
+ClassMethod ModelSignature(signature As %String) As %String
+{
+    If signature = "" Quit ""
+    If signature ? 1"ERROR #"1.N Quit signature
+    If signature ? 1"ERROR <"1.(1A,1N,1"%",1".")1">"1.(1A,1N) Quit signature
+    Quit "[withheld text " _ $EXTRACT($PIECE(##class(Shutter.Util.Digest).SHA256Hex(signature), ":", 2), 1, 12) _ "]"
 }
 
 /// The Ens.MessageHeader id of a message body, or "".
