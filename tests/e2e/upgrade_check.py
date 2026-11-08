@@ -140,6 +140,15 @@ def first_case(ns):
     return m[-1] if m else out[-400:]
 
 
+def same_case(ns, before):
+    """The first case after the upgrade: the same id and failure kind. Its state is printed, not compared: a running
+    production carries on working the case while the upgrade loads."""
+    after = first_case(ns)
+    b, a = before.split("|"), after.split("|")
+    check("the first case still opens: the same case and failure kind", before != "no row" and len(a) == 3 and (a[0], a[2]) == (b[0], b[2]), (before, after))
+    print(f"  note  its state before and after: {b[1] if len(b) == 3 else '?'} and {a[1] if len(a) == 3 else '?'}", flush=True)
+
+
 def receiver_watch(ns, production):
     """The item new in 1.1 is in the production's definition after the upgrade. Whether it runs before a restart is printed."""
     got = value(ns, f'##class(%SQL.Statement).%ExecDirectNoPriv(,"SELECT ID FROM Ens_Config.Item WHERE Production = \'{production}\' AND Name = \'Receiver Watch\'").%Next()')
@@ -235,7 +244,7 @@ Set sc=$SYSTEM.OBJ.Delete("Shutter.Setup","-d")''')
 
     the_upgrade("SHUTTER", " -Ddemo=0", old_version)
     check("the case is still there", case_line("SHUTTER") == before_cases, (before_cases, case_line("SHUTTER")))
-    check("the first case still opens, with its state", before_first != "no row" and first_case("SHUTTER") == before_first, (before_first, first_case("SHUTTER")))
+    same_case("SHUTTER", before_first)
     receiver_watch("SHUTTER", "Shutter.Production")
     check("the person's site profile is still the current one, unchanged", profile_line("SHUTTER") == before_profile, (before_profile, profile_line("SHUTTER")))
     check("Shutter.Production runs after the upgrade", status("SHUTTER") == "Shutter.Production|1", status("SHUTTER"))
@@ -278,7 +287,7 @@ def demo_shape():
 
     the_upgrade("USER", "", old_version)
     check("the cases are still there", case_line("USER") == before_cases, (before_cases, case_line("USER")))
-    check("the first case still opens, with its state", before_first != "no row" and first_case("USER") == before_first, (before_first, first_case("USER")))
+    same_case("USER", before_first)
     receiver_watch("USER", "Shutter.Production")
     check("the person's site profile is still the current one, unchanged", profile_line("USER") == before_profile, (before_profile, profile_line("USER")))
     check("Shutter.Production runs after the upgrade", status("USER") == "Shutter.Production|1", status("USER"))
@@ -324,7 +333,7 @@ Set sc=$SYSTEM.OBJ.Delete("Shutter.Setup","-d")''')
 
     the_upgrade("PATHOLOGY", extra, old_version)
     check("the case is still there", case_line("PATHOLOGY") == before_cases, (before_cases, case_line("PATHOLOGY")))
-    check("the first case still opens, with its state", before_first != "no row" and first_case("PATHOLOGY") == before_first, (before_first, first_case("PATHOLOGY")))
+    same_case("PATHOLOGY", before_first)
     check("the person's site profile is still the current one, unchanged", profile_line("PATHOLOGY") == before_profile, (before_profile, profile_line("PATHOLOGY")))
     check("OnbPath.Production still runs", status("PATHOLOGY") == "OnbPath.Production|1", status("PATHOLOGY"))
     now = jobs("PATHOLOGY")
