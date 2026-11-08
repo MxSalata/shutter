@@ -2,7 +2,7 @@
 
 **When a hospital's HL7 delivery fails, the usual fix is Resend, and when two systems move a patient at the same moment, that resend writes over the bed manager's ward with every check passed. Shutter's IRIS AI Hub agents decide how to put the failure right; a deterministic gate decides whether anything is written.**
 
-On an ordinary day a hospital's integration engine can see hundreds of failed messages. Engineers put right what they can by hand, and the rest can go unactioned. Shutter won't fix them all, but it helps with most: in my experience at the hospitals I have worked with, most failures are of the kinds it knows. It resends the failed patient movements that pass its checks, and for the rest it stops, writes nothing, and names the patient a person needs to review.
+On an ordinary day a hospital's integration engine can see hundreds of failed messages. Engineers put right what they can by hand, and the rest can go unactioned. Shutter won't fix them all, but it helps with most: in my experience at the hospitals I have worked with, most failures are of the kinds it knows. It resends the failed patient movements that pass its checks, and for the rest it stops, writes nothing, and identifies the patient for a person to review.
 
 Shutter is about delivery, not diagnosis: it sends the receiver the operation the failed message asked for, as that message stated it, or nothing, and shows why. Recovery needs a receiver with an API; a plain MLLP receiver gets the investigation and a drafted escalation, never a resend.
 
@@ -10,9 +10,11 @@ Shutter is about delivery, not diagnosis: it sends the receiver the operation th
 
 **For judges, in about three minutes, with nothing to install:**
 1. Open the [trial](https://mxsalata.github.io/shutter/) and press **Explore on my own**.
-2. In **Scenarios**, choose **Rules only**, then under **Every scenario** press **Run** on S8's row (not the S8 card at the top), and open its case: "Wrote WARD-B over the bed manager's WARD-C", with every check passed.
-3. Choose **Board**, press **Run** on S8's row again and open C-000008: escalated, **0 writes**, and the patient named for a person to review. Run **S3** the same way: the receiver already holds the message and only its answer was lost, so the case reads the receipt and writes nothing.
-4. On that case, under **In IRIS:**, press **Message trace (screenshot)**. To see the real thing, [the demo's IRIS](https://shutter.mxsalata.com/csp/healthshare/shutter/Shutter.Portal.Guide.cls) is read only, behind a GitHub or emailed one-time-code sign-in ([details](https://github.com/MxSalata/shutter#try-it)).
+2. In **Scenarios**, choose **Rules only** (a plain resend, no agents), then under **Every scenario**, further down, press **Run** on S8's row (not the S8 card at the top). It plays for about 10 seconds; open its case, C-000021: "Wrote WARD-B over the bed manager's WARD-C", with every check passed.
+3. Choose **Board**, press **Run** on S8's row again and open C-000008: escalated, **0 writes**, and the patient (MRN1008) handed to a person to review.
+4. On C-000008, under **In IRIS:**, press **Message trace (screenshot)**. To see the real thing, [the demo's IRIS](https://shutter.mxsalata.com/csp/healthshare/shutter/Shutter.Portal.Guide.cls) is read only, behind a GitHub or emailed one-time-code sign-in ([details](https://github.com/MxSalata/shutter#try-it)).
+
+Then run **S3** in **Board** the same way: the receiver already holds the message and only its answer was lost, so the case reads the receipt and writes nothing.
 
 [![CI](https://github.com/MxSalata/shutter/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/MxSalata/shutter/actions/workflows/ci.yml) [![Licence: MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](https://github.com/MxSalata/shutter/blob/main/LICENSE)
 
@@ -26,12 +28,12 @@ Instead of a **Resend** in the Message Viewer, Shutter makes each failed deliver
 
 | Shutter decides | For example | What is written |
 | --- | --- | --- |
-| Resend | S2: a transfer that never arrived | One conditional write once released, verified from the receiver's history |
-| Superseded | S1: a later transfer has already moved the patient | Nothing; the closure is checked against the receiver's history, or against a later message the feed sent |
+| Resend | S2: a transfer that never arrived | One conditional write, verified in the receiver's history |
+| Superseded | S1: a later transfer has already moved the patient | Nothing; the closure is checked |
 | Reconcile | S3: the receiver holds the message; only its acknowledgement was lost | Nothing; the receipt is checked |
 | Escalate | S8: two moves at one moment | Nothing; a person decides |
 | Withheld | S15: a patient merge, for the PAS team | Nothing; no agent runs |
-| An incident | S11: an outage, eight failures to one receiver | One chain per encounter, released in event order by the site's policy or an approval, each item verified, stopping at the first surprise |
+| An incident | S11: an outage, eight failures to one receiver | One chain per encounter, released in order, each item verified |
 
 ![S2's case in the web app, waiting for approval: the stages done, and approve or reject plan v1](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/case-s2-approval.png)
 
@@ -94,7 +96,7 @@ Shutter is ready after 3 min 21 s:
 
 The gate is the same in every mode; **Single investigator** runs live only ([the modes](https://github.com/MxSalata/shutter/blob/main/docs/readme/first-steps.md#the-modes)).
 
-1. In the trial, choose **Explore on my own** (on your machine, **Not now** if a prompt offers the trial). In **Scenarios**, run **S2** in **Board** mode. About 20 seconds later (a minute live) **Open C-000002** shows its case waiting for approval: **Decide on the resend**, **Review the plan and decide**, **Approve plan**, **Approve this plan**. One conditional write, then "Verified".
+1. In the trial, choose **Explore on my own** (on your machine, **Not now** if a prompt offers the trial). In **Scenarios**, run **S2** in **Board** mode. About 10 to 20 seconds later (a minute live) **Open C-000002** shows its case waiting for approval: **Decide on the resend**, **Review the plan and decide**, **Approve plan**, **Approve this plan**. One conditional write, then "Verified".
 2. Run **S8** in **Rules only** and approve (in the trial it is already approved and written): WARD-B overwrites WARD-C. In **Board** it escalates, writing nothing, and the plan records the dissent.
 
 ![S8 played twice: Rules only overwrites WARD-C; the board escalates and writes nothing](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/s8-rules-and-board.png)
