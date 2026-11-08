@@ -1483,6 +1483,7 @@ ClassMethod InstallIntoStatus(production As %String, root As %String = "") As %S
         // SQL hands an empty argument over as $CHAR(0): a control character, stripped with the blanks.
         Set production = $ZSTRIP($GET(production), "<>WC")
         If production = "" Set sc = $$$ERROR($$$GeneralError, "InstallInto needs the name of the production Shutter's items go into") Quit
+        Set refusal = ##class(Shutter.Util.SiteProduction).InstallRefusal(production) If refusal '= "" Set sc = $$$ERROR($$$GeneralError, refusal) Quit
         If '##class(Ens.Config.Production).%ExistsId(production) Set sc = $$$ERROR($$$GeneralError, "No production " _ production _ " in " _ $NAMESPACE) Quit
         Set ns = $NAMESPACE
         If root '= "" Set root = ##class(%File).NormalizeDirectory(root)
