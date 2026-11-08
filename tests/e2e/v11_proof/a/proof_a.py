@@ -185,8 +185,12 @@ def up(r, port, spec=None):
 
 
 def fresh(r, s, item, spec=None):
-    up(r, PORT[item], spec)
-    r.wait_until(lambda: qn(r, item) == 0, 180)
+    """The listener answering AA until the engine has nothing queued or in hand for the item, then as asked: the queue count
+    leaves out the message being tried, so a header still Delivered is waited out too."""
+    up(r, PORT[item])
+    r.wait_until(lambda: qn(r, item) == 0 and not oldest_delivered(r, item), 180)
+    if spec:
+        r.listener_spec(PORT[item], spec)
     time.sleep(6)
     s.close_all(item)
     time.sleep(4)
@@ -245,7 +249,7 @@ def row9_and_2(r, s):
     dialled = len(connects) > 0
     ok2 = word in ("down", "cant_tell") and not frames
     verdict(2, ok2, f"Status read {sorted(set(x[1] for x in samples))}, AdapterState {sorted(set(x[2] for x in samples))}, Status at 2 minutes {status_end!r}; the watch's reading {sorted(set(readings))}, last {word!r}; the idle operation {'dialled' if dialled else 'did not dial'} ({len(connects)} connection events); nothing resent ({len(frames)} frames of the three)",
-            f"the card's word at a no-retry receiver whose listener is back is {word!r}" + (" ('can't tell': the engine does not show the return)" if word == "cant_tell" else "") + f"; Status {'stays' if status_end == 'Error' else 'does not stay'} Error on a quiet feed, so no rule may wait for Status OK there")
+            f"the card's word at a no-retry receiver whose listener is back is {word!r}" + (" ('can't tell': the engine does not show the return)" if word == "cant_tell" else "") + (f"; Status stays Error on a quiet feed, so no rule may wait for Status OK there" if status_end == "Error" else f"; Status came back to {status_end!r} on a quiet feed because the idle operation {'dialled' if dialled else 'reconnected'}, so Status OK there says the connection opened, not that any message went"))
     s.close_all(NORETRY)
 
 
@@ -373,7 +377,7 @@ def row13(r, s):
     for i, (c, a) in enumerate(zip(origins, arrivals)):
         origin = heads[c]["id"]
         path = f"/tmp/v11_site/{a}.hl7"
-        code = f'''Set t0=$ZH Set rs=##class(%SQL.Statement).%ExecDirect(,"SELECT COUNT(*) AS n FROM Ens.MessageHeader WHERE TargetConfigName='NoRetry Out' AND ID > ?",{origin}) Do rs.%Next() Set seen=rs.%Get("n") Set t1=$ZH
+        code = f'''Set t0=$ZH Set rs=##class(%SQL.Statement).%ExecDirect(,"SELECT MAX(ID) AS n FROM Ens.MessageHeader WHERE TargetConfigName='NoRetry Out' AND ID > ?",{origin}) Do rs.%Next() Set seen=+rs.%Get("n") Set t1=$ZH
 Set rc=$ZF(-100,"/SHELL /STDOUT=""/tmp/v11_site/arrive.out""","python3","/tmp/v11_site/mllp_send.py",{IN[NORETRY]},"{path}","20") Set t2=$ZH
 Set sc=##class(Ens.MessageHeader).ResendDuplicatedMessage({origin},.new,"NoRetry Out") Set t3=$ZH
 Write !,"<<<",seen,"|",$FNUMBER(t1-t0*1000,"",3),"|",$FNUMBER(t2-t1*1000,"",3),"|",$FNUMBER(t3-t2*1000,"",3),"|",$GET(new),"|",rc,"|",$SELECT(sc:"ok",1:$SYSTEM.Status.GetErrorText(sc)),">>>",!'''
@@ -381,7 +385,7 @@ Write !,"<<<",seen,"|",$FNUMBER(t1-t0*1000,"",3),"|",$FNUMBER(t2-t1*1000,"",3),"
         seen, check_ms, arrive_ms, enqueue_ms, new, rc, sc = found[-1].split("|", 6)
         if sc != "ok" or rc != "0":
             raise RigBroken(f"try {i + 1}: the arrival exited {rc}, the resend answered {sc}")
-        rows.append({"origin": c, "arrival": a, "seenByCheck": int(seen), "checkMs": float(check_ms), "arrivalMs": float(arrive_ms), "enqueueMs": float(enqueue_ms), "resent": new})
+        rows.append({"origin": c, "arrival": a, "checkSawUpTo": int(seen), "checkMs": float(check_ms), "arrivalMs": float(arrive_ms), "enqueueMs": float(enqueue_ms), "resent": new})
         r.wait_until(lambda: qn(r, NORETRY) == 0, 30, 0.5)
     # The window itself, with nothing put in it: from the end of the check to the end of the resend's enqueue.
     for i in range(TRIES):
@@ -393,12 +397,14 @@ Write !,"<<<",seen,"|",$FNUMBER(t1-t0*1000,"",3),"|",$FNUMBER(t2-t1*1000,"",3),"
     first = [first_order(heard, x["arrival"], x["origin"]) for x in rows]
     arrival_first = sum(1 for x, f in zip(rows, first) if f == x["arrival"])
     origin_first = sum(1 for x, f in zip(rows, first) if f == x["origin"])
-    unseen = sum(1 for x in rows if x["seenByCheck"] == 0)
     hids = {}
     for h in r.headers(PLAIN, NORETRY):
         hids.setdefault(h["control"], []).append(int(h["id"]))
+    # The check stands in for the patient check: the newest header to the item it could see. The arrival is unseen by it when the
+    # arrival's own header is newer than that.
+    unseen = sum(1 for x in rows if hids.get(x["arrival"]) and min(hids[x["arrival"]]) > x["checkSawUpTo"])
     enq_first = sum(1 for x in rows if hids.get(x["arrival"]) and int(x["resent"] or 0) and min(hids[x["arrival"]]) < int(x["resent"]))
-    note(f"tries: {[(x['seenByCheck'], x['checkMs'], x['arrivalMs'], x['enqueueMs']) for x in rows]}")
+    note(f"tries (newest header the check saw, check ms, arrival ms, enqueue ms): {[(x['checkSawUpTo'], x['checkMs'], x['arrivalMs'], x['enqueueMs']) for x in rows]}")
     note(f"the window with nothing in it (ms from the end of the check to the resend enqueued): median {statistics.median(window):.2f}, max {max(window):.2f}")
     note(f"the arrival's header made before the resend's in {enq_first} of {TRIES}; the check saw no arrival in {unseen} of {TRIES}")
     ok = arrival_first + origin_first == TRIES
@@ -408,6 +414,15 @@ Write !,"<<<",seen,"|",$FNUMBER(t1-t0*1000,"",3),"|",$FNUMBER(t2-t1*1000,"",3),"
 
 
 # ---- Row 15: the inactivity alert, and a flap ----
+
+def trace_events(r, item, on):
+    """LogTraceEvents is an attribute of the production's item, not one of its settings: set it, save, and update."""
+    code = f'''Set p=##class(Ens.Config.Production).%OpenId("{PROD}") Set it="" For i=1:1:p.Items.Count() {{ If p.Items.GetAt(i).Name="{item}" {{ Set it=p.Items.GetAt(i) }} }}
+If '$ISOBJECT(it) {{ Write !,"<<<no item>>>",! }} Else {{ Set it.LogTraceEvents={1 if on else 0} Set sc=p.%Save() Set:sc sc=p.SaveToClass() Set:sc sc=##class(Ens.Director).UpdateProduction(60,1) Write !,"<<<",$SELECT(sc:"ok",1:$SYSTEM.Status.GetErrorText(sc)),"|",it.LogTraceEvents,">>>",! }}'''
+    found = r.rows(PLAIN, code)
+    if found != [f"ok|{1 if on else 0}"]:
+        raise RigBroken(f"LogTraceEvents on {item} did not take: {found}")
+
 
 def alerts_since(r, item, after):
     code = f'''Set rs=##class(%SQL.Statement).%ExecDirect(,"SELECT ID, SessionId, AlertText FROM Ens.AlertRequest WHERE ID > ? AND SourceConfigName = ? ORDER BY ID",{int(after)},"{item}") If rs.%SQLCODE<0 {{ Write !,"<<<read failed|",rs.%SQLCODE," ",rs.%Message,">>>",! }} While rs.%Next() {{ Write !,"<<<",rs.%Get("ID"),"|",rs.%Get("SessionId"),"|",$TRANSLATE($EXTRACT(rs.%Get("AlertText"),1,200),"|"_$CHAR(10,13),"   "),">>>",! }}'''
@@ -423,7 +438,7 @@ def row15_inactivity(r, s):
     fresh(r, s, NORETRY)
     with open(ALERT_SOURCE, encoding="utf-8") as f:
         source = f.read()
-    r.set_item(PLAIN, PROD, "Ens.Alert", LogTraceEvents=1)
+    trace_events(r, "Ens.Alert", True)
     try:
         down(r, PORT[NORETRY])
         control = f"I15{tag}"
@@ -437,7 +452,7 @@ def row15_inactivity(r, s):
         oid = o[0]["id"]
         events_before = [e["kind"] for e in s.events(oid)]
         state_before = s.outage(oid)["state"]
-        case_mark = s._max('Shutter_Store."Case"', "SHUTTER")
+        case_mark = s._max('Shutter_Store.""Case""', "SHUTTER")
         log_mark = s._max("Ens_Util.Log", PLAIN)
         alert_mark = s._max("Ens.AlertRequest", PLAIN)
         r.set_item(PLAIN, PROD, NORETRY, InactivityTimeout=20)
@@ -461,7 +476,7 @@ def row15_inactivity(r, s):
                 ("the inactivity alert is session-less, stops before any case is made and leaves the outage record alone: the card's line that the site's inactivity alert makes no case holds as measured" if not with_session else "the inactivity alert carries a session: it is the queue wait alert's shape, once per session") if ok else ("no inactivity alert came within 150 s: the row is unmeasured on this build" if not alerts else "the inactivity alert opened a case or moved the outage: the design's words on the site's alerts must change"))
     finally:
         r.set_item(PLAIN, PROD, NORETRY, InactivityTimeout=0)
-        r.set_item(PLAIN, PROD, "Ens.Alert", LogTraceEvents=0)
+        trace_events(r, "Ens.Alert", False)
         s.close_all(NORETRY)
 
 
@@ -471,7 +486,7 @@ def row15_flap(r, s):
     fresh(r, s, NORETRY)
     r.set_item(PLAIN, PROD, RETRY, QueueWaitAlert=30, AlertOnError=0)
     try:
-        case_mark = s._max('Shutter_Store."Case"', "SHUTTER")
+        case_mark = s._max('Shutter_Store.""Case""', "SHUTTER")
         out_mark = s._max("Shutter_Store.Outage", "SHUTTER")
         sent = {RETRY: [], NORETRY: []}
         t0 = time.time()
@@ -497,7 +512,7 @@ def row15_flap(r, s):
         r.wait_until(lambda: qn(r, RETRY) == 0, 300, 5)
         r.wait_until(lambda: all(o["state"] in ("closed", "needs_person") for o in s.outages(RETRY, everything=True, after=out_mark) + s.outages(NORETRY, everything=True, after=out_mark)), 300, 5)
         time.sleep(10)
-        lines = []
+        lines, why = [], []
         ok = True
         for item in (RETRY, NORETRY):
             rows = s.outages(item, everything=True, after=out_mark)
@@ -513,9 +528,17 @@ def row15_flap(r, s):
             moved_by_alert = [k for ks in kinds for k in ks if "alert" in k.lower()]
             good = len(rows) == 1 and not unlinked and not moved_by_alert
             ok = ok and good
-            lines.append(f"{item}: {len(rows)} outage row(s), {len(cases)} case(s) opened, {len(cases) - len(unlinked)} linked, events {kinds[0] if rows else []}")
+            flips = sum(ks.count("kind") for ks in kinds)
+            per_row = [len([c for c in cases if c["caseId"] in {x["caseId"] for x in s.outage(o["id"]).get("linkedCases", [])}]) for o in rows]
+            lines.append(f"{item}: {len(rows)} outage row(s) (events {[[k for k in ks if k != 'kind'] for ks in kinds]}, {flips} kind changes), {len(cases)} case(s) opened, {len(cases) - len(unlinked)} linked ({per_row} per row), {len(unlinked)} unlinked, events naming an alert {len(moved_by_alert)}")
+            if len(rows) > 1:
+                why.append(f"at {item} each up window drained the queue and the row closed, so each down opened a new row ({len(rows)} in 5 minutes)")
+            if unlinked:
+                why.append(f"at {item} {len(unlinked)} cases opened after the row's close judgement are linked to no row: the link is made once, at closing")
+            if moved_by_alert:
+                why.append(f"at {item} an event names an alert")
         verdict("15b", ok, "; ".join(lines),
-                "a flapping listener stays one outage per receiver and every case the site's alerts open is linked to it; the number of cases is as measured here, which the card says instead of 'one per outage'" if ok else "a flap opened a second outage, or left a case unlinked, or an alert moved the record: the design's words on the site's alerts must change as the reading shows")
+                "a flapping listener stays one outage per receiver and every case the site's alerts open is linked to it; the number of cases is as measured here, which the card says instead of 'one per outage'" if ok else "; ".join(why) + ". No event named an alert, so the alerts did not move the record; the card's 'one outage' and 'every case linked' do not hold over a flap as built")
     finally:
         r.set_item(PLAIN, PROD, RETRY, QueueWaitAlert=0, AlertOnError=1)
         for item in (RETRY, NORETRY):
