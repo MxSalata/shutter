@@ -46,9 +46,11 @@ ClassMethod FirstLines(lines As %String, room As %Integer, Output chains As %Int
     While at <= $LENGTH(lines) {
         Set next = $FIND(lines, nl, at + 1)
         Set stop = $SELECT(next: next - 2, 1: $LENGTH(lines))
+        Set header = ($EXTRACT(lines, at + 1, at + 6) = "Chain ")
+        // A chain's header closes the chain before it, which is whole whether or not the header fits.
+        If header, seen Set wholeEnd = end, wholeChains = seen, wholeItems = kept
         If stop > room Quit
-        If $EXTRACT(lines, at + 1, at + 6) = "Chain " {
-            If seen Set wholeEnd = end, wholeChains = seen, wholeItems = kept
+        If header {
             Set seen = seen + 1
         } Else {
             Set kept = kept + 1
