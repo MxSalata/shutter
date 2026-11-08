@@ -43,6 +43,19 @@ Property ReadyTimeoutSeconds As %Integer [ InitialExpression = 180 ];
 /// How long after an error raising a task the workflow tries again.
 Parameter RAISEAGAINSECONDS = 300;
 
+/// The task request last sent for the shared task and for each chain's own, by its id, under TaskKey, until the call
+/// answers with an error: what a taskcheck alarm is for (IncidentTaskCheck).
+Property TaskSent As array Of %String(MAXLEN = 40);
+
+/// TaskSent's key for the shared task (seq "", which an array cannot hold) or a chain's own.
+ClassMethod TaskKey(seq As %String) As %String [ CodeMode = expression ]
+{
+$SELECT(seq = "": "shared", 1: seq)
+}
+
+/// How long after a task's call the workflow checks that the Workflow item made the task.
+Parameter TASKCHECKSECONDS = 30;
+
 Parameter SETTINGS = "CaseTarget:Targets,ApprovalTarget:Targets,PollSeconds:Timing,ReadyTimeoutSeconds:Timing";
 
 Method OnRequest(request As %Library.Persistent, Output response As %Library.Persistent) As %Status
@@ -79,6 +92,7 @@ Method OnResponse(request As %Library.Persistent, ByRef response As %Library.Per
         If completionkey = "approval" { Set sc = ..OnApproval(incident, "", callresponse) Quit }
         If $EXTRACT(completionkey, 1, 9) = "approval:" { Set sc = ..OnApproval(incident, $EXTRACT(completionkey, 10, *), callresponse) Quit }
         If $PIECE(completionkey, ":", 1) = "raise" { Set sc = ..OnRaiseAgain(incident, $PIECE(completionkey, ":", 2)) Quit }
+        If $PIECE(completionkey, ":", 1) = "taskcheck" { Set sc = ..OnTaskCheck(incident, $PIECE(completionkey, ":", 2), $PIECE(completionkey, ":", 3)) Quit }
         $$$LOGWARNING("Unexpected completion key " _ completionkey)
     } Catch ex {
         Set sc = ex.AsStatus()
@@ -103,6 +117,7 @@ Method OnError(request As %Library.Persistent, ByRef response As %Library.Persis
         Set incident = ##class(Shutter.Store.Incident).ByIncidentId(..IncidentId)
         If $ISOBJECT(incident) && (incident.State '= "closed") && ($PIECE(pCompletionKey, ":", 1) = "approval") {
             Set ..PendingTasks = ..PendingTasks - 1
+            Do ..TaskSent.RemoveAt(..TaskKey($PIECE(pCompletionKey, ":", 2)))
             Do ..TaskNotRaised(incident, $PIECE(pCompletionKey, ":", 2), pErrorStatus)
             Quit
         }
@@ -260,6 +275,20 @@ Method OnRaiseAgain(incident As Shutter.Store.Incident, seq As %String) As %Stat
     Quit ..Advance(incident)
 }
 
+/// The check after a task's call: when the Workflow item took the request and made no task, the same stop as an error
+/// raising it (TaskNotRaised); while the item has not finished with it, another check later. A request since answered
+/// with an error, or sent again, is not this check's.
+Method OnTaskCheck(incident As Shutter.Store.Incident, seq As %String, requestId As %String) As %Status
+{
+    Quit:((requestId = "") || (..TaskSent.GetAt(..TaskKey(seq)) '= requestId)) $$$OK
+    Set lost = ##class(Shutter.Process.IncidentTaskCheck).Lost(requestId, ##class(Shutter.Process.IncidentTaskCheck).SubjectPrefix(incident.IncidentId, seq))
+    Quit:lost="" $$$OK
+    If lost = "wait" Quit ..Alarm(..#RAISEAGAINSECONDS, "taskcheck:" _ seq _ ":" _ requestId)
+    Set ..PendingTasks = ..PendingTasks - 1
+    Do ..TaskSent.RemoveAt(..TaskKey(seq))
+    Quit ..TaskNotRaised(incident, seq, $$$ERROR($$$GeneralError, lost))
+}
+
 /// One Workflow task for the incident's policy chains under a shared approval (seq ""), or for one chain (7.3).
 Method RaiseTask(incident As Shutter.Store.Incident, chains As %ListOfObjects, seq As %String) As %Status
 {
@@ -277,9 +306,15 @@ Method RaiseTask(incident As Shutter.Store.Incident, chains As %ListOfObjects, s
         }
     }
     Set task = ..ApprovalTask(incident, seq, count, incident.CaseCount(), lines)
+    // The Workflow item defers its reply before it makes the task, so a role it cannot find would never answer.
+    Set sc = ##class(Shutter.Process.IncidentTaskCheck).RoleMissing(..ApprovalTarget)
+    Quit:$$$ISERR(sc) sc
     Set sc = ..SendRequestAsync(..ApprovalTarget, task, 1, $SELECT(seq = "": "approval", 1: "approval:" _ seq))
     Quit:$$$ISERR(sc) sc
     Set ..PendingTasks = ..PendingTasks + 1
+    Do ..TaskSent.SetAt(task.%Id(), ..TaskKey(seq))
+    Set check = ..Alarm(..#TASKCHECKSECONDS, "taskcheck:" _ seq _ ":" _ task.%Id())
+    If $$$ISERR(check) $$$LOGWARNING("Incident " _ incident.IncidentId _ " will not check that its approval task was made: " _ $SYSTEM.Status.GetErrorText(check))
     // The task is out: a note that fails must not raise it again. A call that keeps answering with an error raises it
     // every 5 minutes, and only the first is news.
     If ..TaskSaid.GetAt("raised|" _ seq) = "" {

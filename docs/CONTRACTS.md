@@ -1033,6 +1033,10 @@ the framework). The Dockerfile runs it, and a site with Java runs it once by han
 - An error raising a task, or the Workflow item answering its call with an error, closes nothing: the chains stay
   `awaiting_approval`, no case fails, an `error` event and an alert name the incident, once for each cause, and the workflow
   tries again every 5 minutes, reading the approval target afresh. Until a task exists an approval answers 409 `wrong_state`.
+  The Workflow item defers its reply before it makes the task, so an error inside it never answers the call: the workflow
+  makes no call while the target's Workflow role is not defined, and 30 seconds after a call it checks that the item made
+  the task. A request the item finished with, 10 seconds or more before, and no task made from it is that error; a request
+  still queued is checked again 5 minutes later, so a slow item never gets a second task.
 
 ### 7.4 Release
 
