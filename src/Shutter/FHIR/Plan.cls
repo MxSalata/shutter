@@ -6,6 +6,10 @@
 /// reason code and a detail object. The ordering of the move against the event time (FHIR_LATER_MOVE_AT_RECEIVER)
 /// and meta.security (FHIR_RESTRICTED) are rows of the FHIR gate, not of this class.
 ///
+/// Diff bounds where two bodies differ and the shape of what changed there, never what it changed to: it has no view,
+/// marker or event time, so any mapped-looking target, any marker of the right shape and any end are in bounds. What
+/// is sent must be bound to Build's own output, not to a body that passed Diff.
+///
 /// The comparison (Same) is the defined resource comparison: two JSON values are the same when they have the same
 /// JSON type; objects have the same key set, in any order, and the same value under each key; arrays have the same
 /// length and the same value at each index; strings are equal character for character; numbers are equal when their
@@ -13,9 +17,6 @@
 /// JSON pointer (/location/0/period/end).
 Class Shutter.FHIR.Plan [ Abstract ]
 {
-
-/// The system and code of the tag a server puts on a subsetted representation (_elements, _summary).
-Parameter SUBSETTEDSYSTEM = "http://terminology.hl7.org/CodeSystem/v3-ObservationValue";
 
 /// A literal reference to a Location: the type, a slash and a FHIR id.
 Parameter LITERALLOCATION = "^Location/[A-Za-z0-9.\-]{1,64}$";
@@ -115,16 +116,14 @@ ClassMethod Apply(encounterBody As %String, view As %DynamicObject, eventTime As
         Quit "FHIR_SHAPE_UNSUPPORTED"
     }
 
-    // 3. A subsetted representation, before anything that reads meta.versionId.
+    // 3. A subsetted representation, before anything that reads meta.versionId. SUBSETTED is a reserved code with one
+    // meaning, so it is a stop under any system (R4's v3-ObservationValue, STU3's URI for it, or none).
     Set meta = $SELECT(enc.%GetTypeOf("meta") = "object": enc.meta, 1: "")
     If $ISOBJECT(meta) && (meta.%GetTypeOf("tag") = "array") {
         For j = 0:1:meta.tag.%Size() - 1 {
             Continue:meta.tag.%GetTypeOf(j)'="object"
             Set tag = meta.tag.%Get(j)
-            If (tag.%GetTypeOf("code") = "string") && (tag.code = "SUBSETTED") {
-                Quit:tag.%GetTypeOf("system")="unassigned"
-                Quit:(tag.%GetTypeOf("system")="string")&&(tag.system=..#SUBSETTEDSYSTEM)
-            }
+            Quit:(tag.%GetTypeOf("code")="string")&&(tag.code="SUBSETTED")
             Kill tag
         }
         Quit:$DATA(tag) ..Refuse("FHIR_REPRESENTATION_PARTIAL", "subsetted", "/meta/tag/" _ j, .detail)
@@ -155,7 +154,8 @@ ClassMethod Apply(encounterBody As %String, view As %DynamicObject, eventTime As
     Quit:$DATA(entry) ..Refuse("FHIR_BED_MOVE_UNSUPPORTED", "bed", "/location_map/" _ j _ "/bed", .detail)
     Quit:'mapped ..Refuse("FHIR_LOCATION_UNMAPPED", "target", "/target_location", .detail)
 
-    // 8. Exactly one open entry, and every open entry a literal reference in the map.
+    // 8. Exactly one open entry, and every open entry a literal reference in the map. A pending entry (a planned move,
+    // a held place) is a stop: moving the patient past it is for a person to decide.
     Set type = enc.%GetTypeOf("location")
     If (type '= "unassigned") && (type '= "array") {
         Quit ..Refuse("FHIR_SHAPE_UNSUPPORTED", "location", "/location", .detail)
@@ -166,6 +166,10 @@ ClassMethod Apply(encounterBody As %String, view As %DynamicObject, eventTime As
         Set state = ..EntryState(locations, i)
         If state = "" {
             Set problem = "location_entry", path = "/location/" _ i
+            Quit
+        }
+        If state = "pending" {
+            Set problem = "pending_entry", path = "/location/" _ i
             Quit
         }
         Continue:state'="open"
@@ -283,8 +287,9 @@ ClassMethod MarkerShape(marker) As %Boolean [ Private ]
     Quit $MATCH(marker.code, ..#MARKERCODE)
 }
 
-/// "open", "closed", or "" for an entry this builder cannot read. An entry is open when its status is active or absent
-/// and it has no period.end.
+/// "open", "closed", "pending", or "" for an entry this builder cannot read. An entry is open when its status is
+/// active or absent and it has no period.end; closed when it has an end and its status is active or absent, or its
+/// status is completed; pending for any other status (planned, reserved, or one R4 does not define), end or not.
 ClassMethod EntryState(locations As %DynamicArray, i As %Integer) As %String [ Private ]
 {
     Quit:locations.%GetTypeOf(i)'="object" ""
@@ -294,9 +299,11 @@ ClassMethod EntryState(locations As %DynamicArray, i As %Integer) As %String [ P
     Quit:(period'="unassigned")&&(period'="object") ""
     Set end = $SELECT(period = "object": entry.period.%GetTypeOf("end"), 1: "unassigned")
     Quit:(end'="unassigned")&&(end'="string") ""
-    Quit:end'="unassigned" "closed"
-    Quit:status="unassigned" "open"
-    Quit $SELECT(entry.status = "active": "open", 1: "closed")
+    If status = "string" {
+        Quit:entry.status="completed" "closed"
+        Quit:entry.status'="active" "pending"
+    }
+    Quit $SELECT(end '= "unassigned": "closed", 1: "open")
 }
 
 /// The entry's location.reference when it is a literal Location reference, else "".
