@@ -376,6 +376,23 @@ Method TestANewVisitAfterTheApprovalOnAShowProfile()
         Do $$$AssertEquals(response.ReasonCode, "further_movement", "for this reason")
         Do $$$AssertTrue(response.Error [ "ENC-UT-NEW", "and says what it found: " _ response.Error)
         Do $$$AssertEquals(response.HttpStatus, "", "nothing was sent")
+        // The pass path: a snapshot that shows the same row lets the connector go on past this line. Its send then fails
+        // here, with no receiver behind the test's connector, which the assertion leaves aside.
+        Do ..OnAfterOneTest()
+        Do ..ChangeProfile({"further_messages": {"in_patient_movement": "show"}})
+        Set case = ..NewCase({})
+        Set summary = ..Fill(..BaseSummary(), case.OperationKey)
+        Do summary.%Set("further_messages", ##class(Shutter.Util.FurtherMessages).Find(case))
+        Do $$$AssertEquals(##class(Shutter.Util.FurtherMessages).Count(summary.%Get("further_messages"), "shows"), 1, "show: the snapshot shows the new visit's row")
+        Set snap = ##class(Shutter.Store.Snapshot).Begin(case, 300)
+        Do $$$AssertStatusOK(snap.Seal(summary), "the snapshot that shows it is sealed")
+        Do $$$AssertStatusOK(case.SetSnapshot(snap), "and is the case's")
+        Do $$$AssertEquals(##class(Shutter.Util.FurtherNew).Describe(case, ##class(Shutter.Util.FurtherMessages).Find(case), ##class(Shutter.Util.FurtherNew).Prior(case)), "", "show: a row the snapshot showed is not new to the connector")
+        Set request = ##class(Shutter.Msg.WardOperation).%New()
+        Set request.Purpose = "recovery", request.CaseId = case.CaseId, request.OperationKey = case.OperationKey
+        Set response = ""
+        Try { Do ward.OnWardOperation(request, .response) } Catch { }
+        Do $$$AssertTrue($ISOBJECT(response) && (response.ReasonCode '= "further_movement"), "show: the connector does not refuse a row the snapshot showed (" _ $SELECT($ISOBJECT(response): response.ReasonCode _ " " _ response.Error, 1: "no answer") _ ")")
     } Catch ex {
         Do $$$AssertTrue(0, "no error: " _ ex.DisplayString())
     }
