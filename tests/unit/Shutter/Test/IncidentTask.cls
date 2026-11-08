@@ -144,6 +144,43 @@ Method TestOneLongChainSaysHowManyMore()
     Do $$$AssertTrue(task.%Message [ "/shutter/index.html#/incidents/I-000009", "the page has them all")
 }
 
+/// A text whose room ends exactly where the next chain's line begins lists the chain before it as whole, and says so;
+/// one character less and that chain is left out, not counted.
+Method TestACutOnAChainsLineCountsTheChainBefore()
+{
+    Set inc = ##class(Shutter.Store.Incident).%New()
+    Set inc.IncidentId = "I-000010", inc.Receiver = "Downstream Out", inc.OpenedAt = "2026-11-06T09:00:00Z", inc.PlanDigest = "sha256:abc"
+    Set inc.CatalogueVersion = "E1@1", inc.ProfileVersion = "3", inc.PolicyVersion = "2026-10-26.1"
+    Set nl = $CHAR(10)
+    Set chains = ""
+    For seq = 1:1:8 {
+        Set chain = nl _ "Chain " _ seq _ " (ordered, E4): encounter ENC-" _ seq _ ", patient MRN-" _ seq _ ", first at receiver version 1"
+        For p = 1:1:2 Set chain = chain _ nl _ "  " _ p _ ". transfer at 2026-11-06T09:00:00Z (C-00000" _ seq _ ", E4 resend_chain)"
+        Set chains(seq) = chain
+    }
+    // The room the long text leaves for the lines: the limit less the text round them and the note's reserve.
+    Set room = $PARAMETER("Shutter.Process.IncidentTaskText", "MESSAGELIMIT") - $LENGTH(##class(Shutter.Process.IncidentTaskText).Message(inc, 8, 16, "")) - 260
+    Set pad = room - $LENGTH(chains(1) _ chains(2))
+    Do $$$AssertTrue(pad > 0, "two chains fit with room to spare: " _ pad)
+    Set chains(2) = chains(2) _ ..Long("X", pad)
+    Set lines = ""
+    For seq = 1:1:8 Set lines = lines _ chains(seq)
+    Set end = ##class(Shutter.Process.IncidentTaskText).FirstLines(lines, room, .shown, .items)
+    Do $$$AssertEquals(end, room, "the cut falls on chain 3's line")
+    Do $$$AssertEquals(shown, 2, "both chains before it are whole")
+    Do $$$AssertEquals(items, 4, "with their items")
+    Set end = ##class(Shutter.Process.IncidentTaskText).FirstLines(lines, room - 1, .shown, .items)
+    Do $$$AssertEquals(end, $LENGTH(chains(1)), "a character less ends after the first chain")
+    Do $$$AssertEquals(shown, 1, "the second chain is not counted")
+    Do $$$AssertEquals(items, 2, "nor its items")
+    Set msg = ##class(Shutter.Process.IncidentTaskText).Message(inc, 8, 16, lines)
+    Do $$$AssertTrue($LENGTH(msg) <= 2000, "it fits: " _ $LENGTH(msg))
+    Do $$$AssertTrue(msg [ (chains(2) _ nl _ "Listed here: "), "the second chain is listed whole")
+    Do $$$AssertNotTrue(msg [ (nl _ "Chain 3 ("), "the third is not")
+    Do $$$AssertTrue(msg [ "Listed here: the first 2 of 8 chains, 4 of 16 operations.", "the note counts both chains")
+    Do $$$AssertTrue(msg [ "6 more chains and every operation are on the incident page", "and the six left")
+}
+
 /// The digest moves with a chain the task does not list, so an approval from the text binds that chain too.
 Method TestTheDigestBindsAChainNotListed()
 {
