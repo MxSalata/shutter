@@ -44,8 +44,15 @@ export function messageTypeOf(snapshot: Snapshot | null | undefined): MessageTyp
   };
 }
 
-/** The message's type in a few characters, as IRIS writes it: the DocType, else MSH-9 and its version. */
+/**
+ * The message's type in a few characters, as IRIS writes it: the DocType, else MSH-9 and its version. When the event
+ * parses as another structure (ADT^A40 as ADT_A39), the event leads and the structure follows: "ADT^A40 (structure
+ * 2.5.1:ADT_A39)", so the header names the same event as the scenario.
+ */
 export function messageTypeLabel(m: MessageType): string {
+  const structure = m.docType.slice(m.docType.indexOf(':') + 1);
+  if (m.docType && m.messageType && structure !== m.messageType.replace('^', '_'))
+    return `${m.messageType} (structure ${m.docType})`;
   if (m.docType) return m.docType;
   return m.version ? `${m.messageType}, HL7 ${m.version}` : m.messageType;
 }

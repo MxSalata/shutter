@@ -377,7 +377,9 @@ export function failedSummary(
   what = `${c.sourceSystem ? `${c.sourceSystem} ` : ''}${humanize(c.event).toLowerCase()}${c.ward ? ` to ${c.ward}` : ''}`,
 ): string {
   const how = failedHow(c);
-  const detail = [c.failureHttpStatus ? `HTTP ${str(c.failureHttpStatus)}` : '', str(c.failureReasonCode)]
+  // A withheld message was never sent, so its reason code ("merge") is no error: the words already say what happened
+  const reason = failureKindInWords(c) === 'withheld' ? '' : str(c.failureReasonCode);
+  const detail = [c.failureHttpStatus ? `HTTP ${str(c.failureHttpStatus)}` : '', reason]
     .filter(Boolean)
     .join(', ');
   return sentence([`${what} ${how}${detail ? `: ${detail}` : ''}`]);
