@@ -88,17 +88,20 @@ AI Hub features measured with no model call and on the publisher from an MCP cli
 - **The API page.** `docs/api/openapi.json` describes every route (an OpenAPI 3.1 file that CI checks against the
   dispatcher), and the Technical view gains an API page listing each route with its parameters, its role and an example.
 - **Fixes found in review before the release.**
-  - The approval's lock: a second decision on the same plan while the first is being written answers `wrong_state`.
+  - The decision lock is given back when cancelling an approval task fails, and a refused second decision names the
+    decision that stands.
   - An incident's approval task is checked for the role before it is raised and after, and an incident whose task can't
     be raised goes back to awaiting approval once its other chains are done, so it stays listed.
   - The task text counts a chain as shown only when all of it fits.
   - Another visit's movement is never released by policy, leaves an incident's shared approval, and a new one after the
     approval holds the write at dispatch.
-  - The uninstall removes items in an order that leaves nothing half removed, stops at the first failed step with
-    Shutter's configuration kept, and refuses when a namespace can't be read.
+  - The uninstall also takes the messages, process rows, queues, saved engine state and Workflow index entries that
+    Shutter's items left, and nothing of the site's; it stops at the first failed step with Shutter's configuration
+    kept, and refuses when a namespace can't be read.
   - The installer refuses a production in the demo's `Hospital`, `Downstream` or `Shutter` packages.
   - The scenario runner plays on a demo instance only, over SQL and the terminal as over REST.
-  - A key shown anywhere (agent start lines, refusals, settings, stored runs) is masked by one rule.
+  - A key shown anywhere (agent start lines, refusals, settings, stored runs) is masked by one rule, and a model id
+    written as a name and a version is shown as it is, not masked.
   - The production review withholds an error signature without blanking the same word elsewhere in its text, and the
     judges' address is set once.
 
