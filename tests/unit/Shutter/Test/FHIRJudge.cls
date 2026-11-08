@@ -198,7 +198,7 @@ ClassMethod Context(row As %DynamicObject) As %DynamicObject
     // The row's own versions, in the order given.
     Set iter = versions.%GetIterator(), stamp = 0
     While iter.%GetNext(.name, .def) {
-        Continue:(name = "base") || (name = "expected") || (name = "V")
+        Continue:((name = "base") || (name = "expected") || (name = "V"))
         Set from = $SELECT(def.%IsDefined("from"): def.from, 1: "V")
         Set body = ..Copy(bodies.%Get(from)), stamp = stamp + 1
         If def.%IsDefined("patch") Do $CLASSMETHOD(merge, "Merge", body, def.patch)
@@ -415,6 +415,11 @@ XData Rows [ MimeType = application/json ]
    "versions": {"base": {"patch": {"meta": {"tag": [{"system": "urn:shutter:recovery", "code": "00000000000000000000000000000001"}]}}}},
    "outcome": "verified", "reason": "committed_current"},
   {"group": "positive", "name": "a history with no older version than the base", "history": ["V", "base"], "outcome": "verified", "reason": "committed_current"},
+  {"group": "positive", "name": "a server-owned field the binding lists (as a measurement would) is set aside, and nothing else",
+   "versions": {"V": {"patch": {"meta": {"source": "urn:server:node-2"}}}}, "ctx": {"binding": {"server_owned_fields": ["meta.source"]}},
+   "outcome": "verified", "reason": "committed_current"},
+  {"group": "adversarial", "adversarial": true, "name": "the same server-set field when the binding lists none (IRIS: none measured)",
+   "versions": {"V": {"patch": {"meta": {"source": "urn:server:node-2"}}}}, "outcome": "unknown", "reason": "field_differs", "path": "/meta/source"},
 
   {"group": "adversarial", "adversarial": true, "name": "a lost update (If-Match ignored): another writer's version between the base and Shutter's",
    "vids": {"V": "8"}, "versions": {"X": {"from": "base", "vid": "7", "patch": {"type": [{"text": "clerk edit"}]}}},

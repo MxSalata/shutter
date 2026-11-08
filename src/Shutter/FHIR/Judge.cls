@@ -395,7 +395,7 @@ ClassMethod Continuation(w As %DynamicObject, b As %DynamicObject, Output path A
     If ent(s, "open") Quit ""
     // Shutter's entry is completed after its own start; the one open entry is a later move to a mapped location.
     For j = 1:1:n {
-        Continue:'ent(j, "open")
+        Continue:('ent(j, "open"))
         Set path = ent(j, "path")
         If '..Mapped(ent(j, "ref"), b) Return "unfamiliar_shape"
         If ent(j, "start") < sStart Return "overlapping_periods"
