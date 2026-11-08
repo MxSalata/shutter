@@ -52,7 +52,7 @@ const SAVE_NOTE = 'A save lasts until you reload or leave.';
 describe('SiteProfilePage in the trial', () => {
   it('says a save lasts until you reload or leave, once, wherever the button is', async () => {
     renderPage();
-    const notice = (await screen.findByText('Shutter is running on the shipped answers')).closest(
+    const notice = (await screen.findByText("Shutter is running on the demo's answers")).closest(
       '[data-tone]',
     )!;
     expect(within(notice as HTMLElement).getByText(SAVE_NOTE)).toBeInTheDocument();

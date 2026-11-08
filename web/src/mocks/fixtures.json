@@ -82466,7 +82466,7 @@
    ]
   },
   "version": 7,
-  "source": "/home/irisowner/dev/knowledge/site/profile.json",
+  "source": "/home/irisowner/dev/knowledge/site/profile.json (demo)",
   "updatedAt": "2026-10-26T03:31:49Z",
   "updatedBy": "",
   "catalogueEntries": 18
@@ -82474,7 +82474,7 @@
  "siteProfileHistory": [
   {
    "version": 7,
-   "source": "/home/irisowner/dev/knowledge/site/profile.json",
+   "source": "/home/irisowner/dev/knowledge/site/profile.json (demo)",
    "updatedAt": "2026-10-26T03:31:49Z",
    "updatedBy": "",
    "profile": {

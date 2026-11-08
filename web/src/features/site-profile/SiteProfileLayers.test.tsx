@@ -47,24 +47,24 @@ function renderPage(detail: 'plain' | 'technical' = 'plain', query = '') {
 const matrix = async () => within(await screen.findByRole('table', { name: 'Who releases each write' }));
 
 describe('the header', () => {
-  it('leads with one plain sentence and names the version and the shipped answers', async () => {
+  it("leads with one plain sentence and names the version and the demo's answers", async () => {
     renderPage();
-    // The shipped answers' badge says the page has its data; the heading alone is there while it loads
-    expect(await screen.findByText('Shipped answers')).toBeInTheDocument();
+    // The demo's answers' badge says the page has its data; the heading alone is there while it loads
+    expect(await screen.findByText("Demo's answers")).toBeInTheDocument();
     expect(screen.getByRole('heading', { level: 1, name: 'Site profile' })).toBeInTheDocument();
     expect(
       screen.getByText(/This hospital's answers: they decide what Shutter may do at each/),
     ).toBeInTheDocument();
     // The version badge (the list of versions below says "Version 7" too, once it has loaded)
     expect(screen.getAllByText('Version 7').some((e) => e.closest('[data-tone="neutral"]'))).toBe(true);
-    expect(screen.getByText('Shipped answers')).toBeInTheDocument();
+    expect(screen.getByText("Demo's answers")).toBeInTheDocument();
     // The long paragraph is a list in the header's second layer, closed
     const detail = screen.getByRole('button', { name: 'Technical detail' });
     expect(detail).toHaveAttribute('aria-expanded', 'false');
     expect(screen.getByText("each receiver's category and tier")).toBeInTheDocument();
   });
 
-  it('moves to the next version once it is saved, and drops the shipped answers', async () => {
+  it("moves to the next version once it is saved, and drops the demo's answers", async () => {
     renderPage();
     await userEvent.click(await screen.findByRole('button', { name: 'Confirm these answers…' }));
     const dialog = await screen.findByRole('dialog');
@@ -73,8 +73,8 @@ describe('the header', () => {
     await waitFor(() =>
       expect(screen.getAllByText('Version 8').some((e) => e.closest('[data-tone="neutral"]'))).toBe(true),
     );
-    expect(screen.queryByText('Shipped answers')).not.toBeInTheDocument();
-    expect(screen.queryByText('Shutter is running on the shipped answers')).not.toBeInTheDocument();
+    expect(screen.queryByText("Demo's answers")).not.toBeInTheDocument();
+    expect(screen.queryByText("Shutter is running on the demo's answers")).not.toBeInTheDocument();
   });
 });
 
@@ -365,7 +365,7 @@ describe('the second layer at the foot', () => {
     renderPage();
     const toggle = await screen.findByRole('button', { name: 'Version, source and other settings' });
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
-    expect(screen.getByText('Seeded from knowledge/site/profile.json')).toBeInTheDocument();
+    expect(screen.getByText('Seeded from knowledge/site/profile.json (demo)')).toBeInTheDocument();
     expect(screen.getByText('Unconditional resends')).toBeInTheDocument();
   });
 });

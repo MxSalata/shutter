@@ -20,6 +20,7 @@ import {
   diffProfiles,
   fieldId,
   incidentRule,
+  isDemoPolicy,
   overtakenLine,
   problemField,
   toPutBody,
@@ -568,6 +569,16 @@ describe('describeSource', () => {
     );
     expect(describeSource('api')).toBe('Saved in Shutter');
     expect(describeSource('defaults')).toBe('The built-in defaults, never stored');
+  });
+});
+
+describe('isDemoPolicy', () => {
+  it("tells the demo's own policy, marked in the source, from the shipped answers", () => {
+    expect(isDemoPolicy('/home/irisowner/dev/knowledge/site/profile.json (demo)')).toBe(true);
+    expect(isDemoPolicy('/home/irisowner/dev/knowledge/site/profile.json (demo) (live hospital)')).toBe(true);
+    expect(isDemoPolicy('/home/irisowner/dev/knowledge/site/profile.json')).toBe(false);
+    expect(isDemoPolicy('/home/irisowner/dev/knowledge/site/profile.json (live hospital)')).toBe(false);
+    expect(isDemoPolicy(undefined)).toBe(false);
   });
 });
 

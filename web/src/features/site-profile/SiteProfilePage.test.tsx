@@ -60,8 +60,8 @@ const inReceiver1 = async () =>
 describe('SiteProfilePage', () => {
   it('shows the answers in force, where they came from, and asks for the induction', async () => {
     renderPage();
-    expect(await screen.findByText('Seeded from knowledge/site/profile.json')).toBeInTheDocument();
-    expect(screen.getByText('Shutter is running on the shipped answers')).toBeInTheDocument();
+    expect(await screen.findByText('Seeded from knowledge/site/profile.json (demo)')).toBeInTheDocument();
+    expect(screen.getByText("Shutter is running on the demo's answers")).toBeInTheDocument();
     expect((await inReceiver1()).getByRole('radio', { name: /2, operations/ })).toBeChecked();
     expect((await inReceiver1()).getByRole('radio', { name: 'In arrival order' })).toBeChecked();
     expect(screen.getByRole('switch', { name: /Downstream Out accepts cancels/ })).not.toBeChecked();
@@ -204,7 +204,7 @@ describe('SiteProfilePage', () => {
     expected.receivers[0].tier = 3;
     expect(puts[0].body).toEqual({ ...expected, expectedVersion: recorded.version });
     expect(await screen.findByText('Saved in Shutter')).toBeInTheDocument();
-    expect(screen.queryByText('Shutter is running on the shipped answers')).not.toBeInTheDocument();
+    expect(screen.queryByText("Shutter is running on the demo's answers")).not.toBeInTheDocument();
   });
 
   // It fills a whole team form: about 3 s alone, 10 s on a busy machine, and 30 s when the suites run side by side.
@@ -617,10 +617,10 @@ describe("SiteProfilePage, as the public demo's role reads it", () => {
     expect(saves()).not.toBeInTheDocument();
     expect(screen.queryByText(/Changing the answers needs the approver role/)).not.toBeInTheDocument();
     expect(screen.queryByText(/a save lasts until the page is reloaded/)).not.toBeInTheDocument();
-    // The shipped answers are listed, as for everyone
-    expect(screen.getByText('Shutter is running on the shipped answers')).toBeInTheDocument();
+    // The demo's answers are listed, as for everyone
+    expect(screen.getByText("Shutter is running on the demo's answers")).toBeInTheDocument();
     // Beside that notice it says who saves, and never tells this role to do it
-    const notice = screen.getByText('Shutter is running on the shipped answers').closest('[role]')!;
+    const notice = screen.getByText("Shutter is running on the demo's answers").closest('[role]')!;
     expect(within(notice as HTMLElement).getByTestId('demo-read-only')).toBeInTheDocument();
     expect(screen.queryByText(/confirm or change them and save/)).not.toBeInTheDocument();
   });
