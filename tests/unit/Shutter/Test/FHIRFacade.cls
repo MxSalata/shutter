@@ -170,7 +170,7 @@ Method TestUnchangedPutAndClientMeta()
     Do $$$AssertEquals(again.meta.lastUpdated, "2026-11-08T02:32:10Z", "with its own time")
     Do again.meta.%Set("versionId", "1"), again.meta.%Set("lastUpdated", ..#CLOCK)
     Do $$$AssertEquals(again.%ToJSON(), stored.%ToJSON(), "and nothing else differs")
-    Set raw = "{""resourceType"" : ""Encounter"", ""id"" : ""enc-raw"", ""status"" : ""in-progress"", ""length"" : {""value"" : 1.50, ""unit"" : ""h""}, ""location"":[{""location"":{""reference"":""Location/ward-a""},""status"":""active"",""period"":{""start"" : ""2026-11-07T10:00:00.000+00:00""}}], ""extension"":[{""url"":""http://example.org/ext/d"",""valueDecimal"":1.0E2}]}"
+    Set raw = "{""resourceType"" : ""Encounter"", ""id"" : ""enc-raw"", ""status"" : ""in-progress"", ""class"" : {""code"" : ""IMP""}, ""length"" : {""value"" : 1.50, ""unit"" : ""h""}, ""location"":[{""location"":{""reference"":""Location/ward-a""},""status"":""active"",""period"":{""start"" : ""2026-11-07T10:00:00.000+00:00""}}], ""extension"":[{""url"":""http://example.org/ext/d"",""valueDecimal"":1.0E2}]}"
     Do $$$AssertEquals(..Call("PUT", "Encounter/enc-raw", , raw).status, 201, "raw text with spaces")
     Set text = ..Get("Encounter/enc-raw").body
     Do $$$AssertTrue(text [ """length"":{""value"":1.50,""unit"":""h""}", "1.50 kept: " _ text)
@@ -178,7 +178,7 @@ Method TestUnchangedPutAndClientMeta()
     Do $$$AssertTrue(text [ """start"":""2026-11-07T10:00:00.000+00:00""", "precision and offset kept: " _ text)
     Do $$$AssertTrue(text [ "}],""meta"":{""lastUpdated"":""" _ ..#CLOCK _ """,""versionId"":""1""}}", "meta appended at the end: " _ text)
     Do $$$AssertNotTrue(text [ " ", "whitespace removed")
-    Set u = "{""resourceType"":""Encounter"",""id"":""enc-u"",""status"":""in-progress"",""reasonCode"":[{""text"":""reason " _ $CHAR(233, 32, 8594) _ " unicode""}]}"
+    Set u = "{""resourceType"":""Encounter"",""id"":""enc-u"",""status"":""in-progress"",""class"":{""code"":""IMP""},""reasonCode"":[{""text"":""reason " _ $CHAR(233, 32, 8594) _ " unicode""}]}"
     Do ..Call("PUT", "Encounter/enc-u", , u)
     Do $$$AssertTrue(..Get("Encounter/enc-u").body [ ("reason " _ $CHAR(233, 32, 8594) _ " unicode"), "characters outside ASCII kept")
 }
@@ -435,6 +435,131 @@ Method TestOneOfTwoWritersWins()
     Set b = ..Put("Encounter/enc-1", ..Enc("enc-1", "V1001"), "W/""1""")
     Do $$$AssertEquals(a.status _ "," _ b.status, "200,412", "the second is refused")
     Do $$$AssertEquals(..Versions("Encounter", "enc-1"), 2, "one version written")
+}
+
+/// Bodies IRIS refuses with a 400 that lists every problem, each row's issues as IRIS gave them (2027.1.0AI Build 109U,
+/// probed on 8 Nov 2026), and nothing written. The conformance file holds the whole measured set; these rows cover each
+/// kind of check: codes, JSON types, nulls, required elements, arrays and objects, unknown elements at every depth, the
+/// dateTime, date and instant forms.
+Method TestStructureAsIris()
+{
+    Quit:'..Ready()
+    Do ..Seed()
+    Set rows = []
+    Set e = ..Enc("st-1", "V2001"), e.status = "bogus"
+    Do rows.%Push({"id": "st-1", "body": (e), "issues": "ValueNotInEnumeration", "expression": "Encounter.status", "text": "The value 'bogus' of Property 'status' of Type 'Encounter' must be one of (arrived,cancelled,entered-in-error,finished,in-progress,onleave,planned,triaged,unknown)"})
+    Set e = ..Enc("st-2", "V2002")
+    Do e.%Set("status", 5, "number")
+    Do rows.%Push({"id": "st-2", "body": (e), "issues": "WrongJsonType,ValueNotInEnumeration", "expression": "Encounter.status", "text": "Property 'status' of Type 'Encounter' is type number but must be string"})
+    Set e = ..Enc("st-3", "V2003")
+    Do e.%Set("status", "", "null")
+    Do rows.%Push({"id": "st-3", "body": (e), "issues": "EmptyValue,MissingRequiredProperty", "expression": "Encounter.status", "text": "Property 'status' of Type 'Encounter' cannot be null or an empty string."})
+    Set e = ..Enc("st-4", "V2004")
+    Do e.%Remove("status"), e.%Remove("class")
+    Do rows.%Push({"id": "st-4", "body": (e), "issues": "MissingRequiredProperty,MissingRequiredProperty", "expression": "Encounter", "text": "The type 'Encounter' requires a property named 'class'"})
+    Set e = ..Enc("st-5", "V2005"), e.status = ["in-progress"]
+    Do rows.%Push({"id": "st-5", "body": (e), "issues": "UnexpectedArray", "expression": "Encounter.status", "text": "Property 'status' of Type 'Encounter' cannot be an Array"})
+    Set e = ..Enc("st-6", "V2006")
+    Do e.%Set("class", "IMP")
+    Do rows.%Push({"id": "st-6", "body": (e), "issues": "NotAnObject", "expression": "Encounter.class", "text": "Property 'class' of Type 'Encounter' must be an Object"})
+    Set e = ..Enc("st-7", "V2007")
+    Do e.%Set("class", {"code": "IMP", "bogus": 1})
+    Do rows.%Push({"id": "st-7", "body": (e), "issues": "UnexpectedPropertyName", "expression": "Encounter.class", "text": "The property name 'bogus' is not valid for type 'Coding'"})
+    Set e = ..Enc("st-8", "V2008", [{"location": {"reference": "Location/ward-a"}, "status": "active", "notAnElement": 1}])
+    Do rows.%Push({"id": "st-8", "body": (e), "issues": "UnexpectedPropertyName", "expression": "Encounter.location[0]", "text": "The property name 'notAnElement' is not valid for type 'Encounter.location'"})
+    Set e = ..Enc("st-9", "V2009", [{"status": "active", "period": {"start": "2026-11-07T09:00:00Z"}}])
+    Do rows.%Push({"id": "st-9", "body": (e), "issues": "MissingRequiredProperty", "expression": "Encounter.location[0]", "text": "The type 'Encounter.location' requires a property named 'location'"})
+    Set e = ..Enc("st-10", "V2010", [{"location": {"reference": "Location/ward-a"}, "status": "active", "period": {"start": "2026-11-07 09:00"}}])
+    Do rows.%Push({"id": "st-10", "body": (e), "issues": "MalformedValue", "expression": "Encounter.location[0].period.start", "text": "The value '2026-11-07 09:00' of Property 'start' of Type 'Period' is a malformed 'dateTime'. It should match the Regex '([0-9]([0-9]([0-9][1-9]|[1-9]0)|[1-9]00)|[1-9]000)(-(0[1-9]|1[0-2])(-(0[1-9]|[1-2][0-9]|3[0-1])(T([01][0-9]|2[0-3]):[0-5][0-9]:([0-5][0-9]|60)(\\.[0-9]+)?(Z|(\\+|-)((0[0-9]|1[0-3]):[0-5][0-9]|14:00)))?)?)?'"})
+    Set e = ..Enc("st-11", "V2011"), e.identifier = {"system": (..#SYS), "value": "X"}
+    Do rows.%Push({"id": "st-11", "body": (e), "issues": "NotAnArray", "expression": "Encounter.identifier", "text": "Property 'identifier' of Type 'Encounter' must be an Array"})
+    Set e = ..Enc("st-12", "V2012"), e.identifier = [{"system": (..#SYS), "value": "X", "bogus": 1}]
+    Do rows.%Push({"id": "st-12", "body": (e), "issues": "UnexpectedPropertyName", "expression": "Encounter.identifier[0]", "text": "The property name 'bogus' is not valid for type 'Identifier'"})
+    Set e = ..Enc("st-13", "V2013")
+    Do e.%Set("identifier,status", "x")
+    Do rows.%Push({"id": "st-13", "body": (e), "issues": "UnexpectedPropertyName", "expression": "Encounter", "text": "The property name 'identifier,status' is not valid for type 'Encounter'"})
+    Set dup = "{""resourceType"":""Encounter"",""id"":""st-14"",""status"":""in-progress"",""status"":""bogus"",""class"":{""code"":""IMP""}}"
+    Do rows.%Push({"id": "st-14", "body": (dup), "issues": "ValueNotInEnumeration", "expression": "Encounter.status"})
+    Set e = ..Enc("st-15", "V2015"), e.meta = [{"versionId": "1"}]
+    Do rows.%Push({"id": "st-15", "body": (e), "issues": "UnexpectedArray", "expression": "Encounter.meta", "text": "Property 'meta' of Type 'Encounter' cannot be an Array"})
+    Set e = ..Enc("st-16", "V2016"), e.meta = {"lastUpdated": 2001, "versionId": 77}
+    Do rows.%Push({"id": "st-16", "body": (e), "issues": "WrongJsonType,MalformedValue,WrongJsonType", "expression": "Encounter.meta.lastUpdated", "text": "Property 'lastUpdated' of Type 'Meta' is type number but must be string"})
+    Set e = ..Enc("st-17", "V2017"), e.meta = {"tag": [{"code": "x", "bogus": 1}]}
+    Do rows.%Push({"id": "st-17", "body": (e), "issues": "UnexpectedPropertyName", "expression": "Encounter.meta.tag[0]", "text": "The property name 'bogus' is not valid for type 'Coding'"})
+    Set e = ..Enc("st-18", "V2018"), e.extension = [{"valueString": "y"}]
+    Do rows.%Push({"id": "st-18", "body": (e), "issues": "MissingRequiredProperty", "expression": "Encounter.extension[0]", "text": "The type 'Extension' requires a property named 'url'"})
+    Set e = ..Enc("st-19", "V2019"), e.status = "bogus", e.notAnElement = 1
+    Do rows.%Push({"id": "st-19", "body": (e), "issues": "ValueNotInEnumeration,UnexpectedPropertyName", "expression": "Encounter.status"})
+    Do rows.%Push({"id": "pt-1", "type": "Patient", "body": ({"resourceType": "Patient", "id": "pt-1", "gender": "Male"}), "issues": "ValueNotInEnumeration", "expression": "Patient.gender", "text": "The value 'Male' of Property 'gender' of Type 'Patient' must be one of (female,male,other,unknown)"})
+    Do rows.%Push({"id": "pt-2", "type": "Patient", "body": ({"resourceType": "Patient", "id": "pt-2", "birthDate": "08/11/2026"}), "issues": "MalformedValue", "expression": "Patient.birthDate", "text": "The value '08/11/2026' of Property 'birthDate' of Type 'Patient' is a malformed 'date'. It should match the Regex '([0-9]([0-9]([0-9][1-9]|[1-9]0)|[1-9]00)|[1-9]000)(-(0[1-9]|1[0-2])(-(0[1-9]|[1-2][0-9]|3[0-1]))?)?'"})
+    Do rows.%Push({"id": "pt-3", "type": "Patient", "body": ({"resourceType": "Patient", "id": "pt-3", "active": "yes"}), "issues": "WrongJsonType", "expression": "Patient.active", "text": "Property 'active' of Type 'Patient' is type string but must be boolean"})
+    Do rows.%Push({"id": "pt-4", "type": "Patient", "body": ({"resourceType": "Patient", "id": "pt-4", "name": [{"family": "X", "given": "Y"}]}), "issues": "NotAnArray", "expression": "Patient.name[0].given", "text": "Property 'given' of Type 'HumanName' must be an Array"})
+    Do rows.%Push({"id": "lc-1", "type": "Location", "body": ({"resourceType": "Location", "id": "lc-1", "status": "bogus"}), "issues": "ValueNotInEnumeration", "expression": "Location.status", "text": "The value 'bogus' of Property 'status' of Type 'Location' must be one of (active,inactive,suspended)"})
+    Do rows.%Push({"id": "lc-2", "type": "Location", "body": ({"resourceType": "Location", "id": "lc-2", "name": ""}), "issues": "EmptyValue", "expression": "Location.name", "text": "Property 'name' of Type 'Location' cannot be null or an empty string."})
+    Set iter = rows.%GetIterator()
+    While iter.%GetNext(, .row) {
+        Set path = $SELECT(row.%IsDefined("type"): row.type, 1: "Encounter") _ "/" _ row.id
+        Set body = $SELECT($ISOBJECT(row.body): row.body.%ToJSON(), 1: row.body)
+        Set w = ..Call("PUT", path, {"Content-Type": "application/fhir+json"}, body)
+        Do $$$AssertEquals(w.status, 400, row.id _ ": the status")
+        Set issues = "", outcome = {}
+        Try {
+            Set outcome = {}.%FromJSON(w.body)
+        } Catch {
+        }
+        Set:'$ISOBJECT(outcome) outcome = {}
+        Set list = $SELECT($ISOBJECT(outcome.issue): outcome.issue, 1: [])
+        Set each = list.%GetIterator()
+        While each.%GetNext(, .issue) {
+            Set issues = issues _ $SELECT(issues = "": "", 1: ",") _ $PIECE(issue.diagnostics, ">", 2)
+        }
+        Do $$$AssertEquals(issues, row.issues, row.id _ ": the issues, in order")
+        Set first = list.%Get(0)
+        If $ISOBJECT(first) {
+            Do $$$AssertEquals(first.severity _ " " _ first.code, "error invalid", row.id _ ": severity and code")
+            Do $$$AssertEquals($SELECT($ISOBJECT(first.expression): first.expression.%Get(0), 1: ""), row.expression, row.id _ ": the expression")
+            Do:row.%IsDefined("text") $$$AssertEquals(first.details.text, row.text, row.id _ ": the text")
+        }
+        Do $$$AssertEquals(..Get(path).status, 404, row.id _ ": nothing written")
+    }
+    Set e = ..Enc("st-ok", "V2099", [{"location": {"reference": "Location/ward-a"}, "status": "active", "_status": {"id": "s"}, "period": {"start": "2026-11-07T09:00:00+01:00", "end": "2026-11-07T10:00:00.5Z"}}])
+    Do e.%Set("meta", {"versionId": "7", "lastUpdated": "2026-11-07T09:00:00.123+01:00", "source": "#s", "tag": [{"system": "urn:shutter:recovery", "code": "op-1"}]})
+    Do e.%Set("modifierExtension", [{"url": "http://example.org/m", "valueBoolean": true}])
+    Do $$$AssertEquals(..Put("Encounter/st-ok", e).status, 201, "a body with every element Shutter writes is accepted")
+}
+
+/// Ids and type names as IRIS takes them: an id outside [A-Za-z0-9.-]{1,64} is 400 InvalidId on every interaction; an
+/// empty id segment and a type name that is not a single name are an empty text/html 404; the path is decoded once,
+/// by the web gateway, never again here.
+Method TestIdsAndTypeNames()
+{
+    Quit:'..Ready()
+    Do ..Seed()
+    Set text = "The Id specified in the URL, 'bad_id!' is invalid. It can only contain alphanumerics, '.', or '-', and maximum length is 64."
+    Set e = ..Enc("bad_id!", "V3001")
+    Set w = ..Put("Encounter/bad_id!", e)
+    Do $$$AssertEquals(w.status _ " " _ ..Issue(w).diagnostics, "400 <HSFHIRErr>InvalidId", "PUT an id with '_' and '!'")
+    Do $$$AssertEquals(..Issue(w).details.text, text, "its text")
+    Do $$$AssertEquals(..Issue(w).%IsDefined("expression"), 0, "with no expression")
+    For request = $LISTBUILD("GET", "Encounter/bad_id!"), $LISTBUILD("DELETE", "Encounter/bad_id!"), $LISTBUILD("GET", "Encounter/bad_id!/_history"), $LISTBUILD("GET", "Encounter/bad_id!/_history/1") {
+        Set w = ..Call($LISTGET(request, 1), $LISTGET(request, 2))
+        Do $$$AssertEquals(w.status _ " " _ ..Issue(w).details.text, "400 " _ text, $LISTGET(request, 1) _ " " _ $LISTGET(request, 2))
+    }
+    Set long = $TRANSLATE($JUSTIFY("", 65), " ", "a")
+    Set w = ..Put("Encounter/" _ long, ..Enc(long, "V3002"))
+    Do $$$AssertEquals(w.status _ " " _ ..Issue(w).diagnostics, "400 <HSFHIRErr>InvalidId", "an id of 65 characters")
+    Do $$$AssertEquals(..Get("Encounter/" _ $EXTRACT(long, 1, 64)).status, 404, "an id of 64 characters is an id")
+    Do $$$AssertEquals(..Put("Encounter/enc.2-B", ..Enc("enc.2-B", "V3003")).status, 201, "letters, digits, '.' and '-'")
+    Set w = ..Put("Encounter/a%41", ..Enc("a%41", "V3004"))
+    Do $$$AssertEquals(..Issue(w).details.text, "The Id specified in the URL, 'a%41' is invalid. It can only contain alphanumerics, '.', or '-', and maximum length is 64.", "the path is not decoded a second time")
+    Set w = ..Call("PUT", "Encounter,Location/c1", {"Content-Type": "application/fhir+json"}, "{""resourceType"":""Encounter,Location"",""id"":""c1""}")
+    Do $$$AssertEquals(w.status _ " " _ $PIECE(w.headers.%Get("Content-Type"), ";") _ " [" _ w.body _ "]", "404 text/html []", "a PUT to the type 'Encounter,Location'")
+    Do $$$AssertEquals(..Get("Encounter/c1").status, 404, "wrote nothing")
+    Do $$$AssertEquals(..Get("Encounter,Location/c1").status, 404, "and nothing reads back")
+    For path = "Encounter//_history", "Encounter//_history/1", "Encounter,Location/enc-1" {
+        Set w = ..Get(path)
+        Do $$$AssertEquals(w.status _ " " _ $PIECE(w.headers.%Get("Content-Type"), ";") _ " [" _ w.body _ "]", "404 text/html []", path)
+    }
 }
 
 Method Ready() As %Boolean
