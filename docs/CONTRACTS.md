@@ -1260,7 +1260,9 @@ refused `budget_exhausted` with "Your share of the day's model budget ... is spe
 is spent (`until` = `budget.resetsAt`), `provider_auth` when a live run failed with an authentication error (a 401, a bad or
 deactivated key) within the last 15 minutes (`until` = the next 00:00 UTC, when a key a site deactivates for the day comes
 back; the flag clears on the next live run the provider accepts, and after 15 minutes one run tries again), and null when
-live runs can go; `detail` is the sentence to show. While the provider refuses the key the Agent item refuses runs that would
+live runs can go; `detail` is the sentence to show. As built in 1.1.2 (v1.48), the flag is set only by a run whose status is `error` with an authentication
+error's words (`LiveAgents.NoteRun`), and the live runner reports a provider's own error as `model_error` (`AIHub.cls`, its
+`Catch`), so a key the provider refuses doesn't set it yet: each run still calls the provider and ends `model_error`. While the provider refuses the key the Agent item refuses runs that would
 call a model with the status `provider_auth` and makes no call (a board whose members were all refused so has no board
 answer, 6.6, as for `budget_exhausted`), `POST /cases/{id}/board` answers `409 live_unavailable` with `live`
 (the availability object) before the budget is looked at, and a question from a caller with the live agents is answered from
@@ -2140,7 +2142,8 @@ with the other stores.
 
 - 8 Nov 2026, release 1.1.2 (v1.48): two release behaviours stated as built (7.4): any error in an incident's workflow
   during a release, other than raising an approval task, abandons the incident; a receiver that goes down again during a
-  release stops each remaining chain in turn at its next item, with nothing written twice.
+  release stops each remaining chain in turn at its next item, with nothing written twice; and `provider_auth` (12) stated
+  as built: only a run with status `error` sets it, so a key the provider refuses, which ends `model_error`, doesn't set it yet.
 - 8 Nov 2026, release 1.1.2 (v1.47): the receipt check compares beds only when the receipt and the operation both state
   one: a bed that is JSON null, missing or empty is not stated, so a receipt whose bed is null no longer reads as a
   different bed (`RECEIPT_PAYLOAD_DIFFERS`), and a stated different bed still does. A replayed run writes one trace line per

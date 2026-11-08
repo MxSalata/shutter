@@ -223,16 +223,16 @@ Figures from [CI's run at the 1.1.0 release commit](https://github.com/MxSalata/
 
 - **Not yet measured at a hospital:** the scenarios are ours, the data is synthetic and the receiver is a demo bed manager built for them.
 - **A resend needs a receiver API** the site profile describes; a plain MLLP receiver gets a case and a drafted email, never a resend.
-- **Every resend waits for a person** under the shipped site profile (a demo install keeps its own labelled table). Without a key the agents replay recordings; **if the model fails** or there is none, nothing is written without a person ([how](https://github.com/MxSalata/shutter/blob/main/docs/readme/model-fails.md)).
+- **Every resend waits for a person** under the shipped site profile (a demo install keeps its own labelled table). Without a key the agents replay recordings; **if the model fails** or there is none, no agent or rules plan is released without a person ([how](https://github.com/MxSalata/shutter/blob/main/docs/readme/model-fails.md)).
 - **A large incident is approved once, and its task lists only the first chains:** the Workflow message holds 2,000 characters, so above about four chains it names how many it leaves out and points to the incident page; one approval binds every chain. 40 and 200 failures were released whole at about 3 s an item; at 1,000 only the first 50 items were measured ([the measurements](https://github.com/MxSalata/shutter/blob/main/docs/readme/storm-at-scale.md#after-the-fix)).
-- **Nothing tells anyone** that an outage opened or that an approval went undecided for 24 hours: the site's own alert, or a person watching, must.
+- **Nothing tells anyone** that an outage opened or an approval went undecided for 24 hours: the site's own alert, or a person watching, must.
 - **Onboarding edits the watched production**, and Shutter has no stop switch of its own: a disabled connector item holds its writes in its queue (tested on build 109).
 
-Every other limit, with its effect, workaround and status: [limits.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/limits.md). For a clinical safety officer: [SAFETY.md](https://github.com/MxSalata/shutter/blob/main/docs/SAFETY.md), the hazards, data flow and what a site still owes.
+Every other limit, with effect, workaround and status: [limits.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/limits.md). For a clinical safety officer: [SAFETY.md](https://github.com/MxSalata/shutter/blob/main/docs/SAFETY.md), the hazards, data flow and what a site still owes.
 
 ## Run details
 
-What the organisers ask each README to give; `install.sh` above does these steps for you.
+What the organisers ask each README to give; `install.sh` above does them for you.
 
 ```sh
 docker image load -i irishealth-community-2027.1.0AI.109.0-docker.tar.gz
