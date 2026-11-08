@@ -66,7 +66,15 @@ export type PlayedResult = 'as-expected' | 'differs' | 'stopped' | 'wrote-wrongl
 
 export interface Proof {
   /** The board's proposals: the scored passes whose plan proposed the scenario's expected action, of the scored. */
-  board: { matched: number; scored: number; passes: number; cases: number; notScored: number } | null;
+  board: {
+    matched: number;
+    scored: number;
+    passes: number;
+    cases: number;
+    notScored: number;
+    /** How many scenarios the scored cases come from (an incident gives several cases), when the evaluation says. */
+    scenarios?: number;
+  } | null;
   /** The specialists alone, each against the same scored passes: who proposed the expected action. */
   specialists: { conformance: number; encounter: number; impact: number } | null;
   /** Played end to end on the same failures (the single cases the board was convened for): the board, Rules only. */
@@ -171,6 +179,7 @@ export function proofFrom(src: ProofSource): Proof {
   const matched = num(t.board_matches);
   const passCount = num(t.passes);
   const cases = num(t.cases);
+  const scenarioCount = num(t.scenarios);
   const sm = t.specialist_matches;
   const image = typeof src.sources?.recorded_on === 'string' ? src.sources.recorded_on : '';
   const build = image.includes(':') ? image.slice(image.indexOf(':') + 1) : image;
@@ -178,7 +187,14 @@ export function proofFrom(src: ProofSource): Proof {
   return {
     board:
       scored !== null && matched !== null && passCount !== null && cases !== null
-        ? { matched, scored, passes: passCount, cases, notScored: passCount - scored }
+        ? {
+            matched,
+            scored,
+            passes: passCount,
+            cases,
+            notScored: passCount - scored,
+            ...(scenarioCount !== null ? { scenarios: scenarioCount } : {}),
+          }
         : null,
     specialists:
       sm && ['conformance', 'encounter', 'impact'].every((k) => typeof sm[k] === 'number')
