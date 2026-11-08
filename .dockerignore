@@ -11,3 +11,9 @@ tests/unit/Shutter
 tests/mock
 **/.DS_Store
 install-build.log
+**/*.tar
+**/*.tar.gz
+**/*.tgz
+**/*.zip
+**/.env.*
+!.env.example
