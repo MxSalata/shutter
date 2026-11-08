@@ -31,6 +31,7 @@ export function PageHeader({
   tour,
   subtitle,
   docTitle,
+  quiet = false,
 }: {
   title: ReactNode;
   /** The page's navigation icon. */
@@ -55,6 +56,11 @@ export function PageHeader({
   subtitle?: ReactNode;
   /** The page's name in the tab's title, when the title is not plain text. */
   docTitle?: string;
+  /**
+   * The title as a quiet label (a record's id, such as "Case C-000002"): still the page's h1, but small, so the lead,
+   * which says what the page is about, is what the eye finds first.
+   */
+  quiet?: boolean;
 }) {
   const page = docTitle ?? (typeof title === 'string' ? title : undefined);
   useEffect(() => {
@@ -68,25 +74,31 @@ export function PageHeader({
             <span
               className="identity-mark page-icon"
               style={{
-                width: 36,
-                height: 36,
+                width: quiet ? 28 : 36,
+                height: quiet ? 28 : 36,
                 borderRadius: 8,
                 ['--mark-hue' as string]: hue ? hueVar(hue) : undefined,
               }}
               aria-hidden
             >
-              <I size={22} stroke={1.8} />
+              <I size={quiet ? 18 : 22} stroke={1.8} />
             </span>
           ) : null}
           <Group gap="sm" wrap="wrap" align="center" style={{ minWidth: 0 }}>
-            <Title order={1}>{title}</Title>
+            {quiet ? (
+              <Title order={1} className="page-title-quiet">
+                {title}
+              </Title>
+            ) : (
+              <Title order={1}>{title}</Title>
+            )}
             {status}
           </Group>
         </Group>
         {actions ? <Group gap="xs">{actions}</Group> : null}
       </Group>
       {lead ? (
-        <Text size="lg" maw={leadMaw}>
+        <Text size="lg" maw={leadMaw} className={quiet ? 'page-lead-strong' : undefined}>
           {lead}
         </Text>
       ) : null}

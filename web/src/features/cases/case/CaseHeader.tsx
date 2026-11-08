@@ -1,5 +1,11 @@
 import { Anchor, Button, Group, Stack, Text } from '@mantine/core';
-import { IconChevronDown, IconHandStop, IconListDetails, IconSparkles } from '@tabler/icons-react';
+import {
+  IconChevronDown,
+  IconHandStop,
+  IconListDetails,
+  IconSparkles,
+  IconUserQuestion,
+} from '@tabler/icons-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import type { CaseDetail, Snapshot } from '@/api/types';
@@ -11,14 +17,17 @@ import { OutcomeBadge } from '@/components/OutcomeBadge';
 import { PageHeader } from '@/components/PageHeader';
 import { DispositionBadge } from '@/components/StateBadge';
 import { StatusBadge } from '@/components/StatusBadge';
+import { Term } from '@/components/Term';
 import { Timestamp } from '@/components/Timestamp';
 import { displayZone, humanize } from '@/lib/format';
+import { asObject } from '@/lib/json';
 import { caseOutcome, caseState, type ExpectedScenario, type OutcomeCase } from '@/lib/status';
-import type { Status } from '@/lib/tone';
+import { toneText, type Status, type Tone } from '@/lib/tone';
 import { useDetail } from '@/stores/appearance';
 import { forwardedFrom } from './derive';
-import { messageTypeLabel, messageTypeOf } from './message';
-import { headerSentence } from './outcome';
+import { receiverWords } from './failureMap';
+import { evidenceOf, messageTypeLabel, messageTypeOf } from './message';
+import { actionHead, headerSentence } from './outcome';
 
 /** Where the case sits in its incident: the chain, its place in it and how the chain is released. */
 function incidentPlace(c: CaseDetail): string {
@@ -42,6 +51,60 @@ function sourceText(c: CaseDetail): string {
   return `Forwarded from ${from}${c.sourceHeaderId ? `; Shutter's copy is message ${c.sourceHeaderId}` : ''}`;
 }
 
+/**
+ * The header's sentence with the sending system's short name defined a click away (a dotted underline), rather than
+ * spelt out in brackets: "The PAS transfer to WARD-B was not delivered: HTTP 503, ward_unavailable."
+ */
+function Lead({ c }: { c: CaseDetail }) {
+  const sentence = headerSentence(c);
+  const system = c.sourceSystem ?? '';
+  const prefix = `The ${system} `;
+  const term = system === 'PAS' ? 'pas' : system === 'BEDMGR' ? 'bedmgr' : undefined;
+  if (!term || !sentence.startsWith(prefix)) return <>{sentence}</>;
+  return (
+    <>
+      {'The '}
+      <Term term={term}>{system}</Term>
+      {` ${sentence.slice(prefix.length)}`}
+    </>
+  );
+}
+
+/**
+ * The encounter as the receiver held it when Shutter looked, from the evidence: "WARD-C, bed BAY1-07", with its state
+ * when that is not admitted. Empty when the evidence has no reading. It is the receiver's state before any write
+ * Shutter made, so the header shows it only while nothing has been written.
+ */
+function receiverHolds(snapshot: Snapshot | null | undefined): string {
+  const ward = evidenceOf(snapshot, 'ward_state');
+  if (!ward || ward.not_applicable) return '';
+  const status = Number(ward.http_status);
+  if (status === 404) return 'No such encounter';
+  if (status !== 200) return '';
+  const b = asObject(ward.body) ?? {};
+  const state = b.state ? String(b.state) : '';
+  const place = [b.ward ? String(b.ward) : '', b.bed ? `bed ${String(b.bed)}` : '']
+    .filter(Boolean)
+    .join(', ');
+  const parts = [state && state !== 'admitted' ? humanize(state) : '', place].filter(Boolean);
+  return parts.join(', ');
+}
+
+/** What Shutter wrote to the receiver, as the receipt counts it: "Nothing yet" while the case is still open. */
+function writtenWords(oc: OutcomeCase): string {
+  if (oc.writes === undefined || oc.writes === null) return '';
+  const n = Number(oc.writes);
+  if (n > 0) return `${n} write${n === 1 ? '' : 's'}`;
+  return ['resolved', 'blocked', 'escalated', 'failed'].includes(oc.state) ? 'Nothing' : 'Nothing yet';
+}
+
+/** What has to happen next and who does it, for the line under the header's sentence: a person's step only. */
+export interface HeaderNext {
+  action: string;
+  role: string;
+  tone: Tone;
+}
+
 /** How the case was investigated, as the cases list names it. */
 const MODES: Record<string, string> = {
   rules: 'Rules only',
@@ -58,11 +121,15 @@ function failureCode(c: CaseDetail): string {
 }
 
 /**
- * The case's header: the cases' indigo mark and the title, then its status as one verdict and two facts (the outcome
- * first, then the workflow state where it says something the outcome does not, and the proposal); the plain sentence
- * of what failed; the case's line of facts; the IRIS row, always visible, with the case's message trace, workflow trace
- * and source message; and the rest of the record behind Details. In Technical the status adds
- * how the case compares with its scenario's expectation, and the line the failure's HTTP status and reason code.
+ * The case's header, read the way a busy reader on a ward or an integration engineer at 2 a.m. reads it: the case id
+ * as a quiet label beside its status (one verdict and two facts: the outcome first, then the workflow state where it
+ * says something the outcome does not, and the proposal); then the plain sentence of what failed, the largest text on
+ * the page, its sending system defined a click away; a person's next step and who takes it; the patient's facts (what
+ * Shutter wrote, the patient number, the encounter, the bed asked for, where the receiver had them); the message's
+ * facts (its HL7 type, the receiver by name and production item, the event time); the IRIS row, always visible, with
+ * the case's message trace, workflow trace and source message; and the rest of the record, the scenario included,
+ * behind Details. In Technical the status adds how the case compares with its scenario's expectation, and the facts
+ * MSH-9 and the failure's HTTP status and reason code.
  */
 export function CaseHeader({
   c,
@@ -72,6 +139,7 @@ export function CaseHeader({
   scenario,
   portalBase = '/csp/shutter/',
   snapshot,
+  next,
 }: {
   c: CaseDetail;
   provenance?: Status;
@@ -85,9 +153,10 @@ export function CaseHeader({
   portalBase?: string;
   /** The case's evidence, once read: the message's HL7 type, as IRIS parsed it. */
   snapshot?: Snapshot | null;
+  /** A person's next step, when the case waits for one: said under the sentence, before the facts. */
+  next?: HeaderNext;
 }) {
   const technical = useDetail() === 'technical';
-  const what = `${humanize(c.event)}${c.ward ? ` to ${c.ward}` : ''}`;
   const place = incidentPlace(c);
   const source = sourceText(c);
   const oc: OutcomeCase = outcome ?? {
@@ -104,9 +173,19 @@ export function CaseHeader({
   const failure = failureCode(c);
   const iris = caseIrisLinks(c, portalBase);
   const message = messageTypeOf(snapshot);
+  const written = writtenWords(oc);
+  // Where the receiver had the patient, while Shutter has written nothing: after a write it would be out of date
+  const holds = Number(oc.writes ?? 0) > 0 ? '' : receiverHolds(snapshot);
+  // The receiver by what it is ("Bed-management system"), with the production item that carries it ("Downstream Out")
+  const item = c.receiver || 'Downstream Out';
+  const receiverName = receiverWords(String(evidenceOf(snapshot, 'route')?.receiver ?? '')).name;
+  const nextHead = next ? actionHead(next.action).head : '';
+  const nextKnown = !!next && !['Unknown', 'Not read yet'].includes(next.action);
+  const roleKnown = !!next?.role && !['Unknown', 'Not read yet'].includes(next.role);
   return (
     <PageHeader
       title={`Case ${c.caseId}`}
+      quiet
       icon={IconListDetails}
       hue="indigo"
       actions={actions}
@@ -140,25 +219,82 @@ export function CaseHeader({
           ) : null}
         </>
       }
-      lead={headerSentence(c)}
+      lead={<Lead c={c} />}
       meta={
         <Stack gap="sm" w="100%">
+          {/* A person's next step and who takes it, said before the facts: the header's button goes to it */}
+          {next && nextKnown ? (
+            <Group gap={8} wrap="nowrap" align="flex-start" data-testid="case-next">
+              <IconUserQuestion
+                size={20}
+                aria-hidden
+                style={{ flex: 'none', color: toneText(next.tone), marginTop: 1 }}
+              />
+              <Text size="md">
+                <Text span fw={700}>
+                  {'Next: '}
+                </Text>
+                {nextHead}
+                {roleKnown ? (
+                  <Text span c="dimmed">
+                    {` · ${next.role}`}
+                  </Text>
+                ) : null}
+              </Text>
+            </Group>
+          ) : null}
+          {/* The patient first: what Shutter wrote for them, their number, the encounter, the bed asked for and where
+              the receiver had them */}
           <Group gap="lg" wrap="wrap" align="flex-start" style={{ rowGap: 'var(--mantine-spacing-sm)' }}>
-            <Meta label="What">
-              {c.encounterId && c.encounterId !== '-'
-                ? `${what}, encounter ${c.encounterId}`
-                : `${what}, no encounter`}
-            </Meta>
+            {written ? (
+              <Meta label={<Term term="write">Shutter wrote</Term>}>
+                <Text size="sm" fw={600} data-testid="case-written">
+                  {written}
+                </Text>
+              </Meta>
+            ) : null}
             {/* The hospital number the message carries (PID-3), as the Evidence tab shows it: never a name or a birth date */}
-            {c.patientId ? <Meta label="Patient">{c.patientId}</Meta> : null}
-            {/* The message's HL7 type as IRIS parsed it ("2.5.1:ADT_A02"), from the evidence; in Technical, the version
-                the message declares when the route parsed it as another */}
+            {c.patientId ? (
+              <Meta label={<Term term="patient-number">Patient</Term>}>
+                <Text size="sm" fw={600}>
+                  {c.patientId}
+                </Text>
+              </Meta>
+            ) : null}
+            <Meta label={<Term term="encounter">Encounter</Term>}>
+              <Text size="sm" fw={600}>
+                {c.encounterId && c.encounterId !== '-' ? c.encounterId : 'None'}
+              </Text>
+            </Meta>
+            {c.bed ? <Meta label="Bed asked for">{c.bed}</Meta> : null}
+            {holds ? (
+              <Meta label="Receiver had">
+                <Stack gap={0}>
+                  <Text size="sm" data-testid="case-receiver-holds">
+                    {holds}
+                  </Text>
+                  <Text size="xs" c="dimmed">
+                    when Shutter looked
+                  </Text>
+                </Stack>
+              </Meta>
+            ) : null}
+          </Group>
+          {/* Then the message: its HL7 type, the receiver, when it happened, and the rest */}
+          <Group gap="lg" wrap="wrap" align="flex-start" style={{ rowGap: 'var(--mantine-spacing-sm)' }}>
+            {/* The message's HL7 type as IRIS parsed it ("2.5.1:ADT_A02"), from the evidence; in Technical, MSH-9 and the
+                version the message declares when the route parsed it as another */}
             {message ? (
-              <Meta label="Message">
+              <Meta label={<Term term="adt">Message</Term>}>
                 <Stack gap={0}>
                   <Text size="sm" className="mono-wrap" data-testid="case-message-type">
                     {messageTypeLabel(message)}
                   </Text>
+                  {technical && message.docType && message.messageType ? (
+                    <Text size="xs" c="dimmed" className="mono-wrap">
+                      {`MSH-9 ${message.messageType}`}
+                    </Text>
+                  ) : null}
                   {technical && message.declaredOther ? (
                     <Text size="xs" c="dimmed">
                       {`The message says HL7 ${message.declaredOther}`}
@@ -167,15 +303,26 @@ export function CaseHeader({
                 </Stack>
               </Meta>
             ) : null}
-            {/* A case is one failed delivery to one receiver; one recorded before the server named it went to the bed manager */}
-            <Meta label="Receiver">{c.receiver || 'Downstream Out'}</Meta>
+            {/* A case is one failed delivery to one receiver; one recorded before the server named it went to the bed
+                manager. Named as the failure map names it, with its production item under it */}
+            <Meta label={<Term term="receiver">Receiver</Term>}>
+              {receiverName ? (
+                <Stack gap={0}>
+                  <Text size="sm">{receiverName}</Text>
+                  <Text size="xs" c="dimmed" className="mono-wrap">
+                    {item}
+                  </Text>
+                </Stack>
+              ) : (
+                item
+              )}
+            </Meta>
             {source ? <Meta label="Source">{source}</Meta> : null}
             {c.event === 'merge' ? (
               <Meta label="Merge">
                 {`${c.priorPatientId || 'a prior record'}${c.priorPatientIdAuthority ? ` (${c.priorPatientIdAuthority})` : ''}${c.priorEncounterId ? `, visit ${c.priorEncounterId}` : ''} into ${c.patientId}${(c.mergeGroups ?? 1) > 1 ? `, and ${(c.mergeGroups ?? 1) - 1} more` : ''}`}
               </Meta>
             ) : null}
-            <Meta label="Scenario">{c.scenario || 'None'}</Meta>
             {c.incidentId ? (
               <Meta label="Incident">
                 <Stack gap={0}>
@@ -225,6 +372,7 @@ export function CaseHeader({
           {/* Who investigated, the record's times and version: kept a click away from the outcome */}
           {details ? (
             <Group id="case-details" gap="xl" wrap="wrap" align="flex-start">
+              <Meta label="Scenario">{c.scenario || 'None'}</Meta>
               <Meta label="Investigated by">{MODES[c.mode] ?? humanize(c.mode)}</Meta>
               {provenance ? (
                 <Meta label="Provenance">

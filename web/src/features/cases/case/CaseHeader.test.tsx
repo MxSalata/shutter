@@ -1,6 +1,7 @@
 import { MantineProvider } from '@mantine/core';
 import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import type { CaseDetail } from '@/api/types';
 import fixtures from '@/mocks/fixtures.json';
@@ -13,6 +14,13 @@ vi.mock('@/api/hooks', async (original) => ({
   ...(await original<typeof import('@/api/hooks')>()),
   useSettings: () => ({ data: undefined }),
 }));
+
+/** An element's text as the reader sees it: a term's definition stays hidden until it is asked for. */
+function shownText(el: HTMLElement): string {
+  const copy = el.cloneNode(true) as HTMLElement;
+  copy.querySelectorAll('[hidden]').forEach((n) => n.remove());
+  return copy.textContent ?? '';
+}
 
 const base = { caseId: 'C-000123', state: 'resolved', event: 'transfer', ward: 'WARD-B' } as CaseDetail;
 
@@ -161,8 +169,9 @@ describe('the case header facts: the patient and the message', () => {
 
   it("names the patient by the hospital number the message carries, and the message's HL7 type as IRIS parsed it", () => {
     renderUi(<CaseHeader c={recorded('C-000002')} snapshot={snapshot('C-000002')} />);
-    const patient = screen.getByText('Patient').parentElement!;
-    expect(patient).toHaveTextContent(/^PatientMRN1002$/);
+    // The label is a term, its definition a click away and hidden until then
+    const patient = screen.getByText('Patient').closest('.mantine-Stack-root') as HTMLElement;
+    expect(shownText(patient)).toBe('PatientMRN1002');
     expect(screen.getByText('Message')).toBeInTheDocument();
     expect(screen.getByTestId('case-message-type')).toHaveTextContent(/^2\.5\.1:ADT_A02$/);
     // Never the patient's name, which the evidence holds
@@ -208,5 +217,104 @@ describe('the case header facts: the patient and the message', () => {
     expect(screen.queryByText('Patient')).not.toBeInTheDocument();
     expect(screen.queryByText('Message')).not.toBeInTheDocument();
     expect(screen.getByText('Receiver')).toBeInTheDocument();
+  });
+});
+
+describe('the case header for a busy reader (8 Nov)', () => {
+  const recorded = (id: keyof typeof fixtures.cases) => fixtures.cases[id].detail as unknown as CaseDetail;
+  const snapshot = (id: keyof typeof fixtures.cases) => fixtures.cases[id].snapshot as never;
+
+  it('keeps the case id as the h1, a quiet label, and makes the sentence of what failed the largest text', () => {
+    renderUi(<CaseHeader c={recorded('C-000008')} snapshot={snapshot('C-000008')} />);
+    const title = screen.getByRole('heading', { level: 1, name: 'Case C-000008' });
+    expect(title).toHaveClass('page-title-quiet');
+    const pas = screen.getByText('PAS', { selector: '.term' });
+    expect(pas.closest('p')).toHaveClass('page-lead-strong');
+    expect(shownText(pas.closest('p')!)).toBe(
+      'The PAS transfer to WARD-B was not delivered: HTTP 503, ward_unavailable.',
+    );
+  });
+
+  it('defines PAS a click away in Plain and reads it as plain text in Technical', () => {
+    const { unmount } = renderUi(<CaseHeader c={recorded('C-000002')} />);
+    expect(screen.getByText('PAS', { selector: '.term' })).toHaveAccessibleDescription(
+      'The patient administration system, where admissions and transfers start.',
+    );
+    expect(document.body).not.toHaveTextContent('(patient administration system)');
+    unmount();
+    renderUi(<CaseHeader c={recorded('C-000002')} />, { detail: 'technical' });
+    expect(screen.queryByText('PAS', { selector: '.term' })).not.toBeInTheDocument();
+  });
+
+  it("says a withheld merge's sentence without repeating its event as a reason", () => {
+    renderUi(<CaseHeader c={recorded('C-000012')} />);
+    const pas = screen.getByText('PAS', { selector: '.term' });
+    expect(shownText(pas.closest('p')!)).toBe('The PAS merge was withheld, never sent.');
+  });
+
+  it("says a person's next step and who takes it before the facts, and nothing when none is given", () => {
+    const { unmount } = renderUi(
+      <CaseHeader
+        c={recorded('C-000002')}
+        next={{ action: 'Approve or reject plan v1', role: 'Approver', tone: 'attention' }}
+      />,
+    );
+    expect(screen.getByTestId('case-next')).toHaveTextContent(/^Next: Approve or reject plan v1 · Approver$/);
+    unmount();
+    renderUi(
+      <CaseHeader c={recorded('C-000002')} next={{ action: 'Not read yet', role: '', tone: 'attention' }} />,
+    );
+    expect(screen.queryByTestId('case-next')).not.toBeInTheDocument();
+  });
+
+  it('puts what Shutter wrote, the patient, the encounter, the bed and where the receiver had them first', () => {
+    renderUi(
+      <CaseHeader
+        c={recorded('C-000008')}
+        snapshot={snapshot('C-000008')}
+        outcome={{ state: 'escalated', disposition: 'escalate', writes: 0 }}
+      />,
+    );
+    expect(screen.getByTestId('case-written')).toHaveTextContent('Nothing');
+    expect(shownText(screen.getByText('Encounter').closest('.mantine-Stack-root') as HTMLElement)).toBe(
+      'EncounterENC-1008',
+    );
+    expect(screen.getByText('Bed asked for').parentElement).toHaveTextContent('BAY2-04');
+    // S8: the PAS asked for WARD-B, but the bed manager had the patient on WARD-C
+    expect(screen.getByTestId('case-receiver-holds')).toHaveTextContent(/^WARD-C, bed BAY1-07$/);
+    // The receiver by what it is, with the production item that carries it
+    const receiver = screen.getByText('Receiver').closest('.mantine-Stack-root') as HTMLElement;
+    expect(shownText(receiver)).toBe('ReceiverBed-management systemDownstream Out');
+    const order = ['case-written', 'case-receiver-holds', 'case-message-type'].map((id) =>
+      screen.getByTestId(id),
+    );
+    expect(order[0].compareDocumentPosition(order[1]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(order[1].compareDocumentPosition(order[2]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('leaves where the receiver had the patient out once Shutter wrote, since the write changed it', () => {
+    renderUi(
+      <CaseHeader
+        c={recorded('C-000044')}
+        snapshot={snapshot('C-000044')}
+        outcome={{ state: 'resolved', disposition: 'resend', writes: 1, verification: 'verified' }}
+      />,
+    );
+    expect(screen.getByTestId('case-written')).toHaveTextContent('1 write');
+    expect(screen.queryByTestId('case-receiver-holds')).not.toBeInTheDocument();
+  });
+
+  it('keeps the scenario behind Details, with the record', async () => {
+    renderUi(<CaseHeader c={recorded('C-000002')} />);
+    expect(screen.queryByText('Scenario')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Details' }));
+    expect(screen.getByText('Scenario').parentElement).toHaveTextContent('S2');
+  });
+
+  it('adds MSH-9 beside the document type in Technical', () => {
+    renderUi(<CaseHeader c={recorded('C-000002')} snapshot={snapshot('C-000002')} />, {
+      detail: 'technical',
+    });
+    expect(screen.getByText('MSH-9 ADT^A02')).toBeInTheDocument();
   });
 });

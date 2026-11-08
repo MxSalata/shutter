@@ -2,11 +2,15 @@ import { Box, Text, VisuallyHidden } from '@mantine/core';
 import { IconChevronRight, IconX } from '@tabler/icons-react';
 import type { ReactNode } from 'react';
 import { StatusBadge } from '@/components/StatusBadge';
+import { Term } from '@/components/Term';
 import { TONE_ICONS } from '@/lib/tone';
 import { useDetail } from '@/stores/appearance';
 import type { FailureMap as Map } from './failureMap';
 
-/** One system on the path: its name, what it is, and the engineer's names for it in Technical. */
+/**
+ * One system on the path: its name (a term defined a click away where it is an abbreviation), what it is where the
+ * name alone does not say, and the engineer's names for it in Technical.
+ */
 function Node({
   role,
   title,
@@ -15,7 +19,7 @@ function Node({
   children,
 }: {
   role: 'sender' | 'iris' | 'receiver';
-  title: string;
+  title: ReactNode;
   sub?: string;
   technical?: string;
   children?: ReactNode;
@@ -114,19 +118,30 @@ export function FailureMap({ map }: { map: Map }) {
         <div className="fm-flow">
           {sender ? (
             <>
+              {/* A known system's short name is defined a click away rather than spelt out under it */}
               <Node
                 role="sender"
-                title={sender.name}
-                sub={
-                  sender.gloss
-                    ? sender.gloss.charAt(0).toUpperCase() + sender.gloss.slice(1)
-                    : 'The sending system'
+                title={
+                  sender.name === 'PAS' ? (
+                    <Term term="pas">PAS</Term>
+                  ) : sender.name === 'BEDMGR' ? (
+                    <Term term="bedmgr">BEDMGR</Term>
+                  ) : (
+                    sender.name
+                  )
                 }
+                sub={sender.gloss ? '' : 'The sending system'}
               />
               <Link label={message.plain} answer={technical ? message.code : ''} />
             </>
           ) : null}
-          <Node role="iris" title="IRIS" sub={iris.role} technical={technical ? irisTechnical : ''}>
+          {/* Shutter's own feed is IRIS, defined a click away; the hospital's production is said in words */}
+          <Node
+            role="iris"
+            title={<Term term="iris">IRIS</Term>}
+            sub={iris.role === 'The message engine' ? '' : iris.role}
+            technical={technical ? irisTechnical : ''}
+          >
             {iris.trouble ? (
               <Text size="xs" fw={600} lh={1.35} mt={4} className="fm-trouble">
                 {iris.trouble}
@@ -140,10 +155,11 @@ export function FailureMap({ map }: { map: Map }) {
             label={hop.label}
             answer={hop.answer || (technical ? hop.code : '')}
           />
+          {/* A receiver named in words needs no caption; one known only by its production item keeps it */}
           <Node
             role="receiver"
             title={receiver.name}
-            sub="The receiving system"
+            sub={receiver.item ? '' : 'The receiving system'}
             technical={technical ? receiverTechnical : ''}
           >
             {receiver.now ? (
