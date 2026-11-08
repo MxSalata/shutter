@@ -274,7 +274,7 @@ Method OnRaiseAgain(incident As Shutter.Store.Incident, seq As %String) As %Stat
 /// with an error, or sent again, is not this check's.
 Method OnTaskCheck(incident As Shutter.Store.Incident, seq As %String, requestId As %String) As %Status
 {
-    Quit:(requestId = "") || (..TaskSent.GetAt(seq) '= requestId) $$$OK
+    Quit:((requestId = "") || (..TaskSent.GetAt(seq) '= requestId)) $$$OK
     Set lost = ##class(Shutter.Process.IncidentTaskCheck).Lost(requestId, ##class(Shutter.Process.IncidentTaskCheck).SubjectPrefix(incident.IncidentId, seq))
     Quit:lost="" $$$OK
     If lost = "wait" Quit ..Alarm(..#RAISEAGAINSECONDS, "taskcheck:" _ seq _ ":" _ requestId)
