@@ -163,7 +163,9 @@ describe('AccessSection', () => {
     const line = await screen.findByRole('button', { name: /^Each sign-in compared/ });
     expect(line).toHaveTextContent('Each sign-in compared: yours matches Judge');
     expect(line).toHaveAttribute('aria-expanded', 'false');
-    expect(layer1Words(plain.container).join(' ')).toBe('Your access Each sign-in compared: yours matches Judge');
+    expect(layer1Words(plain.container).join(' ')).toBe(
+      'Your access Each sign-in compared: yours matches Judge',
+    );
     plain.unmount();
     useAppearance.setState({ detail: 'technical' });
     renderAccess(judgeReport());
