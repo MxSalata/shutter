@@ -29,7 +29,7 @@ Method TestMail()
     Do ..RunRows("mail")
 }
 
-/// A strictness a site may loosen or keep: another visit's movement shows by default (v1.1.0), a lost admission waits for a
+/// A strictness a site may loosen or keep: another visit's movement shows by default (v1.47), a lost admission waits for a
 /// person, and a stored profile can say otherwise.
 Method TestFurtherMessages()
 {

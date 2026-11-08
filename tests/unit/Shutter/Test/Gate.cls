@@ -296,7 +296,7 @@ Method TestFurtherMessagesAreReadAgainBeforeTheWrite()
 }
 
 /// The site's choice for another visit's in-patient movement, through the gate at dispatch on a real index row: stop holds the
-/// write and names the other visit; show, and a profile that doesn't say (the shipped default since v1.1.0), let it through
+/// write and names the other visit; show, and a profile that doesn't say (the shipped default since v1.47), let it through
 /// with the other visit counted for the plan. A cancel on the case's own visit stops whichever the site chose.
 Method TestFurtherMovementStopOrShow()
 {
