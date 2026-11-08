@@ -295,7 +295,7 @@ ClassMethod Runs(item As %DynamicObject, mock As %String, instanceConfig As %Str
     If (raw '= "") && ..LooksSecret(raw) {
         Set out.config = "hidden", out.provider = "hidden"
         If item.model '= "" {
-            Set out.model = ..Clean(item.model), out.from = "from the item's Model setting"
+            Set out.model = ..CleanModel(item.model), out.from = "from the item's Model setting"
         } Else {
             Set out.model = "not readable", out.from = "from its provider configuration"
         }
@@ -319,11 +319,11 @@ ClassMethod Runs(item As %DynamicObject, mock As %String, instanceConfig As %Str
         }
     }
     If item.model '= "" {
-        Set out.model = ..Clean(item.model), out.from = "from the item's Model setting"
+        Set out.model = ..CleanModel(item.model), out.from = "from the item's Model setting"
     } ElseIf (fqn '= "") && 'readable {
         Set out.model = "not readable", out.from = "from its provider configuration"
     } ElseIf cmodel '= "" {
-        Set out.model = ..Clean(cmodel), out.from = $SELECT(own '= "": "from its provider configuration", 1: "from the instance's configuration, SHUTTER_MODEL")
+        Set out.model = ..CleanModel(cmodel), out.from = $SELECT(own '= "": "from its provider configuration", 1: "from the instance's configuration, SHUTTER_MODEL")
     } Else {
         Set cls = $SELECT(item.agentClass '= "": item.agentClass, 1: "Shutter.Agent.Base")
         Set m = ""
@@ -332,7 +332,7 @@ ClassMethod Runs(item As %DynamicObject, mock As %String, instanceConfig As %Str
         } Catch ex {
             Set m = ""
         }
-        Set out.model = $SELECT(m '= "": ..Clean(m), 1: "none"), out.from = $SELECT(m '= "": "from the agent class " _ cls, 1: "its agent class is not installed here (the replay edition)")
+        Set out.model = $SELECT(m '= "": ..CleanModel(m), 1: "none"), out.from = $SELECT(m '= "": "from the agent class " _ cls, 1: "its agent class is not installed here (the replay edition)")
     }
     Quit out
 }
@@ -455,36 +455,23 @@ ClassMethod KnownMode(mode As %String, asSet As %Boolean = 0) As %String
     Quit $SELECT((mode '= "") && $LISTFIND(ok, mode): mode, 1: "not valid")
 }
 
-/// A value that looks like a secret or an address: a key's or a token's prefix (sk- where a word starts, anywhere in
-/// the value; sk-ant, GitHub's ghp_, gho_ and github_pat_, Slack's xox, Stripe's sk_live_, sk_test_, rk_live_ and
-/// rk_test_, GitLab's glpat- anywhere; Hugging Face's hf_ where a word starts), an AWS access key id (AKIA or ASIA and
-/// sixteen capitals or digits), a Google API key (AIza and ten more), a JSON Web Token (eyJ, as {" starts in base64), a
-/// PEM block (-----BEGIN), HTTP Basic credentials (basic and a base64 run holding a digit, +, / or =, or a capital
-/// after a small letter, which a plain word does not), a credential written as a name and its value (key=, token=,
-/// apikey:, secret= and the like), one run of 24 or more letters and digits holding both, as a random key is, a wallet
-/// reference, a password, a URL or an address.
+/// Whether a value looks like a secret or an address: the rule is Shutter.Util.Secret's, which every place that
+/// prints or stores an agent item's settings uses, so the page and the rest of the instance agree.
 ClassMethod LooksSecret(value As %String) As %Boolean
 {
-    Set v = $ZCONVERT(value, "L")
-    For word = "sk-ant", "secret://", "password", "bearer ", "://", "@", "ghp_", "gho_", "github_pat_", "xox", "-----begin", "sk_live_", "sk_test_", "rk_live_", "rk_test_", "glpat-" {
-        If v [ word Return 1
-    }
-    // Where a word starts, so task-runner and chf_rate are not keys.
-    If $LOCATE(v, "(^|[^a-z0-9])(sk-|hf_)") Quit 1
-    If $LOCATE(v, "(^|[^a-z0-9])(api[-_]?key|access[-_]?key|private[-_]?key|key|token|secret|passwd|pwd|auth)\s*[=:]") Quit 1
-    If $LOCATE(value, "(^|[^A-Za-z0-9])(?i:basic)\s+(?=[A-Za-z0-9+/]*([0-9+/=]|[a-z][A-Z]))[A-Za-z0-9+/]{8,}") Quit 1
-    // Where case tells a key from a word: AKIA or ASIA alone, or Asia/Kolkata, is not one.
-    If value [ "eyJ" Quit 1
-    If $LOCATE(value, "(AKIA|ASIA)[A-Z0-9]{16}") Quit 1
-    If $LOCATE(value, "AIza[0-9A-Za-z_-]{10}") Quit 1
-    If $LOCATE(value, "(?=[A-Za-z0-9]*[0-9])(?=[A-Za-z0-9]*[A-Za-z])[A-Za-z0-9]{24,}") Quit 1
-    Quit 0
+    Quit ##class(Shutter.Util.Secret).Looks(value)
 }
 
 /// A value for the page, or "hidden" when it looks like a secret (a Model or ProviderConfig set to a key by mistake).
 ClassMethod Clean(value As %String) As %String
 {
-    Quit $SELECT(..LooksSecret(value): "hidden", 1: value)
+    Quit ##class(Shutter.Util.Secret).Clean(value)
+}
+
+/// An agent item's Model for the page, or "hidden" when it looks like a key: a model's name@version shows.
+ClassMethod CleanModel(value As %String) As %String
+{
+    Quit ##class(Shutter.Util.Secret).CleanModel(value)
 }
 
 /// The page. app is this page's web application, whose portal pages it links to.

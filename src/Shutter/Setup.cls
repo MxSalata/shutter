@@ -164,6 +164,8 @@ ClassMethod InstallStatus(root As %String = "", demo As %Boolean = 1, production
         If $EXTRACT(r, 1, 6) = "ERROR:" Set sc = $$$ERROR($$$GeneralError, "Retention tasks: " _ r) Quit
         // Replayed runs spend nothing; rows written before this rule held a recording's price.
         Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "UPDATE Shutter_Store.AgentRun SET CostUSD = 0 WHERE Mode = 'replay' AND CostUSD <> 0")
+        // A key typed into an item's Model or ProviderConfig is hidden in the runs stored before this rule too.
+        Do ##class(Shutter.Util.Secret).RepairRuns()
         Set sc = ..StartProduction() Quit:$$$ISERR(sc)
         Set synced = ..SyncSecondParser("Shutter.Production")
         If $EXTRACT(synced, 1, 5) = "ERROR" Set sc = $$$ERROR($$$GeneralError, synced) Quit

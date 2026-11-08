@@ -1631,7 +1631,7 @@ ClassMethod Settings() As %Status
             For j = 1:1:item.Settings.Count() {
                 Set st = item.Settings.GetAt(j)
                 Set name = st.Name
-                Do a.%Set($ZCONVERT($EXTRACT(name, 1), "L") _ $EXTRACT(name, 2, *), st.Value)
+                Do a.%Set($ZCONVERT($EXTRACT(name, 1), "L") _ $EXTRACT(name, 2, *), $SELECT(name = "Model": ##class(Shutter.Util.Secret).CleanModel(st.Value), 1: ##class(Shutter.Util.Secret).Clean(st.Value)))
             }
             Set a.effectiveMode = ##class(Shutter.Bridge.Operation.Agent).ResolveMode(##class(Shutter.Util.Json).Str(a, "mode", "auto"), mock)
             // Who answers a run that goes to a model: the mimic while its switch is set, else the item's provider
@@ -1641,8 +1641,8 @@ ClassMethod Settings() As %Status
                 Set a.answeredBy = "the API mimic"
             } ElseIf (a.effectiveMode = "live") || (a.effectiveMode = "record") {
                 Set by = ##class(Shutter.Util.Json).Str(a, "providerConfig")
-                If (by '= "") && ($LENGTH(by, ".") < 3) Set by = "AI.LLM." _ by
-                If by = "" Set by = $GET(^Shutter.Config("aihub", "provider"))
+                If (by '= "") && (by '= "hidden") && ($LENGTH(by, ".") < 3) Set by = "AI.LLM." _ by
+                If by = "" Set by = ##class(Shutter.Util.Secret).Clean($GET(^Shutter.Config("aihub", "provider")))
                 If by '= "" Set a.answeredBy = by
             }
             Do items.%Push(a)
