@@ -30,7 +30,7 @@ import { AnswerText, focusSoon } from '@/features/cases/ask/AskPanel';
 import { guideFor } from './guides';
 import { PAGE_ANSWERS_RECORDED } from './recorded';
 import { summariseScreen } from './screen';
-import { useAssistant } from './store';
+import { useAssistant, type PageAsked } from './store';
 
 /** The label of a trial answer that is not a recording (features/assistant/recorded.ts). */
 export const PAGE_SAMPLE_LABEL = 'Example (sample data)';
@@ -44,6 +44,9 @@ export const PAGE_JUDGES_ONLY =
   "Questions about a page are answered live only, and that needs the judges' account. The guide below says what this page is and what to try.";
 
 const turnId = (qid: string) => `ask-page-${qid}`;
+
+/** A page with nothing asked yet: one array, so the store's selector returns the same value each time. */
+const NO_ASKED: PageAsked[] = [];
 
 // In UTC, the zone the API carries times in, so a recording reads as made on the same day wherever it is read
 const day = new Intl.DateTimeFormat('en-GB', {
@@ -255,7 +258,7 @@ export function PageChat({ page }: { page: string }) {
   const access = usePageAccess();
   const guide = guideFor(page);
   const ask = useAskPageQuestion();
-  const asked = useAssistant((s) => s.threads[page] ?? []);
+  const asked = useAssistant((s) => s.threads[page]) ?? NO_ASKED;
   const addAsked = useAssistant((s) => s.addAsked);
   const [text, setText] = useState('');
   const settings = useSettings().data;

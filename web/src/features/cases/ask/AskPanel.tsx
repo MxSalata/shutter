@@ -429,7 +429,8 @@ export function AskPanel({ caseId, autoAsk = false }: { caseId: string; autoAsk?
     const first = conversations[0];
     const turn = first?.turns.find((t) => t.turn === 1);
     if (!first || !turn || !canAsk || chipAsked(first.id, turn)) return;
-    choose(first.id, turn);
+    // Asked once the panel has rendered, not in the effect's own pass
+    queueMicrotask(() => choose(first.id, turn));
   });
 
   // A follow-up turn is offered once the turn before it has been asked here

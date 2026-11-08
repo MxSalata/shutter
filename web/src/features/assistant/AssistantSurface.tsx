@@ -236,33 +236,28 @@ export function AssistantRouteSync() {
   const [search, setSearch] = useSearchParams();
   const asked = search.get('ask') === '1';
   const onCase = ctx.kind === 'case';
+  // Whether the address asked for the panel at the last look: only an address that newly asks (a link followed, Back)
+  // opens it, so closing the panel, which leaves `ask=1` behind for a moment, never reopens it
+  const askedBefore = useRef(false);
   useEffect(() => {
-    if (onCase && asked && !open) setOpen(true);
-  }, [onCase, asked, open, setOpen]);
-  useEffect(() => {
+    const newlyAsked = asked && !askedBefore.current;
+    askedBefore.current = asked;
     if (!onCase) return;
-    if (open === asked) return;
-    // The address opens the panel first; only then does the panel write the address
-    if (!open && asked) {
-      setSearch(
-        (prev) => {
-          const params = new URLSearchParams(prev);
-          params.delete('ask');
-          return params;
-        },
-        { replace: true, preventScrollReset: true },
-      );
-    } else if (open && !asked) {
-      setSearch(
-        (prev) => {
-          const params = new URLSearchParams(prev);
-          params.set('ask', '1');
-          return params;
-        },
-        { replace: true, preventScrollReset: true },
-      );
+    if (newlyAsked && !open) {
+      setOpen(true);
+      return;
     }
-  }, [onCase, open, asked, setSearch]);
+    if (open === asked) return;
+    setSearch(
+      (prev) => {
+        const params = new URLSearchParams(prev);
+        if (open) params.set('ask', '1');
+        else params.delete('ask');
+        return params;
+      },
+      { replace: true, preventScrollReset: true },
+    );
+  }, [onCase, open, asked, setOpen, setSearch]);
   return null;
 }
 
