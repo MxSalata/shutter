@@ -22,6 +22,9 @@ the productions a hospital already runs; the README's `docker compose up` is the
 - **A receiver with no API is escalated, never resent.** Shutter resends only to a receiver whose site profile entry
   describes its API (state, receipt, capabilities and operations paths). A ward system that takes HL7 over TCP and
   keeps no receipts is investigated and escalated; the team corrects it by hand and marks the case handled.
+- **A receiver's outage is one incident (v1.1.0).** Give a receiver's profile entry a `watch` block and Shutter reads what the
+  engine shows about its HL7 TCP operation, never the receiver, opens one outage for the time it is down, says what to do
+  and whom to call, and closes it when every message has settled. It sends no orders or results (section 11).
 
 ## 2. What an install creates
 
@@ -347,6 +350,22 @@ installer's `DATADIR` was a name `%Installer` reserves); on such an instance the
 so take what you need from it before replacing it, or copy `/usr/irissys/IRIS.DAT` out, create the database under
 `mgr/shutter/db/SHUTTERDATA` and mount it there.
 
+**Upgrading to 1.1.0.** Run the install once, as above, and then stop and start `Shutter.Production`: a business operation
+that runs for a long time keeps its old code until its production restarts. The install adds the item `Receiver Watch`
+(section 11), and the Doctor's `missing_items` names it until it is there; in shape B, `InstallInto` adds it. Then:
+
+- **Approvals given before the upgrade.** The gate's policy version moves from `2026-11-01.1` to `2026-11-06.1`, and the
+  catalogue's entries E1, E7 and E13 have new versions and E19 is new. A plan made before the upgrade is refused at
+  dispatch: `APPROVAL_POLICY_CHANGED` when it was approved before the upgrade, `APPROVAL_CATALOGUE_CHANGED` when it is
+  approved after, since it was matched against the old catalogue. Investigate the case again and approve the new plan.
+- **Precedents.** A failure's signature includes the policy version, so after the upgrade no case finds the precedents
+  recorded before it: the approval task reads "Precedents: none" until approvers decide again under the new version. The old
+  rows stay on record (`GET /cases/{id}/precedents`).
+- **The site profile.** Every saved profile validates as it did; the receiver keys of section 11.1 are optional. Saving the
+  profile voids every approval not yet dispatched (`APPROVAL_SITE_PROFILE_CHANGED`), so add a `watch` block when no
+  incident or case is waiting to be sent.
+- **A forwarder onboarded before 1.1.0** keeps `FailureTimeout` 0 on its item and tries each forward once (section 10).
+
 ## 9. Onboarding several namespaces
 
 A trust's integration engine is often several namespaces: order communications and the LIMS in one, documents in another,
@@ -474,7 +493,7 @@ The web application is at `/shutter/index.html`; `/shutter` and `/shutter/` answ
 draft has: in a second namespace every item is reported with its prefix (`DOCUMENTS Results Out`), including those that clash with
 nothing, so a team's `receivers` must say that. A namespace already wired keeps its names when another comes on after it, and the
 plan warns if an operation added later takes a name another namespace reports. Through the API, `GET /api/shutter/site-profile`, change the `profile` inside the reply, and
-`PUT` that inner object, all of it, back with the header `X-Requested-With: Shutter`; a part alone, or the outer reply, answers 400. A receiver with no API stays declared as it is, and its failures escalate to its team. `Shutter_Approver` may save the profile, policy included, so `approval` is a setting an approver can change; `GET /api/shutter/site-profile/history` keeps each version and who saved it.
+`PUT` that inner object, all of it, back with the header `X-Requested-With: Shutter`; a part alone, or the outer reply, answers 400. A receiver with no API stays declared as it is, and its failures escalate to its team. To have Shutter watch its operation for outages, add a `watch` block (section 11.1). `Shutter_Approver` may save the profile, policy included, so `approval` is a setting an approver can change; `GET /api/shutter/site-profile/history` keeps each version and who saved it.
 
 **What a tier decides.** A receiver's tier is read with the profile's `policy`, by the shape of the failure. As shipped: tier 1 writes a
 single failed message or an ordered chain with no approval; tier 2 writes a single failed message with no approval and asks for one on an
@@ -623,11 +642,11 @@ Say these plainly to whoever owns the feed.
 - **A message accepted by a transport ACK and then lost downstream raises nothing in Shutter today.** The engine completed it, so no alert comes and no case
   opens. The same goes for an operation with `GetReply` off, and for an application ACK that never arrives. A negative ACK on a feed of its own opens a case only with the process in 9.9.
 - **Non-ADT messages have no recovery.** Orders, results and documents open a case and escalate, and a person decides: the case says what the
-  receiver did, since the message may be sound. They do not group: 5 failed results are 5 cases, and an outage is one case per message, not an incident.
+  receiver did, since the message may be sound. They do not group: 5 failed results are 5 cases. A receiver with a `watch` block also gets one outage for the time it is down (section 11), and its cases are listed with it; without one, an outage is one case per message, not an incident.
 - **An MLLP operation retrying forever (`FailureTimeout` -1, the stock TCP operation's default, which the plan now warns of whether
   the item sets it or inherits it).** The alert opens a case on the first failure, even in a short outage, and the engine goes on
   retrying. When the system returns the messages go through by themselves, in order, and no alert says so: the case still reads
-  escalated and shows no later messages. Read the message trace before anyone re-enters an order by hand. At a receiver that also has an API, Shutter's own approved resend can duplicate it: the API write, then the engine's delivery when the listener returns (measured on 109, on ADT). Keep `FailureTimeout` 0 on such a receiver.
+  escalated and shows no later messages. Read the message trace before anyone re-enters an order by hand. At a stock HL7 TCP operation whose receiver also has an API, Shutter refuses the resend while the engine is trying, and closes the case when the engine delivers, in words that say only what the acknowledgement can claim (measured on 109, on ADT). A site's own operation class, or a receiver reached through a business process, is not read that way: keep `FailureTimeout` 0 there.
 - **`QueueCountAlert` reaches your own alert consumer but opens no case,** and a router's validation refusal, with `AlertOnError` off on
   the router, is only logged: no alert, no case, and its header reads Completed.
 - **A forward is retried only while nobody answers.** While `Shutter.Production` is stopped (or a gateway answers 502, 503 or 504, or nothing does), a
@@ -658,6 +677,178 @@ Say these plainly to whoever owns the feed.
   case gives its header id there.
 - **The cross-namespace timeline** reads Shutter's own connector table only: on a site's stock production it finds no earlier or later
   messages.
+
+## 11. A receiver's outages (v1.1.0)
+
+Shutter watches configured HL7 TCP operations without contacting their receivers. It groups outages, shows whether the
+engine is retrying or messages have settled, preserves unresolved exceptions, and shows the site's next action and contact.
+It sends no orders or results. At supported stock TCP routes, it also prevents Shutter's ADT API recovery from competing
+with the engine's delivery (section 10).
+
+**11.1 The watch block.** A receiver is watched when its site profile entry has a `watch` block naming the production item
+that delivers to it; with none, nothing below happens for it. The keys (CONTRACTS 6.4), each checked only when present:
+
+```json
+{
+  "name": "Lab Orders Out",
+  "category": "orders_results",
+  "tier": 3,
+  "watch": {"namespace": "PATHOLOGY", "item": "Lab Orders Out"},
+  "runbook": "Restart the listener on the receiving server, then tell the lab desk",
+  "call": "Lab desk, 01632 960000",
+  "approvers": ["the lab's on-call"],
+  "ack_level": "commit",
+  "duplicates": {"behaviour": "unknown"},
+  "settle_minutes": 10,
+  "window_minutes": 5
+}
+```
+
+- `watch` `{"namespace", "item"}`, both required: the item is read, never changed.
+- `runbook` and `call`: your own words, printed as written, for what to do and whom to call.
+- `approvers`: names, shown as who may approve here; with none, `approvers.escalation`.
+- `ack_level`: `connection` (the default), `commit` or `application`, on any category: what a Completed header proves at
+  this receiver, as you declare it (section 9.9). It is never rounded up.
+- `duplicates` `{"behaviour", "code", "phrase", "refers_to"}`: `refuses` (with the ERR-3 `code` or the exact MSA-3
+  `phrase`), `files_twice` or `unknown` (the default). At a retrying receiver the outage says which, beside "entering one by
+  hand first is your downtime procedure's call".
+- `settle_minutes` (default 10) and `window_minutes` (default 5), whole numbers of 1 or more; `resend_approval_minutes`
+  (default 15) validates and has no use in this build.
+- `engine_resend`, `hold` and `mail` validate and do nothing in this build: the Doctor lists each one a profile declares in
+  `outages.declared_not_in_build`, "declared; not in this build", so a block never appears to enable recovery.
+
+Saving the profile voids every approval given and not yet dispatched (`APPROVAL_SITE_PROFILE_CHANGED`), so add a watch
+block when nothing is waiting to be sent.
+
+**11.2 The readings.** The item `Receiver Watch` (in `Shutter.Production`, and added by `InstallInto` in shape B) polls every
+5 seconds from Shutter's own production job. Per watched receiver it reads, in the watched namespace, the production's state,
+the item's status, adapter state, queue, the oldest header to the item reading Delivered (the head message), the job list's
+active message, and the item's `FailureTimeout`, `DefCharEncoding`, `ReplyCodeActions`, `GetReply` and `StayConnected`. It
+opens no connection to the receiver and writes nothing in the watched namespace. Every value is stamped, and a failed read
+is stored as unknown, never as healthy. The reading is one of `healthy`, `slow` (connected, with a queue), `down`,
+`refusing` (the head message refused and tried again), `not_answering` (the head written and no reply), `cant_tell` and
+`unknown`; a receiver whose row its watcher has not written for 60 seconds reads `unknown` with its last stamp.
+`GET /api/shutter/outages` answers every watched receiver's reading as `receivers` (CONTRACTS 17.3).
+
+**11.3 The outage.** One per receiver, opened when every poll across 30 seconds reads down, when the head message stays
+refused or unanswered across two polls, or, at an operation that finishes with messages by itself (`FailureTimeout` 0 or
+above), on one new Error header whose every attempt says the connection never opened. A queue's depth alone opens nothing.
+The states are CONTRACTS 17.2's:
+
+- `open` while the engine owns everything queued; `draining` once the adapter reads connected and `Status` OK at a
+  retrying operation; a dirty read returns it to `open`.
+- `closing` when the queue is 0, no head message is read and no header of the window is Queued or Delivered, on two polls
+  5 seconds apart. Every header of the window (from the open less `window_minutes` to the drain) is then read and counted by
+  what happened to it, and the engine's own alerts for the item in the window are kept beside the record.
+- `closed` when no header of the window ended in Error. With any, `needs_person`: "N messages failed and were not offered;
+  a person reads the trace". This build offers nothing to send again (`set.status` `not_computed`, "no set gate in this
+  build").
+- `needs_person` also when `settle_minutes` pass with the queue never at 0 (a busy feed).
+- An outage open an hour or more says "Down longer than the site's limit: the lab's downtime procedure applies."
+
+The cases opened by the receiver's failures in that time are linked to it and listed as `openCases`. A link is no authority
+to close one: a linked case is resolved only when it is a failed delivery whose own delivery header reads Completed with an
+acknowledgement level established; every other one stays open, with its reason. A closed transport outage can leave
+urgent clinical exceptions unresolved: it lists them and settles none of them. The outage's words (`words`: `first`, `do`,
+`call`, and `critical` at an `orders_results` receiver) are composed on each read from the row, the reading, the profile
+entry and what the build holds, and always say "Recovery attempts initiated by Shutter: 0."
+
+**11.4 The acts.** `POST /api/shutter/outages/{id}/acts` (an approver's, with `X-Requested-With: Shutter`) takes
+`{"act": "pause", "until": "<UTC time>"}`, for a receiver down on purpose until a time, or `{"act": "close", "reason": "..."}`.
+The person recorded is the signed-in user. An act the row does not list (`acts`) is refused, 400, and the row is left as it
+was; an operator's session reads every route and is refused here with 403. There is no Read again in this build.
+
+**11.5 The Doctor's lines.** `SELECT Shutter.Setup_Doctor()` has `outages`: the count open and by state; per watched receiver
+its reading, stamp and settings with where each came from (`item`, `class_default` or `unknown`), `SaveReplies`, and
+`reply_actions_note` where the item's `ReplyCodeActions` is not the engine's default; `approvers_missing`;
+`policy_version`; `routers_validating` and `alert_on_error_off` in each watched namespace (a router's validation refusal,
+and an operation with `AlertOnError` off, reach no intake); and `declared_not_in_build`. `missing_items` names `Receiver
+Watch` when the production lacks it. `release_sweep.engine_unreadable` counts the cases waiting on the engine whose record
+the Case Releaser could not read on its last sweep.
+
+**11.6 The site's alert must carry the link.** Nothing in this build tells anyone an outage has opened: no mail goes and no
+screen of the web application shows outages yet. The engine's own alerts still reach your consumer (`Site Alerts` after
+onboarding), so put the address of Shutter's outages there, `https://<your Shutter host>/api/shutter/outages`, or the web
+application's `/shutter/index.html` for the cases, in the alert's text or your on-call's notification. The `runbook` and
+`call` lines are for whoever opens it. A watcher that stops shows as `unknown` with its last stamp; nothing outside Shutter
+checks that it runs.
+
+**11.7 Limits.** What Shutter does not do or cannot see here, measured on two stock builds (109 and 2026.2) with fake
+listeners on the loopback address of a test instance:
+
+- **What Shutter sends.** At an operation that retries (`FailureTimeout` -1, the stock default) there is nothing to resend
+  and Shutter sends nothing: the engine goes on attempting delivery, in order, when the listener is back; a refusal, a
+  stopped production or a changed setting can still stop one. A `FailureTimeout` above 0 is bounded retries, not "no
+  retry". Shutter sends no order or result. It never edits, re-encodes, transliterates or reorders a message, never passes a
+  new body or target to the engine, and never suspends, discards or reorders a message in the engine's hands, even when one
+  refused message at the head of a retrying queue blocks everything behind it: it names the message and a person acts.
+- **No probe.** Shutter never opens a connection to a receiver to see whether it is up. Measured: a connect-and-close probe
+  reads a busy healthy listener as down and a hung one as up, logs a warning at the receiver each time, and, badly timed,
+  caused the very failure it was looking for. The engine's view is of its own connection, so a network, DNS or VPN fault
+  reads as down or can't tell, never as the receiver's fault. TLS on the operation was not tried: a TLS failure's words read
+  unknown.
+- **Delivery, not diagnosis.** No result value is printed, weighed or sent to a model. Shutter does not assess clinical
+  urgency. If delayed reporting may require clinical action, contact the laboratory using the site's critical-results and
+  downtime procedure. Do not re-enter or amend a result solely from this page.
+- **An acknowledgement proves what the site declares.** A plain AA leaves nothing in the engine that tells an application
+  ACK from a commit ACK, and no positive reply is stored on stock settings. The level shown is the site's word, never
+  rounded up, and never "Verified" at an MLLP receiver. An AA that carries a warning or an ERR segment is invisible to
+  Shutter. On the stock `ReplyCodeActions` the engine does not check that a reply names the message it answered. Where an
+  operation's reply actions complete on anything but AA and CA, or `GetReply` is off, or a site's own subclass overrides the
+  reply handling, Completed can mean a refusal or that nothing was awaited (section 9.9), so no level is shown: "IRIS marked
+  this delivery Completed. Receiver acceptance has not been established." A whole-message ACK does not establish that every
+  patient or result group was processed, and a product name cannot establish an installation's ACK, duplicate or correction
+  behaviour. A transport ACK followed by silence raises nothing in IRIS, so no case opens. A receiver's own suspense queue,
+  or a restore of it from backup, can undo a Completed: Shutter reads the engine, not the receiver.
+- **A hand entry at the receiver is invisible** over HL7. A declared `duplicates` behaviour is the site's word; after the
+  receiver's own retention has passed, a duplicate may read there as a new message.
+- **Characters above ASCII.** On stock settings a UTF-8 e with a grave accent (U+00E8) and no MSH-18 is stored as two characters and goes out as the
+  same two bytes it came in with; a Latin-1 byte read by a service set to UTF-8 becomes `?` and takes the next byte with
+  it, which can be a `^` or a `|`, so later fields move along by one, with a commit ACK to the sender, Completed on every
+  copy, no log row, and the original bytes gone from the stored message. Shutter cannot detect or repair that, and the
+  engine's own retries send it as stored, as they do a truncated body or an identity fault inside a message: Shutter reads
+  identifiers, never corrects them. `Charset` does not exist on HL7 TCP items.
+- **Orders and results across patients.** Nothing here reads an order's or result's patient across merges (A40, A47) or
+  identifier corrections, and arrival order is not proof of order and result, cancellation or amendment order.
+- **"Still in the engine's hands" is read for stock HL7 TCP operations.** A site's own operation class, or a receiver
+  reached through a business process, is not read, and the ADT guard does not apply there: keep `FailureTimeout` 0 at such
+  a receiver that also has an API. At a stock HL7 TCP operation the guard holds in both orders (approval first, or the
+  engine first). An ADT message whose first attempt reached the receiver and whose operation then gave up is blocked
+  `RECEIVER_MAY_HOLD_IT` for a person. A subclass of the stock operation with its own reply handling is watched with its
+  behaviour marked unknown. A case waiting on the engine is judged by the Case Releaser every few seconds; while the
+  engine's record can't be read it stays blocked and is counted in the Doctor's `release_sweep.engine_unreadable`. An
+  incident's item blocked `ENGINE_STILL_TRYING` stops its chain, as an escalated case does.
+- **Operations with `StayConnected` 0** read disconnected whether the receiver is up or down, so they can only be judged by
+  their next send, and the reading says can't tell. A silent network drop with no FIN was not measured. A hung listener
+  reads connected until a read times out.
+- **Counts of attempts are undercounts.** The engine logs a row only when the words change, so the attempts are read from
+  the header's own description where it says so, and otherwise as "at least once". A namespace's surviving log rows do not
+  prove a complete attempt history.
+- **Failures the intake never hears** (a router's validation refusal with `AlertOnError` off, a batch, a message over 2 MB,
+  a FHIR or document body) get no case. The outage does not depend on the intake, so it can still open at the operation; a
+  router's refusal never reaches the operation and gets neither. A target with no header to it is invisible: nothing reaches
+  the item and nothing is read. A no-retry operation with `AlertOnError` on makes one case per failed message; those cases
+  are linked to the outage. Whether a long or flapping outage makes more cases from the site's queue alerts was not
+  measured.
+- **A busy feed may never read a queue of zero,** so after `settle_minutes` the outage goes to a person.
+- **A sender replaying older messages after the close** opens a new outage or none: nothing is held back.
+- **Times** are read from `TimeCreated` as stored; a clock jump is not corrected.
+- **The engine's alert words** are kept to 300 characters, as JSON text: whatever shows them must escape them, never render
+  them as markup.
+- **Restore, mirror, test copy.** A restored engine, a mirror failover mid-run, or a test copy refreshed from live are not
+  guarded: there is no instance identity and no monotonic reference, and the outage watcher is not established as safe
+  across a failover or the loss of Shutter's database.
+- **No board on any order or result,** no catalogue entry for orders, no order-level keys (placer or filler), no correction
+  sequence, no probe.
+- **Not in this build:** an offered list of messages that never reached the receiver, a resend of orders or results, named
+  findings on characters, reply words or OBX, an agent's summary of an outage, an assistant for the profile, the outage
+  email, and the hold on a patient's ADT traffic (it was not built for this version, so none of its measurements ran).
+- **Not measured for this version,** so the words on these points say unknown rather than claim: the engine's `Status`
+  through an AR retry loop, after an AE, and after a no-retry receiver returns on an idle feed; the job list's active message
+  under retry; whether a header completed after retries keeps its earlier rows.
+- **Every receiver behaviour measured is a fake's.** No real laboratory system, order communications system or integration
+  engine has been tried, and every reply wording in the measurements was made up for the test. What a real system answers
+  to a duplicate is the site's word in its profile and nobody's measurement.
 
 ## The publisher: Shutter's read-only tools for an MCP client
 

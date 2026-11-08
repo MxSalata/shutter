@@ -4,6 +4,61 @@ Versions follow `major.minor.patch`: a minor release for new features, a patch r
 updates. The version in both `module.xml` files (the one the package manager publishes) is always the version of the
 GitHub tag on the same commit; `scripts/check-versions.py` checks every place the version is written.
 
+## Unreleased
+
+What 1.1.0 holds: Shutter watches configured HL7 TCP operations without contacting their receivers. It groups outages,
+shows whether the engine is retrying or messages have settled, preserves unresolved exceptions, and shows the site's next
+action and contact. It sends no orders or results. At supported stock TCP routes, it also prevents Shutter's ADT API
+recovery from competing with the engine's delivery.
+
+- **A receiver's outage is one incident.** A receiver whose site profile entry has a `watch` block is read by the new item
+  `Receiver Watch` every 5 seconds: the production's state, the operation's status, adapter state, queue, head message and
+  settings, in the watched namespace, with no connection to the receiver and nothing written there. One outage opens per
+  receiver, drains, closes when every header of its window has settled, or goes to a person, with the engine's own alerts
+  beside the record and the cases of the outage listed with it. A linked case is resolved only from its own delivery header.
+  The routes `GET /outages`, `GET /outages/{id}` and `POST /outages/{id}/acts` (pause and close) carry the outage's words:
+  what the engine is doing, the site's runbook and call lines, who may approve, and at an orders and results receiver the
+  critical-results sentence. The Doctor's `outages` reads each watched item's settings and names what a profile declares that
+  the build does not act on (`docs/INSTALL.md` section 11).
+- **The site profile takes a receiver's outage keys:** `watch`, `runbook`, `call`, `approvers`, `ack_level`, `duplicates` and
+  the minutes, checked in the same words by the server and the page; `engine_resend`, `hold` and `mail` validate and do
+  nothing in this release.
+- **No write while the engine still has the message.** At a stock HL7 TCP operation, a write waits while the engine is
+  still trying its message (`ENGINE_STILL_TRYING`), resolves when the engine delivered it (`ENGINE_DELIVERED`), and is blocked
+  for a person when the receiver may already hold it (`RECEIVER_MAY_HOLD_IT`) or the engine's record can't be read
+  (`ENGINE_UNREADABLE`). The Case Releaser judges each waiting case again every few seconds. This closes a double delivery
+  measured on 1.0.0: an approved API write, then the engine's own delivery when the listener returned.
+- **No claim of verification without a receipt.** A case with no receipt says the receiver was not checked, with the words
+  its declared acknowledgement level allows, and the escalation email promises no check of a receiver Shutter can't read.
+- **Further messages for the patient.** Before a write Shutter reads the patient on every visit it can see: a further
+  in-patient movement on another visit stops the write and names both visits, a lost admission waits for a person, and the
+  read walks every header since the case's own, for as long as the profile's `further_messages.scan_seconds` allows.
+- **An automatic release needs the case's source proved:** the named namespace must hold the named header with the text
+  received, sent to that receiver; otherwise a person approves (`feed.prove_origin`).
+- **What reaches Shutter.** An alert or a negative acknowledgement carries the message the failing item was sent; a session
+  with several messages to one item opens no case on a guess and says so; alert words Shutter does not know read as an
+  uncertain outcome, never as not delivered; a forward nobody answered waits in the forwarder's queue and is tried again for
+  its `FailureTimeout` (300 seconds as onboarding now sets it).
+- **What the receiver must honestly offer.** A resend needs a readable history; a read counts only when it is the receiver's
+  own answer, a 200 is a delivery only with its receipt, and a receipt closes a case only when it holds the message's own
+  content (`strict_answers`). A write a receiver made during a rehearsal goes on the record and stops the case.
+- **The verifier and the purge.** No sign of a write by the last read is unknown, not "not committed"; the case purge takes
+  only finished cases.
+- **Incidents.** An approval under an incident binds the plan's receiver epoch; the next item of a chain goes at the version
+  in the previous item's receipt; a chain waiting on a bed held in a later chain of the same incident stops; the intake of an
+  incident closes at a maximum time while the receiver keeps refusing.
+- **The catalogue.** E19, new, sends a case with a death on the message to a person; E1 closes a failed transfer only; E7
+  takes a movement from another source within `feed.source_skew_seconds`; E13 is revised. A case the catalogue gives to the
+  board or a person goes to a person when no board member can answer. Policy version 2026-11-06.1.
+- **The approval dialogs** name the case, the patient with authority, the event time and the bed, and hold the plan they
+  opened on.
+- **Upgrading:** run the install once and restart the production. Approvals given before the upgrade and not yet dispatched
+  are refused (the policy and catalogue versions moved), precedents recorded before it are not found under the new policy
+  version, and saving the profile voids approvals not yet dispatched (`docs/INSTALL.md` section 8).
+- **Not in this release:** a list of messages to send again, a resend of orders or results, named findings, an agent's
+  summary of an outage, a profile assistant, the outage email and the hold on a patient's ADT traffic. The limits are
+  `docs/INSTALL.md` section 11.7.
+
 ## 1.0.0 (6 November 2026)
 
 What the first release holds: Shutter, supervised recovery of failed deliveries in an InterSystems IRIS
