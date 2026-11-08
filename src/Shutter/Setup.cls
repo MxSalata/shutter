@@ -619,8 +619,9 @@ ClassMethod LoginJob(user As %String, password As %String, key As %String)
 /// The public demo's API session timeout in seconds (1.1.2), which HardenPortal sets on /api/shutter in place of IRIS's
 /// 900. A signed-in session holds one licence connection until it ends, and the Community licence refuses every new login,
 /// Management Portal and terminal included, once the instance holds 8 (the demo of 8 Nov 2026: the portal page answered
-/// 503 after the 8th sign-in, for 15 minutes). An open tab keeps its session by polling (every 30 s at most while a live
-/// hospital is on), so only a closed tab, or one hidden for longer than this, lets its session end.
+/// 503 after the 8th sign-in, for 15 minutes). A visible tab with the live hospital on keeps its session by the banner's
+/// poll (every 30 s at most); a hidden tab polls nothing, so a tab hidden, or idle on a page that polls nothing, for longer
+/// than this is signed out, and a closed tab's session ends this long after its last request.
 Parameter DEMOAPISESSIONSECONDS = 120;
 
 /// The demo's Management Portal, read only (v1.38; the demo portal review of 3 Nov 2026). The portal web applications of

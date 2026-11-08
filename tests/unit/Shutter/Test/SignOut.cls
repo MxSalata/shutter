@@ -24,8 +24,8 @@ Method TestLogoutEndsTheSession()
     Do $$$AssertEquals(%response.ContentType, "application/json", "with JSON")
 }
 
-/// The demo's session timeout outlasts the slowest poll of an open tab (30 s, the live hospital's banner) at least twice
-/// over, so a visible tab is never signed out, and is at most a third of IRIS's 900 s, so a closed tab's session ends soon.
+/// The demo's session timeout outlasts the slowest poll of a visible tab (30 s, the live hospital's banner) at least twice
+/// over, so a visible tab with the live hospital on is never signed out, and is at most a third of IRIS's 900 s, so a closed tab's session ends soon.
 Method TestDemoTimeoutBounds()
 {
     Set t = ##class(Shutter.Setup).#DEMOAPISESSIONSECONDS
