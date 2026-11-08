@@ -11,7 +11,12 @@ Class Shutter.Util.ShownVisit
 ClassMethod In(summary As %DynamicObject) As %Boolean
 {
     If '$ISOBJECT(summary) Quit 0
-    Set found = summary.%Get("further_messages")
+    Quit ..Any(summary.%Get("further_messages"))
+}
+
+/// Whether a reading of the patient's further messages (Shutter.Util.FurtherMessages Find) shows another visit's movement.
+ClassMethod Any(found) As %Boolean
+{
     If '$ISOBJECT(found) Quit 0
     Set shows = found.%Get("shows")
     If '$ISOBJECT(shows) || 'shows.%IsA("%Library.DynamicArray") Quit 0
