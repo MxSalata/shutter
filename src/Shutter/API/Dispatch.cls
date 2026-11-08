@@ -665,7 +665,10 @@ ClassMethod DecisionRefused(out As %DynamicObject, case As Shutter.Store.Case = 
         } ElseIf $ISOBJECT(case) {
             Do case.%Reload()
             Set a = case.CurrentApproval
-            If $ISOBJECT(a) && (a.Decision '= "") { Set extra.approval = {} Set extra.approval.decision = a.Decision, extra.approval.approver = a.Approver, extra.approval.decidedAt = a.DecidedAt, extra.approval.planDigest = a.PlanDigest }
+            If $ISOBJECT(a) && (a.Decision '= "") {
+                Set extra.approval = {} Set extra.approval.decision = a.Decision, extra.approval.approver = a.Approver, extra.approval.decidedAt = a.DecidedAt, extra.approval.planDigest = a.PlanDigest
+                Quit ..Fail("409 Conflict", "wrong_state", out.error _ "; " _ a.Decision _ " by " _ a.Approver _ " at " _ a.DecidedAt, extra)
+            }
         }
     }
     Quit ..Fail("409 Conflict", "wrong_state", out.error, extra)
