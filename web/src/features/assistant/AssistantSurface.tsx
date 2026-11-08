@@ -1,5 +1,14 @@
 import { AppShell, Card, CloseButton, Drawer, Group, Stack, Title } from '@mantine/core';
-import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react';
 import { Outlet, useSearchParams } from 'react-router';
 import { Loader } from '@mantine/core';
 import { useMediaQuery } from '@mantine/hooks';
@@ -123,16 +132,22 @@ function Sheet({ title, onClose, children }: { title: string; onClose: () => voi
   );
 }
 
-/** Closes the panel; focus goes back to the button that opens it (a case's own, else the header's) once it has closed. */
+/** Focus on the button that opens the panel: a case's own, else the header's. */
+function focusOpener() {
+  const own = document.querySelector<HTMLElement>('[data-tour-action="ask-open"]');
+  (own ?? document.getElementById(ASSISTANT_BUTTON_ID))?.focus();
+}
+
+/**
+ * Closes the panel; focus goes back to the button that opens it once it has closed. The drawer does the same again when
+ * its closing transition ends, since its focus trap holds focus until then.
+ */
 function useClosePanel() {
   const setOpen = useAssistant((s) => s.setOpen);
-  return () => {
+  return useCallback(() => {
     setOpen(false);
-    window.setTimeout(() => {
-      const own = document.querySelector<HTMLElement>('[data-tour-action="ask-open"]');
-      (own ?? document.getElementById(ASSISTANT_BUTTON_ID))?.focus();
-    }, 0);
-  };
+    window.setTimeout(focusOpener, 0);
+  }, [setOpen]);
 }
 
 /**
@@ -174,22 +189,29 @@ export function AssistantOverlay() {
   // A citation in an answer opens the Evidence tab behind the drawer, so the drawer closes for the evidence to be seen:
   // once the address names the tab, since closing edits the address too and must keep it
   const citing = useRef(false);
+  // Closed for a citation: focus goes to the cited evidence, not back to the button, when the drawer has closed
+  const toEvidence = useRef(false);
+  const setOpen = useAssistant((s) => s.setOpen);
+  const closeForEvidence = useCallback(() => {
+    toEvidence.current = true;
+    setOpen(false);
+  }, [setOpen]);
   const [search] = useSearchParams();
   const onEvidence = search.get('tab') === 'evidence';
   useEffect(() => {
     if (!open || wide) return;
     const cite = () => {
-      if (onEvidence) onClose();
+      if (onEvidence) closeForEvidence();
       else citing.current = true;
     };
     window.addEventListener(SHOW_EVIDENCE, cite);
     return () => window.removeEventListener(SHOW_EVIDENCE, cite);
-  }, [open, wide, onEvidence, onClose]);
+  }, [open, wide, onEvidence, closeForEvidence]);
   useEffect(() => {
     if (!citing.current || !onEvidence) return;
     citing.current = false;
-    if (open && !wide) onClose();
-  }, [onEvidence, open, wide, onClose]);
+    if (open && !wide) closeForEvidence();
+  }, [onEvidence, open, wide, closeForEvidence]);
   return (
     <>
       {asSheet ? (
@@ -202,6 +224,11 @@ export function AssistantOverlay() {
         onClose={onClose}
         position="right"
         size={phone ? '100%' : 480}
+        returnFocus={false}
+        onExitTransitionEnd={() => {
+          if (toEvidence.current) toEvidence.current = false;
+          else focusOpener();
+        }}
       >
         <Drawer.Overlay />
         <Drawer.Content>

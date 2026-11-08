@@ -44,7 +44,7 @@ test.describe('Ask Shutter, from the header', () => {
   }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await signIn(page);
-    const button = page.getByRole('button', { name: 'Ask Shutter' });
+    const button = page.getByRole('button', { name: 'Ask Shutter', exact: true });
     await expect(button).toHaveAttribute('aria-expanded', 'false');
     await button.click();
     const panel = page.getByRole('region', { name: 'Ask Shutter' });
@@ -60,7 +60,7 @@ test.describe('Ask Shutter, from the header', () => {
     await panel.getByRole('button', { name: 'What is a scenario?' }).click();
     const thread = panel.getByRole('region', { name: 'Conversation' });
     await expect(thread.getByRole('heading', { name: 'What is a scenario?', level: 4 })).toBeFocused();
-    await expect(thread).toContainText('replays a known failure');
+    await expect(thread).toContainText('one known failure of a hospital message');
     await expect(thread).toContainText('Example (sample data)');
     // No question of one's own in the trial, and the written guide to the page
     await expect(panel.getByRole('textbox', { name: 'Your own question' })).toBeDisabled();
@@ -79,6 +79,11 @@ test.describe('Ask Shutter, from the header', () => {
     await expect(
       page.getByRole('region', { name: 'Ask Shutter' }).getByRole('button', { name: 'Which cases need me?' }),
     ).toBeVisible();
+    // Escape inside the panel closes it (beside the page it is no dialog, so Escape elsewhere is the page's own)
+    await page
+      .getByRole('region', { name: 'Ask Shutter' })
+      .getByRole('button', { name: 'Which cases need me?' })
+      .focus();
     await page.keyboard.press('Escape');
     await expect(page.getByRole('region', { name: 'Ask Shutter' })).toHaveCount(0);
     await expect(button).toBeFocused();
@@ -92,7 +97,7 @@ test.describe('Ask Shutter, from the header', () => {
   test('is a full-screen sheet on a phone, and comes back open after a reload', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await signIn(page);
-    await page.getByRole('button', { name: 'Ask Shutter' }).click();
+    await page.getByRole('button', { name: 'Ask Shutter', exact: true }).click();
     const sheet = page.getByRole('dialog', { name: 'Ask Shutter' });
     await expect(sheet.getByRole('heading', { name: 'Ask Shutter' })).toBeFocused();
     await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running'));

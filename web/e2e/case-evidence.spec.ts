@@ -49,8 +49,11 @@ test.describe('Ask about this case, from 1200 px', tagged, () => {
     const side = await panel.boundingBox();
     const title = await page.getByRole('heading', { name: 'Case C-000008', exact: true }).boundingBox();
     expect(side!.x).toBeGreaterThan(title!.x + 200);
-    const main = await page.locator('main').boundingBox();
-    expect(main!.x + main!.width).toBeLessThanOrEqual(side!.x + 1);
+    // The page's own content ends before the panel: the shell's main keeps the panel's width as its right padding
+    const mainEnd = await page
+      .locator('main')
+      .evaluate((m) => m.getBoundingClientRect().right - parseFloat(getComputedStyle(m).paddingRight));
+    expect(mainEnd).toBeLessThanOrEqual(side!.x + 1);
     await expect(page.getByRole('dialog')).toHaveCount(0);
     // The header's button says the panel is open, and the case's own asked the first suggested question (the trial's
     // example conversation has it answered already, so nothing more was asked)

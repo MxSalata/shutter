@@ -378,10 +378,10 @@ test.describe('the tour with Ask open', () => {
   test('keeps Ask a sheet when the tour is closed from its card, and Escape in Ask leaves the tour where it was', async ({
     page,
   }) => {
-    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.setViewportSize({ width: 1100, height: 800 });
     const guide = await atAskStep(page);
     await page.locator('[data-tour-action="ask-open"]').click();
-    const panel = await besideAsk(page, guide, 1280);
+    const panel = await besideAsk(page, guide, 1100);
     // Escape in Ask closes Ask, back to its button; the card returns before it
     await page.keyboard.press('Escape');
     await expect(panel).toHaveCount(0);
