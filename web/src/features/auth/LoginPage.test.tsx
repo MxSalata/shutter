@@ -85,18 +85,28 @@ describe('LoginPage', () => {
 
   it("names the online demo's account outside the disclosure on a demo instance", async () => {
     await renderDemoLogin();
-    const line = screen.getByText(/On the online demo, sign in as/);
-    expect(line).toHaveTextContent('On the online demo, sign in as demo / shutter.');
+    const line = screen.getByText(/Online demo:/);
+    expect(line).toHaveTextContent('Online demo: demo / shutter.');
     expect(screen.getByRole('button', { name: 'Demo users' })).toHaveAttribute('aria-expanded', 'false');
     expect(line.closest('[data-tech-detail]')).toBeNull();
     expect(screen.getByText(/They are for your own instance/)).toBeInTheDocument();
+  });
+
+  it("names an install's own users first, above the online demo's account", async () => {
+    await renderDemoLogin();
+    const own = screen.getByText(/Your own install:/);
+    expect(own).toHaveTextContent('Your own install: approver or operator / shutter.');
+    expect(own.closest('[data-tech-detail]')).toBeNull();
+    const online = screen.getByText(/Online demo:/);
+    expect(own.compareDocumentPosition(online) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('names no online demo account on a site install', async () => {
     const { client } = renderLogin(false);
     expect(await screen.findByRole('button', { name: 'Sign in' })).toBeInTheDocument();
     await waitFor(() => expect(client.getQueryState(keys.health)?.status).toBe('success'));
-    expect(screen.queryByText(/On the online demo, sign in as/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Online demo:/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Your own install:/)).not.toBeInTheDocument();
   });
 
   it('keeps the demo users in a disclosure, closed until it is opened', async () => {

@@ -100,11 +100,15 @@ export default function LoginPage() {
                   <Button type="submit" loading={signIn.isPending} fullWidth>
                     Sign in
                   </Button>
-                  {/* The demo users and their password only on a demo instance (the server's flag). */}
+                  {/* The demo users and their password only on a demo instance (the server's flag). An install's own
+                      users come first: the online demo's user has no password on an install unless it was given one. */}
                   {demo ? (
                     <>
                       <Text size="sm">
-                        On the online demo, sign in as <b>demo</b> / <code>shutter</code>.
+                        Your own install: <b>approver</b> or <b>operator</b> / <code>shutter</code>.
+                      </Text>
+                      <Text size="sm">
+                        Online demo: <b>demo</b> / <code>shutter</code>.
                       </Text>
                       <TechDetail label="Demo users" kind="explain">
                         The demo installs two users: <b>operator</b> runs scenarios, reads cases, escalates
