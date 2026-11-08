@@ -1020,6 +1020,13 @@ the framework). The Dockerfile runs it, and a site with Java runs it once by han
   until the decider fills it (v1.21; before, it was pre-filled with the plan's digest, so an inbox approval always
   matched). An approval with another digest, or none, rejects the chains it covers: their cases are escalated with the
   reason.
+- A task's message holds 2,000 characters (`EnsLib.Workflow.TaskRequest.%Message`). It lists every chain and item when
+  they fit; otherwise the first whole chains, how many chains and operations it leaves out, and the incident page
+  (`/shutter/index.html#/incidents/I-nnnnnn`), which has them all. The digest is always whole, and an approval binds every chain the
+  plan holds, listed in the message or not.
+- An error raising a task, or the Workflow item answering its call with an error, closes nothing: the chains stay
+  `awaiting_approval`, no case fails, an `error` event and an alert name the incident, once for each cause, and the workflow
+  tries again every 5 minutes, reading the approval target afresh. Until a task exists an approval answers 409 `wrong_state`.
 
 ### 7.4 Release
 
