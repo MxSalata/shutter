@@ -127,6 +127,17 @@ describe('LoginPage', () => {
     expect(screen.getByLabelText(/Password/)).toHaveAttribute('autocomplete', 'current-password');
   });
 
+  it('is a main landmark that starts on User name, with the h1 and the form before the proof', async () => {
+    renderLogin(false);
+    const user = await screen.findByRole('textbox', { name: 'User name' });
+    const main = screen.getByRole('main');
+    expect(main).toContainElement(user);
+    await waitFor(() => expect(user).toHaveFocus());
+    const h1 = screen.getByRole('heading', { level: 1, name: 'Sign in' });
+    const h2 = within(main).getAllByRole('heading', { level: 2 })[0];
+    expect(h1.compareDocumentPosition(h2) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('signs in with the form and goes on to Home', async () => {
     const { client } = renderLogin(true);
     await userEvent.type(await screen.findByLabelText(/User name/), 'approver');
