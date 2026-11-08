@@ -717,7 +717,7 @@ profile a person saved is never touched, and a reinstall leaves both marked sour
   disposition `correct` that always needs an approval and a rehearsal showing the placement unchanged; the gate and the
   verifier reading the history for the inserted movement. Practice (IHE PAM) corrects a past movement only through a
   historic-movement update where the receiver supports it, never by resending the original message.
-- **A receiver's outages** (v1.1.0): optional keys on a receiver entry. Each is checked only when present, an entry with none
+- **A receiver's outages** (v1.47): optional keys on a receiver entry. Each is checked only when present, an entry with none
   of them validates as it always did, and a block whose feature is not in the build validates and does nothing.
   `watch` `{"namespace", "item"}`, both required: the production item Shutter watches, read only; with no `watch` the receiver
   is not watched. `runbook` and `call`: the site's own words, what to do and who to call. `approvers`: an array of names.
@@ -838,6 +838,15 @@ The plan's `catalogue_entry` and `outcome` are bound by the approval's digest li
 Two `intent` checks for withheld cases (v1.14, policy version 2026-10-19.3), appended for every plan on a case of kind `withheld` as `UNMAPPABLE` is, and as guards on any write of a merge or a cancel: `MERGE_WITHHELD` (the case's event is `merge` and the site profile does not allow merges, or the receiver does not take them) and `CANCEL_UNSUPPORTED` (a `cancel_*` event to a receiver whose entry says `cancels: false`). The identity check answers `NO_ENCOUNTER` (pass) for a case whose encounter piece is `-`, and the state-transition and concurrency checks answer `PATIENT_LEVEL_WRITE` (block) for a write on such a case: there is no encounter state or version to check, so a person decides, and nothing is retried.
 
 **The rehearsal check** (v1.21, policy version 2026-10-25.1), between authorization and concurrency: `NOT_APPLICABLE` (pass) for a plan that writes nothing, `NOT_YET_REQUIRED` (pass) at the proposal, and at dispatch `REHEARSED` (pass: the approval's bound rehearsal is of this plan, reported `would_apply`, and was checked against the plan's expected version, the receiver's epoch and the evidence's payload digest), `DRY_RUN_MISSING` (block: no rehearsal bound, or one of another plan), `DRY_RUN_FAILED` (block: the bound rehearsal reported it would not apply) and `DRY_RUN_STALE` (block: checked against another version, a rehearsal with no version from the receiver included, against another epoch than the preflight's, against another payload digest than the evidence's, or sent with an expected version other than the plan's). The capability check adds `DRY_RUN_UNSUPPORTED` (block: the capability profile reports no dry run). The approval binds the latest rehearsal of its plan, not the case's latest. The rehearsal record carries `expectedVersion` and `payloadDigest`, what was sent; the execution attempt carries `rehearsalId`, the approval's bound rehearsal, or the rehearsal itself when the receiver applied it. An approval given under 2026-10-20.1 and not yet dispatched is void at dispatch (`APPROVAL_POLICY_CHANGED`).
+
+**The engine check** (v1.47, `Shutter.Util.EngineCheck`). For a write on a case with a source namespace and an origin header,
+the gate's ordering check reads first: `ENGINE_NOT_IN_SCOPE` (pass, the target is not a stock HL7 TCP operation),
+`ENGINE_STILL_TRYING` (block, the case waits on `waitsOnEngine`), `ENGINE_DELIVERED` (block, on any route but the
+acknowledgement feed; the case resolves with the engine's words, or stays with a person where acceptance can't be
+established), `RECEIVER_MAY_HOLD_IT` (block, a person), `ENGINE_UNREADABLE` (unknown, refreshed, then a person),
+`ENGINE_SETTLED` (pass). The reason codes are in `knowledge/block-reasons.json`, with `HOLD_EXPIRED`, `ENGINE_ROUTE`,
+`ENGINE_ROUTE_ABSENT`, `ENGINE_ROUTE_REFUSED` and `ENGINE_ROUTE_NO_API`, which this build does not emit. The Case Releaser
+judges a case waiting on the engine again (8.1).
 
 ### 6.6 The board and the catalogue
 
@@ -1104,16 +1113,21 @@ separate, later tool.
   Class. `Rebuild(fromId, toId, routes)` walks a range again (SQL procedure, `Shutter_Operate`).
 - `Shutter.Operation.Releaser` (production item "Case Releaser", v1.35), a service on `Ens.InboundAdapter` (`CallInterval` 5 s)
   that releases the cases no other host can: a case blocked or escalated while a newer message of its encounter was in
-  flight at a watched production (`waitsOnMessage`; that production's connector knows nothing of Shutter), and a case
-  held for a schema not loaded when its message was read (`heldSchema`, 11). Each sweep counts the candidates first; when
+  flight at a watched production (`waitsOnMessage`; that production's connector knows nothing of Shutter), a case
+  held for a schema not loaded when its message was read (`heldSchema`, 11), and a case blocked while the engine was still
+  trying its message (`waitsOnEngine`, 6.5). Each sweep counts the candidates first; when
   there are any it opens a run row, `Shutter.Store.ReleaseRun` (`startedAt`, `endedAt`, `state` running, done, failed or
   interrupted, `waitingChecked`, `waitingReleased`, `heldChecked`, `heldReleased`, `error`, `job`), runs
-  `ResendGuard.ReleaseDeliveredWaits` and `Schemas.ReleaseHeld`, which send each release from this host to the Case
-  Workflow as an id-only `Shutter.Msg.Reinvestigate` (`caseId`, `requestedBy` system, `reason`), and ends the row: the
+  `ResendGuard.ReleaseDeliveredWaits` and `Schemas.ReleaseHeld`, then `Releaser.ReleaseEngineWaits`, which reads the marked
+  header and resolves a case the engine delivered (the gate's own words and rules), plans one again when the engine has
+  settled it, with every blocked case on that header and never an escalated one, and leaves one still with the engine or
+  unreadable; its counts join the waiting counts on the run row. Each release goes from this host to the Case
+  Workflow as an id-only `Shutter.Msg.Reinvestigate` (`caseId`, `requestedBy` system, `reason`); the sweep then ends the row: the
   host is the one writer that ends a run. A quiet sweep writes no row, only its time. At start every run still open is
   marked interrupted, since the host starting again means a restart cut it. The newest 500 runs are kept (`KeepRuns`).
   `GET /index` carries `releases` `{host, started_at, last_sweep_at, sweeps, last_run, runs, interrupted_runs, candidates
-  {waiting, held}}` and the Doctor `release_sweep`. Until v1.35 the HL7 Index adapter's task ran the two checks beside its
+  {waiting, held, engine}, engine_unreadable}`, the last the number of waits on the engine the last sweep could not read (all of
+  them when the sweep stopped before reading them), and the Doctor `release_sweep`. Until v1.35 the HL7 Index adapter's task ran the two checks beside its
   walk; the adapter now only reads, and a site that installed Shutter earlier gets the item from the installer's item list.
 - The index is a finder, never a second source of truth: every decision still opens the message or asks the receiver.
 
@@ -1355,7 +1369,8 @@ needs only the packages `Shutter.Intake` and `Shutter.Util` for the forwarder an
 - The case carries `bed` (PV1-3's room and bed components for an admission or a transfer, else null; v1.28), `waitsOn` (the case it
   waits on while the gate holds its write with `WAITING_FOR_OCCUPANT_CASE`, 6.5; null otherwise; cleared by a reopening) and
   `waitsOnMessage` (the control id of the newer message it waits for under `NEWER_MESSAGE_PENDING`, 6.5, v1.29; null otherwise;
-  cleared by a reopening), on `GET /cases` items and `GET /cases/{id}` alike; `GET /cases/{id}` adds `waitedOnBy`, the ids of the
+  cleared by a reopening) and `waitsOnEngine` (`namespace:header id` of the header the engine still holds, under
+  `ENGINE_STILL_TRYING`, 6.5; null otherwise; cleared by a reopening; v1.47), on `GET /cases` items and `GET /cases/{id}` alike; `GET /cases/{id}` adds `waitedOnBy`, the ids of the
   cases whose `waitsOn` names it (v1.29).
 - The case carries `receiver` (the intake's, else the connector item), `sourceNamespace`, `sourceProduction`,
   `sourceRoute` and `originHeaderId`; the evidence snapshot has an item of kind `source` and the summary a `source`
@@ -1916,11 +1931,12 @@ board's case in the Visual Trace, the latest cases, and links to the portal's pa
 - **Sessions.** A request with no session behind it ends the one it opened, so a caller that keeps no cookie can't use up
   the licence units; a visitor already in a portal session keeps it.
 
-## 17. Receiver outages (v1.1.0)
+## 17. Receiver outages (v1.47)
 
 One incident per watched receiver: an outage, opened and closed by a read-only poll from Shutter's own production job, never
 by a connection to the receiver. It is a store of its own, `Shutter.Store.Outage`, beside `Shutter.Store.OutageEvent` (what
-happened to it, append only) and `Shutter.Store.ReceiverReading` (the last reading per watched receiver, overwritten by each
+happened to it, append only: `{at, kind, detail, by}`, `kind` one of `opened`, `kind`, `draining`, `open`, `closing`, `closed`,
+`needs_person`, `paused` and `overdue`) and `Shutter.Store.ReceiverReading` (the last reading per watched receiver, overwritten by each
 poll). A receiver is watched when its profile entry has a `watch` block (6.4); with none, the item `Receiver Watch` does
 nothing, and every route below answers empty lists.
 
@@ -1975,12 +1991,16 @@ All under `/api/shutter`, JSON in and out.
   "namespace", "item", "state", "kind", "openedAt", "drainedAt", "closedAt", "runbook", "call", "approvers": [..],
   "pausedUntil", "overdueAt", "readings": Reading, "window": { "from", "to" }, "settled": { "completed", "suspended",
   "error", "other" }, "alerts": [ { "at", "kind", "text" } ], "lists": { "queued": [Row], "offered": [Row], "reached":
-  [Row], "refused": [Row] }, "openCases": [ { "caseId", "reason", "owner" } ], "version", "set": { "digest", "computedAt",
+  [Row], "refused": [Row] }, "openCases": [ { "caseId", "reason", "owner" } ], "linkedCases": [ { "caseId", "state",
+  "headerId", "resolved" } ], "outcome", "version", "set": { "digest", "computedAt",
   "setPolicyVersion", "status": "computed|not_computed|withheld", "reason" }, "approvable": false, "approval": null,
   "sentByShutter": 0, "acts": ["pause", "close"], "words": { "first", "do", "call", "critical" } }`. `Row` is `{
   "headerId", "controlId", "timeCreated", "status", "attempts", "reason", "patient": { "id", "authority" }, "sibling": {
   "headerId", "status", "at" } }`. Every field is present from the first moment: empty lists, zero counts, null where
-  nothing has filled it. `Outage.ToJSON()` serialises the row, and the route adds `words`.
+  nothing has filled it. `linkedCases` is every case linked by receiver and time at the close, `resolved` true for one this
+  close resolved; `outcome` is the close's words, such as "Transport outage closed. 2 delivery exceptions still need review."
+  or "5 messages failed and were not offered; a person reads the trace.", or null. `Outage.ToJSON()` serialises the row, and
+  the route adds `words`.
 - `set.status` and `set.reason` are the one name for the set's state on every surface: `not_computed` with its reason ("no
   set gate in this build", or the condition that failed), `withheld` with "down on purpose", `computed` with its digest.
 - `acts` holds `pause` and `close` while the row is not closed, and nothing once it is; a build with Read again appends
@@ -2068,7 +2088,22 @@ with the other stores.
 
 ## Changes
 
-- v1.47, 8 Nov 2026 ("approval on every tier by default; the demo keeps its own setting, labelled"): the shipped
+- v1.47, 8 Nov 2026 (the engine check): the gate's ordering check reads the engine first for a write on a case with a source
+  namespace and an origin header, with `ENGINE_NOT_IN_SCOPE`, `ENGINE_STILL_TRYING`, `ENGINE_DELIVERED`, `RECEIVER_MAY_HOLD_IT`,
+  `ENGINE_UNREADABLE` and `ENGINE_SETTLED` (6.5); the case carries `waitsOnEngine` (11); eleven reason codes appended to
+  `knowledge/block-reasons.json`, of which `HOLD_EXPIRED`, `ENGINE_ROUTE`, `ENGINE_ROUTE_ABSENT`, `ENGINE_ROUTE_REFUSED` and
+  `ENGINE_ROUTE_NO_API` are not emitted by this build.
+- v1.47, 8 Nov 2026 (receiver outages): a receiver entry may carry `watch`, `runbook`, `call`, `approvers`, `ack_level`,
+  `duplicates`, `engine_resend`, `hold`, `mail`, `resend_approval_minutes`, `settle_minutes` and `window_minutes` (6.4); an entry
+  with none of them validates as before. Section 17, receiver outages: Receiver Watch, the states, `GET /outages`,
+  `GET /outages/:id`, `POST /outages/:id/acts`, the card's words, the forwarded /summaries and /assist with one security
+  contract, the Doctor's outages lines and the reset; Receiver Watch in INSTALLITEMS (12). The Outage carries `linkedCases`
+  and `outcome`, and the outage's events their kinds (17).
+- v1.47, 8 Nov 2026 (the Case Releaser's third pass): `Releaser.ReleaseEngineWaits` judges each case waiting on the engine
+  from its marked header, resolves it when the engine delivered, plans it again when settled, and leaves it while the engine
+  still holds it or its record can't be read; `GET /index` `releases.candidates` gains `engine`, and `releases` gains
+  `engine_unreadable` (8.1).
+- v1.47, 8 Nov 2026 (the approval default): the shipped
   site profile's policy is `approval` for single and ordered chains at every tier, the board for interleaved ones; a demo
   install keeps the earlier table as the demo's own, labelled setting, marked in the profile's source and on the Site profile
   page (6.4, 4.4).
