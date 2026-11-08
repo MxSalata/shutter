@@ -277,7 +277,7 @@ Method TestFurtherMessagesAreReadAgainBeforeTheWrite()
     Set row.ControlId = "UT-NEW", row.EventTime = "2026-10-20T09:00:00Z", row.TimeCreated = "2099-01-01 00:00:00"
     Do $$$AssertStatusOK(row.%Save(), "the index's row is saved")
     Try {
-        Set run = ..Run({"name": "the dispatch gate reads again", "approval": {}})
+        Set run = ..Run({"name": "the dispatch gate reads again", "approval": {}, "profile": {"further_messages": {"in_patient_movement": "stop"}}})
         Do $$$AssertEquals(..Found(run.checks, "ordering", "FURTHER_MOVEMENT"), "block", "the dispatch gate stops the write")
         Do $$$AssertTrue(..Detail(run.checks, "ordering", "FURTHER_MOVEMENT") [ "ENC-UT-NEW", "and names the new visit")
         Set case = ..NewCase({})
@@ -289,6 +289,40 @@ Method TestFurtherMessagesAreReadAgainBeforeTheWrite()
         Do $$$AssertEquals(response.ReasonCode, "further_movement", "for this reason")
         Do $$$AssertTrue(response.Error [ "ENC-UT-NEW", "and says what it found: " _ response.Error)
         Do $$$AssertEquals(response.HttpStatus, "", "nothing was sent")
+    } Catch ex {
+        Do $$$AssertTrue(0, "no error: " _ ex.DisplayString())
+    }
+    Do ##class(Shutter.Index.Message).%DeleteId(row.%Id())
+}
+
+/// The site's choice for another visit's in-patient movement, through the gate at dispatch on a real index row: stop holds the
+/// write and names the other visit; show, and a profile that doesn't say (the shipped default since v1.1.0), let it through
+/// with the other visit counted for the plan. A cancel on the case's own visit stops whichever the site chose.
+Method TestFurtherMovementStopOrShow()
+{
+    Set row = ##class(Shutter.Index.Message).%New()
+    Set row.DocId = "UT-GATE-FURTHER-2", row.PatientId = "MRN-UT1", row.PatientIdAuthority = "HOSP", row.VisitNumber = "ENC-UT-NEW", row.Event = "admit", row.MessageType = "ADT_A01"
+    Set row.ControlId = "UT-NEW-2", row.EventTime = "2026-10-20T09:00:00Z", row.TimeCreated = "2099-01-01 00:00:00"
+    Do $$$AssertStatusOK(row.%Save(), "the index's row is saved")
+    Try {
+        Set run = ..Run({"name": "a site that says stop", "approval": {}, "profile": {"further_messages": {"in_patient_movement": "stop"}}})
+        Do $$$AssertEquals(..Found(run.checks, "ordering", "FURTHER_MOVEMENT"), "block", "stop: the gate holds the write")
+        Do $$$AssertTrue(..Detail(run.checks, "ordering", "FURTHER_MOVEMENT") [ "ENC-UT-NEW", "and names the other visit")
+        Do $$$AssertEquals(run.response.Outcome, "block", "stop: the outcome is a block")
+        Do ..OnAfterOneTest()
+        For setting = "show", "unset" {
+            Set profile = $SELECT(setting = "show": {"further_messages": {"in_patient_movement": "show"}}, 1: {"further_messages": null})
+            Set run = ..Run({"name": ("a site whose profile says " _ setting), "approval": {}, "profile": (profile)})
+            Do $$$AssertEquals(..Found(run.checks, "ordering", "FURTHER_MOVEMENT"), "", setting _ ": no further-movement block")
+            Do $$$AssertEquals(..Found(run.checks, "ordering", "NO_FURTHER_MOVEMENT"), "pass", setting _ ": the check passes")
+            Do $$$AssertTrue(..Detail(run.checks, "ordering", "NO_FURTHER_MOVEMENT") [ "shown on the plan", setting _ ": and counts the other visit for the plan")
+            Do $$$AssertEquals(run.response.Outcome, "pass", setting _ ": the gate passes the write (" _ ..Codes(run.checks, "ordering") _ ")")
+            Do ..OnAfterOneTest()
+        }
+        Set row.Event = "cancel_transfer", row.MessageType = "ADT_A12", row.VisitNumber = "ENC-UT1"
+        Do $$$AssertStatusOK(row.%Save(), "the row is a cancel on the case's own visit")
+        Set run = ..Run({"name": "a cancel on the case's own visit, with show", "approval": {}, "profile": {"further_messages": {"in_patient_movement": "show"}}})
+        Do $$$AssertEquals(..Found(run.checks, "ordering", "FURTHER_MOVEMENT"), "block", "show: a cancel of this visit still stops")
     } Catch ex {
         Do $$$AssertTrue(0, "no error: " _ ex.DisplayString())
     }

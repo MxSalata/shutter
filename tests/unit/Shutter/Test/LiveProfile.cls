@@ -36,12 +36,14 @@ Method TestLivePolicy()
     // A site install keeps the shipped table; the live hospital's mark on a shipped profile makes no difference at tier 2.
     Do $$$AssertStatusOK(##class(Shutter.Setup).DemoProfilePolicy(seed, 0), "a site install: nothing to do")
     Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).Row().Source, seed, "and the source is still the seed's")
+    Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).FurtherMovement(), "show", "a site install lets another visit's movement show, as shipped")
     // A demo install keeps the demo's own table, labelled.
     Do $$$AssertStatusOK(##class(Shutter.Setup).DemoProfilePolicy(seed, 1), "a demo install: the demo's policy applies")
     Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).Policy(2, "single"), "automatic", "tier 2 single is the demo's automatic release")
     Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).Policy(1, "ordered"), "automatic", "tier 1 ordered too")
     Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).Policy(3, "ordered"), "per_chain", "tier 3 ordered per chain, as the demo had it")
     Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).Row().Source, seed _ " (demo)", "the source says whose answers they are")
+    Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).FurtherMovement(), "stop", "the demo keeps the stop for another visit's movement, as it had it")
     Set version = ##class(Shutter.Store.SiteProfile).Row().Version
     Do $$$AssertStatusOK(##class(Shutter.Setup).DemoProfilePolicy(seed, 1), "again: idempotent")
     Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).Row().Version, version, "and the version did not move")
@@ -53,9 +55,18 @@ Method TestLivePolicy()
     Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).Policy(1, "single"), "automatic", "tier 1 stays the demo's")
     Set row = ##class(Shutter.Store.SiteProfile).Row()
     Do $$$AssertEquals(row.Source, seed _ " (demo) (live hospital)", "the source says why: " _ row.Source)
+    Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).FurtherMovement(), "stop", "and the live hospital keeps the demo's stop")
     Set version = row.Version
     Do $$$AssertStatusOK(##class(Shutter.Setup).LiveProfilePolicy(seed, 1), "again: idempotent")
     Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).Row().Version, version, "and the version did not move")
+    // A demo profile stored before the demo kept its own stop (the demo's policy, no further_messages): a reinstall adds it.
+    Set p = ##class(Shutter.Store.SiteProfile).Default()
+    Set p.policy = ##class(Shutter.Store.SiteProfile).DemoPolicy()
+    Do p.%Remove("further_messages")
+    Do $$$AssertStatusOK(##class(Shutter.Store.SiteProfile).Store(p.%ToJSON(), seed _ " (demo)", "test", "", .v), "an older demo profile")
+    Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).FurtherMovement(), "show", "it reads the shipped show until the install runs")
+    Do $$$AssertStatusOK(##class(Shutter.Setup).DemoProfilePolicy(seed, 1), "a reinstall of the demo")
+    Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).FurtherMovement(), "stop", "and the demo's stop is back")
     // A person's own profile is theirs.
     Set p = ##class(Shutter.Store.SiteProfile).Default()
     Do $$$AssertStatusOK(##class(Shutter.Store.SiteProfile).Store(p.%ToJSON(), "api", "approver", "", .v), "a profile a person saved")
