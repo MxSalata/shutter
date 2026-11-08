@@ -2,14 +2,14 @@ import { Box, Text, VisuallyHidden } from '@mantine/core';
 import { IconChevronRight, IconX } from '@tabler/icons-react';
 import type { ReactNode } from 'react';
 import { StatusBadge } from '@/components/StatusBadge';
-import { Term } from '@/components/Term';
 import { TONE_ICONS } from '@/lib/tone';
 import { useDetail } from '@/stores/appearance';
 import type { FailureMap as Map } from './failureMap';
 
 /**
- * One system on the path: its name (a term defined a click away where it is an abbreviation), what it is where the
- * name alone does not say, and the engineer's names for it in Technical.
+ * One system on the path: its name, what it is where neither the name nor the header's sentence says, and the
+ * engineer's names for it in Technical. The picture is one image to assistive technology, so it holds no terms to
+ * open: the header defines them.
  */
 function Node({
   role,
@@ -19,7 +19,7 @@ function Node({
   children,
 }: {
   role: 'sender' | 'iris' | 'receiver';
-  title: ReactNode;
+  title: string;
   sub?: string;
   technical?: string;
   children?: ReactNode;
@@ -118,30 +118,12 @@ export function FailureMap({ map }: { map: Map }) {
         <div className="fm-flow">
           {sender ? (
             <>
-              {/* A known system's short name is defined a click away rather than spelt out under it */}
-              <Node
-                role="sender"
-                title={
-                  sender.name === 'PAS' ? (
-                    <Term term="pas">PAS</Term>
-                  ) : sender.name === 'BEDMGR' ? (
-                    <Term term="bedmgr">BEDMGR</Term>
-                  ) : (
-                    sender.name
-                  )
-                }
-                sub={sender.gloss ? '' : 'The sending system'}
-              />
+              {/* The header's sentence defines a known system's short name a click away, so the box does not spell it out */}
+              <Node role="sender" title={sender.name} sub={sender.gloss ? '' : 'The sending system'} />
               <Link label={message.plain} answer={technical ? message.code : ''} />
             </>
           ) : null}
-          {/* Shutter's own feed is IRIS, defined a click away; the hospital's production is said in words */}
-          <Node
-            role="iris"
-            title={<Term term="iris">IRIS</Term>}
-            sub={iris.role === 'The message engine' ? '' : iris.role}
-            technical={technical ? irisTechnical : ''}
-          >
+          <Node role="iris" title="IRIS" sub={iris.role} technical={technical ? irisTechnical : ''}>
             {iris.trouble ? (
               <Text size="xs" fw={600} lh={1.35} mt={4} className="fm-trouble">
                 {iris.trouble}

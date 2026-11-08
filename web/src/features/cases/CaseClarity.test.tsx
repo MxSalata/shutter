@@ -93,9 +93,11 @@ describe("the header's patient and message", () => {
   it('names the patient by hospital number and the message as IRIS typed it, from the evidence', async () => {
     renderCase('C-000008');
     expect(await screen.findByTestId('case-message-type')).toHaveTextContent('2.5.1:ADT_A02');
-    // The header's fact: its label over its value, as the other facts of the line
+    // The header's fact: its label (a term defined a click away) over its value, as the other facts of the line
     expect(
-      screen.getAllByText('Patient').some((el) => el.nextElementSibling?.textContent === 'MRN1008'),
+      screen
+        .getAllByText('Patient')
+        .some((el) => el.closest('p')?.nextElementSibling?.textContent === 'MRN1008'),
     ).toBe(true);
   });
 });

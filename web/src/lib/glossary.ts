@@ -75,11 +75,6 @@ export const GLOSSARY = {
     term: 'Write (a fix)',
     definition: 'An update Shutter sends to that system to put it right.',
   },
-  iris: {
-    term: 'IRIS',
-    definition:
-      "The InterSystems engine that carries messages between the hospital's systems. Shutter runs inside it.",
-  },
   encounter: {
     term: 'Encounter',
     definition:
