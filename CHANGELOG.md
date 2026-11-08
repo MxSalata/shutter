@@ -43,6 +43,12 @@ AI Hub features measured with no model call and on the publisher from an MCP cli
   8). Not yet in 1.1.2: nobody reads a shown movement at a tier released by policy or under an incident's shared
   approval, and one that arrives after the approval passes the write unseen, where 1.1.1 stopped it; a site that uses
   incidents or releases a tier by policy should set `stop`.
+- **Further messages in an onboarded namespace read the feed's zone.** The read of a patient's further messages runs in the
+  watched namespace, which maps only Shutter's intake and utility classes, so a message time with no UTC offset looked up
+  the feed's zone in a class that namespace can't reach, the read failed and the write stopped for a person
+  (`FURTHER_NOT_READ`), with nothing written. The read now carries the zone from Shutter's namespace (`Shutter.Util.Time`,
+  `Shutter.Util.FurtherMessages`), and a unit test reads a time in a namespace with no zone of its own. On build 154 the onboarding check
+  passed 238 of 238 and the 26 scenarios played as expected with the fix.
 - **Another provider, by hand.** `docs/readme/another-provider.md`: the board run on OpenAI's `gpt-4.1` through AI Hub on
   build 109, S2 and S8 as expected twice, with the steps as tested and their undo, runs unpriced and outside the day's
   budget, and the places the install assumes Anthropic. Current OpenAI models refuse the `max_tokens` the runner sends.
