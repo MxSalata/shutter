@@ -90,7 +90,7 @@ ClassMethod LastLive() As %DynamicObject
     &sql(SELECT TOP 1 StartedAt, Status, MemberCode, Model, Mode INTO :at, :status, :member, :model, :mode FROM Shutter_Store.AgentRun WHERE Mode IN ('live', 'record') AND Model <> 'mock' ORDER BY ID DESC)
     If (SQLCODE '= 0) || (at = "") Quit ""
     Set o = {}
-    Set o.at = at, o.status = status, o.member = member, o.model = model, o.mode = mode
+    Set o.at = at, o.status = status, o.member = member, o.model = ##class(Shutter.Util.Secret).Clean(model), o.mode = mode
     Quit o
 }
 
@@ -102,7 +102,8 @@ ClassMethod FromResponse(case As Shutter.Store.Case, snapshot As Shutter.Store.S
     Do run.CaseSetObjectId(case.%Id())
     Set run.Snapshot = snapshot, run.Role = role, run.MemberCode = memberCode
     Set run.AgentClass = response.AgentClass, run.ConfigVersion = response.ConfigVersion
-    Set run.Mode = response.Mode, run.Model = response.Model, run.ProviderConfig = response.ProviderConfig
+    // A key typed into the item's Model or ProviderConfig is stored as "hidden" (Shutter.Util.Secret).
+    Set run.Mode = response.Mode, run.Model = ##class(Shutter.Util.Secret).Clean(response.Model), run.ProviderConfig = ##class(Shutter.Util.Secret).Clean(response.ProviderConfig)
     Set run.Status = response.Status, run.StartedAt = response.StartedAt, run.DurationMs = response.DurationMs
     Set run.PromptTokens = response.PromptTokens, run.CompletionTokens = response.CompletionTokens
     Set run.CacheReadTokens = response.CacheReadTokens, run.CacheCreationTokens = response.CacheCreationTokens

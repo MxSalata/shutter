@@ -149,6 +149,8 @@ Method Run(spec As Shutter.Bridge.RunSpec, ByRef response As Shutter.Bridge.Msg.
 ClassMethod ProviderFrom(name As %String, Output model As %String) As %AI.Provider
 {
     Set model = ""
+    // A name that looks like a key is not looked up: the Config Store's error would repeat it.
+    If ##class(Shutter.Util.Secret).Looks(name) $$$ThrowStatus($$$ERROR($$$GeneralError, ##class(Shutter.Util.Secret).Refusal("ProviderConfig")))
     Set fqn = $SELECT($LENGTH(name, ".") < 3: "AI.LLM." _ name, 1: name)
     $$$ThrowOnError(##class(%ConfigStore.Configuration).GetDetails(fqn, .details, 0, 1))
     Set model = details.%Get("model")
