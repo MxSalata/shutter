@@ -31,6 +31,8 @@ SITE = os.path.join(HERE, "onboard_site")
 ROOT = os.path.dirname(os.path.dirname(HERE))
 HOME = "/home/irisowner"
 PW = "Uninstall-2026x"
+# The body classes that are Shutter's in its own namespace, with the demo.
+DEMOPREFIXES = ("Shutter.", "Hospital.", "Downstream.")
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--image", required=True)
@@ -313,6 +315,96 @@ def site_hospital_class_stays(ns, body_id):
     check("its event log line stays", "<<<l|1>>>" in out, out[-400:])
 
 
+# What of Shutter's runs the engine keeps in a namespace: every message header with whether its body is still there, the
+# business process rows (Shutter's by the class each row names), the Workflow tasks and the queues.
+LEFT = r"""Try { Set rs=##class(%SQL.Statement).%ExecDirectNoPriv(,"SELECT ID, MessageBodyClassName, MessageBodyId, SourceConfigName, TargetConfigName FROM Ens.MessageHeader") While rs.%Next() { Set bc=rs.%GetData(2),bi=rs.%GetData(3),ok=1 Try { Set:(bc'="")&&(bi'="") ok=+$CLASSMETHOD(bc,"%ExistsId",bi) } Catch e2 { Set ok="?" } Write !,"<<<hdr|",rs.%GetData(1),"|",bc,"|",rs.%GetData(4),"|",rs.%GetData(5),"|",ok,">>>" } } Catch e { Write !,"<<<hdr|ERROR ",e.DisplayString(),">>>" }
+Set id="" For { Set id=$ORDER(^Ens.BusinessProcessD(id)) Quit:id=""  Set d=$GET(^Ens.BusinessProcessD(id)) Write !,"<<<bp|",id,"|",$SELECT((d["~Shutter.")||(d["Shutter.Process."):"shutter",1:"other"),">>>" }
+Try { Set rs=##class(%SQL.Statement).%ExecDirectNoPriv(,"SELECT ID, %Subject FROM EnsLib_Workflow.TaskRequest") While rs.%Next() { Write !,"<<<taskreq|",rs.%GetData(1),"|",$TRANSLATE(rs.%GetData(2),"|<>","   "),">>>" } } Catch e { Write !,"<<<taskreq|ERROR>>>" }
+Try { Set rs=##class(%SQL.Statement).%ExecDirectNoPriv(,"SELECT ID, %RoleName FROM EnsLib_Workflow.TaskResponse") While rs.%Next() { Write !,"<<<taskresp|",rs.%GetData(1),"|",rs.%GetData(2),">>>" } } Catch e { Write !,"<<<taskresp|ERROR>>>" }
+Set q="" For { Set q=$ORDER(^Ens.Queue(q)) Quit:q=""  Write !,"<<<queue|",q,">>>" }"""
+
+
+def shutter_items(ns, production):
+    """The names of Shutter's items in a production, read while it is installed: all of Shutter.Production's, and in a
+    site's production the ones its install put there."""
+    out = session(ns, rows(ns, "it", f"SELECT Name FROM Ens_Config.Item WHERE Production = '{production}'"))
+    names = {x.split("|", 2)[2] for x in re.findall(r"<<<(it\|.*?)>>>", out)}
+    if production != "Shutter.Production":
+        names &= set(value(ns, '$PARAMETER("Shutter.Setup","INSTALLITEMS")').split(","))
+    return names
+
+
+def leftovers(ns, items, prefixes):
+    """Shutter's: headers through one of its items or of its body classes, process rows of its classes, approval tasks and
+    its items' queues. The site's: every other header (and whether its body is still there) and process row."""
+    left = {"headers": [], "site_headers": 0, "site_bodies_gone": [], "processes": 0, "site_processes": 0, "tasks": [], "queues": [], "errors": []}
+    for x in re.findall(r"<<<(.*?)>>>", session(ns, LEFT, 900), re.S):
+        p = x.split("|")
+        if "ERROR" in x:
+            left["errors"].append(x[:300])
+        elif p[0] == "hdr" and len(p) >= 6:
+            if p[2].startswith(prefixes) or p[3] in items or p[4] in items:
+                left["headers"].append("|".join(p[2:5]))
+            else:
+                left["site_headers"] += 1
+                if p[5] != "1":
+                    left["site_bodies_gone"].append("|".join(p[1:]))
+        elif p[0] == "bp":
+            left["processes" if p[2] == "shutter" else "site_processes"] += 1
+        elif p[0] == "taskreq" and p[2].startswith("Shutter "):
+            left["tasks"].append(p[2][:120])
+        elif p[0] == "taskresp" and p[2] == "Shutter Approvers":
+            left["tasks"].append("response " + p[1])
+        elif p[0] == "queue" and p[1] in items:
+            left["queues"].append(p[1])
+    return left
+
+
+def nothing_of_shutters_runs_left(ns, items, prefixes, before):
+    """After the uninstall: none of Shutter's headers, process rows, approval tasks or queues; all of the site's, bodies too."""
+    left = leftovers(ns, items, prefixes)
+    check(f"{ns}: no message header of Shutter's is left, through its items or of its classes", not left["headers"], sorted(set(left["headers"]))[:30])
+    check(f"{ns}: no business process row of Shutter's classes is left", left["processes"] == 0, left["processes"])
+    check(f"{ns}: no approval task of Shutter's is left", not left["tasks"], left["tasks"][:10])
+    check(f"{ns}: no queue of Shutter's items is left", not left["queues"], left["queues"])
+    check(f"{ns}: the site's own message headers all stay", left["site_headers"] >= before["site_headers"], (before["site_headers"], left["site_headers"]))
+    check(f"{ns}: each of the site's messages still has its body", not left["site_bodies_gone"], left["site_bodies_gone"][:10])
+    check(f"{ns}: the site's own process rows all stay", left["site_processes"] >= before["site_processes"], (before["site_processes"], left["site_processes"]))
+    check(f"{ns}: the engine's tables were all readable", not left["errors"], left["errors"])
+
+
+def awaiting_approval(ns, scenario="S2"):
+    """A scenario of the demo played until its case waits for a person's approval: a Workflow task open, the case's
+    process waiting for the answer. No model is called: the board mode with no provider is scripted."""
+    me = value(ns, "$USERNAME")
+    out = session(ns, f'Set d=##class(EnsLib.Workflow.UserDefinition).CreateUser("{me}","uninstall check") Set e=##class(EnsLib.Workflow.RoleDefinition).AddUserToRole("Shutter Approvers","{me}",1,"Approver") Write !,"[wf] ",e,!')
+    check("the terminal user joins the Workflow role", "[wf] 1" in out, out[-300:])
+    out = session(ns, f'Write !,"<<<",##class(Shutter.Scenarios.Runner).Run("{scenario}","board"),">>>"', 1200)
+    print("   ", (re.findall(r"<<<(.*?)>>>", out, re.S) or [out[-500:]])[-1][:600], flush=True)
+    cases = '##class(%SQL.Statement).%ExecDirectNoPriv(,"SELECT COUNT(*) AS n FROM Shutter_Store.""Case"" WHERE State = \'awaiting_approval\'")'
+    tasks = '##class(%SQL.Statement).%ExecDirectNoPriv(,"SELECT COUNT(*) AS n FROM EnsLib_Workflow.TaskResponse WHERE %RoleName = \'Shutter Approvers\'")'
+    end, got = time.time() + 420, ""
+    while time.time() < end:
+        out = session(ns, f'Set a={cases} Do a.%Next() Set b={tasks} Do b.%Next() Write !,"<<<",a.%Get("n"),"|",b.%Get("n"),">>>",!')
+        m = re.findall(r"<<<(.*?)>>>", out)
+        got = m[-1] if m else out[-300:]
+        if got == "1|1":
+            break
+        time.sleep(10)
+    check(f"a case of {scenario} waits for approval, with its task open", got == "1|1", got)
+
+
+def approval_task_by_hand(ns):
+    """In the site's production there is no demo to play: a task such as a case's goes from Shutter's API item to its
+    Workflow item, which keeps it open."""
+    me = value(ns, "$USERNAME")
+    out = session(ns, f"""Set d=##class(EnsLib.Workflow.UserDefinition).CreateUser("{me}","uninstall check") Set e=##class(EnsLib.Workflow.RoleDefinition).AddUserToRole("Shutter Approvers","{me}",1,"Approver")
+Set sc=##class(Ens.Director).CreateBusinessService("Shutter API",.svc) Write !,"[svc] ",sc,!
+Set t=##class(EnsLib.Workflow.TaskRequest).%New() Set t.%Actions="Approve,Reject",t.%Subject="Shutter C-CHECK-1: approve the resend of one movement",t.%Message="A check's task",t.%FormFields="PlanDigest,Comment"
+Set sc=svc.SendRequestAsync("Shutter Approvers",t) Write !,"[sent] ",sc,! Kill svc Hang 3""")
+    check("an approval task goes from Shutter API to Shutter Approvers", "[svc] 1" in out and "[sent] 1" in out, out[-500:])
+
+
 def site_shape():
     step("A hospital namespace running its own production, and the namespace Shutter will go in")
     make_namespace("PATHOLOGY")
@@ -444,18 +536,30 @@ def demo_shape():
     for ns in ("HOSPITAL", "RECORDS"):
         check(f"the plan names {ns}", f"The namespace {ns} and its databases, made for the demo" in plan["removes"], plan["removes"])
 
+    step("A case waiting for a person's approval as the uninstall comes")
+    items = shutter_items("USER", "Shutter.Production")
+    awaiting_approval("USER")
+    during = leftovers("USER", items, DEMOPREFIXES)
+    check("Shutter's runs are there to take: headers, a waiting process row and its task", during["headers"] and during["processes"] > 0 and during["tasks"], {k: (len(v) if isinstance(v, list) else v) for k, v in during.items()})
+
     step("The uninstall")
     uninstall("USER")
     check("/shutter answers 404", http_code("/shutter/index.html") == 404)
+    nothing_of_shutters_runs_left("USER", items, DEMOPREFIXES, during)
     after = snapshot(namespaces)
     compare(before, after)
     r = session("%SYS", 'Kill p Do ##class(Security.Users).Get("operator",.p) Write !,"<<<",p("Roles"),"|",p("Comment"),">>>",!')
     check("the site's user named operator stays, without Shutter's role", "<<<%Developer|Not ours>>>" in r, r[-300:])
 
-    step("It can be installed again")
+    step("It can be installed again, and uninstalled twice over with a case waiting: the uninstall's own run, then zpm's")
     load("USER")
     check("/shutter answers", http_code("/shutter/index.html") == 200)
+    awaiting_approval("USER")
+    during = leftovers("USER", items, DEMOPREFIXES)
+    r = obj("USER", "##class(Shutter.Util.Uninstall).Run()")
+    check("the uninstall's run, with the classes still there, ends ok", r.get("ok") is True, r.get("errors"))
     uninstall("USER")
+    nothing_of_shutters_runs_left("USER", items, DEMOPREFIXES, during)
     compare(before, snapshot(namespaces))
 
 
@@ -487,16 +591,31 @@ def into_shape():
     step("A class of the site's in the Hospital package: refused, since the package manager would take it with the package")
     site_hospital_class_refused("PATHOLOGY")
 
+    step("An approval task open, and an order of the site's through its own items, as the uninstall comes")
+    items = shutter_items("PATHOLOGY", "OnbPath.Production")
+    approval_task_by_hand("PATHOLOGY")
+    check("the site's order reaches its LIMS with Shutter there", "ERR" not in send_order("PATHOLOGY", "ORDB1") and order_delivered("PATHOLOGY", "ORDB1"))
+    during = leftovers("PATHOLOGY", items, ("Shutter.",))
+    check("Shutter's task is there to take, and the site has messages of its own", during["tasks"] and during["headers"] and during["site_headers"] > 0, {k: (len(v) if isinstance(v, list) else v) for k, v in during.items()})
+
     step("The uninstall")
     keep = jobs("PATHOLOGY")
     uninstall("PATHOLOGY")
     production_runs("PATHOLOGY", "OnbPath.Production", keep)
+    nothing_of_shutters_runs_left("PATHOLOGY", items, ("Shutter.",), during)
     site_globals_stay("PATHOLOGY")
     site_hospital_class_stays("PATHOLOGY", body_id)
     check("none of Shutter's items run", not [k for k in jobs("PATHOLOGY") if k in ("Gate", "Verifier", "Shutter API", "HL7 Index")], jobs("PATHOLOGY"))
     check("the site's order still reaches its LIMS", "ERR" not in send_order("PATHOLOGY", "ORDA3") and order_delivered("PATHOLOGY", "ORDA3"))
     src = value("PATHOLOGY", '##class(%Dictionary.XDataDefinition).%OpenId("OnbPath.Production||ProductionDefinition").Data.Read(200000)["Shutter"')
     check("the production's class names nothing of Shutter's", src == "0", src)
+    compare(before, snapshot(namespaces))
+
+    step("A second uninstall, with nothing of Shutter's left, changes nothing of the site's")
+    keep = jobs("PATHOLOGY")
+    out = session("PATHOLOGY", f'Set sc=##class(%IPM.Main).Shell("uninstall {MODULE}") Write !,"RESULT: ",$SELECT(sc:"ok",1:$SYSTEM.Status.GetErrorText(sc)),!', 560)
+    print(out[-600:], flush=True)
+    production_runs("PATHOLOGY", "OnbPath.Production", keep)
     compare(before, snapshot(namespaces))
 
 
