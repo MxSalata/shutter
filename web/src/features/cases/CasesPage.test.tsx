@@ -396,6 +396,80 @@ describe('the technical chips', () => {
   });
 });
 
+describe("the Technical line: the message, where it came in, the trace and the plan", () => {
+  // C-000058 as the trial records it, with the fields the API sends for Technical
+  const recorded = recording.cases['C-000058'].summary as unknown as CaseSummary;
+  const words = [
+    'ADT^A02',
+    'MSG02304',
+    '409 bed_occupied',
+    '14:34:44.605Z',
+    'ADT In',
+    'Shutter.Production',
+    'Shutter.Operation.Ward',
+    'session 9625',
+    'v1 f1171ecfa9a8',
+  ];
+
+  it('adds none of it in Plain', () => {
+    const { container } = renderUi(<CasesTable items={[recorded]} />);
+    for (const w of words) expect(container).not.toHaveTextContent(w);
+    expect(screen.queryByTestId('case-tech')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('case-receiver-class')).not.toBeInTheDocument();
+  });
+
+  it('shows each fact the server sent in Technical, the session and the header opening their pages in the portal', () => {
+    renderUi(<CasesTable items={[recorded]} />, { detail: 'technical' });
+    const line = screen.getByTestId('case-tech');
+    const message = within(line).getByTestId('case-tech-message');
+    // MSH-9 in place of Shutter's event word, then MSH-10, the failure kind, the receiver's answer and when it failed
+    expect(message).toHaveTextContent(/^ADT\^A02MSG02304rejected409 bed_occupied14:34:44\.605Z$/);
+    expect(within(message).getByText('14:34:44.605Z').closest('time')).toHaveAttribute(
+      'dateTime',
+      '2026-11-02T14:34:44.605Z',
+    );
+    expect(within(line).getByTestId('case-tech-source')).toHaveTextContent(/^ADT InShutter\.Production$/);
+    const trace = within(line).getByTestId('case-tech-trace');
+    expect(trace).toHaveTextContent(/^session 9625 ?header 9625 ?catalogue E16v1 f1171ecfa9a8$/);
+    expect(within(trace).getByRole('link', { name: 'session 9625' })).toHaveAttribute(
+      'href',
+      '/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9625',
+    );
+    expect(within(trace).getByRole('link', { name: 'header 9625' })).toHaveAttribute(
+      'href',
+      '/csp/healthshare/shutter/EnsPortal.MessageContents.zen?HeaderId=9625',
+    );
+    expect(screen.getByTestId('case-receiver-class')).toHaveTextContent('Shutter.Operation.Ward');
+  });
+
+  it("names a forwarded case's production and route, and guesses no class for a receiver in another production", () => {
+    const forwarded = recording.cases['C-000052'].summary as unknown as CaseSummary;
+    renderUi(<CasesTable items={[forwarded]} />, { detail: 'technical' });
+    expect(screen.getByTestId('case-tech-source')).toHaveTextContent(/^PAS InHospital\.Production$/);
+    expect(screen.queryByTestId('case-receiver-class')).not.toBeInTheDocument();
+  });
+
+  it('keeps the event word, unlinked ids and no plan for a case the server sent no more of', () => {
+    renderUi(
+      <CasesTable
+        items={[{ ...base, ensSessionId: '77', sourceHeaderId: '78', failureKind: 'delivery_failed' }]}
+      />,
+      { detail: 'technical' },
+    );
+    expect(screen.getByTestId('case-tech-message')).toHaveTextContent(/^transferdelivery_failed$/);
+    expect(screen.queryByTestId('case-tech-source')).not.toBeInTheDocument();
+    const trace = screen.getByTestId('case-tech-trace');
+    expect(trace).toHaveTextContent(/^session 77header 78$/);
+    expect(within(trace).queryByRole('link')).not.toBeInTheDocument();
+  });
+
+  it("adds nothing of the patient: not the hospital number, the authority or the message's patient fields", () => {
+    renderUi(<CasesTable items={[recorded]} />, { detail: 'technical' });
+    const line = screen.getByTestId('case-tech');
+    for (const w of ['MRN1232', 'HOSP', 'SYNTH', 'BAY2-02']) expect(line).not.toHaveTextContent(w);
+  });
+});
+
 describe('the rows', () => {
   it('colour each row by what came of the case, and keep the rest of a long headline behind its own button', async () => {
     renderUi(

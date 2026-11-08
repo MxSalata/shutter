@@ -451,6 +451,9 @@ ClassMethod Cases() As %Status
         // Who made the current plan (the board's or the investigator's run, the site's policy, rules alone)
         If rs.%Get("PlanCreatedBy") '= "" Set o.planCreatedBy = rs.%Get("PlanCreatedBy")
         Set o.writes = +rs.%Get("Writes"), o.verification = rs.%Get("Verification")
+        // The facts Technical shows on the row: the message's type, where it came in, the receiver's class, when the
+        // failure was reported, the plan's version and digest, and the trace links (read only; no patient field)
+        Do ..Technical(c, o, .seen)
         Do items.%Push(o)
     }
     Set out = {}
@@ -487,11 +490,78 @@ ClassMethod CaseGet(caseId As %String) As %Status
     &sql(SELECT COUNT(*) INTO :n FROM Shutter_Store.ExecutionAttempt WHERE "Case" = :id)
     Set counts.attempts = +n
     Set o.counts = counts
-    Set links = {}
-    Set links.visualTrace = ..PortalPath() _ "EnsPortal.VisualTrace.zen?SESSIONID=" _ case.EnsSessionId
-    Set links.workflowTrace = ..PortalPath() _ "EnsPortal.VisualTrace.zen?SESSIONID=" _ case.WorkflowSessionId
-    Set o.links = links
+    Do ..Technical(case, o)
     Quit ..Json(o)
+}
+
+/// The facts the list and the case page show in Technical, added to a case's projection, read only and from what the
+/// production already holds (no new store field): the source message's HL7 type and trigger as MSH-9 gives them
+/// ("ADT^A02"); the production and the item the message came in by (the source production and route of a case another
+/// production forwarded); the class of the receiver's item, for a receiver in Shutter's own production; when the feed
+/// reported the failure, the time of the case intake's header in the case's session for its receiver (UTC, to the
+/// millisecond); the current plan's version, digest and catalogue entry; and the Visual Trace links. Nothing here names
+/// the patient: MSH-9 and the items' names only. seen keeps what a list reads once (the production, the item classes,
+/// the portal path) between its rows.
+ClassMethod Technical(case As Shutter.Store.Case, o As %DynamicObject, ByRef seen)
+{
+    If '$DATA(seen("production")) {
+        Set seen("production") = ##class(Shutter.Setup).ProductionName(), seen("portal") = ..PortalPath()
+        Set prod = ##class(Ens.Config.Production).%OpenId(seen("production"))
+        If $ISOBJECT(prod) {
+            For i = 1:1:prod.Items.Count() {
+                Set item = prod.Items.GetAt(i)
+                If item.Name '= "" Set seen("class", item.Name) = item.ClassName
+            }
+        }
+    }
+    Set links = {}
+    Set links.visualTrace = seen("portal") _ "EnsPortal.VisualTrace.zen?SESSIONID=" _ case.EnsSessionId
+    Set links.workflowTrace = seen("portal") _ "EnsPortal.VisualTrace.zen?SESSIONID=" _ case.WorkflowSessionId
+    Set o.links = links
+    Set header = $SELECT(case.SourceHeaderId = "": "", 1: ##class(Ens.MessageHeader).%OpenId(case.SourceHeaderId))
+    // MSH-9's type and trigger, from the message itself: the case keeps only Shutter's event word
+    Set type = ""
+    Try {
+        If $ISOBJECT(header) && (header.MessageBodyClassName '= "") && $CLASSMETHOD(header.MessageBodyClassName, "%Extends", "EnsLib.HL7.Message") {
+            Set msg = $CLASSMETHOD(header.MessageBodyClassName, "%OpenId", header.MessageBodyId)
+            If $ISOBJECT(msg) {
+                Set type = msg.GetValueAt("MSH:9.1")
+                If msg.GetValueAt("MSH:9.2") '= "" Set type = type _ "^" _ msg.GetValueAt("MSH:9.2")
+            }
+        }
+    } Catch {
+        Set type = ""
+    }
+    If type '= "" Set o.messageType = type
+    // Where the message came in: the forwarding production's own route, or the item of Shutter's production that sent it
+    // to the feed (the source header's sender)
+    If case.SourceNamespace '= "" {
+        If case.SourceProduction '= "" Set o.production = case.SourceProduction
+        If case.SourceRoute '= "" Set o.sourceItem = case.SourceRoute
+    } Else {
+        Set o.production = seen("production")
+        If $ISOBJECT(header) && (header.SourceConfigName '= "") Set o.sourceItem = header.SourceConfigName
+        // The receiver's item is in this production only for a case of its own feed
+        If (case.Receiver '= "") && ($GET(seen("class", case.Receiver)) '= "") Set o.receiverClass = seen("class", case.Receiver)
+    }
+    // When the feed reported the failure: the case intake it sent, in the case's session, for the case's receiver
+    If case.EnsSessionId '= "" {
+        Set sql = "SELECT TOP 1 h.TimeCreated AS T FROM Ens.MessageHeader h, Shutter_Msg.CaseIntake i WHERE h.SessionId = ? AND h.MessageBodyClassName = 'Shutter.Msg.CaseIntake' AND i.ID = h.MessageBodyId"
+        Set args = 1, args(1) = case.EnsSessionId
+        If case.Receiver '= "" Set sql = sql _ " AND i.Receiver = ?", args = 2, args(2) = case.Receiver
+        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, sql _ " ORDER BY h.ID", args...)
+        If rs.%Next() && (rs.%Get("T") '= "") Set t = rs.%Get("T"), o.failedAt = $PIECE(t, " ", 1) _ "T" _ $PIECE(t, " ", 2) _ "Z"
+    }
+    // The current plan: its version, its digest and its catalogue entry
+    Set planId = case.CurrentPlanGetObjectId()
+    If planId '= "" {
+        &sql(SELECT Version, Digest, CatalogueEntry INTO :version, :digest, :entry FROM Shutter_Store.Plan WHERE ID = :planId)
+        If SQLCODE = 0 {
+            If version '= "" Do o.%Set("planVersion", +version, "number")
+            If digest '= "" Set o.planDigest = digest
+            If entry '= "" Set o.catalogueEntry = entry
+        }
+    }
 }
 
 ClassMethod CaseEvents(caseId As %String) As %Status

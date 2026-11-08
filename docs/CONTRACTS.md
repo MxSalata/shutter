@@ -449,6 +449,19 @@ current plan's `createdBy`, `run:<id>` for the coordinator's or the single inves
 catalogue and the site's policy, `rules` for rules alone, `withheld` for a withheld merge or cancel that no single
 catalogue entry matched (no agent runs; a person decides). The cases list shows it as who investigated the case.
 
+**What Technical shows** (8 Nov 2026, the Technical detail). `GET /cases` items and `GET /cases/{id}` carry, each only
+when the server has it and read only from what the production already holds (no new stored field): `messageType`, the
+source message's type and trigger as MSH-9 gives them (`ADT^A02`, without the structure), read from Shutter's copy of the
+message by `sourceHeaderId`; `production` and `sourceItem`, the production and the item the message came in by (for a
+forwarded case the forwarding production and its route, `sourceProduction` and `sourceRoute`; otherwise Shutter's
+production and the source header's sender); `receiverClass`, the class of the receiver's item, for a case of the feed in
+Shutter's own production only; `failedAt`, when the feed reported the failure: the time of the case intake's header in
+the case's session for its receiver, ISO UTC to the millisecond; `planVersion`, `planDigest` and `catalogueEntry`, the
+current plan's; and on the list's items too, `links` (`visualTrace`, `workflowTrace`), as `GET /cases/{id}` has always
+sent them. None of them names the patient: of the message they read MSH-9 only. The cases list and the case header show
+them with the Detail switch on Technical, beside the failure's `failureHttpStatus` and `failureReasonCode`, the control id
+`sourceMessageId` and the session and header ids; Plain shows none of them.
+
 **The blind-resend preview** (v1.21). `POST /cases/{id}/preview-blind-resend` answers 409 `dry_run_unsupported`, and sends nothing, when the case's evidence shows no readable capability profile or `dry_run` false (a case with no snapshot yet gets the same answer); otherwise 200 `{wouldApply, outcome, reason, encounterAfter, checkedAgainst: {version, epoch}, expectedVersion: null, applied, note}`. `checkedAgainst` is the receiver version and epoch the dry run was checked against (null when the receiver reported none); `expectedVersion` is null because a preview is conditional on nothing; `applied` true means the receiver wrote during the preview and does not honour `dry_run`: the case then carries an `execution` event saying so, an alert is logged, the note says it, and, since nobody released that write, the write goes on the record as an attempt and the case blocks for a person (`WRITE_NOT_RELEASED`; the answer's `state` says so). The preview is not stored as a rehearsal and never satisfies the gate's rehearsal check (6.5); the case keeps a note with the outcome and what it was checked against.
 
 ### 5.1 Attempts and verification (v1.21)
@@ -2140,6 +2153,9 @@ with the other stores.
 
 ## Changes
 
+- 8 Nov 2026 (the Technical detail on the cases): `GET /cases` items and `GET /cases/{id}` carry `messageType`,
+  `production`, `sourceItem`, `receiverClass`, `failedAt`, `planVersion`, `planDigest` and `catalogueEntry`, and the list's
+  items `links`, read only and never a patient field (5).
 - 8 Nov 2026, release 1.1.2 (v1.48): two release behaviours stated as built (7.4): any error in an incident's workflow
   during a release, other than raising an approval task, abandons the incident; a receiver that goes down again during a
   release stops each remaining chain in turn at its next item, with nothing written twice; and `provider_auth` (12) stated

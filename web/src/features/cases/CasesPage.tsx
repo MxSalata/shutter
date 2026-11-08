@@ -54,6 +54,7 @@ import {
 import type { Tone } from '@/lib/tone';
 import { useTechnical } from '@/stores/appearance';
 import { forwardedFrom } from './case/derive';
+import { CaseTechLine } from './case/TechFacts';
 import './cases-list.css';
 
 const PAGE = 25;
@@ -64,12 +65,24 @@ const NEWEST = 100;
 /** The states a case is in before anyone has made its plan. */
 const BEFORE_PLAN = new Set(['detected', 'collecting', 'investigating', 'grouped']);
 
-/** What reached the receiver and what the verifier found, when the server sends them; a closed case with no write says so. */
+/**
+ * What reached the receiver and what the verifier found, when the server sends them; a closed case with no write says
+ * so. In Technical the receiver's item names its class, when the server sends it.
+ */
 function AtReceiver({ c }: { c: CaseSummary }) {
+  const technical = useTechnical();
   // A case is one failed delivery to one receiver: with two receivers fed, the list says which
   const name = c.receiver ? (
     <Text size="xs" c="dimmed">
       {c.receiver}
+      {technical && c.receiverClass ? (
+        <>
+          {' '}
+          <CodeChip fz="xs" data-testid="case-receiver-class">
+            {c.receiverClass}
+          </CodeChip>
+        </>
+      ) : null}
     </Text>
   ) : null;
   if (c.writes === undefined) return name;
@@ -186,22 +199,17 @@ export function whatHappened(c: Pick<CaseSummary, 'headline' | 'event' | 'ward' 
   return { first, rest: sentences.slice(used).join(' ') };
 }
 
-/** The cell of what happened: the first sentence, the failure's codes in Technical, and the rest behind its own button. */
+/**
+ * The cell of what happened: the first sentence, in Technical the message, where it came in, its trace and its plan
+ * (CaseTechLine), and the rest behind its own button.
+ */
 function WhatHappened({ c }: { c: CaseSummary }) {
   const technical = useTechnical();
   const { first, rest } = whatHappened(c);
-  const entry = c.planCreatedBy?.startsWith('policy:') ? c.planCreatedBy.slice('policy:'.length) : '';
   return (
     <Stack gap={4} align="flex-start">
       <Text size="sm">{first}</Text>
-      {technical ? (
-        <Group gap={4} wrap="wrap">
-          {c.event ? <CodeChip fz="xs">{c.event}</CodeChip> : null}
-          {c.failureKind ? <CodeChip fz="xs">{c.failureKind}</CodeChip> : null}
-          {c.sourceHeaderId ? <CodeChip fz="xs">{`header ${c.sourceHeaderId}`}</CodeChip> : null}
-          {entry ? <CodeChip fz="xs">{`catalogue ${entry}`}</CodeChip> : null}
-        </Group>
-      ) : null}
+      {technical ? <CaseTechLine c={c} /> : null}
       {rest ? (
         <TechDetail label={`More about ${c.caseId}`} kind="explain">
           <Text size="sm">{rest}</Text>

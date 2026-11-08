@@ -208,6 +208,30 @@ export interface CaseSummary {
   followsCase?: string;
   /** The failure signature this case led or followed a board for (CONTRACTS 6.6, v1.35). */
   leadSignature?: string;
+  /** The downstream system's answer to the failed delivery, when it gave one: its HTTP status and reason code. */
+  failureHttpStatus?: number;
+  failureReasonCode?: string;
+  /** The source message's control id (MSH-10), as the case recorded it. */
+  sourceMessageId?: string;
+  /**
+   * What Technical shows of the message and the trace, read only from what the production holds (CONTRACTS 5, the
+   * Technical detail): the source message's HL7 type and trigger as MSH-9 gives them ("ADT^A02", without the
+   * structure); the production and the item the message came in by (the forwarding production and its route for a
+   * forwarded case); the class of the receiver's item, for a receiver in Shutter's own production; and when the feed
+   * reported the failure (ISO UTC, to the millisecond). Each is absent when the server does not have it. Never a
+   * patient field.
+   */
+  messageType?: string;
+  production?: string;
+  sourceItem?: string;
+  receiverClass?: string;
+  failedAt?: string;
+  /** The current plan's version, digest and catalogue entry, when the case has a plan (CONTRACTS 5, the Technical detail). */
+  planVersion?: number;
+  planDigest?: string;
+  catalogueEntry?: string;
+  /** The case's Visual Trace links, on the list's items too (CONTRACTS 5, the Technical detail). */
+  links?: { visualTrace: string; workflowTrace: string };
 }
 
 export interface CaseList {
@@ -220,9 +244,6 @@ export interface CaseDetail extends CaseSummary {
   /** No catalogue entry fitted the case: it is flagged as a candidate for a new entry (CONTRACTS 6.3). */
   candidateEntry?: boolean;
   failureText: string;
-  /** The downstream system's answer to the failed delivery, when it gave one: its HTTP status and reason code. */
-  failureHttpStatus?: number;
-  failureReasonCode?: string;
   patientId: string;
   patientIdAuthority: string;
   /** A merge only (ADT^A40): the patient (MRG-1) and visit (MRG-5) merged into this one, and how many MRG groups. */
