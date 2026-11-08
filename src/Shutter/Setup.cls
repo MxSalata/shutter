@@ -118,6 +118,8 @@ ClassMethod InstallStatus(root As %String = "", demo As %Boolean = 1, production
         Do ##class(Shutter.Util.Budget).ConfigureShare($SYSTEM.Util.GetEnviron("SHUTTER_JUDGE_BUDGET_USD"))
         Do ##class(Shutter.Util.Budget).ConfigureDemoBudget($SYSTEM.Util.GetEnviron("SHUTTER_DEMO_BUDGET_USD"), $SYSTEM.Util.GetEnviron("SHUTTER_DEMO_BUDGET_PERIOD"))
         Set ^Shutter.Config("installedAt") = ##class(Shutter.Util.Time).NowUTC()
+        // Before the seed can replace a seed's profile and before the version moves on: a site upgraded to 1.1.2 keeps its stop.
+        Set sc = ..KeepStopOnUpgrade($GET(^Shutter.Config("version")), demo) Quit:$$$ISERR(sc)
         Set ^Shutter.Config("version") = ..#VERSION
         If $GET(^Shutter.Config("mode")) = "" Set ^Shutter.Config("mode") = "board"
         Set sc = ..CreateFolders() Quit:$$$ISERR(sc)
@@ -1324,6 +1326,42 @@ ClassMethod DemoProfilePolicy(seedPath As %String, demo As %Integer = -1) As %St
     Quit ##class(Shutter.Store.SiteProfile).Store(p.%ToJSON(), $SELECT(isLive: liveDemo, 1: demoSource), "install", "", .version)
 }
 
+/// Existing sites keep stop (1.1.2): before 1.1.2 a profile that did not name further_messages.in_patient_movement read
+/// stop, and since then it reads show on a site. An install over a site installed before 1.1.2 (before, the version that
+/// install recorded, or none recorded) whose stored profile does not name the setting stores it as stop, a new version
+/// with the profile's source and Shutter.Store.SiteProfile.#KEPTSTOP, so the running site behaves as it did. A new
+/// install (no stored profile) gets the shipped show, a profile that names the setting is left alone, and a demo install
+/// changes nothing here (DemoProfilePolicy keeps the demo's stop). Called by Install and InstallInto before the seed and
+/// before the version moves on, so a reinstall of 1.1.2 or later never runs it. Returns a status.
+ClassMethod KeepStopOnUpgrade(before As %String, demo As %Boolean = 0) As %Status
+{
+    Quit:demo $$$OK
+    Quit:'..VersionBefore(before, "1.1.2") $$$OK
+    Set row = ##class(Shutter.Store.SiteProfile).Row()
+    Quit:('$ISOBJECT(row) || (row.Json = "")) $$$OK
+    Set p = ##class(Shutter.Util.Json).Parse(row.Json, .sc)
+    Quit:('$ISOBJECT(p) || $$$ISERR(sc)) $$$OK
+    Set fm = p.%Get("further_messages")
+    Quit:($ISOBJECT(fm) && 'fm.%IsA("%Library.DynamicArray") && fm.%IsDefined("in_patient_movement")) $$$OK
+    If '$ISOBJECT(fm) || fm.%IsA("%Library.DynamicArray") Set fm = {} Do p.%Set("further_messages", fm)
+    Set fm."in_patient_movement" = "stop"
+    Set source = $EXTRACT(row.Source _ ##class(Shutter.Store.SiteProfile).#KEPTSTOP, 1, 500)
+    Set sc = ##class(Shutter.Store.SiteProfile).Store(p.%ToJSON(), source, "install", row.Version, .version)
+    If $$$ISERR(sc) Quit $$$ERROR($$$GeneralError, "Could not keep the site profile's stop for another visit's in-patient movement on the upgrade to 1.1.2: " _ $SYSTEM.Status.GetErrorText(sc))
+    Quit $$$OK
+}
+
+/// Whether version a (such as 1.1.1) is older than b; an empty a (an install that recorded no version) is.
+ClassMethod VersionBefore(a As %String, b As %String) As %Boolean [ Private ]
+{
+    If a = "" Quit 1
+    For i = 1:1:3 {
+        Set x = +$PIECE(a, ".", i), y = +$PIECE(b, ".", i)
+        If x '= y Return (x < y)
+    }
+    Quit 0
+}
+
 /// The live hospital's policy (CONTRACTS 4.4, v1.34; decided on 1 Nov 2026, "single cases at tier 2 wait for an
 /// approval in the live hospital"): when the install is told SHUTTER_LIVE=1 (or on is 1), the shipped profile's policy for
 /// tier 2, single chains becomes approval, so the demo's visitors always have a case to approve, and the profile is stored
@@ -1493,6 +1531,7 @@ ClassMethod InstallIntoStatus(production As %String, root As %String = "") As %S
         Set ^Shutter.Config("demo") = 0
         Set ^Shutter.Config("production") = production
         Set ^Shutter.Config("installedAt") = ##class(Shutter.Util.Time).NowUTC()
+        Set sc = ..KeepStopOnUpgrade($GET(^Shutter.Config("version")), 0) Quit:$$$ISERR(sc)
         Set ^Shutter.Config("version") = ..#VERSION
         If $GET(^Shutter.Config("mode")) = "" Set ^Shutter.Config("mode") = "board"
         Set sc = ..CreateFolders() Quit:$$$ISERR(sc)
