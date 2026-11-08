@@ -242,11 +242,22 @@ ClassMethod Context(row As %DynamicObject) As %DynamicObject
     Set patient = ..PatientBody()
     If row.%IsDefined("patient_patch") Do $CLASSMETHOD(merge, "Merge", patient, row."patient_patch")
     Set ctx.patient = {"http_status": 200, "body": (patient.%ToJSON())}
+    // One read per bound Location. location_read patches a read ("absent" leaves it out); location_twice adds a second
+    // read of a Location, its body patched.
     Set ctx.locations = []
+    Set reads = $SELECT(row.%IsDefined("location_read"): row."location_read", 1: {})
     For ward = "a", "b", "c" {
         Set ref = "Location/ward-" _ ward, loc = ..LocationBody(ward)
         If row.%IsDefined("location_patch") && row."location_patch".%IsDefined(ref) Do $CLASSMETHOD(merge, "Merge", loc, row."location_patch".%Get(ref))
-        Do ctx.locations.%Push({"reference": (ref), "http_status": 200, "body": (loc.%ToJSON())})
+        Set read = {"reference": (ref), "http_status": 200, "body": (loc.%ToJSON())}
+        If reads.%GetTypeOf(ref) = "string" Continue
+        If reads.%GetTypeOf(ref) = "object" Do $CLASSMETHOD(merge, "Merge", read, reads.%Get(ref))
+        Do ctx.locations.%Push(read)
+        If row.%IsDefined("location_twice") && row."location_twice".%IsDefined(ref) {
+            Set again = ..LocationBody(ward)
+            Do $CLASSMETHOD(merge, "Merge", again, row."location_twice".%Get(ref))
+            Do ctx.locations.%Push({"reference": (ref), "http_status": 200, "body": (again.%ToJSON())})
+        }
     }
     If row.%IsDefined("ctx") Do $CLASSMETHOD(merge, "Merge", ctx, ..Expand(row.ctx))
     Quit ctx
@@ -571,8 +582,52 @@ XData Rows [ MimeType = application/json ]
    "outcome": "committed_review", "reason": "location_changed"},
   {"group": "adversarial", "adversarial": true, "name": "the target Location's identifier differs only by case", "location_patch": {"Location/ward-b": {"identifier": [{"system": "urn:shutter:demo:ward", "value": "ward-b"}]}},
    "outcome": "committed_review", "reason": "location_changed"},
-  {"group": "adversarial", "adversarial": true, "name": "a bound Location could not be read again", "ctx": {"locations": [{"reference": "Location/ward-b", "http_status": 0, "body": ""}]},
-   "outcome": "committed_review", "reason": "location_changed", "retry": true},
+  {"group": "adversarial", "adversarial": true, "name": "a bound Location could not be read again", "location_read": {"Location/ward-b": {"http_status": 0, "body": ""}},
+   "outcome": "committed_review", "reason": "location_changed", "retry": true, "detail": {"note": "Location/ward-b was not read"}},
+  {"group": "adversarial", "adversarial": true, "name": "the target Location answered 404 when read again", "location_read": {"Location/ward-b": {"http_status": 404, "body": "Not Found"}},
+   "outcome": "committed_review", "reason": "location_changed", "retry": true, "detail": {"note": "Location/ward-b was not read"}},
+  {"group": "context", "adversarial": true, "name": "no Location bound and none read: nothing would be read again", "ctx": {"binding": {"locations": []}, "locations": []},
+   "outcome": "unknown", "reason": "context_invalid"},
+  {"group": "context", "adversarial": true, "name": "the target left out of the bound Locations while it is now inactive",
+   "ctx": {"binding": {"locations": [{"reference": "Location/ward-a", "checked_identifier": "WARD-A"}, {"reference": "Location/ward-c", "checked_identifier": "WARD-C"}]}},
+   "location_patch": {"Location/ward-b": {"status": "inactive"}}, "outcome": "unknown", "reason": "context_invalid"},
+  {"group": "context", "adversarial": true, "name": "the prior left out of the bound Locations",
+   "ctx": {"binding": {"locations": [{"reference": "Location/ward-b", "checked_identifier": "WARD-B"}, {"reference": "Location/ward-c", "checked_identifier": "WARD-C"}]}},
+   "outcome": "unknown", "reason": "context_invalid"},
+  {"group": "context", "adversarial": true, "name": "a bound Location with no read at all (a walk that skipped it)", "location_read": {"Location/ward-c": "absent"},
+   "outcome": "unknown", "reason": "context_invalid"},
+  {"group": "context", "adversarial": true, "name": "a bound Location read twice, the second read inactive", "location_twice": {"Location/ward-b": {"status": "inactive"}},
+   "outcome": "unknown", "reason": "context_invalid"},
+  {"group": "adversarial", "adversarial": true, "name": "a later writer added a modifierExtension to the Encounter",
+   "versions": {"W": {"from": "V", "vid": "8", "patch": {"location": ["@D", "@Ac", "@Bc", "@C"], "meta": {"tag": null}, "modifierExtension": [{"url": "http://example.org/fhir/StructureDefinition/encounter-void", "valueBoolean": true}]}}},
+   "history": ["W", "V", "base", "v5"], "current": "W", "outcome": "committed_review", "reason": "unfamiliar_shape", "path": "/modifierExtension"},
+  {"group": "adversarial", "adversarial": true, "name": "a later writer put a modifierExtension on Shutter's still-open entry",
+   "versions": {"W": {"from": "V", "vid": "8", "patch": {"location": ["@D", "@Ac", {"location": {"reference": "Location/ward-b"}, "status": "active", "period": {"start": "2026-11-08T09:00:00Z"}, "modifierExtension": [{"url": "http://example.org/fhir/StructureDefinition/entry-void", "valueBoolean": true}]}], "meta": {"tag": null}}}},
+   "history": ["W", "V", "base", "v5"], "current": "W", "outcome": "committed_review", "reason": "unfamiliar_shape", "path": "/location/2/modifierExtension"},
+  {"group": "adversarial", "adversarial": true, "name": "a later writer put a modifierExtension on a participant",
+   "versions": {"W": {"from": "V", "vid": "8", "patch": {"participant": [{"modifierExtension": [{"url": "urn:x", "valueBoolean": true}], "individual": {"reference": "Practitioner/p1"}}], "meta": {"tag": null}}}},
+   "history": ["W", "V", "base", "v5"], "current": "W", "outcome": "committed_review", "reason": "unfamiliar_shape", "path": "/participant/0/modifierExtension"},
+  {"group": "adversarial", "adversarial": true, "name": "a later writer set implicitRules",
+   "versions": {"W": {"from": "V", "vid": "8", "patch": {"implicitRules": "http://example.org/rules", "meta": {"tag": null}}}},
+   "history": ["W", "V", "base", "v5"], "current": "W", "outcome": "committed_review", "reason": "unfamiliar_shape", "path": "/implicitRules"},
+  {"group": "adversarial", "adversarial": true, "name": "Shutter's entry ends at 10:30 and the next ward opens at 14:00: a gap, not a continuation",
+   "versions": {"W": {"from": "V", "vid": "8", "patch": {"location": ["@D", "@Ac", "@Bc", {"location": {"reference": "Location/ward-c"}, "status": "active", "period": {"start": "2026-11-08T14:00:00Z"}}], "meta": {"tag": null}}}},
+   "history": ["W", "V", "base", "v5"], "current": "W", "outcome": "committed_review", "reason": "unfamiliar_shape", "path": "/location/3"},
+  {"group": "adversarial", "adversarial": true, "name": "finished, the next ward completed but opened after a gap",
+   "versions": {"W": {"from": "V", "vid": "8", "patch": {"status": "finished", "location": ["@D", "@Ac", "@Bc", {"location": {"reference": "Location/ward-c"}, "status": "completed", "period": {"start": "2026-11-08T14:00:00Z", "end": "2026-11-08T16:00:00Z"}}], "meta": {"tag": null}}}},
+   "history": ["W", "V", "base", "v5"], "current": "W", "outcome": "committed_review", "reason": "unfamiliar_shape", "path": "/location/3"},
+  {"group": "adversarial", "adversarial": true, "name": "a later move through a location outside the map, then on to WARD-C",
+   "versions": {"W": {"from": "V", "vid": "8", "patch": {"location": ["@D", "@Ac", {"location": {"reference": "Location/ward-b"}, "status": "completed", "period": {"start": "2026-11-08T09:00:00Z", "end": "2026-11-08T10:00:00Z"}}, {"location": {"reference": "Location/ward-x"}, "status": "completed", "period": {"start": "2026-11-08T10:00:00Z", "end": "2026-11-08T10:30:00Z"}}, "@C"], "meta": {"tag": null}}}},
+   "history": ["W", "V", "base", "v5"], "current": "W", "outcome": "committed_review", "reason": "unfamiliar_shape"},
+  {"group": "adversarial", "adversarial": true, "name": "finished after a move back to the prior ward, completed",
+   "versions": {"W": {"from": "V", "vid": "8", "patch": {"status": "finished", "location": ["@D", "@Ac", "@Bc", {"location": {"reference": "Location/ward-a"}, "status": "completed", "period": {"start": "2026-11-08T10:30:00Z", "end": "2026-11-08T12:00:00Z"}}], "meta": {"tag": null}}}},
+   "history": ["W", "V", "base", "v5"], "current": "W", "outcome": "committed_review", "reason": "unfamiliar_shape", "path": "/location/3"},
+  {"group": "positive", "name": "the next ward opens exactly at Shutter's end, the two instants written with different offsets",
+   "versions": {"W": {"from": "V", "vid": "8", "patch": {"location": ["@D", "@Ac", {"location": {"reference": "Location/ward-b"}, "status": "completed", "period": {"start": "2026-11-08T09:00:00Z", "end": "2026-11-08T10:30:00Z"}}, "@C"], "meta": {"tag": null}}}},
+   "history": ["W", "V", "base", "v5"], "current": "W", "outcome": "verified_continued", "reason": "committed_continued"},
+  {"group": "positive", "name": "finished after a move on to WARD-C that starts at Shutter's end",
+   "versions": {"W": {"from": "V", "vid": "8", "patch": {"status": "finished", "location": ["@D", "@Ac", "@Bc", {"location": {"reference": "Location/ward-c"}, "status": "completed", "period": {"start": "2026-11-08T10:30:00Z", "end": "2026-11-08T12:00:00Z"}}], "meta": {"tag": null}}}},
+   "history": ["W", "V", "base", "v5"], "current": "W", "outcome": "verified_continued", "reason": "committed_continued"},
   {"group": "adversarial", "adversarial": true, "name": "a later writer moved the patient back to WARD-A",
    "versions": {"W": {"from": "V", "vid": "8", "patch": {"location": ["@D", "@Ac", "@Bc", {"location": {"reference": "Location/ward-a"}, "status": "active", "period": {"start": "2026-11-08T10:30:00Z"}}], "meta": {"tag": null}}}},
    "history": ["W", "V", "base", "v5"], "current": "W", "outcome": "committed_review", "reason": "prior_active_again", "detail": {"current_version": "8"}},
