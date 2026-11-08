@@ -275,6 +275,25 @@ def site_globals_stay(ns):
     check(f"{ns} still holds them, where the demo was never installed", got == "sitesitesite", got)
 
 
+def site_hospital_class(ns):
+    """A class of the site's own called Hospital., with a message and an event log line of it. In a hospital's namespace the
+    demo's prefixes are not Shutter's: the uninstall leaves all three."""
+    cls = "Class Hospital.SiteNote Extends Ens.Request\n{\n\nProperty Text As %String;\n\n}\n"
+    subprocess.run(["docker", "exec", "-i", CTR, "sh", "-c", "cat > /tmp/onb_site/Hospital.SiteNote.cls"], input=cls, text=True, check=True)
+    out = session(ns, '''Set sc=$SYSTEM.OBJ.Load("/tmp/onb_site/Hospital.SiteNote.cls","ck-d") Write !,"[c] ",sc,!
+Set b=##class(Hospital.SiteNote).%New() Set b.Text="site" Set sc=b.%Save() Set h=##class(Ens.MessageHeader).%New() Set h.MessageBodyClassName="Hospital.SiteNote",h.MessageBodyId=b.%Id(),h.SourceConfigName="Site Notes",h.TargetConfigName="Site Notes" Set sc=h.%Save() Write !,"[m] ",sc,!
+Do ##class(Ens.Util.Log).LogInfo("Hospital.SiteNote","Note","a line of the site's") Write !,"[l] 1",!''')
+    check(f"{ns} holds a class of its own called Hospital.SiteNote, a message of it and a log line", "[c] 1" in out and "[m] 1" in out, out[-500:])
+
+
+def site_hospital_class_stays(ns):
+    got = value(ns, '##class(%Dictionary.CompiledClass).%ExistsId("Hospital.SiteNote")')
+    check(f"the site's Hospital.SiteNote class is still in {ns}", got == "1", got)
+    out = session(ns, 'Set rs=##class(%SQL.Statement).%ExecDirectNoPriv(,"SELECT COUNT(*) FROM Ens.MessageHeader WHERE MessageBodyClassName = \'Hospital.SiteNote\'") Do rs.%Next() Write !,"<<<m|",rs.%GetData(1),">>>",! Set rs=##class(%SQL.Statement).%ExecDirectNoPriv(,"SELECT COUNT(*) FROM Ens_Util.Log WHERE SourceClass = \'Hospital.SiteNote\'") Do rs.%Next() Write !,"<<<l|",rs.%GetData(1),">>>",!')
+    check("its message stays", "<<<m|1>>>" in out, out[-400:])
+    check("its event log line stays", "<<<l|1>>>" in out, out[-400:])
+
+
 def site_shape():
     step("A hospital namespace running its own production, and the namespace Shutter will go in")
     make_namespace("PATHOLOGY")
@@ -428,6 +447,7 @@ def into_shape():
     check("IPM is there", "[ipm] 1" in out, out[-400:])
     lims_up("PATHOLOGY")
     site_globals("PATHOLOGY")
+    site_hospital_class("PATHOLOGY")
     namespaces = ["USER", "PATHOLOGY"]
     before = snapshot(namespaces)
     print(len(before), "lines", flush=True)
@@ -449,6 +469,7 @@ def into_shape():
     uninstall("PATHOLOGY")
     production_runs("PATHOLOGY", "OnbPath.Production", keep)
     site_globals_stay("PATHOLOGY")
+    site_hospital_class_stays("PATHOLOGY")
     check("none of Shutter's items run", not [k for k in jobs("PATHOLOGY") if k in ("Gate", "Verifier", "Shutter API", "HL7 Index")], jobs("PATHOLOGY"))
     check("the site's order still reaches its LIMS", "ERR" not in send_order("PATHOLOGY", "ORDA3") and order_delivered("PATHOLOGY", "ORDA3"))
     src = value("PATHOLOGY", '##class(%Dictionary.XDataDefinition).%OpenId("OnbPath.Production||ProductionDefinition").Data.Read(200000)["Shutter"')
