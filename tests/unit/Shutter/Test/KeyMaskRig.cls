@@ -16,7 +16,7 @@ ClassMethod Arm(item As %String, providerConfig As %String = "", model As %Strin
         If '$ISOBJECT(it) Set out = "no item " _ item Quit
         For pair = $LISTBUILD("ProviderConfig", providerConfig), $LISTBUILD("Model", model), $LISTBUILD("Mode", mode) {
             Set name = $LIST(pair, 1), value = $LIST(pair, 2)
-            Continue:value = ""
+            Continue:(value = "")
             Do ..Put(it, name, $SELECT(value = "-": "", 1: value))
         }
         $$$ThrowOnError(prod.%Save())
@@ -34,7 +34,7 @@ ClassMethod Put(it As Ens.Config.Item, name As %String, value As %String)
         Set st = it.Settings.GetAt(j)
         If st.Name = name Do it.Settings.RemoveAt(j)
     }
-    Quit:value = ""
+    Quit:(value = "")
     Set st = ##class(Ens.Config.Setting).%New()
     Set st.Name = name, st.Target = "Host", st.Value = value
     Do it.Settings.Insert(st)
