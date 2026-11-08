@@ -152,6 +152,15 @@ Method TestSubsetted()
     Set e = {}.%FromJSON(..Text("Elements"))
     Do e.%Set("modifierExtension", [])
     Do ..Expect(e.%ToJSON(), "FHIR_REPRESENTATION_PARTIAL", "/meta/tag/0", "SUBSETTED wins over later rules")
+    // The code has one meaning whatever system carries it: STU3's URI for the same code system, another system, none.
+    For system = "http://hl7.org/fhir/v3/ObservationValue", "urn:example:other" {
+        Set e = ..Seed()
+        Do e.meta.%Set("tag", [{"system": "urn:example:keep", "code": "x"}, {"system": (system), "code": "SUBSETTED"}])
+        Do ..Expect(e.%ToJSON(), "FHIR_REPRESENTATION_PARTIAL", "/meta/tag/1", "SUBSETTED under " _ system)
+    }
+    Set e = ..Seed()
+    Do e.meta.%Set("tag", [{"code": "SUBSETTED"}])
+    Do ..Expect(e.%ToJSON(), "FHIR_REPRESENTATION_PARTIAL", "/meta/tag/0", "SUBSETTED with no system")
 }
 
 /// 7. A narrative is always a stop.
@@ -182,6 +191,20 @@ Method TestOpenEntries()
     Set e = ..Seed()
     Do e.location.%Get(0).%Set("status", 1)
     Do ..Expect(e.%ToJSON(), ..#SHAPE, "/location/0", "an entry whose status is not a string", "location_entry")
+
+    // A pending entry (a planned move, a held place) beside the open one is a stop, with or without an end; so is a
+    // status R4 does not define.
+    For status = "planned", "reserved" {
+        Set e = ..Seed()
+        Do e.location.%Push({"location": {"reference": "Location/ward-c"}, "status": (status), "period": {"start": "2026-11-07T11:00:00Z"}})
+        Do ..Expect(e.%ToJSON(), ..#SHAPE, "/location/1", "a " _ status _ " entry with no end", "pending_entry")
+        Set e = ..Seed()
+        Do ..Prepend(e.location, {"location": {"reference": "Location/ward-c"}, "status": (status), "period": {"start": "2026-11-08T09:00:00Z", "end": "2026-11-09T09:00:00Z"}})
+        Do ..Expect(e.%ToJSON(), ..#SHAPE, "/location/0", "a " _ status _ " entry with an end", "pending_entry")
+    }
+    Set e = ..Seed()
+    Do e.location.%Push({"location": {"reference": "Location/ward-c"}, "status": "booked"})
+    Do ..Expect(e.%ToJSON(), ..#SHAPE, "/location/1", "a status R4 does not define", "pending_entry")
 
     // An active entry with an end is not open: beside the mapped open one, the plan builds.
     Set e = ..Seed()
@@ -380,6 +403,8 @@ Method TestPurity()
 
 /// Build does not judge the move against the event time: an open entry that starts after it still builds, because
 /// FHIR_LATER_MOVE_AT_RECEIVER is the gate's row (it needs the time reader). meta.security is the gate's too.
+/// This pins a deliberate gap, not a property: the body built here ends the old entry before it starts, and an IRIS
+/// FHIR server stores such a period without complaint, so the gate's ordering row is the only stop for it.
 Method TestNoOrderingJudged()
 {
     Set e = ..Seed()
