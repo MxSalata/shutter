@@ -1979,7 +1979,7 @@ All under `/api/shutter`, JSON in and out.
   list of what to send again is `lists.offered[].controlId` in order.
 - `POST /outages/:id/acts` (`Shutter_Approve`, the CSRF header) with `{ "act": "pause", "until": "<UTC time>" }` or `{
   "act": "close", "reason": "..." }`, and optionally `"version"`. 200 with the outage as `GET /outages/:id` gives it; 400
-  `bad_request` for an act the row doesn't list, a pause with no time, or one not in the future, or a close with no reason or
+  `bad_request` for an act the row doesn't list or one it lists that this build's route doesn't handle (the row is left as it was), a pause with no time, or one not in the future, or a close with no reason or
   one over 1,000 characters; 409 `wrong_state` on a closed row, `version_changed` (with `currentVersion`) on a stale
   version; 413 `too_large` for a body over 8,192 characters, refused before it is parsed. A pause moves the row to
   `paused`, sets `pausedUntil`, and withholds any set (`set.status` `withheld`, `set.reason` "down on purpose"); a close
@@ -2007,7 +2007,7 @@ words follow the build (`Shutter.API.Outages.Words`, a pure method with a table 
   "Transport outage closed.", with "N delivery exceptions still need review." while cases stay open. Where the item's
   `ReplyCodeActions` is not the engine's default, the string is printed with "This operation's reply actions are the site's
   own: what an AE, AR or timeout does here follows this string". Always last: "Recovery attempts initiated by Shutter: 0.",
-  with "The integration engine may still be delivering or retrying." while anything is queued or being tried, and "Nothing
+  with "The integration engine may still be delivering or retrying." while messages are queued or a head message is read, and "Nothing
   is sent to the receiver to check this."
 - `do`: "Do: " and the site's runbook line; at Refusing "Do: a person decides in the Message Viewer; Shutter does not
   suspend or discard."; while paused, "Down on purpose until ..." in its place. At a retrying receiver (`unlimited` or

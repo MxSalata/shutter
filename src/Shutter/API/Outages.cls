@@ -240,12 +240,12 @@ ClassMethod Settled(o As %DynamicObject) As %String
 ClassMethod RecoveryLine(o As %DynamicObject, state As %String, retry As %String, queue As %String, head As %String) As %String
 {
     Set text = "Recovery attempts initiated by Shutter: " _ (+o.%Get("sentByShutter")) _ "."
-    Set trying = (+queue > 0) || (head '= "") || ((retry = "unlimited") && $LISTFIND($LISTBUILD("open", "draining", "paused", "needs_person"), state))
+    Set trying = (+queue > 0) || (head '= "")
     If trying Set text = text _ " The integration engine may still be delivering or retrying."
     Quit text _ " Nothing is sent to the receiver to check this."
 }
 
-/// Q8's line, from the profile's duplicates: what a duplicate does at this receiver, refused with its words, filed twice or unknown.
+/// The duplicate line, from the profile's duplicates: what a duplicate does at this receiver, refused with its words, filed twice or unknown.
 ClassMethod DuplicateLine(entry As %DynamicObject) As %String
 {
     Set d = $SELECT($ISOBJECT(entry): entry.%Get("duplicates"), 1: "")
@@ -325,11 +325,12 @@ ClassMethod S(obj As %DynamicObject, key As %String) As %String
 
 /// A person's act on an outage: pause until a time, or close with a reason. Answers the HTTP status, and in reply the outage
 /// as the routes give it or the error object. by is the signed-in user, never a name from the body.
-ClassMethod Act(row As Shutter.Store.Outage, body As %DynamicObject, by As %String, Output reply As %DynamicObject) As %String
+/// acts, when given, stands in for the row's own list (a later build's row may list an act this method doesn't handle).
+ClassMethod Act(row As Shutter.Store.Outage, body As %DynamicObject, by As %String, Output reply As %DynamicObject, acts As %DynamicArray = "") As %String
 {
     Set reply = ""
     Set act = ..S(body, "act")
-    Set acts = row.ToJSON().acts
+    If '$ISOBJECT(acts) Set acts = row.ToJSON().acts
     Set allowed = ""
     Set ai = acts.%GetIterator()
     While ai.%GetNext(.i, .a) { Set allowed = allowed _ $SELECT(allowed = "": "", 1: ", ") _ a }
@@ -348,11 +349,14 @@ ClassMethod Act(row As Shutter.Store.Outage, body As %DynamicObject, by As %Stri
         Set ahead = ##class(Shutter.Util.Time).MillisBetween(##class(Shutter.Util.Time).NowUTC(), until)
         If (ahead = "") || (ahead <= 0) Set reply = {"error": "bad_request", "detail": "until must be in the future"} Quit "400 Bad Request"
         Set sc = row.Pause(until, by)
-    } Else {
+    } ElseIf act = "close" {
         Set reason = ..S(body, "reason")
         If $ZSTRIP(reason, "<>W") = "" Set reply = {"error": "bad_request", "detail": "A close needs a reason"} Quit "400 Bad Request"
         If $LENGTH(reason) > 1000 Set reply = {"error": "bad_request", "detail": "reason is longer than 1000 characters"} Quit "400 Bad Request"
         Set sc = row.Close(reason, by)
+    } Else {
+        Set reply = {"error": "bad_request", "detail": ("The act " _ act _ " is not handled in this build")}
+        Quit "400 Bad Request"
     }
     If $$$ISERR(sc) {
         Set reply = {"error": "wrong_state", "detail": ($SYSTEM.Status.GetErrorText(sc))}

@@ -221,7 +221,7 @@ def watched(r):
 
 
 def retrying(r):
-    step("A retrying receiver's outage: the JSON, the words with Q8's declared duplicate words, nothing approvable")
+    step("A retrying receiver's outage: the JSON, the words with the declared duplicate words, nothing approvable")
     if r.listening(PORT[RETRY]):
         r.listener_down(PORT[RETRY])
     for i in range(1, 4):
@@ -241,7 +241,7 @@ def retrying(r):
         w = one["words"]
         print("        words: " + json.dumps(w)[:900], flush=True)
         check("first: the engine retries without limit", "retries without limit" in w["first"] and "Recovery attempts initiated by Shutter: 0." in w["first"], w["first"])
-        check("do: the site's runbook and Q8's line with its words", RUNBOOK in w["do"] and 'a duplicate is refused, with its words "ALREADY HELD"' in w["do"], w["do"])
+        check("do: the site's runbook and the duplicate line with its words", RUNBOOK in w["do"] and 'a duplicate is refused, with its words "ALREADY HELD"' in w["do"], w["do"])
         check("call: the site's line as written", CALL in w["call"], w["call"])
         check("critical: the laboratory line", w["critical"] == CRITICAL, w["critical"])
         check("no promise of a send", "for one approval" not in json.dumps(w), w)
@@ -249,7 +249,7 @@ def retrying(r):
 
 
 def bounded(r):
-    step("A bounded receiver with no duplicates declared: Q8's line says unknown")
+    step("A bounded receiver with no duplicates declared: the duplicate line says unknown")
     if r.listening(PORT[BOUNDED]):
         r.listener_down(PORT[BOUNDED])
     r.send(IN[BOUNDED], r.order(f"B1{tag}"), "b1")

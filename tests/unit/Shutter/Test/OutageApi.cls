@@ -51,7 +51,7 @@ XData Rows [ MimeType = application/json ]
   "has": {"first": ["The engine retries here for at most 25 s, then gives up"], "do": ["duplicate is unknown."]}, "not": {"first": ["does not retry"]}},
  {"name": "the setting unreadable: no promise", "category": "orders_results", "reading": {"retry": "unknown", "failureTimeout": null, "settingSources": {"FailureTimeout": "unknown"}},
   "has": {"first": ["Whether this operation retries could not be read: treat them as not going by themselves until a person checks the item."]}, "not": {"first": ["retries without limit", "does not retry"]}},
- {"name": "a retrying receiver, no duplicates declared: Q8's line says unknown", "category": "orders_results", "reading": {"retry": "unlimited", "failureTimeout": -1, "queue": 5, "headHeaderId": "41"},
+ {"name": "a retrying receiver, no duplicates declared: the duplicate line says unknown", "category": "orders_results", "reading": {"retry": "unlimited", "failureTimeout": -1, "queue": 5, "headHeaderId": "41"},
   "has": {"first": ["At this operation the engine retries without limit (FailureTimeout -1, read off the item)", "5 messages are queued.", "The integration engine may still be delivering or retrying."], "do": ["Entering one by hand first is your downtime procedure's call; at this receiver a duplicate is unknown."]},
   "not": {"first": ["Shutter will not send", "not offered"]}},
  {"name": "a retrying receiver that refuses duplicates, with its words", "category": "orders_results", "reading": {"retry": "unlimited", "failureTimeout": -1, "settingSources": {"FailureTimeout": "class_default"}}, "duplicates": {"behaviour": "refuses", "phrase": "ALREADY HELD"},
@@ -159,6 +159,11 @@ Method TestActs()
     For key = "first", "do", "call", "critical" { Do $$$AssertTrue(json.words.%IsDefined(key), "words has " _ key) }
     Do $$$AssertTrue(json.words.call [ "01632 960998", "the call line as the site wrote it")
     Do $$$AssertEquals($CLASSMETHOD(api, "Act", row, {"act": "read_again"}, "unit", .reply), "400 Bad Request", "an act the row doesn't list is refused")
+    Set before = row.State _ "/" _ row.Version
+    Do $$$AssertEquals($CLASSMETHOD(api, "Act", row, {"act": "read_again", "reason": "a later act"}, "unit", .reply, ["pause", "close", "read_again"]), "400 Bad Request", "an act the row lists but this build doesn't handle is refused")
+    Do $$$AssertTrue($ISOBJECT(reply) && (reply.error = "bad_request"), "with bad_request")
+    Set still = ##class(Shutter.Store.Outage).%OpenId(row.%Id(), 0)
+    Do $$$AssertEquals(still.State _ "/" _ still.Version, before, "and the state is as it was")
     Do $$$AssertEquals($CLASSMETHOD(api, "Act", row, {"act": "pause"}, "unit", .reply), "400 Bad Request", "a pause needs until")
     Do $$$AssertEquals($CLASSMETHOD(api, "Act", row, {"act": "pause", "until": "2020-01-01T00:00:00Z"}, "unit", .reply), "400 Bad Request", "a pause in the past is refused")
     Do $$$AssertEquals($CLASSMETHOD(api, "Act", row, {"act": "pause", "until": "tomorrow"}, "unit", .reply), "400 Bad Request", "a pause needs a UTC time")
