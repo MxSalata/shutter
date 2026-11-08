@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.47, 8 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.48, 8 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -1069,6 +1069,14 @@ the framework). The Dockerfile runs it, and a site with Java runs it once by han
   evidence names another entry or outcome (`APPROVAL_ITEM_CHANGED`) or the incident's plan digest is no longer the one
   it bound, or the case no longer belongs to the incident (`APPROVAL_INCIDENT_PLAN_CHANGED`): the case blocks and the
   chain stops at that item (v1.21).
+- Any error in the incident's workflow during a release, other than one raising an approval task (7.3), abandons the
+  whole incident (`IncidentWorkflow.OnResponse`, `OnError`): a released case it can't find again ("Released case ... not
+  found"), or a failure moving on to the next item, stops its open chains, fails its cases still `detected`,
+  `collecting`, `investigating` or `grouped` with the reason, and closes it. As built in 1.1.2 (v1.48).
+- A receiver that goes down again during a release stops each remaining chain in turn: the released item's preflight
+  read, tried `MaxRefreshes` + 1 times (4 by default), or its write finds the receiver down, the case stops for a person,
+  the chain's later items are escalated ("Not released: ..."), and the next chain is released and stops the same way. No
+  write is retried blindly, so nothing is written twice. As built in 1.1.2 (v1.48).
 
 ### 7.5 The API
 
@@ -2130,6 +2138,9 @@ with the other stores.
 
 ## Changes
 
+- 8 Nov 2026, release 1.1.2 (v1.48): two release behaviours stated as built (7.4): any error in an incident's workflow
+  during a release, other than raising an approval task, abandons the incident; a receiver that goes down again during a
+  release stops each remaining chain in turn at its next item, with nothing written twice.
 - 8 Nov 2026, release 1.1.2 (v1.47): the receipt check compares beds only when the receipt and the operation both state
   one: a bed that is JSON null, missing or empty is not stated, so a receipt whose bed is null no longer reads as a
   different bed (`RECEIPT_PAYLOAD_DIFFERS`), and a stated different bed still does. A replayed run writes one trace line per
