@@ -18,6 +18,8 @@ The README's Try it and Run details sections have the commands. This page keeps 
 
 Neither user starts, stops or purges the production.
 
+One Shutter per Docker host: the container is named `shutter` and its image `shutter:dev`. To run a second beside it, clone into another folder and add a `docker-compose.override.yml` there with its own `name:`, `container_name:` and `image:`, and other ports.
+
 To feed a message of your own, copy an HL7 file (one message, `.hl7`) into the production's inbound folder in the data volume: `docker cp my-message.hl7 shutter:/usr/irissys/mgr/shutter/in/`. Without a key, a failure it causes takes the rules path, unless the catalogue gives it to the board or a person: then it goes to a person with no plan (see [Limits, plainly](https://github.com/MxSalata/shutter#limits-plainly)).
 
 ### More about running it
