@@ -64,6 +64,15 @@ Method TestRetryPathDrains()
     Set f = ..Facts("open", "unlimited", 0), f.stayConnected = 0
     Set n = $CLASSMETHOD(c, "Next", f, now)
     Do $$$AssertEquals(n.to, "open", "StayConnected 0 is the no-retry path: never draining")
+    Set f = ..Facts("open", "unlimited", 0), f.stayConnected = ""
+    Set n = $CLASSMETHOD(c, "Next", f, now)
+    Do $$$AssertEquals(n.to, "open", "StayConnected unread is the no-retry path: never draining")
+    Set f = ..Facts("open", "unlimited", 1, "2026-11-08T01:04:55Z", "disconnected", "Retry", "cant_tell"), f.stayConnected = ""
+    Set n = $CLASSMETHOD(c, "Next", f, now)
+    Do $$$AssertEquals(n.to, "closing", "and it leaves open on two quiet polls, whatever the adapter reads")
+    Set f = ..Facts("open", "unlimited", 0), f.stayConnected = ""
+    Set n = $CLASSMETHOD(c, "Next", f, "2026-11-08T01:10:00Z")
+    Do $$$AssertEquals(n.to, "needs_person", "with the busy feed's clock")
 }
 
 /// Two quiet polls at least 4 s apart close the drain; one, or two too close, don't.
@@ -391,6 +400,43 @@ Method TestNoRetryClosesWithOpenCases()
     Set name = ..#RECEIVER
     &sql(SELECT COUNT(*) INTO :resolved FROM Shutter_Store."Case" WHERE Receiver = :name AND State = 'resolved')
     Do $$$AssertEquals(resolved, 0, "none resolved by membership")
+}
+
+/// A row left in closing (the close's save never came) is closed again by the next poll, which reads everything again.
+Method TestRowLeftInClosingClosesOnTheNextPoll()
+{
+    Do $$$AssertStatusOK(##class(Shutter.Store.Outage).Open(..Entry(), "cant_tell", "a test", "unit", .o), "opened")
+    Do $$$AssertStatusOK(o.Advance("closing", "queue 0 on two polls", "unit", , , .moved), "closing, and the close never ran")
+    Do ..AddCase("rejected", "", "escalated")
+    Set facts = {"answer": "ok", "productionState": "running", "enabled": 1, "queue": 0, "head": "", "retry": "none", "stayConnected": "-1", "status": "Error", "adapterState": "1 job disconnected"}
+    Set now = ##class(Shutter.Util.Time).NowUTC()
+    Do $$$AssertStatusOK(##class(Shutter.Operation.OutageClose).Step(o, ..Entry(), facts, "cant_tell", now), "the next poll")
+    Set j = o.ToJSON()
+    Do $$$AssertEquals(j.state, "closed", "closed from closing by the next poll")
+    Do $$$AssertEquals(j.openCases.%Size(), 1, "the case judged")
+    Do $$$AssertEquals(j.set.reason, "no set gate in this build", "set.reason")
+    Set kinds = ""
+    Set events = ##class(Shutter.Store.OutageEvent).Of(o.%Id()), iter = events.%GetIterator()
+    While iter.%GetNext(.i, .e) { Set kinds = kinds _ $SELECT(kinds = "": "", 1: ",") _ e.kind }
+    Do $$$AssertEquals(kinds, "opened,closing,closed", "one closing, then closed")
+}
+
+/// A header queued again at the close sends the row back to open before any linked case is judged.
+Method TestQueuedAtTheCloseJudgesNoCase()
+{
+    Do $$$AssertStatusOK(##class(Shutter.Store.Outage).Open(..Entry(), "cant_tell", "a test", "unit", .o), "opened")
+    Do $$$AssertStatusOK(o.Advance("closing", "queue 0 on two polls", "unit", , , .moved), "closing")
+    Do ..AddCase("rejected", "", "escalated")
+    Set h = ##class(Ens.MessageHeader).%New()
+    Set h.SourceConfigName = "Unit Close In", h.TargetConfigName = "Unit Close Out", h.Status = ##class(Ens.DataType.MessageStatus).DisplayToLogical("Queued")
+    Do $$$AssertStatusOK(h.%Save(), "a header queued at the item")
+    Set sc = ##class(Shutter.Operation.OutageClose).Close(o, ..Entry(), {}, ##class(Shutter.Util.Time).NowUTC(), "")
+    Do ##class(Ens.MessageHeader).%DeleteId(h.%Id())
+    Do $$$AssertStatusOK(sc, "the close")
+    Set j = o.ToJSON()
+    Do $$$AssertEquals(j.state, "open", "back to open")
+    Do $$$AssertEquals(j.linkedCases.%Size(), 0, "no case judged")
+    Do $$$AssertEquals(j.openCases.%Size(), 0, "and none listed")
 }
 
 Method AddCase(kind As %String, code As %String, state As %String) [ Private ]

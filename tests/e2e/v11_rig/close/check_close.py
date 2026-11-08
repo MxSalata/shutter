@@ -2,8 +2,9 @@
 """The close of a receiver's outage on a real instance: the drain, a dirty read during it, the headers listed at the close, the
 engine's own alerts beside the record, a busy feed, and the cases linked by receiver and time, each judged from its own
 delivery header. It reads the store directly, since the routes are another part's. Every receiver is a fake on the loopback
-address of a test instance. The cases here are written straight into the store with the fields the intake gives them, since
-the rig's productions have no intake of Shutter's.
+address of a test instance. The cases the checks need are written straight into the store with the fields the intake gives
+them, so each has the kind a check asks for. The rig's productions do carry Shutter's intake, which opens its own case for
+each alert an item raises on error, so a check judges the cases it wrote by their ids and leaves the intake's alone.
 
     python3 tests/e2e/v11_rig/close/check_close.py --ctr NAME --port PORT --image IMAGE [--module core] [--keep] [--reuse] [--only a,b]
 

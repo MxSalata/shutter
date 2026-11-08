@@ -45,7 +45,15 @@ ClassMethod Step(outage As Shutter.Store.Outage, entry As %DynamicObject, facts 
         Quit outage.Advance("open", "the pause ended at " _ outage.PausedUntil, ..#ACTOR, fields)
     }
     Do ..NewAlerts(outage, fields)
-    // Only open and draining are the poll's to move; closing, offered and sending belong to the close and to later parts.
+    // With no set gate in the build, closing is a step within one poll: a row left there (the close's save refused by a lock,
+    // the production stopped between the two saves) is closed again on the next poll. The close reads everything again, so
+    // running it twice is safe.
+    If (state = "closing") && (..SetReasonNow() = ..#NOSETGATE) {
+        Set sc = ..Save(outage, fields)
+        If $$$ISERR(sc) Quit sc
+        Quit ..Close(outage, entry, facts, now, "")
+    }
+    // Only open and draining are the poll's to move otherwise; closing with a set gate, offered and sending belong to later parts.
     If (state '= "open") && (state '= "draining") Quit ..Save(outage, fields)
     Set f = {"state": (state), "reading": (reading), "retry": (facts.retry), "stayConnected": (facts.stayConnected), "status": (facts.status), "word": (##class(Shutter.Operation.ReceiverWatch).AdapterWord(facts.adapterState)), "quietSince": (outage.QuietSince), "openedAt": (outage.OpenedAt), "drainStartedAt": (outage.DrainStartedAt), "settleMinutes": (##class(Shutter.Store.SiteProfile).ReceiverMinutes(outage.Receiver, "settle_minutes"))}
     Do f.%Set("quiet", ..IsQuiet(outage, facts, now), "boolean")
@@ -93,7 +101,9 @@ ClassMethod Next(f As %DynamicObject, now As %String) As %DynamicObject
         Set out.quietSince = ""
         Quit out
     }
-    Set retryPath = (f.retry = "unlimited") && (f.stayConnected '= 0) && (f.stayConnected '= "0")
+    // StayConnected unread is the no-retry path, as FailureTimeout unread is: only an item known to retry and stay connected
+    // waits for the adapter to read connected.
+    Set retryPath = (f.retry = "unlimited") && (f.stayConnected '= "") && (f.stayConnected '= 0) && (f.stayConnected '= "0")
     Set status = $ZCONVERT(f.status, "L"), ok = (status = "ok") || (status = "inactive")
     Set dirty = (f.word '= "connected") || 'ok || (f.reading = "refusing") || (f.reading = "not_answering")
     Set twice = f.quiet && (f.quietSince '= "") && (##class(Shutter.Util.Time).MillisBetween(f.quietSince, now) >= ..#QUIETMILLIS)
@@ -188,15 +198,18 @@ ClassMethod Close(outage As Shutter.Store.Outage, entry As %DynamicObject, facts
     Set fields.SettledError = sorted.settled.error, fields.SettledOther = sorted.settled.other
     Set fields.ListQueued = sorted.lists.queued, fields.ListOffered = sorted.lists.offered
     Set fields.ListReached = sorted.lists.reached, fields.ListRefused = sorted.lists.refused
+    Set w = {"why": (why), "unread": (read.answer '= "ok"), "unreadWhy": (read.why), "truncated": (sorted.truncated), "errors": (sorted.settled.error), "openCases": 0, "completed": (sorted.settled.completed), "suspended": (sorted.settled.suspended), "other": (sorted.settled.other), "queued": (sorted.lists.queued.%Size()), "moreThanOnce": (sorted.moreThanOnce), "drainedAt": ($SELECT(why = "": ..Clock(now), 1: "")), "recoveredAt": ($SELECT((why = "") && (outage.DrainStartedAt '= ""): ..Clock(outage.DrainStartedAt), 1: ""))}
+    // Whether the close goes back to open does not depend on the cases, so that is known before any case is judged.
+    Set first = ..CloseWords(w)
+    If first.to = "open" {
+        // A dirty read at the close: back to open, as during the drain, with nothing of a close kept and no case touched.
+        Quit outage.Advance("open", first.outcome, ..#ACTOR, {"QuietSince": "", "DrainStartedAt": ""})
+    }
+    // Only a close that answers closed or needs_person judges the linked cases.
     Set linked = ..Linked(outage, now)
     Set fields.LinkedCases = linked.linked, fields.OpenCases = linked.open
-    Set w = {"why": (why), "unread": (read.answer '= "ok"), "unreadWhy": (read.why), "truncated": (sorted.truncated), "errors": (sorted.settled.error), "openCases": (linked.open.%Size()), "completed": (sorted.settled.completed), "suspended": (sorted.settled.suspended), "other": (sorted.settled.other), "queued": (sorted.lists.queued.%Size()), "moreThanOnce": (sorted.moreThanOnce), "drainedAt": ($SELECT(why = "": ..Clock(now), 1: "")), "recoveredAt": ($SELECT((why = "") && (outage.DrainStartedAt '= ""): ..Clock(outage.DrainStartedAt), 1: ""))}
+    Set w.openCases = linked.open.%Size()
     Set words = ..CloseWords(w)
-    If words.to = "open" {
-        // A dirty read at the close: back to open, as during the drain, with nothing of a close kept.
-        Set fields = {"QuietSince": "", "DrainStartedAt": ""}
-        Quit outage.Advance("open", words.outcome, ..#ACTOR, fields)
-    }
     Set fields.Outcome = words.outcome
     Quit outage.Advance(words.to, words.outcome, ..#ACTOR, fields)
 }
