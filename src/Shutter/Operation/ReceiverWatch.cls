@@ -4,7 +4,7 @@
 /// watched namespace can't stop the Case Releaser, and a failure here reaches no intake.
 ///
 /// The judging is in pure class methods (AdapterWord, RetryOf, HeadWords, HeadCheck, ReadingOf, DownSince, ShouldOpen, MarkAfter), so a table can
-/// test them with no instance. Here it only opens an outage: what moves an open one on is written elsewhere.
+/// test them with no instance. Here it opens an outage; Shutter.Operation.OutageClose moves an open one on.
 Class Shutter.Operation.ReceiverWatch Extends Ens.BusinessService
 {
 
@@ -62,7 +62,11 @@ ClassMethod PollOne(entry As %DynamicObject) As %Status
     Set sc = row.%Save()
     If $$$ISERR(sc) Quit sc
     If $ISOBJECT(outage) {
-        Quit $SELECT(..IsKind(reading): outage.SetKind(reading, "Receiver Watch"), 1: $$$OK)
+        If ..IsKind(reading) {
+            Set sc = outage.SetKind(reading, "Receiver Watch")
+            If $$$ISERR(sc) Quit sc
+        }
+        Quit ##class(Shutter.Operation.OutageClose).Step(outage, entry, facts, reading, now)
     }
     Set why = ..ShouldOpen(reading, row.DownSince, now, fresh)
     If why = "" Quit $$$OK

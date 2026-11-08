@@ -104,6 +104,22 @@ Property WordsCall As %String(MAXLEN = 4000);
 
 Property WordsCritical As %String(MAXLEN = 4000);
 
+/// When the poll first read the engine delivering the backlog (draining), for the busy feed's clock and the return words.
+Property DrainStartedAt As %String(MAXLEN = 30);
+
+/// The first of an unbroken run of quiet polls: queue 0, no head message, no header of the window Queued or Delivered. A
+/// dirty read empties it.
+Property QuietSince As %String(MAXLEN = 30);
+
+/// The highest event log row id already read for the item's alerts, so each poll reads only what is new.
+Property AlertMark As %Integer [ InitialExpression = 0 ];
+
+/// JSON: [ { "caseId", "state", "headerId", "resolved" } ], the cases linked by receiver and time, written at the close.
+Property LinkedCases As %Stream.GlobalCharacter;
+
+/// What the close found, in a person's words: the drain and its dispositions, or what a person must do.
+Property Outcome As %String(MAXLEN = 4000);
+
 /// The row of a receiver that is not closed, or "".
 ClassMethod ActiveFor(receiver As %String) As Shutter.Store.Outage
 {
@@ -212,36 +228,65 @@ Method Close(reason As %String, by As %String) As %Status
 /// never changes. On any refusal this copy goes back to what the store holds.
 Method Move(state As %String, detail As %String, by As %String, until As %String = "") As %Status [ Private ]
 {
+    Set fields = {}
+    If state = "paused" Set fields.PausedUntil = until, fields.PausedBy = by, fields.SetStatus = "withheld", fields.SetReason = "down on purpose"
+    Quit ..Change(state, detail, by, fields, 0, state, .moved)
+}
+
+/// The poll's change: to state (the same state for fields alone), with fields set by property name (a list's name takes a
+/// %DynamicArray), and an event of kind event when the state stays. It goes only on the state and version this copy read:
+/// when a person or another job moved the row first, moved is 0, nothing changes and this copy reads the store again, so the
+/// next poll judges the row as it is. The version moves with the state.
+Method Advance(state As %String, detail As %String, by As %String, fields As %DynamicObject = "", event As %String = "", Output moved As %Boolean) As %Status
+{
+    Quit ..Change(state, detail, by, fields, 1, event, .moved)
+}
+
+Method Change(state As %String, detail As %String, by As %String, fields As %DynamicObject, quiet As %Boolean, event As %String = "", Output moved As %Boolean) As %Status [ Private ]
+{
+    Set moved = 0
     Set id = ..%Id()
     If id = "" Quit $$$ERROR($$$GeneralError, "This outage is not saved")
     Lock +^Shutter.Outage(id):5
     If '$TEST Quit $$$ERROR($$$GeneralError, "Outage " _ id _ " is locked")
-    Set sc = $$$OK, version = ..Version
+    Set sc = $$$OK, version = ..Version, was = ..State
     Try {
         Set sc = ..%Reload()
         If $$$ISERR(sc) Quit
+        If quiet && ((..Version '= version) || (..State '= was) || (..State = "closed")) Quit
         If ..Version '= version Set sc = $$$ERROR($$$GeneralError, "Outage " _ id _ " has moved on: read it again") Quit
         If ..State = "closed" Set sc = $$$ERROR($$$GeneralError, "Outage " _ id _ " is closed") Quit
-        Set ..State = state, ..Version = version + 1
-        If state = "closed" {
-            Set ..ClosedAt = ##class(Shutter.Util.Time).NowUTC(), ..CloseReason = $EXTRACT(detail, 1, 1000), ..ClosedBy = by, ..ActiveReceiver = ""
-            Set kind = "closed"
-        } Else {
-            Set ..PausedUntil = until, ..PausedBy = by, ..SetStatus = "withheld", ..SetReason = "down on purpose"
-            Set kind = "paused"
+        If $ISOBJECT(fields) {
+            Set iter = fields.%GetIterator()
+            While iter.%GetNext(.name, .value) {
+                If $LISTFIND($LISTBUILD("Alerts", "ListQueued", "ListOffered", "ListReached", "ListRefused", "OpenCases", "LinkedCases"), name) {
+                    Set sc = ..PutList(name, value)
+                    If $$$ISERR(sc) Quit
+                } Else {
+                    Set $PROPERTY($THIS, name) = value
+                }
+            }
+            If $$$ISERR(sc) Quit
+        }
+        Set kind = event
+        If state '= ..State {
+            Set ..State = state, ..Version = version + 1, kind = state
+            If state = "closed" Set ..ClosedAt = ##class(Shutter.Util.Time).NowUTC(), ..CloseReason = $EXTRACT(detail, 1, 1000), ..ClosedBy = by, ..ActiveReceiver = ""
         }
         Set sc = ..%Save()
         If $$$ISERR(sc) Quit
-        Set sc = ##class(Shutter.Store.OutageEvent).Add(id, kind, detail, by)
+        Set moved = 1
+        If kind '= "" Set sc = ##class(Shutter.Store.OutageEvent).Add(id, kind, detail, by)
     } Catch ex {
         Set sc = ex.AsStatus()
     }
-    If $$$ISERR(sc) Do ..%Reload()
+    If 'moved Do ..%Reload()
     Lock -^Shutter.Outage(id)
     Quit sc
 }
 
-/// Replaces a JSON list: name is Alerts, ListQueued, ListOffered, ListReached, ListRefused or OpenCases. The caller saves.
+/// Replaces a JSON list: name is Alerts, ListQueued, ListOffered, ListReached, ListRefused, OpenCases or LinkedCases. The
+/// caller saves.
 Method PutList(name As %String, list As %DynamicArray) As %Status
 {
     Set stream = $PROPERTY($THIS, name)
@@ -277,6 +322,8 @@ Method ToJSON() As %DynamicObject
     Set o.alerts = ..GetList("Alerts")
     Set o.lists = {"queued": (..GetList("ListQueued")), "offered": (..GetList("ListOffered")), "reached": (..GetList("ListReached")), "refused": (..GetList("ListRefused"))}
     Set o.openCases = ..GetList("OpenCases")
+    Set o.linkedCases = ..GetList("LinkedCases")
+    Do ..Put(o, "outcome", ..Outcome)
     Do o.%Set("version", +..Version, "number")
     Set set = {"status": (..SetStatus)}
     Do ..Put(set, "digest", ..SetDigest), ..Put(set, "computedAt", ..SetComputedAt), ..Put(set, "setPolicyVersion", ..SetPolicyVersion), ..Put(set, "reason", ..SetReason)
