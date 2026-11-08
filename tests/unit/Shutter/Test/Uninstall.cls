@@ -100,6 +100,48 @@ Method TestClassPrefixesInAHospitalsNamespace()
     Do $$$AssertEquals($CLASSMETHOD(u, "TakenByUninstall", "Hospital.Production", "Shutter Forwarder", "Shutter.Intake.Forwarder", "Site.Production", "", "", 0), 1, "the module's own Hospital.Production, compiled in a hospital's namespace")
 }
 
+/// The package manager removes the Hospital and Downstream packages whole, so a class of the site's in either would go with
+/// them: the uninstall refuses over it. Only a class the module's tree has, or one generated from such a class, is the module's.
+Method TestSiteClassesInTheDemoPackages()
+{
+    Set u = "Shutter.Util.Uninstall"
+    Set module("Hospital.Production") = 1, module("Downstream.API") = 1
+    Do $$$AssertEquals($CLASSMETHOD(u, "SiteClass", "Hospital.SiteNote", "", .module), 1, "a site's class in the Hospital package")
+    Do $$$AssertEquals($CLASSMETHOD(u, "SiteClass", "Downstream.Mine.Thing", "", .module), 1, "and in a package under Downstream")
+    Do $$$AssertEquals($CLASSMETHOD(u, "SiteClass", "Hospital.Production", "", .module), 0, "the module's own")
+    Do $$$AssertEquals($CLASSMETHOD(u, "SiteClass", "Hospital.Production.Thread1", "Hospital.Production.CLS", .module), 0, "one generated from the module's")
+    Do $$$AssertEquals($CLASSMETHOD(u, "SiteClass", "Hospital.SiteNote.Thread1", "Hospital.SiteNote.CLS", .module), 1, "one generated from the site's")
+    Do $$$AssertEquals($CLASSMETHOD(u, "SiteClass", "HospitalTrust.Note", "", .module), 0, "a package that begins alike")
+    Do $$$AssertEquals($CLASSMETHOD(u, "SiteClass", "Site.Note", "", .module), 0, "another package: the package manager leaves it")
+}
+
+/// The module's demo classes are known whether or not the tree it was loaded from is still on disk, and every one is compiled.
+Method TestModuleClassesAreKnown()
+{
+    Set u = "Shutter.Util.Uninstall"
+    Do $CLASSMETHOD(u, "ModuleClasses", .module)
+    Do $$$AssertTrue($DATA(module("Hospital.Production")) && $DATA(module("Downstream.API")) && $DATA(module("Hospital.Operation.DownstreamOut")), "the tree's classes, subpackages too")
+    Set list = $LISTFROMSTRING($PARAMETER(u, "DEMOCLASSES")), missing = ""
+    For i = 1:1:$LISTLENGTH(list) If '##class(%Dictionary.CompiledClass).%ExistsId($LIST(list, i)) Set missing = missing _ " " _ $LIST(list, i)
+    Do $$$AssertEquals(missing, "", "every class the fallback list names is compiled")
+    Set name = ""
+    For { Set name = $ORDER(module(name)) Quit:name=""  If '$LISTFIND(list, name) Set missing = missing _ " " _ name }
+    Do $$$AssertEquals(missing, "", "the fallback list names every demo class of the tree")
+}
+
+/// What goes with the uninstall's two writes outside the messages (a search table's registration, an extent definition): in
+/// a hospital's namespace only Shutter.'s classes and the module's own demo classes, never a site's called Hospital. there.
+Method TestWhatTheExtentAndSearchTableStepsTake()
+{
+    Set u = "Shutter.Util.Uninstall"
+    Set module("Hospital.Production") = 1
+    Do $$$AssertEquals($CLASSMETHOD(u, "TakesClass", "Hospital.SiteSearch", 0, .module), 0, "a site's search table in a hospital's namespace")
+    Do $$$AssertEquals($CLASSMETHOD(u, "TakesClass", "Hospital.Production", 0, .module), 1, "the module's own class there")
+    Do $$$AssertEquals($CLASSMETHOD(u, "TakesClass", "Shutter.Index.HL7", 0, .module), 1, "Shutter's, anywhere")
+    Do $$$AssertEquals($CLASSMETHOD(u, "TakesClass", "Hospital.Anything", 1, .module), 1, "the demo's prefixes in Shutter's own namespace")
+    Do $$$AssertEquals($CLASSMETHOD(u, "TakesClass", "EnsLib.HL7.SearchTable", 1, .module), 0, "the engine's, never")
+}
+
 /// A plan changes nothing and answers.
 Method TestPlanAnswersAndChangesNothing()
 {
