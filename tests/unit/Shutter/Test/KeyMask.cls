@@ -37,6 +37,13 @@ ClassMethod Models() As %List
     Quit l
 }
 
+/// Real model ids written as a name and a version after "@", as one cloud names its models: an address word the rule
+/// hides in other settings, but never a key in a Model.
+ClassMethod ModelsAt() As %List
+{
+    Quit $LISTBUILD("gemini-1.5-pro@001", "claude-sonnet-5-5@20261101", "mistral-large@2407")
+}
+
 /// One rule: the guide's check and Shutter.Util.Secret's agree on every value, key-shaped or not.
 Method TestTheGuidesRule()
 {
@@ -59,6 +66,37 @@ Method TestARealModelShows()
         Set v = $LISTGET(models, i)
         Do $$$AssertEquals(##class(Shutter.Util.Secret).Clean(v), v, "shown as it is: " _ v)
     }
+    Set models = ..Models() _ ..ModelsAt()
+    For i = 1:1:$LISTLENGTH(models) {
+        Set v = $LISTGET(models, i)
+        Do $$$AssertNotTrue(##class(Shutter.Util.Secret).LooksModel(v), "not a key as a Model: " _ v)
+        Do $$$AssertEquals(##class(Shutter.Util.Secret).CleanModel(v), v, "a Model shown as it is: " _ v)
+    }
+    // The guide's card shows such a Model as it is too, so the two agree.
+    Set v = $LISTGET(..ModelsAt(), 1)
+    Set r = ##class(Shutter.Portal.Guide).Runs({"model": (v), "providerConfig": "", "agentClass": ""}, "", "AI.LLM.Shutter", "model-instance", 0)
+    Do $$$AssertEquals(r.model, v, "the guide's card shows " _ v)
+    // Every key shape still reads as one in a Model, and an address in any other setting is still hidden.
+    Set keys = ..Keys()
+    For i = 1:1:$LISTLENGTH(keys) Do $$$AssertEquals(##class(Shutter.Util.Secret).CleanModel($LISTGET(keys, i)), "hidden", "a key in a Model reads hidden (" _ i _ ")")
+    For v = "https://user:pw@host/", "tcp://10.0.0.1:2575", "secret://Shutter.Anthropic#key" Do $$$AssertEquals(##class(Shutter.Util.Secret).CleanModel(v), "hidden", "an address in a Model reads hidden: " _ v)
+    Do $$$AssertEquals(##class(Shutter.Util.Secret).Clean("someone@example.org"), "hidden", "an address elsewhere stays hidden")
+}
+
+/// A Model written as name@version is used, shown and stored as it is: not refused, not hidden, not taken out of an error.
+Method TestAModelWithAVersionIsUsed()
+{
+    Set v = $LISTGET(..ModelsAt(), 1)
+    Set request = ##class(Shutter.Bridge.Msg.AgentRequest).%New()
+    Set request.ModeOverride = "live"
+    Set op = {"AgentClass": "Shutter.Agent.Conformance", "Runner": "Shutter.Bridge.Runner.AIHub", "Mode": "live", "ProviderConfig": "OpenAI", "Model": (v), "MaxIterations": 8, "TokenBudget": 120000, "RequestTimeoutSeconds": 120}
+    Set spec = ##class(Shutter.Bridge.RunSpec).FromRequest(request, op)
+    Do $$$AssertEquals(##class(Shutter.Util.Secret).MaskSpec(spec), "", "not refused")
+    Do $$$AssertEquals(spec.Model, v, "and used as set")
+    Set r = ##class(Shutter.Bridge.Msg.AgentResponse).%New()
+    Set r.Model = v, r.ProviderConfig = "OpenAI", r.Error = "the provider has no model " _ v
+    Do ##class(Shutter.Util.Secret).MaskResponse(r, $LISTBUILD("OpenAI"), v)
+    Do $$$AssertEquals(r.Model _ "|" _ r.Error, v _ "|the provider has no model " _ v, "shown in the response and its error")
 }
 
 /// The run's spec: a key-shaped ProviderConfig or Model becomes "hidden" before any runner sees it, and the setting is
@@ -153,18 +191,34 @@ Method TestTheStoredRun()
 }
 
 /// Every place that echoes the item's settings goes through the one rule: the item's start line and the run's last lines
-/// (Agent.cls), the settings route, and the install's repair. Read from the compiled methods, as the production's own
-/// lines can only be seen with the item running (the end-to-end check, tests/e2e/key_mask_check.py, reads those).
+/// (Agent.cls), the settings route, and the install's repair. Read from the methods' code lines (a comment naming the
+/// rule does not count), as the production's own lines can only be seen with the item running (the end-to-end check,
+/// tests/e2e/key_mask_check.py, reads those).
 Method TestEveryEchoUsesTheRule()
 {
-    For m = "Shutter.Bridge.Operation.Agent||OnInit", "Shutter.Bridge.Operation.Agent||OnAgentRequest", "Shutter.API.Dispatch||Settings", "Shutter.Setup||InstallStatus" {
+    Do $$$AssertNotTrue(..Calls("    // Shutter.Util.Secret).MaskSpec(spec)", "MaskSpec"), "a comment is not a call")
+    Do $$$AssertTrue(..Calls("    Set k = ##class(Shutter.Util.Secret).MaskSpec(spec)", "MaskSpec"), "a code line is")
+    For pair = $LISTBUILD("Shutter.Bridge.Operation.Agent||OnInit", "CleanModel"), $LISTBUILD("Shutter.Bridge.Operation.Agent||OnInit", "Clean"), $LISTBUILD("Shutter.Bridge.Operation.Agent||OnAgentRequest", "MaskSpec"), $LISTBUILD("Shutter.Bridge.Operation.Agent||OnAgentRequest", "MaskResponse"), $LISTBUILD("Shutter.API.Dispatch||Settings", "CleanModel"), $LISTBUILD("Shutter.API.Dispatch||Settings", "Clean"), $LISTBUILD("Shutter.Setup||InstallStatus", "RepairRuns") {
+        Set m = $LIST(pair, 1), call = $LIST(pair, 2)
         Set def = ##class(%Dictionary.MethodDefinition).%OpenId(m)
         Do $$$AssertTrue($ISOBJECT(def), m _ " reads")
         Continue:'$ISOBJECT(def)
         Do def.Implementation.Rewind()
         Set code = def.Implementation.Read(3000000)
-        Do $$$AssertTrue(code [ "Shutter.Util.Secret", m _ " uses Shutter.Util.Secret")
+        Do $$$AssertTrue(..Calls(code, call), m _ " calls Shutter.Util.Secret's " _ call)
     }
+}
+
+/// Whether <var>code</var> calls Shutter.Util.Secret's <var>method</var> on a line that is not a comment.
+ClassMethod Calls(code As %String, method As %String) As %Boolean
+{
+    Set code = $TRANSLATE(code, $CHAR(13))
+    For i = 1:1:$LENGTH(code, $CHAR(10)) {
+        Set line = $ZSTRIP($PIECE(code, $CHAR(10), i), "<W")
+        Continue:($EXTRACT(line, 1, 2) = "//") || ($EXTRACT(line, 1) = ";") || ($EXTRACT(line, 1, 2) = "#;")
+        If line [ ("##class(Shutter.Util.Secret)." _ method _ "(") Return 1
+    }
+    Quit 0
 }
 
 }

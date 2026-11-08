@@ -24,9 +24,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from iris_query import query  # noqa: E402
 from scenario_check import Session  # noqa: E402
 
-KEY_CONFIG = "sk-" + "ant-api03-NOTAREALKEY000fxmask"
-KEY_MODEL = "sk-" + "proj-NOTAREALKEY111fxmask"
-VALUES = [KEY_CONFIG, KEY_MODEL, "NOTAREALKEY000fxmask", "NOTAREALKEY111fxmask"]
+KEY_CONFIG = "sk-" + "ant-api03-NOTAREALKEY000test000"
+KEY_MODEL = "sk-" + "proj-NOTAREALKEY111test111"
+VALUES = [KEY_CONFIG, KEY_MODEL, "NOTAREALKEY000test000", "NOTAREALKEY111test111"]
 
 
 def hits(where, text, found):
