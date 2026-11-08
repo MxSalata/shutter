@@ -58,7 +58,7 @@ ClassMethod Request(path As %String) As %DynamicObject [ Private ]
 /// The body as text: the bytes read as UTF-8 when the gateway passed them through unconverted.
 ClassMethod Body() As %String [ Private ]
 {
-    Quit:'$ISOBJECT($GET(%request.Content)) ""
+    Quit:'$ISOBJECT(%request.Content) ""
     Do %request.Content.Rewind()
     Set text = ""
     While '%request.Content.AtEnd {
