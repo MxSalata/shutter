@@ -582,6 +582,8 @@ Release 1.1.2's receipt check (`src/Shutter/Operation/Verify.cls`, which reads a
 saying nothing about the bed; the file is the same as in the v1.1.2 release) was loaded over the 1.1.1 build above, on
 the same instance, with every board member on `claude-opus-5-5` and the same harness, seed, `--day`, 600 s timeout and
 rig, 8 November 2026; the manifest checked OK. F03 was played three times, then F01 and F12 once each as a check.
+Every run is in
+[fair-test/results-f03-null-bed.json](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test/results-f03-null-bed.json).
 
 | Case, board, 1.1.1's code with 1.1.2's receipt check | Runs | Categories | Proposal | Gate at proposal | Receiver at the end | USD for the runs | Seconds a run |
 | --- | ---: | --- | --- | --- | --- | ---: | ---: |
@@ -595,10 +597,6 @@ blocked for a person (2.370 USD for the three, the second investigation included
 that table, not played as one set. F07 stays N- on 1.1.1's code; on 1.1.2's shipped `show` default it has not been played.
 
 ### Release 1.1.2
-
-<!-- 1.1.2 ROWS PLACEHOLDER: tonight's v112-proof rows go here, the single investigator on all twelve cases and Site
-policy with no model, on release 1.1.2's own code, with the build, date and instance. Replace this comment and the
-sentence below when they are measured. -->
 
 Not yet measured on its own code: the single investigator on all twelve cases and Site policy with no model. No figure
 on this page is from release 1.1.2's whole code; F03 above ran with only its receipt check.
@@ -626,6 +624,9 @@ In [docs/readme/fair-test](https://github.com/MxSalata/shutter/tree/main/docs/re
 - [results-v111.json](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test/results-v111.json): the board
   on release 1.1.1's code, all `claude-opus-5-5` and with `claude-sonnet-5-5` specialists: per board, each case's three
   categories, the graded and settled totals, the cost and seconds a run, and the two gate stops.
+- [results-f03-null-bed.json](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test/results-f03-null-bed.json):
+  release 1.1.2's receipt check over the 1.1.1 build: each run of F03 (three) and of the F01 and F12 check, with its
+  proposal, gate, receiver at the end, category and seconds, and each case's cost.
 
 **To repeat it:** [tests/fair_test](https://github.com/MxSalata/shutter/tree/main/tests/fair_test) holds the fixtures
 built from `cases.md`, the player and the grader; its README says how to run them.

@@ -268,7 +268,7 @@ zpm "install iris-shutter"
 
 For example: `docker run -d --name shutter-ipm -p 52773:52773 irishealth-community:2026.3.0AI.154.0`, `docker cp ./shutter shutter-ipm:/home/irisowner/shutter` (that path is `<module>`), then `docker exec -it shutter-ipm iris session IRIS`. For a hospital's own instance, make the last line `zpm "install iris-shutter -Ddemo=0"`. The last line installs the registry's latest version (`zpm "list"`); for exactly your clone, use `zpm "load <module>"` instead of the last two lines.
 
-**Uninstall and upgrade:** `zpm "uninstall iris-shutter"` takes off everything the install and the onboarding added, cases included, and stops no production of the site's; `SELECT Shutter_Util.Uninstall_Plan()` lists it first. A `zpm "load <folder>"` of a newer tree keeps the production, cases and site profile; then restart `Shutter.Production` ([the install guide, section 8](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md#8-upgrading-in-place)).
+**Uninstall and upgrade** (1.1.2 and later): `zpm "uninstall iris-shutter"` takes off everything the install and the onboarding added, cases included, and stops no production of the site's; `SELECT Shutter_Util.Uninstall_Plan()` lists it first. A `zpm "load <folder>"` of a newer tree keeps the production, cases and site profile; then restart `Shutter.Production` ([the install guide, section 8](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md#8-upgrading-in-place)).
 
 ## About the contest
 
