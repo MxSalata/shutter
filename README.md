@@ -6,7 +6,7 @@
 
 On an ordinary day a hospital's integration engine can see hundreds of failed messages. Engineers put right what they can by hand, and the rest can go unactioned. Shutter won't fix them all, but it helps with most: in my experience at the hospitals I have worked with (my background: interoperability with 28 NHS hospitals), most failures are of the kinds it knows. It resends the failed patient movements that pass its checks, and for the rest it stops, writes nothing, and identifies the patient for a person to review.
 
-**For judges: three minutes, nothing to install.** Start in the [trial](https://mxsalata.github.io/shutter/) (**Explore on my own**):
+**For judges: three minutes, nothing to install, no key.** Start in the [trial](https://mxsalata.github.io/shutter/) (**Explore on my own**):
 
 1. In **Scenarios**, choose **Rules only** (a plain resend, no agents), then under **Every scenario**, press **Run** on S8's row (not the S8 card at the top). About 20 seconds later open its case (C-000021, already approved; on your machine, approve it): "Wrote WARD-B over the bed manager's WARD-C", every check passed.
 2. Choose **Board** (four AI Hub agents), run S8's row again and open its case (C-000008): escalated, **0 writes**, the patient (MRN1008) handed to a person.
@@ -71,6 +71,8 @@ What do the agents add? Not the flag: the board checks the entry against this ca
 | Rules only | 5.000 | 5.000 | 18 | 0 | 0 | 15 | 3 | 0 |
 | Always escalating, computed, per case | 1.250 | 0.833 | 2 | 5 | 0 | 0 | 0 | 0 |
 
+**Defensible:** an answer the sealed rules accept that isn't the reference; **false closure:** a case closed with nothing written where work remained or a person was needed, and nobody told; **with defensible answers free:** the mean loss with a defensible answer costing 0 ([the scoring rule](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test/scoring.md)).
+
 36 runs a mode, and no needless stop but always escalating's 5. The single investigator scores 0.500 if two F08 runs are graded on the plan made after the gate voided their approval; Site policy's three board cases had no key and fell back to a plain resend ([every run](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md)). On `claude-sonnet-5-5` the board decided all 36 runs as Opus 5.5 did, at 0.24 USD a run against 0.48 ([cheaper models](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#cheaper-models)).
 
 ## Try it
@@ -99,7 +101,7 @@ git clone https://github.com/MxSalata/shutter.git && cd shutter
 # Already loaded the 109 (or 154) image? ./install.sh
 ```
 
-- **Builds:** judges, please use the AI Hub Community build `2027.1.0AI.109.0`, which the [Early Access portal](https://evaluation.intersystems.com/Eval/early-access/AIHub) offers since 2 November 2026; Shutter is also verified on `2026.3.0AI.154.0` ([receipt](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt.md)). With both loaded, `./install.sh` uses 109; for 154, run `cp .env.example .env`, set `SHUTTER_IMAGE=irishealth-community:2026.3.0AI.154.0` in it, and run `./install.sh`. Port 52773 or 1972 in use? `SHUTTER_WEB_PORT=8080 SHUTTER_SUPERSERVER_PORT=1973 ./install.sh`, then use that port in every address.
+- **Builds:** for the AI Hub edition, use the AI Hub Community build `2027.1.0AI.109.0`, which the [Early Access portal](https://evaluation.intersystems.com/Eval/early-access/AIHub) offers since 2 November 2026; Shutter is also verified on `2026.3.0AI.154.0` ([receipt](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt.md)). With both loaded, `./install.sh` uses 109; for 154, run `cp .env.example .env`, set `SHUTTER_IMAGE=irishealth-community:2026.3.0AI.154.0` in it, and run `./install.sh`. Port 52773 or 1972 in use? `SHUTTER_WEB_PORT=8080 SHUTTER_SUPERSERVER_PORT=1973 ./install.sh`, then use that port in every address.
 - **Live agents:** `ANTHROPIC_API_KEY` in `.env` (Anthropic's API only; another provider can be set by hand: [another-provider.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/another-provider.md)); without one the board replays, and the case page says so. `SHUTTER_MODEL=claude-sonnet-5-5`, set before the first start, halves the cost ([cheaper models](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#cheaper-models)); each board member's model is its item's `Model` setting. Allow Docker at least 5 GB of memory and about 25 GB of disk.
 
 ### On your machine or in the trial, first
@@ -128,7 +130,7 @@ One web app for a PC and a phone, 57 screens and states tested at a phone's widt
 
 ![S2's case in the web app, waiting for approval: the stages done, and approve or reject plan v1](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/case-s2-approval.png)
 
-**Terms:** the **receiver**, the system the failed message was going to (in the demo a bed manager); the **catalogue**, the failures Shutter knows and each one's safe outcome; **PAS**, the patient administration system; **Verified**, read in the receiver's receipt and history, never from an acknowledgement ([all terms](https://github.com/MxSalata/shutter/blob/main/docs/readme/first-steps.md#terms)).
+**Terms:** the **receiver**, the system the failed message was going to (in the demo a bed manager); its **receipt**, the receiver's own record of a message it holds; the **catalogue**, the failures Shutter knows and each one's safe outcome; the **matcher**, which links a failure to its catalogue entry with no model; the **site profile**, the site's written policy, with an entry for each receiver; **PAS**, the patient administration system; **Verified**, read in the receiver's receipt and history, never from an acknowledgement ([all terms](https://github.com/MxSalata/shutter/blob/main/docs/readme/first-steps.md#terms)).
 
 ![A case's life, from the failed delivery to verification](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/case-lifecycle.png)
 

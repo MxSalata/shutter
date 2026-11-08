@@ -70,7 +70,10 @@ On every push to `main` that changes code, CI tries an approval naming another p
 - **Case:** one failed or withheld delivery and everything decided about it.
 - **Receiver:** the system the failed message was going to; in the demo, a bed manager, called the downstream system in the code and the item `Downstream Out`.
 - **Catalogue:** the failures Shutter knows and the safe outcome of each.
+- **Matcher:** links a failure to its catalogue entry, with no model.
+- **Site profile:** the site's written policy, with an entry for each receiver: what Shutter may do there on its own and what waits for a person.
 - **Incident and chain:** many failures to one receiver, grouped; a chain is one encounter's messages, in event order.
+- **Receipt:** the receiver's own record of a message it holds, read to tell a lost acknowledgement from a lost message.
 - **Rehearsal:** the receiver's dry run of the exact write, with nothing kept.
 - **Verified:** this operation read in the receiver's receipt and history at the time, never from an acknowledgement; ward and bed aren't compared.
 - **PAS:** the patient administration system, the hospital's source of admissions and transfers.
