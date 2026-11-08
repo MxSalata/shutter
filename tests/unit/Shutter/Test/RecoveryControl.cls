@@ -255,6 +255,22 @@ Method TestTheSeed()
     Do live.%Save()
     Do $$$AssertStatusOK(##class(Shutter.Store.SiteProfile).SeedFromFile(path), "the live hospital's stored form from before")
     Do $$$AssertEquals(##class(Shutter.Util.RecoveryControl).Mode(), "enabled", "is brought to enabled too")
+    // The demo's own policy and the live hospital's mark on it, as 1.1.0 stored them, with no recovery field.
+    For source = path _ " (demo)", path _ " (demo) (live hospital)" {
+        Set marked = ##class(Shutter.Store.SiteProfile).Row()
+        Set marked.Source = source, marked.Json = seed.%ToJSON()
+        Do marked.%Save()
+        Do $$$AssertEquals(##class(Shutter.Util.RecoveryControl).Mode(), "shadow", "stored by 1.1.0 as " _ source _ ": shadow before the seed")
+        Do $$$AssertStatusOK(##class(Shutter.Store.SiteProfile).SeedFromFile(path), "the upgrade's seed")
+        Do $$$AssertEquals(##class(Shutter.Util.RecoveryControl).Mode(), "enabled", "is brought to enabled: " _ source)
+        Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).Row().Source, source, "and keeps its source")
+    }
+    // A person's own profile on the demo is theirs, recovery or none.
+    Set saved = ##class(Shutter.Store.SiteProfile).Row()
+    Set saved.Source = "api", saved.Json = seed.%ToJSON()
+    Do saved.%Save()
+    Do $$$AssertStatusOK(##class(Shutter.Store.SiteProfile).SeedFromFile(path), "a person's profile on the demo")
+    Do $$$AssertEquals(##class(Shutter.Util.RecoveryControl).Mode(), "shadow", "is left as they saved it")
     Do ##class(%File).Delete(path)
 }
 

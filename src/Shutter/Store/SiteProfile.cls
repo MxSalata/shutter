@@ -585,10 +585,12 @@ ClassMethod SeedFromFile(path As %String) As %Status
     If '..DemoInstall() Set p = ..ForSite(p)
     Set row = ..Row()
     // The file is the same for a site and the demo and says nothing of recovery, which a site's install reads as shadow.
-    // The demo seeds enabled explicitly (CONTRACTS 18), the live hospital's stored form too.
+    // The demo seeds enabled explicitly (CONTRACTS 18), and so do the demo's marked forms: the live hospital's, the demo's own
+    // policy (Shutter.Setup.DemoProfilePolicy) and both together, which an upgrade from 1.1.0 finds stored with no recovery.
     If '..SiteInstall() {
         Do p.%Set("recovery", {"mode": "enabled"})
-        If $ISOBJECT(row) && (row.Source = (path _ " (live hospital)")) && (##class(Shutter.Util.RecoveryControl).ModeOfJson(row.Json) '= "enabled") {
+        Set marked = $LISTBUILD(path _ " (live hospital)", path _ " (demo)", path _ " (demo) (live hospital)")
+        If $ISOBJECT(row) && $LISTFIND(marked, row.Source) && (##class(Shutter.Util.RecoveryControl).ModeOfJson(row.Json) '= "enabled") {
             Set live = ##class(Shutter.Util.Json).Parse(row.Json, .lsc)
             If $ISOBJECT(live) Do live.%Set("recovery", {"mode": "enabled"}) Quit ..Store(live.%ToJSON(), row.Source, "install")
         }

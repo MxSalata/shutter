@@ -2322,7 +2322,7 @@ Two different things. **Shadow mode** is a setting: the site profile's `recovery
 **The mode.**
 - Only an explicit `enabled` enables. A profile with no `recovery`, with no `mode`, or with a value that isn't one of the two reads as shadow, and `PUT /site-profile` refuses such a value, naming it (400).
 - So a new install with no demo starts in shadow, since the shipped `knowledge/site/profile.json` says nothing of it. **An upgrade from a version before this one also comes up in shadow**, unless its profile says otherwise: enabling is a decision, in the normal save of the profile (`Shutter_Configure`). No environment variable enables it.
-- The demo seeds `enabled` explicitly, whenever the seed fills or follows the stored profile, so its behaviour is unchanged. A profile a person saved on the demo keeps what it says.
+- The demo seeds `enabled` explicitly, whenever the seed fills or follows the stored profile, so its behaviour is unchanged. So does a demo profile stored under the seed's marked sources, `" (demo)"`, `" (live hospital)"` or both (6.4, 4.4), which an upgrade from 1.1.0 finds with no `recovery`. A profile a person saved on the demo keeps what it says.
 - Each change of the mode moves the generation on, like a clear.
 
 **What it covers.** Every call of `Shutter.Operation.Ward` other than a read passes one admission (`Shutter.Util.RecoveryControl.Admit`), immediately before the POST:
