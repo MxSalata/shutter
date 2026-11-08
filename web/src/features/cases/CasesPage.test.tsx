@@ -186,6 +186,34 @@ describe('CasesTable', () => {
   });
 });
 
+describe('CasesTable tab stops', () => {
+  it("keeps one tab stop per row, the case link: no stop on the row's time, badges or action", () => {
+    render(
+      <MantineProvider theme={theme}>
+        <MemoryRouter>
+          <CasesTable
+            items={[
+              {
+                ...base,
+                encounterId: 'ENC-1',
+                disposition: 'resend',
+                scenario: 'S2',
+                mode: 'board',
+                openedAt: '2026-10-25T08:00:00Z',
+                writes: 1,
+                verification: 'verified',
+              } as CaseSummary,
+            ]}
+          />
+        </MemoryRouter>
+      </MantineProvider>,
+    );
+    const row = screen.getAllByRole('row')[1];
+    const stops = [...row.querySelectorAll<HTMLElement>('a[href], button, [tabindex="0"]')];
+    expect(stops.map((e) => e.textContent)).toEqual([base.caseId]);
+  });
+});
+
 describe('proposalNote', () => {
   it('says what a stopped, held or escalated state means for the proposal beside it, and nothing otherwise', () => {
     expect(proposalNote({ state: 'blocked', disposition: 'resend' })).toBe('Stopped: nothing more is sent');

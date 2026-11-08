@@ -414,6 +414,16 @@ describe('EvaluationPage', () => {
     expect(cells[7].querySelector('[data-label="Elapsed"]')).toHaveTextContent('30.9 s');
   });
 
+  it("keeps the members' and the plan's action badges out of the tab order, the played marks' own words in it", () => {
+    renderPage();
+    const row = within(table()).getByText('S8').closest('tr')!;
+    const cells = within(row).getAllByRole('cell');
+    // The specialists' and the plan's actions: the same definition in every row, so no stop per badge
+    for (const cell of cells.slice(2, 6)) expect(cell.querySelector('[tabindex="0"]')).toBeNull();
+    // The played marks carry this row's own comparison words, so the keyboard still reaches them
+    expect(cells[6].querySelectorAll('[tabindex="0"]').length).toBeGreaterThan(0);
+  });
+
   it("shows each member's view and confidence, the plan, and how the pass ended played end to end", () => {
     renderPage();
     const region = table();
