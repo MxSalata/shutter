@@ -2,38 +2,36 @@
 
 **When a hospital's HL7 delivery fails, the usual fix is Resend, and when two systems move a patient at the same moment, that resend writes over the bed manager's ward with every check passed. Shutter's IRIS AI Hub agents decide how to put the failure right; a deterministic gate decides whether anything is written.**
 
-On an ordinary day a hospital's integration engine can see hundreds of failed messages. Engineers put right what they can by hand, and the rest can go unactioned. Shutter won't fix them all, but it helps with most: in my experience at the hospitals I have worked with, most failures are of the kinds it knows. It resends the failed patient movements that pass its checks, and for the rest it stops, writes nothing, and identifies the patient for a person to review. It is about delivery, not diagnosis: the receiver gets the operation the failed message stated, or nothing, and Shutter shows why. A resend needs a receiver with [an API](https://github.com/MxSalata/shutter/blob/main/docs/readme/receiver-contract.md) offering a readable history and dry runs; a plain MLLP receiver gets the investigation and a drafted escalation, never a resend.
+On an ordinary day a hospital's integration engine can see hundreds of failed messages. Engineers put right what they can by hand, and the rest can go unactioned. Shutter won't fix them all, but it helps with most: in my experience at the hospitals I have worked with, most failures are of the kinds it knows. It resends the failed patient movements that pass its checks, and for the rest it stops, writes nothing, and identifies the patient for a person to review.
 
-**For judges, recommended:** the replay edition, with no key and no Early Access file, healthy in 2 min 21 s as measured on 8 November 2026 (the 6 GB image pull comes first, counted apart). With nothing to install, the same steps work in the [trial](https://mxsalata.github.io/shutter/) (**Explore on my own**).
+**For judges, recommended:** the replay edition (the board replays its recorded live runs; no key, no Early Access file). It needs Docker (5 GB memory, 25 GB disk) and a 6 GB image pull, then is healthy in 2 min 21 s on a 12-thread VM, about 8 min on 8 cores. **In about three minutes, with nothing to install:** the same steps in the [trial](https://mxsalata.github.io/shutter/) (**Explore on my own**).
 
 ```sh
-git clone https://github.com/MxSalata/shutter.git && cd shutter && ./install.sh --replay
+git clone https://github.com/MxSalata/shutter.git
+cd shutter
+./install.sh --replay
 ```
 
 1. Open http://localhost:52773/shutter/index.html as `approver` / `shutter` (**Not now** if offered the trial). In **Scenarios**, choose **Rules only** (a plain resend, no agents), then under **Every scenario**, further down, press **Run** on S8's row (not the S8 card at the top). About 20 seconds later open its case and approve it (in the trial, C-000021, already approved and written): "Wrote WARD-B over the bed manager's WARD-C", with every check passed.
-2. Choose **Board**, press **Run** on S8's row again and open its case (C-000008 in the trial): escalated, **0 writes**, and the patient (MRN1008) handed to a person to review.
-3. On that case, under **In IRIS:**, press **Message trace**: the session in the Visual Trace, as `approver` (a screenshot in the trial). Then run **S3** in **Board**: the receiver already holds the message and only its answer was lost, so the case reads the receipt and writes nothing.
+2. Choose **Board** (four AI Hub agents, replayed from their recorded live runs), press **Run** on S8's row again and open its case (C-000008 in the trial): escalated, **0 writes**, and the patient (MRN1008) handed to a person to review.
+3. On that case, under **In IRIS:**, press **Message trace**: the session in the Visual Trace, as `approver` (a screenshot in the trial). Then run **S3** in **Board**: the receiver (the bed manager) already holds the message and only its answer was lost, so the case reads the receipt and writes nothing.
 
-| Where | User | Password | What it allows |
-| --- | --- | --- | --- |
-| The [trial](https://mxsalata.github.io/shutter/) | none | none | Everything, on recorded runs; nothing leaves the browser |
-| Your machine: the web app, http://localhost:52773/shutter/index.html | `approver` or `operator` | `shutter` | `approver` approves; `operator` runs and reads, and can't approve |
-| Your machine: the Management Portal, http://localhost:52773/csp/sys/UtilHome.csp | `_SYSTEM`, or `approver` for the Workflow inbox | `SYS`, or `shutter` | Namespace `SHUTTER`: the production, the trace, SQL |
-| The [online demo](https://shutter.mxsalata.com): the web app | `demo` | `shutter` | Reads, asks, approves a case that waits; runs no scenario |
-| The demo's IRIS, read only: [Shutter in IRIS](https://shutter.mxsalata.com/csp/healthshare/shutter/Shutter.Portal.Guide.cls), after a GitHub or emailed one-time-code sign-in | `demo-trace` | `Shutter-Demo-IRIS-Portal` | The Visual Trace, and the page listing the production's agents and their settings |
+| Where | Sign in as | Allows |
+| --- | --- | --- |
+| The [trial](https://mxsalata.github.io/shutter/) | No sign-in | Everything, on recorded runs; nothing leaves the browser |
+| Your machine's web app | `approver` / `shutter`, or `operator` / `shutter` | `approver` approves; `operator` runs and reads, and can't approve |
+| The [online demo](https://shutter.mxsalata.com) | `demo` / `shutter` | Reads, asks, approves a case that waits; runs no scenario |
 
-The online demo is my fictional hospital, with made-up patients, on AI Hub build `2026.3.0AI.154.0`. The board runs live for the judges' account, whose sign-in the organisers pass to the judges within a model budget of 15 USD a day.
+The Management Portal and the demo's IRIS: [Try it](https://github.com/MxSalata/shutter#try-it). The online demo is my fictional hospital, with made-up patients, on AI Hub build `2026.3.0AI.154.0`. The board runs live for the judges' account, whose sign-in the organisers pass to the judges within a model budget of 15 USD a day.
 
 **Measured**, with every proof linked:
 
 | What | Result | Proof |
 | --- | --- | --- |
-| The board on the 11 single scenarios it is convened for (S1 to S10, S13) | 11 of 11 as expected, live on build 154 with `claude-opus-5-5`, and in replay | [comparison](https://github.com/MxSalata/shutter/blob/main/docs/readme/comparison.md) |
-| Rules only (no agents), the same 11 | 4 right; the gate blocks 6 wrong resends for a person; in S8 every check passes and WARD-B is written over WARD-C | [comparison](https://github.com/MxSalata/shutter/blob/main/docs/readme/comparison.md#what-it-shows) |
-| Site policy (the catalogue, no agent), the same 11 | 8 settled with no model call; S4 and S8 sent to the board | [receipt on 109](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt-109.md#every-scenario-on-build-109) |
-| Twelve sealed held-out cases, release 1.0.0, 3 runs each | Board and single investigator: mean loss 0.167, no wrong write. Site policy 3.500 and Rules only 5.000: each wrote a cancelled transfer (F09) | [fair test](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md) |
-| The same cases, the board on `claude-sonnet-5-5` | The same category as `claude-opus-5-5` in 36 of 36 runs, at 0.24 USD a run against 0.48 | [cheaper models](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#cheaper-models) |
-| The same cases, release 1.1.1's code | The board proposed as on 1.0.0 in 36 of 36 runs; the gate stopped two right plans, F03 (a bug, fixed for 1.1.2) and F07 (a deliberate default): mean loss 0.667, or 0.500 with F03 settled. Sonnet 5.5 specialists graded the same, at 0.331 USD a run against 0.527 | [release 1.1.x](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#release-11x) |
+| The board on the 11 one-failure scenarios it plans (S1 to S10, S13) | 11 of 11 as expected, live on build 154 and in replay | [comparison](https://github.com/MxSalata/shutter/blob/main/docs/readme/comparison.md) |
+| Rules only (no agents), the same 11 | 4 right; 6 wrong resends stopped; S8 overwrites WARD-C | [comparison](https://github.com/MxSalata/shutter/blob/main/docs/readme/comparison.md#what-it-shows) |
+| Twelve cases written after release 1.0.0, outcomes sealed first; loss per case from 0 (right) to 20 (a wrong write made) | Board and single investigator (one agent): 0.167, no wrong write. Site policy and Rules only, with no agents, wrote a cancelled transfer | [fair test](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md) |
+| The board on release 1.1.1, the same cases | No wrong write; the gate held two right plans for a person, F03 (a null bed read as another bed, fixed for 1.1.2) and F07 (another visit's discharge, held by default): loss 0.667 | [release 1.1.x](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#release-11x) |
 
 [![CI](https://github.com/MxSalata/shutter/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/MxSalata/shutter/actions/workflows/ci.yml) [![Licence: MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](https://github.com/MxSalata/shutter/blob/main/LICENSE)
 
@@ -43,28 +41,15 @@ The online demo is my fictional hospital, with made-up patients, on AI Hub build
 
 Instead of a **Resend** in the Message Viewer, Shutter makes each failed delivery a case: **the board**, four AI Hub agents (three specialists and a coordinator), reads its sealed evidence and proposes a plan; **the gate**, deterministic checks, decides whether the plan may write; **a person, or the site's written policy,** releases it; **one conditional write** follows, checked against the receiver's receipt and history. The AI board proposes; the gate disposes.
 
-| Shutter decides | For example | What is written |
-| --- | --- | --- |
-| Resend | S2: a transfer that never arrived | One conditional write, verified in the receiver's history |
-| Superseded | S1: a later transfer has already moved the patient | Nothing; the closure is checked |
-| Reconcile | S3: the receiver holds the message; only its acknowledgement was lost | Nothing; the receipt is checked |
-| Escalate | S8: two moves at one moment | Nothing; a person decides |
-| Withheld | S15: a patient merge, for the PAS team | Nothing; no agent runs |
-| An incident | S11: an outage, eight failures to one receiver | One chain per encounter, released in order, each item verified |
-
-![S2's case in the web app, waiting for approval: the stages done, and approve or reject plan v1](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/case-s2-approval.png)
-
-**Terms:** the **receiver**, the system the failed message was going to (in the demo a bed manager); the **catalogue**, the failures Shutter knows and each one's safe outcome; **PAS**, the patient administration system; **Verified**, read in the receiver's receipt and history, never from an acknowledgement ([all terms](https://github.com/MxSalata/shutter/blob/main/docs/readme/first-steps.md#terms)).
-
 ## Take the agents away
 
 **Scenario S8 shows what a plain resend misses.** Two systems move one patient at the same moment, and the matcher flags it as catalogue entry E7 with no model. **Rules only**, the plain-resend baseline with no agents, sends the failed operation as stated unless the gate objects: in S8 every check passes, and Ward B is written over the bed manager's Ward C. The gate stops this resend in every other mode and on any real case; Rules only in a recorded scenario is exempted on purpose, to show what a plain resend does. The board sees the evidence can't say which move is current, and escalates ([comparison](https://github.com/MxSalata/shutter/blob/main/docs/readme/comparison.md)).
 
 ![S8 in plain terms: the bed manager has the patient in Ward C; Rules only writes Ward B over it with every check passed; the board leaves them in Ward C and asks a person](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/s8-plain.png)
 
-What do the agents add? Not the flag: the board checks the entry against this case's evidence, says why it applies or doesn't, and keeps any dissent (in S8, the conformance specialist's resend, and why it was overruled). Each agent is given the catalogue's entry and preferred outcome, and the coordinator took it in 24 of 25 recorded plans: agents applying written policy, not answering unaided ([what that does and does not show](https://github.com/MxSalata/shutter/blob/main/docs/readme/evaluation.md)). **Site policy**'s resends go without a person only under a demo install's own policy; the shipped site profile asks a person for each.
+What do the agents add? Not the flag: the board checks the entry against this case's evidence, says why it applies or doesn't, and keeps any dissent (in S8, the conformance specialist's resend, and why it was overruled). Each agent is given the catalogue's entry and preferred outcome, and the coordinator took it in 24 of 25 recorded plans: agents applying written policy, not answering unaided ([what that does and does not show](https://github.com/MxSalata/shutter/blob/main/docs/readme/evaluation.md)). **Site policy** (the catalogue, no agent) played 10 of the board's 11 scenarios (S7 has no such mode): 8 settled with no model call, and S4 and S8 went to the board ([on build 109](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt-109.md#every-scenario-on-build-109)). Under the shipped site profile each of its resends waits for a person.
 
-**Twelve held-out cases,** made-up failed ADT deliveries written inside the project by an author who had not read the catalogue, against release 1.0.0's code, frozen before they were written. Cases, outcomes and scoring rule were hashed on 6 November 2026 before any run and published with the results, so the seal rests on my word. Three runs a case, live on `claude-opus-5-5`; mean loss, lower is better. Both agent modes beat always escalating and wrote nothing wrong; the board did no better than the single investigator, at 3.7 times its cost. These are 1.0.0's figures; 1.1.1's are under [release 1.1.x](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#release-11x).
+**Twelve held-out cases,** made-up failed ADT deliveries written inside the project by an author who had not read the catalogue, against release 1.0.0's code, frozen before they were written. Cases, outcomes and scoring rule were hashed on 6 November 2026 before any run and published with the results, so the seal rests on my word. Three runs a case, live on `claude-opus-5-5`; mean loss per case, from 0 right to 20 for a wrong write executed. Both agent modes beat always escalating and wrote nothing wrong; the board did no better than the single investigator, at 3.7 times its cost. These are 1.0.0's figures; 1.1.1's are under [release 1.1.x](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#release-11x).
 
 | Mode | Mean loss | With defensible answers free | Right | Defensible | False closure | Wrong write stopped | Wrong write executed | USD a run |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -74,7 +59,7 @@ What do the agents add? Not the flag: the board checks the entry against this ca
 | Rules only | 5.000 | 5.000 | 18 | 0 | 0 | 15 | 3 | 0 |
 | Always escalating, computed, per case | 1.250 | 0.833 | 2 | 5 | 0 | 0 | 0 | 0 |
 
-36 runs a mode, and no needless stop but always escalating's 5. The single investigator scores 0.500 if two F08 runs are graded on the plan made after the gate voided their approval; Site policy's three board cases had no key and fell back to a plain resend ([every run](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md)).
+36 runs a mode, and no needless stop but always escalating's 5. The single investigator scores 0.500 if two F08 runs are graded on the plan made after the gate voided their approval; Site policy's three board cases had no key and fell back to a plain resend ([every run](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md)). On `claude-sonnet-5-5` the board decided all 36 runs as Opus 5.5 did, at 0.24 USD a run against 0.48 ([cheaper models](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#cheaper-models)); on 1.1.1's code, Sonnet 5.5 specialists graded the same at 0.331 USD a run against 0.527 ([release 1.1.x](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#release-11x)).
 
 ## Try it
 
@@ -84,6 +69,8 @@ What do the agents add? Not the flag: the board checks the entry against this ca
 | **The online demo**: a live hospital, a new failure every 7 minutes; any resend waits for you | The sign-ins above | [Four steps](https://github.com/MxSalata/shutter/blob/main/docs/readme/first-steps.md#on-the-online-demo-first): **Convene the board** live, then **Break the feed** |
 | **The replay edition**, `./install.sh --replay`: no AI Hub, the board replaying its recorded live runs | Docker; no key, no Early Access file | 2 min 21 s measured on a test VM, about 8 min on 8 cores and 5 GB, after the 6 GB image pull |
 | **The AI Hub edition**, `./install.sh --image-file ...`: live agents, or their recordings without a key | Docker, the build 109 file from the Early Access portal; `ANTHROPIC_API_KEY` for live agents | 2 min 52 s measured on build 109, up to 15 min on a smaller machine ([receipt](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt-109.md)) |
+
+**Other sign-ins:** your machine's Management Portal, http://localhost:52773/csp/sys/UtilHome.csp, as `_SYSTEM` / `SYS` (namespace `SHUTTER`: the production, the trace, SQL), or `approver` / `shutter` for the Workflow inbox; the demo's read-only IRIS, [Shutter in IRIS](https://shutter.mxsalata.com/csp/healthshare/shutter/Shutter.Portal.Guide.cls), after a GitHub or emailed one-time-code sign-in, as `demo-trace` / `Shutter-Demo-IRIS-Portal`, for the Visual Trace and the production's agents.
 
 **In a hospital's own IRIS for Health:** Shutter installs without the demo, beside or inside the productions it watches, fed by a forwarder or the production's alerts ([docs/INSTALL.md](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md); [several namespaces](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md#9-onboarding-several-namespaces); [what each receiver gets](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md#what-shutter-does-at-your-site)). Every proof so far is against the demo receiver or a stub: treat recovery as a demonstration until a site has tested its own, and [pilot it first](https://github.com/MxSalata/shutter/blob/main/docs/readme/first-steps.md#pilot-it-first).
 
@@ -107,7 +94,7 @@ git clone https://github.com/MxSalata/shutter.git && cd shutter
 
 The gate is the same in every mode, with one recorded exemption: S8 in **Rules only**, exempted on purpose to show a plain resend (on a real case the gate holds it). **Single investigator** runs live only ([the modes](https://github.com/MxSalata/shutter/blob/main/docs/readme/first-steps.md#the-modes)).
 
-1. In **Scenarios**, run **S2** in **Board** mode. About 20 seconds later (a minute live) the **Open** link on S2's row shows its case waiting for approval (C-000002 in the trial, C-000001 on a fresh install): **Decide on the resend**, **Review the plan and decide**, **Approve plan**, **Approve this plan**. One conditional write, then "Verified".
+1. In **Scenarios**, run **S2** in **Board** mode. About 20 seconds later (a minute live) the case under **Latest case** on S2's row (C-000002 in the trial, C-000001 on a fresh install) is waiting for approval: **Decide on the resend**, **Review the plan and decide**, **Approve plan**, **Approve this plan**. One conditional write, then "Verified".
 2. Run **S8** in **Rules only**, then in **Board**, as in the judges' steps: the case page sets the two side by side.
 
 ![S8 played twice: Rules only overwrites WARD-C; the board escalates and writes nothing](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/s8-rules-and-board.png)
@@ -118,6 +105,19 @@ One web app for a PC and a phone, 57 screens and states tested at a phone's widt
 
 ## How it works
 
+| Shutter decides | For example | What is written |
+| --- | --- | --- |
+| Resend | S2: a transfer that never arrived | One conditional write, verified in the receiver's history |
+| Superseded | S1: a later transfer has already moved the patient | Nothing; the closure is checked |
+| Reconcile | S3: the receiver holds the message; only its acknowledgement was lost | Nothing; the receipt is checked |
+| Escalate | S8: two moves at one moment | Nothing; a person decides |
+| Withheld | S15: a patient merge, for the PAS team | Nothing; no agent runs |
+| An incident | S11: an outage, eight failures to one receiver | One chain per encounter, released in order, each item verified |
+
+![S2's case in the web app, waiting for approval: the stages done, and approve or reject plan v1](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/case-s2-approval.png)
+
+**Terms:** the **receiver**, the system the failed message was going to (in the demo a bed manager); the **catalogue**, the failures Shutter knows and each one's safe outcome; **PAS**, the patient administration system; **Verified**, read in the receiver's receipt and history, never from an acknowledgement ([all terms](https://github.com/MxSalata/shutter/blob/main/docs/readme/first-steps.md#terms)).
+
 ![A case's life, from the failed delivery to verification](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/case-lifecycle.png)
 
 1. **A failed delivery becomes a case.** The feed fails forward (`FailureTimeout` 0), so nothing is stuck behind it.
@@ -127,9 +127,11 @@ One web app for a PC and a phone, 57 screens and states tested at a phone's widt
 5. **Release.** A person approves the exact plan, bound to its digest, the evidence, the policy and the receiver's version, or the site's written profile releases what its catalogue settles.
 6. **One conditional write, then verification:** a dry run, a fresh read, a second gate, one write at the expected version, then a check of the receiver's history.
 
+A resend needs a receiver with [an API](https://github.com/MxSalata/shutter/blob/main/docs/readme/receiver-contract.md) offering a readable history and dry runs; a plain MLLP receiver gets the investigation and a drafted escalation, never a resend.
+
 **Sign-in stays inside IRIS:** Shutter keeps no users or passwords of its own; IRIS roles say what a person may do. The workflows are ObjectScript rather than BPL because they wait on a board answering in parallel, timeouts, re-plans and expiring approvals, and are unit-tested with the gate; every step is still a production message, so the Visual Trace shows it ([why](https://github.com/MxSalata/shutter/blob/main/docs/readme/ai-hub.md#sign-in-the-workflows-and-the-two-productions)).
 
-**Data governance:** with live agents on, what the agents read goes to Anthropic's API, the one provider Shutter configures: identifiers as per-case tokens, no demographics, notes as flags, and the map back stays in IRIS. With no key nothing goes to any model: the board replays its recordings, and a case with none takes the rules path or goes to a person ([data flow](https://github.com/MxSalata/shutter/blob/main/docs/SAFETY.md#data-flow)).
+**Data governance:** with live agents on, what the agents read goes to Anthropic's API, the one provider Shutter configures: identifiers as per-case tokens, no demographics, notes as flags, and the map back stays in IRIS. With no provider configured (an instance never given a key), nothing goes to any model: the board replays its recordings, and a case with none takes the rules path or goes to a person. A provider once configured stays configured when the key leaves the environment, so pin the agents to replay with `SELECT Shutter.Setup_RecordAgentMode('replay')`. Still open: whether a first knowledge build on the AI Hub image fetches an embedding model ([data flow](https://github.com/MxSalata/shutter/blob/main/docs/SAFETY.md#data-flow)).
 
 ![Hospital.Production and Shutter.Production: the hospital's feed, Shutter's ways in, the board of AI Hub agents and the demo receivers](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/production.png)
 
@@ -207,7 +209,7 @@ Figures from [CI's run at the 1.1.0 release commit](https://github.com/MxSalata/
 
 - **Not yet measured at a hospital:** the scenarios are ours, the data is synthetic and the receiver is a demo bed manager built for them.
 - **A resend needs a receiver API** the site profile describes; a plain MLLP receiver gets a case and a drafted email, never a resend.
-- **Every resend waits for a person** under the shipped site profile (a demo install keeps its own labelled table); without a key the agents replay, and a case with no recording takes the rules path or goes to a person.
+- **Every resend waits for a person** under the shipped site profile (a demo install keeps its own labelled table); with no provider configured the agents replay, and a case with no recording takes the rules path or goes to a person.
 - **An incident stops at about four chains under one approval:** larger storms are grouped, nothing is written, and each case goes to a person ([measured on 1.0.0](https://github.com/MxSalata/shutter/blob/main/docs/readme/storm-at-scale.md)).
 - **Nothing tells anyone** that an outage opened or that an approval went undecided for 24 hours: the site's own alert, or a person watching, must.
 - **Onboarding edits the watched production**, and Shutter has no stop switch of its own: a disabled connector item holds its writes in its queue (tested on build 109).
@@ -231,7 +233,7 @@ curl http://localhost:52773/api/shutter/health   # "ok":true once the production
 - **Build 154:** use its file and the tag `irishealth-community:2026.3.0AI.154.0`, and set `SHUTTER_IMAGE` to it. If `docker image load` prints another name, tag that one.
 - **The replay edition:** in `.env`, set `SHUTTER_IMAGE=containers.intersystems.com/intersystems/irishealth-community:2026.2`, then `docker compose up -d --build`.
 
-**Open it** with the sign-ins at the top (production `Shutter.Production`; the demo hospital's is `Hospital.Production` in `HOSPITAL`). Switching editions and more: [running.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/running.md); a hospital's own IRIS for Health: [docs/INSTALL.md](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md).
+**Open it** with the sign-ins at the top and under [Try it](https://github.com/MxSalata/shutter#try-it) (production `Shutter.Production`; the demo hospital's is `Hospital.Production` in `HOSPITAL`). Switching editions and more: [running.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/running.md); a hospital's own IRIS for Health: [docs/INSTALL.md](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md).
 
 **Troubleshooting.** `install.sh` prints `[fix]` at each check it stops at, and gives up after 25 minutes with the log's last 30 lines; `SELECT Shutter.Setup_Doctor()` in the SQL page (namespace `SHUTTER`, as `_SYSTEM`) is the readiness report. "License limit exceeded": `docker compose restart`. The rest: [troubleshooting.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/troubleshooting.md).
 
