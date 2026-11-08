@@ -334,11 +334,21 @@ ClassMethod ReceiptDiffers(receipt As %DynamicObject, op As %DynamicObject) As %
         Set heldWard = $CLASSMETHOD(json, "Str", receipt, "ward"), ourWard = $CLASSMETHOD(json, "Str", op, "ward")
         Set words = $SELECT(heldWard '= ourWard: "ward " _ ..Named(heldWard) _ " against this message's " _ ..Named(ourWard), 1: "its payload digest differs")
     }
-    If (receipt.%GetTypeOf("bed") '= "unassigned") && (op.%GetTypeOf("bed") '= "unassigned") {
+    // A bed that is missing, null or empty on either side says nothing about the bed (v1.1.2: a receipt with "bed": null
+    // read as "" and blocked the right reconcile as a different bed).
+    If ..BedStated(receipt) && ..BedStated(op) {
         Set held = $CLASSMETHOD(json, "Str", receipt, "bed"), ours = $CLASSMETHOD(json, "Str", op, "bed")
         If held '= ours Set words = words _ $SELECT(words '= "": ", ", 1: "") _ "bed " _ ..Named(held) _ " against this message's " _ ..Named(ours)
     }
     Quit words
+}
+
+/// Whether the object states a bed: the key is there, not null, and not empty.
+ClassMethod BedStated(obj As %DynamicObject) As %Boolean [ Private ]
+{
+    Set type = obj.%GetTypeOf("bed")
+    If (type = "unassigned") || (type = "null") Quit 0
+    Quit $CLASSMETHOD("Shutter.Util.Json", "Str", obj, "bed") '= ""
 }
 
 ClassMethod Named(value As %String) As %String [ Private ]
