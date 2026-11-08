@@ -11,7 +11,9 @@ import {
 
 describe("the Technical facts' words", () => {
   it("name the receiver's answer by its status and reason code, and nothing when it gave none", () => {
-    expect(failureCode({ failureHttpStatus: 409, failureReasonCode: 'bed_occupied' })).toBe('409 bed_occupied');
+    expect(failureCode({ failureHttpStatus: 409, failureReasonCode: 'bed_occupied' })).toBe(
+      '409 bed_occupied',
+    );
     expect(failureCode({ failureReasonCode: 'merge' })).toBe('merge');
     expect(failureCode({})).toBe('');
   });
@@ -24,7 +26,7 @@ describe("the Technical facts' words", () => {
     expect(digestPrefix(undefined)).toBe('');
   });
 
-  it("name the plan by its version and digest, and say nothing of a case with no plan", () => {
+  it('name the plan by its version and digest, and say nothing of a case with no plan', () => {
     expect(planLabel({ planVersion: 2, planDigest: 'sha256:07a74c78526c5aaa' })).toBe('v2 07a74c78526c');
     expect(planLabel({ planDigest: 'sha256:07a74c78526c5aaa' })).toBe('07a74c78526c');
     expect(planLabel({})).toBe('');

@@ -65,7 +65,6 @@ const MODES: Record<string, string> = {
   policy: 'Site policy',
 };
 
-
 /**
  * The case's header: the cases' indigo mark and the title, then its status as one verdict and two facts (the outcome
  * first, then the workflow state where it says something the outcome does not, and the proposal); the plain sentence
@@ -213,7 +212,9 @@ export function CaseHeader({
             {technical && !source && (c.sourceItem || c.production) ? (
               <Meta label="Source">
                 <Group gap={4} wrap="wrap" data-testid="case-tech-source">
-                  {c.sourceItem ? <Hinted hint="The item the message came in by">{c.sourceItem}</Hinted> : null}
+                  {c.sourceItem ? (
+                    <Hinted hint="The item the message came in by">{c.sourceItem}</Hinted>
+                  ) : null}
                   {c.production ? <Hinted hint="The production it came in by">{c.production}</Hinted> : null}
                 </Group>
               </Meta>

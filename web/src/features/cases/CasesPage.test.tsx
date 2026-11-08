@@ -396,7 +396,7 @@ describe('the technical chips', () => {
   });
 });
 
-describe("the Technical line: the message, where it came in, the trace and the plan", () => {
+describe('the Technical line: the message, where it came in, the trace and the plan', () => {
   // C-000058 as the trial records it, with the fields the API sends for Technical
   const recorded = recording.cases['C-000058'].summary as unknown as CaseSummary;
   const words = [
