@@ -4,13 +4,18 @@ Versions follow `major.minor.patch`: a minor release for new features, a patch r
 updates. The version in both `module.xml` files (the one the package manager publishes) is always the version of the
 GitHub tag on the same commit; `scripts/check-versions.py` checks every place the version is written.
 
-## Unreleased
+## 1.1.0 (8 November 2026)
 
 What 1.1.0 holds: Shutter watches configured HL7 TCP operations without contacting their receivers. It groups outages,
 shows whether the engine is retrying or messages have settled, preserves unresolved exceptions, and shows the site's next
 action and contact. It sends no orders or results. At supported stock TCP routes, it also prevents Shutter's ADT API
-recovery from competing with the engine's delivery.
+recovery from competing with the engine's delivery. And the shipped site profile now asks a person before every resend.
 
+- **A person approves at every tier by default.** The shipped site profile's policy is approval for single and ordered
+  chains at tiers 1 to 3, and the board for interleaved ones; a site that wants a tier released by its policy says so in its
+  own profile. A demo install keeps the earlier table (tiers 1 and 2 released by policy for single chains, tier 1 for ordered
+  ones) as the demo's own setting, marked in the profile's source and labelled on the Site profile page; the online demo
+  also asks a person at tier 2 for single chains. A profile a person saved is never changed.
 - **A receiver's outage is one incident.** A receiver whose site profile entry has a `watch` block is read by the new item
   `Receiver Watch` every 5 seconds: the production's state, the operation's status, adapter state, queue, head message and
   settings, in the watched namespace, with no connection to the receiver and nothing written there. One outage opens per
