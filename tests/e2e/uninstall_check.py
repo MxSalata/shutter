@@ -218,7 +218,7 @@ def uninstall(ns):
 def send_order(ns, control):
     """An order through the site's own feed and router to its own LIMS: the production does its work."""
     now = time.strftime("%Y%m%d%H%M%S", time.gmtime())
-    text = f"MSH|^~\\&|ICE|HOSP|LIMS|HOSP|{now}||ORM^O01^ORM_O01|{control}|P|2.5.1\rPID|1||MRN{control}^^^HOSP^MR||SYNTH^{control}||19751120|F\rORC|NW|{control}||||||||{now}\rOBR|1|{control}||FBC^Full blood count^L|||{now}\r"
+    text = f"MSH|^~\\&|ORDERS|HOSP|LIMS|HOSP|{now}||ORM^O01^ORM_O01|{control}|P|2.5.1\rPID|1||MRN{control}^^^HOSP^MR||SYNTH^{control}||19751120|F\rORC|NW|{control}||||||||{now}\rOBR|1|{control}||FBC^Full blood count^L|||{now}\r"
     subprocess.run(["docker", "exec", "-i", CTR, "sh", "-c", f"cat > /tmp/onb_site/{control}.hl7"], input=text, text=True, check=True)
     r = subprocess.run(["docker", "exec", "-e", "MLLP_WAIT=20", CTR, "python3", "/tmp/onb_site/mllp.py", "7101", f"/tmp/onb_site/{control}.hl7"], capture_output=True, text=True, timeout=60)
     return r.stdout.strip() + r.stderr.strip()
@@ -281,16 +281,33 @@ def site_hospital_class(ns):
     cls = "Class Hospital.SiteNote Extends Ens.Request\n{\n\nProperty Text As %String;\n\n}\n"
     subprocess.run(["docker", "exec", "-i", CTR, "sh", "-c", "cat > /tmp/onb_site/Hospital.SiteNote.cls"], input=cls, text=True, check=True)
     out = session(ns, '''Set sc=$SYSTEM.OBJ.Load("/tmp/onb_site/Hospital.SiteNote.cls","ck-d") Write !,"[c] ",sc,!
-Set b=##class(Hospital.SiteNote).%New() Set b.Text="site" Set sc=b.%Save() Set h=##class(Ens.MessageHeader).%New() Set h.MessageBodyClassName="Hospital.SiteNote",h.MessageBodyId=b.%Id(),h.SourceConfigName="Site Notes",h.TargetConfigName="Site Notes" Set sc=h.%Save() Write !,"[m] ",sc,!
+Set b=##class(Hospital.SiteNote).%New() Set b.Text="site" Set sc=b.%Save() Write !,"<<<id|",b.%Id(),">>>",! Set h=##class(Ens.MessageHeader).%New() Set h.MessageBodyClassName="Hospital.SiteNote",h.MessageBodyId=b.%Id(),h.SourceConfigName="Site Notes",h.TargetConfigName="Site Notes" Set sc=h.%Save() Write !,"[m] ",sc,!
 Do ##class(Ens.Util.Log).LogInfo("Hospital.SiteNote","Note","a line of the site's") Write !,"[l] 1",!''')
     check(f"{ns} holds a class of its own called Hospital.SiteNote, a message of it and a log line", "[c] 1" in out and "[m] 1" in out, out[-500:])
+    m = re.findall(r"<<<id\|(.*?)>>>", out)
+    return m[-1] if m else ""
 
 
-def site_hospital_class_stays(ns):
-    # The package manager's uninstall removes the module's whole Hospital and Downstream packages (its .PKG resources), so a
-    # class of the site's in them goes too. Recorded, not checked: the uninstall cannot keep it. Its rows and messages stay.
-    got = value(ns, '##class(%Dictionary.CompiledClass).%ExistsId("Hospital.SiteNote")')
-    print(f"  note  the site's Hospital.SiteNote class after the uninstall: {'still there' if got == '1' else 'gone with the Hospital package'}", flush=True)
+def site_hospital_class_refused(ns):
+    """The package manager's uninstall removes the module's whole Hospital and Downstream packages (its .PKG resources), so a
+    class of the site's in them would go too. The uninstall refuses, with nothing changed, and names it; the site moves it out
+    (exported, and deleted with its data kept), and the uninstall then runs."""
+    plan = obj(ns, "##class(Shutter.Util.Uninstall).Plan()")
+    check("the plan says it would refuse, and names Hospital.SiteNote", "Hospital.SiteNote" in plan["refused"] and plan["ok"] is False, plan["refused"])
+    out = session(ns, f'Set sc=##class(%IPM.Main).Shell("uninstall {MODULE}") Write !,"RESULT: ",$SELECT(sc:"ok",1:$SYSTEM.Status.GetErrorText(sc)),!', 560)
+    check("zpm uninstall fails and names the site's class", "Hospital.SiteNote" in out and "RESULT: ok" not in out, out[-800:])
+    got = value(ns, '##class(%IPM.Storage.Module).NameExists("' + MODULE + '")_##class(%Dictionary.CompiledClass).%ExistsId("Hospital.SiteNote")_##class(%Dictionary.CompiledClass).%ExistsId("Hospital.Production")')
+    check("the module, the site's class and the module's demo classes are all still there", got == "111", got)
+    out = session(ns, 'Set sc=$SYSTEM.OBJ.Export("Hospital.SiteNote.CLS","/tmp/onb_site/SiteNote-moved.xml") Write !,"[x] ",sc,! Set sc=$SYSTEM.OBJ.Delete("Hospital.SiteNote","-d/deleteextent=0") Write !,"[d] ",sc,!')
+    check("the site moves its class out of the way", "[x] 1" in out and "[d] 1" in out, out[-400:])
+
+
+def site_hospital_class_stays(ns, body_id):
+    """After the uninstall the site puts its class back: its message, its log line and the message's body are all still there."""
+    out = session(ns, 'Set sc=$SYSTEM.OBJ.Load("/tmp/onb_site/SiteNote-moved.xml","ck-d") Write !,"[back] ",sc,!')
+    check("the site's class goes back in", "[back] 1" in out, out[-400:])
+    got = value(ns, f'$SELECT($ISOBJECT(##class(Hospital.SiteNote).%OpenId("{body_id}")):##class(Hospital.SiteNote).%OpenId("{body_id}").Text,1:"no row")')
+    check("its message body opens, with its text", got == "site", got)
     out = session(ns, 'Set rs=##class(%SQL.Statement).%ExecDirectNoPriv(,"SELECT COUNT(*) FROM Ens.MessageHeader WHERE MessageBodyClassName = \'Hospital.SiteNote\'") Do rs.%Next() Write !,"<<<m|",rs.%GetData(1),">>>",! Set rs=##class(%SQL.Statement).%ExecDirectNoPriv(,"SELECT COUNT(*) FROM Ens_Util.Log WHERE SourceClass = \'Hospital.SiteNote\'") Do rs.%Next() Write !,"<<<l|",rs.%GetData(1),">>>",!')
     check("its message stays", "<<<m|1>>>" in out, out[-400:])
     check("its event log line stays", "<<<l|1>>>" in out, out[-400:])
@@ -335,7 +352,8 @@ def site_shape():
     load("SHUTTER", " -Ddemo=0")
     subprocess.run(["docker", "exec", CTR, "sh", "-c", f"sed -i 's|<Version>[0-9.]*</Version>|<Version>99.0.0</Version>|' {TARGET}/module.xml"], check=True)
     load("SHUTTER", " -Ddemo=0")
-    subprocess.run(["docker", "exec", CTR, "sh", "-c", f"sed -i 's|<Version>99.0.0</Version>|<Version>1.0.0</Version>|' {TARGET}/module.xml"], check=True)
+    tree_version = re.search(r"<Version>([^<]+)</Version>", open(os.path.join(ROOT, args.module, "module.xml")).read()).group(1)
+    subprocess.run(["docker", "exec", CTR, "sh", "-c", f"sed -i 's|<Version>99.0.0</Version>|<Version>{tree_version}</Version>|' {TARGET}/module.xml"], check=True)
     check("the case is still there", value("SHUTTER", '$ORDER(^Shutter.Store.CaseD(""),-1)') == cases, cases)
     check("PATHOLOGY is still wired", value("PATHOLOGY", '##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Intake.Forwarder")') == "1")
 
@@ -449,7 +467,7 @@ def into_shape():
     check("IPM is there", "[ipm] 1" in out, out[-400:])
     lims_up("PATHOLOGY")
     site_globals("PATHOLOGY")
-    site_hospital_class("PATHOLOGY")
+    body_id = site_hospital_class("PATHOLOGY")
     namespaces = ["USER", "PATHOLOGY"]
     before = snapshot(namespaces)
     print(len(before), "lines", flush=True)
@@ -466,18 +484,20 @@ def into_shape():
     step("A second gate added by hand inside the site's production: refused, since only Shutter's own items are taken")
     hand_item_refused("PATHOLOGY", "PATHOLOGY", "OnbPath.Production", "My Gate", "Shutter.Operation.Gate", "Gate")
 
+    step("A class of the site's in the Hospital package: refused, since the package manager would take it with the package")
+    site_hospital_class_refused("PATHOLOGY")
+
     step("The uninstall")
     keep = jobs("PATHOLOGY")
     uninstall("PATHOLOGY")
     production_runs("PATHOLOGY", "OnbPath.Production", keep)
     site_globals_stay("PATHOLOGY")
-    site_hospital_class_stays("PATHOLOGY")
+    site_hospital_class_stays("PATHOLOGY", body_id)
     check("none of Shutter's items run", not [k for k in jobs("PATHOLOGY") if k in ("Gate", "Verifier", "Shutter API", "HL7 Index")], jobs("PATHOLOGY"))
     check("the site's order still reaches its LIMS", "ERR" not in send_order("PATHOLOGY", "ORDA3") and order_delivered("PATHOLOGY", "ORDA3"))
     src = value("PATHOLOGY", '##class(%Dictionary.XDataDefinition).%OpenId("OnbPath.Production||ProductionDefinition").Data.Read(200000)["Shutter"')
     check("the production's class names nothing of Shutter's", src == "0", src)
-    # The site's Hospital.SiteNote class goes with the package manager's removal of the Hospital package (see above).
-    compare(before, snapshot(namespaces), allowed_gone=[r"^(class|sql_table)\|PATHOLOGY\|Hospital\.SiteNote$"])
+    compare(before, snapshot(namespaces))
 
 
 start_instance()
