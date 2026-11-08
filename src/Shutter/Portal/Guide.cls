@@ -414,14 +414,19 @@ ClassMethod PoolSetting(size As %String) As %Boolean
     Quit (size > 0) && (size \ 1 = size)
 }
 
-/// A value that looks like a secret or an address: a key's prefix, a wallet reference, a password, a URL or an address.
+/// A value that looks like a secret or an address: a key's or a token's prefix (sk-, GitHub's ghp_, gho_ and github_pat_,
+/// Slack's xox), an AWS access key id (AKIA or ASIA and sixteen capitals or digits), a JSON Web Token (eyJ, as {" starts
+/// in base64), a PEM block (-----BEGIN), a wallet reference, a password, a URL or an address.
 ClassMethod LooksSecret(value As %String) As %Boolean
 {
     Set v = $ZCONVERT(value, "L")
     If $EXTRACT(v, 1, 3) = "sk-" Quit 1
-    For word = "sk-ant", "secret://", "password", "bearer ", "://", "@" {
+    For word = "sk-ant", "secret://", "password", "bearer ", "://", "@", "ghp_", "gho_", "github_pat_", "xox", "-----begin" {
         If v [ word Return 1
     }
+    // Where case tells a key from a word: AKIA or ASIA alone, or Asia/Kolkata, is not one.
+    If value [ "eyJ" Quit 1
+    If $LOCATE(value, "(AKIA|ASIA)[A-Z0-9]{16}") Quit 1
     Quit 0
 }
 
@@ -554,7 +559,8 @@ ClassMethod ItemPanels(items As %DynamicObject) As %String
         While it.%GetNext(, .a) { Set h = h _ ..AgentCard(a) }
         Set h = h _ "</div>"
     }
-    Set h = h _ "<p class='note'>Each agent's model can be set on its item in the production (Interoperability &gt; Configure &gt; Production, the item's Model setting); the instance's default is SHUTTER_MODEL.</p></section>"
+    Set h = h _ "<p class='note'>Each agent's model can be set on its item in the production (Interoperability &gt; Configure &gt; Production, the item's Model setting); the instance's default is SHUTTER_MODEL.</p>"
+    Set h = h _ "<p class='note'>A run's request can set its own mode and limits: a reopened case's runs and a question's runs answer from the recordings when the person who asked is without the live agents (Shutter_LiveAgents) or the provider refuses the key, and questions and reviews set their own turns and token budget.</p></section>"
     Set h = h _ "<section class='panel'><h2>Operations</h2><p class='note'>The production's other business operations, with the settings that hold no secret and no address.</p>"
     If 'items.readable {
         Set h = h _ unread
@@ -582,11 +588,18 @@ ClassMethod Fact(label As %String, value As %String, note As %String = "") As %S
     Quit "<dt>" _ ..E(label) _ "</dt><dd>" _ ..E(value) _ $SELECT(note '= "": "<span>" _ ..E(note) _ "</span>", 1: "") _ "</dd>"
 }
 
+/// The model as a card shows it: a replaying item calls no model, so its model is the one it runs on when live.
+ClassMethod ModelShown(model As %String, mode As %String) As %String
+{
+    If (mode '= "replay") || (model = "none") Quit model
+    Quit model _ " when live; none while replaying"
+}
+
 ClassMethod AgentCard(a As %DynamicObject) As %String
 {
     Set h = ..CardTop(a)
     If a.unreadable Quit h _ "<p class='none'>not readable</p></div>"
-    Set h = h _ "<dl>" _ ..Fact("Model", a.model, a.modelFrom)
+    Set h = h _ "<dl>" _ ..Fact("Model", ..ModelShown(a.model, a.mode), a.modelFrom)
     Set h = h _ ..Fact("Provider", $SELECT(a.config '= "": a.config, 1: "none configured"), $SELECT(a.provider '= "": "model_provider " _ a.provider, 1: ""))
     Set note = $SELECT(a.modeSetting = "auto": "auto, as the instance decides", 1: "set on the item") _ $SELECT(a.mode = "replay": "; recorded answers, no model called", 1: "")
     Set h = h _ ..Fact("Mode", a.mode, note)
@@ -624,13 +637,13 @@ ClassMethod Css() As %String
     Set c = c _ "*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,-apple-system,'Segoe UI',Roboto,sans-serif}main{max-width:1200px;margin:0 auto;padding:32px 16px 40px;display:flex;flex-direction:column;gap:20px}"
     Set c = c _ "header{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px}.brand{display:flex;align-items:center;gap:14px}.brand svg{width:44px;height:44px;flex:none}h1{margin:0;font-size:1.75rem;line-height:1.2;font-weight:600}.sub,.who{margin:0;color:var(--muted);font-size:.875rem}"
     Set c = c _ ".tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:16px}.tile,.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px}.tile{padding:16px 18px}.lab,.hint{color:var(--muted);font-size:.8125rem}.val{font-size:1.625rem;line-height:2rem;font-weight:600}.ok{color:var(--ok)}.warn{color:var(--warn)}"
-    Set c = c _ ".columns{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}@media (min-width:900px){.columns{grid-template-columns:2fr 1fr}}.panel{padding:18px 20px;display:flex;flex-direction:column;gap:10px;min-width:0}h2{margin:6px 0 2px;font-size:1.0625rem;font-weight:600}"
+    Set c = c _ ".columns{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr));gap:16px}@media (min-width:900px){.columns{grid-template-columns:2fr 1fr}}.panel{padding:18px 20px;display:flex;flex-direction:column;gap:10px;min-width:0}h2{margin:6px 0 2px;font-size:1.0625rem;font-weight:600}"
     Set c = c _ ".feature{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px;background:var(--soft);border:1px solid var(--accent);border-radius:10px;padding:14px 16px}.feature b,.nav b{display:block;font-weight:600}.feature span,.nav span{display:block;color:var(--muted);font-size:.8125rem}"
     Set c = c _ ".line{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;padding:9px 12px;border-radius:8px;background:var(--soft)}.story{flex:1 1 220px;min-width:0;overflow-wrap:anywhere;font-size:.875rem}.state{font-size:.8125rem;color:var(--muted);min-width:76px}.state.ok{color:var(--ok)}.state.warn{color:var(--warn)}"
     Set c = c _ ".btn{flex:none;display:inline-block;background:var(--accent);color:var(--on);font-weight:600;font-size:.875rem;padding:9px 14px;border-radius:8px;text-decoration:none}.btn.small{padding:5px 12px;font-size:.8125rem}a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}"
     Set c = c _ ".nav{display:block;padding:10px 12px;border-radius:8px;background:var(--soft);color:inherit;text-decoration:none}a.nav:hover{outline:1px solid var(--accent)}.pair{margin-top:4px}.pair a{color:var(--accent);margin-right:14px;font-weight:600}"
     Set c = c _ ".lane{display:flex;align-items:center;gap:10px;font-size:.8125rem}.dot{width:10px;height:10px;border-radius:50%;background:var(--ok);flex:none}.num{margin-left:auto;color:var(--muted)}.none{margin:0;color:var(--muted);font-size:.875rem}"
-    Set c = c _ ".cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}.card{background:var(--soft);border-radius:10px;padding:12px 14px;min-width:0}.top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}.top b{font-weight:600;overflow-wrap:anywhere}.flag{flex:none;font-size:.8125rem;font-weight:600}"
+    Set c = c _ ".cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(300px,100%),1fr));gap:12px}.card{background:var(--soft);border-radius:10px;padding:12px 14px;min-width:0}.top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}.top b{font-weight:600;overflow-wrap:anywhere}.flag{flex:none;font-size:.8125rem;font-weight:600}"
     Set c = c _ ".card dl{display:grid;grid-template-columns:minmax(84px,auto) minmax(0,1fr);gap:4px 12px;margin:8px 0 0;font-size:.8125rem}.card dt{color:var(--muted)}.card dd{margin:0;overflow-wrap:anywhere}.card dd span{display:block;color:var(--muted);font-size:.75rem}.note{margin:0;color:var(--muted);font-size:.8125rem}"
     Quit c _ "footer{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;color:var(--muted);font-size:.8125rem;border-top:1px solid var(--line);padding-top:12px}"
 }

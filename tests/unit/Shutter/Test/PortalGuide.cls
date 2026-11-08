@@ -204,7 +204,7 @@ Method TestReadsTheProductionItems()
         }
         Set h = $CLASSMETHOD(guide, "Html", {"user": "demo-trace", "namespace": "SHUTTER", "updated": "", "cases": [], "agents": [], "items": (items)}, "/csp/healthshare/shutter/")
         Do $$$AssertTrue(h [ "<b>Test Agent</b>", "the agent's card")
-        Do $$$AssertTrue(h [ "test-model-2<span>from the item&#39;s Model setting</span>", "its model and where it comes from")
+        Do $$$AssertTrue(h [ "test-model-2 when live; none while replaying<span>from the item&#39;s Model setting</span>", "its model, which a replaying item doesn't run on, and where it comes from")
         Do $$$AssertTrue(h [ "<b>Test Out</b>", "the operation's card")
         Do $$$AssertNotTrue(h [ "TestCreds", "no credential on the page")
         Set none = $CLASSMETHOD(guide, "Items", "No.Such.Production")
@@ -235,7 +235,8 @@ Method TestDrawsTheItemPanels()
     Do $$$AssertTrue(h [ "<h2>Operations</h2>", "the operations' panel")
     Do $$$AssertTrue(h [ "warn'>Off", "a disabled operation says so")
     Do $$$AssertTrue(h [ "<dt>ReplyCodeActions</dt><dd>not set</dd>", "an empty setting says so")
-    Do $$$AssertTrue(h [ "<dd>claude-opus-5-5<span>from the instance&#39;s configuration, SHUTTER_MODEL</span></dd>", "the model and where it comes from")
+    Do $$$AssertTrue(h [ "<dd>claude-opus-5-5 when live; none while replaying<span>from the instance&#39;s configuration, SHUTTER_MODEL</span></dd>", "the model, none while replaying, and where it comes from")
+    Do $$$AssertNotTrue(h [ "<dd>claude-opus-5-5<span>", "never as if it ran on it")
     Do $$$AssertTrue(h [ "Interoperability &gt; Configure &gt; Production, the item's Model setting); the instance's default is SHUTTER_MODEL.", "where a model is set")
     Set f.items = {"production": "Shutter.Production", "readable": 0, "agents": [], "operations": []}
     Set h = ##class(Shutter.Portal.Guide).Html(f, "/csp/healthshare/shutter/")
@@ -254,6 +255,61 @@ Method TestLastRunIsByTheItemsOwnName()
         Do $$$AssertTrue(at ? 4N1"-"2N1"-"2N1"T".E, "with a time: " _ at)
     }
     If n = 0 Do $$$AssertSkipped("no agent run with its request header on this instance")
+}
+
+/// The cards' grid never asks for more than the screen: a column is 300 px or the whole width, whichever is less.
+Method TestCardsFitANarrowScreen()
+{
+    Set c = ##class(Shutter.Portal.Guide).Css()
+    Do $$$AssertTrue(c [ ".cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(300px,100%),1fr))", "the cards' columns")
+    Do $$$AssertTrue(c [ ".columns{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr))", "the page's columns")
+    Do $$$AssertNotTrue(c [ "minmax(300px,1fr)", "no column wider than a 320 px screen")
+}
+
+/// A replaying item calls no model, so its card never says a model ran: the model is the one it runs on when live.
+Method TestAReplayingItemRunsNoModel()
+{
+    Set guide = "Shutter.Portal.Guide"
+    Do $$$AssertEquals($CLASSMETHOD(guide, "ModelShown", "claude-opus-5-5", "replay"), "claude-opus-5-5 when live; none while replaying", "replay")
+    Do $$$AssertEquals($CLASSMETHOD(guide, "ModelShown", "claude-opus-5-5", "live"), "claude-opus-5-5", "live")
+    Do $$$AssertEquals($CLASSMETHOD(guide, "ModelShown", "claude-opus-5-5", "record"), "claude-opus-5-5", "record calls the model")
+    Do $$$AssertEquals($CLASSMETHOD(guide, "ModelShown", "none", "replay"), "none", "no model at all")
+    Set f = ..Facts()
+    Set f.items = {"production": "Shutter.Production", "readable": 1, "operations": [],
+        "agents": [{"name": "Live One", "enabled": 1, "pool": 1, "model": "model-a", "modelFrom": "from the item's Model setting", "config": "", "provider": "", "mode": "live", "modeSetting": "live", "turns": 8, "budget": 120000, "timeout": 120, "agentClass": "", "lastAt": ""},
+            {"name": "Replay One", "enabled": 1, "pool": 1, "model": "model-b", "modelFrom": "from the item's Model setting", "config": "", "provider": "", "mode": "replay", "modeSetting": "replay", "turns": 8, "budget": 120000, "timeout": 120, "agentClass": "", "lastAt": ""}]}
+    Set h = ##class(Shutter.Portal.Guide).Html(f, "/csp/healthshare/shutter/")
+    Do $$$AssertTrue(h [ "<dd>model-a<span>from the item&#39;s Model setting</span></dd>", "a live item's model")
+    Do $$$AssertTrue(h [ "<dd>model-b when live; none while replaying<span>from the item&#39;s Model setting</span></dd>", "a replaying item's, with its from note")
+    Do $$$AssertNotTrue(h [ "<dd>model-b<span>", "never as if it ran")
+}
+
+/// Under the Agents panel, a line on what a run's request sets for itself (RunSpec.FromRequest): the mode, when the person
+/// who asked is without the live agents, and a question's or a review's own turns and budget.
+Method TestRequestsSetTheirOwn()
+{
+    Set f = ..Facts()
+    Set f.items = {"production": "Shutter.Production", "readable": 1, "agents": [], "operations": []}
+    Set h = ##class(Shutter.Portal.Guide).Html(f, "/csp/healthshare/shutter/")
+    Set line = "A run's request can set its own mode and limits: a reopened case's runs and a question's runs answer from the recordings when the person who asked is without the live agents (Shutter_LiveAgents) or the provider refuses the key, and questions and reviews set their own turns and token budget."
+    Set at = $FIND(h, line), panel = $FIND(h, "<h2>Agents in"), ops = $FIND(h, "<h2>Operations</h2>")
+    Do $$$AssertTrue(at > 0, "the line is on the page")
+    Do $$$AssertTrue((at > panel) && (at < ops), "in the Agents panel, before Operations")
+}
+
+/// A value that looks like a key, a token or an address is never shown, whatever the setting's name. The key-shaped values
+/// are joined from two parts, so the repository's secret scan does not take the source for a leaked key.
+Method TestSecretLookingValues()
+{
+    Set guide = "Shutter.Portal.Guide"
+    For v = "AKIA" _ "IOSFODNN7EXAMPLE", "id=ASIAIOSFODNN7EXAMPLE", "ghp_0123456789abcdefABCDEF", "gho_0123456789abcdef", "github_pat_11ABCDEFG0123456789", "xoxb" _ "-1234-5678-abcdef", "xoxp-1-2-3", "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2ln", "-----BEGIN " _ "PRIVATE KEY-----", "-----begin certificate-----", "sk-ant-api03-x", "someone@example.org", "tcp://10.0.0.1:2575" {
+        Do $$$AssertTrue($CLASSMETHOD(guide, "LooksSecret", v), "looks secret: " _ v)
+        Do $$$AssertTrue($CLASSMETHOD(guide, "Hidden", "RetryInterval", v), "and is hidden: " _ v)
+        Do $$$AssertEquals($CLASSMETHOD(guide, "Clean", v), "hidden", "and cleaned: " _ v)
+    }
+    For v = "Asia/Kolkata", "ASIA", "AKIA-short", "claude-opus-5-5", ":?R=RF,:?E=S,:*=S", "120", "eyes", "Toxic" {
+        Do $$$AssertNotTrue($CLASSMETHOD(guide, "LooksSecret", v), "harmless: " _ v)
+    }
 }
 
 Method MakeProduction() As %Status
