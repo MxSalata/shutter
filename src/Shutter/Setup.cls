@@ -4,7 +4,7 @@
 Class Shutter.Setup Extends %RegisteredObject
 {
 
-Parameter VERSION = "1.0.0";
+Parameter VERSION = "1.1.0";
 
 /// Create a namespace with its own database and Interoperability enabled. Returns "ok" or the error.
 ClassMethod CreateNamespace(ns As %String = "SHUTTER") As %String [ SqlProc ]

@@ -82162,7 +82162,7 @@
  },
  "health": {
   "namespace": "SHUTTER",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "installed_at": "2026-11-02T03:03:04Z",
   "demo": true,
   "mode": "policy",
