@@ -575,9 +575,9 @@ ClassMethod TakeMessages(out As %DynamicObject)
     // What the engine saved when it stopped Shutter's own production, its timers among them: their messages are gone, so a
     // later start would fail on them. A site's production is never stopped, and its saved state stays.
     If ($GET(^Ens.Suspended) '= "") && ..OwnClass(^Ens.Suspended, own) Kill ^Ens.Suspended
-    // The role's index entries for Workflow tasks whose rows are gone.
-    Set role = "Shutter Approvers", id = ""
-    For { Set id = $ORDER(^Ens.MessageBodyI("RoleIdx", role, id)) Quit:id=""  Kill:'$DATA(^Ens.MessageBodyD(id)) ^Ens.MessageBodyI("RoleIdx", role, id) }
+    // The Workflow tasks' bitmap index keeps a chunk under the role's name once its rows are deleted: an empty one goes.
+    Set role = "Shutter Approvers", chunk = ""
+    For { Set chunk = $ORDER(^Ens.MessageBodyI("RoleIdx", role, chunk), 1, bits) Quit:chunk=""  Kill:$BITCOUNT(bits, 1)=0 ^Ens.MessageBodyI("RoleIdx", role, chunk) }
     // The event log's lines from Shutter's classes.
     Do ##class(%SQL.Statement).%ExecDirectNoPriv(, "DELETE %NOCHECK FROM Ens_Util.Log WHERE " _ ..PrefixWhere("SourceClass", own))
 }
