@@ -22,9 +22,9 @@ import { PORTAL_SIGN_IN } from '@/lib/hospital';
 import { hueVar } from '@/lib/hues';
 import {
   PORTAL_PAGE,
-  SECTIONS,
   useNeedAPerson,
   usePortalPage,
+  useSections,
   type SectionItem,
 } from '@/features/shell/sections';
 
@@ -36,6 +36,8 @@ import {
  */
 export default function HomePage() {
   const hidden = scenariosHidden(useCan());
+  // The same list as the navigation's, so the engineer's group appears in both under Technical, or in neither
+  const sections = useSections();
   return (
     <Stack gap="lg">
       <PageHeader
@@ -52,7 +54,7 @@ export default function HomePage() {
       />
       <FirstStep />
       <PortalCard />
-      {SECTIONS.map(({ group, about, aboutLookOnly, items }) => (
+      {sections.map(({ group, about, aboutLookOnly, items }) => (
         <Stack key={group} gap="xs" component="section" aria-labelledby={`home-${group}`}>
           <Group gap="xs" align="baseline" wrap="wrap">
             <Title order={2} id={`home-${group}`}>

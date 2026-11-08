@@ -11,7 +11,9 @@
  * group's keys; its edition, missing items and disabled items moved into Production on 3 November), with their labels, values and counts (about 180,
  * the Agents group's sentence and the two "What the dashes mean" buttons among them); what it saves is the
  * 98-word provenance paragraph, the 34-word note, the rows' 12-pixel explanations and the licence's four lines, which
- * are one click away.
+ * are one click away. On the 1.1.2 recording the page measured 288 in Plain and 332 in Technical; since 8 November each
+ * group lists its checks first and its facts apart under a "Details" overline, one word a group, so it measures 293 and
+ * 337 (Other's overline sits in its closed disclosure), still under this ceiling.
  */
 export const PLAIN_BUDGET = 300;
 export const TECHNICAL_BUDGET = PLAIN_BUDGET * 1.5;

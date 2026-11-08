@@ -232,6 +232,8 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
                 // An admission on a 404 is never released by policy alone (a record may have been entered by hand under another
                 // number), unless the site's profile says so. An incident's release has its own path (7.3).
                 If (why = "") && '$ISOBJECT(case.Incident) && ##class(Shutter.Util.FurtherMessages).AdmissionOnNotFound(case, summary) && (##class(Shutter.Store.SiteProfile).AdmissionNotFound() = "person") Set why = "policy_requires_approval"
+                // Nor is a write that shows another visit's movement, in the snapshot or read again now: nobody would read it.
+                If (why = "") && (##class(Shutter.Util.ShownVisit).In(summary) || ##class(Shutter.Util.ShownVisit).Any($GET(further))) Set why = "policy_requires_approval"
                 // The plan must have come from the policy path for the entry it names: a board's plan never goes by policy.
                 If (why = "") && ((plan.CatalogueEntry = "") || (plan.CreatedBy '= ("policy:" _ plan.CatalogueEntry))) Set why = "plan_origin"
                 // A write with no person needs the case's source proved (CONTRACTS 11).

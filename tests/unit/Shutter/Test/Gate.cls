@@ -312,7 +312,10 @@ Method TestFurtherMovementStopOrShow()
         Do ..OnAfterOneTest()
         For setting = "show", "unset" {
             Set profile = $SELECT(setting = "show": {"further_messages": {"in_patient_movement": "show"}}, 1: {"further_messages": null})
+            // A site's install: a demo's unset reads stop (Shutter.Test.DemoMovement).
+            Set demo = $GET(^Shutter.Config("demo")), ^Shutter.Config("demo") = 0
             Set run = ..Run({"name": ("a site whose profile says " _ setting), "approval": {}, "profile": (profile)})
+            If demo = "" { Kill ^Shutter.Config("demo") } Else { Set ^Shutter.Config("demo") = demo }
             Do $$$AssertEquals(..Found(run.checks, "ordering", "FURTHER_MOVEMENT"), "", setting _ ": no further-movement block")
             Do $$$AssertEquals(..Found(run.checks, "ordering", "NO_FURTHER_MOVEMENT"), "pass", setting _ ": the check passes")
             Do $$$AssertTrue(..Detail(run.checks, "ordering", "NO_FURTHER_MOVEMENT") [ "shown on the plan", setting _ ": and counts the other visit for the plan")
@@ -325,6 +328,7 @@ Method TestFurtherMovementStopOrShow()
         Set run = ..Run({"name": "a cancel on the case's own visit, with show", "approval": {}, "profile": {"further_messages": {"in_patient_movement": "show"}}})
         Do $$$AssertEquals(..Found(run.checks, "ordering", "FURTHER_MOVEMENT"), "block", "show: a cancel of this visit still stops")
     } Catch ex {
+        If $GET(demo) '= "" Set ^Shutter.Config("demo") = demo
         Do $$$AssertTrue(0, "no error: " _ ex.DisplayString())
     }
     Do ##class(Shutter.Index.Message).%DeleteId(row.%Id())
@@ -1025,6 +1029,11 @@ XData Rows [ MimeType = application/json ]
    "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2", "action": {"expected_version": 0}}, "approval": {"approver": "policy"}, "request": {"chain_kind": "single"},
    "profile": {"policy": {"2": {"single": "automatic"}}, "further_messages": {"admission_not_found": "policy"}},
    "expect": [["authorization", "pass", "APPROVAL_VALID"]]},
+  {"group": "authorization", "name": "an automatic release of a case that shows another visit's movement: nobody would read it",
+   "summary": {"further_messages": {"identifier": "read", "stops": [], "shows": [{"why": "other_visit", "event": "admit", "visit_number": "ENC-UT-OTHER", "control_id": "M-UT-SV"}], "unread": ""}},
+   "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2"}, "approval": {"approver": "policy"}, "request": {"chain_kind": "single"},
+   "profile": {"policy": {"2": {"single": "automatic"}}},
+   "expect": [["authorization", "block", "POLICY_REQUIRES_APPROVAL"]]},
   {"group": "engine", "name": "the scope reads no: the check passes and reads nothing",
    "case": {"source_namespace": "RIG", "origin_header_id": "16"}, "engine": {"scope": "no", "why": "", "namespace": "RIG", "item": "LIMS Out", "receiver": "LIMS Out", "ackRoute": false, "deliveryHeader": "17", "headers": [], "effectiveAck": "", "ackReason": ""}, 
    "expect": [["ordering", "pass", "ENGINE_NOT_IN_SCOPE"]], "outcome": "pass"},

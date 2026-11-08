@@ -142,6 +142,15 @@ Method TestWhatTheExtentAndSearchTableStepsTake()
     Do $$$AssertEquals($CLASSMETHOD(u, "TakesClass", "EnsLib.HL7.SearchTable", 1, .module), 0, "the engine's, never")
 }
 
+/// The messages that go with Shutter's items: to or from one of them, by name, a quote in a name kept as data.
+Method TestItemWhere()
+{
+    Set u = "Shutter.Util.Uninstall"
+    Do $$$AssertEquals($CLASSMETHOD(u, "ItemWhere", ""), "", "no items, nothing more")
+    Do $$$AssertEquals($CLASSMETHOD(u, "ItemWhere", $LISTBUILD("Case Workflow", "Shutter Approvers")), " OR SourceConfigName IN ('Case Workflow','Shutter Approvers') OR TargetConfigName IN ('Case Workflow','Shutter Approvers')", "both ends of a message")
+    Do $$$AssertEquals($CLASSMETHOD(u, "ItemWhere", $LISTBUILD("It's")), " OR SourceConfigName IN ('It''s') OR TargetConfigName IN ('It''s')", "a quote doubled")
+}
+
 /// A plan changes nothing and answers.
 Method TestPlanAnswersAndChangesNothing()
 {

@@ -76,6 +76,7 @@ import {
   type PassFilters,
   type Specialist,
 } from './evaluation';
+import { HELD_OUT } from './heldOut';
 import './EvaluationPage.css';
 
 /**
@@ -318,6 +319,36 @@ function heroSecond(proof: Proof, entryOf: (scenario: string) => string): string
 }
 
 /**
+ * The held-out fair test, in one compact card above the board's own recorded scores: twelve sealed cases nobody wrote
+ * the catalogue for, where the board and the single investigator scored alike and the mode with no model wrote wrongly.
+ * Its figures are fair-test.md's (heldOut.ts, checked against the document).
+ */
+function HeldOutCard() {
+  const h = HELD_OUT;
+  return (
+    <Paper withBorder p="sm" component="section" aria-labelledby="held-out-title" data-testid="held-out-card">
+      <Stack gap={4}>
+        <Title order={3} size="h5" id="held-out-title">
+          {`Held out: ${h.cases} sealed cases, ${h.repeats} runs each, on release ${h.release}'s code`}
+        </Title>
+        <Text size="sm">
+          {`Strict mean loss, lower is better: the board ${h.board}, the single investigator ${h.single} with two ${h.disputed} runs settled (${h.singleGraded} as graded), Site policy with no model ${h.policy}, always escalating ${h.escalate}; with no model, ${h.wroteWrongly} was written wrongly in every run.`}{' '}
+          <Anchor href={h.url} target="_blank" rel="noreferrer" underline="always">
+            fair-test.md
+          </Anchor>
+        </Text>
+        <Text size="sm">
+          {`On ${h.v111.release}'s code the board proposed the same and the gate also held ${h.v111.held.join(' and ')}: ${h.v111.boardGraded} as graded.`}{' '}
+          <Anchor href={h.v111.url} target="_blank" rel="noreferrer" underline="always">
+            Release 1.1.x
+          </Anchor>
+        </Text>
+      </Stack>
+    </Paper>
+  );
+}
+
+/**
  * The headline: the hero statement and its second line, the board's proposals, the comparison played end to end on
  * one base, the cost of a pass, where the figures come from, how far the specialists agreed and the limits, all in one
  * band, so the scope and the limits sit beside the result, never further down the page.
@@ -384,6 +415,8 @@ function Headline({
           {`The coordinator is given the catalogue's entry and took its outcome in ${t.plans_taking_the_preferred_outcome ?? 0} of ${t.plans_with_a_catalogue_outcome} plans, S8 included: written policy applied to evidence, not answers reached unaided.`}
         </Text>
       ) : null}
+
+      <HeldOutCard />
 
       <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md" style={{ alignItems: 'start' }}>
         <StatTile
@@ -684,7 +717,14 @@ function WhyABoard({
           caption={`Who proposed the expected action, of ${base} scored passes`}
         />
       ) : null}
-      <Text size="sm">Each specialist answers from its own view. No single-agent run was recorded.</Text>
+      <Text size="sm">
+        Each specialist answers from its own view. The single investigator was measured with the real model on
+        the {HELD_OUT.cases} held-out cases (
+        <Anchor href={HELD_OUT.url} target="_blank" rel="noreferrer" underline="always">
+          fair-test.md
+        </Anchor>
+        ); it has no recording in the trial.
+      </Text>
       {misses && (misses.stopped.length || misses.wrote.length) ? (
         <Text size="sm">
           {misses.stopped.length ? <>The gate alone catches {ids(misses.stopped)}. </> : null}
@@ -1065,7 +1105,18 @@ export default function EvaluationPage({
           title="What the boundary refuses"
           note={`What ${refusals.script} tries over HTTP against the approval boundary, and the answer each attempt must get. It runs in ${refusals.runs}, and on any instance of your own (it plays the scenarios it names, so not on one someone else is using).`}
         >
-          <Table.ScrollContainer minWidth={800} className="stack-scroll">
+          {/* Nothing in the table takes the focus, so where it scrolls sideways its scroll area does, named */}
+          <Table.ScrollContainer
+            minWidth={800}
+            className="stack-scroll"
+            scrollAreaProps={{
+              viewportProps: {
+                tabIndex: 0,
+                role: 'region',
+                'aria-label': 'What the boundary refuses, scrolls sideways',
+              },
+            }}
+          >
             <StackTable verticalSpacing="xs" className="stack-table">
               <StackTable.Thead>
                 <StackTable.Tr>

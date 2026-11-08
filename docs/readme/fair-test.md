@@ -9,7 +9,8 @@ is in [fair-test/results.json](https://github.com/MxSalata/shutter/blob/main/doc
 
 Every figure on this page is on release 1.0.0's code, except the section
 [Release 1.1.x](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#release-11x) near the end: on
-1.1.1's code the board proposes the same, and the gate stops two right plans.
+1.1.1's code the board proposes the same, and the gate stops two right plans; with release 1.1.2's receipt check
+loaded over it, F03 closes right in all three runs.
 
 ## Headline
 
@@ -307,7 +308,8 @@ The board was played again on the same twelve sealed cases with only the model c
   executed. It cost **0.24 USD a run against 0.48** (8.716 against 17.263 USD for the 36 runs). Under the sealed
   ranking rule neither model is better.
 - **Haiku 5.5 lost F03, at 1/27 of the cost.** It cost 0.018 USD a run (0.649 USD for the 36). In all three F03 runs
-  the board proposed closing the case as superseded instead of reconciling it. Nothing was written: Shutter's
+  the board proposed closing the case as superseded instead of reconciling it, though two of those plans said, in the
+  same text, that the receipt was committed. Nothing was written: Shutter's
   verification after the close found the committed receipt, refused the close and sent the case to a person. As
   settled here (below) those runs are defensible, and Haiku 5.5's strict mean loss is **0.250** (lenient 0.000). As
   graded by the unchanged grader they are needless stops: 0.333 and 0.167.
@@ -536,10 +538,10 @@ and approval by the rig, three runs a case, 8 November 2026; the manifest checke
   expected version, applied and verified; the 1.0.0 board also wrote F07, which the 1.1.0 gate now holds (below).
 - **The gate stopped two right plans,** so the score is worse than 1.0.0's, and the gate is the reason, not the agents.
   Both checks came in with 1.1.0; in all six runs nothing was written.
-  - **F03, a bug, fixed for release 1.1.2.** The board proposed `reconcile`, the reference outcome. The receiver holds a
+  - **F03, a bug, fixed in release 1.1.2.** The board proposed `reconcile`, the reference outcome. The receiver holds a
     committed receipt under the failed key with the operation's own digest, but the receipt's bed is JSON null, and the
     1.1.0 receipt check read a null bed as a different bed (`RECEIPT_PAYLOAD_DIFFERS`), so a person gets a case the
-    receipt had settled.
+    receipt had settled. The fix was played (below).
   - **F07, a deliberate default.** The board proposed the right resend. The gate held it because the patient has a
     discharge on another visit beside the transfer (`FURTHER_MOVEMENT`): the shipped site profile's
     `further_messages.in_patient_movement` is `stop`, and Shutter can't say which visit is right, so a person looks
@@ -569,13 +571,35 @@ way a hospital sees the same thing: a person gets three cases the receipt had se
 F07 is N- in both gradings.
 
 **What it does not show.** Three runs a case, twelve cases and one fictional hospital, as above. The two boards ran one
-after the other, not interleaved. The F03 fix and the F07 setting were read in the code, not run. The comparison with
+after the other, not interleaved. The F07 setting was read in the code, not run; the F03 fix was played on F03 alone
+(below). The comparison with
 the 1.0.0 board crosses releases, and the 1.1.0 gate stops F03 and F07 for every model, so only the two boards on the
 same code isolate the models.
 
-**Release 1.1.2: not yet measured.** Its rows go here once measured on its own code: F03 on the board with the null bed
-fixed, the single investigator on all twelve cases, and Site policy with no model. Until then, no figure on this page
-is release 1.1.2's.
+### The null-bed fix on F03
+
+Release 1.1.2's receipt check (`src/Shutter/Operation/Verify.cls`, which reads a bed that is null, missing or empty as
+saying nothing about the bed; the file is the same as in the v1.1.2 release) was loaded over the 1.1.1 build above, on
+the same instance, with every board member on `claude-opus-5-5` and the same harness, seed, `--day`, 600 s timeout and
+rig, 8 November 2026; the manifest checked OK. F03 was played three times, then F01 and F12 once each as a check.
+Every run is in
+[fair-test/results-f03-null-bed.json](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test/results-f03-null-bed.json).
+
+| Case, board, 1.1.1's code with 1.1.2's receipt check | Runs | Categories | Proposal | Gate at proposal | Receiver at the end | USD for the runs | Seconds a run |
+| --- | ---: | --- | --- | --- | --- | ---: | ---: |
+| F03 | 3 | R R R | `reconcile` (E3) | pass | CCU, version 3, no row added | 1.384 | 52.2 |
+| F01 (check) | 1 | R | resend | pass | W7N, version 3, written under the failed key and verified, as on the 1.1.1 build | 0.383 | 50.2 |
+| F12 (check) | 1 | R | escalate | `PATIENT_MISMATCH`, `NEW_PATTERN`, as on the 1.1.1 build | AMU, version 1, nothing written | 0.534 | 50.2 |
+
+Each F03 run closed `resolved` on the committed receipt with nothing written, where the 1.1.1 build's three ended
+blocked for a person (2.370 USD for the three, the second investigation included). With F03 at R R R, the 1.1.1 board's
+36 runs would grade as its "F03 settled as right" row above (strict 0.500, lenient 0.333): composed from these runs and
+that table, not played as one set. F07 stays N- on 1.1.1's code; on 1.1.2's shipped `show` default it has not been played.
+
+### Release 1.1.2
+
+Not yet measured on its own code: the single investigator on all twelve cases and Site policy with no model. No figure
+on this page is from release 1.1.2's whole code; F03 above ran with only its receipt check.
 
 ## The files
 
@@ -600,6 +624,9 @@ In [docs/readme/fair-test](https://github.com/MxSalata/shutter/tree/main/docs/re
 - [results-v111.json](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test/results-v111.json): the board
   on release 1.1.1's code, all `claude-opus-5-5` and with `claude-sonnet-5-5` specialists: per board, each case's three
   categories, the graded and settled totals, the cost and seconds a run, and the two gate stops.
+- [results-f03-null-bed.json](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test/results-f03-null-bed.json):
+  release 1.1.2's receipt check over the 1.1.1 build: each run of F03 (three) and of the F01 and F12 check, with its
+  proposal, gate, receiver at the end, category and seconds, and each case's cost.
 
 **To repeat it:** [tests/fair_test](https://github.com/MxSalata/shutter/tree/main/tests/fair_test) holds the fixtures
 built from `cases.md`, the player and the grader; its README says how to run them.

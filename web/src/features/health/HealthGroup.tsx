@@ -131,8 +131,42 @@ function ValueView({ row, report }: { row: Row; report: Report }) {
   return <CodeChip>{text}</CodeChip>;
 }
 
-/** One report row: the mark and the label as the row's header, the value and its reason as the cell. */
-function CheckRow({ row, report }: { row: Row; report: Report }) {
+/** A row's value with its reason chip, what to do and the engineer's note: the cell of a check and of a detail alike. */
+function RowValue({ row, report, note }: { row: Row; report: Report; note?: string }) {
+  const { info } = row;
+  return (
+    <Stack gap={2} align="flex-start">
+      <Group gap="xs" wrap="wrap">
+        <ValueView row={row} report={report} />
+        {info.reason ? (
+          <StatusBadge
+            tone={info.reason.tone}
+            label={info.reason.chip}
+            hint={info.reason.note}
+            icon={null}
+            variant="light"
+          />
+        ) : null}
+      </Group>
+      {info.todo ? (
+        <Text size="sm" fw={500}>
+          {info.todo}
+        </Text>
+      ) : null}
+      {note ? (
+        <Text size="xs" c="dimmed" maw="68ch">
+          {note}
+        </Text>
+      ) : null}
+    </Stack>
+  );
+}
+
+/**
+ * One report row: a check carries its mark beside the label as the row's header, a detail only its label (a row to fix
+ * or to look at is always a check, so only a check carries a tone); the value and its reason are the cell.
+ */
+function ReportRow({ row, report }: { row: Row; report: Report }) {
   const technical = useDetail() === 'technical';
   const { info } = row;
   const note = technical ? TECHNICAL_NOTES[row.key] : undefined;
@@ -142,50 +176,64 @@ function CheckRow({ row, report }: { row: Row; report: Report }) {
     <StackTable.Tr
       className="health-row"
       data-row={row.key}
+      data-kind={row.kind}
       data-tone={info.tone === 'blocking' || info.tone === 'attention' ? info.tone : undefined}
       data-long={long ? 'true' : undefined}
     >
       <StackTable.Th>
-        <Group gap={8} wrap="nowrap" align="flex-start">
-          <MarkIcon mark={info.mark} tone={info.tone} />
+        {row.kind === 'check' ? (
+          <Group gap={8} wrap="nowrap" align="flex-start">
+            <MarkIcon mark={info.mark} tone={info.tone} />
+            <Text size="sm" component="span">
+              {row.label}
+            </Text>
+          </Group>
+        ) : (
           <Text size="sm" component="span">
             {row.label}
           </Text>
-        </Group>
+        )}
       </StackTable.Th>
       <StackTable.Td>
-        <Stack gap={2} align="flex-start">
-          <Group gap="xs" wrap="wrap">
-            <ValueView row={row} report={report} />
-            {info.reason ? (
-              <StatusBadge
-                tone={info.reason.tone}
-                label={info.reason.chip}
-                hint={info.reason.note}
-                icon={null}
-                variant="light"
-              />
-            ) : null}
-          </Group>
-          {info.todo ? (
-            <Text size="sm" fw={500}>
-              {info.todo}
-            </Text>
-          ) : null}
-          {note ? (
-            <Text size="xs" c="dimmed" maw="68ch">
-              {note}
-            </Text>
-          ) : null}
-        </Stack>
+        <RowValue row={row} report={report} note={note} />
       </StackTable.Td>
     </StackTable.Tr>
   );
 }
 
+/** A group's rows of one kind, as a table whose rows keep their row headers (tests find a row by its header's name). */
+function RowTable({
+  rows,
+  report,
+  kind,
+  labelledBy,
+}: {
+  rows: Row[];
+  report: Report;
+  kind: Row['kind'];
+  labelledBy?: string;
+}) {
+  return (
+    <StackTable
+      className={kind === 'check' ? 'health-rows health-checks-rows' : 'health-rows health-details-rows'}
+      withRowBorders={false}
+      verticalSpacing={4}
+      aria-labelledby={labelledBy}
+    >
+      <StackTable.Tbody>
+        {rows.map((row) => (
+          <ReportRow key={row.key} row={row} report={report} />
+        ))}
+      </StackTable.Tbody>
+    </StackTable>
+  );
+}
+
 /**
- * A group of the report: a section with its heading, its count and its rows (so each row keeps its row header). Other,
- * the fields no group names, keeps its rows in a data disclosure, closed in both modes.
+ * A group of the report: a section with its heading and its count (its core checks, as the group links count them), its
+ * checks first with their marks, then its details apart under "Details": a quiet label and value list with no mark
+ * column, so a name, a path or a number can never be read as a check that failed. A group with no checks shows only its
+ * details. Other, the fields no group names, keeps both in a data disclosure, closed in both modes.
  */
 export function HealthGroup({
   group,
@@ -200,14 +248,21 @@ export function HealthGroup({
   const { def } = group;
   const reasons = group.rows.filter((r) => r.info.reason);
   const licence = def.id === 'installation' && report.license && typeof report.license === 'object';
+  const checks = group.rows.filter((r) => r.kind === 'check');
+  const details = group.rows.filter((r) => r.kind === 'detail');
+  const detailsId = `health-${def.id}-details`;
   const rows = (
-    <StackTable className="health-rows" withRowBorders={false} verticalSpacing={4}>
-      <StackTable.Tbody>
-        {group.rows.map((row) => (
-          <CheckRow key={row.key} row={row} report={report} />
-        ))}
-      </StackTable.Tbody>
-    </StackTable>
+    <Stack gap="sm">
+      {checks.length ? <RowTable rows={checks} report={report} kind="check" /> : null}
+      {details.length ? (
+        <div className="health-details" data-after-checks={checks.length ? 'true' : undefined}>
+          <Text component="h3" id={detailsId} className="overline health-details-title" m={0}>
+            Details
+          </Text>
+          <RowTable rows={details} report={report} kind="detail" labelledBy={detailsId} />
+        </div>
+      ) : null}
+    </Stack>
   );
   return (
     <div className="health-group" data-tone={group.edge ?? undefined} data-group={def.id}>

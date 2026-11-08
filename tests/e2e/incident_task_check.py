@@ -11,6 +11,9 @@ Two storms through the intake route, each with its own patients, on an instance 
 - 8 failures with the approval target missing: no task can be raised, and the incident waits for a person instead of
   closing: no case fails, its timeline and an alert name the incident, once, through a retry that fails again. The target
   comes back, the next try raises the task, the API approves, and every case resolves, in order, verified, no key twice.
+- 8 failures with the approval target's Workflow role deleted, which the Workflow item would meet only after it deferred
+  its reply: the same stop for a person, with no call left waiting on a task that does not exist; the role comes back,
+  the next try raises one task, the API approves, and every case resolves.
 
 Writes DIR/result.json as it goes. Exit status: 0 held, 1 a line failed. Standard library only.
 """
@@ -34,6 +37,7 @@ RETRY_SECONDS = 300
 UPDATE_SECONDS = 120
 ROOM = 6
 MISSING_TARGET = "No Such Approvers"
+ROLE = "Shutter Approvers"
 
 
 def own_patients(plan, first_digit):
@@ -83,6 +87,19 @@ def set_target(ctr, value, log):
                                 stdin=code, timeout=UPDATE_SECONDS + 30)
     if "RESULT: ok" not in out:
         raise SystemExit(f"the production's update failed (exit {rc}): " + (out + err)[-400:])
+
+
+def role(ctr, present):
+    """Deletes the approval target's Workflow role, or makes it again with its members as the install does."""
+    call = '##class(Shutter.Setup).CreateWorkflowRole(1)' if present else f'##class(EnsLib.Workflow.RoleDefinition).%DeleteId("{ROLE}")'
+    for _ in range(8):
+        out = storm.iris_session(ctr, "SHUTTER", f'Set sc = {call} Write !,"RESULT: ",$SELECT($SYSTEM.Status.IsOK(sc): "ok", 1: $SYSTEM.Status.GetErrorText(sc)),!')
+        if "RESULT: ok" in out:
+            return
+        if "LICENSE" not in out.upper():
+            break
+        time.sleep(15)
+    raise SystemExit(f"the role's {'creation' if present else 'deletion'} failed: " + out[-400:])
 
 
 def open_task_message(ctr, incident_id):
@@ -259,6 +276,59 @@ def main():
     line("the timeline has one error and one task raised", len(said) == 2, said and [t[:40] for t in said])
     judged = types.SimpleNamespace(rule=lambda group, name, ok, detail="": line(name, ok, detail), invalid=lambda why: line(why, False), report=lambda *a: None)
     storm.judge_writes(judged, storm.Sql(args.url, log), waited)
+
+    # The approval target's Workflow role deleted: the Workflow item would take the call and never answer it.
+    role(args.ctr, False)
+    before = known()
+    unroled = own_patients(storm.storm_plan(8, base + dt.timedelta(seconds=200)), 4)
+    post(args, unroled, log)
+    incident = wait_state(operator, before, ("awaiting_approval", "closed"), 200)
+    iid = (incident or {}).get("incidentId", "")
+    line("with the role missing the incident is not closed", incident and incident["state"] == "awaiting_approval", incident and incident["state"])
+    time.sleep(10)
+    states, detail = case_states(operator, iid)
+    line("no task is open, with the role missing", detail.get("tasks") == [], detail.get("tasks"))
+    line("the chains wait, with the role missing", {c.get("state") for c in detail.get("chains", [])} == {"awaiting_approval"})
+    _, cases, _, _ = operator.call("GET", "/cases?limit=500")
+    held = [c for c in (cases or {}).get("items", []) if c.get("incidentId") == iid]
+    line("no case failed, with the role missing", held and not [c for c in held if c.get("state") == "failed"], {c.get("state") for c in held})
+    _, events, _, _ = operator.call("GET", "/incidents/" + urllib.parse.quote(iid) + "/events")
+    with open(os.path.join(args.out, "no-role-events.json"), "w") as f:
+        json.dump(events, f, indent=1)
+    errors = [e for e in (events or []) if e.get("kind") == "error"]
+    line("one error names the incident and the role", len(errors) == 1 and iid in errors[0]["text"] and ROLE in errors[0]["text"], errors and errors[0]["text"])
+    line("no task is said to be raised", not [e for e in (events or []) if (e.get("text") or "").startswith("Approval task raised")])
+    line("an alert names the incident, with the role missing", alerts(args.ctr, iid) == 1, alerts(args.ctr, iid))
+    approver = storm.Role(args.url, "approver", log)
+    status, reply, _, _ = approver.call("POST", "/incidents/" + urllib.parse.quote(iid) + "/approvals",
+                                        {"planDigest": detail.get("planDigest"), "decision": "approve"}, idempotent=True)
+    line("an approval with the role missing is refused", status == 409, f"HTTP {status} {reply}")
+    approver.sign_out()
+    operator.sign_out()
+    role(args.ctr, True)
+    operator = storm.Role(args.url, "operator", log)
+    deadline = time.monotonic() + RETRY_SECONDS + 120
+    tasks = []
+    while time.monotonic() < deadline and not tasks:
+        time.sleep(10)
+        _, detail = case_states(operator, iid)
+        tasks = detail.get("tasks") or []
+    line("the role back, the next try raises one task", len(tasks) == 1, [t.get("subject") for t in tasks])
+    approver = storm.Role(args.url, "approver", log)
+    status, reply, _, _ = approver.call("POST", "/incidents/" + urllib.parse.quote(iid) + "/approvals",
+                                        {"planDigest": detail.get("planDigest"), "decision": "approve"}, idempotent=True)
+    line("the approval is taken, the role back", status == 202, f"HTTP {status} {reply}")
+    approver.sign_out()
+    incident = wait_state(operator, before, ("closed",), 300)
+    _, detail = case_states(operator, iid)
+    line("every chain resolved, the role back", {c.get("state") for c in detail.get("chains", [])} == {"resolved"}, detail.get("summary"))
+    time.sleep(40)
+    _, detail = case_states(operator, iid)
+    line("still one task, after the task check", len(detail.get("tasks") or []) == 1, len(detail.get("tasks") or []))
+    _, events, _, _ = operator.call("GET", "/incidents/" + urllib.parse.quote(iid) + "/events")
+    said = [e["text"] for e in (events or []) if e.get("kind") == "error" or (e.get("text") or "").startswith("Approval task raised")]
+    line("one error and one task raised, the role back", len(said) == 2, said and [t[:40] for t in said])
+    storm.judge_writes(judged, storm.Sql(args.url, log), unroled)
     operator.sign_out()
     failed = [x["name"] for x in lines if not x["ok"]]
     print("FAILED: " + "; ".join(failed) if failed else "All held")

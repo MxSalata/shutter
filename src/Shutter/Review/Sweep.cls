@@ -140,7 +140,8 @@ ClassMethod RunJSON(namespace As %String = "", production As %String = "", windo
 
 /// One review of one production over the last windowDays (1 to 90; 7 when out of range): the reader's data, the case
 /// aggregates, the checks, the fingerprint, the baseline rank and the annotations. result = {namespace, production,
-/// productionState, window: {days, from, to}, fingerprint, summary, findings, caseAggregates, readAt, unreadable}. A
+/// productionState, window: {days, from, to}, fingerprint, summary, findings, caseAggregates, itemNames, readAt,
+/// unreadable}; itemNames are the production's items as read, which the review's request may name to the agent. A
 /// namespace or production that cannot be read gives one finding, NAMESPACE_UNREADABLE, unreadable true and a good
 /// status: the review is still a result.
 ClassMethod Run(namespace As %String, production As %String, windowDays As %Integer = 7, Output result As %DynamicObject) As %Status
@@ -173,6 +174,7 @@ ClassMethod Run(namespace As %String, production As %String, windowDays As %Inte
         Set result.readAt = ##class(Shutter.Util.Time).NowUTC()
     } Else {
         Set findings = ..Evaluate(data, cases, window)
+        Set result.itemNames = ..ItemNames(data)
         Set result.productionState = data.productionState
         Set result.readAt = data.readAt
     }
@@ -650,6 +652,19 @@ ClassMethod ClassOf(items As %DynamicArray, name As %String) As %String [ Privat
     }
     If $ISOBJECT($GET(item)) && (item.name = name) Quit ##class(Shutter.Util.Json).Str(item, "className")
     Quit ""
+}
+
+/// The names of the production's items in the reader's data, in its order.
+ClassMethod ItemNames(data As %DynamicObject) As %DynamicArray
+{
+    Set names = []
+    Set items = $SELECT($ISOBJECT(data): data.%Get("items"), 1: "")
+    Quit:'$ISOBJECT(items) names
+    Set iter = items.%GetIterator()
+    While iter.%GetNext(.i, .item) {
+        If $ISOBJECT(item) && (##class(Shutter.Util.Json).Str(item, "name") '= "") Do names.%Push(item.name)
+    }
+    Quit names
 }
 
 ClassMethod HasItem(items As %DynamicArray, name As %String) As %Boolean [ Private ]

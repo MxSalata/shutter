@@ -21,6 +21,11 @@ export interface Env {
   role: TrialRole;
   /** `?trial=tour` opens the guide's quick tour on arrival, `?trial=engineer` the integration engineers' tour. */
   openGuide: 'quick' | 'engineer' | false;
+  /**
+   * `?trial=judge`: the judges' path. The page opens on Scenarios in Rules only mode, scrolled to the S8 card, with no
+   * welcome; a reload of it is an ordinary trial page.
+   */
+  judgePath: boolean;
   /** `?detail=technical` (or `plain`) sets the Detail switch at start; null when the address says nothing. */
   detail: DetailLevel | null;
 }
@@ -43,6 +48,7 @@ export function envFrom(search: string, demoBuild: boolean): Env {
     canLeave: trial && !demoBuild,
     role: ROLES.includes(as as TrialRole) ? (as as TrialRole) : 'approver',
     openGuide: trialValue === 'tour' ? 'quick' : trialValue === 'engineer' ? 'engineer' : false,
+    judgePath: trialValue === 'judge',
     detail: detail === 'technical' || detail === 'plain' ? detail : null,
   };
 }
@@ -91,11 +97,33 @@ export const ENV: Env = pageEnv(typeof window === 'undefined' ? '' : window.loca
 export const TRIAL = ENV.trial;
 
 /**
- * The address after start: `?trial=tour` and `?trial=engineer` become `?trial`, so a reload does not open the tour's
- * welcome again; the rest of the address, and React Router's own history state, are kept.
+ * The address after start: `?trial=tour`, `?trial=engineer` and `?trial=judge` become `?trial`, so a reload does not
+ * open the tour's welcome again or take the judges' path a second time; the rest of the address, and React Router's own
+ * history state, are kept.
  */
 export function normalisedSearch(search: string): string {
-  return search.replace(/([?&])trial=(tour|engineer)(?=&|$)/, '$1trial');
+  return search.replace(/([?&])trial=(tour|engineer|judge)(?=&|$)/, '$1trial');
+}
+
+/** Where the judges' path (`?trial=judge`) opens: Scenarios in Rules only mode, whatever page the address named. */
+export const JUDGE_PATH_HASH = '#/scenarios?mode=rules';
+
+// The judges' path opens on its page here, at load: the router is made when routes.tsx loads, after this module and
+// before the start (trial/visit.ts, enterTrialPage) runs, and reads the page from the address once, then
+if (ENV.judgePath && typeof window !== 'undefined' && window.location.hash !== JUDGE_PATH_HASH)
+  window.history.replaceState(
+    window.history.state,
+    '',
+    `${window.location.pathname}${window.location.search}${JUDGE_PATH_HASH}`,
+  );
+
+/**
+ * The address a trial page starts at, from the one it was loaded at: the query normalised (above), and on the judges'
+ * path the page it opens. Pure, so it is tested on its own.
+ */
+export function startAddress(search: string, hash: string): { search: string; hash: string } {
+  const judge = new URLSearchParams(search).get('trial') === 'judge';
+  return { search: normalisedSearch(search), hash: judge ? JUDGE_PATH_HASH : hash };
 }
 
 /** The trial's sign-in for a role: the mock's user of that name, with the demo users' password. */

@@ -44,7 +44,8 @@ A production review needs none of this configured.
   Hub build: the core, the demo receiver's classes, and the live agents with their tools, policies, schemas and knowledge
   bases. Its manifest requires IRIS 2026.3 or later with Interoperability (the organisers' line: the agents need the `%AI`
   package, which the early access builds 2026.3.0AI.154.0 and 2027.1.0AI.109.0 have and 2026.2 has not), so
-  `zpm "install iris-shutter"` on either installs everything and an earlier version refuses it.
+  `zpm "install iris-shutter"` on either installs everything (the registry's latest published version, section 3.1) and an
+  earlier version refuses it.
 - **The core alone,** for a plain IRIS for Health Community 2026.2 that replays recorded agent runs, is the module
   `iris-shutter-core` in the repository's `core/` folder: loaded by path (`zpm "load <repository>/core"`), never published;
   the image build loads one or the other by what the base image has (`WITH_AIHUB`). Without the agents the gate, the
@@ -64,7 +65,7 @@ A production review needs none of this configured.
   rest itself: the `RECORDS` and `HOSPITAL` namespaces, the records system's web application and the hospital's production.
   It doesn't build the Second Parser's jar (below), so that item stays disabled and S25 is decided without its second
   opinion. `scripts/stock-install-check.sh` runs this path; CI runs it on 2026.2 with the core.
-- **`zpm "uninstall iris-shutter"` takes off everything the install and the onboarding added,** in every namespace, and
+- **`zpm "uninstall iris-shutter"` takes off everything the install and the onboarding added** (from 1.1.2), in every namespace, and
   stops no production of the site's: a site production Shutter went into is updated in place, keeps running, and its own
   alert item gets its name back. Every case, approval, incident and setting goes with it, so export what you must keep
   first. `SELECT Shutter_Util.Uninstall_Plan()` says what would go and changes nothing.
@@ -143,7 +144,7 @@ disabled (the six named in section 1), so it has no feed of its own until the in
 one. **Load only in the namespace made for Shutter.** A load in a namespace running another production is refused and says
 so, since starting `Shutter.Production` there would stop it; name that production (`-Dproduction=...`) for shape B.
 
-**From the registry.** The IPM in `vendor/ipm` starts with no registry, so `zpm "install iris-shutter"` answers "No repositories are configured and enabled in this namespace" until you run `zpm "repo -reset-defaults"`. `zpm "load"` from a clone doesn't need it. This demo install, from a clone of this repository, took about 2.5 minutes on clean 154 and 109 containers on 7 Nov 2026, and started `Shutter.Production` and `Hospital.Production`:
+**From the registry.** The IPM in `vendor/ipm` starts with no registry, so `zpm "install iris-shutter"` answers "No repositories are configured and enabled in this namespace" until you run `zpm "repo -reset-defaults"`. `zpm "install iris-shutter"` installs the latest version published on the registry, which can be behind this repository: on 8 Nov 2026 the registry served 1.1.1, which has no uninstall and no `Uninstall_Plan` (both are 1.1.2's). `zpm "list"` shows the version installed; for the exact version of a clone, use `zpm "load <module>"` instead. `zpm "load"` from a clone doesn't need the registry. This demo install, from a clone of this repository, took about 2.5 minutes on clean 154 and 109 containers on 7 Nov 2026, and started `Shutter.Production` and `Hospital.Production`:
 
 ```
 Do $SYSTEM.OBJ.Load("<module>/src/Shutter/Setup.cls", "ck")
@@ -232,8 +233,10 @@ that production is stopped, purged or rerouted.
 
 Load the module's classes into the production's namespace without the demo installer
 (`$SYSTEM.OBJ.LoadDir("/path/to/module/src/", "ck", , 1)`), then
-`SELECT Shutter.Setup_InstallInto('Hospital.Production', '/path/to/module/')`. It refuses an empty or unknown
-production name, and then:
+`SELECT Shutter.Setup_InstallInto('Your.Production', '/path/to/module/')`, with your site's own production name in
+place of `Your.Production` (not the demo's `Hospital.Production`). It refuses an empty or unknown production name, a name in the
+`Hospital.`, `Downstream.` or `Shutter.` packages (Shutter's own demo classes), and
+then:
 
 - records the name in `^Shutter.Config("production")` and runs the namespace-level parts of a non-demo install (no
   demo users, no demo receiver, no credential, no message purge: the trust's own purge rules stand);
@@ -407,10 +410,11 @@ long-lived jobs keep the earlier code until then.
 **Upgrading to 1.1.2.** Run the install once, or load the newer tree, and restart the production as above. Then:
 
 - **Another visit's in-patient movement shows on the plan by default** instead of stopping the resend (section 10). A
-  stored profile that doesn't name `further_messages.in_patient_movement` reads `show` after the upgrade, so at a tier the
-  site releases by policy such a write now goes with no person. To keep the stop of 1.1.0 and 1.1.1, set
+  stored profile that doesn't name `further_messages.in_patient_movement` reads `show` after the upgrade. A write that
+  shows such a movement still waits for a person at a tier the site releases by policy, and an incident's chain that
+  shows one leaves the shared approval for its own case. To keep the stop of 1.1.0 and 1.1.1, set
   `"further_messages": {"in_patient_movement": "stop"}` in the site profile's JSON before the upgrade. A demo install keeps
-  the stop.
+  the stop, whoever saved its profile.
 - **A large incident's approval.** An incident above about four chains, which 1.1.1 abandoned with every case `failed`,
   now raises one task that lists the first chains and binds them all (CONTRACTS 7.3).
 
@@ -543,11 +547,13 @@ nothing, so a team's `receivers` must say that. A namespace already wired keeps 
 plan warns if an operation added later takes a name another namespace reports. Through the API, `GET /api/shutter/site-profile`, change the `profile` inside the reply, and
 `PUT` that inner object, all of it, back with the header `X-Requested-With: Shutter`; a part alone, or the outer reply, answers 400. A receiver with no API stays declared as it is, and its failures escalate to its team. To have Shutter watch its operation for outages, add a `watch` block (section 11.1). `Shutter_Approver` may save the profile, policy included, so `approval` is a setting an approver can change; `GET /api/shutter/site-profile/history` keeps each version and who saved it.
 
-**What a tier decides.** A receiver's tier is read with the profile's `policy`, by the shape of the failure. As shipped: tier 1 writes a
-single failed message or an ordered chain with no approval; tier 2 writes a single failed message with no approval and asks for one on an
-ordered chain; tier 3, a draft's tier, asks for approval on both. An interleaved failure goes to the board at every tier. So giving a
-receiver an API at tier 1 or 2 is what lets a case write to it with no person, through the gate's checks alone. For a person on every
-write, keep it at tier 3 or set that part of `policy` to `approval`.
+**What a tier decides.** A receiver's tier is read with the profile's `policy`, by the shape of the failure. As shipped (since 1.1.0), every
+tier, a draft's tier 3 included, asks a person to approve a single failed message and an ordered chain, and an interleaved failure goes to
+the board, whose plan a person then approves. A value is `automatic`, `approval`, `per_chain` (an incident's chains approved one task
+each) or `board`; a missing or unknown one reads as `approval`. Only a tier the profile sets to `automatic` lets a case write to a
+receiver with no person, through the gate's checks alone. A demo install keeps the earlier table as its own, labelled setting: tiers 1
+and 2 write a single failed message with no approval, tier 1 an ordered chain too, and the online demo's live hospital (`SHUTTER_LIVE=1`) asks a person for a single failed message at tier 2
+as well.
 
 **Giving a receiver its API.** Only a receiver with state, receipt, capabilities and operations paths can be recovered. Add
 them in the profile, then, since Shutter writes through a connector item of that receiver's name in its own production:
@@ -682,7 +688,7 @@ Say these plainly to whoever owns the feed.
 
 - **Further messages for the patient.** Before a write Shutter reads the patient on every visit it can see. By default an
   in-patient movement on another visit shows on the plan and doesn't stop the resend; a cancel, merge or discharge on the case's own
-  visit, or a change to the record, still stops it. A stored profile that doesn't name the setting reads it so after an upgrade. To have another visit's
+  visit, or a change to the record, still stops it. A stored profile that doesn't name the setting reads it so after an upgrade on a site's install, and stop on a demo's. To have another visit's
   movement stop the write for a person, as 1.1.0 and 1.1.1 did, set `"further_messages": {"in_patient_movement": "stop"}` in the site profile's JSON (`GET` and `PUT /api/shutter/site-profile`,
   section 9; the Site profile page keeps it as stored). The demo's profile keeps the stop (CONTRACTS 6.4 and 6.5). It can't see a change made by hand
   at the receiver, or a message on a route the index doesn't watch once the index has passed it. In a watched namespace it reads every

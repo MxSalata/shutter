@@ -209,6 +209,11 @@ jobs:
           else
             python3 scripts/check-text.py --messages "-1"
           fi
+      # The REST API's description (docs/api/openapi.json) names every route of Dispatch.cls's UrlMap and nothing else,
+      # each with the resource and the write flag the route's own check says (scripts/check-openapi.py). A push of docs
+      # alone runs no CI, so a route change and its description go in one commit.
+      - name: The API description matches the routes of Dispatch.cls
+        run: python3 scripts/check-openapi.py
       # The evaluation of the board is made from the recordings, the scenarios and docs/readme/comparison.md, so a change
       # to any of them regenerates it (scripts/evaluate.py). A push of docs alone runs no CI, so regenerate it with the
       # docs change rather than leave it to the next code push.

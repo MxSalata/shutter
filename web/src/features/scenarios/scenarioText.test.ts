@@ -82,13 +82,13 @@ describe('proofParts', () => {
   it('takes its figures from the evaluation, never typed', () => {
     const parts = proofParts(PROOF);
     expect(parts.tested).toBe(
-      `Tested on ${PROOF.board!.scored} recorded failures, the board chose the expected action every time.`,
+      `Tested on ${PROOF.board!.scored} recorded board passes, each against its scenario's expected action: the board chose it every time.`,
     );
     expect(parts.played).toEqual({
       of: PROOF.played!.of,
       board: PROOF.played!.board,
       rules: PROOF.played!.rules,
-      ofThem: true,
+      counted: 'of the scenarios',
     });
     expect(parts.bases).toBe(
       `(${PROOF.board!.scored} scored passes, proposed action; ${PROOF.played!.of} scenarios, played end to end)`,
@@ -98,14 +98,15 @@ describe('proofParts', () => {
   it('follows other figures, and leaves out a sentence the evaluation cannot give', () => {
     const board = { matched: 22, scored: 24, passes: 25, cases: 24, notScored: 1 };
     expect(proofParts({ board, played: null })).toEqual({
-      tested: 'Tested on 24 recorded failures, the board chose the expected action in 22 of them.',
+      tested:
+        "Tested on 24 recorded board passes, each against its scenario's expected action: the board chose it in 22 of them.",
       played: null,
       bases: '(24 scored passes, proposed action)',
     });
     const played = { of: 9, board: 8, rules: 3, scenarios: [] };
     expect(proofParts({ board: null, played })).toEqual({
       tested: null,
-      played: { of: 9, board: 8, rules: 3, ofThem: false },
+      played: { of: 9, board: 8, rules: 3, counted: 'recorded failures' },
       bases: '(9 scenarios, played end to end)',
     });
     expect(proofParts({ board: null, played: null })).toEqual({ tested: null, played: null, bases: null });

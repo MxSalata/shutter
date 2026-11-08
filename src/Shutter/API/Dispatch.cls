@@ -347,9 +347,22 @@ ClassMethod PlayerEnabled() As %Boolean
     Quit (state = 1) && (name = prod)
 }
 
+/// The scenarios play on a demo instance only (^Shutter.Config("demo"), the flag GET /status reports): a run resets the
+/// receivers first and a reset abandons every open incident and moves resetAt, so on a site install, where the operator
+/// and the approver still hold Shutter_Scenarios, both are refused with 403 not_a_demo_instance and nothing changes, as
+/// the demo receiver refuses its own reset and Shutter.Setup.PurgeStore refuses the purge. Writes the refusal and
+/// returns 0, or returns 1.
+ClassMethod DemoOnly() As %Boolean
+{
+    If $GET(^Shutter.Config("demo")) Quit 1
+    Do ..Fail("403 Forbidden", "not_a_demo_instance", "Scenarios run and reset on a demo instance only: this instance is a site install, where a reset would abandon its open incidents")
+    Quit 0
+}
+
 ClassMethod ScenarioRun(id As %String) As %Status
 {
     If '..Allow("Shutter_Scenarios", 1) Quit $$$OK
+    If '..DemoOnly() Quit $$$OK
     If '##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Scenarios.Runner") Quit ..Fail("503 Service Unavailable", "no_runner", "The scenario runner is not installed")
     Set bodyText = $SELECT($ISOBJECT(%request.Content): %request.Content.Read($$$MaxStringLength), 1: $GET(%request.Content))
     Set body = ##class(Shutter.Util.Json).Parse(bodyText, .psc)
@@ -402,6 +415,7 @@ ClassMethod ScenarioRun(id As %String) As %Status
 ClassMethod ScenarioReset() As %Status
 {
     If '..Allow("Shutter_Scenarios", 1) Quit $$$OK
+    If '..DemoOnly() Quit $$$OK
     If '##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Scenarios.Runner") Quit ..Fail("503 Service Unavailable", "no_runner", "The scenario runner is not installed")
     Set result = $CLASSMETHOD("Shutter.Scenarios.Runner", "Reset")
     Set out = ##class(Shutter.Util.Json).Parse(result, .sc)
@@ -647,7 +661,7 @@ ClassMethod CaseApprove(caseId As %String) As %Status
     If '$ISOBJECT(out) Set out = {"result": (result)}
     If out.%GetTypeOf("error") '= "unassigned" {
         If $LISTFIND($LISTBUILD("not_in_role", "forbidden"), ##class(Shutter.Util.Json).Str(out, "code")) Quit ..Fail("403 Forbidden", "forbidden", out.error)
-        Quit ..Fail("409 Conflict", "wrong_state", out.error)
+        Quit ..DecisionRefused(out, case)
     }
     Set reply = {}
     Set reply.taskId = out."task_id", reply.decision = decision, reply.caseId = caseId, reply.approver = out.user
@@ -656,6 +670,31 @@ ClassMethod CaseApprove(caseId As %String) As %Status
     Set %response.Status = "202 Accepted"
     Write text
     Quit $$$OK
+}
+
+/// The 409 for a decision the task refused. When another decision reached the task first (decided), another approver
+/// has accepted it (assigned_to_other) or it is no longer open (no_task), the reply carries the approval block a
+/// decision on a decided case gets (CONTRACTS 5): from the task when it names its decision, else from the case's
+/// current approval, so the approver who lost the race is told who decided, what and when.
+ClassMethod DecisionRefused(out As %DynamicObject, case As Shutter.Store.Case = "") As %Status
+{
+    Set code = ##class(Shutter.Util.Json).Str(out, "code"), extra = {}
+    If $LISTFIND($LISTBUILD("decided", "assigned_to_other", "no_task"), code) {
+        Set action = ##class(Shutter.Util.Json).Str(out, "action")
+        If action '= "" {
+            Set extra.approval = {}
+            Set extra.approval.decision = $CASE(action, "Approve": "approved", "Reject": "rejected", "Cancel": "cancelled", : $ZCONVERT(action, "L"))
+            Set extra.approval.approver = out.user, extra.approval.decidedAt = out.completedAt
+        } ElseIf $ISOBJECT(case) {
+            Do case.%Reload()
+            Set a = case.CurrentApproval
+            If $ISOBJECT(a) && (a.Decision '= "") {
+                Set extra.approval = {} Set extra.approval.decision = a.Decision, extra.approval.approver = a.Approver, extra.approval.decidedAt = a.DecidedAt, extra.approval.planDigest = a.PlanDigest
+                Quit ..Fail("409 Conflict", "wrong_state", out.error _ "; " _ a.Decision _ " by " _ a.Approver _ " at " _ a.DecidedAt, extra)
+            }
+        }
+    }
+    Quit ..Fail("409 Conflict", "wrong_state", out.error, extra)
 }
 
 ClassMethod CaseAttempts(caseId As %String) As %Status
@@ -1461,7 +1500,7 @@ ClassMethod IncidentDecide(id As %String, seq As %String) As %Status
     If '$ISOBJECT(out) Set out = {"result": (result)}
     If out.%GetTypeOf("error") '= "unassigned" {
         If $LISTFIND($LISTBUILD("not_in_role", "forbidden"), ##class(Shutter.Util.Json).Str(out, "code")) Quit ..Fail("403 Forbidden", "forbidden", out.error)
-        Quit ..Fail("409 Conflict", "wrong_state", out.error)
+        Quit ..DecisionRefused(out)
     }
     Set reply = {}
     Set reply.taskId = out."task_id", reply.decision = decision, reply.incidentId = id, reply.approver = out.user

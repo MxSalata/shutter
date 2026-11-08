@@ -174,7 +174,7 @@ WARN  Discovery failed for default/mcp/shutter: Service discovery failed: HTTP 4
       Unauthorized: Authentication required. (no previous registration; tools unavailable until next refresh)
 ```
 
-So the forwarder can't call a tool at all:
+Asked to call a tool, the Inspector stops at that empty list:
 
 ```text
 $ npx @modelcontextprotocol/inspector@2.11.0 --cli http://127.0.0.1:8765/mcp --transport http \
@@ -183,5 +183,7 @@ $ npx @modelcontextprotocol/inspector@2.11.0 --cli http://127.0.0.1:8765/mcp --t
 {"error":{"code":"tool_not_found","message":"Tool 'mcp_shutter_GetCase' not found on server."}}
 (exit code 5)
 ```
+
+The Inspector checks its own tool list before it calls, so this refusal is the client's. A client that sends `tools/call` anyway (a plain JSON-RPC client, protocol `2025-06-18`, the same credentials) gets `isError: true` from the sidecar, which logs it as an `ERROR` line: `Service unavailable: tool 'mcp_shutter_GetCase' cannot be reached (... HTTP 401 Unauthorized: /mcp/shutter/v1/services ...)`.
 
 No audit row was written for the forwarder. The refusal is the web application's: `/mcp/shutter` requires `Shutter_Publish` ([Setup.cls](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Setup.cls), `EnsurePublishApp`), so the forwarder's sign-in to it fails and the gateway answers 401 before the service runs. `OnAuthenticate` in [Service.cls](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Publish/Service.cls) checks `Shutter_Publish` again, as a second gate.

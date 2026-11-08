@@ -1,0 +1,374 @@
+{
+ "about": "Release 1.1.2's receipt check (src/Shutter/Operation/Verify.cls, BedStated: a bed that is null, missing or empty says nothing about the bed) loaded over the 1.1.1 build of results-v111.json, on the same instance. F03 played three times on the board, then F01 and F12 once each as a check. Graded by tests/fair_test/grade.py, unchanged. Run records only: no logs, traces or exports.",
+ "played_on": "the AI Hub 109 instance of results-v111.json (IRIS for Health Community 2027.1.0AI.109.0 with AI Hub), 8 November 2026: Verify.cls compiled and Shutter.Production restarted at 14:38 UTC, F03 from 14:39 to 14:41 UTC, the check from 14:41 to 14:43 UTC. The sealed manifest checked OK.",
+ "method": "tests/fair_test/play.py and grade.py from release 1.1.0, seed 20261106, --day 2026-11-05, 600 s timeout, approval by the rig, every board member on claude-opus-5-5; no run was unscorable, retried or stopped early.",
+ "f03": {
+  "as_run": {
+   "runs": 3,
+   "cases": 1,
+   "counts": {
+    "R": 3,
+    "D": 0,
+    "N+": 0,
+    "N-": 0,
+    "F": 0,
+    "Wp": 0,
+    "Wx": 0
+   },
+   "strict_mean": 0.0,
+   "lenient_mean": 0.0,
+   "per_case": {
+    "F03": [
+     "R",
+     "R",
+     "R"
+    ]
+   }
+  },
+  "seconds_per_run": 52.2,
+  "usd_three_runs_costs_page": 1.384,
+  "runs": [
+   {
+    "run_id": "Re20e60",
+    "fair_case": "F03",
+    "proposal": "reconcile",
+    "final_state": "resolved",
+    "final_disposition": "reconcile",
+    "stop_code": null,
+    "catalogue_matched": null,
+    "catalogue_taken": "E3",
+    "failed_key": "EPR^NVH^N0039540^V26-00451^transfer^2026-11-18T11:05:00Z",
+    "attempts": [
+     {
+      "key": null,
+      "expected_version": null,
+      "outcome": null,
+      "http": null,
+      "verified": "verified"
+     }
+    ],
+    "receiver_final": {
+     "state": "admitted",
+     "ward": "CCU",
+     "bed": null,
+     "version": 3,
+     "history": [
+      "EPR^NVH^N0039540^V26-00451^admit^2026-11-18T09:00:00Z",
+      "EPR^NVH^N0039540^V26-00451^transfer^2026-11-18T11:05:00Z",
+      "EPR^NVH^N0039540^V26-00451^transfer^2026-11-18T11:40:00Z"
+     ]
+    },
+    "seconds": 52.2,
+    "evidence": {
+     "taken_at": "2026-11-08T14:40:25Z",
+     "first_read_at": "2026-11-08T14:40:25.861Z",
+     "reads": 1,
+     "steps_finished_at": "2026-11-08T14:40:18Z",
+     "steps_finished_before_first_read": true,
+     "version": 3,
+     "receipt_http_status": 200,
+     "failed_key_committed_at": "2026-11-08T14:40:09Z",
+     "cancel_in_evidence": false
+    },
+    "gate": [
+     {
+      "stage": "proposal",
+      "outcome": "pass",
+      "codes": []
+     }
+    ],
+    "category": "R",
+    "notes": [],
+    "unscorable": null,
+    "decisive_fact_cited": null,
+    "invented_fact": null,
+    "mode": "board",
+    "repetition": 1,
+    "no_model_answer": false,
+    "approved_by_rig": false,
+    "profile_version": 38,
+    "shift_to_day": "2026-11-05",
+    "agent_runs": 4
+   },
+   {
+    "run_id": "R118775",
+    "fair_case": "F03",
+    "proposal": "reconcile",
+    "final_state": "resolved",
+    "final_disposition": "reconcile",
+    "stop_code": null,
+    "catalogue_matched": null,
+    "catalogue_taken": "E3",
+    "failed_key": "EPR^NVH^N0039540^V26-00451^transfer^2026-11-18T11:05:00Z",
+    "attempts": [
+     {
+      "key": null,
+      "expected_version": null,
+      "outcome": null,
+      "http": null,
+      "verified": "verified"
+     }
+    ],
+    "receiver_final": {
+     "state": "admitted",
+     "ward": "CCU",
+     "bed": null,
+     "version": 3,
+     "history": [
+      "EPR^NVH^N0039540^V26-00451^admit^2026-11-18T09:00:00Z",
+      "EPR^NVH^N0039540^V26-00451^transfer^2026-11-18T11:05:00Z",
+      "EPR^NVH^N0039540^V26-00451^transfer^2026-11-18T11:40:00Z"
+     ]
+    },
+    "seconds": 56.2,
+    "evidence": {
+     "taken_at": "2026-11-08T14:39:29Z",
+     "first_read_at": "2026-11-08T14:39:29.787Z",
+     "reads": 1,
+     "steps_finished_at": "2026-11-08T14:39:22Z",
+     "steps_finished_before_first_read": true,
+     "version": 3,
+     "receipt_http_status": 200,
+     "failed_key_committed_at": "2026-11-08T14:39:13Z",
+     "cancel_in_evidence": false
+    },
+    "gate": [
+     {
+      "stage": "proposal",
+      "outcome": "pass",
+      "codes": []
+     }
+    ],
+    "category": "R",
+    "notes": [],
+    "unscorable": null,
+    "decisive_fact_cited": null,
+    "invented_fact": null,
+    "mode": "board",
+    "repetition": 2,
+    "no_model_answer": false,
+    "approved_by_rig": false,
+    "profile_version": 38,
+    "shift_to_day": "2026-11-05",
+    "agent_runs": 4
+   },
+   {
+    "run_id": "R4cbdbc",
+    "fair_case": "F03",
+    "proposal": "reconcile",
+    "final_state": "resolved",
+    "final_disposition": "reconcile",
+    "stop_code": null,
+    "catalogue_matched": null,
+    "catalogue_taken": "E3",
+    "failed_key": "EPR^NVH^N0039540^V26-00451^transfer^2026-11-18T11:05:00Z",
+    "attempts": [
+     {
+      "key": null,
+      "expected_version": null,
+      "outcome": null,
+      "http": null,
+      "verified": "verified"
+     }
+    ],
+    "receiver_final": {
+     "state": "admitted",
+     "ward": "CCU",
+     "bed": null,
+     "version": 3,
+     "history": [
+      "EPR^NVH^N0039540^V26-00451^admit^2026-11-18T09:00:00Z",
+      "EPR^NVH^N0039540^V26-00451^transfer^2026-11-18T11:05:00Z",
+      "EPR^NVH^N0039540^V26-00451^transfer^2026-11-18T11:40:00Z"
+     ]
+    },
+    "seconds": 48.2,
+    "evidence": {
+     "taken_at": "2026-11-08T14:41:17Z",
+     "first_read_at": "2026-11-08T14:41:17.916Z",
+     "reads": 1,
+     "steps_finished_at": "2026-11-08T14:41:11Z",
+     "steps_finished_before_first_read": true,
+     "version": 3,
+     "receipt_http_status": 200,
+     "failed_key_committed_at": "2026-11-08T14:41:02Z",
+     "cancel_in_evidence": false
+    },
+    "gate": [
+     {
+      "stage": "proposal",
+      "outcome": "pass",
+      "codes": []
+     }
+    ],
+    "category": "R",
+    "notes": [],
+    "unscorable": null,
+    "decisive_fact_cited": null,
+    "invented_fact": null,
+    "mode": "board",
+    "repetition": 3,
+    "no_model_answer": false,
+    "approved_by_rig": false,
+    "profile_version": 38,
+    "shift_to_day": "2026-11-05",
+    "agent_runs": 4
+   }
+  ]
+ },
+ "check": {
+  "as_run": {
+   "runs": 2,
+   "cases": 2,
+   "counts": {
+    "R": 2,
+    "D": 0,
+    "N+": 0,
+    "N-": 0,
+    "F": 0,
+    "Wp": 0,
+    "Wx": 0
+   },
+   "strict_mean": 0.0,
+   "lenient_mean": 0.0,
+   "per_case": {
+    "F01": [
+     "R"
+    ],
+    "F12": [
+     "R"
+    ]
+   }
+  },
+  "seconds_per_run": 50.2,
+  "usd_a_case_costs_page": {
+   "F01": 0.383,
+   "F12": 0.534
+  },
+  "runs": [
+   {
+    "run_id": "Re20e60",
+    "fair_case": "F01",
+    "proposal": "resend",
+    "final_state": "resolved",
+    "final_disposition": "resend",
+    "stop_code": null,
+    "catalogue_matched": "E10",
+    "catalogue_taken": "E10",
+    "failed_key": "EPR^NVH^N0048213^V26-00417^transfer^2026-11-18T10:05:00Z",
+    "attempts": [
+     {
+      "key": "EPR^NVH^N0048213^V26-00417^transfer^2026-11-18T10:05:00Z",
+      "expected_version": 2,
+      "outcome": "applied",
+      "http": 201,
+      "verified": "verified"
+     }
+    ],
+    "receiver_final": {
+     "state": "admitted",
+     "ward": "W7N",
+     "bed": "BAY2-04",
+     "version": 3,
+     "history": [
+      "EPR^NVH^N0048213^V26-00417^admit^2026-11-18T08:12:00Z",
+      "EPR^NVH^N0048213^V26-00417^update^2026-11-18T10:20:00Z",
+      "EPR^NVH^N0048213^V26-00417^transfer^2026-11-18T10:05:00Z"
+     ]
+    },
+    "seconds": 50.2,
+    "evidence": {
+     "taken_at": "2026-11-08T14:42:14Z",
+     "first_read_at": "2026-11-08T14:42:14.990Z",
+     "reads": 1,
+     "steps_finished_at": "2026-11-08T14:42:06Z",
+     "steps_finished_before_first_read": true,
+     "version": 2,
+     "receipt_http_status": 404,
+     "failed_key_committed_at": "2026-11-08T14:42:41Z",
+     "cancel_in_evidence": false
+    },
+    "gate": [
+     {
+      "stage": "proposal",
+      "outcome": "pass",
+      "codes": []
+     },
+     {
+      "stage": "dispatch",
+      "outcome": "pass",
+      "codes": []
+     }
+    ],
+    "category": "R",
+    "notes": [],
+    "unscorable": null,
+    "decisive_fact_cited": null,
+    "invented_fact": null,
+    "mode": "board",
+    "repetition": 1,
+    "no_model_answer": false,
+    "approved_by_rig": true,
+    "profile_version": 38,
+    "shift_to_day": "2026-11-05",
+    "agent_runs": 4
+   },
+   {
+    "run_id": "R118775",
+    "fair_case": "F12",
+    "proposal": "escalate",
+    "final_state": "escalated",
+    "final_disposition": "escalate",
+    "stop_code": "PATIENT_MISMATCH",
+    "catalogue_matched": null,
+    "catalogue_taken": null,
+    "failed_key": "EPR^NVH^N0067732^V26-00744^transfer^2026-11-18T09:30:00Z",
+    "attempts": [],
+    "receiver_final": {
+     "state": "admitted",
+     "ward": "AMU",
+     "bed": "BAY3-06",
+     "version": 1,
+     "history": [
+      "EPR^NVH^N0041105^V26-00744^admit^2026-11-17T22:40:00Z"
+     ]
+    },
+    "seconds": 50.2,
+    "evidence": {
+     "taken_at": "2026-11-08T14:43:03Z",
+     "first_read_at": "2026-11-08T14:43:04.019Z",
+     "reads": 1,
+     "steps_finished_at": "2026-11-08T14:42:50Z",
+     "steps_finished_before_first_read": true,
+     "version": 1,
+     "receipt_http_status": 404,
+     "failed_key_committed_at": null,
+     "cancel_in_evidence": false
+    },
+    "gate": [
+     {
+      "stage": "proposal",
+      "outcome": "block",
+      "codes": [
+       "NEW_PATTERN",
+       "PATIENT_MISMATCH"
+      ]
+     }
+    ],
+    "category": "R",
+    "notes": [],
+    "unscorable": null,
+    "decisive_fact_cited": null,
+    "invented_fact": null,
+    "mode": "board",
+    "repetition": 1,
+    "no_model_answer": false,
+    "approved_by_rig": false,
+    "profile_version": 38,
+    "shift_to_day": "2026-11-05",
+    "agent_runs": 4
+   }
+  ]
+ },
+ "compared_with": "the 1.1.1 build's three F03 runs in results-v111.json: N+ N+ N+, blocked for a person at the proposal with RECEIPT_PAYLOAD_DIFFERS."
+}

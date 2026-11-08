@@ -50,7 +50,7 @@ ClassMethod TasksFor(caseId As %String) As %DynamicArray
 /// digest the caller binds is written into the task's PlanDigest form value, which the case or incident workflow
 /// checks against the plan (CONTRACTS 6.4, 7.3): an approval with no digest is refused here. Returns JSON with the
 /// task id, the action, the user and the case id, or an error with its code (unauthenticated, forbidden, no_digest,
-/// no_task, not_in_role, assigned_to_other, engine).
+/// no_task, busy, decided, not_in_role, assigned_to_other, engine).
 ClassMethod Decide(caseId As %String, action As %String = "Approve", digest As %String = "", comment As %String = "") As %String [ SqlProc ]
 {
     // SQL passes its empty string as $CHAR(0).
@@ -63,6 +63,22 @@ ClassMethod Decide(caseId As %String, action As %String = "Approve", digest As %
     If (action = "Approve") && (digest = "") Quit ..ErrorJSON("no_digest", "an approval names the plan digest it binds")
     Set task = ..WaitForTask(caseId, ..#TASKWAIT)
     If '$ISOBJECT(task) Quit ..ErrorJSON("no_task", "no open approval task for " _ caseId)
+    // Two decisions can both find the task open: each takes the task's lock and reads the task again, so the second
+    // waits for the first and is told who decided, and one decision stands.
+    Set refused = ..Claim(task)
+    If refused '= "" Quit refused
+    Try {
+        Set out = ..DecideClaimed(task, caseId, user, action, digest, comment)
+    } Catch ex {
+        Set out = ..ErrorJSON("engine", ex.DisplayString())
+    }
+    Do ..Release(task)
+    Quit out
+}
+
+/// Decide's work on a task the caller has claimed.
+ClassMethod DecideClaimed(task As EnsLib.Workflow.TaskResponse, caseId As %String, user As %String, action As %String, digest As %String, comment As %String) As %String [ Private ]
+{
     If '..IsMember(task.%RoleName, user) Quit ..ErrorJSON("not_in_role", user _ " is not a member of the Workflow role " _ task.%RoleName)
     Set assigned = $SELECT($ISOBJECT(task.%TaskStatus): task.%TaskStatus.AssignedTo, 1: "")
     If (assigned '= "") && (assigned '= user) Quit ..ErrorJSON("assigned_to_other", "the task is assigned to " _ assigned)
@@ -77,6 +93,40 @@ ClassMethod Decide(caseId As %String, action As %String = "Approve", digest As %
     Set r = {}
     Set r."task_id" = task.%Id(), r.action = action, r.user = user, r."case_id" = caseId
     Quit r.%ToJSON()
+}
+
+/// How long a decision or a cancellation waits for another one on the same task to finish, in seconds.
+Parameter CLAIMWAIT = 5;
+
+/// Takes the task's decision lock and reads the task again, for a decision or a cancellation. Returns "" when the
+/// caller holds the lock and the task is still open (the caller then calls Release), or an error without the lock:
+/// busy when another decision kept the lock past the wait, decided when the task was completed meanwhile, naming the
+/// action, who took it and when.
+ClassMethod Claim(task As EnsLib.Workflow.TaskResponse) As %String
+{
+    Set id = task.%Id()
+    Lock +^Shutter.TaskDecision(id):..#CLAIMWAIT
+    If '$TEST Quit ..ErrorJSON("busy", "another decision on task " _ id _ " is under way")
+    Set sc = task.%Reload()
+    If $$$ISERR(sc) {
+        Lock -^Shutter.TaskDecision(id)
+        Quit ..ErrorJSON("engine", $SYSTEM.Status.GetErrorText(sc))
+    }
+    If $ISOBJECT(task.%TaskStatus) && task.%TaskStatus.IsComplete {
+        Lock -^Shutter.TaskDecision(id)
+        Set e = {}
+        Set e.code = "decided", e.action = task.%Action, e.user = task.%UserName
+        Do ..SetTime(e, "completedAt", task.%TaskStatus.TimeCompleted)
+        Set e.error = "the task was already decided: " _ task.%Action _ " by " _ task.%UserName _ " at " _ e.completedAt
+        Quit e.%ToJSON()
+    }
+    Quit ""
+}
+
+/// Gives back the lock Claim took.
+ClassMethod Release(task As EnsLib.Workflow.TaskResponse)
+{
+    Lock -^Shutter.TaskDecision(task.%Id())
 }
 
 /// How long Decide waits for a task on its way, in seconds.
