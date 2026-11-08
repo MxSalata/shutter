@@ -875,16 +875,16 @@ function MemberHeader({ code }: { code: Specialist }) {
  *
  * Each column's share of the width (COLUMNS) is a hint to the browser's table layout, which otherwise gives a wide
  * screen's surplus to the columns with the longest single line (a long title, a played mark) and leaves the badge
- * columns gaping; a column never shrinks below its content, so a laptop's 940 px is laid out as before. Played takes the
- * largest share: its two marks are the longest badges, and at 1280 px they keep to a line or two rather than a stack of
- * single words.
+ * columns gaping; a column never shrinks below its content, so a laptop's 940 px is laid out as before. On a wide screen
+ * Played gets room for its longest mark ("Rules only: stopped by the gate") on one line, and no column more than its
+ * content needs.
  */
 const COLUMNS = {
-  pass: '16%',
+  pass: '18%',
   expected: '12%',
-  member: '9%',
+  member: '10%',
   plan: '14%',
-  played: '21%',
+  played: '16%',
   cost: '10%',
 };
 function PassesTable({
