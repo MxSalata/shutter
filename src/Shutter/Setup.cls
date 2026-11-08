@@ -328,7 +328,13 @@ ClassMethod CreateSecurity(ns As %String, demo As %Boolean) As %Status
     // The public demo's logins (the live hospital, v1.34): made, or brought back to their definition, only when the install is
     // told their passwords; never a documented one. The production's start applies the container's environment the same way
     // (ApplyEnvironment), so `docker compose up` with the variables in .env makes them without a build argument.
-    Quit ..EnsurePublicUsers(ns, $SYSTEM.Util.GetEnviron("SHUTTER_PUBLIC_DEMO_PASSWORD"), $SYSTEM.Util.GetEnviron("SHUTTER_TRACE_PASSWORD"), $SYSTEM.Util.GetEnviron("SHUTTER_JUDGE_PASSWORD"))
+    Set sc = ..EnsurePublicUsers(ns, $SYSTEM.Util.GetEnviron("SHUTTER_PUBLIC_DEMO_PASSWORD"), $SYSTEM.Util.GetEnviron("SHUTTER_TRACE_PASSWORD"), $SYSTEM.Util.GetEnviron("SHUTTER_JUDGE_PASSWORD"))
+    Quit:$$$ISERR(sc) sc
+    // Each role's resources as they now stand, for GET /access, whose callers may not read Security.Roles; from the
+    // namespace, where the class is.
+    Set $NAMESPACE = ns
+    Do ##class(Shutter.API.Access).Record(ns)
+    Quit sc
 }
 
 /// The public demo's three logins, each made (or brought back to its definition) when its password is given, left alone
@@ -379,6 +385,8 @@ ClassMethod ApplyEnvironment(wait As %Integer = 0) As %String [ SqlProc ]
     Set out = ..ApplyRuntime($SYSTEM.Util.GetEnviron("SHUTTER_DAILY_BUDGET_USD"), $SYSTEM.Util.GetEnviron("SHUTTER_JUDGE_BUDGET_USD"), $SYSTEM.Util.GetEnviron("SHUTTER_PUBLIC_DEMO_PASSWORD"), $SYSTEM.Util.GetEnviron("SHUTTER_TRACE_PASSWORD"), $SYSTEM.Util.GetEnviron("SHUTTER_JUDGE_PASSWORD"), $SYSTEM.Util.GetEnviron("SHUTTER_LIVE"), wait, $SYSTEM.Util.GetEnviron("SHUTTER_PROVIDER_TIMEOUT_SECONDS"), $SYSTEM.Util.GetEnviron("SHUTTER_DEMO_BUDGET_USD"), $SYSTEM.Util.GetEnviron("SHUTTER_DEMO_BUDGET_PERIOD"), $SYSTEM.Util.GetEnviron("SHUTTER_LIVE_SCENARIOS"), $SYSTEM.Util.GetEnviron("SHUTTER_DEMO_PORTAL"))
     // The credential checks' cache, from this privileged process (v1.38): the anonymous health report only reads it.
     Set out.credentials = ..RefreshCredentialCache(1)
+    // The roles' resources for GET /access, at every start, so a role changed by hand shows as it is.
+    Try { Do ##class(Shutter.API.Access).Record() } Catch ex { Set out.access = ex.DisplayString() }
     Quit out.%ToJSON()
 }
 
@@ -690,6 +698,8 @@ ClassMethod HardenPortal(hospital As %String = "") As %String [ SqlProc ]
     }
     Set out.apps = apps
     If errors.%Size() > 0 Set out.errors = errors
+    // The trace role's new resources for GET /access, from the namespace.
+    Try { Set $NAMESPACE = ns Do ##class(Shutter.API.Access).Record(ns) } Catch ex { }
     Quit out.%ToJSON()
 }
 

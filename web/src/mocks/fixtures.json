@@ -85479,5 +85479,193 @@
    "active": true,
    "id": "1"
   }
- ]
+ ],
+ "access": {
+  "demo": true,
+  "portalHardened": false,
+  "read": "recorded",
+  "recordedAt": "2026-11-02T14:56:18Z",
+  "roles": [
+   {
+    "role": "Shutter_Demo",
+    "installed": true
+   },
+   {
+    "role": "Shutter_Judge",
+    "installed": true
+   },
+   {
+    "role": "Shutter_Operator",
+    "installed": true
+   },
+   {
+    "role": "Shutter_Approver",
+    "installed": true
+   },
+   {
+    "role": "Shutter_Trace",
+    "installed": true
+   }
+  ],
+  "rows": [
+   {
+    "id": "view",
+    "needs": [
+     [
+      "Shutter_Operate:U"
+     ]
+    ],
+    "available": true,
+    "roles": {
+     "Shutter_Demo": true,
+     "Shutter_Judge": true,
+     "Shutter_Operator": true,
+     "Shutter_Approver": true,
+     "Shutter_Trace": false
+    },
+    "you": false
+   },
+   {
+    "id": "approve",
+    "needs": [
+     [
+      "Shutter_Approve:U"
+     ]
+    ],
+    "available": true,
+    "roles": {
+     "Shutter_Demo": true,
+     "Shutter_Judge": true,
+     "Shutter_Operator": false,
+     "Shutter_Approver": true,
+     "Shutter_Trace": false
+    },
+    "you": false
+   },
+   {
+    "id": "scenarios",
+    "needs": [
+     [
+      "Shutter_Scenarios:U"
+     ]
+    ],
+    "available": true,
+    "roles": {
+     "Shutter_Demo": false,
+     "Shutter_Judge": false,
+     "Shutter_Operator": true,
+     "Shutter_Approver": true,
+     "Shutter_Trace": false
+    },
+    "you": false
+   },
+   {
+    "id": "liveAgents",
+    "needs": [
+     [
+      "Shutter_LiveAgents:U"
+     ]
+    ],
+    "available": true,
+    "roles": {
+     "Shutter_Demo": false,
+     "Shutter_Judge": true,
+     "Shutter_Operator": true,
+     "Shutter_Approver": true,
+     "Shutter_Trace": false
+    },
+    "you": false
+   },
+   {
+    "id": "configure",
+    "needs": [
+     [
+      "Shutter_Configure:U"
+     ]
+    ],
+    "available": true,
+    "roles": {
+     "Shutter_Demo": false,
+     "Shutter_Judge": false,
+     "Shutter_Operator": false,
+     "Shutter_Approver": true,
+     "Shutter_Trace": false
+    },
+    "you": false
+   },
+   {
+    "id": "inbox",
+    "needs": [
+     [
+      "%Ens_Portal:U",
+      "Shutter_Approve:U"
+     ]
+    ],
+    "available": true,
+    "roles": {
+     "Shutter_Demo": true,
+     "Shutter_Judge": true,
+     "Shutter_Operator": false,
+     "Shutter_Approver": true,
+     "Shutter_Trace": false
+    },
+    "you": false
+   },
+   {
+    "id": "guide",
+    "needs": [
+     [
+      "Shutter_Portal:U"
+     ],
+     [
+      "Shutter_Operate:U"
+     ]
+    ],
+    "available": true,
+    "roles": {
+     "Shutter_Demo": true,
+     "Shutter_Judge": true,
+     "Shutter_Operator": true,
+     "Shutter_Approver": true,
+     "Shutter_Trace": false
+    },
+    "you": false
+   },
+   {
+    "id": "trace",
+    "needs": [
+     [
+      "%Ens_Portal:U",
+      "%Ens_MessageTrace:U"
+     ]
+    ],
+    "available": true,
+    "roles": {
+     "Shutter_Demo": true,
+     "Shutter_Judge": true,
+     "Shutter_Operator": false,
+     "Shutter_Approver": true,
+     "Shutter_Trace": true
+    },
+    "you": false
+   },
+   {
+    "id": "publisher",
+    "needs": [
+     [
+      "Shutter_Publish:U"
+     ]
+    ],
+    "available": true,
+    "roles": {
+     "Shutter_Demo": false,
+     "Shutter_Judge": false,
+     "Shutter_Operator": true,
+     "Shutter_Approver": true,
+     "Shutter_Trace": false
+    },
+    "you": false
+   }
+  ]
+ }
 }

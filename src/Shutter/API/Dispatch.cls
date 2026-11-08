@@ -18,6 +18,7 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
   <Route Url="/session" Method="POST" Call="Login"/>
   <Route Url="/session" Method="DELETE" Call="Logout"/>
   <Route Url="/me" Method="GET" Call="Me"/>
+  <Route Url="/access" Method="GET" Call="Access"/>
   <Route Url="/health" Method="GET" Call="Health"/>
   <Route Url="/scenarios" Method="GET" Call="Scenarios"/>
   <Route Url="/scenarios/reset" Method="POST" Call="ScenarioReset"/>
@@ -277,6 +278,14 @@ ClassMethod Me() As %Status
     Do can.%Set("liveAgents", $SYSTEM.Security.Check("Shutter_LiveAgents", "USE"), "boolean")
     Set o.can = can
     Quit ..Json(o)
+}
+
+/// What each of Shutter's roles may do beside what the caller may (Shutter.API.Access): every signed-in user, read
+/// only. It names roles and resources, never a user.
+ClassMethod Access() As %Status
+{
+    If '..Allow("") Quit $$$OK
+    Quit ..Json(##class(Shutter.API.Access).Report())
 }
 
 ClassMethod Health() As %Status

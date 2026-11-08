@@ -47,6 +47,53 @@ export interface Can {
   liveAgents: boolean;
 }
 
+/** One of the roles Shutter installs, as `GET /access` reads it (CONTRACTS 5): whether it is defined on this instance. */
+export interface AccessRole {
+  role: string;
+  installed: boolean;
+}
+
+/** What a person can do in Shutter, as one row of the access table. */
+export type AccessRowId =
+  | 'view'
+  | 'approve'
+  | 'scenarios'
+  | 'liveAgents'
+  | 'configure'
+  | 'inbox'
+  | 'guide'
+  | 'trace'
+  | 'publisher';
+
+export interface AccessRow {
+  id: AccessRowId;
+  /** The resources it needs: one of the alternatives, each a list of `resource:permission` all of which are needed. */
+  needs: string[][];
+  /** False when this instance has nothing to hold: the Shutter in IRIS page off a demo, the publisher off AI Hub. */
+  available: boolean;
+  /** Each role's answer, by role name, from the role's resources and its granted roles'. */
+  roles: Record<string, boolean>;
+  /** The signed-in user's own answer, from the resources they hold. */
+  you: boolean;
+}
+
+/**
+ * `GET /access` (CONTRACTS 5): what each of Shutter's roles may do beside what the signed-in user may, read only. It names
+ * roles and resources, never a user. The roles' columns come from the record the install, the portal's hardening and each
+ * start of the production write (`read` says `recorded`, with `recordedAt`), or from Security.Roles itself for a caller
+ * who may read it (`now`); `none` means no record yet, and every role then reads as not installed. The user's own column
+ * is always read now, from the resources they hold.
+ */
+export interface AccessReport {
+  demo: boolean;
+  /** The public demo's portal hardening is on: the Management Portal's pages need the resource Shutter_Portal. */
+  portalHardened: boolean;
+  read: 'now' | 'recorded' | 'none';
+  recordedAt?: string;
+  roles: AccessRole[];
+  rows: AccessRow[];
+}
+
 export interface Me {
   username: string;
   operator: boolean;
