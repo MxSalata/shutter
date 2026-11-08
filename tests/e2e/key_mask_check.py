@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Checks that a key typed into an agent item's Model or ProviderConfig setting appears nowhere in full.
 
-    python3 tests/e2e/key_mask_check.py [--url http://localhost:52773] [--item "Agent Impact"] [--scenario S2]
+    python3 tests/e2e/key_mask_check.py [--url http://localhost:52773] [--ns SHUTTER] [--item "Agent Impact"] [--scenario S2]
                                         [--arm] [--disarm]
 
 With --arm, sets the item's ProviderConfig and Model to two key-shaped test values and its Mode to live (the rig
@@ -35,14 +35,15 @@ def hits(where, text, found):
             found.append(f"{where}: holds {v[:12]}...")
 
 
-def rig(url, item, pc, model, mode):
-    rows = query(url, "SHUTTER", "SELECT Shutter_Test.KeyMaskRig_Arm(?, ?, ?, ?) AS r", [item, pc, model, mode])
+def rig(url, ns, item, pc, model, mode):
+    rows = query(url, ns, "SELECT Shutter_Test.KeyMaskRig_Arm(?, ?, ?, ?) AS r", [item, pc, model, mode])
     return rows[0]["r"] if rows else "no answer"
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--url", default=os.environ.get("IRIS_URL", "http://localhost:52773"))
+    ap.add_argument("--ns", default="SHUTTER", help="Shutter's namespace (USER after a stock install)")
     ap.add_argument("--item", default="Agent Impact")
     ap.add_argument("--scenario", default="")
     ap.add_argument("--arm", action="store_true")
@@ -50,13 +51,13 @@ def main():
     ap.add_argument("--password", default=os.environ.get("SHUTTER_PASSWORD", "shutter"))
     args = ap.parse_args()
     if args.disarm:
-        print("disarm:", rig(args.url, args.item, "-", "-", "auto"))
+        print("disarm:", rig(args.url, args.ns, args.item, "-", "-", "auto"))
         return 0
     since = 0
     if args.arm:
-        rows = query(args.url, "SHUTTER", "SELECT MAX(ID) AS m FROM Ens_Util.Log")
+        rows = query(args.url, args.ns, "SELECT MAX(ID) AS m FROM Ens_Util.Log")
         since = (rows[0]["m"] or 0) if rows else 0
-        print("arm:", rig(args.url, args.item, KEY_CONFIG, KEY_MODEL, "live"))
+        print("arm:", rig(args.url, args.ns, args.item, KEY_CONFIG, KEY_MODEL, "live"))
     if args.scenario:
         here = os.path.dirname(os.path.abspath(__file__))
         subprocess.run([sys.executable, os.path.join(here, "scenario_check.py"), "--url", args.url, "--approve",
@@ -88,17 +89,17 @@ def main():
               ("Shutter_Store.CaseQuestion", "Model, Error")]
     for table, cols in tables:
         try:
-            rows = query(args.url, "SHUTTER", f"SELECT ID, {cols} FROM {table}")
+            rows = query(args.url, args.ns, f"SELECT ID, {cols} FROM {table}")
         except Exception as e:
             print(f"{table}: not read ({str(e)[:100]})")
             continue
         for r in rows:
             hits(f"{table} {r.get('ID')}", json.dumps(r), found)
-    rows = query(args.url, "SHUTTER", "SELECT TOP 1 Model, ProviderConfig, Status, Error FROM Shutter_Store.AgentRun "
+    rows = query(args.url, args.ns, "SELECT TOP 1 Model, ProviderConfig, Status, Error FROM Shutter_Store.AgentRun "
                  "WHERE MemberCode = 'impact' ORDER BY ID DESC")
     if rows:
         seen.append(f"newest impact AgentRun: {rows[0]}")
-    rows = query(args.url, "SHUTTER", "SELECT ID, Type, Text FROM Ens_Util.Log WHERE ID > ?", [since])
+    rows = query(args.url, args.ns, "SELECT ID, Type, Text FROM Ens_Util.Log WHERE ID > ?", [since])
     for r in rows:
         hits(f"Event Log {r['ID']} (type {r['Type']})", r.get("Text") or "", found)
         t = r.get("Text") or ""
