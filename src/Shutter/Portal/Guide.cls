@@ -3,7 +3,8 @@
 /// demo as demo-trace, who reads the databases but holds no SQL privilege on Shutter's tables, so it reads through
 /// %ExecDirectNoPriv: fixed queries, and only what the app's public sign-in can read too. That is why it answers only on a
 /// demo instance, to a holder of Shutter_Portal or Shutter_Operate: a site's portal users, whose cases hold real messages,
-/// get a 404. GET and HEAD only, with no broker, script or form, since the demo's edge refuses a POST to a page. A figure
+/// get a 404. GET and HEAD only, with no broker, script or form, since the demo's edge refuses a POST to a page, and no
+/// timed refresh, which would take a screen reader back to the top: a Refresh link reloads it. A figure
 /// that cannot be read leaves its tile out rather than failing the page. Its Agents and Operations panels show the
 /// production's business operations as its configuration sets them: each agent item's model and where it comes from, its
 /// provider configuration, mode and limits, and for every other operation its class and an explicit list of settings that
@@ -15,9 +16,6 @@ Class Shutter.Portal.Guide Extends %CSP.Page
 Parameter CHARSET = "utf-8";
 
 Parameter CONTENTTYPE = "text/html";
-
-/// The seconds between refreshes, a plain meta refresh.
-Parameter REFRESH = 30;
 
 /// How many of the latest cases it lists.
 Parameter LATEST = 4;
@@ -92,7 +90,7 @@ ClassMethod Facts() As %DynamicObject
 }
 
 /// running or stopped, from the runtime global a production keeps in its namespace, or empty when it can't be read. Not
-/// Ens.Director's GetProductionStatus, which takes the runtime lock: this page answers every 30 seconds to anyone.
+/// Ens.Director's GetProductionStatus, which takes the runtime lock: this page answers anyone, as often as they load it.
 ClassMethod ProductionState(ns As %String) As %String
 {
     Set state = ""
@@ -205,9 +203,10 @@ ClassMethod Items(production As %String = "") As %DynamicObject
                     Set row.model = runs.model, row.modelFrom = runs.from, row.config = runs.config, row.provider = runs.provider
                     Set setting = $ZCONVERT($GET(s("Host", "Mode")), "L")
                     If setting = "" Set setting = "auto"
-                    Set row.mode = $CLASSMETHOD(cls, "ResolveMode", setting, mock), row.modeSetting = ..Clean(setting)
+                    Set row.modeSetting = ..KnownMode(setting, 1)
+                    Set row.mode = $SELECT(row.modeSetting = "not valid": "not valid", 1: ..KnownMode($CLASSMETHOD(cls, "ResolveMode", setting, mock)))
                     Set row.agentClass = ..Clean(a.agentClass)
-                    Set row.turns = ..Clean($GET(s("Host", "MaxIterations"))), row.budget = ..Clean($GET(s("Host", "TokenBudget"))), row.timeout = ..Clean($GET(s("Host", "RequestTimeoutSeconds")))
+                    Set row.turns = ..Number($GET(s("Host", "MaxIterations"))), row.budget = ..Number($GET(s("Host", "TokenBudget"))), row.timeout = ..Number($GET(s("Host", "RequestTimeoutSeconds")))
                     Set row.lastAt = last.%Get(name)
                 } Else {
                     Set row.settings = ..Shown(.s)
@@ -287,7 +286,19 @@ ClassMethod Runs(item As %DynamicObject, mock As %String, instanceConfig As %Str
 {
     Set out = {"model": "", "from": "", "config": "", "provider": ""}
     If mock '= "" {
-        Set out.model = "mock", out.from = "from the API mimic, a test fixture that answers with no model", out.config = ..Clean(..ConfigName(mock)), out.provider = "the API mimic"
+        Set out.model = "mock", out.from = "from the API mimic, a test fixture that answers with no model", out.config = $SELECT(..LooksSecret(mock): "hidden", 1: ..Clean(..ConfigName(mock))), out.provider = "the API mimic"
+        Quit out
+    }
+    // The configuration's own name is checked before AI.LLM. goes in front of it, which would hide where a key starts,
+    // and one that looks like a key is neither shown nor looked up.
+    Set raw = $SELECT(item.providerConfig '= "": item.providerConfig, 1: instanceConfig)
+    If (raw '= "") && ..LooksSecret(raw) {
+        Set out.config = "hidden", out.provider = "hidden"
+        If item.model '= "" {
+            Set out.model = ..Clean(item.model), out.from = "from the item's Model setting"
+        } Else {
+            Set out.model = "not readable", out.from = "from its provider configuration"
+        }
         Quit out
     }
     Set own = ..ConfigName(item.providerConfig), instance = ..ConfigName(instanceConfig)
@@ -355,7 +366,8 @@ ClassMethod ConfigFacts(fqn As %String, mayRead As %Integer, Output model As %St
 }
 
 /// The settings of OPERATIONSETTINGS that an operation has, in that order, as [{name, value}]: never one whose name or
-/// value looks like a secret or a host detail (Hidden), whatever the list says.
+/// value looks like a secret or a host detail (Hidden), whatever the list says, nor one whose value is not in its own
+/// form (InForm).
 ClassMethod Shown(ByRef s, allow As %String = {..#OPERATIONSETTINGS}) As %DynamicArray
 {
     Set out = []
@@ -364,6 +376,7 @@ ClassMethod Shown(ByRef s, allow As %String = {..#OPERATIONSETTINGS}) As %Dynami
         Continue:(target="")||(name="")
         Continue:'$DATA(s(target, name), value)
         Continue:..Hidden(name, value)
+        Continue:'..InForm(name, value)
         If $LENGTH(value) > ..#SETTINGLENGTH Set value = $EXTRACT(value, 1, ..#SETTINGLENGTH) _ "..."
         Do out.%Push({"name": (name), "value": (value)})
     }
@@ -414,19 +427,57 @@ ClassMethod PoolSetting(size As %String) As %Boolean
     Quit (size > 0) && (size \ 1 = size)
 }
 
-/// A value that looks like a secret or an address: a key's or a token's prefix (sk-, GitHub's ghp_, gho_ and github_pat_,
-/// Slack's xox), an AWS access key id (AKIA or ASIA and sixteen capitals or digits), a JSON Web Token (eyJ, as {" starts
-/// in base64), a PEM block (-----BEGIN), a wallet reference, a password, a URL or an address.
+/// Whether a listed setting's value is in the form its setting takes, so that nothing else typed into one is shown:
+/// empty (not set), 0 or 1 for AlertOnError, the engine's pattern=actions list for ReplyCodeActions (each pattern up to
+/// 40 characters with no comma or equals sign, each action letters), and a plain number for every other one (the
+/// timeouts, intervals, grace and queue alerts).
+ClassMethod InForm(name As %String, value As %String) As %Boolean
+{
+    If value = "" Quit 1
+    If name = "AlertOnError" Quit (value = 0) || (value = 1)
+    If name = "ReplyCodeActions" Quit $MATCH(value, "\s*:?[^=,]{1,40}=[A-Za-z]{1,8}\s*(,\s*:?[^=,]{1,40}=[A-Za-z]{1,8}\s*)*")
+    Quit $MATCH(value, "-?[0-9]{1,12}(\.[0-9]{1,6})?")
+}
+
+/// A number for the page (an agent's turns, budget or seconds), "not valid" for anything else, "" when not set.
+ClassMethod Number(value As %String) As %String
+{
+    If value = "" Quit ""
+    Quit $SELECT($MATCH(value, "-?[0-9]{1,12}(\.[0-9]{1,6})?"): value, 1: "not valid")
+}
+
+/// A mode as the card shows it: live, record or replay, and with <var>asSet</var> auto too; "not valid" for anything else,
+/// which the production class or the API can save past the portal's own list.
+ClassMethod KnownMode(mode As %String, asSet As %Boolean = 0) As %String
+{
+    Set ok = $LISTBUILD("live", "record", "replay")
+    If asSet Set ok = ok _ $LISTBUILD("auto")
+    Quit $SELECT((mode '= "") && $LISTFIND(ok, mode): mode, 1: "not valid")
+}
+
+/// A value that looks like a secret or an address: a key's or a token's prefix (sk- where a word starts, anywhere in
+/// the value; sk-ant, GitHub's ghp_, gho_ and github_pat_, Slack's xox, Stripe's sk_live_, sk_test_, rk_live_ and
+/// rk_test_, GitLab's glpat- anywhere; Hugging Face's hf_ where a word starts), an AWS access key id (AKIA or ASIA and
+/// sixteen capitals or digits), a Google API key (AIza and ten more), a JSON Web Token (eyJ, as {" starts in base64), a
+/// PEM block (-----BEGIN), HTTP Basic credentials (basic and a base64 run holding a digit, +, / or =, or a capital
+/// after a small letter, which a plain word does not), a credential written as a name and its value (key=, token=,
+/// apikey:, secret= and the like), one run of 24 or more letters and digits holding both, as a random key is, a wallet
+/// reference, a password, a URL or an address.
 ClassMethod LooksSecret(value As %String) As %Boolean
 {
     Set v = $ZCONVERT(value, "L")
-    If $EXTRACT(v, 1, 3) = "sk-" Quit 1
-    For word = "sk-ant", "secret://", "password", "bearer ", "://", "@", "ghp_", "gho_", "github_pat_", "xox", "-----begin" {
+    For word = "sk-ant", "secret://", "password", "bearer ", "://", "@", "ghp_", "gho_", "github_pat_", "xox", "-----begin", "sk_live_", "sk_test_", "rk_live_", "rk_test_", "glpat-" {
         If v [ word Return 1
     }
+    // Where a word starts, so task-runner and chf_rate are not keys.
+    If $LOCATE(v, "(^|[^a-z0-9])(sk-|hf_)") Quit 1
+    If $LOCATE(v, "(^|[^a-z0-9])(api[-_]?key|access[-_]?key|private[-_]?key|key|token|secret|passwd|pwd|auth)\s*[=:]") Quit 1
+    If $LOCATE(value, "(^|[^A-Za-z0-9])(?i:basic)\s+(?=[A-Za-z0-9+/]*([0-9+/=]|[a-z][A-Z]))[A-Za-z0-9+/]{8,}") Quit 1
     // Where case tells a key from a word: AKIA or ASIA alone, or Asia/Kolkata, is not one.
     If value [ "eyJ" Quit 1
     If $LOCATE(value, "(AKIA|ASIA)[A-Z0-9]{16}") Quit 1
+    If $LOCATE(value, "AIza[0-9A-Za-z_-]{10}") Quit 1
+    If $LOCATE(value, "(?=[A-Za-z0-9]*[0-9])(?=[A-Za-z0-9]*[A-Za-z])[A-Za-z0-9]{24,}") Quit 1
     Quit 0
 }
 
@@ -442,9 +493,9 @@ ClassMethod Html(f As %DynamicObject, app As %String) As %String
     If $EXTRACT(app, *) '= "/" Set app = app _ "/"
     Set hospital = ..HospitalApp(app, f.namespace)
     Set h = "<!doctype html><html lang='en-GB'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><meta name='robots' content='noindex'>"
-    Set h = h _ "<meta http-equiv='refresh' content='" _ ..#REFRESH _ "'><title>Shutter in IRIS</title><style>" _ ..Css() _ "</style></head><body><main>"
+    Set h = h _ "<title>Shutter in IRIS</title><style>" _ ..Css() _ "</style></head><body><main>"
     Set h = h _ "<header><div class='brand'>" _ ..Logo() _ "<div><h1>Shutter in IRIS</h1><p class='sub'>Live from this instance, drawn by IRIS itself. Read only, synthetic data.</p></div></div>"
-    Set h = h _ "<p class='who'>Signed in as " _ ..E(f.user) _ ", namespace " _ ..E(f.namespace) _ "<br>Updated " _ ..E(f.updated) _ " UTC, refreshes every " _ ..#REFRESH _ " s</p></header>"
+    Set h = h _ "<p class='who'>Signed in as " _ ..E(f.user) _ ", namespace " _ ..E(f.namespace) _ "<br>Updated " _ ..E(f.updated) _ " UTC, <a href='" _ app _ "Shutter.Portal.Guide.cls'>Refresh</a></p></header>"
     Set h = h _ "<section class='tiles' aria-label='This instance now'>"
     Set h = h _ ..StateTile("Shutter production", f.shutter, "Shutter.Production")
     Set h = h _ ..StateTile("Hospital production", f.hospital, "Hospital.Production")
@@ -601,7 +652,7 @@ ClassMethod AgentCard(a As %DynamicObject) As %String
     If a.unreadable Quit h _ "<p class='none'>not readable</p></div>"
     Set h = h _ "<dl>" _ ..Fact("Model", ..ModelShown(a.model, a.mode), a.modelFrom)
     Set h = h _ ..Fact("Provider", $SELECT(a.config '= "": a.config, 1: "none configured"), $SELECT(a.provider '= "": "model_provider " _ a.provider, 1: ""))
-    Set note = $SELECT(a.modeSetting = "auto": "auto, as the instance decides", 1: "set on the item") _ $SELECT(a.mode = "replay": "; recorded answers, no model called", 1: "")
+    Set note = $SELECT(a.modeSetting = "auto": "auto, as the instance decides", a.modeSetting = "not valid": "set on the item, not one of auto, live, record or replay", 1: "set on the item") _ $SELECT(a.mode = "replay": "; recorded answers, no model called", 1: "")
     Set h = h _ ..Fact("Mode", a.mode, note)
     Set h = h _ ..Fact("Pool size", a.pool)
     Set h = h _ ..Fact("Turns per run", a.turns, "MaxIterations")
@@ -635,7 +686,7 @@ ClassMethod Css() As %String
     Set c = ":root{color-scheme:light dark;--bg:#f4f7f9;--panel:#fff;--soft:#e9f2f6;--text:#16232b;--muted:#55666f;--line:#d5dfe4;--accent:#095c7c;--on:#fff;--ok:#1a7a44;--warn:#8a5a00}"
     Set c = c _ "@media (prefers-color-scheme:dark){:root{--bg:#0d1518;--panel:#152127;--soft:#17303b;--text:#e8f0f3;--muted:#9db0b9;--line:#2a3b43;--accent:#45acd1;--on:#06202b;--ok:#5fd08a;--warn:#e8c26a}}"
     Set c = c _ "*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,-apple-system,'Segoe UI',Roboto,sans-serif}main{max-width:1200px;margin:0 auto;padding:32px 16px 40px;display:flex;flex-direction:column;gap:20px}"
-    Set c = c _ "header{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px}.brand{display:flex;align-items:center;gap:14px}.brand svg{width:44px;height:44px;flex:none}h1{margin:0;font-size:1.75rem;line-height:1.2;font-weight:600}.sub,.who{margin:0;color:var(--muted);font-size:.875rem}"
+    Set c = c _ "header{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px}.brand{display:flex;align-items:center;gap:14px}.brand svg{width:44px;height:44px;flex:none}h1{margin:0;font-size:1.75rem;line-height:1.2;font-weight:600}.sub,.who{margin:0;color:var(--muted);font-size:.875rem}.who a{color:var(--accent);font-weight:600}"
     Set c = c _ ".tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:16px}.tile,.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px}.tile{padding:16px 18px}.lab,.hint{color:var(--muted);font-size:.8125rem}.val{font-size:1.625rem;line-height:2rem;font-weight:600}.ok{color:var(--ok)}.warn{color:var(--warn)}"
     Set c = c _ ".columns{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr));gap:16px}@media (min-width:900px){.columns{grid-template-columns:2fr 1fr}}.panel{padding:18px 20px;display:flex;flex-direction:column;gap:10px;min-width:0}h2{margin:6px 0 2px;font-size:1.0625rem;font-weight:600}"
     Set c = c _ ".feature{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px;background:var(--soft);border:1px solid var(--accent);border-radius:10px;padding:14px 16px}.feature b,.nav b{display:block;font-weight:600}.feature span,.nav span{display:block;color:var(--muted);font-size:.8125rem}"

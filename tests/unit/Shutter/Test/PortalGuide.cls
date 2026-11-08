@@ -56,7 +56,7 @@ Method TestLinksOnlyToWhatTheEdgeLeavesOpen()
     Set m = ##class(%Regex.Matcher).%New("href='([^']*)'", h), n = 0
     While m.Locate() {
         Set href = m.Group(1), n = n + 1
-        Set ok = (href = "/shutter/index.html")
+        Set ok = (href = "/shutter/index.html") || (href = "/csp/healthshare/shutter/Shutter.Portal.Guide.cls")
         If 'ok Set ok = ##class(%Regex.Matcher).%New("^/csp/healthshare/(shutter|hospital)/EnsPortal\.(ProductionMonitor|MessageViewer|EventLog)\.zen$", href).Locate()
         If 'ok Set ok = ##class(%Regex.Matcher).%New("^/csp/healthshare/shutter/EnsPortal\.VisualTrace\.zen\?SESSIONID=[0-9]+$", href).Locate()
         Do $$$AssertTrue(ok, "open on the demo's edge: " _ href)
@@ -64,7 +64,16 @@ Method TestLinksOnlyToWhatTheEdgeLeavesOpen()
     Do $$$AssertTrue(n >= 8, "it has its links: " _ n)
     Do $$$AssertNotTrue(h [ "<form", "no form")
     Do $$$AssertNotTrue(h [ "<script", "no script")
-    Do $$$AssertTrue(h [ "http-equiv='refresh'", "a plain refresh")
+}
+
+/// No timed refresh, which would take a screen reader back to the top of a long page (WCAG 2.2.1): a plain link to the
+/// page itself, beside the time it was read, refreshes it when the visitor asks.
+Method TestRefreshesWhenAsked()
+{
+    Set h = ##class(Shutter.Portal.Guide).Html(..Facts(), "/csp/healthshare/shutter/")
+    Do $$$AssertNotTrue($ZCONVERT(h, "L") [ "http-equiv='refresh'", "no meta refresh")
+    Do $$$AssertNotTrue(h [ "refreshes every", "and no promise of one")
+    Do $$$AssertTrue(h [ "Updated 13:44:30 UTC, <a href='/csp/healthshare/shutter/Shutter.Portal.Guide.cls'>Refresh</a>", "a link to the page itself, beside the time")
 }
 
 /// Read from this instance, each figure or empty; a namespace that does not exist reads as unknown, not as an error.
@@ -310,17 +319,137 @@ Method TestSecretLookingValues()
     For v = "Asia/Kolkata", "ASIA", "AKIA-short", "claude-opus-5-5", ":?R=RF,:?E=S,:*=S", "120", "eyes", "Toxic" {
         Do $$$AssertNotTrue($CLASSMETHOD(guide, "LooksSecret", v), "harmless: " _ v)
     }
+    // sk- where a word starts, anywhere in the value; other providers' key shapes; a credential written as name=value or
+    // name: value; HTTP Basic credentials; and one long run of letters and digits, as a random key is.
+    For v = "sk-" _ "proj-PLNTCFG13", " sk-proj-x", "key sk-proj-abc", "AI.LLM.sk-proj-x", "sk_" _ "live_51Habc", "sk_test_abc", "rk_live_abc", "AIza" _ "SyD-abc_123", "glpat-" _ "abc123", "hf_" _ "AbCdEf", "token=abc", "apikey:abc", "api_key = abc", "key=abc", "secret=abc", "Basic cGxudHVzZXI6" _ "cGxudHBhc3M=", "basic dXNlcjpwYXNz", "d41d8cd98f00b204" _ "e9800998ecf8427e" {
+        Do $$$AssertTrue($CLASSMETHOD(guide, "LooksSecret", v), "looks secret: " _ v)
+        Do $$$AssertEquals($CLASSMETHOD(guide, "Clean", v), "hidden", "and cleaned: " _ v)
+    }
+    For v = "task-runner", "disk-usage", "Basic configuration", "basic Configuration", "BASIC SETTINGS", "claude-sonnet-5-5-20261101", "anthropic.claude-sonnet-5-5-20261101-v1:0", "AIza", "monkey=1", "chf_rate", "Shutter" {
+        Do $$$AssertNotTrue($CLASSMETHOD(guide, "LooksSecret", v), "harmless: " _ v)
+    }
 }
 
-Method MakeProduction() As %Status
+/// A ProviderConfig that looks like a key is never shown, nor read: not under AI.LLM., whose prefix would hide its start
+/// from the check, and the configuration's model and provider are not looked up with it.
+Method TestAKeyInProviderConfig()
+{
+    Set guide = "Shutter.Portal.Guide"
+    For pc = " sk-" _ "proj-PLNTCFGSPACE13", "sk-" _ "proj-PLNTCFGNOSPACE13", "glpat-" _ "PLNTCFG", "x.y.sk-" _ "PLNTCFG" {
+        For mayRead = 0, 1 {
+            Set r = $CLASSMETHOD(guide, "Runs", {"model": "", "providerConfig": (pc), "agentClass": ""}, "", "AI.LLM.Shutter", "model-instance", mayRead), json = r.%ToJSON()
+            Do $$$AssertNotTrue(json [ "PLNTCFG", "never shown: " _ json)
+            Do $$$AssertEquals(r.config, "hidden", "the configuration is hidden: [" _ pc _ "]")
+            Do $$$AssertEquals(r.provider, "hidden", "and its provider")
+            Do $$$AssertEquals(r.model, "not readable", "and its model is not read")
+        }
+    }
+    Set r = $CLASSMETHOD(guide, "Runs", {"model": "model-item", "providerConfig": ("sk-" _ "proj-PLNTCFG"), "agentClass": ""}, "", "AI.LLM.Shutter", "model-instance", 0)
+    Do $$$AssertEquals(r.model, "model-item", "the item's own Model still shows")
+    Do $$$AssertEquals(r.config, "hidden", "beside a hidden configuration")
+    // The instance's configuration, from Shutter's record, is checked the same way.
+    Set r = $CLASSMETHOD(guide, "Runs", {"model": "", "providerConfig": "", "agentClass": ""}, "", "sk-" _ "proj-PLNTINST", "model-instance", 0)
+    Do $$$AssertNotTrue(r.%ToJSON() [ "PLNTINST", "the instance's configuration too: " _ r.%ToJSON())
+    Do $$$AssertEquals(r.config, "hidden", "hidden")
+}
+
+/// The Mode line shows only a mode there is: auto, live, record or replay as set, and live, record or replay in effect;
+/// anything else, which the production class or the API can save, reads "not valid".
+Method TestModeIsOneOfItsValues()
+{
+    Set guide = "Shutter.Portal.Guide"
+    For v = "live", "record", "replay" {
+        Do $$$AssertEquals($CLASSMETHOD(guide, "KnownMode", v), v, "in effect: " _ v)
+        Do $$$AssertEquals($CLASSMETHOD(guide, "KnownMode", v, 1), v, "as set: " _ v)
+    }
+    Do $$$AssertEquals($CLASSMETHOD(guide, "KnownMode", "auto", 1), "auto", "auto as set")
+    Do $$$AssertEquals($CLASSMETHOD(guide, "KnownMode", "auto"), "not valid", "never in effect")
+    For v = "sk-" _ "ant-plntmode8", "bogus", "", "live ", "<b>live</b>" {
+        Do $$$AssertEquals($CLASSMETHOD(guide, "KnownMode", v), "not valid", "not a mode: [" _ v _ "]")
+        Do $$$AssertEquals($CLASSMETHOD(guide, "KnownMode", v, 1), "not valid", "nor as set: [" _ v _ "]")
+    }
+    Set f = ..Facts()
+    Set f.items = {"production": "Shutter.Production", "readable": 1, "operations": [],
+        "agents": [{"name": "Odd One", "enabled": 1, "pool": 1, "model": "model-a", "modelFrom": "from the item's Model setting", "config": "", "provider": "", "mode": "not valid", "modeSetting": "not valid", "turns": 8, "budget": 120000, "timeout": 120, "agentClass": "", "lastAt": ""}]}
+    Set h = ##class(Shutter.Portal.Guide).Html(f, "/csp/healthshare/shutter/")
+    Do $$$AssertTrue(h [ "<dt>Mode</dt><dd>not valid<span>set on the item, not one of auto, live, record or replay</span></dd>", "an invalid mode says so: " _ $EXTRACT(h, $FIND(h, "<dt>Mode") - 9, $FIND(h, "<dt>Mode") + 120))
+}
+
+/// An operation's listed setting shows only in its own form: a number for the timeouts, intervals and queue alerts, 0 or 1
+/// for AlertOnError, and the engine's grammar for ReplyCodeActions; anything else is left off, as a key typed into one
+/// would be.
+Method TestOperationSettingsKeepTheirForm()
+{
+    Set guide = "Shutter.Portal.Guide"
+    For pair = "FailureTimeout|-1", "FailureTimeout|15", "RetryInterval|5", "ConnectTimeout|2.5", "QueueWaitAlert|0", "FreshSeconds|3600", "ResponseTimeout|", "AlertOnError|1", "AlertOnError|0", "ReplyCodeActions|:?R=RF,:?E=S,:~=S,:?A=C,:*=S,:I?=W,:T?=C", "ReplyCodeActions|E=F", "ReplyCodeActions|E#6301=R,E*timed out=W", "ReplyCodeActions| :?E=S , :*=C" {
+        Do $$$AssertTrue($CLASSMETHOD(guide, "InForm", $PIECE(pair, "|", 1), $PIECE(pair, "|", 2)), "in its form: " _ pair)
+    }
+    For pair = "FailureTimeout|sk_live_x", "RetryInterval|abc", "ResponseTimeout|Basic cGxudHVzZXI6", "QueueCountAlert|glpat-x", "AlertOnError|AIzaSyD", "AlertOnError|2", "AlertOnError|yes", "InactivityTimeout|1e9", "ReplyCodeActions|sk_live_abc", "ReplyCodeActions|plain words", "ReplyCodeActions|E=", "ReplyCodeActions|=R" {
+        Do $$$AssertNotTrue($CLASSMETHOD(guide, "InForm", $PIECE(pair, "|", 1), $PIECE(pair, "|", 2)), "not in its form: " _ pair)
+    }
+    Kill s
+    Set s("Host", "FailureTimeout") = 15, s("Host", "RetryInterval") = "sk_" _ "live_PLNTOP", s("Host", "AlertOnError") = "AIza" _ "SyPLNTOP0123456789", s("Adapter", "ResponseTimeout") = "Basic cGxudHVzZXI6" _ "cGxudHBhc3M="
+    Set shown = $CLASSMETHOD(guide, "Shown", .s)
+    Do $$$AssertEquals(shown.%ToJSON(), "[{""name"":""FailureTimeout"",""value"":15}]", "only the one in its form: " _ shown.%ToJSON())
+}
+
+/// Odd values saved in a production (by its class or the API, past the portal's own checks) stay off the page: a key in
+/// ProviderConfig, Model or Mode, and key shapes in an operation's listed settings, a system default setting's too.
+Method TestOddValuesInAProductionStayHidden()
+{
+    Set guide = "Shutter.Portal.Guide"
+    Do ..RemoveProduction()
+    Set defs = $LISTBUILD($LISTBUILD("Odd Agent", "Shutter.Bridge.Operation.Agent", 1, 1, $LISTBUILD($LISTBUILD("Host", "AgentClass", "Shutter.Agent.Conformance"), $LISTBUILD("Host", "Mode", "sk-" _ "ant-PLNTMODE8"), $LISTBUILD("Host", "ProviderConfig", " sk-" _ "proj-PLNTCFGSPACE13"), $LISTBUILD("Host", "MaxIterations", "token=PLNTTURNS"))))
+    Set defs = defs _ $LISTBUILD($LISTBUILD("Odd Agent Two", "Shutter.Bridge.Operation.Agent", 1, 1, $LISTBUILD($LISTBUILD("Host", "Mode", "live"), $LISTBUILD("Host", "Model", "sk_" _ "live_PLNTMODEL"), $LISTBUILD("Host", "ProviderConfig", "glpat-" _ "PLNTGL"))))
+    Set defs = defs _ $LISTBUILD($LISTBUILD("Odd Out", "Shutter.Operation.Ward", 1, 1, $LISTBUILD($LISTBUILD("Host", "RetryInterval", "sk_" _ "live_PLNTRETRY"), $LISTBUILD("Host", "AlertOnError", "AIza" _ "SyPLNTALERT0123456789"), $LISTBUILD("Host", "QueueCountAlert", "glpat-" _ "PLNTQUEUE"), $LISTBUILD("Adapter", "ResponseTimeout", "Basic cGxudHVzZXI6" _ "cGxudHBhc3M="), $LISTBUILD("Host", "FailureTimeout", 9))))
+    Set sc = ..MakeProduction(defs, $LISTBUILD($LISTBUILD("Odd Out", "ReplyCodeActions", "sk_" _ "live_PLNTDEFAULT")))
+    Do $$$AssertStatusOK(sc, "the test production is saved")
+    Try {
+        Set items = $CLASSMETHOD(guide, "Items", ..#PRODUCTION), json = items.%ToJSON()
+        Do $$$AssertEquals(items.agents.%Size(), 2, "two agent items: " _ json)
+        Set h = $CLASSMETHOD(guide, "Html", {"user": "demo-trace", "namespace": "SHUTTER", "updated": "", "cases": [], "agents": [], "items": (items)}, "/csp/healthshare/shutter/")
+        For word = "PLNT", "plnt", "cGxud", "sk-", "sk_", "glpat", "AIza", "token=" {
+            Do $$$AssertNotTrue(json [ word, "never read out: " _ word)
+            Do $$$AssertNotTrue(h [ word, "never on the page: " _ word)
+        }
+        Set a = items.agents.%Get(0)
+        Do $$$AssertEquals(a.mode, "not valid", "a mode that isn't one")
+        Do $$$AssertEquals(a.modeSetting, "not valid", "as set")
+        Do $$$AssertEquals(a.config, "hidden", "a key in ProviderConfig")
+        Do $$$AssertEquals(a.turns, "not valid", "turns that aren't a number")
+        Set b = items.agents.%Get(1)
+        Do $$$AssertEquals(b.model, "hidden", "a key in Model")
+        Do $$$AssertEquals(b.config, "hidden", "and in its ProviderConfig")
+        Do $$$AssertEquals(b.mode, "live", "a mode that is one")
+        Set o = items.operations.%Get(0), shown = ""
+        Set it = o.settings.%GetIterator()
+        While it.%GetNext(, .one) { Set shown = shown _ one.name _ "=" _ one.value _ ";" }
+        Do $$$AssertTrue(shown [ "FailureTimeout=9;", "the setting in its form: " _ shown)
+        For name = "RetryInterval", "AlertOnError", "QueueCountAlert", "ResponseTimeout", "ReplyCodeActions" {
+            Do $$$AssertNotTrue(shown [ (name _ "="), "left off: " _ name)
+        }
+    } Catch ex {
+        Do $$$AssertStatusOK(ex.AsStatus(), "the reads")
+    }
+    Do ..RemoveProduction()
+}
+
+/// Saves the test production: defs as $LISTBUILD(name, class, pool size, enabled, $LISTBUILD(target, setting, value)...)
+/// per item, and defaults as $LISTBUILD(item, setting, value) per system default setting. With none, the production the
+/// item reads use.
+Method MakeProduction(defs As %List = "", defaults As %List = "") As %Status
 {
     Set sc = $$$OK
     Try {
         Set p = ##class(Ens.Config.Production).%New()
         Set p.Name = ..#PRODUCTION
-        Set defs = $LISTBUILD($LISTBUILD("Test Agent", "Shutter.Bridge.Operation.Agent", 2, 1, $LISTBUILD($LISTBUILD("Host", "AgentClass", "Shutter.Agent.Conformance"), $LISTBUILD("Host", "Mode", "replay"), $LISTBUILD("Host", "Model", "test-model-2"), $LISTBUILD("Host", "MaxIterations", 3))))
-        Set defs = defs _ $LISTBUILD($LISTBUILD("Test Out", "Shutter.Operation.Ward", 1, 0, $LISTBUILD($LISTBUILD("Adapter", "Credentials", "TestCreds"), $LISTBUILD("Adapter", "HTTPServer", "receiver.example"), $LISTBUILD("Host", "ReplyCodeActions", "secret://Shutter.Anthropic#key"), $LISTBUILD("Host", "FailureTimeout", 7))))
-        Set defs = defs _ $LISTBUILD($LISTBUILD("Test In", "Shutter.Service.API", 0, 1, ""))
+        If defs = "" {
+            Set defs = $LISTBUILD($LISTBUILD("Test Agent", "Shutter.Bridge.Operation.Agent", 2, 1, $LISTBUILD($LISTBUILD("Host", "AgentClass", "Shutter.Agent.Conformance"), $LISTBUILD("Host", "Mode", "replay"), $LISTBUILD("Host", "Model", "test-model-2"), $LISTBUILD("Host", "MaxIterations", 3))))
+            Set defs = defs _ $LISTBUILD($LISTBUILD("Test Out", "Shutter.Operation.Ward", 1, 0, $LISTBUILD($LISTBUILD("Adapter", "Credentials", "TestCreds"), $LISTBUILD("Adapter", "HTTPServer", "receiver.example"), $LISTBUILD("Host", "ReplyCodeActions", "secret://Shutter.Anthropic#key"), $LISTBUILD("Host", "FailureTimeout", 7))))
+            Set defs = defs _ $LISTBUILD($LISTBUILD("Test In", "Shutter.Service.API", 0, 1, ""))
+            // A system default PoolSize, which Ens.Director takes over the item's own.
+            If defaults = "" Set defaults = $LISTBUILD($LISTBUILD("Test Out", "PoolSize", 4))
+        }
         For d = 1:1:$LISTLENGTH(defs) {
             Set def = $LIST(defs, d)
             Set i = ##class(Ens.Config.Item).%New()
@@ -334,10 +463,10 @@ Method MakeProduction() As %Status
             Do p.Items.Insert(i)
         }
         Set sc = p.%Save()
-        // A system default PoolSize, which Ens.Director takes over the item's own.
-        If $SYSTEM.Status.IsOK(sc) {
-            Set ds = ##class(Ens.Config.DefaultSettings).%New()
-            Set ds.ProductionName = ..#PRODUCTION, ds.ItemName = "Test Out", ds.HostClassName = "*", ds.SettingName = "PoolSize", ds.SettingValue = 4
+        For d = 1:1:$LISTLENGTH(defaults) {
+            Quit:$SYSTEM.Status.IsError(sc)
+            Set def = $LIST(defaults, d), ds = ##class(Ens.Config.DefaultSettings).%New()
+            Set ds.ProductionName = ..#PRODUCTION, ds.ItemName = $LIST(def, 1), ds.HostClassName = "*", ds.SettingName = $LIST(def, 2), ds.SettingValue = $LIST(def, 3)
             Set sc = ds.%Save()
         }
     } Catch ex {
