@@ -22,6 +22,24 @@
 }
 
 /*
+ * The table's toolbar: the count sits on the controls' baseline (the selects are 30 px high with a 21 px line of text
+ * at their foot). On a phone each select takes a share of the width, two to a line, and the chips wrap under their
+ * label.
+ */
+.eval-filter-count {
+  padding-bottom: 4px;
+}
+@media (max-width: 35.99em) {
+  .eval-filters .eval-filter {
+    flex: 1 1 10rem;
+  }
+  .eval-filters .eval-filter-count {
+    flex: 1 1 100%;
+    padding-bottom: 0;
+  }
+}
+
+/*
  * On a phone each pass is a compact card (stack-cards): the pass and its title on the first line, then each value
  * after its column's name on the same line, the expected outcome's name shown too.
  */
