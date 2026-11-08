@@ -3,7 +3,7 @@
 is loaded over it from the same folder, as a site does after pulling the repository. Nothing of the site's is lost and the
 uninstall (the module's Clean phase) never runs.
 
-    python3 tests/e2e/upgrade_check.py --image IMAGE --ctr NAME --old DIR [--port N] [--shape site|demo] [--keep]
+    python3 tests/e2e/upgrade_check.py --image IMAGE --ctr NAME --old DIR [--port N] [--shape site|demo] [--as-version V] [--keep]
 
 DIR is the earlier release's tree (git archive v1.0.0, say). The shapes:
 
@@ -36,6 +36,7 @@ ap.add_argument("--ctr", required=True)
 ap.add_argument("--old", required=True)
 ap.add_argument("--port", type=int, default=0)
 ap.add_argument("--shape", choices=["site", "demo"], default="site")
+ap.add_argument("--as-version", default="", help="the version this tree's module.xml is given in the container, as a release would bump it")
 ap.add_argument("--keep", action="store_true")
 args = ap.parse_args()
 CTR = args.ctr
@@ -142,6 +143,9 @@ def the_upgrade(ns, extra, old_version):
     step(f"The upgrade: this tree in the same folder, then zpm load{extra} -v over {old_version}")
     put_tree(ROOT)
     new_version = re.search(r"<Version>([^<]+)</Version>", open(os.path.join(ROOT, "module.xml")).read()).group(1)
+    if args.as_version:
+        subprocess.run(["docker", "exec", CTR, "sed", "-i", f"0,/<Version>[^<]*<\\/Version>/s//<Version>{args.as_version}<\\/Version>/", f"{PKG}/module.xml"], check=True)
+        new_version = args.as_version
     out = load(ns, extra)
     removed = [x for x in out.splitlines() if x.strip().startswith("removed:") or x.strip().startswith("kept:")]
     check("the uninstall did not run: no line of what it removed", not removed, removed[:20])
