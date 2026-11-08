@@ -42,12 +42,16 @@ def methods_of(source):
 
 
 def guard_of(name, methods, depth=0):
-    """(resource, change) of a route method's Allow(...) call, following one delegation (IncidentApprove -> IncidentDecide)."""
+    """(resource, change) of a route method's Allow(...) call, following one delegation (IncidentApprove -> IncidentDecide).
+    Allow() checks its default, Shutter_Operate; Allow("") checks only that someone is signed in, so its resource is None."""
     body = methods.get(name, "")
     m = ALLOW.search(body)
     if m:
-        args = [a.strip().strip('"') for a in m.group(1).split(",")] if m.group(1).strip() else []
-        resource = args[0] if args and args[0] else "Shutter_Operate"
+        args = [a.strip() for a in m.group(1).split(",")] if m.group(1).strip() else []
+        if not args or not args[0]:
+            resource = "Shutter_Operate"
+        else:
+            resource = args[0].strip('"') or None
         change = len(args) > 1 and args[1] == "1"
         return resource, change
     if depth == 0:
@@ -170,7 +174,10 @@ def main():
                 bad.append(f"{where}: x-writes true but Dispatch.{call} calls no Allow")
         else:
             want_resource, want_change = guard
-            if want_resource not in resources:
+            if want_resource is None:
+                if resources:
+                    bad.append(f"{where}: x-required-resource {sorted(resources)} but Dispatch.{call} needs only a sign-in")
+            elif want_resource not in resources:
                 bad.append(f"{where}: x-required-resource {sorted(resources)} but Dispatch.{call} needs {want_resource}")
             if bool(op.get("x-writes")) != want_change:
                 bad.append(f"{where}: x-writes {op.get('x-writes')} but Dispatch.{call} is {'a change' if want_change else 'a read'}")
