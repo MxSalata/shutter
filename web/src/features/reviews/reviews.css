@@ -60,3 +60,111 @@
 .latest-review {
   height: 100%;
 }
+
+/*
+ * The review's summary, one line at a laptop width: the findings count, the bar split by severity with its legend, and
+ * the window's two counts on the right. The tone sits in the bar's segments and the legend's dots (the filled tokens,
+ * as a tile's edge); every number stays in the text colour. On a phone the three parts stack.
+ */
+.review-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--mantine-spacing-xs) var(--mantine-spacing-lg);
+}
+.review-summary-count {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  margin: 0;
+  flex: 0 0 auto;
+}
+.review-summary-word {
+  font-size: var(--mantine-font-size-sm);
+  color: var(--mantine-color-dimmed);
+}
+.review-summary-tiers {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--mantine-spacing-xs) var(--mantine-spacing-sm);
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+.severity-bar {
+  display: flex;
+  gap: 2px;
+  flex: 1 1 8rem;
+  max-width: 16rem;
+  height: 10px;
+  border-radius: 5px;
+  overflow: hidden;
+}
+.severity-bar > span {
+  flex: 0 1 0;
+  min-width: 6px;
+  background: var(--segment, var(--shutter-muted-soft));
+}
+.severity-legend,
+.review-summary-window-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px var(--mantine-spacing-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--mantine-font-size-sm);
+  line-height: var(--mantine-line-height-sm);
+}
+.severity-legend > li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.severity-legend > li[data-zero] {
+  color: var(--mantine-color-dimmed);
+}
+.severity-dot {
+  display: inline-block;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--segment, currentColor);
+}
+.severity-legend > li[data-zero] > .severity-dot {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--segment, currentColor);
+}
+.review-summary-window {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  margin-left: auto;
+}
+.review-summary-window-counts > li {
+  white-space: nowrap;
+}
+.review-summary-small {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+:root[data-shutter-contrast='high'] :is(.severity-bar > span, .severity-dot) {
+  --segment: currentColor;
+}
+@media (forced-colors: active) {
+  .severity-bar > span,
+  .severity-dot {
+    forced-color-adjust: none;
+  }
+}
+@media (max-width: 47.99em) {
+  .review-summary-window {
+    margin-left: 0;
+  }
+}

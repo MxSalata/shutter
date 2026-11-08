@@ -1,10 +1,9 @@
 import { Alert, Anchor, Container, Loader, Stack, Text } from '@mantine/core';
 import { IconClipboardSearch, IconEye } from '@tabler/icons-react';
-import type { ReactNode } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { DEMO_READ_ONLY, readOnlyDemo } from '@/api/can';
 import { isReviewRunning, useCan, useReview } from '@/api/hooks';
-import type { ReviewDetail, Severity } from '@/api/types';
+import type { ReviewDetail } from '@/api/types';
 import { ApiSource } from '@/components/ApiSource';
 import { Digest } from '@/components/Digest';
 import { ErrorAlert } from '@/components/ErrorAlert';
@@ -12,77 +11,17 @@ import { KeyValueList } from '@/components/KeyValueList';
 import { PageHeader } from '@/components/PageHeader';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { NotYet, Section } from '@/components/Section';
-import { StatTile } from '@/components/StatTile';
 import { StatusNotice } from '@/components/StatusBadge';
-import { SummaryBand } from '@/components/SummaryBand';
 import { TechDetail } from '@/components/TechDetail';
 import { Timestamp } from '@/components/Timestamp';
 import { isApiError } from '@/lib/errors';
 import { formatInt, humanize } from '@/lib/format';
-import { SEVERITY_STATUS } from '@/lib/status';
 import { AgentBlock } from './AgentBlock';
 import { useAnnotationDialogs } from './AnnotationDialogs';
-import { ReviewStateBadge, SeverityBadge } from './badges';
+import { ReviewStateBadge } from './badges';
 import { FindingCards } from './FindingCards';
-import { agentLeads, hl7Note, orderedFindings, rankedByAgent, READ_ONLY, SEVERITIES } from './review';
-
-/** "0 high · 1 marked": the tiers with no findings, which get no tile of their own (F19), and the findings marked. */
-function findingsCaption(r: ReviewDetail): string {
-  const s = r.summary;
-  if (!s.findings) return 'No findings';
-  const zero = (['high', 'medium', 'low'] as Severity[])
-    .filter((sev) => (s.bySeverity?.[sev] ?? 0) === 0)
-    .map((sev) => `0 ${sev}`);
-  return [...zero, ...(s.intended ? [`${formatInt(s.intended)} marked`] : [])].join(' · ');
-}
-
-/**
- * The review's counts as a row of tiles: one for each severity that has findings, the findings (with the tiers that
- * have none and the marks in its caption), the errors logged and the messages in error. Never a tile for a zero.
- */
-function Counts({ r }: { r: ReviewDetail }) {
-  const s = r.summary;
-  if (!s.bySeverity)
-    return (
-      <section aria-label="Summary">
-        {r.state === 'failed' ? (
-          <Text size="sm">There is no result because the review failed{r.error ? `: ${r.error}` : '.'}</Text>
-        ) : (
-          <NotYet>Not yet: the sweep is still reading.</NotYet>
-        )}
-      </section>
-    );
-  const tiers = SEVERITIES.filter((sev) => (s.bySeverity?.[sev] ?? 0) > 0);
-  const tiles: ReactNode[] = [
-    ...tiers.map((sev) => (
-      <StatTile
-        key={sev}
-        label="Severity"
-        figure={formatInt(s.bySeverity![sev])}
-        tone={SEVERITY_STATUS[sev].tone}
-        status={<SeverityBadge severity={sev} />}
-      />
-    )),
-    <StatTile key="findings" label="Findings" figure={formatInt(s.findings)} caption={findingsCaption(r)} />,
-    <StatTile
-      key="errors"
-      label="Errors logged"
-      figure={formatInt(s.errorsInWindow)}
-      caption="in the window"
-    />,
-    <StatTile
-      key="messages"
-      label="Messages in error"
-      figure={formatInt(s.messageErrorsInWindow)}
-      caption="in the window"
-    />,
-  ];
-  return (
-    <SummaryBand title="Summary" cols={{ base: 2, sm: 3, lg: Math.min(tiles.length, 5) }}>
-      {tiles}
-    </SummaryBand>
-  );
-}
+import { agentLeads, hl7Note, orderedFindings, rankedByAgent, READ_ONLY } from './review';
+import { ReviewSummary } from './ReviewSummary';
 
 function Review({ r }: { r: ReviewDetail }) {
   // Annotating a finding changes what the site records about its production: the configure resource's
@@ -134,7 +73,7 @@ function Review({ r }: { r: ReviewDetail }) {
             <Text size="sm">{r.error || 'The sweep failed.'}</Text>
           </Alert>
         ) : null}
-        <Counts r={r} />
+        <ReviewSummary r={r} />
         {agentFirst ? agent : null}
         <Section
           id="findings"
