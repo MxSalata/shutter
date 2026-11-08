@@ -1011,7 +1011,7 @@ function Profile({
             <Stack gap="xs">
               <Text size="md" data-testid={reading && !dirty ? 'demo-read-only' : undefined}>
                 {demoPolicy
-                  ? "The release policy is the demo's own choice, so its scenarios show a resend the policy releases at tiers 1 and 2; the shipped default asks a person at every tier. "
+                  ? "The demo's own release policy: tiers 1 and 2 release by policy, where the shipped default asks a person at every tier. "
                   : "They are defaults, not this site's choices. "}
                 {editable
                   ? 'Check the questions below, then confirm or change them and save.'
