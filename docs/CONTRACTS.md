@@ -529,7 +529,12 @@ The gate's ordering check blocks with `FURTHER_MOVEMENT`, naming both visits; `P
 blocks for a person at once, with no wait. Any other ADT message for the patient, such as an out-patient A04 or an emergency department's A03, passes
 (`NO_FURTHER_MOVEMENT`) and goes on a resend's plan as a precondition line and in the approval task. The gate reads the snapshot
 at the proposal and reads again at dispatch, and the connector reads once more at the moment of the write, answering `refused`
-with reason `further_movement`. An admission the receiver answers 404 for isn't released by the site's policy (a 404 doesn't
+with reason `further_movement`. Where `other_visit` rows show, the dispatch gate and the connector also compare the rows they read
+with the snapshot's `shows`, by control id and visit: an `other_visit` row the snapshot didn't show reached the engine after the plan
+was made, so no approval of that plan covers it. The gate answers `unknown` with `FURTHER_MOVEMENT_NEW`, naming the new visit and the
+case's own; the case workflow collects the evidence again as for stale evidence, the fresh snapshot shows the row, its material
+digest changes and the approval is revoked, and the case is planned again (a second approval where the policy asks for one). The
+connector refuses such a row too (`further_movement`). An admission the receiver answers 404 for isn't released by the site's policy (a 404 doesn't
 prove there's no record entered by hand under another number): it waits for a person, and the plan says to check the system's own
 screen. An incident's release of such an admission keeps its own path. A site chooses with `further_messages` (6.4). **What this
 can't see:** a change made by hand at the receiver; a message on a route Shutter's index doesn't watch, once the index has passed it;

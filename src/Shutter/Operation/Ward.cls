@@ -46,6 +46,7 @@ Method OnWardOperation(request As Shutter.Msg.WardOperation, Output response As 
         If $ISOBJECT(guardCase) {
             Set further = ##class(Shutter.Util.FurtherMessages).Find(guardCase)
             Set word = ##class(Shutter.Util.FurtherMessages).Describe(guardCase, further)
+            If word = "" Set word = ##class(Shutter.Util.FurtherNew).Describe(guardCase, further, ##class(Shutter.Util.FurtherNew).Prior(guardCase))
             If (word '= "") || ##class(Shutter.Util.FurtherMessages).Unreadable(further) || (##class(Shutter.Util.FurtherMessages).Unread(further) '= "") {
                 Set response.Outcome = "refused", response.ReasonCode = "further_movement"
                 Set response.Error = "Not sent: " _ $SELECT(word '= "": word, ##class(Shutter.Util.FurtherMessages).Unreadable(further): "the patient identifier could not be read", 1: "further messages could not all be read: " _ ##class(Shutter.Util.FurtherMessages).Unread(further))

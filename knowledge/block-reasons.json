@@ -796,6 +796,15 @@
       "owner": "Integration team",
       "reevaluate_when": "Nothing: a pass",
       "text": "There is no API at this receiver: the never-opened rule before the send and the declared acknowledgement after it take the place of the version, the receipt and the dry run."
+    },
+    {
+      "code": "FURTHER_MOVEMENT_NEW",
+      "title": "Another visit moved after the plan was made",
+      "prerequisite": "Every movement on another visit for the patient that is read at the moment of the write was on the plan, where the site profile shows such a movement",
+      "next_action": "Nothing to do yet. Shutter reads the evidence again and makes the plan afresh with the new visit shown, and an approval given before is void, so the approver reads the new visit and decides again. A case that stays blocked with this reason could not complete its refresh: read the new visit the check names and decide.",
+      "owner": "Approver",
+      "reevaluate_when": "The evidence has been read again, or a person has read the new visit",
+      "text": "This site lets a movement on another visit through, shown on the plan, so the approver sees it. A new admission or ward stay for the same patient under another visit number reached the engine after the plan was made, so the plan did not show it and an approval of that plan does not cover it. Nothing is sent on that approval."
     }
   ]
 }
