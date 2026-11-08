@@ -1,4 +1,4 @@
-import { startAddress } from '@/env/mode';
+import { normalisedSearch } from '@/env/mode';
 
 /**
  * The tab's memory of the trial, in `sessionStorage` (one tab, gone when it closes; never API data):
@@ -58,7 +58,8 @@ export function compactBanner(): void {
  * `public/color-scheme.js` has already done so), the tab is marked as having visited it, the banner takes its form,
  * the tab's title says "(trial)", and `?trial=tour`, `?trial=engineer` or `?trial=judge` becomes `?trial`, so a reload
  * does not open the tour's welcome again or take the judges' path again (React Router's own history state is kept).
- * The judges' path (`?trial=judge`) also opens on Scenarios in Rules only mode, whatever page the address named.
+ * The page the judges' path opens on (Scenarios in Rules only mode) is set earlier, when env/mode.ts loads, since the
+ * router has read the address by now; the address keeps it.
  */
 export function enterTrialPage(): void {
   document.documentElement.dataset.shutterEnv = 'trial';
@@ -66,10 +67,13 @@ export function enterTrialPage(): void {
   write(TRIAL_VISITED_KEY, '1');
   setForm(before ? 'compact' : 'full');
   document.title = 'Shutter (trial)';
-  // The judges' path opens on Scenarios in Rules only mode, before the router reads the address
-  const { search, hash } = startAddress(window.location.search, window.location.hash);
-  if (search !== window.location.search || hash !== window.location.hash)
-    window.history.replaceState(window.history.state, '', `${window.location.pathname}${search}${hash}`);
+  const search = normalisedSearch(window.location.search);
+  if (search !== window.location.search)
+    window.history.replaceState(
+      window.history.state,
+      '',
+      `${window.location.pathname}${search}${window.location.hash}`,
+    );
 }
 
 /** Whether this tab came from the trial since the live page last said so, and forgets it once asked. */

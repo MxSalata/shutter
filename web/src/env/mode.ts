@@ -108,13 +108,14 @@ export function normalisedSearch(search: string): string {
 /** Where the judges' path (`?trial=judge`) opens: Scenarios in Rules only mode, whatever page the address named. */
 export const JUDGE_PATH_HASH = '#/scenarios?mode=rules';
 
-// The judges' path opens on its page here, at load: the router is made when routes.tsx loads, after this module and
-// before the start (trial/visit.ts, enterTrialPage) runs, and reads the page from the address once, then
+// The judges' path opens on its page here, at load, and only here: the router is made when routes.tsx loads, after this
+// module and before the start (trial/visit.ts, enterTrialPage) runs, and reads the page from the address once, then
+// keeps it, so a page set any later would not be the one shown. The start then only normalises the query.
 if (ENV.judgePath && typeof window !== 'undefined' && window.location.hash !== JUDGE_PATH_HASH)
   window.history.replaceState(
     window.history.state,
     '',
-    `${window.location.pathname}${window.location.search}${JUDGE_PATH_HASH}`,
+    `${window.location.pathname}${window.location.search}${startAddress(window.location.search, window.location.hash).hash}`,
   );
 
 /**

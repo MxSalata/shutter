@@ -30,11 +30,16 @@ describe("the tab's memory of the trial", () => {
     expect(window.history.state).toEqual({ idx: 3 });
   });
 
-  it("opens the judges' path on Scenarios in Rules only mode, and leaves ?trial so a reload does not take it again", () => {
-    window.history.replaceState({ idx: 0 }, '', '/shutter/?trial=judge#/home');
+  it("leaves ?trial after the judges' path so a reload does not take it again, and the page env/mode.ts opened", () => {
+    // env/mode.ts has already set the page at load, before the router read it (mode.test.ts, startAddress)
+    window.history.replaceState({ idx: 0 }, '', '/shutter/?trial=judge#/scenarios?mode=rules');
     enterTrialPage();
     expect(window.location.search).toBe('?trial');
     expect(window.location.hash).toBe('#/scenarios?mode=rules');
     expect(window.history.state).toEqual({ idx: 0 });
+    // The start sets no page of its own: the address is rewritten once, at load
+    window.history.replaceState({ idx: 1 }, '', '/shutter/?trial=judge#/home');
+    enterTrialPage();
+    expect(window.location.hash).toBe('#/home');
   });
 });
