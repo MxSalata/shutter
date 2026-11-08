@@ -1294,8 +1294,9 @@ ClassMethod ApplyDefaultSettings(production As %String = "Shutter.Production") A
 /// never stopped here.
 /// The demo's release policy (v1.1.0): a demo install (demo 1, or ^Shutter.Config("demo") when -1) whose profile is still the seed's stores
 /// Shutter.Store.SiteProfile.DemoPolicy() as the policy, with the seed's path and " (demo)" as the source, which the seed
-/// leaves alone on a reinstall and the Site profile page labels as the demo's answers. A site install (demo 0) keeps the
-/// shipped table, approval everywhere. A profile a person saved is never touched. Returns a status; nothing changes when
+/// leaves alone on a reinstall and the Site profile page labels as the demo's answers, and keeps the demo's stop for another
+/// visit's in-patient movement (further_messages.in_patient_movement: stop; shipped as show since v1.47), on the live
+/// hospital's profile too. A site install (demo 0) keeps the shipped table, approval everywhere, and the shipped show. A profile a person saved is never touched. Returns a status; nothing changes when
 /// the policy already reads so.
 ClassMethod DemoProfilePolicy(seedPath As %String, demo As %Integer = -1) As %Status
 {
@@ -1303,14 +1304,22 @@ ClassMethod DemoProfilePolicy(seedPath As %String, demo As %Integer = -1) As %St
     Quit:'demo $$$OK
     Set row = ##class(Shutter.Store.SiteProfile).Row()
     Quit:'$ISOBJECT(row) $$$OK
-    Set demoSource = seedPath _ " (demo)"
-    Quit:((row.Source '= seedPath) && (row.Source '= demoSource)) $$$OK
+    Set demoSource = seedPath _ " (demo)", liveDemo = demoSource _ " (live hospital)"
+    Quit:((row.Source '= seedPath) && (row.Source '= demoSource) && (row.Source '= liveDemo)) $$$OK
     Set p = ##class(Shutter.Util.Json).Parse(row.Json, .sc)
     Quit:('$ISOBJECT(p) || $$$ISERR(sc)) $$$OK
     Set want = ##class(Shutter.Store.SiteProfile).DemoPolicy()
-    Quit:(($ISOBJECT(p.%Get("policy")) && (p.%Get("policy").%ToJSON() = want.%ToJSON())) && (row.Source = demoSource)) $$$OK
-    Do p.%Set("policy", want)
-    Quit ##class(Shutter.Store.SiteProfile).Store(p.%ToJSON(), demoSource, "install", "", .version)
+    // The live hospital's profile (LiveProfilePolicy) keeps its own policy; only the demo's stop is added to it.
+    Set isLive = (row.Source = liveDemo)
+    Set policyOk = isLive || ($ISOBJECT(p.%Get("policy")) && (p.%Get("policy").%ToJSON() = want.%ToJSON()))
+    // The demo keeps the stop for another visit's in-patient movement that it had before v1.47 relaxed the shipped default.
+    Set fm = p.%Get("further_messages")
+    Set stopOk = $ISOBJECT(fm) && (##class(Shutter.Util.Json).Str(fm, "in_patient_movement") = "stop")
+    Quit:(policyOk && stopOk && (row.Source '= seedPath)) $$$OK
+    If 'isLive Do p.%Set("policy", want)
+    If '$ISOBJECT(fm) || fm.%IsA("%Library.DynamicArray") Set fm = {} Do p.%Set("further_messages", fm)
+    Set fm."in_patient_movement" = "stop"
+    Quit ##class(Shutter.Store.SiteProfile).Store(p.%ToJSON(), $SELECT(isLive: liveDemo, 1: demoSource), "install", "", .version)
 }
 
 /// The live hospital's policy (CONTRACTS 4.4, v1.34; decided on 1 Nov 2026, "single cases at tier 2 wait for an

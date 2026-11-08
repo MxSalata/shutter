@@ -522,6 +522,8 @@ visit_number, event_time, sent_at, control_id, location, where}`. A row stops a 
 visit (`why: other_visit`: an A01, A02, A03 or cancel of any patient class but E or O, or an A04 or A05 of class I, unless that A05 was on file before the case's message, which is a date on a waiting list and shows), a change to the record (`record_changed`:
 A06, A07, A23, A29, A37, A44, A45, A47, A49, A50, A51), a merge naming the patient on either side, a cancel of this visit the receiver
 did not apply (`cancel`), or for an admission outside a chain a discharge of this visit the receiver did not apply (`discharge`).
+An `other_visit` row stops only where the site profile says `further_messages.in_patient_movement: stop`; the shipped profile says
+`show` (v1.47), so there it goes on the plan as a shown row and stops nothing, and the demo's profile keeps `stop` (6.4).
 The gate's ordering check blocks with `FURTHER_MOVEMENT`, naming both visits; `PATIENT_UNREADABLE` when the case has no identifier;
 `FURTHER_NOT_READ` when a namespace's read failed or ran out of its time with headers left. These come before `NEWER_MESSAGE_PENDING` in the checks, and the case
 blocks for a person at once, with no wait. Any other ADT message for the patient, such as an out-patient A04 or an emergency department's A03, passes
@@ -678,7 +680,7 @@ reads it through `Shutter.Store.SiteProfile`.
   "incident": {"threshold": 5, "window_minutes": 10, "quiet_seconds": 60},
   "model_content": {"free_text": false},
   "feed": {"time_zone": "Europe/London", "prevent_failures": false, "source_skew_seconds": 300},
-  "further_messages": {"in_patient_movement": "stop", "admission_not_found": "person", "scan_seconds": 30}
+  "further_messages": {"in_patient_movement": "show", "admission_not_found": "person", "scan_seconds": 30}
 }
 ```
 
@@ -689,7 +691,9 @@ seed's stores `Shutter.Store.SiteProfile.DemoPolicy()` (tiers 1 and 2 single and
 `approval`, tier 3 `approval` and `per_chain`, interleaved `board`) with the seed's path and `" (demo)"` as the profile's
 source (`Shutter.Setup.DemoProfilePolicy`); the live hospital's rule (4.4) then marks it `" (demo) (live hospital)"` and makes
 tier 2 single an approval. The Site profile page labels such a profile "Demo's answers" instead of "Shipped answers". A
-profile a person saved is never touched, and a reinstall leaves both marked sources alone.
+profile a person saved is never touched, and a reinstall leaves both marked sources alone, but for one setting: the demo
+keeps `further_messages.in_patient_movement: stop`, which a demo install writes into its profile, the live hospital's included
+(v1.47), so S27, S31 and S32 stop as they did while the shipped profile says `show`.
 
 (`teams` and `mail`, optional, are in section 10. The shipped seed profile has both: the integration and PAS teams, and
 `mail.allowed_domains` set to their mailboxes' domain, `example.nhs.uk`.)
@@ -751,8 +755,10 @@ profile a person saved is never touched, and a reinstall leaves both marked sour
   movement on another visit through with a line on the plan; a cancel, merge or discharge the receiver didn't apply on this visit
   stops either way. `admission_not_found`: `person`, or `policy` to let the tier's own policy release a lost admission on a 404.
   `scan_seconds`: how long, from 1 to 600 seconds, one read of a namespace's messages may take at a write; a read that runs out with
-  headers left blocks the write (`FURTHER_NOT_READ`). Absent means `stop`, `person` and 30, which are the safe defaults, and the shipped
-  profile says the same.
+  headers left blocks the write (`FURTHER_NOT_READ`). Absent means `show`, `person` and 30, and the shipped profile says the same
+  (`show` since v1.47; it was `stop`). A site that wants another visit's movement to stop the write for a person sets
+  `in_patient_movement` to `stop` in the profile's JSON (`PUT /api/shutter/site-profile`; the Site profile page has no question for it
+  and keeps what is stored); the demo's profile says `stop`.
 - `feed.prove_origin`: `true` or `false`, `true` when absent and in the shipped profile: an automatic release needs the case's source proved (section 11). A site whose forwarder reports from another instance turns it off.
 - `feed.prevent_failures` (v1.34; "prevent failures", decided on 1 Nov 2026, section 12): `true` or `false`, `false` when
   absent and in the shipped profile. On, the feed holds a message whose HL7 schema category is not loaded here as a case of

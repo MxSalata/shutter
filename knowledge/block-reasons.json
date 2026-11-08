@@ -611,7 +611,7 @@
     {
       "code": "FURTHER_MOVEMENT",
       "title": "Something else has happened to this patient",
-      "prerequisite": "No further in-patient movement for the patient on another visit, and no cancel, merge or change to the record the receiver has not applied",
+      "prerequisite": "No further in-patient movement for the patient on another visit where the site profile stops on one, and no cancel, merge or change to the record the receiver has not applied",
       "next_action": "Read both visits named here, in the source system and on the receiver's own screen, and put the patient right by hand or close the case. Nothing is sent, and nothing will be until a person decides.",
       "owner": "Operator",
       "reevaluate_when": "A person has read both and closed or reinvestigated the case",
@@ -620,7 +620,7 @@
     {
       "code": "NO_FURTHER_MOVEMENT",
       "title": "Nothing else stops this for the patient",
-      "prerequisite": "No further in-patient movement for the patient on another visit",
+      "prerequisite": "No further in-patient movement for the patient on another visit where the site profile stops on one",
       "next_action": "None: a pass. Anything else on file for the patient, such as an out-patient attendance, is on the plan.",
       "owner": "Operator",
       "reevaluate_when": "Not applicable",

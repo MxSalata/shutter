@@ -120,7 +120,7 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
         } ElseIf ##class(Shutter.Util.FurtherMessages).Unread(further) '= "" {
             Do ..Check(checks, "ordering", "block", "FURTHER_NOT_READ", "Further messages for this patient could not all be read: " _ ##class(Shutter.Util.FurtherMessages).Unread(further) _ ". Nothing is sent until they can be, or a person decides")
         } ElseIf $ISOBJECT(further) {
-            Do ..Check(checks, "ordering", "pass", "NO_FURTHER_MOVEMENT", "No further in-patient movement for this patient" _ $SELECT(##class(Shutter.Util.FurtherMessages).Count(further, "shows") > 0: "; " _ ##class(Shutter.Util.FurtherMessages).Count(further, "shows") _ " other message(s) on file, shown on the plan", 1: ""))
+            Do ..Check(checks, "ordering", "pass", "NO_FURTHER_MOVEMENT", $SELECT(##class(Shutter.Util.FurtherMessages).Count(further, "shows") > 0: "No further message stops this write for this patient; " _ ##class(Shutter.Util.FurtherMessages).Count(further, "shows") _ " other message(s) on file, shown on the plan", 1: "No further in-patient movement for this patient"))
         }
         // The occupied bed (v1.28): a write into a bed another encounter holds waits for them to leave, or never goes.
         Set bedConflict = $SELECT($ISOBJECT(conds): ##class(Shutter.Util.Json).Str(conds, "bed_conflict", "none"), 1: "none")

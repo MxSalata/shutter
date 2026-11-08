@@ -87,6 +87,9 @@
   "feed": {
     "time_zone": "Europe/London"
   },
+  "further_messages": {
+    "in_patient_movement": "show"
+  },
   "mail": {
     "allowed_domains": [
       "example.nhs.uk"

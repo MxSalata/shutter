@@ -100,6 +100,8 @@ Method TestAnIndexedMovementIsReadWithItsClass()
     Set case = ##class(Shutter.Store.Case).%New()
     Set case.CaseId = "UT-FURTHER-CLASS", case.EncounterId = "ENC-UT-CLASS", case.Event = "transfer", case.PatientId = "MRN-UT-CLASS", case.PatientIdAuthority = "HOSP"
     Set case.EventTime = "2026-10-15T08:20:00Z", case.OperationKey = "k-class", case.SourceMessageId = "M-OWN-CLASS", case.OpenedAt = "2026-10-26T10:59:31Z"
+    // Find reads the stored profile: this test is about the class, so the site's choice is pinned to stop and put back.
+    Set saved = ..PinMovement("stop")
     For class = "E", "I" {
         Set body = ##class(EnsLib.HL7.Message).ImportFromString("MSH|^~\&|PAS|HOSP|DOWNSTREAM|HOSP|20261015093000||ADT^A03^ADT_A03|M-UT-CLASS|P|2.5.1" _ $CHAR(13) _ "EVN|A03|20261015093000" _ $CHAR(13) _ "PID|1||MRN-UT-CLASS^^^HOSP^MR" _ $CHAR(13) _ "PV1|1|" _ class _ "|ED^^^HOSP||||||||||||||||ENC-UT-OTHER", .sc)
         Do $$$AssertStatusOK(sc, "the message reads")
@@ -114,6 +116,33 @@ Method TestAnIndexedMovementIsReadWithItsClass()
         Do ##class(Shutter.Index.Message).%DeleteId(row.%Id())
         Do ##class(EnsLib.HL7.Message).%DeleteId(body.%Id())
     }
+    Do ..UnpinMovement(saved)
+}
+
+/// Stores the site profile with further_messages.in_patient_movement set to the given word, keeping its version, and
+/// returns what to put back: the stored row's text, or "" when there was no row.
+Method PinMovement(word As %String) As %String
+{
+    Set row = ##class(Shutter.Store.SiteProfile).Row()
+    Set saved = $SELECT($ISOBJECT(row): row.Json, 1: "")
+    Set p = ##class(Shutter.Store.SiteProfile).Current()
+    Set version = +p.version
+    Do p.%Remove("version")
+    If '$ISOBJECT(p.%Get("further_messages")) Set p."further_messages" = {}
+    Set p."further_messages"."in_patient_movement" = word
+    If '$ISOBJECT(row) Set row = ##class(Shutter.Store.SiteProfile).%New(), row.Version = version
+    Set row.Json = p.%ToJSON()
+    Do $$$AssertStatusOK(row.%Save(), "the site profile says " _ word _ " for the test")
+    Quit saved
+}
+
+Method UnpinMovement(saved As %String)
+{
+    Set row = ##class(Shutter.Store.SiteProfile).Row()
+    Quit:'$ISOBJECT(row)
+    If saved = "" Do ##class(Shutter.Store.SiteProfile).%DeleteId(row.%Id()) Quit
+    Set row.Json = saved
+    Do row.%Save()
 }
 
 /// What is the case's own, or older than it on both counts, doesn't count.

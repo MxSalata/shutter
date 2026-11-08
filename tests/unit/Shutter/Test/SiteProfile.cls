@@ -29,18 +29,41 @@ Method TestMail()
     Do ..RunRows("mail")
 }
 
-/// A new strictness a site may loosen: both default to the safe stop, and a stored profile can say otherwise.
+/// A strictness a site may loosen or keep: another visit's movement shows by default (v1.47), a lost admission waits for a
+/// person, and a stored profile can say otherwise.
 Method TestFurtherMessages()
 {
     Do ..RunRows("further")
     Set p = ##class(Shutter.Store.SiteProfile).Default()
-    Do $$$AssertEquals(p."further_messages"."in_patient_movement", "stop", "another visit's movement stops by default")
+    Do $$$AssertEquals(p."further_messages"."in_patient_movement", "show", "another visit's movement shows by default")
     Do $$$AssertEquals(p."further_messages"."admission_not_found", "person", "a lost admission waits for a person by default")
     Do $$$AssertEquals(p."further_messages"."scan_seconds", 30, "a read of a namespace takes up to 30 seconds by default")
     Do p."further_messages".%Remove("scan_seconds")
     Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).FurtherScanSeconds(p), 30, "and when the profile doesn't say")
     Set p."further_messages"."scan_seconds" = 120
     Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).FurtherScanSeconds(p), 120, "a site's own figure is read")
+}
+
+/// The shipped default for another visit's in-patient movement is show, in Default() and in the seed file alike, and the
+/// reading follows it when a stored profile doesn't say; a site that wants the stop says stop and gets it.
+Method TestTheMovementDefaultIsShow()
+{
+    Set c = "Shutter.Store.SiteProfile"
+    Do $$$AssertEquals($CLASSMETHOD(c, "Default")."further_messages"."in_patient_movement", "show", "Default() says show")
+    Set path = $PIECE($GET(^UnitTestRoot), "tests/unit/", 1) _ "knowledge/site/profile.json"
+    If ($GET(^UnitTestRoot) = "") || '##class(%File).Exists(path) {
+        Do $$$LogMessage("knowledge/site/profile.json is not on the mounted path; the seed was not compared")
+    } Else {
+        Set seed = ##class(Shutter.Util.Json).Parse(##class(Shutter.Knowledge.Text).ReadFile(path), .sc)
+        Do $$$AssertStatusOK(sc, "the seed parses")
+        Do $$$AssertEquals(seed."further_messages"."in_patient_movement", $CLASSMETHOD(c, "Default")."further_messages"."in_patient_movement", "the seed file and Default() agree")
+    }
+    Do ..ChangeProfile({"further_messages": null})
+    Do $$$AssertEquals($CLASSMETHOD(c, "FurtherMovement"), "show", "a stored profile that doesn't say reads show")
+    Do ..ChangeProfile({"further_messages": {"in_patient_movement": "stop"}})
+    Do $$$AssertEquals($CLASSMETHOD(c, "FurtherMovement"), "stop", "a site that says stop keeps the stop")
+    Do ..ChangeProfile({"further_messages": {"in_patient_movement": "show"}})
+    Do $$$AssertEquals($CLASSMETHOD(c, "FurtherMovement"), "show", "and one that says show reads show")
 }
 
 Method TestTeamsNeedADomain()
