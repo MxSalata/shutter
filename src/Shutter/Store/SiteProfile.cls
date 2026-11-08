@@ -486,7 +486,11 @@ ClassMethod ReceiverHoldMinutes(name As %String) As %Integer
     Quit $SELECT(h.%GetTypeOf("minutes") = "number": +h.%Get("minutes"), 1: 10)
 }
 
-/// Seed from knowledge/site/profile.json when the file exists and differs from what is stored.
+/// What a profile's source gains when an upgrade to 1.1.2 wrote the stop a site had (Shutter.Setup.KeepStopOnUpgrade).
+Parameter KEPTSTOP = " (kept stop on upgrade to 1.1.2)";
+
+/// Seed from knowledge/site/profile.json when the file exists and differs from what is stored. A seed's profile that kept
+/// its stop on the upgrade to 1.1.2 (the seed's path with KEPTSTOP) still follows the seed, with the stop kept.
 ClassMethod SeedFromFile(path As %String) As %Status
 {
     If '##class(%File).Exists(path) Quit $$$OK
@@ -497,9 +501,16 @@ ClassMethod SeedFromFile(path As %String) As %Status
     Set row = ..Row()
     // The seed fills an empty store and follows its own file; a profile a person saved (another source) is theirs and
     // is never overwritten by a reinstall or a restart.
-    If $ISOBJECT(row) && (row.Source '= path) Quit $$$OK
+    Set kept = path _ ..#KEPTSTOP
+    If $ISOBJECT(row) && (row.Source '= path) && (row.Source '= kept) Quit $$$OK
+    Set source = path
+    If $ISOBJECT(row) && (row.Source = kept) {
+        Set source = kept, fm = p.%Get("further_messages")
+        If '$ISOBJECT(fm) || fm.%IsA("%Library.DynamicArray") Set fm = {} Do p.%Set("further_messages", fm)
+        Set fm."in_patient_movement" = "stop"
+    }
     If $ISOBJECT(row) && (row.Json = p.%ToJSON()) Quit $$$OK
-    Quit ..Store(p.%ToJSON(), path)
+    Quit ..Store(p.%ToJSON(), source)
 }
 
 /// The site's allowed mail domains (mail.allowed_domains) as a $LIST, lowercased; an empty list when the profile names
