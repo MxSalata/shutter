@@ -44,16 +44,16 @@ ClassMethod InvalidUpdateId() As %String
     Quit ..Issue("error", "invalid", "<HSFHIRErr>InvalidUpdateId", "The id in the updated resource is missing or does not match the requested Id")
 }
 
-ClassMethod UnexpectedProperty(name As %String, type As %String) As %String
+/// An OperationOutcome of several issues, each already an object in IRIS's form (<class>FHIRFacade.Structure</class>).
+ClassMethod Issues(issues As %DynamicArray) As %String
 {
-    Quit ..Issue("error", "invalid", "<HSFHIRErr>UnexpectedPropertyName", "The property name '" _ name _ "' is not valid for type '" _ type _ "'", type)
+    Quit {"resourceType": "OperationOutcome", "issue": (issues)}.%ToJSON()
 }
 
-/// A code outside its value set: <var>owner</var> is the element's type as IRIS names it ("Encounter.location"),
-/// <var>allowed</var> the codes in the order IRIS lists them, <var>expression</var> the element's path.
-ClassMethod NotInEnumeration(value As %String, property As %String, owner As %String, allowed As %String, expression As %String) As %String
+/// An id in the URL outside <code>[A-Za-z0-9\-\.]{1,64}</code>, on any interaction.
+ClassMethod InvalidId(id As %String) As %String
 {
-    Quit ..Issue("error", "invalid", "<HSFHIRErr>ValueNotInEnumeration", "The value '" _ value _ "' of Property '" _ property _ "' of Type '" _ owner _ "' must be one of (" _ allowed _ ")", expression)
+    Quit ..Issue("error", "invalid", "<HSFHIRErr>InvalidId", "The Id specified in the URL, '" _ id _ "' is invalid. It can only contain alphanumerics, '.', or '-', and maximum length is 64.")
 }
 
 /// A history <code>_count</code> of 0 or not a number (the closing quote and full stop are IRIS's).
@@ -96,8 +96,7 @@ ClassMethod NotImplemented(what As %String) As %String
     Quit ..Issue("error", "not-supported", "<FacadeErr>NotImplemented", what _ " is not implemented by the test FHIR server")
 }
 
-/// A body this server cannot store (not a JSON object, the wrong resourceType, meta not an object). Not measured on
-/// IRIS.
+/// A body this server cannot store (not a JSON object, the wrong resourceType). Not measured on IRIS.
 ClassMethod Unreadable(why As %String) As %String
 {
     Quit ..Issue("error", "structure", "<FacadeErr>InvalidResource", why)

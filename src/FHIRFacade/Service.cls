@@ -6,7 +6,8 @@
 /// <code>If-Match</code>, DELETE and the CapabilityStatement. The ETag is always <code>W/"</code> + versionId +
 /// <code>"</code>; a malformed <code>If-Match</code> is 405 and a stale one 412, with nothing written; a PUT makes a new
 /// version even when nothing changed, overwrites the client's <code>meta.versionId</code> and <code>meta.lastUpdated</code>
-/// silently, and stores <code>meta.tag</code> exactly as sent (no carry-over); a good write answers an empty
+/// silently, and stores <code>meta.tag</code> exactly as sent (no carry-over); a body is held to IRIS's structural
+/// checks (<class>FHIRFacade.Structure</class>) and an id in the URL to its form; a good write answers an empty
 /// <code>text/html</code> 200 unless <code>Prefer: return=representation</code>; history is newest first, whole, with no
 /// ETags and no paging; references are not checked, <code>modifierExtension</code> is stored, <code>text</code> is never
 /// made.</p>
@@ -22,25 +23,20 @@ Parameter FHIRJSON = "application/fhir+json; charset=UTF-8";
 
 Parameter HTML = "text/html; charset=utf-8";
 
-/// The resource types this server keeps.
-Parameter TYPES = ",Encounter,Location,Patient,";
+/// The resource types this server keeps, each compared as a whole name.
+Parameter TYPES = "Encounter,Location,Patient";
 
-/// Elements every resource may carry (R4 Resource and DomainResource).
-Parameter COMMON = ",resourceType,id,meta,implicitRules,language,text,contained,extension,modifierExtension,";
-
-Parameter ENCOUNTER = ",identifier,status,statusHistory,class,classHistory,type,serviceType,priority,subject,episodeOfCare,basedOn,participant,appointment,period,length,reasonCode,reasonReference,diagnosis,account,hospitalization,location,serviceProvider,partOf,";
-
-Parameter PATIENT = ",identifier,active,name,telecom,gender,birthDate,deceasedBoolean,deceasedDateTime,address,maritalStatus,multipleBirthBoolean,multipleBirthInteger,photo,contact,communication,generalPractitioner,managingOrganization,link,";
-
-Parameter LOCATION = ",identifier,status,operationalStatus,name,alias,description,mode,type,telecom,address,physicalType,position,managingOrganization,partOf,hoursOfOperation,availabilityExceptions,endpoint,";
+/// The ids IRIS takes in a URL.
+Parameter ID = "[A-Za-z0-9\-\.]{1,64}";
 
 /// The tag IRIS puts on a body reduced by <code>_elements</code>.
 Parameter SUBSETTEDSYSTEM = "http://terminology.hl7.org/CodeSystem/v3-ObservationValue";
 
 /// One request, answered. <var>request</var> is <code>{"method", "path" (after the base, such as
-/// "Encounter/enc-1/_history"), "query" (the raw query string), "headers" {"If-Match", "Prefer", ...}, "body" (a string),
-/// "base" (the absolute base URL, for links)}</code>. The answer is <code>{"status", "headers" {"ETag", "Location",
-/// "Last-Modified", "Content-Type"}, "body" (a string, possibly empty)}</code>.
+/// "Encounter/enc-1/_history", decoded once, as the web gateway hands it over), "query" (the raw query string),
+/// "headers" {"If-Match", "Prefer", ...}, "body" (a string), "base" (the absolute base URL, for links)}</code>. The
+/// answer is <code>{"status", "headers" {"ETag", "Location", "Last-Modified", "Content-Type"}, "body" (a string,
+/// possibly empty)}</code>.
 ClassMethod Handle(request As %DynamicObject) As %DynamicObject
 {
     Try {
@@ -109,9 +105,12 @@ ClassMethod Route(request As %DynamicObject) As %DynamicObject [ Private ]
         Set path = $EXTRACT(path, 1, *-1)
     }
     Set n = $SELECT(path = "": 0, 1: $LENGTH(path, "/"))
+    // The path is not decoded again: IRIS takes a%2541 as the id a%41.
     For i = 1:1:4 {
-        Set p(i) = ..Unescape($PIECE(path, "/", i))
+        Set p(i) = $PIECE(path, "/", i)
     }
+    // An empty segment (Encounter//_history) is IRIS's empty 404, before anything is looked up.
+    Quit:path["//" ..Empty(404, {})
     Set params = ..Params(query)
     If n = 0 Quit ..NotImplemented("A request to the base (a transaction, a batch or a system search)")
     If (n = 1) && (p(1) = "metadata") {
@@ -123,7 +122,11 @@ ClassMethod Route(request As %DynamicObject) As %DynamicObject [ Private ]
         Quit ..NotImplemented("The request " _ method _ " " _ path)
     }
     Quit:$EXTRACT(p(1))="$" ..NotImplemented("The operation '" _ p(1) _ "'")
-    Quit:..#TYPES'[(","_p(1)_",") ..NotImplemented("The resource type '" _ p(1) _ "'")
+    If '$LISTFIND($LISTFROMSTRING(..#TYPES), p(1)) {
+        // A name that is not a single type name (Encounter,Location) is IRIS's empty 404.
+        Quit:p(1)'?1A.AN ..Empty(404, {})
+        Quit ..NotImplemented("The resource type '" _ p(1) _ "'")
+    }
     Set type = p(1)
     If n = 1 {
         Quit:method="GET" ..Search(type, params, query, base)
@@ -136,6 +139,7 @@ ClassMethod Route(request As %DynamicObject) As %DynamicObject [ Private ]
     }
     Quit:$EXTRACT(p(2))="$" ..NotImplemented("The operation '" _ p(2) _ "'")
     Set id = p(2)
+    Quit:'$MATCH(id, ..#ID) ..Fhir(400, ##class(FHIRFacade.Outcome).InvalidId(id))
     If n = 2 {
         Quit:method="GET" ..Read(type, id, params, base)
         Quit:method="PUT" ..Update(type, id, headers, request.body, base)
@@ -375,11 +379,12 @@ ClassMethod Matches(resource As %DynamicObject, token As %String) As %Boolean [ 
     Quit 0
 }
 
-/// PUT {type}/{id}. Checks in this order: a malformed <code>If-Match</code> is 405; a body this server cannot store,
-/// an unknown element or a <code>location.status</code> outside its codes is 400; an <code>id</code> missing or not the
-/// URL's is 400; an <code>If-Match</code> whose version is not the current one ('' for an id never written, the delete's
-/// version for a deleted one) is 412. Nothing is written by a refusal. Otherwise a new version: 200 for an id written
-/// before (deleted ones included), 201 for a new one, which only a PUT without <code>If-Match</code> can make.
+/// PUT {type}/{id}. Checks in this order: a malformed <code>If-Match</code> is 405; a body this server cannot store is
+/// 400, and so is one that fails IRIS's structural checks (<class>FHIRFacade.Structure</class>: every problem listed
+/// in one OperationOutcome); an <code>id</code> missing or not the URL's is 400; an <code>If-Match</code> whose
+/// version is not the current one ('' for an id never written, the delete's version for a deleted one) is 412. Nothing
+/// is written by a refusal. Otherwise a new version: 200 for an id written before (deleted ones included), 201 for a new
+/// one, which only a PUT without <code>If-Match</code> can make.
 ClassMethod Update(type As %String, id As %String, headers As %DynamicObject, body As %String, base As %String) As %DynamicObject [ Private ]
 {
     // HTTP drops the spaces around a header's value; IRIS accepted W/"2" with a trailing space.
@@ -397,10 +402,9 @@ ClassMethod Update(type As %String, id As %String, headers As %DynamicObject, bo
     }
     If '$ISOBJECT(resource) || 'resource.%IsA("%Library.DynamicObject") Quit ..Fhir(400, ##class(FHIRFacade.Outcome).Unreadable("The body is not a JSON object"))
     If resource.%Get("resourceType") '= type Quit ..Fhir(400, ##class(FHIRFacade.Outcome).Unreadable("The body's resourceType is not '" _ type _ "'"))
-    Set problem = ..Structure(type, resource)
+    Set problem = ##class(FHIRFacade.Structure).Check(type, resource)
     Quit:problem'="" ..Fhir(400, problem)
     If (resource.%GetTypeOf("id") '= "string") || (resource.%Get("id") '= id) Quit ..Fhir(400, ##class(FHIRFacade.Outcome).InvalidUpdateId())
-    If resource.%IsDefined("meta") && (resource.%GetTypeOf("meta") '= "object") Quit ..Fhir(400, ##class(FHIRFacade.Outcome).Unreadable("meta is not an object"))
     Quit:'##class(FHIRFacade.Store).Lock(type, id) ..Fhir(500, ##class(FHIRFacade.Outcome).Failure("The resource is locked by another request"))
     Try {
         Set exists = ##class(FHIRFacade.Store).Current(type, id, .current)
@@ -446,32 +450,6 @@ ClassMethod Delete(type As %String, id As %String) As %DynamicObject [ Private ]
     }
     Do ##class(FHIRFacade.Store).Unlock(type, id)
     Quit answer
-}
-
-/// IRIS's structural checks that need no profile: an element the type does not have (a primitive's <code>_name</code>
-/// sibling counts as the element), and an Encounter <code>location.status</code> outside its four codes. Returns the
-/// OperationOutcome, or "".
-ClassMethod Structure(type As %String, resource As %DynamicObject) As %String [ Private ]
-{
-    Set allowed = ..#COMMON _ $CASE(type, "Encounter": ..#ENCOUNTER, "Patient": ..#PATIENT, "Location": ..#LOCATION, : "")
-    Set iter = resource.%GetIterator()
-    While iter.%GetNext(.key) {
-        Set name = $SELECT($EXTRACT(key) = "_": $EXTRACT(key, 2, *), 1: key)
-        Return:allowed'[(","_name_",") ##class(FHIRFacade.Outcome).UnexpectedProperty(key, type)
-    }
-    If (type = "Encounter") && (resource.%GetTypeOf("location") = "array") {
-        Set iter = resource.location.%GetIterator()
-        While iter.%GetNext(.i, .entry) {
-            Continue:'$ISOBJECT(entry)
-            Continue:'entry.%IsA("%Library.DynamicObject")
-            Continue:'entry.%IsDefined("status")
-            Set status = entry.%Get("status")
-            If ",planned,active,reserved,completed," '[ ("," _ status _ ",") {
-                Return ##class(FHIRFacade.Outcome).NotInEnumeration(status, "status", "Encounter.location", "active,completed,planned,reserved", "Encounter.location[" _ i _ "].status")
-            }
-        }
-    }
-    Quit ""
 }
 
 /// Overwrites <code>meta.lastUpdated</code> and <code>meta.versionId</code> where they stand, or adds them at the end
