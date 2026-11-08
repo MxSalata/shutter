@@ -129,6 +129,7 @@ Method TestFailsClosedWhenTheMessageCannotBeRead()
 Method TestRouteKeepsItsCapabilities()
 {
     Set c = ..Case()
+    Do $$$AssertStatusOK(##class(Shutter.Util.ModelView).Learn(c, {}), "the map is learnt, as every reduction needs")
     Set route = {"feed": "ADT In -> ADT to Downstream -> Downstream Out", "connector": "Downstream Out", "receiver": "the demo bed-management system (/downstream/api)", "tier": 2, "category": "current_state", "history_policy": "current", "capabilities_source": "read from /downstream/api/capabilities", "declared": {"conditional_writes": true, "receipts": true, "history": true, "dry_run": true}, "capabilities_http_status": 200, "capabilities": {"conditional_writes": true, "receipts": true, "history": true, "dry_run": true, "epoch": 2}, "conditional_writes": true, "receipts": true, "history": true, "dry_run": true, "epoch": 2}
     Set view = ##class(Shutter.Util.ModelView).Reduce(c, {"kind": "route", "item": (route)})
     Set item = view.%Get("item")
