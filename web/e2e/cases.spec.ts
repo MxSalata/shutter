@@ -120,6 +120,8 @@ test.describe('the Technical detail', () => {
     await expect(row(page, 'C-000058')).toContainText('Delivered, verified');
     await expect(row(page, 'C-000058')).not.toContainText('header 9625');
     await expect(row(page, 'C-000058')).not.toContainText('catalogue E16');
+    await expect(row(page, 'C-000058')).not.toContainText('MSG02304');
+    await expect(row(page, 'C-000058')).not.toContainText('Shutter.Operation.Ward');
   });
 
   test('adds the failure and its codes to a row', async ({ page }) => {
@@ -129,6 +131,21 @@ test.describe('the Technical detail', () => {
     await expect(c58).toContainText('header 9625');
     await expect(c58).toContainText('catalogue E16');
     await expect(c58).toContainText('rejected');
+  });
+
+  test('names the message, where it came in, its trace and its plan on a row', async ({ page }) => {
+    await signIn(page, { detail: 'technical' });
+    await go(page, '/cases', { detail: 'technical' });
+    const tech = row(page, 'C-000058').getByTestId('case-tech');
+    await expect(tech).toContainText('ADT^A02');
+    await expect(tech).toContainText('MSG02304');
+    await expect(tech).toContainText('409 bed_occupied');
+    await expect(tech).toContainText('14:34:44.605Z');
+    await expect(tech).toContainText('ADT In');
+    await expect(tech).toContainText('Shutter.Production');
+    await expect(tech).toContainText('session ');
+    await expect(tech).toContainText('v1 f1171ec');
+    await expect(row(page, 'C-000058')).toContainText('Shutter.Operation.Ward');
   });
 });
 
