@@ -4,15 +4,15 @@
 
 On an ordinary day a hospital's integration engine can see hundreds of failed messages. Engineers put right what they can by hand, and the rest can go unactioned. Shutter won't fix them all, but it helps with most of the failed patient movements it can see: it resends the ones that pass its checks, and for the rest it stops, writes nothing, and names the patient a person needs to review.
 
-Shutter is about delivery, not diagnosis: it resends what the failed message asked for, unchanged, or not at all, and shows why. Recovery needs a receiver with an API; a plain MLLP receiver gets the investigation and a drafted escalation, never a resend.
+Shutter is about delivery, not diagnosis: it sends the receiver the operation the failed message asked for, as that message stated it, or nothing, and shows why. Recovery needs a receiver with an API; a plain MLLP receiver gets the investigation and a drafted escalation, never a resend.
 
 **What can go wrong when you resend:** a nurse moves the patient while a resend waits, the receiver refuses it as "duplicate" with nothing filed, the clocks go back, a merge has since been undone by hand. [The list](https://github.com/MxSalata/shutter/blob/main/docs/edge-cases.md) says what Shutter does about each and what it doesn't cover yet.
 
 **For judges, in about three minutes, with nothing to install:**
 1. Open the [trial](https://mxsalata.github.io/shutter/) and press **Explore on my own**.
-2. In **Scenarios**, choose **Rules only**, press **Run** on S8, then open its case: "Wrote WARD-B over the bed manager's WARD-C", with every check passed.
-3. Choose **Board**, run S8 again and open C-000008: escalated, **0 writes**, and the patient named for a person to review.
-4. On that case, under **In IRIS:**, press **Message trace (screenshot)**. To see the real thing, [the demo's IRIS](https://shutter.mxsalata.com/csp/healthshare/shutter/Shutter.Portal.Guide.cls) is read only, after a sign-in ([details](https://github.com/MxSalata/shutter#try-it)).
+2. In **Scenarios**, choose **Rules only**, then under **Every scenario** press **Run** on S8's row (not the S8 card at the top), and open its case: "Wrote WARD-B over the bed manager's WARD-C", with every check passed.
+3. Choose **Board**, press **Run** on S8's row again and open C-000008: escalated, **0 writes**, and the patient named for a person to review. Run **S3** the same way: the receiver already holds the message and only its answer was lost, so the case reads the receipt and writes nothing.
+4. On that case, under **In IRIS:**, press **Message trace (screenshot)**. To see the real thing, [the demo's IRIS](https://shutter.mxsalata.com/csp/healthshare/shutter/Shutter.Portal.Guide.cls) is read only, behind a GitHub or emailed one-time-code sign-in ([details](https://github.com/MxSalata/shutter#try-it)).
 
 [![CI](https://github.com/MxSalata/shutter/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/MxSalata/shutter/actions/workflows/ci.yml) [![Licence: MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](https://github.com/MxSalata/shutter/blob/main/LICENSE)
 
@@ -39,7 +39,7 @@ Instead of a **Resend** in the Message Viewer, Shutter makes each failed deliver
 
 ## Take the agents away
 
-**Scenario S8 shows what a plain resend misses.** Two systems move one patient at the same moment. The matcher flags it as catalogue entry E7 with no model. **Rules only** mode has no agents: the message is resent unchanged unless the gate objects. On Shutter's own scenarios, with no case held out ([comparison](https://github.com/MxSalata/shutter/blob/main/docs/readme/comparison.md)):
+**Scenario S8 shows what a plain resend misses.** Two systems move one patient at the same moment. The matcher flags it as catalogue entry E7 with no model. **Rules only** mode has no agents, the plain-resend baseline: the failed operation is sent as the message stated it unless the gate objects. On Shutter's own scenarios, with no case held out ([comparison](https://github.com/MxSalata/shutter/blob/main/docs/readme/comparison.md)):
 
 - **The board** gets all 11 single cases it is convened for (S1 to S10 and S13) right, live and in replay.
 - **Rules only** gets 4, the plain resends (S2, S4, S5 and S9).
@@ -49,7 +49,7 @@ Instead of a **Resend** in the Message Viewer, Shutter makes each failed deliver
 
 ![S8 in plain terms: the bed manager has the patient in Ward C; Rules only writes Ward B over it with every check passed; the board leaves them in Ward C and asks a person](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/s8-plain.png)
 
-What do the agents add? Not the flag: the matcher had already marked S8, and in Rules only the gate doesn't stop a resend that names no entry. The board checks the entry against this case's evidence, says in words why it applies or doesn't, and keeps any dissent (in S8, the conformance specialist's resend, and why it was overruled). Each agent is given the catalogue's entry and preferred outcome, and the coordinator took it in 24 of 25 recorded plans: agents applying written policy, not answering unaided ([what that does and does not show](https://github.com/MxSalata/shutter/blob/main/docs/readme/evaluation.md)). **Site policy** mode settles 8 of those 11 from the catalogue with no agent and sends S4 and S8 to the board; S7 has no such mode.
+What do the agents add? Not the flag: the matcher had already marked S8, and in Rules only the gate doesn't stop a resend that names no entry. The board checks the entry against this case's evidence, says in words why it applies or doesn't, and keeps any dissent (in S8, the conformance specialist's resend, and why it was overruled). Each agent is given the catalogue's entry and preferred outcome, and the coordinator took it in 24 of 25 recorded plans: agents applying written policy, not answering unaided ([what that does and does not show](https://github.com/MxSalata/shutter/blob/main/docs/readme/evaluation.md)). **Site policy** mode settles 8 of those 11 from the catalogue with no agent and sends S4 and S8 (entry E7) to the board; S7 is not played in that mode.
 
 ## Try it
 
@@ -57,10 +57,10 @@ What do the agents add? Not the flag: the matcher had already marked S8, and in 
 | --- | --- | --- |
 | **The trial**: recorded runs; nothing leaves the browser | Nothing to install | The quick tour ([open it](https://mxsalata.github.io/shutter/?trial=tour)): 9 steps, about 4 minutes. The engineers' tour ([open it](https://mxsalata.github.io/shutter/?trial=engineer)): 6 steps, about 3 minutes |
 | **The online demo**: a live hospital, a new failure every 7 minutes; any resend waits for you | The sign-ins below | The steps below |
-| **The replay edition**, `./install.sh --replay`: your own instance, the board replaying its recorded live runs | Docker; no key, no Early Access file | Healthy in 2 to 8 min once the 6 GB image is pulled |
+| **The replay edition**, `./install.sh --replay`: your own instance with no AI Hub, the board replaying its recorded live runs | Docker; no key, no Early Access file | Healthy in 2 to 8 min once the 6 GB image is pulled |
 | **The AI Hub edition**, `./install.sh --image-file ...`: live agents, or their recordings without a key | Docker and the build 109 file from the Early Access portal; `ANTHROPIC_API_KEY` for live agents | Healthy in 3 to 15 min on build 109 ([receipt](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt-109.md)) |
 
-**In a hospital's own IRIS for Health:** Shutter installs without the demo, beside or inside the productions it watches ([docs/INSTALL.md](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md); [several namespaces](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md#9-onboarding-several-namespaces)). Failures reach it through a forwarder, or through the production's alerts with no change to the hospital's own code. A receiver with no API still gets a case, the board's diagnosis and a drafted email, never a resend, and a production review needs nothing configured ([what each kind of receiver gets](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md#what-shutter-does-at-your-site)). Every proof so far is against the demo receiver or a stub, so treat recovery as a demonstration until a site has tested its own receiver.
+**In a hospital's own IRIS for Health:** Shutter installs without the demo, beside or inside the productions it watches ([docs/INSTALL.md](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md); [several namespaces](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md#9-onboarding-several-namespaces)). Failures reach it through a forwarder, or through the production's alerts, with the hospital's own classes unchanged (onboarding renames the production's `Ens.Alert`, adds two items and maps Shutter's classes: [Limits](https://github.com/MxSalata/shutter#limits-plainly)). A receiver with no API still gets a case, the board's diagnosis and a drafted email, never a resend, and a production review needs nothing configured ([what each kind of receiver gets](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md#what-shutter-does-at-your-site)). Every proof so far is against the demo receiver or a stub, so treat recovery as a demonstration until a site has tested its own receiver.
 
 **The online demo** is my fictional hospital, with made-up patients, on AI Hub build `2026.3.0AI.154.0`. The board runs live for the judges' account, whose sign-in the organisers pass to the judges within a model budget of 15 USD a day. Its sign-ins:
 
@@ -86,7 +86,7 @@ Shutter is ready after 3 min 21 s:
   the portal:    http://localhost:52773/csp/sys/UtilHome.csp  (_SYSTEM / SYS, namespace SHUTTER)
 ```
 
-- **Builds:** judges, please use the AI Hub Community build `2027.1.0AI.109.0`, the one the [Early Access portal](https://evaluation.intersystems.com/Eval/early-access/AIHub) offers since 2 November 2026. Shutter is also verified on `2026.3.0AI.154.0`, the contest's first ([receipt](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt.md)).
+- **Builds:** judges, please use the AI Hub Community build `2027.1.0AI.109.0`, the one the [Early Access portal](https://evaluation.intersystems.com/Eval/early-access/AIHub) offers since 2 November 2026. Shutter is also verified on `2026.3.0AI.154.0`, the contest's first ([receipt](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt.md)). If you already loaded build 154 (or 109), `./install.sh` with no flag finds that image and uses it.
 - For live agents, set `ANTHROPIC_API_KEY` in `.env` (Anthropic's API only, so with another provider's key it replays too); without a key the board replays, and the case page says so. The replay edition is the same without live agents or knowledge search. Allow Docker at least 5 GB of memory, the minimum, and about 25 GB of free disk.
 - **Sign-ins on your machine:** the web app as `approver` / `shutter` (approves) or `operator` / `shutter`; the Management Portal as `_SYSTEM` / `SYS`, namespace `SHUTTER`, or as `approver` / `shutter` for the Workflow inbox.
 
@@ -153,12 +153,13 @@ The three specialists (conformance, encounter and impact) and the coordinator ar
 | Custom Adapter | The HL7 index walk is Shutter's own inbound adapter, handing batches of message headers to the HL7 Index item ([Index/Adapter.cls](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Index/Adapter.cls)). For a hospital: Shutter knows each encounter's other messages, so it can tell an old resend from the latest state |
 | PEX (Java) | The Second Parser, a Java business operation (`EnsLib.PEX.BusinessOperation` with HAPI 2.6.0): when IRIS can't read a failed message, it says whether the message is sound or malformed; see S25 ([pex/](https://github.com/MxSalata/shutter/tree/main/pex)). For a hospital: whether the sender or the site's schema has to be fixed. `SELECT Shutter.Setup_Doctor()` (the Doctor, Shutter's one-query readiness report) reports `second_parser` |
 | Docker | `install.sh`, or `docker compose up` ([docker-compose.yml](https://github.com/MxSalata/shutter/blob/main/docker-compose.yml), [Dockerfile](https://github.com/MxSalata/shutter/blob/main/Dockerfile)). For a hospital: a full trial on a laptop, away from the live production |
-| IPM | One package for the AI Hub builds, `iris-shutter`, requiring IRIS 2026.3 or later with Interoperability, as the organisers ask: `zpm "install iris-shutter"` (a stock image has no `zpm`, so [the install guide, section 3.1](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md#3-shape-a-shutter-in-its-own-namespace) adds it and points it at the registry), or `zpm "load"` from a clone, as the image build does on 109 and 154 ([module.xml](https://github.com/MxSalata/shutter/blob/main/module.xml)); the replay edition's core alone is [core/module.xml](https://github.com/MxSalata/shutter/blob/main/core/module.xml). For a hospital: one install on its own IRIS for Health with AI Hub. Create and use a namespace called `SHUTTER` first ([the install guide, section 3.1](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md#3-shape-a-shutter-in-its-own-namespace)): a load in `USER` runs, but the web app's "Shutter in IRIS" link answers 404 there and this page's addresses name `SHUTTER`. |
+| IPM | One package for the AI Hub builds, `iris-shutter`, requiring IRIS 2026.3 or later with Interoperability, as the organisers ask: `zpm "install iris-shutter"` (a stock image has no `zpm`: [the six commands](https://github.com/MxSalata/shutter#ipm-on-a-stock-ai-hub-image) add it and point it at the registry), or `zpm "load"` from a clone, as the image build does on 109 and 154 ([module.xml](https://github.com/MxSalata/shutter/blob/main/module.xml)); the replay edition's core alone is [core/module.xml](https://github.com/MxSalata/shutter/blob/main/core/module.xml). For a hospital: one install on its own IRIS for Health with AI Hub. Create and use a namespace called `SHUTTER` first ([the install guide, section 3.1](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md#3-shape-a-shutter-in-its-own-namespace)): a load in `USER` runs, but the web app's "Shutter in IRIS" link answers 404 there and this page's addresses name `SHUTTER`. |
 | Community Opportunity idea [DPI-I-689](https://ideas.intersystems.com/ideas/DPI-I-689) | Interoperability as the traceability tool for AI agents: below. For a hospital: an integration team audits an agent with the Visual Trace and SQL it already knows |
 | AI Hub bug reports | [#11](https://github.com/intersystems-community/ai-hub-eap-bugreports/issues/11): `%AI.Agent.Run()` takes three arguments, not four; [#12](https://github.com/intersystems-community/ai-hub-eap-bugreports/issues/12): `Run()` never calls `OnIterationStart` or `OnIterationComplete` |
 | Embedded Python bug reports | [#26](https://github.com/intersystems-community/python-bugreports/issues/26): signal 11 after catching an SQL error in a Python SQL function under dynamic SQL; [#27](https://github.com/intersystems-community/python-bugreports/issues/27): defaults pasted into the Python source |
 | Online demo | The live hospital, [shutter.mxsalata.com](https://shutter.mxsalata.com): a new failure every 7 minutes, decided under the site's written policy; any resend waits for you; the sign-ins are under [Try it](https://github.com/MxSalata/shutter#try-it). The trial on GitHub Pages is its offline companion, recorded runs only |
 | YouTube video | [link at submission] |
+| AI Hub EAP questionnaire | Submitted on 3 November 2026 |
 | Developer Community articles | [Building Shutter on IRIS AI Hub: what worked, what was hard and what it cost](https://community.intersystems.com/post/building-shutter-iris-ai-hub-what-worked-what-was-hard-and-what-it-cost), also in [Portuguese](https://pt.community.intersystems.com/post/construindo-o-shutter-no-iris-ai-hub-o-que-funcionou-o-que-foi-dif%C3%ADcil-e-quanto-custou) and [Spanish](https://es.community.intersystems.com/post/c%C3%B3mo-constru%C3%AD-shutter-sobre-iris-ai-hub-qu%C3%A9-funcion%C3%B3-qu%C3%A9-fue-dif%C3%ADcil-y-cu%C3%A1nto-cost%C3%B3) |
 
 **Tracing AI agents with Interoperability (DPI-I-689).** Every agent run is a message, so the production's own trace does the job of a tracing tool such as Langfuse, with no other service to run: run **S8** in **Board** mode (the replay edition is enough), and **In IRIS: Message trace** opens its session in the Visual Trace, one lane per item, each `AgentResponse` holding the model, mode, tokens and tool calls. In the SQL page (namespace `SHUTTER`), that session's tool calls:
@@ -211,7 +212,7 @@ For a clinical safety officer: [the hazards, data flow, threats and what a site 
 Every limit in this list, in full, is on [one page](https://github.com/MxSalata/shutter/blob/main/docs/readme/limits.md), which links the rest.
 
 - **How many of a hospital's failures Shutter resolves has not been measured:** the scenarios are written by us and the data is synthetic, and until a receiver is given an API, help means a case and a drafted email.
-- **The receiver is a demo bed-management system built for the scenarios.** Shutter resends only to a receiver whose API the site profile describes. A plain MLLP receiver gets no resend, because an ACK says a message arrived, not what the receiver now holds; a NACK with `AlertOnError` on opens a case for a person.
+- **The receiver is a demo bed-management system built for the scenarios.** Shutter resends only to a receiver whose API the site profile describes. A plain MLLP receiver gets no resend, because an ACK says a message arrived, not what the receiver now holds; a NACK with `AlertOnError` on opens a case for a person; with `AlertOnError` off and no forwarder, nothing opens a case.
 - **Without an API key the agents replay recorded runs;** a case with no recording, such as your own HL7 file's, takes the rules path: the gate alone decides and a resend waits for a person.
 - **When no agent can answer** (no key, the budget spent, the provider refusing), a case for the board falls back to that path, S8's included: it reads as a plain resend, and a person must still approve it. To be fixed in v1.1.0.
 - **At a tier the site's policy releases, a resend writes with no approval;** that is the shipped setting for tiers 1 and 2, and the shipped site profile is a demo ([more](https://github.com/MxSalata/shutter/blob/main/docs/readme/running.md#other-limits)).
@@ -250,6 +251,19 @@ curl http://localhost:52773/api/shutter/health
 **Open it:** the web app at http://localhost:52773/shutter/index.html and the Management Portal at http://localhost:52773/csp/sys/UtilHome.csp, with the sign-ins under [Try it](https://github.com/MxSalata/shutter#try-it) (production `Shutter.Production`; the demo hospital's is `Hospital.Production` in `HOSPITAL`). More in [docs/readme/running.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/running.md) and, for a hospital's own IRIS for Health, [docs/INSTALL.md](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md).
 
 **Troubleshooting.** `install.sh` prints `[fix]` at each check it stops at, and gives up after 25 minutes with the log's last 30 lines; `SELECT Shutter.Setup_Doctor()` in the SQL page (namespace `SHUTTER`, as `_SYSTEM`) is the readiness report. "License limit exceeded": `docker compose restart`. The rest: [troubleshooting.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/troubleshooting.md).
+
+### IPM on a stock AI Hub image
+
+In an IRIS terminal on the instance, with a clone of this repository at `<module>` inside the container (section 3.1 of [the install guide](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md#3-shape-a-shutter-in-its-own-namespace) has the details, and `-Ddemo=0` for a hospital's own instance):
+
+```
+Do $SYSTEM.OBJ.Load("<module>/src/Shutter/Setup.cls", "ck")
+Write ##class(Shutter.Setup).CreateNamespace("SHUTTER")
+zn "SHUTTER"
+Do $SYSTEM.OBJ.Load("<module>/vendor/ipm/zpm-0.10.10.xml", "ck")
+zpm "repo -reset-defaults"
+zpm "install iris-shutter"
+```
 
 ## About the contest
 
