@@ -347,7 +347,8 @@ def leftovers(ns, items, prefixes):
                 left["headers"].append("|".join(p[2:5]))
             else:
                 left["site_headers"] += 1
-                if p[5] != "1":
+                # "?" is a body whose class is not compiled now (a site's class moved out of the way): not counted as gone.
+                if p[5] == "0":
                     left["site_bodies_gone"].append("|".join(p[1:]))
         elif p[0] == "bp":
             left["processes" if p[2] == "shutter" else "site_processes"] += 1

@@ -572,6 +572,12 @@ ClassMethod TakeMessages(out As %DynamicObject)
     If n > 0 Do out.removed.%Push(n _ " runs of Shutter's business processes in " _ $NAMESPACE)
     // A queue of an item no longer running: the Production step stopped or took them all.
     For i = 1:1:$LISTLENGTH(items) { Set name = $LIST(items, i) Kill:'$DATA(^Ens.Runtime("ConfigItem", name)) ^Ens.Queue(name) }
+    // What the engine saved when it stopped Shutter's own production, its timers among them: their messages are gone, so a
+    // later start would fail on them. A site's production is never stopped, and its saved state stays.
+    If ($GET(^Ens.Suspended) '= "") && ..OwnClass(^Ens.Suspended, own) Kill ^Ens.Suspended
+    // The role's index entries for Workflow tasks whose rows are gone.
+    Set role = "Shutter Approvers", id = ""
+    For { Set id = $ORDER(^Ens.MessageBodyI("RoleIdx", role, id)) Quit:id=""  Kill:'$DATA(^Ens.MessageBodyD(id)) ^Ens.MessageBodyI("RoleIdx", role, id) }
     // The event log's lines from Shutter's classes.
     Do ##class(%SQL.Statement).%ExecDirectNoPriv(, "DELETE %NOCHECK FROM Ens_Util.Log WHERE " _ ..PrefixWhere("SourceClass", own))
 }
