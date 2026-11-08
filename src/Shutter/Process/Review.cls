@@ -126,9 +126,9 @@ ClassMethod RecordKeyFor(namespace As %String, production As %String, fingerprin
 /// example text, which may quote an HL7 segment; the annotation id; the rank and explanation it is to fill), and the
 /// per-item case aggregates (counts and case ids only: the sweep never reads note text, operation-key pieces or failure
 /// text; an error group's signature, the one piece of log text in a finding, goes as ModelSignature shows it, and every
-/// key of the aggregates, which a feed or a connector can fill with free text, as ModelKey shows it). Who asked (v1.39)
-/// is the run's requester, for the budget's share; nobody named means the feed's own ("system", no share). A class
-/// method, so a test can build the same request outside the production.
+/// item key and value of the aggregates, which a feed or a connector can fill with free text, as ModelKey and ModelValue
+/// show them). Who asked (v1.39) is the run's requester, for the budget's share; nobody named means the feed's own
+/// ("system", no share). A class method, so a test can build the same request outside the production.
 ClassMethod BuildAgentRequest(review As Shutter.Store.Review, result As %DynamicObject, maxIterations As %Integer = 3, tokenBudget As %Integer = 60000, requestedBy As %String = "") As Shutter.Bridge.Msg.AgentRequest
 {
     Set req = ##class(Shutter.Bridge.Msg.AgentRequest).%New()
@@ -217,8 +217,9 @@ ClassMethod Withheld(text As %String) As %String
 
 /// The case aggregates as the review's agent sees them. Their keys come from the cases' own fields: the item (Receiver or
 /// SourceRoute), and the values by failure kind, outcome, reason code and state, which POST /intake and a connector's
-/// reason_code can fill with any text, a patient's name included. Each key goes as ModelKey shows it; the counts and the
-/// case ids go as they are, and two keys withheld into one (never in practice) add their counts.
+/// reason_code can fill with any text, a patient's name included, as free text or as one word that looks like a code.
+/// Each item key goes as ModelKey shows it and each value as ModelValue does; the counts and the case ids go as they are,
+/// and two keys withheld into one (never in practice) add their counts.
 ClassMethod ModelAggregates(agg As %DynamicObject, ByRef known) As %DynamicObject
 {
     Set out = {}
@@ -228,9 +229,8 @@ ClassMethod ModelAggregates(agg As %DynamicObject, ByRef known) As %DynamicObjec
         Set shown = $SELECT((name = "_total") || (name = "_error"): name, 1: ..ModelKey(name, .known))
         Do out.%Set(shown, $SELECT($ISOBJECT(a): ##class(%DynamicAbstractObject).%FromJSON(a.%ToJSON()), 1: a))
     }
-    // The values within each aggregate, the production's totals included: no item name is a value, so only a code shape
-    // is kept.
-    Kill none
+    // The values within each aggregate, the production's totals included, each read against its own dimension's words.
+    Do ..ModelWords(.words)
     Set iter = out.%GetIterator()
     While iter.%GetNext(.name, .a) {
         Continue:'$ISOBJECT(a)
@@ -240,7 +240,7 @@ ClassMethod ModelAggregates(agg As %DynamicObject, ByRef known) As %DynamicObjec
             Set reduced = {}
             Set it2 = by.%GetIterator()
             While it2.%GetNext(.v, .n) {
-                Set k = ..ModelKey(v, .none)
+                Set k = ..ModelValue(dim, v, .words)
                 If reduced.%IsDefined(k) && (by.%GetTypeOf(v) = "number") {
                     Do reduced.%Set(k, reduced.%Get(k) + n)
                 } Else {
@@ -253,17 +253,61 @@ ClassMethod ModelAggregates(agg As %DynamicObject, ByRef known) As %DynamicObjec
     Quit out
 }
 
-/// A key of the case aggregates as the review's agent sees it: a name in known (the production's items) as it is; a
-/// code's shape (letters, digits and underscores, 1 to 40 of them, with no run of four digits, which an MRN, an NHS
-/// number or a date has: delivery_failed, ward_unavailable, AR, HTTP_503) as it is; "(none)", the sweep's word for an
-/// empty value, as it is; any other text withheld (Withheld).
+/// An item key of the case aggregates as the review's agent sees it: a name in known (the production's items and the
+/// items the findings are about) as it is; "(none)", the sweep's word for an empty value, as it is; any other text
+/// withheld (Withheld), whatever its shape, since a receiver or a route posted to the intake can be one word.
 ClassMethod ModelKey(key As %String, ByRef known) As %String
 {
     If key = "" Quit ""
     If key = "(none)" Quit key
     If $DATA(known(key)) Quit key
-    If (key ? 1.40(1A,1N,1"_")) && '(key ? .E4N.E) Quit key
     Quit ..Withheld(key)
+}
+
+/// The outcomes a case can hold that the agent may read: the connector's classes of an answer (Shutter.Msg.WardResult),
+/// the intake's (CONTRACTS 11) and the code an acknowledgement answers.
+Parameter MODELOUTCOMES = "applied,already_committed,would_apply,would_not_apply,version_conflict,refused,unavailable,uncertain,error,rejected,read,unknown_encounter,AA,AE,AR,CA,CE,CR";
+
+/// The reason codes a case can hold that the agent may read: Shutter's own (an alert, a held or unreadable message, a
+/// withheld merge or cancel, the onboarding test, the connector's preflight), the downstream contract's error codes, and
+/// the words the catalogue reads a receiver's answer by.
+Parameter MODELREASONS = "alert,alert_unread,schema_unknown,invalid_message,merge,cancel_unsupported,onboarding_test,dry_run_unsupported,newer_message_pending,further_movement,committed_not_this_message,ward_unavailable,duplicate_message,version_conflict,invalid_transition,unknown_encounter,bed_occupied,patient_mismatch,no_receipt,unsupported_precondition,payload_digest_mismatch,key_reused_with_different_payload,invalid_request,internal_error,unavailable,timeout,duplicate,refused";
+
+/// The words each dimension of the aggregates may show as they are: words(dim, word). The failure kinds and the states
+/// are the case's own lists (Shutter.Store.Case, VALUELIST); the outcomes and reason codes are MODELOUTCOMES and
+/// MODELREASONS.
+ClassMethod ModelWords(ByRef words)
+{
+    Kill words
+    For dim = "byFailureKind", "byState" {
+        Set prop = ##class(%Dictionary.CompiledProperty).%OpenId("Shutter.Store.Case||" _ $SELECT(dim = "byState": "State", 1: "FailureKind"))
+        Set list = $SELECT($ISOBJECT(prop): prop.Parameters.GetAt("VALUELIST"), 1: "")
+        // A VALUELIST names its delimiter in its first mark.
+        For i = 2:1:$LENGTH(list, $EXTRACT(list)) {
+            Set w = $PIECE(list, $EXTRACT(list), i)
+            Set:w'="" words(dim, w) = ""
+        }
+    }
+    For dim = "byOutcome", "byReasonCode" {
+        Set list = $SELECT(dim = "byOutcome": ..#MODELOUTCOMES, 1: ..#MODELREASONS)
+        For i = 1:1:$LENGTH(list, ",") { Set words(dim, $PIECE(list, ",", i)) = "" }
+    }
+}
+
+/// A value of one dimension of the case aggregates (byFailureKind, byOutcome, byReasonCode, byState) as the review's
+/// agent sees it: a word of that dimension's list (ModelWords) as it is; for an outcome or a reason code also an HTTP
+/// status (HTTP_503) and, for a reason code, an acknowledgement's code (ack_AR), in those fixed shapes; "(none)" as it
+/// is; any other value withheld (Withheld), a word that looks like a code included. words is ModelWords's, built here
+/// when not given.
+ClassMethod ModelValue(dim As %String, value As %String, ByRef words) As %String
+{
+    If value = "" Quit ""
+    If value = "(none)" Quit value
+    If '$DATA(words) Do ..ModelWords(.words)
+    If $DATA(words(dim, value)) Quit value
+    If ((dim = "byOutcome") || (dim = "byReasonCode")) && (value ? 1"HTTP_"3N) Quit value
+    If (dim = "byReasonCode") && (value ? 1"ack_"1(1"AE",1"AR",1"CE",1"CR")) Quit value
+    Quit ..Withheld(value)
 }
 
 /// The Ens.MessageHeader id of a message body, or "".

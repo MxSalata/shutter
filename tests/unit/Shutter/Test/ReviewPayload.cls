@@ -141,8 +141,10 @@ Method TestFillReadsTheRuleOnce()
 }
 
 /// The case aggregates' keys come from the cases' own fields, which POST /intake and a connector fill: an item, a reason
-/// code and an outcome can each hold a patient's name. The model reads the production's items and a code's shape as they
-/// are, any other key as a digest, with every count as it was; the keys do not move with the aggregates.
+/// code and an outcome can each hold a patient's name, as free text or as one word that looks like a code (ZEBEDEE,
+/// SW1A1AA). The model reads the production's items, the failure kinds and states of the case's own lists, and the
+/// outcomes and reason codes Shutter, its connector and the downstream contract write as they are, any other key as a
+/// digest, with every count as it was; the keys do not move with the aggregates.
 Method TestAggregateKeys()
 {
     Set data = ..Data(0)
@@ -153,21 +155,22 @@ Method TestAggregateKeys()
     While iter.%GetNext(.i, .item) { Do names.%Push(item.name) }
     Set result.itemNames = names
     Set leak = "patient ZEBEDEE TESTPATIENT MRN T9990001 unknown"
-    Set lab = {"count": 4, "unique": 3, "byFailureKind": {"delivery_failed": 3, "rejected": 1}, "byOutcome": {"AR": 1, "T9990001": 2, "(none)": 1}, "byReasonCode": {"ward_unavailable": 1, "HTTP_503": 1}, "byState": {"escalated": 4}, "latest": ["C-000004", "C-000003"]}
+    Set lab = {"count": 4, "unique": 3, "byFailureKind": {"delivery_failed": 3, "rejected": 1}, "byOutcome": {"AR": 1, "T9990001": 2, "(none)": 1, "uncertain": 1, "TESTPATIENT": 1}, "byReasonCode": {"ward_unavailable": 1, "HTTP_503": 1, "ack_AR": 1, "ZEBEDEE": 1, "SW1A1AA": 1, "01JAN70": 1, "MRN123": 1}, "byState": {"escalated": 4}, "latest": ["C-000004", "C-000003"]}
     Do lab.byReasonCode.%Set(leak, 2)
-    Set ward = {"count": 2, "unique": 2, "byFailureKind": {}, "byOutcome": {}, "byReasonCode": {"9990001234": 1, "19700101": 1}, "byState": {}, "latest": ["C-000007"]}
+    Set ward = {"count": 2, "unique": 2, "byFailureKind": {"ZEBEDEE": 1}, "byOutcome": {}, "byReasonCode": {"9990001234": 1, "19700101": 1}, "byState": {"TESTPATIENT": 1}, "latest": ["C-000007"]}
     Set feed = {"count": 1, "unique": 1, "byFailureKind": {}, "byOutcome": {}, "byReasonCode": {}, "byState": {}, "latest": ["C-000008"]}
-    Set total = {"count": 7, "unique": 6, "byFailureKind": {}, "byOutcome": {}, "byReasonCode": {"ward_unavailable": 1}, "byState": {}, "latest": ["C-000009"]}
+    Set word = {"count": 1, "unique": 1, "byFailureKind": {}, "byOutcome": {}, "byReasonCode": {}, "byState": {}, "latest": ["C-000006"]}
+    Set total = {"count": 8, "unique": 7, "byFailureKind": {}, "byOutcome": {}, "byReasonCode": {"ward_unavailable": 1, "ZEBEDEE_TESTPATIENT": 1}, "byState": {}, "latest": ["C-000009"]}
     Do total.byReasonCode.%Set(leak, 2)
     Set cases = {}
-    Do cases.%Set("Lab Out", lab), cases.%Set("Ward Out", ward), cases.%Set("ZEBEDEE TESTPATIENT ward feed", feed), cases.%Set("_total", total)
+    Do cases.%Set("Lab Out", lab), cases.%Set("Ward Out", ward), cases.%Set("ZEBEDEE TESTPATIENT ward feed", feed), cases.%Set("ZEBEDEE", word), cases.%Set("_total", total)
     Set result.caseAggregates = cases
     Set req = ..Request(result)
     Do $$$AssertTrue($ISOBJECT(req), "the request is built")
     Quit:'$ISOBJECT(req)
     Set payload = ..Payload(req)
     Set ptr = 0
-    While $LISTNEXT($LISTFROMSTRING(..#NEEDLES), ptr, needle) {
+    While $LISTNEXT($LISTFROMSTRING(..#NEEDLES _ ",SW1A1AA,01JAN70,MRN123"), ptr, needle) {
         Do $$$AssertNotTrue(payload [ needle, needle _ " is not in what the model is sent")
     }
     Set sent = {}.%FromJSON(req.Context).cases
@@ -175,6 +178,8 @@ Method TestAggregateKeys()
     Set shown = ##class(Shutter.Process.Review).Withheld("ZEBEDEE TESTPATIENT ward feed")
     Do $$$AssertTrue($ISOBJECT(sent.%Get(shown)), "an item key that is no item of the production goes as its digest: " _ shown)
     Do $$$AssertEquals(sent.%Get(shown).count, 1, "with its count")
+    Set shown = ##class(Shutter.Process.Review).Withheld("ZEBEDEE")
+    Do $$$AssertTrue($ISOBJECT(sent.%Get(shown)) && (sent.%Get(shown).latest.%Get(0) = "C-000006"), "an item key of one word that is no item of the production goes as its digest too")
     Set a = sent.%Get("Lab Out")
     Do $$$AssertEquals(a.count, 4, "the item's count is as it was")
     Do $$$AssertEquals(a.latest.%Get(0), "C-000004", "and its newest case ids")
@@ -186,8 +191,19 @@ Method TestAggregateKeys()
     Do $$$AssertEquals(a.byReasonCode.%Get(##class(Shutter.Process.Review).Withheld(leak)), 2, "a reason code that is free text goes as its digest, with its count")
     Do $$$AssertEquals(a.byOutcome.%Get(##class(Shutter.Process.Review).Withheld("T9990001")), 2, "a code's shape with an identifier's run of digits is withheld too")
     Do $$$AssertEquals(a.byState.escalated, 4, "a state is kept")
+    Do $$$AssertEquals(a.byOutcome.uncertain, 1, "an outcome Shutter writes is kept")
+    Do $$$AssertEquals(a.byReasonCode."ack_AR", 1, "and an acknowledgement's reason code")
+    Set w = "Shutter.Process.Review"
+    For v = "ZEBEDEE", "SW1A1AA", "01JAN70", "MRN123" {
+        Do $$$AssertEquals(a.byReasonCode.%Get($CLASSMETHOD(w, "Withheld", v)), 1, "a reason code of one word that Shutter never writes goes as its digest: " _ v)
+    }
+    Do $$$AssertEquals(a.byOutcome.%Get($CLASSMETHOD(w, "Withheld", "TESTPATIENT")), 1, "as does an outcome")
+    Set b = sent.%Get("Ward Out")
+    Do $$$AssertEquals(b.byFailureKind.%Get($CLASSMETHOD(w, "Withheld", "ZEBEDEE")), 1, "a failure kind outside the case's list goes as its digest")
+    Do $$$AssertEquals(b.byState.%Get($CLASSMETHOD(w, "Withheld", "TESTPATIENT")), 1, "and a state outside it")
+    Do $$$AssertEquals(sent."_total".byReasonCode.%Get($CLASSMETHOD(w, "Withheld", "ZEBEDEE_TESTPATIENT")), 1, "a code's shape that is no code Shutter knows is withheld in the totals")
     Do $$$AssertEquals(sent."_total".byReasonCode.%Get(##class(Shutter.Process.Review).Withheld(leak)), 2, "the production's totals are reduced the same way")
-    Do $$$AssertEquals(sent."_total".count, 7, "and keep their count")
+    Do $$$AssertEquals(sent."_total".count, 8, "and keep their count")
     // The stored aggregates are the operator's: building the request leaves them whole.
     Do $$$AssertEquals(cases.%Get("Lab Out").byReasonCode.%Get(leak), 2, "the review keeps the reason code's text")
     Do $$$AssertTrue($ISOBJECT(cases.%Get("ZEBEDEE TESTPATIENT ward feed")), "and the item key")
@@ -195,18 +211,50 @@ Method TestAggregateKeys()
     Do $$$AssertEquals(req.RecordKey, clean.RecordKey, "nor does the record key")
 }
 
-/// A key of the aggregates as the model reads it.
+/// An item key of the aggregates as the model reads it: an item of the production, or the sweep's word for none; no
+/// shape lets anything else through.
 Method TestModelKey()
 {
     Set m = "Shutter.Process.Review"
     Set known("Lab Out") = ""
     Do $$$AssertEquals($CLASSMETHOD(m, "ModelKey", "Lab Out", .known), "Lab Out", "an item of the production is kept")
-    Do $$$AssertEquals($CLASSMETHOD(m, "ModelKey", "NO_BOARD_ANSWER", .known), "NO_BOARD_ANSWER", "a code is kept")
     Do $$$AssertEquals($CLASSMETHOD(m, "ModelKey", "(none)", .known), "(none)", "the word for no value is kept")
     Do $$$AssertEquals($CLASSMETHOD(m, "ModelKey", "", .known), "", "nothing gives nothing")
     Do $$$AssertEquals($CLASSMETHOD(m, "ModelKey", "Lab In", .known), $CLASSMETHOD(m, "Withheld", "Lab In"), "a name with a space that is no known item is withheld")
-    Do $$$AssertEquals($CLASSMETHOD(m, "ModelKey", "ABC1234", .known), $CLASSMETHOD(m, "Withheld", "ABC1234"), "four digits in a row are withheld")
-    Do $$$AssertEquals($CLASSMETHOD(m, "ModelKey", $TRANSLATE($JUSTIFY("", 41), " ", "A"), .known), $CLASSMETHOD(m, "Withheld", $TRANSLATE($JUSTIFY("", 41), " ", "A")), "more than 40 marks is withheld")
+    For v = "ZEBEDEE", "TESTPATIENT", "ZEBEDEE_TESTPATIENT", "Zebedee", "MRN123", "SW1A1AA", "01JAN70", "DOB_01JAN70", "MRN_T999_000_1", "NO_BOARD_ANSWER", "ABC1234" {
+        Do $$$AssertEquals($CLASSMETHOD(m, "ModelKey", v, .known), $CLASSMETHOD(m, "Withheld", v), "one word that is no known item is withheld, whatever its shape: " _ v)
+    }
+}
+
+/// A value within the aggregates as the model reads it: a failure kind or a state from the case's own list, an outcome or
+/// a reason code that Shutter, its connector or the downstream contract writes, an acknowledgement's code or an HTTP
+/// status in their fixed shapes, and the sweep's word for none; anything else, a code's shape included, as its digest.
+Method TestModelValue()
+{
+    Set m = "Shutter.Process.Review"
+    For v = "delivery_failed", "uncertain_outcome", "rejected", "unmappable", "withheld", "unreadable" {
+        Do $$$AssertEquals($CLASSMETHOD(m, "ModelValue", "byFailureKind", v), v, "a failure kind of the case's list is kept: " _ v)
+    }
+    For v = "detected", "escalated", "resolved", "awaiting_approval" {
+        Do $$$AssertEquals($CLASSMETHOD(m, "ModelValue", "byState", v), v, "a state of the case's list is kept: " _ v)
+    }
+    For v = "applied", "uncertain", "rejected", "unavailable", "error", "refused", "version_conflict", "AR", "HTTP_503" {
+        Do $$$AssertEquals($CLASSMETHOD(m, "ModelValue", "byOutcome", v), v, "an outcome Shutter writes is kept: " _ v)
+    }
+    For v = "ward_unavailable", "alert", "alert_unread", "schema_unknown", "invalid_message", "merge", "cancel_unsupported", "onboarding_test", "duplicate_message", "bed_occupied", "ack_AE", "ack_AR", "ack_CE", "ack_CR", "HTTP_503", "timeout" {
+        Do $$$AssertEquals($CLASSMETHOD(m, "ModelValue", "byReasonCode", v), v, "a reason code Shutter knows is kept: " _ v)
+    }
+    For dim = "byFailureKind", "byOutcome", "byReasonCode", "byState" {
+        Do $$$AssertEquals($CLASSMETHOD(m, "ModelValue", dim, "(none)"), "(none)", "the word for no value is kept in " _ dim)
+        Do $$$AssertEquals($CLASSMETHOD(m, "ModelValue", dim, ""), "", "nothing gives nothing in " _ dim)
+        For v = "ZEBEDEE", "TESTPATIENT", "ZEBEDEE_TESTPATIENT", "Zebedee", "MRN123", "SW1A1AA", "01JAN70", "DOB_01JAN70", "MRN_T999_000_1", "T9990001", "patient ZEBEDEE TESTPATIENT" {
+            Do $$$AssertEquals($CLASSMETHOD(m, "ModelValue", dim, v), $CLASSMETHOD(m, "Withheld", v), "a value Shutter never writes is withheld in " _ dim _ ": " _ v)
+        }
+    }
+    Do $$$AssertEquals($CLASSMETHOD(m, "ModelValue", "byReasonCode", "ack_ZEBEDEE"), $CLASSMETHOD(m, "Withheld", "ack_ZEBEDEE"), "an acknowledgement's code is two letters")
+    Do $$$AssertEquals($CLASSMETHOD(m, "ModelValue", "byReasonCode", "HTTP_5031"), $CLASSMETHOD(m, "Withheld", "HTTP_5031"), "an HTTP status is three digits")
+    Do $$$AssertEquals($CLASSMETHOD(m, "ModelValue", "byFailureKind", "ward_unavailable"), $CLASSMETHOD(m, "Withheld", "ward_unavailable"), "each list is its own dimension's")
+    Do $$$AssertEquals($CLASSMETHOD(m, "ModelValue", "byReasonCode", "WARD_UNAVAILABLE"), $CLASSMETHOD(m, "Withheld", "WARD_UNAVAILABLE"), "and a code is read in its own case")
 }
 
 /// The model's form of a signature: IRIS error codes as they are, any other text as a digest that is the same each time.
