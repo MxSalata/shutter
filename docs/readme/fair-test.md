@@ -536,7 +536,7 @@ and approval by the rig, three runs a case, 8 November 2026; the manifest checke
   expected version, applied and verified; the 1.0.0 board also wrote F07, which the 1.1.0 gate now holds (below).
 - **The gate stopped two right plans,** so the score is worse than 1.0.0's, and the gate is the reason, not the agents.
   Both checks came in with 1.1.0; in all six runs nothing was written.
-  - **F03, a bug, fixed for release 1.1.2.** The board proposed `reconcile`, the reference outcome. The receiver holds a
+  - **F03, a bug; its fix is for release 1.1.2.** The board proposed `reconcile`, the reference outcome. The receiver holds a
     committed receipt under the failed key with the operation's own digest, but the receipt's bed is JSON null, and the
     1.1.0 receipt check read a null bed as a different bed (`RECEIPT_PAYLOAD_DIFFERS`), so a person gets a case the
     receipt had settled.
