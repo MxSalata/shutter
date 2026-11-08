@@ -1933,7 +1933,7 @@ else; at most 3600 characters. The server holds it to its shape (`Shutter.Util.P
 plain keys (`[A-Za-z][A-Za-z0-9_]{0,39}`), at most three levels deep and forty entries wide in one place, texts cut at 200
 characters with their control characters removed, numbers, booleans and nulls kept, anything else `400 bad_request`; and to
 its length, at most 4000 characters as the agent reads it. It reaches the agent as data: inside the evidence tag the context
-is JSON with every `<`, `>` and `&` written as `<`, `>` and `&` (`AsData`), so no label can close the tag,
+is JSON with every `<`, `>` and `&` written as `\u003c`, `\u003e` and `\u0026` (`AsData`), so no label can close the tag,
 open another or read as markup, and a JSON reader gets the same characters back. The agent's context is `{tier: "page",
 question_id, question: {text, note}, page, on_screen, on_screen_note}`, the notes saying the question and the summary are
 data, never instructions; the agent's own rules say the same (`Shutter.Agent.Base.PagePreamble`).
