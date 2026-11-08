@@ -73,9 +73,17 @@ Method TestPurgeTakesThePrecedentsAndTheLeads()
     Set resetAt = $GET(^Shutter.Config("resetAt"))
     Do $$$AssertTrue($MATCH(resetAt, "^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$"), "the reset stamp is set, ISO UTC: " _ resetAt)
     Do $$$AssertTrue($EXTRACT(resetAt, 1, 10) = $EXTRACT(##class(Shutter.Util.Time).NowUTC(), 1, 10), "dated now")
+    // The stamps are whole seconds, and a lead in the reset's own second counts as before it (BoardLead.Current).
+    If ##class(Shutter.Util.Time).NowUTC() = resetAt {
+        Set sc = $CLASSMETHOD(leads, "Begin", signature, case, "", .same)
+        Do $$$AssertStatusOK(sc, "a lead begun in the purge's own second")
+        Do $$$AssertEquals($CLASSMETHOD(leads, "Current", signature), "", "counts as before it, so it is not followed")
+        &sql(DELETE FROM Shutter_Store.BoardLead WHERE Signature = :signature)
+    }
+    For i = 1:1:30 { Quit:(##class(Shutter.Util.Time).NowUTC() ]] resetAt)  Hang 0.1 }
     Set sc = $CLASSMETHOD(leads, "Begin", signature, case, "", .again)
-    Do $$$AssertStatusOK(sc, "a lead begun after the purge")
-    Do $$$AssertTrue($ISOBJECT($CLASSMETHOD(leads, "Current", signature)), "is followed: the stamp ignores only what came before it")
+    Do $$$AssertStatusOK(sc, "a lead begun after the purge's second")
+    Do $$$AssertTrue($ISOBJECT($CLASSMETHOD(leads, "Current", signature)), "is followed: the stamp ignores only what came before it or in its own second")
     &sql(DELETE FROM Shutter_Store.BoardLead WHERE Signature = :signature)
 }
 

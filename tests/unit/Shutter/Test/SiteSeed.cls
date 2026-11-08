@@ -56,10 +56,13 @@ Method StoredAsTheSeed()
     Do ..PutRow(##class(Shutter.Store.SiteProfile).Default().%ToJSON(), ..SeedPath, +rs.%Get("v"))
 }
 
-/// The shape of the shipped seed: both demo receivers, tier 2 single automatic, and a team that names one of them.
+/// The shape of the seed as a demo install uses it: both demo receivers, the demo's own table (tier 2 single automatic,
+/// Shutter.Store.SiteProfile.DemoPolicy), and a team that names one of them. The shipped table asks a person everywhere,
+/// so the demo's is the one with automatic releases for a non-demo install to take out.
 Method WriteSeed(extra As %String = "") As %String
 {
     Set p = ##class(Shutter.Store.SiteProfile).Default()
+    Set p.policy = ##class(Shutter.Store.SiteProfile).DemoPolicy()
     Do p.receivers.%Push({"name": "Records Out", "system": "the demo patient records system", "category": "history_of_record", "tier": 2, "applies": "arrival_order", "resend_timestamp": "original", "cancels": false, "merges": false, "api": {"base": "/records/api", "state": "/encounters/{encounter}", "receipt": "/receipts/{key}", "capabilities": "/capabilities", "operations": "/operations"}, "features": {"conditional_writes": true, "receipts": true, "history": true, "dry_run": true}, "demo": {"namespace": "RECORDS"}})
     If extra '= "" Do p.receivers.%Push({"name": (extra), "system": "a site's own system", "tier": 2})
     Set p.mail = {"allowed_domains": ["example.nhs.uk"]}
@@ -155,7 +158,9 @@ Method TestDemoSeed()
     Do $$$AssertTrue($ISOBJECT(##class(Shutter.Store.SiteProfile).Receiver("Downstream Out")), "Downstream Out stays")
     Do $$$AssertTrue($ISOBJECT(##class(Shutter.Store.SiteProfile).Receiver("Records Out")), "Records Out stays")
     Do ..HideProfile()
-    Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).Policy(2, "single"), "automatic", "and with no profile stored")
+    // With no profile stored, the demo reads the shipped defaults as they are, which ask a person at every tier (v1.1.0).
+    Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).Policy(2, "single"), "approval", "and with no profile stored, the shipped default")
+    Do $$$AssertTrue($ISOBJECT(##class(Shutter.Store.SiteProfile).Receiver("Downstream Out")), "whose demo receiver stays")
 }
 
 }
