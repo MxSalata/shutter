@@ -125,10 +125,10 @@ ClassMethod RecordKeyFor(namespace As %String, production As %String, fingerprin
 /// The agent's request for a review: the findings as the sweep wrote them, less what is not for the model (the error
 /// example text, which may quote an HL7 segment; the annotation id; the rank and explanation it is to fill), and the
 /// per-item case aggregates (counts and case ids only: the sweep never reads note text, operation-key pieces or failure
-/// text, so no patient or encounter identifier reaches the context by construction; an error group's signature, the one
-/// piece of log text in a finding, goes as ModelSignature shows it). Who asked (v1.39) is the run's
-/// requester, for the budget's share; nobody named means the feed's own ("system", no share). A class method, so a
-/// test can build the same request outside the production.
+/// text; an error group's signature, the one piece of log text in a finding, goes as ModelSignature shows it, and every
+/// key of the aggregates, which a feed or a connector can fill with free text, as ModelKey shows it). Who asked (v1.39)
+/// is the run's requester, for the budget's share; nobody named means the feed's own ("system", no share). A class
+/// method, so a test can build the same request outside the production.
 ClassMethod BuildAgentRequest(review As Shutter.Store.Review, result As %DynamicObject, maxIterations As %Integer = 3, tokenBudget As %Integer = 60000, requestedBy As %String = "") As Shutter.Bridge.Msg.AgentRequest
 {
     Set req = ##class(Shutter.Bridge.Msg.AgentRequest).%New()
@@ -154,6 +154,20 @@ ClassMethod BuildAgentRequest(review As Shutter.Store.Review, result As %Dynamic
     Set context.summary = summary
     Set findings = []
     Set source = result.%Get("findings")
+    // The names the agent may read as they are in the aggregates' keys: the production's items, and the items the
+    // findings are about (an item since removed from the production still logs under its name).
+    Kill known
+    Set names = result.%Get("itemNames")
+    If $ISOBJECT(names) {
+        Set iter = names.%GetIterator()
+        While iter.%GetNext(.i, .name) { Set:name'="" known(name) = "" }
+    }
+    If $ISOBJECT(source) {
+        Set iter = source.%GetIterator()
+        While iter.%GetNext(.i, .f) {
+            If $ISOBJECT(f) && (##class(Shutter.Util.Json).Str(f, "item") '= "") Set known(f.item) = ""
+        }
+    }
     If $ISOBJECT(source) {
         Set iter = source.%GetIterator()
         While iter.%GetNext(.i, .f) {
@@ -177,7 +191,7 @@ ClassMethod BuildAgentRequest(review As Shutter.Store.Review, result As %Dynamic
     Set context.findings = findings
     Set agg = result.%Get("caseAggregates")
     If '$ISOBJECT(agg) Set agg = {}
-    Set context.cases = agg
+    Set context.cases = ..ModelAggregates(agg, .known)
     Set req.Context = context.%ToJSON()
     Quit req
 }
@@ -191,7 +205,65 @@ ClassMethod ModelSignature(signature As %String) As %String
     If signature = "" Quit ""
     If signature ? 1"ERROR #"1.N Quit signature
     If signature ? 1"ERROR <"1.(1A,1N,1"%",1".")1">"1.(1A,1N) Quit signature
-    Quit "[withheld text " _ $EXTRACT($PIECE(##class(Shutter.Util.Digest).SHA256Hex(signature), ":", 2), 1, 12) _ "]"
+    Quit ..Withheld(signature)
+}
+
+/// A text the review's agent is not to read: "[withheld text h]", h the first 12 hex digits of its SHA-256, the same on
+/// every review, so one text still reads as one.
+ClassMethod Withheld(text As %String) As %String
+{
+    Quit "[withheld text " _ $EXTRACT($PIECE(##class(Shutter.Util.Digest).SHA256Hex(text), ":", 2), 1, 12) _ "]"
+}
+
+/// The case aggregates as the review's agent sees them. Their keys come from the cases' own fields: the item (Receiver or
+/// SourceRoute), and the values by failure kind, outcome, reason code and state, which POST /intake and a connector's
+/// reason_code can fill with any text, a patient's name included. Each key goes as ModelKey shows it; the counts and the
+/// case ids go as they are, and two keys withheld into one (never in practice) add their counts.
+ClassMethod ModelAggregates(agg As %DynamicObject, ByRef known) As %DynamicObject
+{
+    Set out = {}
+    Set iter = agg.%GetIterator()
+    While iter.%GetNext(.name, .a) {
+        // The sweep's own keys, the production's totals and its error when the store could not be read, stay as they are.
+        Set shown = $SELECT((name = "_total") || (name = "_error"): name, 1: ..ModelKey(name, .known))
+        Do out.%Set(shown, $SELECT($ISOBJECT(a): ##class(%DynamicAbstractObject).%FromJSON(a.%ToJSON()), 1: a))
+    }
+    // The values within each aggregate, the production's totals included: no item name is a value, so only a code shape
+    // is kept.
+    Kill none
+    Set iter = out.%GetIterator()
+    While iter.%GetNext(.name, .a) {
+        Continue:'$ISOBJECT(a)
+        For dim = "byFailureKind", "byOutcome", "byReasonCode", "byState" {
+            Set by = a.%Get(dim)
+            Continue:'$ISOBJECT(by)
+            Set reduced = {}
+            Set it2 = by.%GetIterator()
+            While it2.%GetNext(.v, .n) {
+                Set k = ..ModelKey(v, .none)
+                If reduced.%IsDefined(k) && (by.%GetTypeOf(v) = "number") {
+                    Do reduced.%Set(k, reduced.%Get(k) + n)
+                } Else {
+                    Do reduced.%Set(k, n)
+                }
+            }
+            Do a.%Set(dim, reduced)
+        }
+    }
+    Quit out
+}
+
+/// A key of the case aggregates as the review's agent sees it: a name in known (the production's items) as it is; a
+/// code's shape (letters, digits and underscores, 1 to 40 of them, with no run of four digits, which an MRN, an NHS
+/// number or a date has: delivery_failed, ward_unavailable, AR, HTTP_503) as it is; "(none)", the sweep's word for an
+/// empty value, as it is; any other text withheld (Withheld).
+ClassMethod ModelKey(key As %String, ByRef known) As %String
+{
+    If key = "" Quit ""
+    If key = "(none)" Quit key
+    If $DATA(known(key)) Quit key
+    If (key ? 1.40(1A,1N,1"_")) && '(key ? .E4N.E) Quit key
+    Quit ..Withheld(key)
 }
 
 /// The Ens.MessageHeader id of a message body, or "".

@@ -96,6 +96,119 @@ Method TestKeysDoNotMove()
     Do $$$AssertEquals(with.RecordKey, without.RecordKey, "nor does the record key")
 }
 
+/// The payload of a request, every part of it that leaves IRIS, as one text.
+ClassMethod Payload(req As Shutter.Bridge.Msg.AgentRequest) As %String
+{
+    Quit req.Goal _ $CHAR(10) _ req.Context _ $CHAR(10) _ req.RecordKey _ $CHAR(10) _ req.SnapshotDigest _ $CHAR(10) _ req.CorrelationKey
+}
+
+/// An application's signature can hold the very marks the check's words use, "(s)" and "{count}": the words quote the
+/// signature exactly as it is, so the request withholds it there too, and nothing of the made-up patient reaches the model.
+Method TestSignatureWithPlaceholderMarks()
+{
+    Set data = ..Data(0)
+    Do data.logErrors.%Push({"configName": "Lab Out", "sourceClass": "UT.Operation", "sourceMethod": "OnMessage", "signature": "Result(s) for ZEBEDEE TESTPATIENT rejected", "count": 4, "latestId": "721", "latestAt": "2026-10-25T09:41:00Z", "latestMessageId": "961", "exampleText": "Result(s) for ZEBEDEE TESTPATIENT rejected: T9990001"})
+    Do data.logErrors.%Push({"configName": "Ward Out", "sourceClass": "UT.Operation", "sourceMethod": "OnMessage", "signature": "ZEBEDEE {count} TESTPATIENT", "count": 4, "latestId": "722", "latestAt": "2026-10-25T09:42:00Z", "latestMessageId": "962", "exampleText": "ZEBEDEE {count} TESTPATIENT: 19700101"})
+    Set result = ..Result(data)
+    Set stored = ##class(Shutter.Test.Review).Find(result.findings, "ERRORS_GROUPED", "Lab Out")
+    Do $$$AssertTrue($ISOBJECT(stored), "the error group on Lab Out is found")
+    Quit:'$ISOBJECT(stored)
+    Do $$$AssertTrue(stored.why [ "4 errors with the signature Result(s) for ZEBEDEE TESTPATIENT rejected in the window", "the operator's words quote the signature as it is, and the plural still follows the count: " _ stored.why)
+    Set other = ##class(Shutter.Test.Review).Find(result.findings, "ERRORS_GROUPED", "Ward Out")
+    Do $$$AssertTrue($ISOBJECT(other) && (other.why [ "the signature ZEBEDEE {count} TESTPATIENT in the window"), "a {count} in a signature is not filled in")
+    Set req = ..Request(result)
+    Do $$$AssertTrue($ISOBJECT(req), "the request is built")
+    Quit:'$ISOBJECT(req)
+    Set payload = ..Payload(req)
+    Set ptr = 0
+    While $LISTNEXT($LISTFROMSTRING(..#NEEDLES), ptr, needle) {
+        Do $$$AssertNotTrue(payload [ needle, needle _ " is not in what the model is sent")
+    }
+    Set context = {}.%FromJSON(req.Context)
+    Set sent = ##class(Shutter.Test.Review).Find(context.findings, "ERRORS_GROUPED", "Lab Out")
+    Do $$$AssertTrue($ISOBJECT(sent) && (sent.why [ ##class(Shutter.Process.Review).ModelSignature(stored.found)), "the words name the digest")
+}
+
+/// The fill of a check's words reads the rule's text once: a value put in is never filled again.
+Method TestFillReadsTheRuleOnce()
+{
+    Set c = "Shutter.Review.Checks"
+    Do $$$AssertEquals($CLASSMETHOD(c, "Fill", "{count} error(s) with {found} on {item}", {"item": "", "found": "A(s) {count} {item}", "count": 4}), "4 errors with A(s) {count} {item} on the production itself", "found stands as it is")
+    Do $$$AssertEquals($CLASSMETHOD(c, "Fill", "{count} error(s)", {"count": 1}), "1 error", "one takes no plural")
+    Do $$$AssertEquals($CLASSMETHOD(c, "Fill", "{count} error(s) {other} {found", {"count": 2, "found": "x"}), "2 errors {other} {found", "an unknown or unclosed mark is left as it is")
+    Do $$$AssertEquals($CLASSMETHOD(c, "Fill", "error(s) on {item}", {"item": "Lab(s) Out"}), "error(s) on Lab(s) Out", "with no count the plural mark stays, and an item is not read again")
+    Do $$$AssertEquals($CLASSMETHOD(c, "Fill", "", {"count": 2}), "", "nothing gives nothing")
+}
+
+/// The case aggregates' keys come from the cases' own fields, which POST /intake and a connector fill: an item, a reason
+/// code and an outcome can each hold a patient's name. The model reads the production's items and a code's shape as they
+/// are, any other key as a digest, with every count as it was; the keys do not move with the aggregates.
+Method TestAggregateKeys()
+{
+    Set data = ..Data(0)
+    Set result = ..Result(data)
+    Set clean = ..Request(result)
+    Set names = []
+    Set iter = data.items.%GetIterator()
+    While iter.%GetNext(.i, .item) { Do names.%Push(item.name) }
+    Set result.itemNames = names
+    Set leak = "patient ZEBEDEE TESTPATIENT MRN T9990001 unknown"
+    Set lab = {"count": 4, "unique": 3, "byFailureKind": {"delivery_failed": 3, "rejected": 1}, "byOutcome": {"AR": 1, "T9990001": 2, "(none)": 1}, "byReasonCode": {"ward_unavailable": 1, "HTTP_503": 1}, "byState": {"escalated": 4}, "latest": ["C-000004", "C-000003"]}
+    Do lab.byReasonCode.%Set(leak, 2)
+    Set ward = {"count": 2, "unique": 2, "byFailureKind": {}, "byOutcome": {}, "byReasonCode": {"9990001234": 1, "19700101": 1}, "byState": {}, "latest": ["C-000007"]}
+    Set feed = {"count": 1, "unique": 1, "byFailureKind": {}, "byOutcome": {}, "byReasonCode": {}, "byState": {}, "latest": ["C-000008"]}
+    Set total = {"count": 7, "unique": 6, "byFailureKind": {}, "byOutcome": {}, "byReasonCode": {"ward_unavailable": 1}, "byState": {}, "latest": ["C-000009"]}
+    Do total.byReasonCode.%Set(leak, 2)
+    Set cases = {}
+    Do cases.%Set("Lab Out", lab), cases.%Set("Ward Out", ward), cases.%Set("ZEBEDEE TESTPATIENT ward feed", feed), cases.%Set("_total", total)
+    Set result.caseAggregates = cases
+    Set req = ..Request(result)
+    Do $$$AssertTrue($ISOBJECT(req), "the request is built")
+    Quit:'$ISOBJECT(req)
+    Set payload = ..Payload(req)
+    Set ptr = 0
+    While $LISTNEXT($LISTFROMSTRING(..#NEEDLES), ptr, needle) {
+        Do $$$AssertNotTrue(payload [ needle, needle _ " is not in what the model is sent")
+    }
+    Set sent = {}.%FromJSON(req.Context).cases
+    Do $$$AssertTrue($ISOBJECT(sent.%Get("Lab Out")) && $ISOBJECT(sent.%Get("Ward Out")), "the production's items are named as they are")
+    Set shown = ##class(Shutter.Process.Review).Withheld("ZEBEDEE TESTPATIENT ward feed")
+    Do $$$AssertTrue($ISOBJECT(sent.%Get(shown)), "an item key that is no item of the production goes as its digest: " _ shown)
+    Do $$$AssertEquals(sent.%Get(shown).count, 1, "with its count")
+    Set a = sent.%Get("Lab Out")
+    Do $$$AssertEquals(a.count, 4, "the item's count is as it was")
+    Do $$$AssertEquals(a.latest.%Get(0), "C-000004", "and its newest case ids")
+    Do $$$AssertEquals(a.byFailureKind."delivery_failed", 3, "a failure kind is a code and is kept")
+    Do $$$AssertEquals(a.byReasonCode."ward_unavailable", 1, "a reason code of a code's shape is kept")
+    Do $$$AssertEquals(a.byReasonCode."HTTP_503", 1, "with digits in it")
+    Do $$$AssertEquals(a.byOutcome.AR, 1, "an outcome code is kept")
+    Do $$$AssertEquals(a.byOutcome."(none)", 1, "and the sweep's word for no value")
+    Do $$$AssertEquals(a.byReasonCode.%Get(##class(Shutter.Process.Review).Withheld(leak)), 2, "a reason code that is free text goes as its digest, with its count")
+    Do $$$AssertEquals(a.byOutcome.%Get(##class(Shutter.Process.Review).Withheld("T9990001")), 2, "a code's shape with an identifier's run of digits is withheld too")
+    Do $$$AssertEquals(a.byState.escalated, 4, "a state is kept")
+    Do $$$AssertEquals(sent."_total".byReasonCode.%Get(##class(Shutter.Process.Review).Withheld(leak)), 2, "the production's totals are reduced the same way")
+    Do $$$AssertEquals(sent."_total".count, 7, "and keep their count")
+    // The stored aggregates are the operator's: building the request leaves them whole.
+    Do $$$AssertEquals(cases.%Get("Lab Out").byReasonCode.%Get(leak), 2, "the review keeps the reason code's text")
+    Do $$$AssertTrue($ISOBJECT(cases.%Get("ZEBEDEE TESTPATIENT ward feed")), "and the item key")
+    Do $$$AssertEquals(req.SnapshotDigest, clean.SnapshotDigest, "SnapshotDigest does not move with the aggregates")
+    Do $$$AssertEquals(req.RecordKey, clean.RecordKey, "nor does the record key")
+}
+
+/// A key of the aggregates as the model reads it.
+Method TestModelKey()
+{
+    Set m = "Shutter.Process.Review"
+    Set known("Lab Out") = ""
+    Do $$$AssertEquals($CLASSMETHOD(m, "ModelKey", "Lab Out", .known), "Lab Out", "an item of the production is kept")
+    Do $$$AssertEquals($CLASSMETHOD(m, "ModelKey", "NO_BOARD_ANSWER", .known), "NO_BOARD_ANSWER", "a code is kept")
+    Do $$$AssertEquals($CLASSMETHOD(m, "ModelKey", "(none)", .known), "(none)", "the word for no value is kept")
+    Do $$$AssertEquals($CLASSMETHOD(m, "ModelKey", "", .known), "", "nothing gives nothing")
+    Do $$$AssertEquals($CLASSMETHOD(m, "ModelKey", "Lab In", .known), $CLASSMETHOD(m, "Withheld", "Lab In"), "a name with a space that is no known item is withheld")
+    Do $$$AssertEquals($CLASSMETHOD(m, "ModelKey", "ABC1234", .known), $CLASSMETHOD(m, "Withheld", "ABC1234"), "four digits in a row are withheld")
+    Do $$$AssertEquals($CLASSMETHOD(m, "ModelKey", $TRANSLATE($JUSTIFY("", 41), " ", "A"), .known), $CLASSMETHOD(m, "Withheld", $TRANSLATE($JUSTIFY("", 41), " ", "A")), "more than 40 marks is withheld")
+}
+
 /// The model's form of a signature: IRIS error codes as they are, any other text as a digest that is the same each time.
 Method TestModelSignature()
 {
