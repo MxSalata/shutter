@@ -59,7 +59,11 @@ Method TestTheMovementDefaultIsShow()
         Do $$$AssertEquals(seed."further_messages"."in_patient_movement", $CLASSMETHOD(c, "Default")."further_messages"."in_patient_movement", "the seed file and Default() agree")
     }
     Do ..ChangeProfile({"further_messages": null})
-    Do $$$AssertEquals($CLASSMETHOD(c, "FurtherMovement"), "show", "a stored profile that doesn't say reads show")
+    // On a site's install; a demo reads stop instead (Shutter.Test.DemoMovement).
+    Set demo = $GET(^Shutter.Config("demo")), ^Shutter.Config("demo") = 0
+    Set reading = $CLASSMETHOD(c, "FurtherMovement")
+    If demo = "" { Kill ^Shutter.Config("demo") } Else { Set ^Shutter.Config("demo") = demo }
+    Do $$$AssertEquals(reading, "show", "a site's stored profile that doesn't say reads show")
     Do ..ChangeProfile({"further_messages": {"in_patient_movement": "stop"}})
     Do $$$AssertEquals($CLASSMETHOD(c, "FurtherMovement"), "stop", "a site that says stop keeps the stop")
     Do ..ChangeProfile({"further_messages": {"in_patient_movement": "show"}})
