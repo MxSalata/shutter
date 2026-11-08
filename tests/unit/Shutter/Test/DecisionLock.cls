@@ -152,7 +152,7 @@ ClassMethod CancelInJob(caseId As %String)
     Try {
         Set case = ##class(Shutter.Store.Case).%New()
         Set case.CaseId = caseId
-        Set wf = ##class(Shutter.Process.CaseWorkflow).%New()
+        Set wf = ##class(Shutter.Process.CaseWorkflow).%New("UT Case Workflow")
         Set decided = 0
         Set sc = wf.CancelOpenTask(case, "system", "a unit test's wait", .decided)
         Set ^Shutter.Test("lock") = {"decided": (+decided), "ok": ($SYSTEM.Status.IsOK(sc))}.%ToJSON()
