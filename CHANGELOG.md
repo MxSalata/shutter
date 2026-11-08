@@ -55,6 +55,29 @@ AI Hub features measured with no model call and on the publisher from an MCP cli
   figures, every term defined; six limits inline and the rest in `docs/readme/limits.md` as a table of effect, workaround
   and status; the fuller rows in `docs/edge-cases.md`; a pilot in the order it works in `first-steps.md`; and the
   held-out cases on release 1.1.1 in `fair-test.md`.
+- **The trial's judges' path.** The S8 card plays in the chosen mode and says so, `?trial=judge` opens Scenarios in Rules
+  only on the S8 card with no welcome, and the Rules only note says S8 is exempted on purpose and that the gate holds the
+  resend on a real case. The Evaluation page puts the held-out fair test above the board's own score, with always
+  escalating, both single investigator figures and release 1.1.1's board; **Explore on my own** keeps the welcome away
+  for the visit, and the boundary table's scroll area takes the focus where it scrolls sideways.
+- **The README review fixes.** The trial route has its own line, the first screen is shorter, only the identifiers
+  Shutter knows for the case are said to become tokens, and `SELECT Shutter.Setup_ClearProvider()`, which an install
+  keeps, is the way to send nothing out; the pilot maps the trust's users to the two roles first.
+- **The production review's agent never reads a patient's words.** An error group's signature goes to it as an IRIS
+  error code or a digest, never the logged text, and a case aggregate's key goes as it is only when Shutter knows the
+  word (an item of the production, a failure kind or state, an outcome or reason code Shutter writes, an acknowledgement
+  code or an HTTP status); anything else, a surname or a postcode included, goes as its digest with its count. The
+  stored review keeps every word, and the record key and `SnapshotDigest` don't move. The scenario routes
+  (`POST /scenarios/reset` and `/scenarios/{id}/run`) answer 403 `not_a_demo_instance` and change nothing off the demo,
+  and an end-to-end check plays two patients no fixture holds in Board mode with no key: nothing is written.
+- **The MCP page.** The forwarder's `tool_not_found` is credited to the MCP Inspector's own tool-list check, with the
+  sidecar's `isError` answer to a `tools/call` sent anyway.
+- **Docs truth for 1.1.2.** The README's first screen gives the trial first, then the online demo, then
+  `./install.sh --replay`, and a Measured box with each figure's release; `docs/readme/model-fails.md` maps each agent
+  run status to what the case does, with the real bounds; the safety and limits pages say what 1.1.2 does as shipped;
+  the F03 null-bed runs are published with the fair test; contracts v1.48. `docs/INSTALL.md` shows `InstallInto` with a
+  site's own production name.
+- **The health page.** Each group lists its checks first and its facts apart under **Details**.
 
 ## 1.1.1 (8 November 2026)
 
