@@ -1,4 +1,4 @@
-import { normalisedSearch } from '@/env/mode';
+import { startAddress } from '@/env/mode';
 
 /**
  * The tab's memory of the trial, in `sessionStorage` (one tab, gone when it closes; never API data):
@@ -56,8 +56,9 @@ export function compactBanner(): void {
 /**
  * A trial page's start, before its first render: the page is marked as the trial (before the first paint
  * `public/color-scheme.js` has already done so), the tab is marked as having visited it, the banner takes its form,
- * the tab's title says "(trial)", and `?trial=tour` or `?trial=engineer` becomes `?trial`, so a reload does not open
- * the tour's welcome again (React Router's own history state is kept).
+ * the tab's title says "(trial)", and `?trial=tour`, `?trial=engineer` or `?trial=judge` becomes `?trial`, so a reload
+ * does not open the tour's welcome again or take the judges' path again (React Router's own history state is kept).
+ * The judges' path (`?trial=judge`) also opens on Scenarios in Rules only mode, whatever page the address named.
  */
 export function enterTrialPage(): void {
   document.documentElement.dataset.shutterEnv = 'trial';
@@ -65,13 +66,10 @@ export function enterTrialPage(): void {
   write(TRIAL_VISITED_KEY, '1');
   setForm(before ? 'compact' : 'full');
   document.title = 'Shutter (trial)';
-  const search = normalisedSearch(window.location.search);
-  if (search !== window.location.search)
-    window.history.replaceState(
-      window.history.state,
-      '',
-      `${window.location.pathname}${search}${window.location.hash}`,
-    );
+  // The judges' path opens on Scenarios in Rules only mode, before the router reads the address
+  const { search, hash } = startAddress(window.location.search, window.location.hash);
+  if (search !== window.location.search || hash !== window.location.hash)
+    window.history.replaceState(window.history.state, '', `${window.location.pathname}${search}${hash}`);
 }
 
 /** Whether this tab came from the trial since the live page last said so, and forgets it once asked. */

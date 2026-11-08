@@ -82,7 +82,7 @@ describe('proofParts', () => {
   it('takes its figures from the evaluation, never typed', () => {
     const parts = proofParts(PROOF);
     expect(parts.tested).toBe(
-      `Tested on ${PROOF.board!.scored} recorded failures, the board chose the expected action every time.`,
+      `Tested on ${PROOF.board!.scored} recorded board runs, each against its scenario's expected action: the board chose it every time.`,
     );
     expect(parts.played).toEqual({
       of: PROOF.played!.of,
@@ -98,7 +98,8 @@ describe('proofParts', () => {
   it('follows other figures, and leaves out a sentence the evaluation cannot give', () => {
     const board = { matched: 22, scored: 24, passes: 25, cases: 24, notScored: 1 };
     expect(proofParts({ board, played: null })).toEqual({
-      tested: 'Tested on 24 recorded failures, the board chose the expected action in 22 of them.',
+      tested:
+        "Tested on 24 recorded board runs, each against its scenario's expected action: the board chose it in 22 of them.",
       played: null,
       bases: '(24 scored passes, proposed action)',
     });

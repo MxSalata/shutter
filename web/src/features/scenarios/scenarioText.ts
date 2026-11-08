@@ -63,7 +63,10 @@ export function recordedLine(played: { board: PlayedResult; rules: PlayedResult 
 
 /** The proof line's parts, each left out when the evaluation cannot give its figures. */
 export interface ProofParts {
-  /** "Tested on 24 recorded failures, the board chose the expected action every time." */
+  /**
+   * "Tested on 24 recorded board runs, each against its scenario's expected action: the board chose it every time." A
+   * run is one recorded pass of the board over one scenario's failure, so the count is of runs, not of scenarios.
+   */
   tested: string | null;
   /** Played end to end on the same failures: how many, the board's and Rules only's expected outcomes. */
   played: { of: number; board: number; rules: number; ofThem: boolean } | null;
@@ -75,7 +78,7 @@ export interface ProofParts {
 export function proofParts(proof: Pick<Proof, 'board' | 'played'>): ProofParts {
   const { board, played } = proof;
   const tested = board
-    ? `Tested on ${board.scored} recorded failures, the board chose the expected action ${
+    ? `Tested on ${board.scored} recorded board runs, each against its scenario's expected action: the board chose it ${
         board.matched === board.scored ? 'every time' : `in ${board.matched} of them`
       }.`
     : null;

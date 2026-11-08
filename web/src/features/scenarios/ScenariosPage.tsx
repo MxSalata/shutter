@@ -19,7 +19,8 @@ import {
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconFlask2, IconPlayerPlay, IconRefresh, IconShieldX } from '@tabler/icons-react';
-import { useMemo } from 'react';
+import { useReducedMotion } from '@mantine/hooks';
+import { useEffect, useMemo } from 'react';
 import { Link } from 'react-router';
 import { useListParams } from '@/lib/listParams';
 import {
@@ -34,7 +35,7 @@ import {
 } from '@/api/hooks';
 import { scenariosHidden } from '@/api/can';
 import type { CaseSummary, Mode, Scenario, ScenarioRun } from '@/api/types';
-import { TRIAL } from '@/env/mode';
+import { ENV, TRIAL } from '@/env/mode';
 import { byEnv } from '@/env/copy';
 import { PageHeader } from '@/components/PageHeader';
 import { CodeChip } from '@/components/CodeChip';
@@ -54,6 +55,7 @@ import { playedFor } from '@/lib/proof';
 import type { Tone } from '@/lib/tone';
 import { useTechnical } from '@/stores/appearance';
 import { HINT_EVENTS } from '@/theme';
+import { landOn } from '@/features/guide/reveal';
 import { MoreAbout } from './MoreAbout';
 import { ScenarioDiagram } from './ScenarioDiagram';
 import { StartHere } from './StartHere';
@@ -718,6 +720,26 @@ function AllScenarios({
   );
 }
 
+/** The judges' path (`?trial=judge`) lands on the S8 card once per page, never again on a later visit to Scenarios. */
+let judgeLanded = false;
+
+/**
+ * The judges' path: once the cards are drawn, the page lands on S8's, which plays in the mode the address chose (Rules
+ * only), and its Run takes the focus, so Enter or a click plays it.
+ */
+function useJudgeLanding(ready: boolean) {
+  const reduced = useReducedMotion();
+  useEffect(() => {
+    if (!ENV.judgePath || judgeLanded || !ready) return;
+    const card = document.querySelector<HTMLElement>('[data-first="S8"]');
+    if (!card) return;
+    judgeLanded = true;
+    card.querySelector<HTMLElement>('[data-tour-action="run-S8"]')?.focus({ preventScroll: true });
+    // Not stopped on unmount: a second effect run (StrictMode) would find it landed and leave the page where it was
+    landOn(card, reduced);
+  }, [ready, reduced]);
+}
+
 export default function ScenariosPage() {
   const can = useCan();
   const scenarios = useScenarios();
@@ -742,6 +764,7 @@ export default function ScenariosPage() {
   const picked = MODES.find((m) => m.value === params.get('mode'))?.value;
   const mode = picked ?? defaultMode;
   const setMode = (next: Mode) => change((p) => p.set('mode', next));
+  useJudgeLanding(!!scenarios.data);
   const current = scenarios.data?.run ?? null;
   const busy = isPlaying(current) ? `A run of ${current?.scenario} is still playing` : '';
   /** Why Reset is disabled now, or "". */
@@ -859,6 +882,7 @@ export default function ScenariosPage() {
             onRun={start}
             demo={hidden}
             whyId={LOOK_ONLY_WHY}
+            chosen={mode}
           />
         )}
         {playerOff ? (

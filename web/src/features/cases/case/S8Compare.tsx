@@ -331,7 +331,8 @@ export function S8RulesNote({ c }: { c: CaseDetail }) {
       <Group gap="xs" wrap="nowrap" align="flex-start">
         <IconAlertTriangle size={18} aria-hidden style={{ flexShrink: 0 }} />
         <Text size="sm" fw={600}>
-          Wrote WARD-B over the bed manager's WARD-C. Every check passed; only the board caught it.
+          Rules only, exempted here on purpose to show a plain resend: every check passed and WARD-B was
+          written over WARD-C. On a real case the gate holds it.
         </Text>
       </Group>
     </Paper>

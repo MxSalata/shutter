@@ -13,6 +13,7 @@ import { theme } from '@/theme';
 import type { DetailLevel } from '@/env/mode';
 import { outweighedIn, passName, type Evaluation } from './evaluation';
 import EvaluationPage from './EvaluationPage';
+import { HELD_OUT } from './heldOut';
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 afterEach(() => server.resetHandlers());
@@ -127,6 +128,23 @@ describe('EvaluationPage', () => {
       'href',
       '/cases/C-000008?show=compare',
     );
+  });
+
+  it("puts the held-out fair test above the board's own score, its figures fair-test.md's", () => {
+    renderPage();
+    const card = within(headline()).getByRole('region', {
+      name: "Held out: 12 sealed cases, 3 runs each, on release 1.0.0's code",
+    });
+    expect(visible(card.querySelector('p')!)).toBe(
+      'Strict mean loss, lower is better: the board 0.167, the single investigator 0.167, Site policy with no model 3.500; with no model, F09 was written wrongly in every run. fair-test.md',
+    );
+    expect(within(card).getByRole('link', { name: 'fair-test.md' })).toHaveAttribute(
+      'href',
+      'https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md',
+    );
+    // Above the self-graded tile: the board's proposals on its own recorded scenarios
+    const own = within(headline()).getByText('recorded failures where the board chose the expected action');
+    expect(card.compareDocumentPosition(own) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('sets Rules only beside the board on one base, apart from the proposed action', () => {
@@ -257,9 +275,12 @@ describe('EvaluationPage', () => {
     expect(
       within(why).getByText('Who proposed the expected action, of 24 scored passes'),
     ).toBeInTheDocument();
-    expect(
-      within(why).getByText('Each specialist answers from its own view. No single-agent run was recorded.'),
-    ).toBeInTheDocument();
+    const single = within(why).getByText(/^Each specialist answers from its own view\./);
+    expect(visible(single)).toBe(
+      'Each specialist answers from its own view. The single investigator was measured with the real model on the 12 held-out cases (fair-test.md); it has no recording in the trial.',
+    );
+    expect(within(single).getByRole('link', { name: 'fair-test.md' })).toHaveAttribute('href', HELD_OUT.url);
+    expect(why).not.toHaveTextContent('No single-agent run was recorded');
     expect(why).toHaveTextContent(
       'The gate alone catches S1, S3, S6, S7, S10 and S13. The board catches S8.',
     );
@@ -557,9 +578,10 @@ describe('EvaluationPage', () => {
     const tech = renderPage(undefined, { detail: 'technical' });
     await within(headline()).findByRole('link', { name: 'Compare the two cases' });
     const technical = wordsAbove(tech.container);
-    // At most 245 words in Plain, which includes the catalogue line beside the result; Technical at most 1.5 times that
-    expect(words.copy).toBeLessThanOrEqual(245);
-    expect(technical.copy).toBeLessThanOrEqual(367);
+    // At most 295 words in Plain, which includes the catalogue line beside the result, the held-out card and where the
+    // single investigator was measured (245 before those two); Technical at most 1.5 times that
+    expect(words.copy).toBeLessThanOrEqual(295);
+    expect(technical.copy).toBeLessThanOrEqual(442);
     // Every visible word, the headings, the controls and the figures with it: Technical adds at most half again
     expect(technical.all).toBeGreaterThan(words.all);
     expect(technical.all).toBeLessThanOrEqual(1.5 * words.all);

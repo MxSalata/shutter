@@ -1015,11 +1015,13 @@ export function Guide() {
     ENV.openGuide === 'engineer' ? 'engineer' : progress.scope,
   );
 
-  // On arrival with ?trial=tour or ?trial=engineer the welcome opens with that tour chosen; on a first entry, by itself
+  // On arrival with ?trial=tour or ?trial=engineer the welcome opens with that tour chosen; on a first entry, by itself.
+  // The judges' path (?trial=judge) goes straight to S8: the welcome is put off for the visit, as Explore on my own does.
   useEffect(() => {
     const s = useGuide.getState();
     if (s.phase !== 'closed') return;
-    if (ENV.openGuide || (!s.snoozed && welcomeDue(s.progress))) s.openWelcome();
+    if (ENV.judgePath) s.notNow();
+    else if (ENV.openGuide || (!s.snoozed && welcomeDue(s.progress))) s.openWelcome();
   }, []);
 
   // Focus goes back where the reader was when a modal or the tour closes

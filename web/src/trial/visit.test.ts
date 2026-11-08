@@ -29,4 +29,12 @@ describe("the tab's memory of the trial", () => {
     // React Router's own state survives
     expect(window.history.state).toEqual({ idx: 3 });
   });
+
+  it("opens the judges' path on Scenarios in Rules only mode, and leaves ?trial so a reload does not take it again", () => {
+    window.history.replaceState({ idx: 0 }, '', '/shutter/?trial=judge#/home');
+    enterTrialPage();
+    expect(window.location.search).toBe('?trial');
+    expect(window.location.hash).toBe('#/scenarios?mode=rules');
+    expect(window.history.state).toEqual({ idx: 0 });
+  });
 });

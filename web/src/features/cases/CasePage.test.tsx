@@ -680,7 +680,7 @@ describe('CasePage', () => {
   it("says on the rules-only S8 case what went wrong, and leaves it off the board's", async () => {
     renderCase('C-000021');
     expect(await screen.findByTestId('s8-rules-note')).toHaveTextContent(
-      "Wrote WARD-B over the bed manager's WARD-C. Every check passed; only the board caught it.",
+      'Rules only, exempted here on purpose to show a plain resend: every check passed and WARD-B was written over WARD-C. On a real case the gate holds it.',
     );
   });
 

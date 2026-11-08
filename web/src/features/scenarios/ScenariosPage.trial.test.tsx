@@ -13,6 +13,7 @@ import { layer1WordCount } from '@/test/words';
 import { theme } from '@/theme';
 import ScenariosPage from './ScenariosPage';
 import { SCENARIOS_LEAD } from './scenarioText';
+import { S8_RULES_SEE } from './TryFirst';
 import { PLAIN_BUDGET, TECHNICAL_BUDGET } from './wordBudget';
 
 /** The page as the trial shows it: the recorded cases, answered in the browser. */
@@ -28,14 +29,14 @@ afterEach(() => {
 });
 afterAll(() => server.close());
 
-function renderTrial(detail: DetailLevel = 'plain') {
+function renderTrial(detail: DetailLevel = 'plain', path = '/') {
   useAppearance.setState({ detail });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <MantineProvider theme={theme}>
       <Notifications />
       <QueryClientProvider client={client}>
-        <MemoryRouter>
+        <MemoryRouter initialEntries={[path]}>
           <ScenariosPage />
         </MemoryRouter>
       </QueryClientProvider>
@@ -128,6 +129,41 @@ describe('ScenariosPage in the trial', () => {
       '/cases/C-000008?show=compare',
     );
     expect(within(steps[4]).getByRole('link', { name: 'Incident I-000001' })).toBeInTheDocument();
+  });
+
+  it("plays S8's card in the mode chosen under Run mode, and says so on its Run", async () => {
+    renderTrial('plain', '/?mode=rules');
+    const first = await screen.findByRole('region', { name: 'Try these three first' });
+    const run = await within(first).findByRole('button', { name: 'Run S8 in Rules only mode' });
+    expect(run).toHaveTextContent(/^Run S8 in Rules only$/);
+    const card = run.closest<HTMLElement>('[data-first="S8"]')!;
+    expect(within(card).getByRole('heading', { name: 'Rules only writes over a ward' })).toBeInTheDocument();
+    expect(card).toHaveTextContent(S8_RULES_SEE);
+    expect(
+      within(card).getByRole('link', { name: 'Open C-000021, the latest S8 case in Rules only mode' }),
+    ).toHaveAttribute('href', '/cases/C-000021');
+    // The other two keep their own modes, and their Run says only the scenario
+    expect(within(first).getByRole('button', { name: 'Run S2 in Board mode' })).toHaveTextContent(/^Run S2$/);
+    expect(within(first).getByRole('button', { name: 'Run S20 in Rules only mode' })).toHaveTextContent(
+      /^Run S20$/,
+    );
+    fireEvent.click(run);
+    expect(await screen.findByText('S8 is playing from its recording in your browser.')).toBeInTheDocument();
+    expect(await screen.findByText(/^Playing S8 \(Rules\)$/)).toBeInTheDocument();
+  });
+
+  it("follows a change of mode: Board's words and Run for S8 when Board is chosen", async () => {
+    renderTrial('plain', '/?mode=rules');
+    const first = await screen.findByRole('region', { name: 'Try these three first' });
+    await within(first).findByRole('button', { name: 'Run S8 in Rules only mode' });
+    fireEvent.click(screen.getByRole('radio', { name: /^Board/ }));
+    const run = await within(first).findByRole('button', { name: 'Run S8 in Board mode' });
+    expect(run).toHaveTextContent(/^Run S8 in Board$/);
+    expect(
+      within(run.closest<HTMLElement>('[data-first="S8"]')!).getByRole('heading', {
+        name: 'The board withholds a write',
+      }),
+    ).toBeInTheDocument();
   });
 
   it('says a run plays from its recording in the browser', async () => {
