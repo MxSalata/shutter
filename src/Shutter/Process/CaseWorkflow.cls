@@ -1761,6 +1761,8 @@ Method CancelOpenTask(case As Shutter.Store.Case, actor As %String, why As %Stri
     // A decision taken meanwhile stands: the task is cancelled only while it is still open, under the decision lock.
     Set refused = ##class(Shutter.Util.Workflow).Claim(task)
     If refused '= "" { Set decided = 1 $$$TRACE("Approval task " _ taskId _ " was not cancelled: " _ refused) Quit $$$OK }
+    // The lock is given back whatever happens, or this long-lived job would hold it and every later decision be busy.
+    Try {
     If (actor '= "") && (actor '= "system") {
         // The engine records who closed it; a refusal (the user is outside the Workflow role) changes nothing below.
         Set asc = ##class(EnsLib.Workflow.Engine).AssignTask(task, actor)
@@ -1776,6 +1778,9 @@ Method CancelOpenTask(case As Shutter.Store.Case, actor As %String, why As %Stri
         Do case.Note("error", "The approval task " _ taskId _ " could not be cancelled: " _ $EXTRACT($SYSTEM.Status.GetErrorText(tsc), 1, 400), "system", "task:" _ taskId)
     } Else {
         Do case.Note("approval", "Approval task " _ taskId _ " cancelled: " _ why, who, "task:" _ taskId)
+    }
+    } Catch ex {
+        $$$LOGWARNING("The approval task " _ taskId _ " of case " _ case.CaseId _ " could not be cancelled: " _ ex.DisplayString())
     }
     Do ##class(Shutter.Util.Workflow).Release(task)
     Quit $$$OK
