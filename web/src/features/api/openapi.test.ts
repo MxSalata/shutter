@@ -45,6 +45,9 @@ describe('the API document', () => {
     expect(byId('caseApprove').writes).toBe(true);
     expect(byId('caseApprove').idempotent).toBe(true);
     expect(byId('cases').writes).toBe(false);
+    expect(byId('access').resources).toEqual([]);
+    expect(byId('access').writes).toBe(false);
+    expect(byId('access').tag).toBe('session');
     expect(allResources(routes)).toEqual([
       'Shutter_Approve',
       'Shutter_Configure',
