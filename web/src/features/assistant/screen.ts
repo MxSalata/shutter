@@ -62,9 +62,11 @@ export function pageNameOf(pathname: string): string {
 const text = (s: string | null | undefined): string =>
   (s ?? '').replace(/\s+/g, ' ').trim().slice(0, MAX_TEXT);
 
-/** Whether a node is part of the page, not of the panel, the guide's card or a hidden template. */
+/** Whether a node is part of the page, not of the panel (beside it or as a drawer), the guide's card or a hidden template. */
 function onPage(el: Element): boolean {
-  return !el.closest('#ask-panel, [data-guide-card], [data-guide-dock], [aria-hidden="true"], template');
+  return !el.closest(
+    '#ask-panel, .assistant-aside, [role="dialog"], [data-guide-card], [data-guide-dock], [aria-hidden="true"], template',
+  );
 }
 
 const kindOf = (id: string) => KINDS.find(([re]) => re.test(id))?.[1] ?? 'id';

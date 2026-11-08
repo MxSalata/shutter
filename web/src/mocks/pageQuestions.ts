@@ -73,9 +73,9 @@ const ANSWERS: Answers = {
   },
   settings: {
     'What does the mode mean?':
-      "The mode says how the agents answer: live, with a model, or replay, from recorded runs at no cost. Auto is what the instance decides from its configuration. Each agent item's row shows the mode it resolved to.",
+      "The mode says how the agents answer: on the live system with a model, or replay, from recorded runs at no cost. Auto is what the instance decides from its configuration. Each agent item's row shows the mode it resolved to.",
     'What is the budget?':
-      "The day's budget caps what the live agents may spend between one midnight UTC and the next; a share of it is each judge's. When it is spent, live runs are refused until the reset and recorded runs still work.",
+      "The day's budget caps what the agents may spend with a model between one midnight UTC and the next; a share of it is each judge's. When it is spent, runs with a model are refused until the reset and recorded runs still work.",
     'Where do the costs come from?':
       'Each run is costed from its tokens at the prices listed on this page, which name their source and date. A replay and a run the API mimic answered cost nothing.',
   },

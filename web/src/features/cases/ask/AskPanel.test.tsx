@@ -177,7 +177,7 @@ describe('Ask about this case', () => {
     const p = await panel();
     expect(router.state.location.search).toBe('?ask=1');
     expect(
-      within(p).getByText(
+      await within(p).findByText(
         /Answers explain this case\. They never write to the receiver, change the case or save a setting\./,
       ),
     ).toBeInTheDocument();

@@ -128,7 +128,9 @@ describe('Ask Shutter about a page', () => {
     await userEvent.click(within(p).getByRole('button', { name: 'What is a scenario?' }));
     const heading = await within(p).findByRole('heading', { name: 'What is a scenario?', level: 4 });
     await waitFor(() => expect(heading).toHaveFocus());
-    await waitFor(() => expect(within(p).getByText(/replays a known failure/)).toBeInTheDocument());
+    await waitFor(() =>
+      expect(within(p).getByText(/one known failure of a hospital message/)).toBeInTheDocument(),
+    );
     expect(within(p).getByText(`${PAGE_SAMPLE_LABEL}.`)).toBeInTheDocument();
     // What went to the server: the page's name, the question and the summary built from the page itself
     expect(posts).toHaveLength(1);

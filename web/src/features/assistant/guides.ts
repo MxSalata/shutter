@@ -107,7 +107,7 @@ export const GUIDES: Record<string, PageGuide> = {
   },
   settings: {
     title: 'Settings and costs',
-    what: "How the agents answer (live with a model, or replaying recordings), the prices used to cost each run, what was spent and the day's budget for the live agents.",
+    what: "How the agents answer (with a model on the live system, or replaying recordings), the prices used to cost each run, what was spent and the day's budget for runs with a model.",
     next: [
       { label: 'The installation report', to: '/health' },
       { label: 'The agents themselves', to: '/library' },

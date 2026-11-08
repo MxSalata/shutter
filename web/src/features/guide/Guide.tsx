@@ -67,6 +67,7 @@ import {
 } from './registry';
 import { bringIntoFreePart, focusFrom, landOn, pageHeading, useMenuHandOver, waitForTarget } from './reveal';
 import { useGuide, type GuidePhase } from './store';
+import { useAssistant } from '@/features/assistant/store';
 
 /**
  * The first-run guide, in the trial only: the welcome with its three routes, then one step at a time in an inline card
@@ -606,12 +607,15 @@ function StepHost({ pos }: { pos: GuidePosition }) {
   const here = location.pathname + withoutOwnParams(location.pathname, location.search);
   // The same address again still counts: the case page reopens its story step on every visit
   // A step on the page already showing scrolls from where the last one left it, not by way of the page's top
-  const go = useEffectEvent((to: string) =>
+  // A step that is not about Ask closes the Ask Shutter panel as it opens its page, so the step's section is in sight
+  const askStep = pos.step.target === 'case-ask';
+  const go = useEffectEvent((to: string) => {
+    if (!askStep) useAssistant.getState().setOpen(false);
     navigate(to, {
       replace: here === to,
       preventScrollReset: to.split('?')[0] === location.pathname,
-    }),
-  );
+    });
+  });
   const reduced = useReducedMotion() ?? false;
   const [host, setHost] = useState<HTMLElement | null>(null);
   const [target, setTarget] = useState<HTMLElement | null>(null);
