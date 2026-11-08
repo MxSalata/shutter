@@ -52,6 +52,7 @@ import { caseOutcome, caseState, proposedWrites, writes } from '@/lib/status';
 import { describeError } from '@/lib/errors';
 import { formatAge, humanize } from '@/lib/format';
 import { playedFor } from '@/lib/proof';
+import { isDemoPolicy } from '@/features/site-profile/profile';
 import type { Tone } from '@/lib/tone';
 import { useTechnical } from '@/stores/appearance';
 import { HINT_EVENTS } from '@/theme';
@@ -514,7 +515,8 @@ function ScenarioRow({
 
 /**
  * The induction prompt (the site profile's questionnaire): an approver sees it until the site's answers are saved. It leads
- * the page on an instance; `below` places it under the scenarios, where the demo keeps it.
+ * the page on an instance; `below` places it under the scenarios, where the demo keeps it. On the demo's own answers it
+ * says so, as the site profile does, rather than calling them the shipped ones.
  */
 function InductionPrompt({ below = false }: { below?: boolean }) {
   const profile = useSiteProfile().data;
@@ -524,7 +526,11 @@ function InductionPrompt({ below = false }: { below?: boolean }) {
       color="blue"
       variant="light"
       mb={below ? 0 : 'md'}
-      title="Shutter is running on the shipped site profile"
+      title={
+        isDemoPolicy(profile.source)
+          ? "Shutter is running on the demo's answers"
+          : 'Shutter is running on the shipped site profile'
+      }
     >
       Answer the thirteen induction questions so it acts as your site does.{' '}
       <Anchor component={Link} to="/site-profile" size="sm" underline="always">
