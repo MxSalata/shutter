@@ -19,10 +19,12 @@ Method OnAfterOneTest() As %Status
 
 Method Clean()
 {
-    Set name = ..#RECEIVER
-    &sql(DELETE FROM Shutter_Store.OutageEvent WHERE OutageId IN (SELECT ID FROM Shutter_Store.Outage WHERE Receiver = :name))
-    &sql(DELETE FROM Shutter_Store.Outage WHERE Receiver = :name)
-    &sql(DELETE FROM Shutter_Store.ReceiverReading WHERE Receiver = :name)
+    // The names are exact, so the upper-case twin that TestNamesAreExact makes is a row of its own.
+    For name = ..#RECEIVER, $ZCONVERT(..#RECEIVER, "U") {
+        &sql(DELETE FROM Shutter_Store.OutageEvent WHERE OutageId IN (SELECT ID FROM Shutter_Store.Outage WHERE Receiver = :name))
+        &sql(DELETE FROM Shutter_Store.Outage WHERE Receiver = :name)
+        &sql(DELETE FROM Shutter_Store.ReceiverReading WHERE Receiver = :name)
+    }
 }
 
 Method Watch() As %String [ Private ]
@@ -237,6 +239,46 @@ Method TestOneRowPerReceiver()
     Set again = ##class(Shutter.Store.Outage).%New()
     Set again.Receiver = ..#RECEIVER, again.ActiveReceiver = ..#RECEIVER
     Do $$$AssertTrue($$$ISERR(again.%Save()), "the store itself refuses a second row")
+}
+
+/// A list written says so in its status, and reads back whole after a save and a fresh open.
+Method TestPutListSaysItWrote()
+{
+    Do $$$AssertStatusOK(##class(Shutter.Store.Outage).Open(..Entry(), "down", "a test", "unit", .o), "opened")
+    Set sc = o.PutList("ListOffered", [{"headerId": "5", "controlId": "C1"}])
+    Do $$$AssertStatusOK(sc, "the write says it worked")
+    Do $$$AssertStatusOK(o.PutList("Alerts", [{"at": "t", "kind": "k", "text": "x"}]), "and again")
+    Do $$$AssertStatusOK(o.%Save(), "saved")
+    Set id = o.%Id()
+    Kill o
+    Set o = ##class(Shutter.Store.Outage).%OpenId(id, 0)
+    Set j = o.ToJSON()
+    Do $$$AssertEquals(j.lists.offered.%Size(), 1, "the list read back")
+    Do $$$AssertEquals(j.lists.offered.%Get(0).controlId, "C1", "as written")
+    Do $$$AssertEquals(j.alerts.%Get(0).kind, "k", "the alerts too")
+    Do $$$AssertEquals(j.lists.queued.%Size(), 0, "a list not written stays empty")
+    Do $$$AssertStatusOK(o.PutList("ListOffered", []), "replaced by an empty one")
+    Do $$$AssertEquals(o.ToJSON().lists.offered.%Size(), 0, "and it reads empty")
+}
+
+/// Two receivers whose names differ only in case are two receivers, as the profile's check says: two outages, two readings.
+Method TestNamesAreExact()
+{
+    Set twin = ..Entry(), twin.name = $ZCONVERT(..#RECEIVER, "U")
+    Do $$$AssertStatusOK(##class(Shutter.Store.Outage).Open(..Entry(), "down", "a test", "unit", .a, .opened), "first")
+    Do $$$AssertTrue(opened, "opened")
+    Do $$$AssertStatusOK(##class(Shutter.Store.Outage).Open(twin, "down", "a test", "unit", .b, .opened), "the twin")
+    Do $$$AssertTrue(opened, "the twin opens its own row")
+    Do $$$AssertNotEquals(a.%Id(), b.%Id(), "two rows")
+    Do $$$AssertEquals(b.Receiver, twin.name, "named as written")
+    For name = ..#RECEIVER, twin.name {
+        Set row = ##class(Shutter.Store.ReceiverReading).%New()
+        Set row.Receiver = name, row.Reading = "healthy", row.CheckedAt = "2026-11-07T03:00:00Z"
+        Do $$$AssertStatusOK(row.%Save(), "a reading for " _ name)
+    }
+    Do $$$AssertEquals(##class(Shutter.Store.ReceiverReading).Find(twin.name).Receiver, twin.name, "Find gives the twin its own row")
+    Do $$$AssertEquals(##class(Shutter.Store.ReceiverReading).Find(..#RECEIVER).Receiver, ..#RECEIVER, "and the first its own")
+    Do $$$AssertTrue(##class(Shutter.Store.ReceiverReading).Find("unit watch receiver") = "", "a third casing finds nothing")
 }
 
 Method TestPauseAndClose()

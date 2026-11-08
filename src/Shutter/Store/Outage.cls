@@ -5,12 +5,13 @@
 Class Shutter.Store.Outage Extends %Persistent
 {
 
-Property Receiver As %String(MAXLEN = 128) [ Required ];
+/// Exact, as the profile's names are: two receivers that differ only in case are two rows.
+Property Receiver As %String(COLLATION = "EXACT", MAXLEN = 128) [ Required ];
 
 Index ReceiverIdx On Receiver;
 
 /// The receiver's name while this row is not closed, empty after: what makes "one row per receiver" a fact of the store.
-Property ActiveReceiver As %String(MAXLEN = 128);
+Property ActiveReceiver As %String(COLLATION = "EXACT", MAXLEN = 128);
 
 Index ActiveIdx On ActiveReceiver [ Unique ];
 
@@ -246,7 +247,9 @@ Method PutList(name As %String, list As %DynamicArray) As %Status
     Set stream = $PROPERTY($THIS, name)
     Set sc = stream.Clear()
     If $$$ISERR(sc) Quit sc
-    Quit list.%ToJSON(stream)
+    // %ToJSON into a stream answers no status, so success is said here.
+    Do list.%ToJSON(stream)
+    Quit $$$OK
 }
 
 /// A stored JSON list, or an empty one.

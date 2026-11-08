@@ -7,7 +7,8 @@ Class Shutter.Store.ReceiverReading Extends %Persistent
 /// Past this many seconds without a write, the row says nothing about now.
 Parameter STALESECONDS = 60;
 
-Property Receiver As %String(MAXLEN = 128) [ Required ];
+/// Exact, as the profile's names are: two receivers that differ only in case are two rows.
+Property Receiver As %String(COLLATION = "EXACT", MAXLEN = 128) [ Required ];
 
 Index ReceiverIdx On Receiver [ Unique ];
 
