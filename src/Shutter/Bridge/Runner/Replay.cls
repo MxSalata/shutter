@@ -38,7 +38,7 @@ Method Run(spec As Shutter.Bridge.RunSpec, ByRef response As Shutter.Bridge.Msg.
 /// milliseconds ("" leaves them at now), once: a run that has rows already is left alone. Returns how many were written.
 ClassMethod ReplayToolCalls(runKey As %String, toolCallsJSON As %String, shift As %String = "") As %Integer
 {
-    Set n = 0, line = ""
+    Set n = 0
     If (runKey = "") || ($ZSTRIP(toolCallsJSON, "<>W") = "") Quit 0
     If ##class(Shutter.Bridge.ToolCall).HasRows(runKey) Quit 0
     Set calls = ##class(Shutter.Util.Json).Parse(toolCallsJSON, .psc)
@@ -50,15 +50,17 @@ ClassMethod ReplayToolCalls(runKey As %String, toolCallsJSON As %String, shift A
         If (at '= "") && (shift '= "") Set at = ##class(Shutter.Util.Time).PlusMillis(at, shift)
         Set args = c.%Get("arguments")
         If $ISOBJECT(args) Set args = args.%ToJSON()
-        Set sc = ##class(Shutter.Bridge.ToolCall).Append(runKey, $CLASSMETHOD(json, "Str", c, "name"), $GET(args), +$CLASSMETHOD(json, "Str", c, "durationMs", 0), $CLASSMETHOD(json, "Bool", c, "ok", 1), $CLASSMETHOD(json, "Str", c, "resultPreview"), $CLASSMETHOD(json, "Str", c, "error"), $CLASSMETHOD(json, "Bool", c, "denied", 0), at)
+        Set name = $CLASSMETHOD(json, "Str", c, "name"), ms = +$CLASSMETHOD(json, "Str", c, "durationMs", 0)
+        Set ok = $CLASSMETHOD(json, "Bool", c, "ok", 1), denied = $CLASSMETHOD(json, "Bool", c, "denied", 0)
+        Set sc = ##class(Shutter.Bridge.ToolCall).Append(runKey, name, $GET(args), ms, ok, $CLASSMETHOD(json, "Str", c, "resultPreview"), $CLASSMETHOD(json, "Str", c, "error"), denied, at)
         If $$$ISOK(sc) {
             Set n = n + 1
-            Set line = line _ $SELECT(line = "": "", 1: ", ") _ $CLASSMETHOD(json, "Str", c, "name") _ " " _ $SELECT($CLASSMETHOD(json, "Bool", c, "denied", 0): "denied", $CLASSMETHOD(json, "Bool", c, "ok", 1): "ok", 1: "failed") _ " " _ (+$CLASSMETHOD(json, "Str", c, "durationMs", 0)) _ " ms"
+            // One line per call, as a live run's audit writes (Shutter.Bridge.Policy.Trace), so each call is its own step in
+            // the Visual Trace; unlike a live line it carries no argument, result or error text, and a name that isn't a
+            // plain tool name is left out.
+            $$$TRACE("Tool " _ $SELECT($MATCH(name, "[A-Za-z_][A-Za-z0-9_.]{0,63}"): name, 1: "(not a tool name)") _ " " _ $SELECT(denied: "denied", ok: "ok", 1: "failed") _ ", " _ ms _ " ms (replay)")
         }
     }
-    // One line for the run, not one per call: the Visual Trace counts events as items, so a line per call pushes the
-    // AgentResponse arrows off the page it opens on, and a recorded call's arguments name the recording's own case.
-    If line '= "" $$$TRACE("Recorded tool calls (" _ n _ "): " _ line)
     Quit n
 }
 
