@@ -55,6 +55,10 @@ Parameter TIMELINEKEEP = ",event,ward,bed,event_time,operation_key,source_messag
 
 Parameter ROUTEKEEP = ",feed,connector,receiver,tier,category,history_policy,capabilities_source,declared,capabilities_http_status,capabilities,conditional_writes,receipts,history,dry_run,epoch,note,";
 
+/// The receiver's capability profile inside the route (capabilities, and the profile's declared features): what the receiver
+/// offers, nothing else; it says history too, so the ward body's shape must not take it (v1.1.1).
+Parameter CAPABILITIESKEEP = ",conditional_writes,receipts,receipt_retention,history,idempotency,dry_run,epoch,last_contract_check,";
+
 /// Keys whose string values are identifiers of the case, and the token kind each gives.
 Parameter IDKEYS = ",patient_id:PID,encounter_id:ENC,encounter:ENC,visit_number:VISIT,visit:VISIT,nhs_number:NHS,mrn:MRN,prior_patient_id:PID,prior_encounter_id:ENC,prior_visit_number:VISIT,prior_patient_identifier:PID,";
 
@@ -154,6 +158,7 @@ ClassMethod Walk(node As %DynamicAbstractObject, parentKey As %String, freeText 
 ClassMethod KeepFor(node As %DynamicObject, parentKey As %String) As %String [ Private ]
 {
     If parentKey = "history" Quit ..#HISTORYKEEP
+    If (parentKey = "capabilities") || (parentKey = "declared") Quit ..#CAPABILITIESKEEP
     If node.%IsDefined("ward_state_http_status") || (node.%IsDefined("operation") && node.%IsDefined("failure")) Quit ..#SUMMARYKEEP
     If node.%IsDefined("message_control_id") || node.%IsDefined("message_type") && node.%IsDefined("sending_application") Quit ..#MESSAGEKEEP
     If node.%IsDefined("parsed") && node.%IsDefined("spec") Quit ..#VALIDATIONKEEP
