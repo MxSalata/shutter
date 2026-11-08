@@ -498,6 +498,138 @@ describe('the row rule', () => {
   });
 });
 
+describe('the kind rule', () => {
+  /** A group's rows of one kind, by key. */
+  const kinds = (report: Report, trial: boolean, id: string) => {
+    const group = groupReport(report, trial).groups.find((g) => g.def.id === id)!;
+    return {
+      checks: group.rows.filter((r) => r.kind === 'check').map((r) => r.key),
+      details: group.rows.filter((r) => r.kind === 'detail').map((r) => r.key),
+    };
+  };
+
+  it('puts the checks first and the names, paths, numbers and facts in the details, group by group', () => {
+    expect(kinds(RECORDED, true, 'production')).toEqual({
+      checks: ['interoperability', 'production_class', 'production_state', 'ward_classes'],
+      details: ['shutter_production', 'adt_in', 'mode'],
+    });
+    expect(kinds(RECORDED, true, 'web-applications')).toEqual({
+      checks: ['api_webapp', 'ui_webapp', 'wards_webapp'],
+      details: ['webapps_checked'],
+    });
+    // A yes or no that is not a core check is still a check; the default board is a detail of the library's
+    expect(kinds(RECORDED, true, 'agents')).toEqual({
+      checks: ['ai_hub_present', 'aihub_runner'],
+      details: ['board_members', 'default_board', 'recordings'],
+    });
+    expect(kinds(RECORDED, true, 'cases')).toEqual({ checks: ['purge_task'], details: ['cases'] });
+    // The demo installation is a fact about the installation, never a check: this group has only details
+    expect(kinds(RECORDED, true, 'installation')).toEqual({
+      checks: [],
+      details: ['namespace', 'version', 'installed_at', 'demo', 'license'],
+    });
+  });
+
+  it('keeps the group links true: a group counts its core checks, which are the first of its checks', () => {
+    const { groups } = groupReport(RECORDED, true);
+    for (const g of groups) {
+      const checks = g.rows.filter((r) => r.kind === 'check').map((r) => r.key);
+      expect(checks.slice(0, g.checks.length)).toEqual(g.checks.map((c) => c.key));
+      for (const r of g.rows.filter((r) => r.kind === 'detail'))
+        expect(g.checks.some((c) => c.key === r.key)).toBe(false);
+    }
+  });
+
+  it('makes a row to fix or to look at a check wherever it sits, and a plain fact a detail', () => {
+    const live = {
+      ...RECORDED,
+      adt_in: null,
+      edition: 'aihub',
+      missing_items: ['Scenario Player'],
+      disabled_items: [],
+      purge_task: false,
+    };
+    const production = kinds(live, false, 'production');
+    // Not reported and an item missing from the production are checks; the edition and "None" are details
+    expect(production.checks).toEqual([
+      'interoperability',
+      'production_class',
+      'production_state',
+      'ward_classes',
+      'adt_in',
+      'missing_items',
+    ]);
+    expect(production.details).toEqual(['shutter_production', 'mode', 'edition', 'disabled_items']);
+    expect(kinds(live, false, 'cases').checks).toEqual(['purge_task']);
+    expect(
+      kinds({ ...live, edition: 'broken: aihub module without AI Hub' }, false, 'production').checks,
+    ).toContain('edition');
+    expect(kinds({ ...live, disabled_items: ['Case Releaser'] }, false, 'production').checks).toContain(
+      'disabled_items',
+    );
+  });
+
+  it('keeps the stored credentials tried a check whether they all sign in or not, with the state and time as details', () => {
+    const report = {
+      ...RECORDED,
+      credentials_ok: true,
+      credentials_state: 'fresh',
+      credentials_checked_at: '2026-11-03T10:00:00Z',
+      credentials: CREDENTIALS.filter((c) => c.ok),
+    };
+    expect(kinds(report, false, 'credentials')).toEqual({
+      checks: ['credentials_ok', 'credentials'],
+      details: ['credentials_state', 'credentials_checked_at'],
+    });
+    const stale = { ...report, credentials_ok: false, credentials_state: 'stale', credentials: CREDENTIALS };
+    expect(kinds(stale, false, 'credentials').checks).toEqual(['credentials_ok', 'credentials']);
+    // A check that threw puts its state among the checks, since it wants a look
+    const thrown = {
+      ...report,
+      credentials_state: 'error: <THROW> reading the credential cache',
+      credentials: [],
+    };
+    expect(kinds(thrown, false, 'credentials')).toEqual({
+      checks: ['credentials_ok', 'credentials_state'],
+      details: ['credentials_checked_at', 'credentials'],
+    });
+  });
+
+  it("keeps the provider and its pieces checks while they carry a reason, and the downstream system's pieces facts off a demo", () => {
+    const hub = {
+      ...RECORDED,
+      ai_hub_present: true,
+      provider: '',
+      wallet_secret: null,
+      provider_config: null,
+    };
+    expect(kinds(hub, false, 'agents').checks).toEqual([
+      'ai_hub_present',
+      'aihub_runner',
+      'provider',
+      'wallet_secret',
+      'provider_config',
+    ]);
+    // A named provider is a fact; its pieces as a yes or a no are still checks
+    const named = { ...hub, provider: 'AI.LLM.Shutter', wallet_secret: true, provider_config: false };
+    expect(kinds(named, false, 'agents')).toMatchObject({
+      checks: ['ai_hub_present', 'aihub_runner', 'wallet_secret', 'provider_config'],
+      details: ['board_members', 'default_board', 'recordings', 'provider'],
+    });
+    // On a site's installation the downstream system's classes and web application are facts about the demo
+    const site = { ...RECORDED, demo: false, ward_classes: false };
+    expect(kinds(site, false, 'production').details).toContain('ward_classes');
+    expect(kinds(site, false, 'web-applications').details).toEqual(['wards_webapp', 'webapps_checked']);
+    // Unless the report left one out, which wants a look wherever it sits
+    expect(kinds(without(site, 'wards_webapp'), false, 'web-applications').details).toEqual([
+      'webapps_checked',
+    ]);
+    expect(kinds({ ...site, wards_webapp: null }, false, 'web-applications').checks).toContain(
+      'wards_webapp',
+    );
+  });
+});
+
 describe('the licence', () => {
   it('is one sentence built from the fields as the report names them, with no sum', () => {
     expect(licenceSentence(RECORDED.license)).toBe(

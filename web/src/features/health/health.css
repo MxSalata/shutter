@@ -1,7 +1,8 @@
 /*
  * The Health page's own drawing (no shared rule is edited): the core checks under the verdict, the facts line, the one
- * line of group links, a group that needs a look (an edge in its tone) and the rows, whose label and value share a
- * line on a phone when the value is short and stack when it is long.
+ * line of group links, a group that needs a look (an edge in its tone), its checks with their marks, its details apart
+ * as a quiet label and value list, and the rows, whose label and value share a line on a phone when the value is short
+ * and stack when it is long.
  */
 .health-checks {
   display: flex;
@@ -103,6 +104,22 @@
   box-shadow: inset 3px 0 0 var(--row-edge);
 }
 
+/*
+ * A group's details: under its checks, past a rule and an overline "Details", the labels in the muted text colour at
+ * normal weight and no mark column, so a name, a path or a number never reads as a check
+ */
+.health-details[data-after-checks] {
+  border-top: 1px solid var(--mantine-color-default-border);
+  padding-top: var(--mantine-spacing-sm);
+}
+.health-details-title {
+  margin-bottom: 4px;
+}
+.health-details-rows th {
+  font-weight: 400;
+  color: var(--shutter-muted);
+}
+
 /* A phone: a short value sits beside its label, a long one under it, and nothing scrolls sideways */
 @media (max-width: 35.99em) {
   .health-rows,
@@ -142,6 +159,9 @@
   }
   .health-rows td > div {
     align-items: flex-end;
+  }
+  .health-details-rows tr[data-long] td {
+    padding-left: 0;
   }
   .health-rows tr[data-long] td > div {
     align-items: flex-start;
