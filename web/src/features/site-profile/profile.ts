@@ -108,6 +108,9 @@ export function describeSource(source: string | undefined): string {
 /** The shipped answers are in force until someone saves the profile in Shutter. */
 export const isShipped = (source: string | undefined) => source !== 'api';
 
+/** The demo's own release policy, kept by a demo install and marked in the profile's source (" (demo)"). */
+export const isDemoPolicy = (source: string | undefined) => (source ?? '').includes('(demo)');
+
 /** A team as the form adds it: every required field empty, for the person to fill. */
 export function newTeam(): SiteTeam {
   return { id: '', name: '', mailbox: '', cc: [], receivers: [], sources: [] };

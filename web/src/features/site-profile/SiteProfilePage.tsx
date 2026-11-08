@@ -62,6 +62,7 @@ import {
   diffProfiles,
   fieldId,
   incidentRule,
+  isDemoPolicy,
   isShipped,
   newReceiver,
   overtakenLine,
@@ -810,6 +811,7 @@ function Profile({
   };
   const changes = diffProfiles(base.profile, draft);
   const shipped = isShipped(base.source);
+  const demoPolicy = isDemoPolicy(base.source);
   const body = toPutBody(draft, base.version);
 
   // A radio question's id names its label (Mantine keeps the group's own id off the page): focus its chosen radio
@@ -954,7 +956,9 @@ function Profile({
         status={
           <Group gap={6}>
             <StatusBadge tone="neutral" icon={IconVersions} label={`Version ${base.version}`} />
-            {shipped ? <StatusBadge tone="info" label="Shipped answers" /> : null}
+            {shipped ? (
+              <StatusBadge tone="info" label={demoPolicy ? "Demo's answers" : 'Shipped answers'} />
+            ) : null}
           </Group>
         }
         lead={
@@ -994,10 +998,19 @@ function Profile({
           />
         ) : null}
         {shipped ? (
-          <StatusNotice tone="info" title="Shutter is running on the shipped answers">
+          <StatusNotice
+            tone="info"
+            title={
+              demoPolicy
+                ? "Shutter is running on the demo's answers"
+                : 'Shutter is running on the shipped answers'
+            }
+          >
             <Stack gap="xs">
               <Text size="md" data-testid={reading && !dirty ? 'demo-read-only' : undefined}>
-                They are defaults, not this site&apos;s choices.{' '}
+                {demoPolicy
+                  ? "The release policy is the demo's own choice, so its scenarios show a resend the policy releases at tiers 1 and 2; the shipped default asks a person at every tier. "
+                  : "They are defaults, not this site's choices. "}
                 {editable
                   ? 'Check the questions below, then confirm or change them and save.'
                   : reading

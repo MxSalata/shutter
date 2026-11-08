@@ -56,18 +56,18 @@
   "merges": "forbidden",
   "policy": {
     "1": {
-      "single": "automatic",
-      "ordered": "automatic",
+      "single": "approval",
+      "ordered": "approval",
       "interleaved": "board"
     },
     "2": {
-      "single": "automatic",
+      "single": "approval",
       "ordered": "approval",
       "interleaved": "board"
     },
     "3": {
       "single": "approval",
-      "ordered": "per_chain",
+      "ordered": "approval",
       "interleaved": "board"
     }
   },

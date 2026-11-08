@@ -23,7 +23,9 @@ Property UpdatedBy As %String(%JSONFIELDNAME = "updatedBy", MAXLEN = 160);
 
 /// The shipped defaults: one receiver (the downstream system, tier 2, taking neither cancels nor merges), keep what is
 /// current, no authoritative source, unconditional resends forbidden, merges forbidden (they go to the PAS team, T31),
-/// automatic single chains for tiers 1 and 2, approvals elsewhere, and an operator may close a case by hand.
+/// a person's approval for every single and ordered chain at every tier (v1.1.0, 8 Nov 2026: "approval on every tier by
+/// default"; the board for interleaved chains, whose plan a person then approves), and an operator may close a case by hand.
+/// The demo keeps the earlier table as its own, labelled setting (Shutter.Setup.DemoProfilePolicy).
 ClassMethod Default() As %DynamicObject
 {
     Set p = {}
@@ -32,7 +34,7 @@ ClassMethod Default() As %DynamicObject
     Set p."authoritative_source" = ""
     Set p."unconditional_resend" = "forbidden"
     Set p.merges = "forbidden"
-    Set p.policy = {"1": {"single": "automatic", "ordered": "automatic", "interleaved": "board"}, "2": {"single": "automatic", "ordered": "approval", "interleaved": "board"}, "3": {"single": "approval", "ordered": "per_chain", "interleaved": "board"}}
+    Set p.policy = ..ShippedPolicy()
     Set p.approvers = {"role": "Shutter Approvers", "escalation": "the integration team's on-call", "close_needs_approver": false}
     Set p.incident = {"threshold": 5, "window_minutes": 10, "quiet_seconds": 60}
     Set p."model_content" = {"free_text": false}
@@ -42,6 +44,23 @@ ClassMethod Default() As %DynamicObject
 }
 
 /// The current profile as a dynamic object (the stored one, else the defaults), with "version" set.
+/// The shipped release policy (v1.1.0): approval at every tier for single and ordered chains, the board for interleaved
+/// ones. A site that wants a tier released by policy says so in its own profile.
+ClassMethod ShippedPolicy() As %DynamicObject
+{
+    Quit {"1": {"single": "approval", "ordered": "approval", "interleaved": "board"}, "2": {"single": "approval", "ordered": "approval", "interleaved": "board"}, "3": {"single": "approval", "ordered": "approval", "interleaved": "board"}}
+}
+
+/// The demo's release policy, the shipped table until v1.1.0 (8 Nov 2026: "the demo keeps its own setting,
+/// labelled"): tiers 1 and 2 released by policy for single chains and tier 1 for ordered ones, so the demo's scenarios show
+/// a resend the policy releases; approvals elsewhere, the board for interleaved chains. The live hospital then makes tier 2
+/// single an approval too (Shutter.Setup.LiveProfilePolicy). Applied by a demo install only, and marked in the profile's
+/// source, so the Site profile page says whose answers they are.
+ClassMethod DemoPolicy() As %DynamicObject
+{
+    Quit {"1": {"single": "automatic", "ordered": "automatic", "interleaved": "board"}, "2": {"single": "automatic", "ordered": "approval", "interleaved": "board"}, "3": {"single": "approval", "ordered": "per_chain", "interleaved": "board"}}
+}
+
 ClassMethod Current() As %DynamicObject
 {
     Set row = ..Row()
