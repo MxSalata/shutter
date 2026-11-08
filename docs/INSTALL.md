@@ -234,7 +234,8 @@ that production is stopped, purged or rerouted.
 Load the module's classes into the production's namespace without the demo installer
 (`$SYSTEM.OBJ.LoadDir("/path/to/module/src/", "ck", , 1)`), then
 `SELECT Shutter.Setup_InstallInto('Your.Production', '/path/to/module/')`, with your site's own production name in
-place of `Your.Production` (not the demo's `Hospital.Production`). It refuses an empty or unknown production name, and
+place of `Your.Production` (not the demo's `Hospital.Production`). It refuses an empty or unknown production name, a name in the
+`Hospital.`, `Downstream.` or `Shutter.` packages (Shutter's own demo classes), and
 then:
 
 - records the name in `^Shutter.Config("production")` and runs the namespace-level parts of a non-demo install (no
