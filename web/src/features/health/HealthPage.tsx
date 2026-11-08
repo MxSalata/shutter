@@ -20,7 +20,10 @@ function jumpTo(group: Group) {
   target?.focus({ preventScroll: true });
 }
 
-/** One line of links to the groups, each with its count where the group has checks: no tiles that repeat the groups. */
+/**
+ * One line of links to the groups, each with its count where the group has core checks (its details are never counted):
+ * no tiles that repeat the groups.
+ */
 function GroupLinks({ groups }: { groups: Group[] }) {
   return (
     <nav aria-label="Groups">
