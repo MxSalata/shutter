@@ -18,6 +18,15 @@ The idea asks whether Interoperability could do the job of a tracing tool such a
 
    ![Event diamonds in the board members' lanes of the Visual Trace for S8 in replay, one opened: Tool GetFailure ok, 2 ms (replay)](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/trace-tool-call-steps.png)
 
+   The same steps in two other scenarios, each played on the board in replay:
+   - **S2, a resend:** the three members' lanes, one diamond for each tool call (the opened one reads `Tool search_contracts ok, 18 ms (replay)`); further down the same trace, after the gate's dispatch, the resend is the case's one write.
+
+     ![The Visual Trace for S2 in replay: Agent Conformance, Agent Encounter and Agent Impact each with a diamond per tool call, one opened: Tool search_contracts ok, 18 ms (replay)](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/trace-s2-board.png)
+
+   - **S3, a lost answer:** Agent Impact reads the receipt first (`Tool GetReceipt ok, 1 ms (replay)`), and the trace ends with the gate's result and the verifier's, with no write to the downstream system: the transfer had been committed, so the case reconciles rather than resends.
+
+     ![The Visual Trace for S3 in replay: Agent Impact's first tool call opened, Tool GetReceipt ok, 1 ms (replay), then the coordinator, the GateResult and the VerifyResult, with no write after them](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/trace-s3-lost-answer.png)
+
 4. In the Management Portal's SQL page (namespace `SHUTTER`), signed in as `_SYSTEM` / `SYS`, run the query below with that session number: every tool call of the pass, in order, with its duration, whether it succeeded, whether the authorisation policy refused it, and the board member that made it.
 5. On the case page, **When each agent worked** draws the same rows as a timeline, and the **Settings and costs** page sums them by case.
 
