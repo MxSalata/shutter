@@ -29,6 +29,7 @@ import http.cookiejar
 import json
 import os
 import sys
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -87,6 +88,15 @@ CHECKS = [
                   "write is conditional on, and the dispatch gate passed APPROVAL_VALID and REHEARSED under the same "
                   "policy version the approval bound. Without that dry run the gate blocks the write (DRY_RUN_MISSING, "
                   "DRY_RUN_FAILED, DRY_RUN_STALE: Shutter's unit tests).",
+    },
+    {
+        "id": "simultaneous_decisions",
+        "title": "An approval and a rejection of one case at the same instant",
+        "scenario": "S2, rules only",
+        "answer": "one 202, the other 409 wrong_state naming the decision",
+        "proves": "The same approver approves in one tab and rejects in another at once. One decision stands: exactly one "
+                  "is accepted, the other is refused with the decision that stands, and the case's one approval and its "
+                  "Workflow task record the same decision.",
     },
     {
         "id": "receiver_changed",
@@ -366,6 +376,54 @@ def main():
           bool(gates) and bool(policy) and gates[-1].get("policyVersion") == policy
           and {("authorization", "APPROVAL_VALID"), ("rehearsal", "REHEARSED")} <= passed,
           f"{gates[-1].get('policyVersion') if gates else 'no dispatch gate'}, passed {sorted(passed)}")
+
+    # ---- S2 again: an approval and a rejection at the same instant, from two sessions of one approver ----
+    case = play("S2")
+    if case:
+        caseid = case["caseId"]
+        c = settle(caseid, "S2", {"awaiting_approval"} | CLOSED) or {}
+        if check(f"S2 {caseid} waits for approval", c.get("state") == "awaiting_approval", c.get("state")):
+            digest = (get(f"/cases/{q(caseid)}/plan") or {})["plan"]["digest"]
+            tabs = {"approve": Session(args.url).sign_in("approver", password),
+                    "reject": Session(args.url).sign_in("approver", password)}
+            replies = {}
+            start = threading.Barrier(len(tabs))
+
+            def decide(decision):
+                start.wait()
+                replies[decision] = tabs[decision].call(
+                    "POST", f"/cases/{q(caseid)}/approvals",
+                    {"decision": decision, "planDigest": digest, "expectedVersion": c["version"],
+                     "comment": f"boundary check: {decision} at the same instant"}, key=str(uuid.uuid4()))
+
+            threads = [threading.Thread(target=decide, args=(d,)) for d in tabs]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+            for tab in tabs.values():
+                tab.call("DELETE", "/session")
+            accepted = [d for d, (status, _) in replies.items() if status == 202]
+            summary = {d: (status, (body or {}).get("error"), (body or {}).get("detail")) for d, (status, body) in replies.items()}
+            if check("two decisions at once: exactly one is 202 accepted", len(accepted) == 1, summary):
+                won = accepted[0]
+                status, body = replies["reject" if won == "approve" else "approve"]
+                told = ((body or {}).get("approval") or {}).get("decision")
+                check("and the other is 409 wrong_state, naming the decision that stands",
+                      status == 409 and (body or {}).get("error") == "wrong_state"
+                      and told in (None, won + "d", won + "ed") and won in ((body or {}).get("detail") or "").lower(),
+                      f"{status} {body}")
+            settle(caseid, "S2", CLOSED)
+            record = get(f"/cases/{q(caseid)}/approvals") or {}
+            stored = record.get("approvals") or []
+            tasks = [t for t in record.get("tasks") or [] if t.get("complete")]
+            action = (tasks[0].get("action") or "").lower() if tasks else None
+            check("the case has one approval, and its task records the same decision",
+                  len(stored) == 1 and len(tasks) == 1 and bool(accepted)
+                  and stored[0].get("decision") in (accepted[0] + "d", accepted[0] + "ed")
+                  and action == accepted[0],
+                  f"approvals {[(a.get('approver'), a.get('decision')) for a in stored]}, "
+                  f"tasks {[(t.get('taskId'), t.get('action'), t.get('userName')) for t in tasks]}, accepted {accepted}")
 
     # ---- S20: the receiving system changes after the approval ----
     expected = next((s.get("expected") or {} for s in (get("/scenarios") or {}).get("scenarios") or []
