@@ -1,6 +1,6 @@
 # First steps, step by step
 
-The README's "On your machine or in the trial, first" in full: the four modes, the first two scenarios, three ways to try to break the approval, the online demo's four steps, what to look at in S2, S8 and S20, what CI attacks at the approval boundary, and the terms. Sign-ins are under [Try it](https://github.com/MxSalata/shutter#try-it).
+The README's "On your machine or in the trial, first" in full: the four modes, the first two scenarios, three ways to try to break the approval, the online demo's four steps, how a hospital pilots it first, what to look at in S2, S8 and S20, what CI attacks at the approval boundary, and the terms. Sign-ins are under [Try it](https://github.com/MxSalata/shutter#try-it).
 
 ## The tours
 
@@ -8,11 +8,11 @@ The quick tour ([open it](https://mxsalata.github.io/shutter/?trial=tour)): 9 st
 
 ## The modes
 
-The mode chooses who proposes the plan; the gate and the rehearsal are the same in every mode, and nothing is written until a person or the site's written policy releases it. **Board**: three specialist agents review the evidence in parallel, then a coordinator agent proposes one plan. **Site policy**: the scenario catalogue and the site's profile settle the cases they know, the cases the catalogue sends straight to a person (such as S13 and S21) are escalated with no board, and the board takes the rest. **Single investigator**: one generalist agent proposes the plan (with live agents only: no run of it is recorded, so without a key a case takes the rules path, and the trial greys it). **Rules only**: no agents; the message is resent unchanged unless the gate objects, the baseline to compare with.
+The mode chooses who proposes the plan; the gate and the rehearsal are the same in every mode, with one recorded exemption (S8 in Rules only, exempted on purpose to show what a plain resend does; on a real case the gate holds it), and nothing is written until a person or the site's written policy releases it. **Board**: three specialist agents review the evidence in parallel, then a coordinator agent proposes one plan. **Site policy**: the scenario catalogue and the site's profile settle the cases they know, the cases the catalogue sends straight to a person (such as S13 and S21) are escalated with no board, and the board takes the rest. **Single investigator**: one generalist agent proposes the plan (with live agents only: no run of it is recorded, so without a key a case takes the rules path, and the trial greys it). **Rules only**: no agents; the message is resent unchanged unless the gate objects, the baseline to compare with.
 
 ## On your machine or in the trial, first
 
-1. In the trial, choose **Explore on my own** on the welcome; on your machine, if a prompt offers the trial, choose **Not now**, and leave the site profile notice for later: the shipped profile serves every scenario. In **Scenarios**, run **S2** in **Board** mode. About 20 seconds later (a minute live) **Open C-000002** shows its case waiting for approval. There, **Decide on the resend**, **Review the plan and decide**, **Approve plan**, **Approve this plan**: one conditional write, then "Verified".
+1. In the trial, choose **Explore on my own** on the welcome; on your machine, if a prompt offers the trial, choose **Not now**, and leave the site profile notice for later: the shipped profile serves every scenario. In **Scenarios**, run **S2** in **Board** mode. About 20 seconds later (a minute live) the **Open** link on S2's row shows its case waiting for approval: C-000002 in the trial, C-000001 on a fresh install of your own (S8 played next opens C-000002 there). There, **Decide on the resend**, **Review the plan and decide**, **Approve plan**, **Approve this plan**: one conditional write, then "Verified".
 2. Run **S8** in **Rules only** and approve (in the trial its recorded case is already approved and written): WARD-B overwrites the bed manager's WARD-C. In **Board** it escalates, writing nothing. The case page sets the two side by side. In the trial, **In IRIS: Message trace** on C-000008 opens a recorded screenshot.
 
 **Try to break it,** with S2's case waiting for approval: run S2 again for each; in the trial, reload. The first also works in the trial (under your name, choose the role); the rest need your machine:
@@ -27,6 +27,16 @@ The mode chooses who proposes the plan; the gate and the rehearsal are the same 
 2. Press **Break the feed** on the hospital's banner. Its bed manager goes down for a minute and eight movements for four new patients fail; a strip follows Shutter grouping them into one incident and, once the bed manager is back, releasing them in order. Unlike a Resend of each message, each item goes in event order, conditional on the version recorded when the previous one was verified, stopping at the first surprise. In the demo's rehearsal on 3 November 2026 it ended as **one incident waiting for one approval**, with no model call: this outage needed no agent to plan its chains. On **Incidents**, **Approve release** sends them in order.
 3. Open a case that **waits for approval** and press **Approve plan**: one conditional write, then "Verified" from the receiver's history.
 4. On any case, **In IRIS: Message trace** opens its session in the Visual Trace.
+
+## Pilot it first
+
+For a hospital trying Shutter beside a real production, as [the install guide](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md) has it:
+
+1. **Its own namespace, no demo.** Create a `SHUTTER` namespace on backed-up storage and install with `-Ddemo=0`: no demo users, no demo receiver, and the feed, records and scenario items switched off ([sections 3 and 5](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md#3-shape-a-shutter-in-its-own-namespace)).
+2. **No live model.** Leave the provider key out. A watched production's failures run in Site policy by default, so the catalogue settles what it knows, a case it gives to the board or a person goes to a person with no plan, and nothing goes to any model.
+3. **A production review first.** It reads one production's settings, event log errors and failed messages, ties them to Shutter's cases and changes nothing; it needs nothing configured, and with no key its ranking agent is skipped (section 3.6).
+4. **Intake, with no receiver given an API.** Onboard one watched namespace ([section 9](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md#9-onboarding-several-namespaces)): its failed HL7 deliveries arrive through the forwarder and the alert intake, and each becomes a case with its evidence and a drafted email, never a resend, until the site profile describes a receiver's API.
+5. **Onboarding edits the production.** It renames the site's `Ens.Alert`, adds two items and maps Shutter's classes, and the production then needs Shutter's database to start ([section 10](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md#10-what-a-watched-namespace-does-not-get)). Do it first on captured traffic in a sandbox, not between a live production's alerts and their consumer.
 
 ## What to look at
 
@@ -49,7 +59,7 @@ The mode chooses who proposes the plan; the gate and the rehearsal are the same 
 
 ![Incident I-000001 from S11: eight failed deliveries, six chains, all verified at the receiver in 1 min 42 s](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/incident-s11.png)
 
-All 32 scenarios (S1 to S32 without S14 and S26, with S23 in three parts), step by step, and where each part of the task shows: [docs/readme/scenarios.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/scenarios.md).
+All 32 scenarios (S1 to S32 without S14 and S26, with S23 in three parts; CI plays 26 of them end to end), step by step, and where each part of the task shows: [docs/readme/scenarios.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/scenarios.md).
 
 ## The approval boundary, attacked over HTTP
 

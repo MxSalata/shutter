@@ -1,0 +1,217 @@
+{
+ "about": "The board on the twelve held-out cases on release 1.1.1's code, three runs a case, board mode: all four members on claude-opus-5-5, then the three specialists on claude-sonnet-5-5 with the coordinator on claude-opus-5-5. Graded by tests/fair_test/grade.py, unchanged, then re-graded blind. Categories: R right, D defensible, N+ needless stop well aimed, N- needless stop blind, F false closure, Wp wrong write proposed, Wx wrong write executed. Lower mean loss is better. The page: docs/readme/fair-test.md#release-11x.",
+ "played_on": "an AI Hub 109 instance (IRIS for Health Community 2027.1.0AI.109.0 with AI Hub), 8 November 2026: release 1.1.0's code with release 1.1.1's model view (src/Shutter/Util/ModelView.cls) loaded over it, which is 1.1.1's source under the 1.1.0 version string. The all-Opus board from 13:01 to 13:35 UTC, the mixed board from 13:38 to 14:06 UTC, one after the other. The sealed manifest checked OK before and after each board.",
+ "method": "tests/fair_test/play.py and grade.py from release 1.1.0, seed 20261106, --day 2026-11-05, 600 s timeout, approval by the rig, three runs a case, the case order of the 1.0.0 runs; no run was unscorable, retried or stopped early.",
+ "boards": {
+  "all_opus": {
+   "as_graded": {
+    "runs": 36,
+    "counts": {
+     "R": 24,
+     "D": 6,
+     "N+": 3,
+     "N-": 3,
+     "F": 0,
+     "Wp": 0,
+     "Wx": 0
+    },
+    "strict_mean": 0.667,
+    "lenient_mean": 0.5,
+    "per_case": {
+     "F01": [
+      "R",
+      "R",
+      "R"
+     ],
+     "F02": [
+      "R",
+      "R",
+      "R"
+     ],
+     "F03": [
+      "N+",
+      "N+",
+      "N+"
+     ],
+     "F04": [
+      "R",
+      "R",
+      "R"
+     ],
+     "F05": [
+      "D",
+      "D",
+      "D"
+     ],
+     "F06": [
+      "R",
+      "R",
+      "R"
+     ],
+     "F07": [
+      "N-",
+      "N-",
+      "N-"
+     ],
+     "F08": [
+      "R",
+      "R",
+      "R"
+     ],
+     "F09": [
+      "D",
+      "D",
+      "D"
+     ],
+     "F10": [
+      "R",
+      "R",
+      "R"
+     ],
+     "F11": [
+      "R",
+      "R",
+      "R"
+     ],
+     "F12": [
+      "R",
+      "R",
+      "R"
+     ]
+    }
+   },
+   "as_settled": {
+    "counts": {
+     "R": 27,
+     "D": 6,
+     "N+": 0,
+     "N-": 3,
+     "F": 0,
+     "Wp": 0,
+     "Wx": 0
+    },
+    "strict_mean": 0.5,
+    "lenient_mean": 0.333
+   },
+   "seconds_per_run": 53.4,
+   "usd_36_runs_costs_page": 18.981,
+   "usd_a_run_costs_page": 0.527,
+   "agent_runs_opened": 180,
+   "models": {
+    "Agent Encounter": "claude-opus-5-5",
+    "Agent Conformance": "claude-opus-5-5",
+    "Agent Impact": "claude-opus-5-5",
+    "Agent Coordinator": "claude-opus-5-5"
+   }
+  },
+  "sonnet_specialists_opus_coordinator": {
+   "as_graded": {
+    "runs": 36,
+    "counts": {
+     "R": 24,
+     "D": 6,
+     "N+": 3,
+     "N-": 3,
+     "F": 0,
+     "Wp": 0,
+     "Wx": 0
+    },
+    "strict_mean": 0.667,
+    "lenient_mean": 0.5,
+    "per_case": {
+     "F01": [
+      "R",
+      "R",
+      "R"
+     ],
+     "F02": [
+      "R",
+      "R",
+      "R"
+     ],
+     "F03": [
+      "N+",
+      "N+",
+      "N+"
+     ],
+     "F04": [
+      "R",
+      "R",
+      "R"
+     ],
+     "F05": [
+      "D",
+      "D",
+      "D"
+     ],
+     "F06": [
+      "R",
+      "R",
+      "R"
+     ],
+     "F07": [
+      "N-",
+      "N-",
+      "N-"
+     ],
+     "F08": [
+      "R",
+      "R",
+      "R"
+     ],
+     "F09": [
+      "D",
+      "D",
+      "D"
+     ],
+     "F10": [
+      "R",
+      "R",
+      "R"
+     ],
+     "F11": [
+      "R",
+      "R",
+      "R"
+     ],
+     "F12": [
+      "R",
+      "R",
+      "R"
+     ]
+    }
+   },
+   "as_settled": {
+    "counts": {
+     "R": 27,
+     "D": 6,
+     "N+": 0,
+     "N-": 3,
+     "F": 0,
+     "Wp": 0,
+     "Wx": 0
+    },
+    "strict_mean": 0.5,
+    "lenient_mean": 0.333
+   },
+   "seconds_per_run": 50.5,
+   "usd_36_runs_costs_page": 11.931,
+   "usd_a_run_costs_page": 0.331,
+   "agent_runs_opened": 180,
+   "models": {
+    "Agent Encounter": "claude-sonnet-5-5",
+    "Agent Conformance": "claude-sonnet-5-5",
+    "Agent Impact": "claude-sonnet-5-5",
+    "Agent Coordinator": "claude-opus-5-5"
+   }
+  }
+ },
+ "settled": {
+  "rule": "F03 settled as R: scoring.md scores the disposition the mode settled on before the dispatch gate, which was reconcile, the reference, and nothing was written. The grader gives N+ because the case ended blocked for a person. The blind re-grade of these 72 runs agrees with the grader on 66 and gives R on the six F03 runs."
+ },
+ "gate_stops": {
+  "F03": "RECEIPT_PAYLOAD_DIFFERS at proposal: the receipt's bed is JSON null and reads as a different bed. A bug; nothing was written.",
+  "F07": "FURTHER_MOVEMENT at proposal: a discharge on another visit beside the transfer. The shipped default (further_messages.in_patient_movement: stop); nothing was written."
+ },
+ "compared_with": "release 1.0.0's board on the same cases (results.json, modes.board): 30 R, 6 D, strict 0.167, lenient 0.000."
+}
