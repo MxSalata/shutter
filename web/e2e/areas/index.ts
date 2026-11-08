@@ -1,4 +1,5 @@
 import type { Area } from '../helpers';
+import { area as api } from './api';
 import { area as case_ } from './case';
 import { area as caseEvidence } from './case-evidence';
 import { area as cases } from './cases';
@@ -34,6 +35,7 @@ export const areas: Area[] = [
   settings,
   evaluation,
   health,
+  api,
 ];
 
 /** The areas the shared runs name in their own tests, beside the screens. */

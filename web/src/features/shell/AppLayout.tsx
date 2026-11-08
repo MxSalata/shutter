@@ -43,7 +43,7 @@ import { DetailSwitch } from '@/components/DetailSwitch';
 import { useAppearance, type ContrastSetting, type PaletteSetting } from '@/stores/appearance';
 import { hueVar } from '@/lib/hues';
 import { useResolvedContrast } from './useApplyAppearance';
-import { PORTAL_PAGE, SECTIONS, useNeedAPerson, usePortalPage } from './sections';
+import { PORTAL_PAGE, useNeedAPerson, usePortalPage, useSections } from './sections';
 import { MAIN_ID, SkipLink } from './SkipLink';
 import { ENV } from '@/env/mode';
 import { LiveHelpMenu } from '@/features/guide/LiveHelpMenu';
@@ -261,6 +261,8 @@ export function AppLayout() {
   // UTC; until the profile has loaded, the questionnaire's default.
   const profile = useSiteProfile().data?.profile;
   setDisplayZone(profile ? profile.feed?.time_zone || 'UTC' : undefined);
+  // The engineer's group (the API reference) joins the navigation while the Detail switch is on Technical
+  const sections = useSections();
   // 56 px live; a trial page's banner adds 40 px, 32 px once it is one line, and 36 px on a phone (styles.css keeps
   // --shutter-header-h, which sticky parts and scrolled-to sections clear, the same, in rem as AppShell turns these)
   const header = chrome ? { base: 92, sm: banner === 'compact' ? 88 : 96 } : 56;
@@ -316,7 +318,7 @@ export function AppLayout() {
           leftSection={<IconHome2 size={18} stroke={1.6} className="nav-icon" aria-hidden />}
           onClick={close}
         />
-        {SECTIONS.map(({ group, items }) => (
+        {sections.map(({ group, items }) => (
           <div key={group} role="group" aria-labelledby={`nav-${group}`} className="nav-group">
             <Text id={`nav-${group}`} className="nav-group-label" tt="uppercase" px="sm" pt="sm" pb={4}>
               {group}

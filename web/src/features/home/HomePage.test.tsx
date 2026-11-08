@@ -7,6 +7,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { PORTAL_PAGE, SECTIONS } from '@/features/shell/sections';
 import { server } from '@/mocks/node';
 import { resetMock } from '@/mocks/handlers';
+import { useAppearance } from '@/stores/appearance';
 import { layer1Words } from '@/test/words';
 import { theme } from '@/theme';
 import HomePage from './HomePage';
@@ -60,7 +61,12 @@ describe('HomePage', () => {
   it('links to every section of the navigation and says what it is for', async () => {
     renderHome();
     await screen.findByRole('heading', { level: 1, name: 'Home' });
-    for (const { group, items } of SECTIONS) {
+    for (const { group, items, technical } of SECTIONS) {
+      // The engineer's group waits for the Detail switch, as it does in the navigation
+      if (technical) {
+        expect(screen.queryByRole('region', { name: group })).not.toBeInTheDocument();
+        continue;
+      }
       const region = screen.getByRole('region', { name: group });
       for (const item of items) {
         const link = within(region).getByRole('link', { name: new RegExp(`^${item.label}`) });
@@ -68,6 +74,18 @@ describe('HomePage', () => {
         expect(link).toHaveTextContent(item.about);
         expect(item.about.split(/\s+/).length).toBeLessThanOrEqual(15);
       }
+    }
+  });
+
+  it('adds the Technical group, with the API reference, while the Detail switch is on Technical', async () => {
+    useAppearance.setState({ detail: 'technical' });
+    try {
+      renderHome();
+      await screen.findByRole('heading', { level: 1, name: 'Home' });
+      const region = screen.getByRole('region', { name: 'Technical' });
+      expect(within(region).getByRole('link', { name: /^API reference/ })).toHaveAttribute('href', '/api');
+    } finally {
+      useAppearance.setState({ detail: 'plain' });
     }
   });
 

@@ -1,12 +1,13 @@
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, within } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { isValidElement, type ReactElement } from 'react';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetMock } from '@/mocks/handlers';
 import { server } from '@/mocks/node';
+import { useAppearance } from '@/stores/appearance';
 import { theme } from '@/theme';
 import { LIVE_WELCOME_KEY } from '@/trial/LiveWelcome';
 import { routes } from '@/routes';
@@ -106,6 +107,25 @@ describe('the shell', () => {
     // A case's page is under Cases: its entry is the active one
     expect(within(nav).getByRole('link', { name: /^Cases/ })).toHaveAttribute('data-active');
     expect(within(nav).getByRole('link', { name: 'Scenarios' })).not.toHaveAttribute('data-active');
+  });
+
+  it('shows the Technical group, with the API reference, only while the Detail switch is on Technical', async () => {
+    renderFrame();
+    const nav = await screen.findByRole('navigation', { name: 'Main' });
+    await within(nav).findByRole('link', { name: 'Cases' });
+    expect(within(nav).queryByRole('link', { name: 'API reference' })).not.toBeInTheDocument();
+    expect(within(nav).queryByRole('group', { name: 'Technical' })).not.toBeInTheDocument();
+    act(() => useAppearance.setState({ detail: 'technical' }));
+    try {
+      const group = within(nav).getByRole('group', { name: 'Technical' });
+      const link = within(group).getByRole('link', { name: 'API reference' });
+      expect(link).toHaveAttribute('href', '/api');
+      expect(link.style.getPropertyValue('--nav-icon')).toBe('var(--shutter-hue-pink)');
+      expect(within(nav).getAllByRole('group')).toHaveLength(4);
+    } finally {
+      act(() => useAppearance.setState({ detail: 'plain' }));
+    }
+    expect(within(nav).queryByRole('link', { name: 'API reference' })).not.toBeInTheDocument();
   });
 
   it('keeps the header and the navigation when a page fails, with a way to another page', async () => {

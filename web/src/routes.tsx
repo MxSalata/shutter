@@ -22,6 +22,7 @@ const LibraryPage = lazy(() => import('./features/library/LibraryPage'));
 const SettingsPage = lazy(() => import('./features/settings/SettingsPage'));
 const EvaluationPage = lazy(() => import('./features/evaluation/EvaluationPage'));
 const HealthPage = lazy(() => import('./features/health/HealthPage'));
+const ApiPage = lazy(() => import('./features/api/ApiPage'));
 const NotFoundPage = lazy(() => import('./features/shell/NotFoundPage'));
 
 // Hash routing: IRIS serves the files at /shutter/ without rewriting unknown paths to index.html, so a deep link
@@ -55,6 +56,7 @@ export const routes: RouteObject[] = [
               { path: 'settings', element: <SettingsPage /> },
               { path: 'evaluation', element: <EvaluationPage /> },
               { path: 'health', element: <HealthPage /> },
+              { path: 'api', element: <ApiPage /> },
               { path: '*', element: <NotFoundPage /> },
             ],
           },

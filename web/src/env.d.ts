@@ -7,6 +7,15 @@ declare module '*evaluation.json?proof' {
   export default slice;
 }
 
+/**
+ * The REST API's description (docs/api/openapi.json), as features/api/openapi.ts reads it. The `?doc` query keeps
+ * TypeScript from inferring a type for the whole document, which takes it minutes; Vite reads the file as JSON all the same.
+ */
+declare module '*openapi.json?doc' {
+  const doc: import('./features/api/openapi').ApiDocument;
+  export default doc;
+}
+
 /** In trial pages only: what the trial answered in this browser and what was refused (src/trial/journal.ts). */
 interface Window {
   shutterTrial?: { journal: import('./trial/journal').Journal };
