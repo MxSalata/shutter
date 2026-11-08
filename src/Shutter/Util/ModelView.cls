@@ -53,7 +53,7 @@ Parameter FAILUREKEEP = ",kind,outcome,reason_code,http_status,status,text,error
 
 Parameter TIMELINEKEEP = ",event,ward,bed,event_time,operation_key,source_message_id,ens_header_id,ens_session_id,sent_at,source,later,this_case,outcome,reason_code,http_status,version_after,route,receiver,message_type,";
 
-Parameter ROUTEKEEP = ",feed,connector,receiver,tier,category,history_policy,capabilities_source,declared,capabilities_http_status,capabilities,conditional_writes,receipts,dry_run,epoch,note,";
+Parameter ROUTEKEEP = ",feed,connector,receiver,tier,category,history_policy,capabilities_source,declared,capabilities_http_status,capabilities,conditional_writes,receipts,history,dry_run,epoch,note,";
 
 /// Keys whose string values are identifiers of the case, and the token kind each gives.
 Parameter IDKEYS = ",patient_id:PID,encounter_id:ENC,encounter:ENC,visit_number:VISIT,visit:VISIT,nhs_number:NHS,mrn:MRN,prior_patient_id:PID,prior_encounter_id:ENC,prior_visit_number:VISIT,prior_patient_identifier:PID,";
@@ -163,9 +163,12 @@ ClassMethod KeepFor(node As %DynamicObject, parentKey As %String) As %String [ P
     If node.%IsDefined("refused") && node.%IsDefined("occupant_movement") Quit ..#BEDCONFLICTKEEP
     If node.%IsDefined("where") && node.%IsDefined("control_id") Quit ..#PENDINGKEEP
     If node.%IsDefined("delivery") && node.%IsDefined("event_time") && 'node.%IsDefined("sent_at") Quit ..#MOVEMENTKEEP
+    // The route before the receiver's body: since v1.1.0 the route item says whether the receiver offers history, and a
+    // route read as a ward body would lose its capability profile (conditional writes, receipts, dry runs), which the
+    // board needs to allow a resend (found on the v1.1.0 live round, 8 Nov 2026).
+    If node.%IsDefined("connector") && node.%IsDefined("capabilities_source") Quit ..#ROUTEKEEP
     If node.%IsDefined("state") || node.%IsDefined("history") Quit ..#WARDKEEP
     If node.%IsDefined("kind") && (node.%IsDefined("text") || node.%IsDefined("outcome")) && 'node.%IsDefined("data") && 'node.%IsDefined("item") && 'node.%IsDefined("items") Quit ..#FAILUREKEEP
-    If node.%IsDefined("connector") && node.%IsDefined("capabilities_source") Quit ..#ROUTEKEEP
     If node.%IsDefined("namespace") && node.%IsDefined("header_id") Quit ..#SOURCEKEEP
     Quit ""
 }

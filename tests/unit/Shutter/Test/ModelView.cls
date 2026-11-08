@@ -123,4 +123,22 @@ Method TestFailsClosedWhenTheMessageCannotBeRead()
     Do $$$AssertNotTrue(view.%ToJSON() [ "MRN9003", "and no identifier")
 }
 
+/// The route item keeps its capability profile in the model view, history field or not (v1.1.0's live round, 8 Nov 2026:
+/// a route that says the receiver offers history was read as a ward body and lost conditional_writes, receipts and
+/// dry_run, so the live board held every resend for more evidence).
+Method TestRouteKeepsItsCapabilities()
+{
+    Set c = ..Case()
+    Set route = {"feed": "ADT In -> ADT to Downstream -> Downstream Out", "connector": "Downstream Out", "receiver": "the demo bed-management system (/downstream/api)", "tier": 2, "category": "current_state", "history_policy": "current", "capabilities_source": "read from /downstream/api/capabilities", "declared": {"conditional_writes": true, "receipts": true, "history": true, "dry_run": true}, "capabilities_http_status": 200, "capabilities": {"conditional_writes": true, "receipts": true, "history": true, "dry_run": true, "epoch": 2}, "conditional_writes": true, "receipts": true, "history": true, "dry_run": true, "epoch": 2}
+    Set view = ##class(Shutter.Util.ModelView).Reduce(c, {"kind": "route", "item": (route)})
+    Set item = view.%Get("item")
+    Do $$$AssertTrue($ISOBJECT(item), "the route item is in the view")
+    For key = "conditional_writes", "receipts", "dry_run", "history" {
+        Do $$$AssertEquals(item.%Get(key), 1, "the route keeps " _ key)
+    }
+    Do $$$AssertTrue($ISOBJECT(item.%Get("capabilities")) && (item.%Get("capabilities").%Get("dry_run") = 1), "and the capability profile itself")
+    Do $$$AssertEquals(item.%Get("capabilities_source"), "read from /downstream/api/capabilities", "and where it was read")
+    Do $$$AssertEquals(item.%Get("epoch"), 2, "and the epoch")
+}
+
 }
