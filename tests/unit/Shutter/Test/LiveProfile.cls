@@ -64,7 +64,10 @@ Method TestLivePolicy()
     Set p.policy = ##class(Shutter.Store.SiteProfile).DemoPolicy()
     Do p.%Remove("further_messages")
     Do $$$AssertStatusOK(##class(Shutter.Store.SiteProfile).Store(p.%ToJSON(), seed _ " (demo)", "test", "", .v), "an older demo profile")
-    Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).FurtherMovement(), "show", "it reads the shipped show until the install runs")
+    Set demo = $GET(^Shutter.Config("demo")), ^Shutter.Config("demo") = 1
+    Set reading = ##class(Shutter.Store.SiteProfile).FurtherMovement()
+    If demo = "" { Kill ^Shutter.Config("demo") } Else { Set ^Shutter.Config("demo") = demo }
+    Do $$$AssertEquals(reading, "stop", "a demo instance reads stop even before the install writes it")
     Do $$$AssertStatusOK(##class(Shutter.Setup).DemoProfilePolicy(seed, 1), "a reinstall of the demo")
     Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).FurtherMovement(), "stop", "and the demo's stop is back")
     // An older live hospital's profile (its own tier 2, no further_messages): a reinstall adds the demo's stop and nothing else.
