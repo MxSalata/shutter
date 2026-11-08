@@ -541,10 +541,12 @@ ClassMethod SourceSkewSeconds() As %Integer
     Quit 300
 }
 
-/// What a further in-patient movement for the patient on another visit does to a write: stop, or show (the default since v1.47).
+/// What a further in-patient movement for the patient on another visit does to a write: stop, or show. A profile that doesn't
+/// say reads show on a site's install (the default since v1.47) and stop on a demo instance, whoever saved its profile, so the
+/// demo keeps its stop (CONTRACTS 6.5).
 ClassMethod FurtherMovement() As %String
 {
-    Quit ..FurtherSetting("in_patient_movement", "show")
+    Quit ..FurtherSetting("in_patient_movement", $SELECT(+$GET(^Shutter.Config("demo")): "stop", 1: "show"))
 }
 
 /// Who releases a failed admission the receiver answers 404 for: person (the default) or policy, the tier's own.
