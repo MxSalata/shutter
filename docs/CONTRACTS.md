@@ -1920,9 +1920,10 @@ board's case in the Visual Trace, the latest cases, and links to the portal's pa
   anyone else 404. It reads Shutter's tables through `%ExecDirectNoPriv`, fixed queries and no more than the app's public
   sign-in can read, since `demo-trace` holds no SQL privilege on them; so a site's portal users, whose cases hold real
   messages, never reach it.
-- **What it does.** `GET` and `HEAD` only, 405 otherwise. No broker, script or form: inline CSS and SVG, a plain meta refresh
-  every 30 seconds, `Cache-Control: no-store` and a Content-Security-Policy that allows nothing else. Everything from a case
-  is escaped, since it began in a message.
+- **What it does.** `GET` and `HEAD` only, 405 otherwise. No broker, script or form: inline CSS and SVG, no timed refresh,
+  which would take a screen reader back to the top of the page (WCAG 2.2.1), but a plain Refresh link to the page itself
+  beside the time it was read, `Cache-Control: no-store` and a Content-Security-Policy that allows nothing else.
+  Everything from a case is escaped, since it began in a message.
 - **What it reads.** The productions' state from `^Ens.Runtime` in each namespace, never `Ens.Director.GetProductionStatus`,
   which takes the runtime lock. Messages and errors in the last hour and the messages queued, through the tables' indices.
   The newest escalated S8 case the agents ran on, by query, since its number changes with each build; the agents' last
@@ -1931,24 +1932,31 @@ board's case in the Visual Trace, the latest cases, and links to the portal's pa
   `Ens_Config.Item` and each item's settings in effect (`Ens.Config.Item`'s `PopulateVirtualSettings`: the production's
   value, else the system default setting, else the class's), opened with no lock; an item's enabled and pool size are a
   system default setting's when one is set, as `Ens.Director` starts the item (a pool size only when it is a whole number
-  above nought). **Agents**: every item of `Shutter.Bridge.Operation.Agent` or a subclass, with enabled, pool size, the model
-  in effect and where it comes from (as the live runner picks it: the API mimic's while it is on; else the item's `Model`,
-  then its configuration's model, the item's `ProviderConfig` or else the instance's `AI.LLM.Shutter`, whose model is
-  `SHUTTER_MODEL`; then the agent class's `MODEL`), the provider configuration and its `model_provider`, the mode in effect
-  (`ResolveMode`; while it is replay, the model reads "<model> when live; none while replaying", since a replay calls no
-  model), `MaxIterations`, `TokenBudget`, `RequestTimeoutSeconds` and the item's last run (by the run's request header); a
-  line says where a model is set, and another that a run's request can set its own mode and limits (`RunSpec.FromRequest`:
-  `ModeOverride` replay on a reopened case's runs, `CaseWorkflow.Stamp`, and a question's, `Question.BuildRequest`, when the
-  person who asked is without `Shutter_LiveAgents` or the provider refuses the key; `MaxIterations` and `TokenBudget` from
-  `Shutter.Process.Question` and `Shutter.Process.Review`). **Operations**: every other business operation, with enabled,
-  pool size, class and only the settings `OPERATIONSETTINGS` names (timeouts, retry, reply codes, alerts), never one whose
-  name or value looks like a credential, key, certificate, server, address or file (a value holding `sk-`, `ghp_`, `gho_`,
-  `github_pat_`, `xox`, `-----BEGIN`, `secret://`, `password`, `bearer `, `://` or `@` in any case, or `eyJ`, or `AKIA` or
-  `ASIA` followed by sixteen capitals or digits, with case kept; a name is read as its words, so `SSLConfig` and `ApiKey`
-  stay off and `UncertainSettleSeconds` shows). Of a configuration it reads only `model` and `model_provider`, with no secret
-  resolved, and only with `%Admin_ConfigStore`; without it, `AI.LLM.Shutter`'s model comes from Shutter's record and another
-  configuration reads "not readable". An item it can't read is a row that says so. A card's column is 300 px or the whole
-  width, whichever is less, so the page never scrolls sideways at 320 px.
+  above nought). **Agents**: every item of `Shutter.Bridge.Operation.Agent` or a subclass, with enabled, pool size, the
+  model in effect and where it comes from (as the live runner picks it: the API mimic's while it is on; else the item's
+  `Model`, then its configuration's model, the item's `ProviderConfig` or else the instance's `AI.LLM.Shutter`, whose model
+  is `SHUTTER_MODEL`; then the agent class's `MODEL`), the provider configuration and its `model_provider` (a
+  `ProviderConfig` is checked as typed, before `AI.LLM.` goes in front of it, and one that looks like a key reads "hidden"
+  and is not looked up), the mode in effect (`ResolveMode`; while it is replay, the model reads "<model> when live; none
+  while replaying", since a replay calls no model; a mode set to anything but `auto`, `live`, `record` or `replay` reads
+  "not valid"), `MaxIterations`, `TokenBudget`, `RequestTimeoutSeconds` (each "not valid" when not a number) and the item's
+  last run (by the run's request header); a line says where a model is set, and another that a run's request can set its own
+  mode and limits (`RunSpec.FromRequest`: `ModeOverride` replay on a reopened case's runs, `CaseWorkflow.Stamp`, and a
+  question's, `Question.BuildRequest`, when the person who asked is without `Shutter_LiveAgents` or the provider refuses the
+  key; `MaxIterations` and `TokenBudget` from `Shutter.Process.Question` and `Shutter.Process.Review`). **Operations**:
+  every other business operation, with enabled, pool size, class and only the settings `OPERATIONSETTINGS` names (timeouts,
+  retry, reply codes, alerts), each only in its own form (a number; 0 or 1 for `AlertOnError`; the engine's pattern=actions
+  list for `ReplyCodeActions`), never one whose name or value looks like a credential, key, certificate, server, address or
+  file. Hidden, in any case: a value holding `sk-` or `hf_` where a word starts (so `task-runner` shows), or `sk-ant`,
+  `ghp_`, `gho_`, `github_pat_`, `xox`, `sk_live_`, `sk_test_`, `rk_live_`, `rk_test_`, `glpat-`, `-----BEGIN`, `secret://`,
+  `password`, `bearer `, `://` or `@` anywhere, a credential written as its name and value (`key=`, `token=`, `apikey:`,
+  `secret=` and the like), or `basic` and a base64 run. Hidden, with case kept: `eyJ`, `AKIA` or `ASIA` followed by sixteen
+  capitals or digits, or `AIza` followed by ten more. Hidden too: one run of 24 or more letters and digits holding both, as
+  a random key is. A name is read as its words, so `SSLConfig` and `ApiKey` stay off and `UncertainSettleSeconds` shows. The
+  same check hides a `Model`, `ProviderConfig` or `AgentClass` that looks like a key. Of a configuration it reads only
+  `model` and `model_provider`, with no secret resolved, and only with `%Admin_ConfigStore`; without it, `AI.LLM.Shutter`'s
+  model comes from Shutter's record and another configuration reads "not readable". An item it can't read is a row that says
+  so. A card's column is 300 px or the whole width, whichever is less, so the page never scrolls sideways at 320 px.
 - **Sessions.** A request with no session behind it ends the one it opened, so a caller that keeps no cookie can't use up
   the licence units; a visitor already in a portal session keeps it.
 
@@ -2114,6 +2122,9 @@ with the other stores.
   The demo's portal page lists the production's agents and its other operations with their settings, read with
   `Ens.Config.Item`, and of a provider configuration only `model` and `model_provider`, with no secret resolved; a replaying
   item names no model, a line says what a run's request sets, more secret shapes stay hidden and the cards fit 320 px (16).
+  A key-shaped `ProviderConfig` is checked before `AI.LLM.` goes in front of it, a mode that isn't one reads "not valid",
+  a listed operation setting shows only in its own form, and the page has a Refresh link in place of its 30-second meta
+  refresh (16).
 - v1.47, 8 Nov 2026 (the engine check): the gate's ordering check reads the engine first for a write on a case with a source
   namespace and an origin header, with `ENGINE_NOT_IN_SCOPE`, `ENGINE_STILL_TRYING`, `ENGINE_DELIVERED`, `RECEIVER_MAY_HOLD_IT`,
   `ENGINE_UNREADABLE` and `ENGINE_SETTLED` (6.5); the case carries `waitsOnEngine` (11); eleven reason codes appended to
