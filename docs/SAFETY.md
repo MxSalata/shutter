@@ -199,7 +199,7 @@ None of these is a control in this repository. They are the site's to do, and a 
 
 - [ ] Who holds each IRIS role, with password policy, lockout and audit.
 - [ ] Separation of duties, if wanted, through a role of its own: an install restores Shutter's roles, so editing them doesn't last.
-- [ ] Who holds `Shutter_Scenarios` on a site install. The operator and approver hold it, and `POST /scenarios/reset` isn't limited to a demo install. From the code, it abandons open incidents ([API/Dispatch.cls:366-374](https://github.com/MxSalata/shutter/blob/v1.0.0/src/Shutter/API/Dispatch.cls#L366-L374), [Scenarios/Runner.cls:399](https://github.com/MxSalata/shutter/blob/v1.0.0/src/Shutter/Scenarios/Runner.cls#L399), [Setup.cls:276](https://github.com/MxSalata/shutter/blob/v1.0.0/src/Shutter/Setup.cls#L276), [:283](https://github.com/MxSalata/shutter/blob/v1.0.0/src/Shutter/Setup.cls#L283)). Read, not run.
+- [ ] Who holds `Shutter_Scenarios` on a site install. The operator and approver hold it. On an install with `-Ddemo=0`, `POST /scenarios/reset` and `POST /scenarios/{id}/run` answer 403 `not_a_demo_instance` and change nothing, so a reset can't abandon the site's open incidents (`Shutter.Test.ScenarioGuard`), and `Shutter.Setup_PurgeStore` refuses there too. The app already greys out Run and Reset there; now the server refuses them as well.
 - [ ] Someone watching the Workflow inbox and the case list, an operator who sends drafts, a team mailbox in the profile and its allowed domains.
 - [ ] Who reads the evidence before approving, and who checks a drafted escalation before acting on it.
 - [ ] A procedure to stop writes, naming who can stop the production.
