@@ -7,6 +7,10 @@ rule were hashed on 6 November 2026, before any run, and are published with thos
 that folder checks them. They were not edited, and the manifest checked OK before and after the live runs. Every run
 is in [fair-test/results.json](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test/results.json).
 
+Every figure on this page is on release 1.0.0's code, except the section
+[Release 1.1.x](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#release-11x) near the end: on
+1.1.1's code the board proposes the same, and the gate stops two right plans.
+
 ## Headline
 
 - **Both agent modes beat always escalating, by a wide margin, and wrote nothing wrong.** The board and the single
@@ -519,6 +523,59 @@ The Opus 5.5 figures come from another build and from recorded runs, so they com
   run order, and so the model, could be recovered.
 - **Cost is at seeded list prices,** not an invoice, and Sonnet 5.5's cache-read price is set too low (above).
 
+## Release 1.1.x
+
+Everything above is release 1.0.0's code. The board was played again on the same twelve sealed cases on release 1.1.1's
+code: release 1.1.0 with 1.1.1's model view (`src/Shutter/Util/ModelView.cls`) loaded over it, which is 1.1.1's source
+under the 1.1.0 version string. Same AI Hub 109 platform build, same harness, seed, `--day`, case order, 600 s timeout
+and approval by the rig, three runs a case, 8 November 2026; the manifest checked OK before and after. Every run is in
+[fair-test/results-v111.json](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test/results-v111.json).
+
+- **The board's proposals are 1.0.0's.** With all four members on `claude-opus-5-5`, the board proposed what the 1.0.0
+  board proposed in all 36 runs. It made 9 writes (F01, F10 and F11, three runs each), each under the failed key at the
+  expected version, applied and verified; the 1.0.0 board also wrote F07, which the 1.1.0 gate now holds (below).
+- **The gate stopped two right plans,** so the score is worse than 1.0.0's, and the gate is the reason, not the agents.
+  Both checks came in with 1.1.0; in all six runs nothing was written.
+  - **F03, a bug, fixed for release 1.1.2.** The board proposed `reconcile`, the reference outcome. The receiver holds a
+    committed receipt under the failed key with the operation's own digest, but the receipt's bed is JSON null, and the
+    1.1.0 receipt check read a null bed as a different bed (`RECEIPT_PAYLOAD_DIFFERS`), so a person gets a case the
+    receipt had settled.
+  - **F07, a deliberate default.** The board proposed the right resend. The gate held it because the patient has a
+    discharge on another visit beside the transfer (`FURTHER_MOVEMENT`): the shipped site profile's
+    `further_messages.in_patient_movement` is `stop`, and Shutter can't say which visit is right, so a person looks
+    first. F07 is the case written to catch a reader who confuses the two visits, and the default treats it as the same
+    doubt. `show` lets such a movement through; that was read in the code, not run.
+- **Sonnet 5.5 specialists cost 37% less and graded the same.** With `claude-sonnet-5-5` on the three specialists (each
+  item's `Model` setting) and `claude-opus-5-5` coordinating, the board reached the same category as the all-Opus board
+  in every one of the 36 runs, made the same writes, and got all 11 scenarios right, at **0.331 USD a run against
+  0.527** (Costs page). Its proposals differ only on F09, where it asked for more evidence instead of escalating:
+  both write nothing and name the cancel.
+
+| Board, release 1.1.1's code | Runs | R | D | N+ | N- | F | Wp | Wx | Strict mean | Lenient mean | USD a run |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| All `claude-opus-5-5`, as graded by `grade.py` | 36 | 24 | 6 | 3 | 3 | 0 | 0 | 0 | 0.667 | 0.500 | 0.527 |
+| All `claude-opus-5-5`, F03 settled as right | 36 | 27 | 6 | 0 | 3 | 0 | 0 | 0 | 0.500 | 0.333 | 0.527 |
+| `claude-sonnet-5-5` specialists, `claude-opus-5-5` coordinator, as graded | 36 | 24 | 6 | 3 | 3 | 0 | 0 | 0 | 0.667 | 0.500 | 0.331 |
+| `claude-sonnet-5-5` specialists, `claude-opus-5-5` coordinator, F03 settled as right | 36 | 27 | 6 | 0 | 3 | 0 | 0 | 0 | 0.500 | 0.333 | 0.331 |
+| The 1.0.0 board above, all `claude-opus-5-5` | 36 | 30 | 6 | 0 | 0 | 0 | 0 | 0 | 0.167 | 0.000 | 0.480 |
+| Always escalate, computed | 12 | 2 | 5 | 5 | 0 | 0 | 0 | 0 | 1.250 | 0.833 | 0 |
+
+**How F03 was settled.** `scoring.md` scores the disposition the mode settled on before the dispatch gate. That was
+`reconcile`, the reference, and nothing was written, so this page reads the three F03 runs as right, as it read
+Haiku 5.5's F03 by its proposal (above). The grader gives N+, because the case ended blocked for a person. A blind
+re-grade of these 72 runs agrees with the grader on 66 and gives R on the six F03 runs. Both rows are published. Either
+way a hospital sees the same thing: a person gets three cases the receipt had settled, told which patient and why.
+F07 is N- in both gradings.
+
+**What it does not show.** Three runs a case, twelve cases and one fictional hospital, as above. The two boards ran one
+after the other, not interleaved. The F03 fix and the F07 setting were read in the code, not run. The comparison with
+the 1.0.0 board crosses releases, and the 1.1.0 gate stops F03 and F07 for every model, so only the two boards on the
+same code isolate the models.
+
+**Release 1.1.2: not yet measured.** Its rows go here once measured on its own code: F03 on the board with the null bed
+fixed, the single investigator on all twelve cases, and Site policy with no model. Until then, no figure on this page
+is release 1.1.2's.
+
 ## The files
 
 In [docs/readme/fair-test](https://github.com/MxSalata/shutter/tree/main/docs/readme/fair-test):
@@ -539,6 +596,9 @@ In [docs/readme/fair-test](https://github.com/MxSalata/shutter/tree/main/docs/re
 - [results-a1.json](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test/results-a1.json): the board on
   `claude-sonnet-5-5` and `claude-haiku-5-5`: per model, each run's proposal, category (and, for Haiku 5.5's F03, the
   settled one), writes and seconds, and each case's cost, agent runs and tokens; the model totals and the 11 scenarios.
+- [results-v111.json](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test/results-v111.json): the board
+  on release 1.1.1's code, all `claude-opus-5-5` and with `claude-sonnet-5-5` specialists: per board, each case's three
+  categories, the graded and settled totals, the cost and seconds a run, and the two gate stops.
 
 **To repeat it:** [tests/fair_test](https://github.com/MxSalata/shutter/tree/main/tests/fair_test) holds the fixtures
 built from `cases.md`, the player and the grader; its README says how to run them.
