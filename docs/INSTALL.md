@@ -64,8 +64,18 @@ A production review needs none of this configured.
   rest itself: the `RECORDS` and `HOSPITAL` namespaces, the records system's web application and the hospital's production.
   It doesn't build the Second Parser's jar (below), so that item stays disabled and S25 is decided without its second
   opinion. `scripts/stock-install-check.sh` runs this path; CI runs it on 2026.2 with the core.
-- **`zpm "uninstall iris-shutter"` removes the classes only.** The productions, the web applications and the two demo
-  namespaces stay, so stop the production first, or remove the instance.
+- **`zpm "uninstall iris-shutter"` takes off everything the install and the onboarding added,** in every namespace, and
+  stops no production of the site's: a site production Shutter went into is updated in place, keeps running, and its own
+  alert item gets its name back. Every case, approval, incident and setting goes with it, so export what you must keep
+  first. `SELECT Shutter_Util.Uninstall_Plan()` says what would go and changes nothing.
+- **The uninstall refuses, changing nothing,** while a production it did not wire still names one of Shutter's classes (an
+  item added by hand), since that production would not start once the classes are gone.
+- **In a hospital's namespace the uninstall takes only Shutter's own** messages, log lines and productions. The
+  package manager removes the module's whole `Hospital` and `Downstream` packages, so while that namespace holds a class of
+  its own in either, the uninstall refuses, changes nothing and names the class: move it to a package of your own, then run
+  the uninstall again.
+- **Only `uninstall` and an explicit `zpm "iris-shutter clean"` run the uninstall,** so don't use `clean` on an instance
+  whose cases you want. A `zpm "load"` over an installed release is an upgrade (section 8).
 
 `Install` creates, in the current namespace, the folders under `<mgr>/shutter/`, the resources `Shutter_Operate`,
 `Shutter_Approve` and `Shutter_Intake`, the roles `Shutter_Operator`, `Shutter_Approver`, `Shutter_WebApp` and
@@ -388,6 +398,21 @@ that runs for a long time keeps its old code until its production restarts. The 
   profile voids every approval not yet dispatched (`APPROVAL_SITE_PROFILE_CHANGED`), so add a `watch` block when no
   incident or case is waiting to be sent.
 - **A forwarder onboarded before 1.1.0** keeps `FailureTimeout` 0 on its item and tries each forward once (section 10).
+
+**Upgrading with the package manager.** `zpm "load <folder>"` of a newer tree over an installed release keeps the
+production, its cases and the saved site profile, and never runs the uninstall. After it, restart `Shutter.Production`
+(stop and start it in the Production Configuration page): the load does not restart a running production, so its
+long-lived jobs keep the earlier code until then.
+
+**Upgrading to 1.1.2.** Run the install once, or load the newer tree, and restart the production as above. Then:
+
+- **Another visit's in-patient movement shows on the plan by default** instead of stopping the resend (section 10). A
+  stored profile that doesn't name `further_messages.in_patient_movement` reads `show` after the upgrade, so at a tier the
+  site releases by policy such a write now goes with no person. To keep the stop of 1.1.0 and 1.1.1, set
+  `"further_messages": {"in_patient_movement": "stop"}` in the site profile's JSON before the upgrade. A demo install keeps
+  the stop.
+- **A large incident's approval.** An incident above about four chains, which 1.1.1 abandoned with every case `failed`,
+  now raises one task that lists the first chains and binds them all (CONTRACTS 7.3).
 
 ## 9. Onboarding several namespaces
 

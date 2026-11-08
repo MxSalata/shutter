@@ -2130,6 +2130,22 @@ with the other stores.
 
 ## Changes
 
+- 8 Nov 2026, release 1.1.2 (v1.47): the receipt check compares beds only when the receipt and the operation both state
+  one: a bed that is JSON null, missing or empty is not stated, so a receipt whose bed is null no longer reads as a
+  different bed (`RECEIPT_PAYLOAD_DIFFERS`), and a stated different bed still does. A replayed run writes one trace line per
+  recorded tool call (the tool; ok, denied or failed; the milliseconds; the word replay; no argument, result or error text),
+  so each call is a step of its own in the Visual Trace, as a live run's are (9); this corrects v1.40's "A replayed run
+  writes one trace line naming its tool calls". `zpm "uninstall iris-shutter"` runs `Shutter.Util.Uninstall` before the
+  classes go: everything the install and the onboarding added, in every namespace, with no production of the site's
+  stopped and a site production Shutter went into updated in place; `Shutter_Util.Uninstall_Plan()` says what would go and
+  changes nothing; it refuses, changing nothing, while a production it did not wire names a Shutter class or a hospital's
+  namespace holds a class of the site's in the `Hospital` or `Downstream` package; `HardenPortal` records each portal
+  application's earlier roles and resource for it to put back (12). An incident's approval task lists what fits in its
+  2,000 characters and binds every chain, and an error raising it closes nothing and is tried again every 5 minutes
+  (7.3); the incident page lists six chains with the rest behind one button. `further_messages.in_patient_movement` is
+  `show` when absent and in the shipped profile, an `other_visit` row stops only where the profile says `stop`, and a demo
+  install writes `stop` into its profile, the live hospital's included (6.4, 6.5). No interface change from the pages on
+  another provider, AI Hub's features, the publisher from an MCP client, or the README.
 - 8 Nov 2026, release 1.1.1 (no interface change): the model view reads a route item as a route before a receiver's body, so
   the route's capability profile reaches the agents whether or not the route says the receiver offers history (9).
   The demo's portal page lists the production's agents and its other operations with their settings, read with

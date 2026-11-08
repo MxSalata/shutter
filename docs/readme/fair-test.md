@@ -544,7 +544,8 @@ and approval by the rig, three runs a case, 8 November 2026; the manifest checke
     discharge on another visit beside the transfer (`FURTHER_MOVEMENT`): the shipped site profile's
     `further_messages.in_patient_movement` is `stop`, and Shutter can't say which visit is right, so a person looks
     first. F07 is the case written to catch a reader who confuses the two visits, and the default treats it as the same
-    doubt. `show` lets such a movement through; that was read in the code, not run.
+    doubt. `show` lets such a movement through, and from 1.1.2 it is the shipped default (the demo keeps `stop`);
+    F07 has not been played on 1.1.2's code.
 - **Sonnet 5.5 specialists cost 37% less and graded the same.** With `claude-sonnet-5-5` on the three specialists (each
   item's `Model` setting) and `claude-opus-5-5` coordinating, the board reached the same category as the all-Opus board
   in every one of the 36 runs, made the same writes, and got all 11 scenarios right, at **0.331 USD a run against

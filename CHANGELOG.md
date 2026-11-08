@@ -4,6 +4,54 @@ Versions follow `major.minor.patch`: a minor release for new features, a patch r
 updates. The version in both `module.xml` files (the one the package manager publishes) is always the version of the
 GitHub tag on the same commit; `scripts/check-versions.py` checks every place the version is written.
 
+## 1.1.2 (8 November 2026)
+
+What 1.1.2 holds: the fix for the null bed that held a settled case for a person, an incident of any size under one
+approval, a supported uninstall and upgrade, a further-movement default that shows another visit on the plan instead of
+stopping the resend, one trace line per tool call in a replay, and pages on running the board on another provider, on
+AI Hub features measured with no model call and on the publisher from an MCP client. The README is restructured.
+
+- **A receipt whose bed is null says nothing about the bed.** The receipt check read a JSON null bed as a different bed
+  (`RECEIPT_PAYLOAD_DIFFERS`), so a person got a case the receipt had settled (held-out case F03). Beds are now compared
+  only when both the receipt and the operation state one; a null, missing or empty bed reads as not stated, and a stated
+  different bed still stops the close. A unit test covers each.
+- **Per-call trace lines in a replay.** A replayed run writes one trace line per recorded tool call, as a live run does,
+  with the tool, ok, denied or failed, the milliseconds and the word replay, and no argument, result or error text, so
+  each call is a step of its own in the Visual Trace. The tracing walk-through shows the steps and the page size that
+  keeps a pass on one page.
+- **Uninstall and upgrade.** `zpm "uninstall iris-shutter"` takes off everything the install and the onboarding added, in
+  every namespace, and stops no production of the site's: a site production Shutter went into is updated in place and its
+  own alert item gets its name back. `SELECT Shutter_Util.Uninstall_Plan()` says what would go. The uninstall refuses,
+  changing nothing, while a production it did not wire still names a Shutter class, or while a hospital's namespace holds a
+  class of the site's in the `Hospital` or `Downstream` package. A `zpm "load"` of a newer tree over an installed release
+  is an upgrade that keeps the production, its cases and the site profile; restart `Shutter.Production` afterwards. Two
+  checks, `tests/e2e/uninstall_check.py` and `tests/e2e/upgrade_check.py`, prove both on build 154, the upgrade over
+  1.0.0 and 1.1.1.
+- **An incident is one approval at any size.** The shared approval task's Workflow message holds 2,000 characters, and
+  1.1.1 abandoned an incident above about four chains, with every case `failed`. The task now lists the first chains that
+  fit, says how many it leaves out and points to the incident page; the digest is whole and one approval binds every
+  chain. An error raising the task leaves the incident waiting for a person and tries again every 5 minutes. The incident
+  page lists six chains with the rest behind one button. A storm check proves it at 40, 200 and 1,000 failures
+  (`docs/readme/storm-at-scale.md`).
+- **Another visit's movement shows on the plan by default.** `further_messages.in_patient_movement` is `show` in the
+  shipped profile and when a profile doesn't say: an in-patient movement on another visit goes on the plan beside the
+  resend instead of stopping it, while a cancel, merge or discharge on the case's own visit, or a change to the record,
+  still stops it. A site that wants the stop sets `stop`. The demo keeps the stop, labelled in its profile, the live
+  hospital's included, so S27, S31 and S32 stop as before. A stored profile that doesn't name the setting reads `show`
+  after the upgrade (`docs/INSTALL.md`, section 8).
+- **Another provider, by hand.** `docs/readme/another-provider.md`: the board run on OpenAI's `gpt-4.1` through AI Hub on
+  build 109, S2 and S8 as expected twice, with the steps as tested and their undo, runs unpriced and outside the day's
+  budget, and the places the install assumes Anthropic. Current OpenAI models refuse the `max_tokens` the runner sends.
+- **AI Hub notes and issues.** `docs/readme/building-on-ai-hub.md` adds skills, `response_format`, knowledge base search and
+  `CreateFromConfig`, each measured on builds 154 and 109 against a local stub with no model call, and links the issues
+  filed on 8 November 2026: #22 (a tool argument's schema), #23 (the Config Store descriptor), #24 (`max_tokens`), and a
+  comment on #4 for 109. `docs/readme/mcp.md` is a transcript of the publisher from an MCP client: the tools listed,
+  `GetCase` with its audit row, and the refusal without `Shutter_Publish`.
+- **The README, restructured.** A first screen under 750 words with the judges' path, one sign-in table and the measured
+  figures, every term defined; six limits inline and the rest in `docs/readme/limits.md` as a table of effect, workaround
+  and status; the fuller rows in `docs/edge-cases.md`; a pilot in the order it works in `first-steps.md`; and the
+  held-out cases on release 1.1.1 in `fair-test.md`.
+
 ## 1.1.1 (8 November 2026)
 
 A fix found by the live board on build 109 at 1.1.0 (`docs/readme/receipt-109.md`, "The board live on build 109, release 1.1.0"):
