@@ -382,7 +382,8 @@ Method OnApproval(incident As Shutter.Store.Incident, seq As %String, result As 
 // ---- release ----
 
 /// Release the next item: the lowest approved chain, its next pending item (7.4). With nothing approved and
-/// tasks still open, wait; with nothing left, close.
+/// tasks still open, or chains waiting for a task that could not be raised, wait in awaiting_approval; with nothing
+/// left, close.
 Method Advance(incident As Shutter.Store.Incident) As %Status
 {
     If ..CurrentCaseId '= "" Quit $$$OK
@@ -399,10 +400,14 @@ Method Advance(incident As Shutter.Store.Incident) As %Status
                 If incident.State = "releasing" Quit incident.Transition("awaiting_approval", "The released chains are done; waiting for " _ ..PendingTasks _ " approval task(s)", "system")
                 Quit $$$OK
             }
-            Set n = 0
+            Set n = 0, waiting = 0
             &sql(SELECT COUNT(*) INTO :n FROM Shutter_Store.Chain WHERE Incident = :iid AND State IN ('awaiting_approval', 'releasing'))
-            If +n > 0 Quit $$$OK
-            Quit ..Close(incident, "")
+            If +n = 0 Quit ..Close(incident, "")
+            // Chains wait for a person with no task open (raising it failed, and it is tried again): the incident rests
+            // where a person looks for it, not in releasing.
+            &sql(SELECT COUNT(*) INTO :waiting FROM Shutter_Store.Chain WHERE Incident = :iid AND State = 'awaiting_approval')
+            If (+waiting > 0) && (incident.State = "releasing") Quit incident.Transition("awaiting_approval", "The released chains are done; " _ (+waiting) _ " chain(s) wait for a person: no approval task is open, and the workflow tries again to raise it", "system")
+            Quit $$$OK
         }
         Set chain = ##class(Shutter.Store.Chain).%OpenId(rid)
         Set chain.State = "releasing"
