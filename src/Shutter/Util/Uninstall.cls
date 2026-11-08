@@ -143,8 +143,9 @@ ClassMethod TakenByUninstall(production As %String, name As %String, className A
 {
     If ownProduction '= "" {
         // The module's own production classes go whole: any Shutter. one, and Hospital.Production by its exact name, which
-        // the module compiles wherever it is loaded. Another Hospital. production in a hospital's namespace is the site's.
-        If ..OwnClass(production, ownProduction = "Shutter.Production") || (production = "Hospital.Production") Quit 1
+        // the module compiles wherever it is loaded. Another Hospital. production in a hospital's namespace is the site's,
+        // and so is the production Shutter's items went into, whatever its name: only its own items go from it.
+        If (..OwnClass(production, ownProduction = "Shutter.Production") || (production = "Hospital.Production")) && ((production '= ownProduction) || (ownProduction = "Shutter.Production")) Quit 1
         If (production = ownProduction) && ..OwnItem(name, className, ownClassName) Quit 1
     }
     Quit (production = onboarded) && recorded
@@ -372,6 +373,8 @@ ClassMethod TakeProduction(out As %DynamicObject)
     Set name = ""
     For {
         Set name = $ORDER(own(name)) Quit:name=""
+        // The production Shutter's items went into is the site's, whatever its name: it is only edited.
+        Continue:'##class(Shutter.Util.SiteProduction).DefinitionGoes(name, production)
         Set sc = ##class(Ens.Config.Production).%DeleteId(name)
         If $$$ISERR(sc) Do out.errors.%Push("The definition of " _ name _ ": " _ $SYSTEM.Status.GetErrorText(sc)) Continue
         Do out.removed.%Push("The definition of " _ name)
