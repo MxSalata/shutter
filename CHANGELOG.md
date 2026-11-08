@@ -41,9 +41,9 @@ AI Hub features measured with no model call and on the publisher from an MCP cli
   the live hospital's included, so S27, S31 and S32 stop as before. A stored profile that doesn't name the setting reads
   `show` after the upgrade, also on a demo whose profile a person or the onboarding saved (`docs/INSTALL.md`, section
   8). A write that shows such a movement is never released by policy: at a tier whose policy is `automatic` it waits
-  for a person, and an incident's chain that shows one leaves the shared approval for its case's own path. Not yet in
-  1.1.2: a movement that arrives after the approval passes the write unseen, where 1.1.1 stopped it; a site that wants
-  that stop sets `stop`.
+  for a person, and an incident's chain that shows one leaves the shared approval for its case's own path. A
+  movement that arrives after the approval is compared with the approved plan at dispatch, and a new one holds the write
+  (`FURTHER_MOVEMENT_NEW`) until the plan is read again and approved again.
 - **Further messages in an onboarded namespace read the feed's zone.** The read of a patient's further messages runs in the
   watched namespace, which maps only Shutter's intake and utility classes, so a message time with no UTC offset looked up
   the feed's zone in a class that namespace can't reach, the read failed and the write stopped for a person
@@ -85,6 +85,22 @@ AI Hub features measured with no model call and on the publisher from an MCP cli
   the F03 null-bed runs are published with the fair test; contracts v1.48. `docs/INSTALL.md` shows `InstallInto` with a
   site's own production name.
 - **The health page.** Each group lists its checks first and its facts apart under **Details**.
+- **The API page.** `docs/api/openapi.json` describes every route (an OpenAPI 3.1 file that CI checks against the
+  dispatcher), and the Technical view gains an API page listing each route with its parameters, its role and an example.
+- **Fixes found in review before the release.**
+  - The approval's lock: a second decision on the same plan while the first is being written answers `wrong_state`.
+  - An incident's approval task is checked for the role before it is raised and after, and an incident whose task can't
+    be raised goes back to awaiting approval once its other chains are done, so it stays listed.
+  - The task text counts a chain as shown only when all of it fits.
+  - Another visit's movement is never released by policy, leaves an incident's shared approval, and a new one after the
+    approval holds the write at dispatch.
+  - The uninstall removes items in an order that leaves nothing half removed, stops at the first failed step with
+    Shutter's configuration kept, and refuses when a namespace can't be read.
+  - The installer refuses a production in the demo's `Hospital`, `Downstream` or `Shutter` packages.
+  - The scenario runner plays on a demo instance only, over SQL and the terminal as over REST.
+  - A key shown anywhere (agent start lines, refusals, settings, stored runs) is masked by one rule.
+  - The production review withholds an error signature without blanking the same word elsewhere in its text, and the
+    judges' address is set once.
 
 ## 1.1.1 (8 November 2026)
 

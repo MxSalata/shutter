@@ -75,6 +75,11 @@ A production review needs none of this configured.
   package manager removes the module's whole `Hospital` and `Downstream` packages, so while that namespace holds a class of
   its own in either, the uninstall refuses, changes nothing and names the class: move it to a package of your own, then run
   the uninstall again.
+- **If a step of the uninstall fails, it stops there** and names the step and the reason. The later steps, Shutter's
+  configuration and its data stay in place, so running `zpm "uninstall iris-shutter"` again finishes the job.
+  `Shutter.Util.Uninstall.Run()` also returns `stopped`: the step that failed, or empty when every step ran.
+- **The uninstall refuses, changing nothing, when a namespace can't be read** for items that use Shutter's classes, and
+  names each such namespace with the reason: make it readable to the user running the uninstall, then run it again.
 - **Only `uninstall` and an explicit `zpm "iris-shutter clean"` run the uninstall,** so don't use `clean` on an instance
   whose cases you want. A `zpm "load"` over an installed release is an upgrade (section 8).
 
