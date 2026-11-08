@@ -86,6 +86,8 @@ ClassMethod Run() As %String [ SqlProc ]
     If refused '= "" Do out.errors.%Push(refused) Quit out.%ToJSON()
     // Starting or stopping a production commits every open transaction; IPM's level is put back by ModuleStatus.
     While $TLEVEL { TCOMMIT }
+    // The names of Shutter's items, read before the Production step takes them: their messages go in the Messages step.
+    Try { Do ..RecordItems() } Catch ex { Do out.errors.%Push("Items: " _ ex.DisplayString()) }
     For step = "Watched", "Production", "Portal", "DemoNamespacesOff", "Workflow", "Messages", "Interop", "Provider", "Tasks", "Applications", "Grants", "Users", "Roles", "Resources", "Folders", "Globals" {
         Try {
             Do $CLASSMETHOD($CLASSNAME(), "Take" _ step, out)
@@ -378,6 +380,34 @@ ClassMethod TakeProduction(out As %DynamicObject)
     }
 }
 
+/// Records the names of Shutter's items here in ^Shutter.Config("uninstall", "items"): every item of Shutter.Production
+/// in its own namespace, and in the site's production only the ones OwnItem accepts. A run again keeps what an earlier one
+/// recorded, after the Production step took the items.
+ClassMethod RecordItems() [ Private ]
+{
+    Set production = ##class(Shutter.Setup).ProductionName()
+    Do ..OwnItems(.own)
+    If production = "Shutter.Production" {
+        Set name = ""
+        For { Set name = $ORDER(own(name)) Quit:name=""  Set ^Shutter.Config("uninstall", "items", name) = 1 }
+        Quit
+    }
+    Set target = ##class(Ens.Config.Production).%OpenId(production)
+    Quit:'$ISOBJECT(target)
+    For i = 1:1:target.Items.Count() {
+        Set item = target.Items.GetAt(i)
+        Set:..OwnItem(item.Name, item.ClassName, $GET(own(item.Name))) ^Shutter.Config("uninstall", "items", item.Name) = 1
+    }
+}
+
+/// The names RecordItems recorded, as a list.
+ClassMethod RecordedItems() As %List [ Private ]
+{
+    Set items = "", name = ""
+    For { Set name = $ORDER(^Shutter.Config("uninstall", "items", name)) Quit:name=""  Set items = items _ $LISTBUILD(name) }
+    Quit items
+}
+
 /// Shutter.Production's items here: own(name) = class.
 ClassMethod OwnItems(Output own) [ Private ]
 {
@@ -530,45 +560,75 @@ ClassMethod TakeWorkflow(out As %DynamicObject)
     Do out.removed.%Push("The Workflow role " _ role)
 }
 
-/// Every message of Shutter's classes here, and what Shutter's own production's items carried.
+/// Every message of Shutter's classes here, and what Shutter's items carried; the rows of its business processes, a case
+/// waiting for approval among them; and its items' queues.
 ClassMethod TakeMessages(out As %DynamicObject)
 {
-    Set own = ..OwnNamespaceHere()
-    Set n = ..DeleteMessages($NAMESPACE, own, .problem)
+    Set own = ..OwnNamespaceHere(), items = ..RecordedItems()
+    Set n = ..DeleteMessages($NAMESPACE, own, .problem, items)
     If problem '= "" Do out.errors.%Push(problem) Quit
     If n > 0 Do out.removed.%Push(n _ " messages in " _ $NAMESPACE)
+    Set n = ..DeleteProcesses(own)
+    If n > 0 Do out.removed.%Push(n _ " runs of Shutter's business processes in " _ $NAMESPACE)
+    // A queue of an item no longer running: the Production step stopped or took them all.
+    For i = 1:1:$LISTLENGTH(items) { Set name = $LIST(items, i) Kill:'$DATA(^Ens.Runtime("ConfigItem", name)) ^Ens.Queue(name) }
     // The event log's lines from Shutter's classes.
     Do ##class(%SQL.Statement).%ExecDirectNoPriv(, "DELETE %NOCHECK FROM Ens_Util.Log WHERE " _ ..PrefixWhere("SourceClass", own))
 }
 
 /// Deletes the messages of Shutter's body classes in a namespace, with their bodies, the rest of each session staying. When
-/// wholeNamespace is 1 (Shutter's own namespace) the demo's body classes too, and every message that went through an item of
-/// Shutter.Production: its feed's HL7 messages have the engine's own body class. Elsewhere a Hospital. or Downstream. body
-/// is the site's and stays (ClassPrefixes). Returns how many.
-ClassMethod DeleteMessages(ns As %String, wholeNamespace As %Boolean = 0, Output problem As %String) As %Integer
+/// wholeNamespace is 1 (Shutter's own namespace) the demo's body classes too; elsewhere a Hospital. or Downstream. body is
+/// the site's and stays (ClassPrefixes). Also every message to or from one of items, the names of Shutter's items: its
+/// feed's HL7 messages and its approval tasks have the engine's own body classes. Such a body goes with its last header, as
+/// a site's item may have sent it on too. Returns how many.
+ClassMethod DeleteMessages(ns As %String, wholeNamespace As %Boolean = 0, Output problem As %String, items As %List = "") As %Integer
 {
     Set problem = "", n = 0
     New $NAMESPACE
     Try {
         Set $NAMESPACE = ns
-        Set where = ..PrefixWhere("MessageBodyClassName", wholeNamespace)
-        If wholeNamespace {
-            Set prod = ##class(Ens.Config.Production).%OpenId("Shutter.Production")
-            If $ISOBJECT(prod) {
-                Set names = ""
-                For i = 1:1:prod.Items.Count() Set names = names _ $SELECT(names = "": "", 1: ",") _ "'" _ $REPLACE(prod.Items.GetAt(i).Name, "'", "''") _ "'"
-                If names '= "" Set where = where _ " OR SourceConfigName IN (" _ names _ ") OR TargetConfigName IN (" _ names _ ")"
-            }
-        }
+        Set where = ..PrefixWhere("MessageBodyClassName", wholeNamespace) _ ..ItemWhere(items)
         Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID, MessageBodyClassName, MessageBodyId FROM Ens.MessageHeader WHERE " _ where)
         While rs.%Next() {
             Set bodyClass = rs.%GetData(2), bodyId = rs.%GetData(3)
-            If (bodyClass '= "") && (bodyId '= "") Try { Do $CLASSMETHOD(bodyClass, "%DeleteId", bodyId) } Catch ex { }
             Do ##class(Ens.MessageHeader).%DeleteId(rs.%GetData(1))
             Set n = n + 1
+            Continue:(bodyClass = "")||(bodyId = "")
+            If '..OwnClass(bodyClass, wholeNamespace) {
+                Set other = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT TOP 1 ID FROM Ens.MessageHeader WHERE MessageBodyClassName = ? AND MessageBodyId = ?", bodyClass, bodyId)
+                Continue:other.%Next()
+            }
+            Try { Do $CLASSMETHOD(bodyClass, "%DeleteId", bodyId) } Catch ex { }
         }
     } Catch ex {
         Set problem = ex.DisplayString()
+    }
+    Quit n
+}
+
+/// The part of a WHERE clause on Ens.MessageHeader matching a message to or from one of items, the names of Shutter's
+/// items; "" when there are none.
+ClassMethod ItemWhere(items As %List) As %String
+{
+    Set names = ""
+    For i = 1:1:$LISTLENGTH(items) Set names = names _ $SELECT(names = "": "", 1: ",") _ "'" _ $REPLACE($LIST(items, i), "'", "''") _ "'"
+    Quit:names="" ""
+    Quit " OR SourceConfigName IN (" _ names _ ") OR TargetConfigName IN (" _ names _ ")"
+}
+
+/// Deletes the engine's rows of the runs of Shutter's business processes here (ClassPrefixes): a run that waits, for a
+/// person's approval or a timer, keeps its row after the classes are gone. A site's own processes stay. Returns how many.
+ClassMethod DeleteProcesses(ownNamespace As %Boolean) As %Integer
+{
+    Set n = 0
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Ens.BusinessProcess")
+    While rs.%Next() {
+        Set id = rs.%GetData(1), class = ""
+        Try { Set run = ##class(Ens.BusinessProcess).%OpenId(id, 0) Set:$ISOBJECT(run) class = $CLASSNAME(run) } Catch ex { }
+        Kill run
+        Continue:(class = "")||'..OwnClass(class, ownNamespace)
+        Set sc = $CLASSMETHOD(class, "%DeleteId", id)
+        Set:$$$ISOK(sc) n = n + 1
     }
     Quit n
 }
