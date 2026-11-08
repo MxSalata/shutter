@@ -316,6 +316,7 @@ Method TestFurtherMovementStopOrShow()
             Do $$$AssertEquals(..Found(run.checks, "ordering", "FURTHER_MOVEMENT"), "", setting _ ": no further-movement block")
             Do $$$AssertEquals(..Found(run.checks, "ordering", "NO_FURTHER_MOVEMENT"), "pass", setting _ ": the check passes")
             Do $$$AssertTrue(..Detail(run.checks, "ordering", "NO_FURTHER_MOVEMENT") [ "shown on the plan", setting _ ": and counts the other visit for the plan")
+            Do $$$AssertTrue('(..Detail(run.checks, "ordering", "NO_FURTHER_MOVEMENT") [ "No further in-patient movement"), setting _ ": the pass doesn't say there is no further movement when the plan shows one")
             Do $$$AssertEquals(run.response.Outcome, "pass", setting _ ": the gate passes the write (" _ ..Codes(run.checks, "ordering") _ ")")
             Do ..OnAfterOneTest()
         }
