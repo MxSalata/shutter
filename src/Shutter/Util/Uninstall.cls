@@ -22,6 +22,10 @@ Parameter CREDENTIALS = "DownstreamAPI,ShutterIntake";
 /// The body classes whose messages are Shutter's own, wherever they are.
 Parameter BODYCLASSES = "Shutter.,Hospital.,Downstream.";
 
+/// The module's demo classes, for when the tree it was loaded from is no longer on disk (ModuleClasses). The unit test
+/// TestModuleClassesAreKnown fails when the tree's src/Hospital or src/Downstream has a class this does not name.
+Parameter DEMOCLASSES = "Downstream.API,Downstream.Encounter,Downstream.Event,Downstream.Installer,Downstream.Receipt,Downstream.Service,Hospital.LivePlayer,Hospital.Operation.DownstreamOut,Hospital.Process.PASToDownstream,Hospital.Production,Hospital.Setup";
+
 /// What an uninstall would do here, changing nothing. Needs what the uninstall needs.
 ClassMethod Plan() As %String [ SqlProc ]
 {
@@ -68,7 +72,8 @@ ClassMethod ModuleStatus() As %Status
 }
 
 /// Does it. Refused, with nothing changed, when a production Shutter did not wire still names one of its classes, since
-/// that production would not start once the classes are gone. Returns {ok, removed, kept, errors} as JSON.
+/// that production would not start once the classes are gone, or when a class of the site's is in the Hospital or
+/// Downstream package, which the package manager removes whole (SiteClassesHere). Returns {ok, removed, kept, errors} as JSON.
 ClassMethod Run() As %String [ SqlProc ]
 {
     Set out = {"namespace": ($NAMESPACE), "removed": [], "kept": [], "errors": []}
@@ -199,8 +204,79 @@ ClassMethod Refusal() As %String
         Set ns = $LIST(all, i)
         If '$LISTFIND(demo, ns) Do ..ForeignItems(ns, here, ownProduction, .own, .found)
     }
-    If found = "" Quit ""
-    Quit "These items use Shutter's classes and were not added by its onboarding, so their productions would not start once the classes are gone: " _ found _ ". Take them out first, then run this again"
+    Set classes = ..SiteClassesHere()
+    If (found = "") && (classes = "") Quit ""
+    Set out = ""
+    If found '= "" Set out = "These items use Shutter's classes and were not added by its onboarding, so their productions would not start once the classes are gone: " _ found _ ". Take them out first, then run this again"
+    If classes '= "" Set out = out _ $SELECT(out = "": "", 1: ". ") _ "These classes in " _ $NAMESPACE _ " are not Shutter's, but they are in the Hospital or Downstream package, which the package manager removes whole with Shutter: " _ classes _ ". Move them to a package of your own first, then run this again"
+    Quit out
+}
+
+/// The classes defined in this namespace in the demo's packages (Hospital, Downstream) that are not the module's, as a
+/// "; " list. The package manager's uninstall removes those packages whole, so these would go with it.
+ClassMethod SiteClassesHere() As %String
+{
+    Do ..ModuleClasses(.module)
+    Set found = ""
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT Name, GeneratedBy FROM %Dictionary.ClassDefinition WHERE Name %STARTSWITH 'Hospital.' OR Name %STARTSWITH 'Downstream.'")
+    While rs.%Next() {
+        If ..SiteClass(rs.%GetData(1), rs.%GetData(2), .module) Set found = found _ $SELECT(found = "": "", 1: "; ") _ rs.%GetData(1)
+    }
+    Quit found
+}
+
+/// Whether a class is in one of the demo's packages and is not the module's: not one of its classes (module(name)), nor
+/// generated from one.
+ClassMethod SiteClass(name As %String, generatedBy As %String, ByRef module) As %Boolean
+{
+    If ($EXTRACT(name, 1, 9) '= "Hospital.") && ($EXTRACT(name, 1, 11) '= "Downstream.") Quit 0
+    If $DATA(module(name)) Quit 0
+    If generatedBy '= "" {
+        Set from = generatedBy
+        If $ZCONVERT($EXTRACT(from, *-3, *), "U") = ".CLS" Set from = $EXTRACT(from, 1, *-4)
+        If $DATA(module(from)) Quit 0
+    }
+    Quit 1
+}
+
+/// The module's demo classes: module(name) = 1 for each .cls under src/Hospital and src/Downstream of the tree it was loaded
+/// from, or DEMOCLASSES when that tree is not on disk.
+ClassMethod ModuleClasses(Output module)
+{
+    Kill module
+    Set root = $GET(^Shutter.Config("root"))
+    If root '= "" {
+        Set src = ##class(%File).NormalizeDirectory(root _ "src")
+        For package = "Hospital", "Downstream" {
+            Set dir = ##class(%File).NormalizeDirectory(src _ package)
+            If ##class(%File).DirectoryExists(dir) Do ..ClassFiles(dir, package, .module)
+        }
+    }
+    Quit:$DATA(module)
+    Set list = $LISTFROMSTRING(..#DEMOCLASSES)
+    For i = 1:1:$LISTLENGTH(list) Set module($LIST(list, i)) = 1
+}
+
+ClassMethod ClassFiles(dir As %String, package As %String, ByRef module) [ Private ]
+{
+    Set rs = ##class(%ResultSet).%New("%File:FileSet")
+    Do rs.Execute(dir, "*", , 1)
+    While rs.Next() {
+        Set name = rs.Get("Name"), file = ##class(%File).GetFilename(name)
+        If rs.Get("Type") = "D" {
+            Do ..ClassFiles(name, package _ "." _ file, .module)
+        } ElseIf $ZCONVERT($EXTRACT(file, *-3, *), "L") = ".cls" {
+            Set module(package _ "." _ $EXTRACT(file, 1, *-4)) = 1
+        }
+    }
+}
+
+/// Whether the uninstall's writes outside the messages (a search table's registration, an extent definition) take a class:
+/// one of Shutter's by ClassPrefixes, or one of the module's demo classes (module, from ModuleClasses). In a hospital's
+/// namespace a class of the site's called Hospital. or Downstream. stays.
+ClassMethod TakesClass(className As %String, ownNamespace As %Boolean, ByRef module) As %Boolean
+{
+    Quit ..OwnClass(className, ownNamespace) || ($DATA(module(className)) > 0)
 }
 
 /// Adds to found the items in one namespace that use Shutter's classes, outside what the uninstall takes out itself.
@@ -510,11 +586,12 @@ ClassMethod TakeInterop(out As %DynamicObject)
         Do out.removed.%Push("The credential " _ name)
     }
     // The engine's note of the search table on HL7 messages, and of the production last open in the portal.
-    Set doc = ""
+    Set doc = "", own = ..OwnNamespaceHere()
+    Do ..ModuleClasses(.module)
     For {
         Set doc = $ORDER(^Ens.DocClassMap(doc)) Quit:doc=""
         Set table = ""
-        For { Set table = $ORDER(^Ens.DocClassMap(doc, "st", table)) Quit:table=""  Kill:..OwnBodyClass(table) ^Ens.DocClassMap(doc, "st", table) }
+        For { Set table = $ORDER(^Ens.DocClassMap(doc, "st", table)) Quit:table=""  Kill:..TakesClass(table, own, .module) ^Ens.DocClassMap(doc, "st", table) }
     }
     For name = "Shutter.Production", "Hospital.Production" {
         Kill ^Ens.Configuration("csp", "Activity", name)
@@ -701,8 +778,11 @@ ClassMethod TakeGlobals(out As %DynamicObject)
         If $$$ISERR(sc) Do out.errors.%Push("The rows of " _ class _ ": " _ $SYSTEM.Status.GetErrorText(sc))
     }
     // The extent manager's record of each class: removing a class leaves it, with every global the class named.
+    // In a hospital's namespace a site's class called Hospital. or Downstream. keeps its record (TakesClass).
+    Set own = ..OwnNamespaceHere()
+    Do ..ModuleClasses(.module)
     Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT Name FROM %Dictionary.CompiledClass WHERE Name %STARTSWITH 'Shutter.' OR Name %STARTSWITH 'Hospital.' OR Name %STARTSWITH 'Downstream.'")
-    While rs.%Next() { Do ##class(%ExtentMgr.Util).DeleteExtentDefinitionIfExists(rs.%GetData(1), "cls") }
+    While rs.%Next() { Do:..TakesClass(rs.%GetData(1), own, .module) ##class(%ExtentMgr.Util).DeleteExtentDefinitionIfExists(rs.%GetData(1), "cls") }
     For i = 1:1:$LENGTH(prefixes, ",") {
         Set prefix = $PIECE(prefixes, ",", i)
         // $ORDER starts from a valid name, so the prefix without its dot.
