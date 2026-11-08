@@ -38,8 +38,9 @@ receiving system's final state with the scenario's expected outcome (`fixtures/s
 - **Where Rules only is wrong, the gate usually stops it.** In S1, S3, S6, S7, S10 and S13 the resend is blocked by
   a check (a later event, an existing receipt, a discharge, a changed receiver, a receiver that can't take a conditional
   write, an event time before the admission), so nothing wrong reaches the receiver, but the case stops for a person.
-- **S8 is the case this gate doesn't catch.** Two systems moved the same patient at the same time, 09:20. No event is
-  later than the other, so every mechanical check passes; Rules only resends, the approval goes through, and the
+- **S8 is the case this gate would stop, exempted here on purpose.** Two systems moved the same patient at the same time, 09:20. No event is
+  later than the other, so the ordering checks pass, and the gate's block on a write past a matched entry that stops is lifted
+  only for Rules only in a recorded scenario; Rules only resends, the approval goes through, and the
   write moves the patient to Ward B over the bed manager's placement in Ward C. The matcher flags the two sources as
   catalogue entry E7, with escalation as its preferred outcome, and the board follows it: it sees that the evidence
   can't decide which movement is current and escalates to a person.

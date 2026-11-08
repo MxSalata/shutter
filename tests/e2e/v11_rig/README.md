@@ -12,6 +12,7 @@ Every name here is made up, and every receiver is a fake on the loopback address
 | `site/` | The two productions, their rule, the function the rule calls and the alert consumer. |
 | `test_rig.py` | The rig's own rules with no instance and no Docker. |
 | `check_rig.py` | Whether the rig stands, on a real instance. |
+| `close/check_close.py` | The close of an outage: the drain, a dirty read during it, the headers listed at the close, the engine's alerts, a busy feed, and linked cases judged from their own delivery header, on both productions' plain namespace. |
 
 ## The two namespaces
 
