@@ -193,6 +193,44 @@ Method TestAChainsOwnTaskStopsForAPerson()
     Do ..AssertStillForAPerson(inc, wf, "raise:1")
 }
 
+/// A chain's own task cannot be raised while an automatic chain goes on: once the automatic chain is done, the incident
+/// rests in awaiting_approval with the reason, not in releasing, so the state filter still lists the chain a person
+/// must approve.
+Method TestAFailedTaskBesideAnAutomaticChainRestsForAPerson()
+{
+    Set inc = ..NewIncident(2, 1, "per_chain")
+    Set auto = inc.ChainAt(2)
+    Set auto.Policy = "automatic", auto.State = "approved"
+    Do $$$AssertStatusOK(auto.%Save(), "chain 2 is automatic")
+    Set wf = ..Workflow(inc)
+    Set wf.Refuse = "the target is not there"
+    Do $$$AssertStatusOK(wf.AskApproval(inc, inc.ChainList(), 1), "chain 1's task cannot be raised")
+    Do $$$AssertEquals(wf.PendingTasks, 0, "no task is open")
+    Set inc = ##class(Shutter.Store.Incident).%OpenId(inc.%Id())
+    Do $$$AssertStatusOK(wf.Advance(inc), "the automatic chain is released")
+    Set inc = ##class(Shutter.Store.Incident).%OpenId(inc.%Id())
+    Do $$$AssertEquals(inc.State, "releasing", "while it goes, the incident is releasing")
+    // The released case resolves: the item is done and the workflow moves on.
+    Set item = ##class(Shutter.Store.ChainItem).%OpenId(wf.CurrentItemId)
+    Set item.State = "resolved"
+    Do $$$AssertStatusOK(item.%Save(), "the automatic chain's item resolves")
+    Set wf.CurrentCaseId = "", wf.CurrentItemId = ""
+    Do $$$AssertStatusOK(wf.Advance(inc), "the workflow moves on")
+    Set now = ##class(Shutter.Store.Incident).%OpenId(inc.%Id())
+    Do $$$AssertEquals(now.ChainAt(2).State, "resolved", "the automatic chain is resolved")
+    Do $$$AssertEquals(now.ChainAt(1).State, "awaiting_approval", "chain 1 still waits for a person")
+    Do $$$AssertEquals(now.State, "awaiting_approval", "the incident rests where a person sees it")
+    Set last = "", it = now.Events().%GetIterator()
+    While it.%GetNext(.k, .e) { If e.kind = "state" Set last = e.text }
+    Do $$$AssertTrue(last [ "no approval task is open", "its transition says why: " _ last)
+    Set listed = 0, rows = ##class(Shutter.Publish.Tools).ListIncidents("awaiting_approval", 200).incidents.%GetIterator()
+    While rows.%GetNext(.k, .row) { If row.incidentId = inc.IncidentId Set listed = 1 }
+    Do $$$AssertTrue(listed, "the state filter lists it")
+    Set again = 0
+    For i = 1:1:wf.Sent.Count() { If wf.Sent.GetAt(i) = "Ens.Alarm|raise:1" Set again = 1 }
+    Do $$$AssertTrue(again, "and the task is tried again")
+}
+
 /// The Workflow item answers the task's call with an error: the same stop, not an abandon.
 Method TestAnErrorFromTheTasksCallStopsForAPerson()
 {
