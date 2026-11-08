@@ -16,6 +16,7 @@ marked optional):
   web/package.json           "version"
   web/package-lock.json      "version" and packages[""].version
   web/src/mocks/fixtures.json  health.version (optional), the version the recorded demo shows
+  docs/api/openapi.json      info.version, the version the REST API's description carries
   www/                       the version the built web application embeds, only while web/src uses __APP_VERSION__
 
 --print prints the version when every place agrees. --set writes X.Y.Z into every place (the release jobs in ci.yml use
@@ -44,6 +45,8 @@ PATTERNS = {
     "web/package-lock.json": [r'(^  "version": ")[^"]*(")', r'(^  "packages": \{\s*"": \{\s*"name": "[^"]*",\s*"version": ")[^"]*(")'],
     # health holds only scalars before its version, so the match cannot leave the object.
     "web/src/mocks/fixtures.json": [r'(^ "health": \{[^{}]*?"version": ")[^"]*(")'],
+    # info holds its title, then its version, before anything else.
+    "docs/api/openapi.json": [r'(^  "info": \{\s*"title": "[^"]*",\s*"version": ")[^"]*(")'],
 }
 OPTIONAL = {"src/Shutter/Setup.cls", "web/src/mocks/fixtures.json"}
 
@@ -95,6 +98,13 @@ def found(root):
         health = json.loads(text).get("health")
         if isinstance(health, dict) and "version" in health:
             out.append(("web/src/mocks/fixtures.json health.version", health["version"], ""))
+
+    text = read(root, "docs/api/openapi.json")
+    if text is None:
+        out.append(("docs/api/openapi.json", None, "file missing"))
+    else:
+        info = json.loads(text).get("info")
+        out.append(("docs/api/openapi.json info.version", info.get("version") if isinstance(info, dict) else None, ""))
 
     # The build embeds the version only where the source reads __APP_VERSION__ (vite.config.ts defines it).
     uses = False

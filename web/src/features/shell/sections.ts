@@ -1,4 +1,5 @@
 import {
+  IconApi,
   IconBooks,
   IconBuildingHospital,
   IconChartBar,
@@ -13,6 +14,7 @@ import {
 import { useCases, useFailedForAPerson, useHealth } from '@/api/hooks';
 import { TRIAL } from '@/env/mode';
 import type { Hue } from '@/lib/hues';
+import { useTechnical } from '@/stores/appearance';
 
 /** The navigation's hues: each section's identity (DESIGN.md 2.5), never a status colour. */
 export type NavHue = Exclude<Hue, 'gray'>;
@@ -29,11 +31,13 @@ export interface SectionItem {
 }
 
 export interface SectionGroup {
-  group: 'Operate' | 'Results' | 'Configure';
+  group: 'Operate' | 'Results' | 'Configure' | 'Technical';
   /** What a visit to the group is for, for the Home page. */
   about: string;
   /** The same for a role that may not run scenarios, when the words above would tell it to. */
   aboutLookOnly?: string;
+  /** For the engineer: shown only while the Detail switch is on Technical, in the navigation and on Home alike. */
+  technical?: true;
   items: SectionItem[];
 }
 
@@ -127,7 +131,27 @@ export const SECTIONS: SectionGroup[] = [
       },
     ],
   },
+  {
+    group: 'Technical',
+    about: 'For the engineer who connects to it.',
+    technical: true,
+    items: [
+      {
+        to: '/api',
+        label: 'API reference',
+        icon: IconApi,
+        hue: 'pink',
+        about: 'Every route of the REST API: what it needs, takes and answers.',
+      },
+    ],
+  },
 ];
+
+/** The groups the navigation and Home show now: every one in Technical, the ones for everyone otherwise. */
+export function useSections(): SectionGroup[] {
+  const technical = useTechnical();
+  return technical ? SECTIONS : SECTIONS.filter((g) => !g.technical);
+}
 
 /** The cases that need a person: waiting for an approval, escalated, blocked or failed, as the Cases page's tiles count them. */
 const NEED_A_PERSON = ['awaiting_approval', 'escalated', 'blocked'] as const;
