@@ -111,7 +111,7 @@ const LIST_FILTERS: Record<string, string[]> = {
 
 /**
  * The address's query without Ask's own `ask=1` or a list's filters: opening Ask about this case keeps the reader on the
- * step's page, so the card stays (in the dock beside Ask below 1440 px, lib/guideDock.ts).
+ * step's page, so the card stays (in the dock beside Ask below 1200 px, lib/guideDock.ts).
  */
 function withoutOwnParams(pathname: string, search: string): string {
   if (!search) return search;

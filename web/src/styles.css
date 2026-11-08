@@ -1461,27 +1461,21 @@ body {
 }
 
 /*
- * Ask about this case: beside the case from 90em (1440 px, AskSurface's media query), the panel keeps to the right of
- * the page and scrolls on its own under the header; narrower, it opens as a drawer (a full-screen sheet on a phone).
- * Its surfaces reuse the tuned tokens: the hovered surface for the read-only notice, the border colour for the turns,
- * the attention edge for the What-if card, so nothing on them needs a contrast rule of its own.
+ * Ask Shutter (features/assistant): beside the page from 75em as the shell's aside, which scrolls on its own under the
+ * header and which the page keeps clear of; narrower, a drawer (a full-screen sheet on a phone). Its surfaces reuse the
+ * tuned tokens: the hovered surface for the read-only notice, the border colour for the turns, the attention edge for the
+ * What-if card, so nothing on them needs a contrast rule of its own.
  */
-.ask-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(360px, 460px);
-  gap: var(--mantine-spacing-md);
-  align-items: start;
-}
-/* Beside the panel the case's column is narrower than a laptop's: its tables wrap their cells instead of scrolling. */
-.ask-layout .stack-scroll {
-  --table-min-width: 0 !important;
-}
-.ask-aside {
-  position: sticky;
-  top: calc(var(--shutter-header-h) + var(--mantine-spacing-md));
-  max-height: calc(100dvh - var(--shutter-header-h) - 2 * var(--mantine-spacing-md));
+.assistant-aside {
   overflow-y: auto;
   overscroll-behavior: contain;
+}
+.ask-aside {
+  background: transparent;
+}
+/* Beside the panel the page's column is narrower than a laptop's: its tables wrap their cells instead of scrolling. */
+main[data-assistant='beside'] .stack-scroll {
+  --table-min-width: 0 !important;
 }
 /*
  * Ask as a sheet, while the guide's card is on the page below 90em (AskSurface): the drawer's side and width, under the

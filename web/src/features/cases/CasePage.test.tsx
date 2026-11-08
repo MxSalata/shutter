@@ -12,6 +12,8 @@ import { useAppearance } from '@/stores/appearance';
 import { layer1Words } from '@/test/words';
 import { theme } from '@/theme';
 import CasePage, { REPLAY_DONE } from './CasePage';
+import { AssistantFrame } from '@/features/assistant/AssistantSurface';
+import { resetAssistantForTests } from '@/features/assistant/store';
 import { REPLAY_DONE as GUIDE_REPLAY_DONE } from '@/features/guide/Guide';
 
 /** Whether the page is the trial, and whether the reader asked for reduced motion: set per test. */
@@ -36,9 +38,10 @@ afterAll(() => server.close());
 
 function renderCase(caseId: string, query = '') {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const router = createMemoryRouter([{ path: '/cases/:caseId', element: <CasePage /> }], {
-    initialEntries: [`/cases/${caseId}${query}`],
-  });
+  const router = createMemoryRouter(
+    [{ element: <AssistantFrame />, children: [{ path: '/cases/:caseId', element: <CasePage /> }] }],
+    { initialEntries: [`/cases/${caseId}${query}`] },
+  );
   render(
     <MantineProvider theme={theme}>
       <QueryClientProvider client={client}>
@@ -76,6 +79,7 @@ const outcomeLine = async (text: string) =>
 describe('CasePage', () => {
   beforeEach(() => {
     resetMock('approver');
+    resetAssistantForTests();
     env.trial = false;
     env.reduced = false;
     useAppearance.setState({ detail: 'plain' });

@@ -5,7 +5,8 @@
 /// the Agent Board item: the Explain agent alone (tier explain), or the board's specialists and then the coordinator's
 /// synthesis (tier board). What comes back is checked against the facts and the view (Shutter.Store.CaseQuestion.CheckAnswer)
 /// before it is stored; a refused answer ends the question schema_failed, a missing one failed, and a timer ends the wait.
-/// Nothing here writes to the case or to a receiver, whatever the question says.
+/// Nothing here writes to the case or to a receiver, whatever the question says. A question about a page of the web app
+/// (Shutter.Msg.PageQuestionRequest, CONTRACTS 14.6) is answered here too, with no case: OnPageRequest.
 Class Shutter.Process.Question Extends Ens.BusinessProcess
 {
 
@@ -61,6 +62,9 @@ Parameter EXPLAINCONFIGVERSION = "1";
 Method OnRequest(request As %Library.Persistent, Output response As %Library.Persistent) As %Status
 {
     Set response = ""
+    // A question about a page of the web app (CONTRACTS 14.6) is answered by the same item: no case, the Explain agent in
+    // the tier page.
+    If request.%IsA("Shutter.Msg.PageQuestionRequest") Quit ..OnPageRequest(request, .response)
     If 'request.%IsA("Shutter.Msg.QuestionRequest") Quit $$$ERROR($$$GeneralError, "Case Question expects a question request, got " _ $CLASSNAME(request))
     Set started = ##class(Shutter.Msg.QuestionStarted).%New()
     Set response = started
@@ -127,6 +131,63 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
     Do q.Answering(facts, ckey)
     If sent = 0 Do q.Fail("failed", "No board member could be asked") Quit $$$OK
     Quit ..ArmTimeout()
+}
+
+/// A question about a page (CONTRACTS 14.6): the row is opened and the early answer goes back with its id, then the Explain
+/// agent in the tier page is asked through the Agent Board item with the page, the question and the summary of the screen
+/// as data (Shutter.Util.PageQuestion.Request): its knowledge search and SubmitAnswer only, the tier's small budget, and
+/// never a recording. The route has already checked who may ask (Shutter_LiveAgents, the budget, a model to answer).
+Method OnPageRequest(request As Shutter.Msg.PageQuestionRequest, Output response As %Library.Persistent) As %Status
+{
+    Set started = ##class(Shutter.Msg.QuestionStarted).%New()
+    Set response = started
+    Set context = ##class(Shutter.Util.Json).Parse(request.ContextJSON, .psc)
+    Set sc = ##class(Shutter.Store.PageQuestion).Create(request.Page, request.Text, $SELECT($ISOBJECT(context): context, 1: {}), request.AskedBy, .q)
+    If $$$ISERR(sc) || '$ISOBJECT(q) Set started.State = "failed", started.Error = "The question could not be opened: " _ $SYSTEM.Status.GetErrorText(sc) Quit $$$OK
+    Set ..QuestionId = q.QuestionId, ..Tier = "page"
+    Set started.QuestionId = q.QuestionId, started.State = q.State
+    $$$TRACE("Question " _ q.QuestionId _ " about the " _ q.Page _ " page asked by " _ request.AskedBy)
+    Set rsc = ..Reply(started)
+    If $$$ISERR(rsc) $$$TRACE("The early reply was not sent: " _ $SYSTEM.Status.GetErrorText(rsc))
+    Set mode = ##class(Shutter.Bridge.Operation.Agent).ResolveMode("auto")
+    Set req = ##class(Shutter.Util.PageQuestion).Request(q.QuestionId, q.Page, q.Question, q.Context(), q.AskedBy, mode)
+    Do q.Answering()
+    Set ..ExplainPending = 1
+    Set sc = ..SendRequestAsync(..AgentTarget, req, 1, "page")
+    If $$$ISERR(sc) {
+        Set ..ExplainPending = 0
+        Do q.Fail("failed", "The request could not be sent to " _ ..AgentTarget _ ": " _ $SYSTEM.Status.GetErrorText(sc))
+        Quit $$$OK
+    }
+    Quit ..ArmTimeout()
+}
+
+/// The page question's answer, or its time running out: the run is recorded (with no case, so the budget counts it), and
+/// the answer kept when its checks pass (Shutter.Util.PageQuestion.CheckAnswer), refused as schema_failed otherwise.
+Method OnPageResponse(callrequest As %Library.Persistent, callresponse As %Library.Persistent, completionkey As %String) As %Status
+{
+    Set q = ##class(Shutter.Store.PageQuestion).ByQuestionId(..QuestionId)
+    If '$ISOBJECT(q) { $$$LOGWARNING("No page question " _ ..QuestionId _ " for the answer " _ completionkey) Quit $$$OK }
+    If completionkey = "question:timeout" {
+        If '..ExplainPending Quit $$$OK
+        Set ..ExplainPending = 0
+        Quit q.Fail("failed", "No answer from the Explain agent within " _ ..AgentTimeoutSeconds _ " s")
+    }
+    If completionkey '= "page" { $$$LOGWARNING("Unexpected completion key " _ completionkey) Quit $$$OK }
+    If '..ExplainPending { $$$TRACE("The Explain agent answered " _ q.QuestionId _ " after its time was up; the answer is not used") Quit $$$OK }
+    Set ..ExplainPending = 0
+    If '$ISOBJECT(callresponse) || 'callresponse.%IsA("Shutter.Bridge.Msg.AgentResponse") Quit q.Fail("failed", "The agent item answered with " _ $SELECT($ISOBJECT(callresponse): $CLASSNAME(callresponse), 1: "nothing"))
+    Set sc = ##class(Shutter.Store.AgentRun).FromResponse("", "", "explain", "explain", callresponse, ..HeaderIdOf(callrequest), .run, q.QuestionId)
+    Quit:$$$ISERR(sc) sc
+    If (callresponse.Status '= "ok") || (callresponse.ResultJSON = "") Quit q.Fail("failed", "The agent answered " _ callresponse.Status _ $SELECT(callresponse.Error '= "": ": " _ $EXTRACT(callresponse.Error, 1, 1200), 1: ""), run)
+    Set answer = ##class(Shutter.Util.Json).Parse(callresponse.ResultJSON, .psc)
+    If '$ISOBJECT(answer) || $$$ISERR(psc) || 'answer.%IsA("%Library.DynamicObject") Quit q.Fail("failed", "The agent's result is not a JSON object", run)
+    If '##class(Shutter.Util.PageQuestion).CheckAnswer(answer, ##class(Shutter.Util.PageQuestion).CiteIds(q.Context()), .problem) {
+        $$$TRACE("Page question " _ q.QuestionId _ ": the answer was refused: " _ problem)
+        Quit q.Fail("schema_failed", problem, run)
+    }
+    $$$TRACE("Page question " _ q.QuestionId _ " answered" _ $SELECT(callresponse.Mode '= "": " (" _ callresponse.Mode _ ")", 1: ""))
+    Quit q.Answered(answer, run)
 }
 
 /// question:<S>:<encounter>:<event>[:<receiver>], the base of a suggested question's record keys. The receiver is named when
@@ -259,6 +320,7 @@ Method OnResponse(request As %Library.Persistent, ByRef response As %Library.Per
 {
     Set sc = $$$OK
     Try {
+        If ..Tier = "page" { Set sc = ..OnPageResponse(callrequest, callresponse, completionkey) Quit }
         Set q = ##class(Shutter.Store.CaseQuestion).ByQuestionId(..QuestionId)
         If '$ISOBJECT(q) { $$$LOGWARNING("No question " _ ..QuestionId _ " for the answer " _ completionkey) Quit }
         If completionkey = "explain" { Set sc = ..OnExplain(q, callrequest, callresponse) Quit }
@@ -269,7 +331,10 @@ Method OnResponse(request As %Library.Persistent, ByRef response As %Library.Per
     } Catch ex {
         Set sc = ex.AsStatus()
     }
-    If $$$ISERR(sc) {
+    If $$$ISERR(sc) && (..Tier = "page") {
+        Set q = ##class(Shutter.Store.PageQuestion).ByQuestionId(..QuestionId)
+        If $ISOBJECT(q) && ((q.State = "pending") || (q.State = "answering")) Do q.Fail("failed", "Error at " _ completionkey _ ": " _ $EXTRACT($SYSTEM.Status.GetErrorText(sc), 1, 1500))
+    } ElseIf $$$ISERR(sc) {
         Set q = ##class(Shutter.Store.CaseQuestion).ByQuestionId(..QuestionId)
         If $ISOBJECT(q) && ((q.State = "pending") || (q.State = "answering")) Do q.Fail("failed", "Error at " _ completionkey _ ": " _ $EXTRACT($SYSTEM.Status.GetErrorText(sc), 1, 1500))
     }
@@ -280,6 +345,12 @@ Method OnResponse(request As %Library.Persistent, ByRef response As %Library.Per
 Method OnError(request As %Library.Persistent, ByRef response As %Library.Persistent, callrequest As %Library.Persistent, pErrorStatus As %Status, pCompletionKey As %String) As %Status
 {
     Try {
+        If (..Tier = "page") && (pCompletionKey = "page") && ..ExplainPending {
+            Set ..ExplainPending = 0
+            Set q = ##class(Shutter.Store.PageQuestion).ByQuestionId(..QuestionId)
+            If $ISOBJECT(q) Do q.Fail("failed", "Error from the agent call: " _ $EXTRACT($SYSTEM.Status.GetErrorText(pErrorStatus), 1, 1500))
+            Quit
+        }
         Set q = ##class(Shutter.Store.CaseQuestion).ByQuestionId(..QuestionId)
         Quit:'$ISOBJECT(q)
         Set text = $EXTRACT($SYSTEM.Status.GetErrorText(pErrorStatus), 1, 1500)

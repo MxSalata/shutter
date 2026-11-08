@@ -5,8 +5,10 @@ import type {
   AccessReport,
   AgentRun,
   ApprovalDecision,
+  AskPageQuestion,
   AskQuestion,
   CaseQuestion,
+  PageQuestion,
   CaseState,
   Costs,
   Escalation,
@@ -34,6 +36,7 @@ import {
 import { digest, draftEscalation, teamFor } from './escalation';
 import { freshHolds, heldView, type CaseFixture, type Hold } from './hold';
 import { recordedSiteProfile, recordedSiteProfileHistory } from './profile';
+import { pageAnswerFor, resetPageQuestionIds, samplePageQuestion } from './pageQuestions';
 import {
   questionDetail,
   recordedQuestion,
@@ -188,7 +191,16 @@ export function resetMock(signedInAs: keyof typeof USERS | null = 'approver') {
   startedReviews = {};
   asked = {};
   resetQuestionIds();
+  pageQuestions = {};
+  resetPageQuestionIds();
 }
+
+/** The questions asked about a page here (CONTRACTS 14.6), by id; the trial answers its suggested ones with sample answers. */
+let pageQuestions: Record<string, PageQuestion> = {};
+
+/** The server's refusal of a caller without the live agents' resource: a page has no recorded answers. */
+export const PAGE_LIVE_AGENTS_ONLY =
+  "Questions about a page are answered live only: they need Shutter_LiveAgents, which the judges' account has";
 
 /**
  * The questions asked about each case here, read on first use: a showcase case starts with its example conversation.
@@ -1106,6 +1118,47 @@ export const handlers = [
     await delay();
     list.push(q);
     return reply(q);
+  }),
+
+  // Asking about a page (CONTRACTS 14.6): the operator role and the live agents' resource, as the server asks; the trial
+  // has no model, so it answers the pages' suggested questions with sample answers and nothing else. The summary of the
+  // screen is checked for its shape and length as the server checks it, and then dropped: nothing reads it here.
+  http.post(`${BASE}/page-questions`, async ({ request }) => {
+    const denied = csrf(request) ?? guard('operator');
+    if (denied) return denied;
+    const body = (await request.json().catch(() => null)) as Partial<AskPageQuestion> | null;
+    if (!body || typeof body !== 'object')
+      return error(400, 'bad_request', 'The body must be a JSON object: {page, question, context}');
+    if (typeof body.page !== 'string' || !/^[a-z][a-z0-9-]{0,39}$/.test(body.page))
+      return error(
+        400,
+        'bad_request',
+        "page must be the page's name: a lower-case word with hyphens, at most 40 characters",
+      );
+    const question = typeof body.question === 'string' ? body.question.trim() : '';
+    if (!question) return error(400, 'bad_request', 'question is required');
+    if (question.length > 500) return error(400, 'bad_request', 'question is at most 500 characters');
+    if (body.context !== undefined && (typeof body.context !== 'object' || Array.isArray(body.context)))
+      return error(400, 'bad_request', 'context must be a JSON object');
+    if (JSON.stringify(body.context ?? {}).length > 4000)
+      return error(400, 'bad_request', 'context is longer than 4000 characters');
+    if (session?.can?.liveAgents === false) return error(403, 'live_agents_only', PAGE_LIVE_AGENTS_ONLY);
+    const answer = pageAnswerFor(body.page, question);
+    if (!answer) return error(503, 'no_service', 'The trial answers its suggested questions only');
+    await delay();
+    const q = samplePageQuestion(body.page, question, answer, session!.username, stamp());
+    pageQuestions[q.questionId] = q;
+    return HttpResponse.json(
+      { questionId: q.questionId, page: q.page, state: q.state, askedBy: q.askedBy },
+      { status: 202 },
+    );
+  }),
+  http.get(`${BASE}/page-questions/:qid`, ({ params }) => {
+    if (!session) return signedOut();
+    const q = pageQuestions[String(params.qid)];
+    return q && q.askedBy === session.username
+      ? HttpResponse.json(q)
+      : error(404, 'not_found', `No question ${String(params.qid)} of yours about a page`);
   }),
 
   http.get(`${BASE}/incidents`, ({ request }) => {

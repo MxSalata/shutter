@@ -4,6 +4,19 @@ Versions follow `major.minor.patch`: a minor release for new features, a patch r
 updates. The version in both `module.xml` files (the one the package manager publishes) is always the version of the
 GitHub tag on the same commit; `scripts/check-versions.py` checks every place the version is written.
 
+## Unreleased
+
+- **Ask Shutter: a chat about what is on the screen.** A button in the header opens a panel on every page, beside the page
+  from 1200 px and as a drawer below it (the whole screen on a phone), open or closed remembered per tab. On a case page it
+  is Ask about this case, through the same read-only case questions as before; the "Ask about this case" button opens it
+  and asks the case's first suggested question. On every other page it asks about the page through one new read-only
+  route, `POST /api/shutter/page-questions`: the web app sends the page's name and a short summary of what is in view (ids
+  and labels only), and the Explain agent answers in a new question tier, `page`, with its knowledge search and
+  `SubmitAnswer` alone, the summary as data inside the prompt, a small budget and few turns, under `Shutter_LiveAgents` and
+  the day's budget as a live case question is; nothing is recorded. Without `Shutter_LiveAgents` the route answers 403 and
+  the panel shows the page's written guide; the trial answers a few suggested questions per page with sample answers,
+  labelled so. CONTRACTS 14.6.
+
 ## 1.1.2 (8 November 2026)
 
 What 1.1.2 holds: the fix for the null bed that held a settled case for a person, an incident of any size under one

@@ -5,10 +5,10 @@ import { area } from './areas/case-evidence';
 import recordedAnswers from '../src/mocks/recorded-questions.json' with { type: 'json' };
 
 /**
- * A case's Evidence and Audit trail tabs, and Ask about this case: the panel beside the case from 1440 px and a drawer
- * over it below, asking a suggested question, the trial's disabled box for a question of one's own, the What-if change
- * taken to the Site profile as a draft, a citation landing on its section of the Evidence tab, Escape, and the
- * full-screen sheet on a phone.
+ * A case's Evidence and Audit trail tabs, and Ask about this case: the Ask Shutter panel beside the case from 1200 px
+ * (the shell's aside, which the page keeps clear of) and a drawer over it below, asking a suggested question, the trial's
+ * disabled box for a question of one's own, the What-if change taken to the Site profile as a draft, a citation landing on
+ * its section of the Evidence tab, Escape, and the full-screen sheet on a phone.
  */
 
 // The recorded answers' own words, so a recording made again doesn't break the test: the first sentence of an answer.
@@ -32,8 +32,8 @@ test.beforeEach(({ page }) => skipWelcome(page));
 // Each group carries the area's tag, so `--grep @case-evidence` runs these with the area's shared checks
 const tagged = { tag: area.tag };
 
-test.describe('Ask about this case, from 1440 px', tagged, () => {
-  test.use({ viewport: { width: 1440, height: 900 } });
+test.describe('Ask about this case, from 1200 px', tagged, () => {
+  test.use({ viewport: { width: 1280, height: 900 } });
 
   test('opens beside the case, asks a suggested question, and takes the What-if change to the Site profile as a draft', async ({
     page,
@@ -45,10 +45,16 @@ test.describe('Ask about this case, from 1440 px', tagged, () => {
     await expect(page).toHaveURL(/#\/cases\/C-000008\?ask=1$/);
     const panel = page.getByRole('region', { name: 'Ask about this case' });
     await expect(panel.getByRole('heading', { name: 'Ask about this case' })).toBeFocused();
-    // Beside the case: the case's heading stays in view on the left
+    // Beside the case: the case's heading stays in view on the left, and the page is not covered
     const side = await panel.boundingBox();
     const title = await page.getByRole('heading', { name: 'Case C-000008', exact: true }).boundingBox();
     expect(side!.x).toBeGreaterThan(title!.x + 200);
+    const main = await page.locator('main').boundingBox();
+    expect(main!.x + main!.width).toBeLessThanOrEqual(side!.x + 1);
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    // The header's button says the panel is open, and the case's own asked the first suggested question (the trial's
+    // example conversation has it answered already, so nothing more was asked)
+    await expect(page.getByRole('button', { name: 'Ask Shutter' })).toHaveAttribute('aria-expanded', 'true');
     await expect(panel).toContainText('Read-only.');
     const example = panel.getByRole('region', { name: 'Example conversation' });
     await expect(example).toContainText('Recorded from a real run on 1 November 2026 with claude-opus-5-5.');
@@ -97,7 +103,9 @@ test.describe('Ask about this case, from 1440 px', tagged, () => {
   });
 });
 
-test.describe('Ask about this case, below 1440 px', tagged, () => {
+test.describe('Ask about this case, below 1200 px', tagged, () => {
+  test.use({ viewport: { width: 1100, height: 800 } });
+
   test('opens as a drawer over the case, which keeps its full width', async ({ page }) => {
     await signIn(page);
     await go(page, '/cases/C-000008');

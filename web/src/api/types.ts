@@ -1543,3 +1543,49 @@ export interface QuestionAsked {
   state: QuestionState;
   askedBy: string;
 }
+
+// ---- asking about a page (CONTRACTS 14.6: the Ask Shutter panel on every page but a case's) ----
+
+/**
+ * What the web app sends with a question about a page: a short structured summary of what is in view, ids and labels
+ * only (features/assistant/screen.ts builds it), at most 4000 characters as the server reads it. Plain keys, three
+ * levels, forty entries in one place, texts of at most 200 characters.
+ */
+export type ScreenContext = Record<string, unknown>;
+
+/** POST /page-questions: the page's name (a lower-case word with hyphens), the question (1 to 500 characters), the summary. */
+export interface AskPageQuestion {
+  page: string;
+  question: string;
+  context: ScreenContext;
+}
+
+/** POST /page-questions answers 202 with the question's id. */
+export interface PageQuestionAsked {
+  questionId: string;
+  page: string;
+  state: QuestionState;
+  askedBy: string;
+}
+
+/** GET /page-questions/{qid}: the question, its state and its answer (the summary is not sent back: the asker sent it). */
+export interface PageQuestion {
+  questionId: string;
+  tier: 'page';
+  page: string;
+  question: string;
+  state: QuestionState;
+  askedBy: string;
+  askedAt: string;
+  answeredAt: string | null;
+  error: string | null;
+  /** live, or the run the API mimic answered (model `mock`); the trial's mock marks its own `replay`. */
+  mode: 'live' | 'record' | 'replay' | string | null;
+  model: string | null;
+  costUsd: number | null;
+  ensMessageId: string | null;
+  /** The accepted answer, null until answered; its cites are ids the summary listed, or `page`. */
+  answer: Answer | null;
+  /** When the trial's answer was made, when it carries it (the mock does; the server does not send it). */
+  recordedAt?: string | null;
+}

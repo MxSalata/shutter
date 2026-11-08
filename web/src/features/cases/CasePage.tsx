@@ -46,7 +46,8 @@ import { SHOW_EVIDENCE } from './case/evidenceLinks';
 import { rounds } from './case/derive';
 import { nextAction, outcomeCaseOf, provenanceOf, recordedApprovalTime } from './case/outcome';
 import { useCaseFacts } from './case/useCaseFacts';
-import { AskButton, AskSurface } from './ask/AskSurface';
+import { AskButton } from './ask/AskSurface';
+import { useAssistant } from '@/features/assistant/store';
 import { ConveneBoard } from './case/ConveneBoard';
 
 /** The portal's base path (/csp/<namespace>/) for links to messages, read from the case's trace link. */
@@ -177,23 +178,11 @@ function CaseBody({ c }: { c: CaseDetail }) {
     if (past > 0) window.scrollBy({ top: -past, behavior: 'instant' });
   }, [tab]);
   const compare = search.get('show') === 'compare';
-  // Ask about this case, kept in the address (`?ask=1`) so a link opens it; closing it returns focus to its button
-  const asking = search.get('ask') === '1';
-  const askButton = useRef<HTMLButtonElement>(null);
-  const setAsking = useCallback(
-    (on: boolean) =>
-      setSearch((prev) => {
-        const params = new URLSearchParams(prev);
-        if (on) params.set('ask', '1');
-        else params.delete('ask');
-        return params;
-      }, STAY),
-    [setSearch],
-  );
-  const closeAsk = useCallback(() => {
-    setAsking(false);
-    window.setTimeout(() => askButton.current?.focus(), 0);
-  }, [setAsking]);
+  // Ask about this case: the Ask Shutter panel (features/assistant), which the shell shows beside or over the page and
+  // keeps in the address (`?ask=1`) so a link opens it; the button opens it and asks the case's first suggested question
+  const asking = useAssistant((s) => s.open);
+  const closeAsk = useAssistant((s) => s.setOpen);
+  const openAsk = useAssistant((s) => s.openForCase);
   // The story steps start closed, except where the reader is sent: the approval of a case waiting for one, and the
   // S8 comparison when the demo's guide links to it. After that they stay as the reader leaves them.
   const [steps, setSteps] = useState<string[]>(() => [
@@ -313,7 +302,7 @@ function CaseBody({ c }: { c: CaseDetail }) {
     }
   };
   return (
-    <AskSurface caseId={c.caseId} open={asking} onClose={closeAsk}>
+    <>
       <CaseHeader
         c={c}
         provenance={provenanceOf(c.mode, facts.runs)}
@@ -326,11 +315,7 @@ function CaseBody({ c }: { c: CaseDetail }) {
           <>
             <ConveneBoard c={c} />
             <CaseActionButton action={action} onGo={goToAction} />
-            <AskButton
-              ref={askButton}
-              open={asking}
-              onToggle={() => (asking ? closeAsk() : setAsking(true))}
-            />
+            <AskButton open={asking} onToggle={() => (asking ? closeAsk(false) : openAsk(c.caseId))} />
           </>
         }
       />
@@ -457,7 +442,7 @@ function CaseBody({ c }: { c: CaseDetail }) {
       <Stack mt="lg">
         <ApiSource endpoint={`GET /api/shutter/cases/${c.caseId}`} data={c} />
       </Stack>
-    </AskSurface>
+    </>
   );
 }
 

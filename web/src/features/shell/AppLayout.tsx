@@ -51,6 +51,15 @@ import { LiveWelcome } from '@/trial/LiveWelcome';
 import { trialChrome } from '@/trial/slot';
 import { bannerForm } from '@/trial/visit';
 import { LiveBanner } from './LiveBanner';
+import {
+  ASSISTANT_ASIDE_WIDTH,
+  AssistantAside,
+  AssistantOverlay,
+  AssistantRouteSync,
+} from '@/features/assistant/AssistantSurface';
+import { HeaderAssistantButton } from '@/features/assistant/HeaderAssistantButton';
+import { useAssistantWide } from '@/features/assistant/panel';
+import { useAssistant } from '@/features/assistant/store';
 
 /**
  * The count beside Cases: how many cases need a person, from the same queries as the Cases page's tiles. Nothing at
@@ -285,16 +294,27 @@ export function AppLayout() {
   // 56 px live; a trial page's banner adds 40 px, 32 px once it is one line, and 36 px on a phone (styles.css keeps
   // --shutter-header-h, which sticky parts and scrolled-to sections clear, the same, in rem as AppShell turns these)
   const header = chrome ? { base: 92, sm: banner === 'compact' ? 88 : 96 } : 56;
+  // Ask Shutter: beside the page from the wide breakpoint (the shell's aside, which the page keeps clear of), a drawer
+  // below it; open or closed is remembered per tab (features/assistant)
+  const asking = useAssistant((s) => s.open);
+  const wide = useAssistantWide();
+  const beside = asking && wide;
   useFocusOnPageChange(pathname);
   return (
     <AppShell
       header={{ height: header }}
       navbar={{ width: 230, breakpoint: 'sm', collapsed: { mobile: !opened } }}
+      aside={{
+        width: ASSISTANT_ASIDE_WIDTH,
+        breakpoint: 'lg',
+        collapsed: { desktop: !beside, mobile: true },
+      }}
       padding="md"
       styles={{
         main: { background: 'var(--shutter-page)' },
         navbar: { background: 'var(--shutter-navbar)' },
         header: { background: 'var(--shutter-header)' },
+        aside: { background: 'var(--shutter-navbar)' },
       }}
     >
       <SkipLink />
@@ -321,6 +341,7 @@ export function AppLayout() {
           </Group>
           <Group gap="xs" wrap="nowrap">
             {chrome ? <chrome.TrialHelpMenu /> : <LiveHelpMenu />}
+            <HeaderAssistantButton />
             <DetailSwitch />
             <AppearanceMenu />
             <UserMenu />
@@ -362,7 +383,12 @@ export function AppLayout() {
         <PortalNavLink onClick={close} />
       </AppShell.Navbar>
       {/* The skip link's target: focusable by script only, so it is no tab stop of its own. */}
-      <AppShell.Main id={MAIN_ID} tabIndex={-1} style={{ outline: 'none' }}>
+      <AppShell.Main
+        id={MAIN_ID}
+        tabIndex={-1}
+        style={{ outline: 'none' }}
+        data-assistant={beside ? 'beside' : undefined}
+      >
         {/* A new page starts at its top; Back returns to where the previous one was left. */}
         <ScrollRestoration />
         <LiveBanner />
@@ -370,6 +396,9 @@ export function AppLayout() {
           <Outlet key={displayZone()} />
         </Suspense>
       </AppShell.Main>
+      {beside ? <AssistantAside /> : null}
+      <AssistantOverlay />
+      <AssistantRouteSync />
       {chrome ? (
         <>
           <chrome.Guide />

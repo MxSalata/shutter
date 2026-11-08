@@ -48,11 +48,12 @@ import {
   tierLabel,
 } from './labels';
 import { WHATIF_ID, WhatIfCard } from './WhatIfCard';
+import { useAssistant } from '@/features/assistant/store';
 
 /** A turn's heading id, which takes focus when its answer is asked for or shown. */
 const turnId = (q: { conversation: string; turn: number }) => `ask-turn-${q.conversation}-${q.turn}`;
 
-function focusSoon(id: string) {
+export function focusSoon(id: string) {
   window.setTimeout(() => {
     const el = document.getElementById(id);
     el?.scrollIntoView?.({ block: 'nearest' });
@@ -67,7 +68,7 @@ const isBoard = (a: CaseQuestion['answer']): a is BoardAnswer =>
  * An answer's opening, and the rest of it one click away: the rest of its text and, for the board, each agent's own
  * view, which stays in the page for a text search.
  */
-function AnswerText({ text, views }: { text: string; views?: BoardAnswer['perspectives'] }) {
+export function AnswerText({ text, views }: { text: string; views?: BoardAnswer['perspectives'] }) {
   const { lead, rest } = answerParts(text);
   return (
     <Stack gap={4}>
@@ -359,7 +360,7 @@ function RecordedCases() {
  * questions; the conversation shown (the recorded example first); the box for a question in one's own words, locked
  * without a key and saying so; and the What-if card. Nothing here writes to the case, the receiver or the profile.
  */
-export function AskPanel({ caseId }: { caseId: string }) {
+export function AskPanel({ caseId, autoAsk = false }: { caseId: string; autoAsk?: boolean }) {
   const access = useFreeText();
   const suggested = useSuggestedQuestions(caseId);
   const questions = useCaseQuestions(caseId);
@@ -416,6 +417,20 @@ export function AskPanel({ caseId }: { caseId: string }) {
       { onSuccess: (r) => onAsked(r.conversation, r.turn) },
     );
   };
+
+  // "Ask about this case" asks the first suggested question for the reader, once, when the panel opened from it: the
+  // first conversation's first turn, unless it has an answer here already (the trial's example conversation has)
+  const tookAutoAsk = useAssistant((s) => s.tookAutoAsk);
+  const autoAsked = useRef(false);
+  useEffect(() => {
+    if (!autoAsk || autoAsked.current || !suggested.isSuccess || !questions.isSuccess) return;
+    autoAsked.current = true;
+    tookAutoAsk();
+    const first = conversations[0];
+    const turn = first?.turns.find((t) => t.turn === 1);
+    if (!first || !turn || !canAsk || chipAsked(first.id, turn)) return;
+    choose(first.id, turn);
+  });
 
   // A follow-up turn is offered once the turn before it has been asked here
   const chips = (forTier: QuestionTier) =>

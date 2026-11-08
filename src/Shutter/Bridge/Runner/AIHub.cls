@@ -78,6 +78,8 @@ Method Run(spec As Shutter.Bridge.RunSpec, ByRef response As Shutter.Bridge.Msg.
                 Set submit.CaseId = caseKey
                 If terminal = "SubmitBoardAnswer" Set submit.FactIds = ..FactIdsOf(spec.Context)
                 If (terminal = "SubmitAnswer") || (terminal = "SubmitBoardAnswer") Set submit.CiteIds = ..CiteIdsOf(spec.Context)
+                // A page question cites only the ids the summary of the screen lists, or page (CONTRACTS 14.6).
+                If $ISOBJECT(question) && (question.Tier = "page") Set submit.CiteIds = ##class(Shutter.Util.PageQuestion).CiteIds(question.Context())
                 // Findings and plans may cite only the evidence they were given (v1.35).
                 If (terminal = "SubmitFindings") || (terminal = "SubmitPlan") Set submit.CiteIds = ..EvidenceIdsOf(spec.Context)
                 Do agent.ToolManager.AddTool(submit)
@@ -171,11 +173,17 @@ ClassMethod BoundCall(details As %DynamicObject)
 }
 
 /// The case a run works on: the correlation key, or for a question's run (keyed by its question id, CONTRACTS 14.2) the
-/// question's case, with the question in <var>question</var> ("" otherwise).
+/// question's case, with the question in <var>question</var> ("" otherwise). A page question's run (P-nnnnnn, 14.6) keeps
+/// its own id, and the question is the page question, whose tier is page.
 ClassMethod CaseKeyOf(spec As Shutter.Bridge.RunSpec, Output question As %RegisteredObject) As %String
 {
     Set question = ""
     Set key = spec.CorrelationKey
+    // A question about a page (CONTRACTS 14.6) has no case: the run is keyed by the question's own id, in the tier page.
+    If ($EXTRACT(key, 1, 2) = "P-") && ##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Store.PageQuestion") {
+        Set question = $CLASSMETHOD("Shutter.Store.PageQuestion", "ByQuestionId", key)
+        Quit key
+    }
     If ($EXTRACT(key, 1, 2) '= "Q-") || '##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Store.CaseQuestion") Quit key
     Set question = $CLASSMETHOD("Shutter.Store.CaseQuestion", "ByQuestionId", key)
     If '$ISOBJECT(question) || '$ISOBJECT(question.Case) Set question = "" Quit key

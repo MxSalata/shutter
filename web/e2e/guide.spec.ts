@@ -262,10 +262,10 @@ test.describe('the guide', () => {
 });
 
 /**
- * Ask about this case opened from the tour's Ask step (s8/ask, step 7 of 9). Below 1440 px Ask opens as a sheet with no
+ * Ask about this case opened from the tour's Ask step (s8/ask, step 7 of 9). Below 1200 px Ask opens as a sheet with no
  * overlay and no focus trap while the tour runs, and the card moves into a dock beside it: left of the sheet on a
- * laptop, at the foot of the screen on a phone, just before the sheet in the tab order. Next then goes on, by mouse
- * and by keyboard.
+ * narrow laptop, at the foot of the screen on a phone, just before the sheet in the tab order. Next then goes on, by
+ * mouse and by keyboard. From 1200 px the panel sits beside the case and the card stays where it was.
  */
 test.describe('the tour with Ask open', () => {
   /** Resumes the quick tour at its Ask step, from the header's button. */
@@ -302,7 +302,7 @@ test.describe('the tour with Ask open', () => {
   }
 
   for (const viewport of [
-    { width: 1280, height: 800 },
+    { width: 1100, height: 800 },
     { width: 390, height: 844 },
   ]) {
     test(`goes on with Ask open, by mouse, at ${viewport.width} px`, async ({ page }) => {
@@ -360,8 +360,8 @@ test.describe('the tour with Ask open', () => {
     });
   }
 
-  test('keeps the card before its section from 1440 px, with Ask beside the case', async ({ page }) => {
-    await page.setViewportSize({ width: 1600, height: 900 });
+  test('keeps the card before its section from 1200 px, with Ask beside the case', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
     const guide = await atAskStep(page);
     await page.locator('[data-tour-action="ask-open"]').click();
     const panel = page.getByRole('region', { name: 'Ask about this case' });

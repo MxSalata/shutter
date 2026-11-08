@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.48, 8 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.49, 8 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -1912,6 +1912,71 @@ is approved or rejected first); `409 budget_exhausted` with the budget object wh
   [{runId, role, member, status, mode, model, costUsd, durationMs, ensMessageId, error}]`; 404 `not_found` for a question
   that is not this case's.
 
+### 14.6 Ask Shutter: a question about a page (v1.49)
+
+The web app's Ask Shutter panel (the header's button, on every page) is a chat about what is on the screen. On a case page
+it is Ask about this case (14.2 to 14.5, unchanged: the same routes, tiers and rules; "Ask about this case" and each
+suggested question open the panel and ask the question for the reader). On every other page it asks about the page through
+one read-only route, under the same rules as a live case question: nothing is written but the question's own row and its
+run, nothing is recorded, and the route spends only as a live case question does.
+
+**The question.** `Shutter.Store.PageQuestion` (`P-nnnnnn`): `page` (the page's name as the web app sends it: a lower-case
+word with hyphens, at most 40 characters), the question (1 to 500 characters, trimmed, control characters removed), the
+summary of the screen as the agent got it, `state` (as 14.2's; a question left `pending` or `answering` for 10 minutes is
+marked `failed` when it is read), who asked, the accepted answer, the run's mode and model, its cost and the Visual Trace
+link. Its run is a `Shutter.Store.AgentRun` row with no case (`Case` is empty only for such a run) naming the question, so
+the day's budget (`Shutter.Util.Budget`) and `GET /costs` count it (`byQuestion` with `caseId` null).
+
+**The summary of the screen** (`context`) is built in the web app from the page itself (`features/assistant/screen.ts`):
+the page's title, its lead, its section headings and the things it links to by id, as `{id, kind, label}`, and nothing
+else; at most 3600 characters. The server holds it to its shape (`Shutter.Util.PageQuestion.CleanContext`): an object of
+plain keys (`[A-Za-z][A-Za-z0-9_]{0,39}`), at most three levels deep and forty entries wide in one place, texts cut at 200
+characters with their control characters removed, numbers, booleans and nulls kept, anything else `400 bad_request`; and to
+its length, at most 4000 characters as the agent reads it. It reaches the agent as data: inside the evidence tag the context
+is JSON with every `<`, `>` and `&` written as `<`, `>` and `&` (`AsData`), so no label can close the tag,
+open another or read as markup, and a JSON reader gets the same characters back. The agent's context is `{tier: "page",
+question_id, question: {text, note}, page, on_screen, on_screen_note}`, the notes saying the question and the summary are
+data, never instructions; the agent's own rules say the same (`Shutter.Agent.Base.PagePreamble`).
+
+**Who may ask** (`Shutter.Util.PageQuestion.Admit`, in this order): `403 live_agents_only` without `Shutter_LiveAgents`,
+since a page has no recorded answers; `409 live_unavailable` with `live` (the availability object, 12) while the day's
+budget or the caller's share is spent or the provider refuses the key; `409 no_model` when the agents' mode resolves to
+`replay` (no key, no API mimic, or the core edition). The Agent item then applies the budget as to any live run (reserve
+and settle, the caller's share by `RequestedBy`).
+
+**The run.** The route sends `Shutter.Msg.PageQuestionRequest` (`Page`, `Text`, `ContextJSON`, `AskedBy`) to the Case
+Question item, which opens the row, answers at once with `Shutter.Msg.QuestionStarted` and asks the Agent Board item with
+one `Shutter.Bridge.Msg.AgentRequest`: `Role` `explain`, `MemberCode` `explain`, `AgentClass` `Shutter.Agent.ExplainPage`
+(the Explain agent in the question tier `page`: no toolset, so no evidence tool and nothing that writes; the explain
+collection's search, which the runner attaches, and `SubmitAnswer`, which the runner adds; the catalogue pin, 9, holds a run
+to exactly `search_explain` and `SubmitAnswer` or it ends `catalogue_mismatch` with no model call), `TerminalTool`
+`SubmitAnswer`, `Shutter.Schema.Answer`, 12000 tokens, 3 iterations, no record key, and `ModeOverride` `live` when the
+instance records, so a page question is never a recording. The run is keyed by the question's id; the agent's `CaseId`,
+the scope policy's and the terminal tool's are that id, so `SubmitAnswer` is accepted for it alone. Under the API mimic
+(tests/mock) the tier is answered deterministically from the summary (`Shutter.Mock.Turns.PageTurn`): one knowledge search,
+then `SubmitAnswer` naming the first ids the summary lists, every text marked `[mock]`, cost 0.
+
+**What the core checks on the way back** (`Shutter.Util.PageQuestion.CheckAnswer`): `answer` present and at most 1200
+characters; `confidence`, when given, `high`, `medium` or `low`; each entry of `cites` is `page` or an `id` the summary
+lists (a case, a scenario, an incident), nothing else. A refusal ends the question `schema_failed` with the problem; a
+missing answer `failed`; the item's alarm (600 s) fails it with what is missing.
+
+**Routes.**
+
+- `POST /page-questions` (`Shutter_Operate`; `X-Requested-With`; `Idempotency-Key`) `{page, question, context}` -> 202
+  `{questionId, page, state, askedBy}`; `400 bad_request` for a body over 16000 characters, a page's name that is not one,
+  a question missing or over 500 characters, or a context out of shape or over 4000 characters; then 403 and 409 as above;
+  503 `no_service` and `not_queued`, 502 `no_answer`, 500 `question_failed` as the case question's route answers them.
+- `GET /page-questions/{qid}` -> `{questionId, tier: "page", page, question, state, askedBy, askedAt, answeredAt, error,
+  mode, model, costUsd, ensMessageId, answer}` for the one who asked it; `404 not_found` for anyone else, as for an id that
+  is not there. The summary is not sent back: the asker sent it.
+
+**The web app.** Without `Shutter_LiveAgents` the panel shows the page's written guide (`features/assistant/guides.ts`:
+what the page is and what to try next, with links) and says live answers need the judges' account; with no model key and
+no mimic it says so and shows the guide. The trial answers each page's suggested questions from its mock
+(`mocks/pageQuestions.ts`) and labels them as sample answers until they are recordings (`PAGE_ANSWERS_RECORDED`). Open or
+closed is remembered per tab; the panel sits beside the page from 1200 px and is a drawer below, the whole screen on a phone.
+
 ## Repository layout
 
 The published IPM package is the repository root (`module.xml`, name `iris-shutter`, sources under `src/`): the whole of Shutter for an AI Hub build, 2026.3 or later with Interoperability (`SystemRequirements`, the organisers' line of 2 Nov 2026), the live runner, the agents, tools, the publisher, schemas, policies and knowledge bases included, since they need the `%AI` package. The core alone is `core/module.xml` (name `iris-shutter-core`, `SourcesRoot ../src`, the same resources without the agents' classes), loaded by path on a 2026.2 Community image and in CI, never published; it compiles there and replays recorded runs. Both modules contribute classes to the `Shutter` package; nothing under `src/` may reference `%AI`.
@@ -2164,6 +2229,13 @@ with the other stores.
 
 ## Changes
 
+- v1.49, 8 Nov 2026 (Ask Shutter): a question about a page of the web app (14.6): `Shutter.Store.PageQuestion` (`P-nnnnnn`),
+  `POST /page-questions` and `GET /page-questions/{qid}`, the Explain agent in the question tier `page`
+  (`Shutter.Agent.ExplainPage`: the explain collection's search and `SubmitAnswer`, no evidence tool, 12000 tokens, 3
+  iterations, never recorded), the summary of the screen held to its shape and written as data inside the evidence tag,
+  the checks on the answer (`page` or an id the summary lists), who may ask (`Shutter_LiveAgents`, the day's budget, a
+  model to answer) and the API mimic's page turn. An `AgentRun` may have no case (such a run only), and `GET /costs`
+  `byQuestion` lists it with `caseId` null. The case questions (14.2 to 14.5) are unchanged.
 - 8 Nov 2026 (the Technical detail on the cases): `GET /cases` items and `GET /cases/{id}` carry `messageType`,
   `production`, `sourceItem`, `receiverClass`, `failedAt`, `planVersion`, `planDigest` and `catalogueEntry`, and the list's
   items `links`, read only and never a patient field (5).

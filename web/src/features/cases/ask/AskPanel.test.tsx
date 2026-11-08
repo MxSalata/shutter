@@ -30,6 +30,8 @@ import { WhatIfCard } from './WhatIfCard';
 import { layer1Words } from '@/test/words';
 import { useAppearance } from '@/stores/appearance';
 import { guideCard, guideDock } from '@/lib/guideDock';
+import { AssistantFrame } from '@/features/assistant/AssistantSurface';
+import { resetAssistantForTests } from '@/features/assistant/store';
 
 /**
  * What the recorded answers say about themselves: the day of the recording and its model. The trial keeps the word
@@ -100,6 +102,7 @@ afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 beforeEach(() => {
   resetMock('approver');
+  resetAssistantForTests();
   useAppearance.setState({ detail: 'plain' });
   demo.value = true;
   recorded.value = true;
@@ -115,8 +118,13 @@ function renderCase(caseId: string, query = '?ask=1') {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const router = createMemoryRouter(
     [
-      { path: '/cases/:caseId', element: <CasePage /> },
-      { path: '/site-profile', element: <p>Site profile page</p> },
+      {
+        element: <AssistantFrame />,
+        children: [
+          { path: '/cases/:caseId', element: <CasePage /> },
+          { path: '/site-profile', element: <p>Site profile page</p> },
+        ],
+      },
     ],
     { initialEntries: [`/cases/${caseId}${query}`] },
   );
@@ -133,9 +141,10 @@ function renderCase(caseId: string, query = '?ask=1') {
 /** The same, for a test that renders more than one case in turn. */
 function renderCaseUnmountable(caseId: string, query = '?ask=1') {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const router = createMemoryRouter([{ path: '/cases/:caseId', element: <CasePage /> }], {
-    initialEntries: [`/cases/${caseId}${query}`],
-  });
+  const router = createMemoryRouter(
+    [{ element: <AssistantFrame />, children: [{ path: '/cases/:caseId', element: <CasePage /> }] }],
+    { initialEntries: [`/cases/${caseId}${query}`] },
+  );
   return render(
     <MantineProvider theme={theme}>
       <QueryClientProvider client={client}>
