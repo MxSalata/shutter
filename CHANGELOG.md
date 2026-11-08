@@ -40,9 +40,10 @@ AI Hub features measured with no model call and on the publisher from an MCP cli
   still stops it. A site that wants the stop sets `stop`. A fresh demo install keeps the stop, labelled in its profile,
   the live hospital's included, so S27, S31 and S32 stop as before. A stored profile that doesn't name the setting reads
   `show` after the upgrade, also on a demo whose profile a person or the onboarding saved (`docs/INSTALL.md`, section
-  8). Not yet in 1.1.2: nobody reads a shown movement at a tier released by policy or under an incident's shared
-  approval, and one that arrives after the approval passes the write unseen, where 1.1.1 stopped it; a site that uses
-  incidents or releases a tier by policy should set `stop`.
+  8). A write that shows such a movement is never released by policy: at a tier whose policy is `automatic` it waits
+  for a person, and an incident's chain that shows one leaves the shared approval for its case's own path. Not yet in
+  1.1.2: a movement that arrives after the approval passes the write unseen, where 1.1.1 stopped it; a site that wants
+  that stop sets `stop`.
 - **Further messages in an onboarded namespace read the feed's zone.** The read of a patient's further messages runs in the
   watched namespace, which maps only Shutter's intake and utility classes, so a message time with no UTC offset looked up
   the feed's zone in a class that namespace can't reach, the read failed and the write stopped for a person
