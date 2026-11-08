@@ -4,6 +4,7 @@
 /// in the downstream system by hand. The production and the app do the rest.
 /// <method>Start</method> does the same in a background job and returns at once, for the app. The methods are SQL
 /// procedures, so scripts and the app can call them: <code>SELECT Shutter_Scenarios.Runner_Run('S2', 'board')</code>.
+/// All three play on a demo instance only (<method>NotDemo</method>), whoever calls them.
 Class Shutter.Scenarios.Runner
 {
 
@@ -13,6 +14,17 @@ Parameter WAITTIMEOUT = 120;
 /// The source system of an operation a <code>manual</code> step enters: a person on the ward, in the downstream
 /// system's own screens rather than through the feed.
 Parameter MANUALSOURCE = "WARD";
+
+/// The scenarios play on a demo instance only (^Shutter.Config("demo"), the flag GET /status reports): a run resets the
+/// receivers first and a reset abandons every open incident, empties the inbound and archive folders and moves resetAt.
+/// The REST routes refuse a site install first (Shutter.API.Dispatch, DemoOnly); this refuses a caller that reaches
+/// <method>Run</method>, <method>Start</method> or <method>Reset</method> another way, over SQL or from the terminal,
+/// with the same words. Returns the refusal as JSON text, or an empty string on a demo instance.
+ClassMethod NotDemo() As %String
+{
+    Quit:$GET(^Shutter.Config("demo")) ""
+    Quit {"error": "not_a_demo_instance", "detail": "Scenarios run and reset on a demo instance only: this instance is a site install, where a reset would abandon its open incidents"}.%ToJSON()
+}
 
 /// The folder that holds scenarios.json and one folder per scenario.
 ClassMethod FixturesDir() As %String
@@ -65,6 +77,8 @@ ClassMethod Load(Output error As %String) As %DynamicArray
 /// is the agent items' production setting, not this. Returns JSON text.
 ClassMethod Run(scenario As %String, mode As %String = "board") As %String [ SqlProc ]
 {
+    Set refused = ..NotDemo()
+    Quit:refused'="" refused
     Set found = ..Prepare(scenario, mode, .inbound, .error)
     Quit:error'="" {"error": (error)}.%ToJSON()
     // Called over HTTP, a run that waits can outlast the web gateway's 60-second response timeout (S7 waits up to
@@ -82,6 +96,8 @@ ClassMethod Run(scenario As %String, mode As %String = "board") As %String [ Sql
 /// another run is playing. Returns JSON text.
 ClassMethod Start(scenario As %String, mode As %String = "board") As %String [ SqlProc ]
 {
+    Set refused = ..NotDemo()
+    Quit:refused'="" refused
     If ..Running() {
         Quit {"error": "scenario_running", "detail": ("a run of " _ {}.%FromJSON(^Shutter.Scenarios("run")).scenario _ " is still playing")}.%ToJSON()
     }
@@ -372,6 +388,8 @@ ClassMethod Drop(source As %String, inbound As %String) As %String
 /// been reset; its open cases fail with the reason. JSON text.
 ClassMethod Reset() As %String [ SqlProc ]
 {
+    Set refused = ..NotDemo()
+    Quit:refused'="" refused
     Set resetAt = ##class(Downstream.Service).Now()
     Set ward = ##class(Downstream.Service).Reset(.status)
     // Every other demo receiver the profile lists, in its own namespace (v1.25): the records system beside the bed manager.
