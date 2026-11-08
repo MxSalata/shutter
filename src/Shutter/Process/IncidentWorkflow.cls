@@ -269,7 +269,7 @@ Method RaiseTask(incident As Shutter.Store.Incident, chains As %ListOfObjects, s
         Continue:(ch.State '= "awaiting_approval")
         If seq = "" { Continue:(ch.Policy '= "approval") } Else { Continue:(ch.Seq '= seq) }
         Set count = count + 1
-        Set lines = lines _ $CHAR(10) _ "Chain " _ ch.Seq _ " (" _ ch.Kind _ ", " _ ch.Entries _ "): encounter " _ ch.EncounterId _ ", patient " _ ch.PatientId _ ", first at receiver version " _ ch.FirstExpectedVersion
+        Set lines = lines _ $CHAR(10) _ "Chain " _ ch.Seq _ " (" _ ch.Kind _ ", " _ ch.Entries _ "): encounter " _ ch.EncounterId _ ", patient " _ ch.PatientId _ $SELECT(ch.FirstExpectedVersion '= "": ", first at receiver version " _ ch.FirstExpectedVersion, 1: ", no receiver version on record")
         Set items = ch.Items()
         Set it = items.%GetIterator()
         While it.%GetNext(.k, .item) {
