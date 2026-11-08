@@ -24,6 +24,10 @@ Property KeepRuns As %Integer [ InitialExpression = 500 ];
 
 Parameter SETTINGS = "WorkflowTarget:Targets,KeepRuns:Runs";
 
+/// Set when this sweep's third check has read every wait on the engine, so a check that throws before it leaves no count
+/// from an earlier sweep.
+Property EngineSwept As %Boolean [ InitialExpression = 0, Transient ];
+
 Method OnInit() As %Status
 {
     Set n = ##class(Shutter.Store.ReleaseRun).InterruptOpen("the Case Releaser started while this run was open: a restart cut it")
@@ -66,12 +70,14 @@ Method Sweep() As %Status
     If (waiting = 0) && (held = 0) && (engine = 0) Quit $$$OK
     Set sc = ##class(Shutter.Store.ReleaseRun).Begin(.run)
     If $$$ISERR(sc) { $$$LOGWARNING("A release run could not be opened: " _ $SYSTEM.Status.GetErrorText(sc)) Quit $$$OK }
-    Set error = "", wc = 0, wr = 0, hc = 0, hr = 0
+    Set error = "", wc = 0, wr = 0, hc = 0, hr = 0, ..EngineSwept = 0
     Try {
         Do ..Checks(.wc, .wr, .hc, .hr)
     } Catch ex {
         Set error = ex.DisplayString()
     }
+    // The third check never finished, so none of this sweep's waits on the engine was read.
+    If '..EngineSwept Set ^Shutter.Release("engine_unreadable") = engine
     Set sc = run.End(wc, wr, hc, hr, error)
     If $$$ISERR(sc) $$$LOGWARNING("Release run " _ run.%Id() _ " could not be ended: " _ $SYSTEM.Status.GetErrorText(sc))
     If error '= "" $$$LOGWARNING("Release run " _ run.%Id() _ " failed: " _ error)
@@ -90,6 +96,7 @@ Method Checks(Output waitingChecked As %Integer, Output waitingReleased As %Inte
     Set waitingReleased = ##class(Shutter.Util.ResendGuard).ReleaseDeliveredWaits($THIS, ..WorkflowTarget, .waitingChecked)
     Set heldReleased = ##class(Shutter.Util.Schemas).ReleaseHeld($THIS, ..WorkflowTarget, .heldChecked)
     Set released = ..ReleaseEngineWaits($THIS, ..WorkflowTarget, .engineChecked)
+    Set ..EngineSwept = 1
     Set waitingChecked = waitingChecked + engineChecked, waitingReleased = waitingReleased + released
 }
 
@@ -185,13 +192,24 @@ ClassMethod ActOnEngineWait(case As Shutter.Store.Case, facts As %DynamicObject,
     Quit $SELECT(case.State = "resolved": "resolved", 1: "stopped")
 }
 
-/// Plans the case again on fresh evidence, where the gate's own checks apply, and clears the marker with NULL as ReleaseHeld
-/// does its field, so this sweep's release is the only one. A send that fails leaves the marker for the next sweep.
+/// Plans the case again on fresh evidence, where the gate's own checks apply, with every other blocked case waiting on the
+/// same header, and clears their marker with NULL as ReleaseHeld does its field, so this sweep's release is the only one.
+/// An escalated case is a person's: its marker is dropped first, so the release never reopens it, and the case stays as
+/// they left it. When a send fails the markers stay, so the next sweep tries the case that didn't go (a case that did go
+/// has its marker cleared by its reopening).
 ClassMethod ReleaseEngineWait(case As Shutter.Store.Case, host As Ens.Host, target As %String) As %String
 {
-    Set key = case.WaitsOnEngine
-    If ##class(Shutter.Store.Case).ReleaseWaitingOnEngine(key, host, target) = 0 Quit "left"
-    &sql(UPDATE Shutter_Store."Case" SET WaitsOnEngine = NULL WHERE WaitsOnEngine = :key)
+    Set key = case.WaitsOnEngine, expected = 0
+    &sql(UPDATE Shutter_Store."Case" SET WaitsOnEngine = NULL WHERE WaitsOnEngine = :key AND State = 'escalated')
+    &sql(SELECT COUNT(*) INTO :expected FROM Shutter_Store."Case" WHERE WaitsOnEngine = :key AND State = 'blocked')
+    If SQLCODE '= 0 Set expected = 0
+    Set n = ##class(Shutter.Store.Case).ReleaseWaitingOnEngine(key, host, target)
+    If n = 0 Quit "left"
+    If n < expected {
+        $$$LOGWARNING("Header " _ key _ ": " _ n _ " of " _ expected _ " case(s) waiting on it were sent to be planned again; the rest are tried on the next sweep")
+        Quit "released"
+    }
+    &sql(UPDATE Shutter_Store."Case" SET WaitsOnEngine = NULL WHERE WaitsOnEngine = :key AND State = 'blocked')
     Quit "released"
 }
 

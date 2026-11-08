@@ -287,6 +287,46 @@ Method TestUnreadableIsLeftAndCounted()
     Set after = ..Again(case)
     Do $$$AssertEquals(after.State _ "|" _ after.WaitsOnEngine, "blocked|" _ marker, "left as it was")
     Do $$$AssertEquals(host.Sent.Count(), 0, "with nothing sent")
+    // Other unreadable waits on the instance count too, so the count is read again without this one: exactly one fewer.
+    Set after.State = "failed"
+    Do $$$AssertStatusOK(after.%Save(), "taken out of the sweep")
+    Do ##class(Shutter.Operation.Releaser).ReleaseEngineWaits(host, "Case Workflow", .checked2, .unreadable2)
+    Do $$$AssertEquals(unreadable - unreadable2, 1, "this case is exactly one of the count: " _ unreadable _ " then " _ unreadable2)
+    Do $$$AssertEquals(checked - checked2, 1, "and one of those looked at")
+}
+
+/// A sweep whose checks throw before the third has read the waits on the engine counts every one of them as unread, rather
+/// than keeping an earlier sweep's count.
+Method TestAThrownSweepCountsItsWaitsUnread()
+{
+    Set case = ..WaitingCase()
+    Set ^Shutter.Release("engine_unreadable") = 0
+    Set host = ..Host(), host.ThrowInChecks = "the lookup threw (unit test)"
+    Set edge = ..LastRunId()
+    Do $$$AssertStatusOK(host.Sweep(), "the sweep answers ok to the adapter")
+    Set run = ..RunByThisJobAfter(edge)
+    Do $$$AssertTrue($ISOBJECT(run), "it wrote a run row, since the case is a candidate")
+    If $ISOBJECT(run) Do ..Keep(run)
+    Do $$$AssertTrue(+$GET(^Shutter.Release("engine_unreadable")) >= 1, "the unread wait is counted: " _ $GET(^Shutter.Release("engine_unreadable")))
+    Do $$$AssertEquals(..Again(case).State, "blocked", "and the case is left")
+}
+
+/// A release reopens every blocked case waiting on the header, and never an escalated one: that is a person's, and its
+/// marker is dropped so no later sweep reopens it either.
+Method TestAnEscalatedSiblingIsNotReopened()
+{
+    Set case = ..WaitingCase(), sibling = ..WaitingCase(), person = ..WaitingCase(), host = ..Host()
+    Set person.State = "escalated"
+    Do $$$AssertStatusOK(person.%Save(), "one escalated by a person")
+    Do $$$AssertEquals(##class(Shutter.Operation.Releaser).ActOnEngineWait(case, {"answer": "settled", "why": ""}, host), "released", "released")
+    Set sent = " "
+    For i = 1:1:host.Sent.Count() Set sent = sent _ $PIECE(host.Sent.GetAt(i), "|", 2) _ " "
+    Do $$$AssertEquals(host.Sent.Count(), 2, "two reinvestigations: " _ sent)
+    Do $$$AssertTrue((sent [ (" " _ case.CaseId _ " ")) && (sent [ (" " _ sibling.CaseId _ " ")), "the case and its blocked sibling: " _ sent)
+    Do $$$AssertTrue(sent '[ (" " _ person.CaseId _ " "), "not the escalated one")
+    Set after = ..Again(person)
+    Do $$$AssertEquals(after.State _ "|" _ after.WaitsOnEngine, "escalated|", "which stays escalated, with no marker")
+    Do $$$AssertEquals(..Again(sibling).WaitsOnEngine, "", "the sibling's marker is cleared")
 }
 
 Method TestAMarkerNamingNoHeaderIsUnreadable()

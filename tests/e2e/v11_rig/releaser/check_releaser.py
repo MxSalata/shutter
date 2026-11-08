@@ -21,6 +21,10 @@ from check_gate import REFUSES_E, Site  # noqa: E402
 
 STOCK = ":?R=RF,:?E=S,:~=S,:?A=C,:*=S,:I?=W,:T?=C"
 SWEEP = 45
+# The states a re-plan rests in: a person's approval, or a case closed. Blocked isn't one: the sweep clears the marker before the
+# reopening moves the case, so a blocked case with no marker may not have been planned again yet. A re-plan that blocks shows when
+# the time runs out.
+SETTLED = ("awaiting_approval", "resolved", "escalated", "failed")
 failed, passed = [], 0
 
 
@@ -143,7 +147,8 @@ def settled_bounded(s, ns, item, service, port, tag):
     control, case_id = waiting_case(s, ns, item, service, port, tag)
     if not case_id:
         return
-    c, ev = moved(s, case_id, lambda x: x.get("state") == "awaiting_approval" or (not x.get("waitsOnEngine") and x.get("state") != "blocked"), 120)
+    # A re-plan passes through proposed on its way, so the wait is for a state a plan rests in, with the marker gone.
+    c, ev = moved(s, case_id, lambda x: not x.get("waitsOnEngine") and x.get("state") in SETTLED, 120)
     print("        ", json.dumps({k: c.get(k) for k in ("state", "headline", "waitsOnEngine")})[:400], flush=True)
     print("         the header:", [h for h in r.headers(ns, item) if h["control"] == control], flush=True)
     check(f"{tag}: the sweep plans it again, and it reaches a person's approval", c.get("state") == "awaiting_approval" and not c.get("waitsOnEngine"), (c.get("state"), c.get("waitsOnEngine"), ev[-500:]))
