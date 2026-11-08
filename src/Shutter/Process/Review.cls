@@ -181,8 +181,9 @@ ClassMethod BuildAgentRequest(review As Shutter.Store.Review, result As %Dynamic
             // in found and in the words that quote it. The stored finding keeps the text for the operator's GET.
             If (copy.code = "ERRORS_GROUPED") && (copy.found '= "") {
                 Set signature = copy.found, shown = ..ModelSignature(signature)
-                For key = "found", "why", "suggested", "action" {
-                    Do copy.%Set(key, $REPLACE(##class(Shutter.Util.Json).Str(copy, key), signature, shown))
+                Set copy.found = shown
+                For key = "why", "suggested", "action" {
+                    Do copy.%Set(key, ..WithheldWords(copy, key, signature, shown))
                 }
             }
             Do findings.%Push(copy)
@@ -194,6 +195,32 @@ ClassMethod BuildAgentRequest(review As Shutter.Store.Review, result As %Dynamic
     Set context.cases = ..ModelAggregates(agg, .known)
     Set req.Context = context.%ToJSON()
     Quit req
+}
+
+/// A finding's words with its error signature withheld: the check's own text filled again with the signature as the model
+/// sees it, so a signature that is also a word of that text or of an item's name ("error", "Feed") stands in for itself
+/// alone. A sentence the sweep added after the check's text (the production's own errors, an item since removed) is
+/// fixed wording and is kept as it is. Words that don't start with the check's text as filled (a finding stored under
+/// another version of the rules) fall back to replacing the signature wherever it is, which may also change other words
+/// but never lets the signature through.
+ClassMethod WithheldWords(finding As %DynamicObject, key As %String, signature As %String, shown As %String) As %String
+{
+    Set json = "Shutter.Util.Json", checks = "Shutter.Review.Checks"
+    Set words = $CLASSMETHOD(json, "Str", finding, key)
+    Set template = $CLASSMETHOD(json, "Str", $CLASSMETHOD(checks, "Rule", $CLASSMETHOD(json, "Str", finding, "code")), key)
+    Set ev = finding.%Get("evidence")
+    Set values = {}
+    Set values.item = $CLASSMETHOD(json, "Str", finding, "item")
+    Set values.setting = $CLASSMETHOD(json, "Str", finding, "setting")
+    Set values.count = $SELECT($ISOBJECT(ev): +ev.%Get("count"), 1: 0)
+    Set values.found = signature
+    Set asStored = $CLASSMETHOD(checks, "Fill", template, values)
+    If (template '= "") && (asStored '= "") && ($EXTRACT(words, 1, $LENGTH(asStored)) = asStored) {
+        Set added = $EXTRACT(words, $LENGTH(asStored) + 1, *)
+        Set values.found = shown
+        Quit $CLASSMETHOD(checks, "Fill", template, values) _ added
+    }
+    Quit $REPLACE(words, signature, shown)
 }
 
 /// An error signature as the review's agent sees it: an IRIS error code (ERROR #5001, ERROR <Ens>ErrBPTerminated) as it

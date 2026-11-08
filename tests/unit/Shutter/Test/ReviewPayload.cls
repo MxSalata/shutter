@@ -129,6 +129,42 @@ Method TestSignatureWithPlaceholderMarks()
     Do $$$AssertTrue($ISOBJECT(sent) && (sent.why [ ##class(Shutter.Process.Review).ModelSignature(stored.found)), "the words name the digest")
 }
 
+/// A signature that is also an ordinary word ("error") or part of an item's name ("Feed") is withheld as itself alone:
+/// the check's words around it, the item's name and the sentence the sweep adds keep their own words.
+Method TestSignatureThatIsAWord()
+{
+    Set data = ..Data(0)
+    Do data.logErrors.%Push({"configName": "Lab Feed Out", "sourceClass": "UT.Operation", "sourceMethod": "OnMessage", "signature": "Feed", "count": 3, "latestId": "731", "latestAt": "2026-10-25T09:43:00Z", "latestMessageId": "971", "exampleText": "Feed: T9990001"})
+    Do data.logErrors.%Push({"configName": "", "sourceClass": "UT.Production", "sourceMethod": "Start", "signature": "error", "count": 2, "latestId": "732", "latestAt": "2026-10-25T09:44:00Z", "latestMessageId": "", "exampleText": "error: T9990002"})
+    Set result = ..Result(data)
+    Set req = ..Request(result)
+    Do $$$AssertTrue($ISOBJECT(req), "the request is built")
+    Quit:'$ISOBJECT(req)
+    Set context = {}.%FromJSON(req.Context)
+    Set feed = ##class(Shutter.Test.Review).Find(context.findings, "ERRORS_GROUPED", "Lab Feed Out")
+    Do $$$AssertTrue($ISOBJECT(feed), "the error group on Lab Feed Out is sent")
+    If $ISOBJECT(feed) {
+        Set shown = ##class(Shutter.Process.Review).ModelSignature("Feed")
+        Do $$$AssertEquals(feed.found, shown, "found is the digest")
+        Do $$$AssertTrue(feed.why [ shown, "the words name the digest: " _ feed.why)
+        For key = "why", "suggested", "action" {
+            Set words = feed.%Get(key)
+            Do $$$AssertNotTrue(words [ ("Lab " _ shown), key _ " keeps the item's name whole: " _ words)
+        }
+        Set rule = ##class(Shutter.Review.Checks).Rule("ERRORS_GROUPED")
+        Set expected = ##class(Shutter.Review.Checks).Fill(rule.why, {"item": "Lab Feed Out", "setting": (feed.setting), "found": (shown), "count": 3})
+        Do $$$AssertEquals($EXTRACT(feed.why, 1, $LENGTH(expected)), expected, "why is the check's words with the digest in place of the signature")
+    }
+    Set own = ##class(Shutter.Test.Review).Find(context.findings, "ERRORS_GROUPED", "")
+    Do $$$AssertTrue($ISOBJECT(own), "the production's own error group is sent")
+    If $ISOBJECT(own) {
+        Set shown = ##class(Shutter.Process.Review).ModelSignature("error")
+        Do $$$AssertTrue(own.why [ "The errors carry no item name", "the sentence the sweep adds keeps its word errors: " _ own.why)
+        Do $$$AssertTrue(own.why [ shown, "the signature is withheld: " _ own.why)
+        Do $$$AssertNotTrue(own.why [ " error ", "the bare signature is not left in the words: " _ own.why)
+    }
+}
+
 /// The fill of a check's words reads the rule's text once: a value put in is never filled again.
 Method TestFillReadsTheRuleOnce()
 {
