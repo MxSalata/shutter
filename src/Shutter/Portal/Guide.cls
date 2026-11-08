@@ -4,7 +4,11 @@
 /// %ExecDirectNoPriv: fixed queries, and only what the app's public sign-in can read too. That is why it answers only on a
 /// demo instance, to a holder of Shutter_Portal or Shutter_Operate: a site's portal users, whose cases hold real messages,
 /// get a 404. GET and HEAD only, with no broker, script or form, since the demo's edge refuses a POST to a page. A figure
-/// that cannot be read leaves its tile out rather than failing the page.
+/// that cannot be read leaves its tile out rather than failing the page. Its Agents and Operations panels show the
+/// production's business operations as its configuration sets them: each agent item's model and where it comes from, its
+/// provider configuration, mode and limits, and for every other operation its class and an explicit list of settings that
+/// hold no secret and no address. Of a provider configuration it reads only the model and model_provider, with no secret
+/// resolved; no credential is read.
 Class Shutter.Portal.Guide Extends %CSP.Page
 {
 
@@ -20,6 +24,13 @@ Parameter LATEST = 4;
 
 /// The longest headline it shows; the case page has the rest.
 Parameter STORYLENGTH = 110;
+
+/// The settings the Operations panel shows, as target:name, an explicit list of those that hold no secret and no address;
+/// Hidden still keeps off any whose name or value looks like one.
+Parameter OPERATIONSETTINGS = "Host:FailureTimeout,Host:RetryInterval,Host:ReplyCodeActions,Host:AlertOnError,Host:AlertRetryGrace,Host:QueueCountAlert,Host:QueueWaitAlert,Host:InactivityTimeout,Host:FreshSeconds,Host:UncertainSettleSeconds,Adapter:ConnectTimeout,Adapter:ResponseTimeout";
+
+/// The longest setting value it shows.
+Parameter SETTINGLENGTH = 80;
 
 ClassMethod OnPreHTTP() As %Boolean [ ServerOnly = 1 ]
 {
@@ -76,6 +87,7 @@ ClassMethod Facts() As %DynamicObject
     Set f.feature = ..Feature()
     Set f.cases = ..LatestCases()
     Set f.agents = ..Agents()
+    Set f.items = ..Items()
     Quit f
 }
 
@@ -157,6 +169,233 @@ ClassMethod Agents() As %DynamicArray
     Quit out
 }
 
+/// The business operations of the running production (Shutter.Production when none runs), read from its saved
+/// configuration as the portal's Production Configuration page shows them, each item opened with no lock: the agent
+/// items (Shutter.Bridge.Operation.Agent or a subclass) with what runs them, and the other operations with their class
+/// and the settings OPERATIONSETTINGS names. An item that can't be read is a row that says so; a list that can't be read
+/// at all has readable 0. No secret is read: no credential, and of a provider configuration only its model and
+/// model_provider, with no secret resolved.
+ClassMethod Items(production As %String = "") As %DynamicObject
+{
+    Set out = {"production": "", "readable": 0, "agents": [], "operations": []}
+    Try {
+        If production = "" Set production = $GET(^Ens.Runtime("Name"))
+        If production = "" Set production = "Shutter.Production"
+        Set out.production = production
+        Set last = ..LastRunByItem()
+        Set mock = ##class(Shutter.Setup).MockConfig()
+        Set instanceConfig = $GET(^Shutter.Config("aihub", "provider")), instanceModel = $GET(^Shutter.Config("aihub", "model"))
+        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID, Name, ClassName, Enabled, PoolSize FROM Ens_Config.Item WHERE Production = ? ORDER BY ID", production)
+        If rs.%SQLCODE '= 0 Quit
+        While rs.%Next() {
+            Set name = rs.%Get("Name"), cls = rs.%Get("ClassName")
+            Set kind = ..Kind(cls)
+            Continue:kind=""
+            Set row = {"name": (name), "class": (cls)}
+            Try {
+                Set row.enabled = ''rs.%Get("Enabled"), row.pool = rs.%Get("PoolSize")
+                If ##class(Ens.Config.DefaultSettings).%GetSetting(production, name, cls, "", "Enabled", .on) Set row.enabled = ''on
+                Kill s
+                Do ..ItemSettings(rs.%Get("ID"), .s)
+                If kind = "agent" {
+                    Set a = {"model": ($GET(s("Host", "Model"))), "providerConfig": ($GET(s("Host", "ProviderConfig"))), "agentClass": ($GET(s("Host", "AgentClass")))}
+                    Set runs = ..Runs(a, mock, instanceConfig, instanceModel)
+                    Set row.model = runs.model, row.modelFrom = runs.from, row.config = runs.config, row.provider = runs.provider
+                    Set setting = $ZCONVERT($GET(s("Host", "Mode")), "L")
+                    If setting = "" Set setting = "auto"
+                    Set row.mode = $CLASSMETHOD(cls, "ResolveMode", setting, mock), row.modeSetting = ..Clean(setting)
+                    Set row.agentClass = ..Clean(a.agentClass)
+                    Set row.turns = ..Clean($GET(s("Host", "MaxIterations"))), row.budget = ..Clean($GET(s("Host", "TokenBudget"))), row.timeout = ..Clean($GET(s("Host", "RequestTimeoutSeconds")))
+                    Set row.lastAt = last.%Get(name)
+                } Else {
+                    Set row.settings = ..Shown(.s)
+                }
+            } Catch ex {
+                Set row = {"name": (name), "unreadable": true}
+            }
+            If kind = "agent" {
+                Do out.agents.%Push(row)
+            } Else {
+                Do out.operations.%Push(row)
+            }
+        }
+        Set out.readable = 1
+    } Catch ex {
+        Set out.readable = 0, out.agents = [], out.operations = []
+    }
+    Quit out
+}
+
+/// agent for an agent item, operation for another business operation, "" for a service, a process or a class that
+/// isn't there.
+ClassMethod Kind(cls As %String) As %String
+{
+    Set kind = ""
+    Try {
+        If $CLASSMETHOD(cls, "%IsA", "Shutter.Bridge.Operation.Agent") {
+            Set kind = "agent"
+        } ElseIf $CLASSMETHOD(cls, "%IsA", "Ens.BusinessOperation") {
+            Set kind = "operation"
+        }
+    } Catch ex {
+        Set kind = ""
+    }
+    Quit kind
+}
+
+/// An item's settings in effect, as s(target, name) = value: the production's value, else the system default setting,
+/// else the class's default (Ens.Config.Item's PopulateVirtualSettings, what the portal's settings pane shows). Throws
+/// when the item can't be read.
+ClassMethod ItemSettings(id As %String, ByRef s)
+{
+    Set item = ##class(Ens.Config.Item).%OpenId(id, 0, .sc)
+    If '$ISOBJECT(item) Throw ##class(%Exception.StatusException).CreateFromStatus(sc)
+    Set sc = item.PopulateVirtualSettings()
+    If $SYSTEM.Status.IsError(sc) Throw ##class(%Exception.StatusException).CreateFromStatus(sc)
+    Set i = ""
+    For {
+        Set i = item.VirtualSettings.Next(i)
+        Quit:i=""
+        Set one = item.VirtualSettings.GetAt(i)
+        Set s($LIST(one, 1), $LIST(one, 2)) = $LIST(one, 3)
+    }
+}
+
+/// When each item last ran an agent, by the item its run's request went to: {item: the newest StartedAt}. A run whose
+/// request header was purged counts for none.
+ClassMethod LastRunByItem() As %DynamicObject
+{
+    Set last = {}
+    Try {
+        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT %EXACT(h.TargetConfigName) AS Item, MAX(r.StartedAt) AS LastAt FROM Shutter_Store.AgentRun r JOIN Ens.MessageHeader h ON h.ID = r.EnsMessageId GROUP BY %EXACT(h.TargetConfigName)")
+        While (rs.%SQLCODE = 0) && rs.%Next() {
+            If rs.%Get("Item") '= "" Do last.%Set(rs.%Get("Item"), rs.%Get("LastAt"))
+        }
+    } Catch ex {
+    }
+    Quit last
+}
+
+/// What runs an agent item (<var>item</var>: its model, providerConfig and agentClass settings), as
+/// Shutter.Bridge.Runner.AIHub picks it: the API mimic while it is on; else the item's Model, then its configuration's
+/// model (the item's ProviderConfig, else the instance's configuration AI.LLM.Shutter, whose model is SHUTTER_MODEL),
+/// then the agent class's MODEL. Returns {model, from, config, provider}, provider being the configuration's
+/// model_provider. <var>mayRead</var> stands in for the Config Store's right in a test; -1 reads the process's own.
+ClassMethod Runs(item As %DynamicObject, mock As %String, instanceConfig As %String, instanceModel As %String, mayRead As %Integer = -1) As %DynamicObject
+{
+    Set out = {"model": "", "from": "", "config": "", "provider": ""}
+    If mock '= "" {
+        Set out.model = "mock", out.from = "from the API mimic, a test fixture that answers with no model", out.config = ..Clean(..ConfigName(mock)), out.provider = "the API mimic"
+        Quit out
+    }
+    Set own = ..ConfigName(item.providerConfig), instance = ..ConfigName(instanceConfig)
+    Set fqn = $SELECT(own '= "": own, 1: instance)
+    Set out.config = ..Clean(fqn)
+    Set cmodel = "", readable = 0
+    If fqn '= "" {
+        Set readable = ..ConfigFacts(fqn, mayRead, .cmodel, .cprovider)
+        If readable {
+            Set out.provider = ..Clean(cprovider)
+        } ElseIf fqn = instance {
+            // Shutter's own configuration, as ConfigureProvider wrote it: its record holds the model, and the
+            // configuration names the anthropic provider. Read so for a caller the Config Store refuses.
+            Set cmodel = instanceModel, out.provider = "anthropic, as Shutter's setup writes it"
+            Set readable = 1
+        } Else {
+            Set out.provider = "not readable"
+        }
+    }
+    If item.model '= "" {
+        Set out.model = ..Clean(item.model), out.from = "from the item's Model setting"
+    } ElseIf (fqn '= "") && 'readable {
+        Set out.model = "not readable", out.from = "from its provider configuration"
+    } ElseIf cmodel '= "" {
+        Set out.model = ..Clean(cmodel), out.from = $SELECT(own '= "": "from its provider configuration", 1: "from the instance's configuration, SHUTTER_MODEL")
+    } Else {
+        Set cls = $SELECT(item.agentClass '= "": item.agentClass, 1: "Shutter.Agent.Base")
+        Set m = ""
+        Try {
+            Set m = $PARAMETER(cls, "MODEL")
+        } Catch ex {
+            Set m = ""
+        }
+        Set out.model = $SELECT(m '= "": ..Clean(m), 1: "none"), out.from = $SELECT(m '= "": "from the agent class " _ cls, 1: "its agent class is not installed here (the replay edition)")
+    }
+    Quit out
+}
+
+/// A Config Store configuration's full name: one of fewer than three parts is under AI.LLM, as the runner reads it.
+ClassMethod ConfigName(name As %String) As %String
+{
+    If name = "" Quit ""
+    Quit $SELECT($LENGTH(name, ".") < 3: "AI.LLM." _ name, 1: name)
+}
+
+/// A configuration's model and model_provider, and nothing else of it: read with no secret resolved, and only by a
+/// caller the Config Store lets read (%Admin_ConfigStore). 1 when read, 0 when not.
+ClassMethod ConfigFacts(fqn As %String, mayRead As %Integer, Output model As %String, Output provider As %String) As %Boolean
+{
+    Set model = "", provider = "", ok = 0
+    If mayRead = -1 Set mayRead = $SYSTEM.Security.Check("%Admin_ConfigStore", "USE")
+    If 'mayRead Quit 0
+    Try {
+        If ##class(%Dictionary.CompiledClass).%ExistsId("%ConfigStore.Configuration") {
+            Set sc = $CLASSMETHOD("%ConfigStore.Configuration", "GetDetails", fqn, .details, 0, 0)
+            If $SYSTEM.Status.IsOK(sc) && $ISOBJECT($GET(details)) {
+                Set model = details.%Get("model"), provider = details.%Get("model_provider"), ok = 1
+            }
+            Kill details
+        }
+    } Catch ex {
+        Set model = "", provider = "", ok = 0
+    }
+    Quit ok
+}
+
+/// The settings of OPERATIONSETTINGS that an operation has, in that order, as [{name, value}]: never one whose name or
+/// value looks like a secret or a host detail (Hidden), whatever the list says.
+ClassMethod Shown(ByRef s, allow As %String = {..#OPERATIONSETTINGS}) As %DynamicArray
+{
+    Set out = []
+    For i = 1:1:$LENGTH(allow, ",") {
+        Set pair = $PIECE(allow, ",", i), target = $PIECE(pair, ":", 1), name = $PIECE(pair, ":", 2)
+        Continue:(target="")||(name="")
+        Continue:'$DATA(s(target, name), value)
+        Continue:..Hidden(name, value)
+        If $LENGTH(value) > ..#SETTINGLENGTH Set value = $EXTRACT(value, 1, ..#SETTINGLENGTH) _ "..."
+        Do out.%Push({"name": (name), "value": (value)})
+    }
+    Quit out
+}
+
+/// Whether a setting stays off the page: a name that speaks of credentials, keys, certificates, servers, addresses or
+/// files, or a value that looks like a secret or carries an address.
+ClassMethod Hidden(name As %String, value As %String) As %Boolean
+{
+    Set n = $ZCONVERT(name, "L"), v = $ZCONVERT(value, "L")
+    For word = "credential", "password", "secret", "token", "key", "ssl", "tls", "cert", "server", "host", "port", "url", "user", "path", "file", "folder", "directory", "email", "from", "smtp", "proxy", "address" {
+        If n [ word Return 1
+    }
+    Quit ''..LooksSecret(v)
+}
+
+/// A value that looks like a secret or an address: a key's prefix, a wallet reference, a password, a URL or an address.
+ClassMethod LooksSecret(value As %String) As %Boolean
+{
+    Set v = $ZCONVERT(value, "L")
+    If $EXTRACT(v, 1, 3) = "sk-" Quit 1
+    For word = "sk-ant", "secret://", "password", "bearer ", "://", "@" {
+        If v [ word Return 1
+    }
+    Quit 0
+}
+
+/// A value for the page, or "hidden" when it looks like a secret (a Model or ProviderConfig set to a key by mistake).
+ClassMethod Clean(value As %String) As %String
+{
+    Quit $SELECT(..LooksSecret(value): "hidden", 1: value)
+}
+
 /// The page. app is this page's web application, whose portal pages it links to.
 ClassMethod Html(f As %DynamicObject, app As %String) As %String
 {
@@ -179,7 +418,8 @@ ClassMethod Html(f As %DynamicObject, app As %String) As %String
     Set h = h _ ..NavRow("Message Viewer", "Each message, and its session", "EnsPortal.MessageViewer.zen", app, hospital)
     Set h = h _ ..NavRow("Event Log", "What each component recorded", "EnsPortal.EventLog.zen", app, hospital)
     Set h = h _ "<a class='nav' href='/shutter/index.html'><b>Back to the Shutter app</b><span>Cases, approvals and the board</span></a>"
-    Set h = h _ "<h2>Agents</h2>" _ ..AgentRows(f.agents) _ "</section></div>"
+    Set h = h _ "<h2>Last run, by member</h2>" _ ..AgentRows(f.agents) _ "</section></div>"
+    Set h = h _ ..ItemPanels(f.items)
     Set h = h _ "<footer><span>Served by Shutter.Portal.Guide, a %CSP.Page in the " _ ..E(f.namespace) _ " namespace</span><span>Other portal pages are closed on the public demo</span></footer>"
     Quit h _ "</main></body></html>"
 }
@@ -264,6 +504,79 @@ ClassMethod AgentRows(agents As %DynamicArray) As %String
     Quit h
 }
 
+/// The production's agent items and its other operations, two panels; "" for facts without them.
+ClassMethod ItemPanels(items As %DynamicObject) As %String
+{
+    If '$ISOBJECT(items) Quit ""
+    Set unread = "<p class='none'>The production's items are not readable here.</p>"
+    Set h = "<section class='panel'><h2>Agents in " _ ..E(items.production) _ "</h2><p class='note'>Each board member's operation: the model it runs and where that comes from, its mode and its limits.</p>"
+    If 'items.readable {
+        Set h = h _ unread
+    } ElseIf items.agents.%Size() = 0 {
+        Set h = h _ "<p class='none'>No agent item in this production.</p>"
+    } Else {
+        Set h = h _ "<div class='cards'>", it = items.agents.%GetIterator()
+        While it.%GetNext(, .a) { Set h = h _ ..AgentCard(a) }
+        Set h = h _ "</div>"
+    }
+    Set h = h _ "<p class='note'>Each agent's model can be set on its item in the production (Interoperability &gt; Configure &gt; Production, the item's Model setting); the instance's default is SHUTTER_MODEL.</p></section>"
+    Set h = h _ "<section class='panel'><h2>Operations</h2><p class='note'>The production's other business operations, with the settings that hold no secret and no address.</p>"
+    If 'items.readable {
+        Set h = h _ unread
+    } ElseIf items.operations.%Size() = 0 {
+        Set h = h _ "<p class='none'>No other operation in this production.</p>"
+    } Else {
+        Set h = h _ "<div class='cards'>", it = items.operations.%GetIterator()
+        While it.%GetNext(, .o) { Set h = h _ ..OperationCard(o) }
+        Set h = h _ "</div>"
+    }
+    Quit h _ "</section>"
+}
+
+/// A card's head: the item's name, and whether it is enabled.
+ClassMethod CardTop(row As %DynamicObject) As %String
+{
+    Set h = "<div class='card'><div class='top'><b>" _ ..E(row.name) _ "</b>"
+    If 'row.unreadable Set h = h _ "<span class='flag " _ $SELECT(row.enabled: "ok'>On", 1: "warn'>Off") _ "</span>"
+    Quit h _ "</div>"
+}
+
+/// One line of a card: a label, a value and, when given, a note under it.
+ClassMethod Fact(label As %String, value As %String, note As %String = "") As %String
+{
+    Quit "<dt>" _ ..E(label) _ "</dt><dd>" _ ..E(value) _ $SELECT(note '= "": "<span>" _ ..E(note) _ "</span>", 1: "") _ "</dd>"
+}
+
+ClassMethod AgentCard(a As %DynamicObject) As %String
+{
+    Set h = ..CardTop(a)
+    If a.unreadable Quit h _ "<p class='none'>not readable</p></div>"
+    Set h = h _ "<dl>" _ ..Fact("Model", a.model, a.modelFrom)
+    Set h = h _ ..Fact("Provider", $SELECT(a.config '= "": a.config, 1: "none configured"), $SELECT(a.provider '= "": "model_provider " _ a.provider, 1: ""))
+    Set note = $SELECT(a.modeSetting = "auto": "auto, as the instance decides", 1: "set on the item") _ $SELECT(a.mode = "replay": "; recorded answers, no model called", 1: "")
+    Set h = h _ ..Fact("Mode", a.mode, note)
+    Set h = h _ ..Fact("Pool size", a.pool)
+    Set h = h _ ..Fact("Turns per run", a.turns, "MaxIterations")
+    Set h = h _ ..Fact("Token budget", a.budget, "TokenBudget")
+    Set h = h _ ..Fact("Seconds per turn", a.timeout, "RequestTimeoutSeconds")
+    Set h = h _ ..Fact("Agent class", $SELECT(a.agentClass '= "": a.agentClass, 1: "named by each request"))
+    Set at = $TRANSLATE($EXTRACT(a.lastAt, 1, 16), "T", " ")
+    Set h = h _ ..Fact("Last run", $SELECT(at = "": "not yet", 1: at _ " UTC"))
+    Quit h _ "</dl></div>"
+}
+
+ClassMethod OperationCard(o As %DynamicObject) As %String
+{
+    Set h = ..CardTop(o)
+    If o.unreadable Quit h _ "<p class='none'>not readable</p></div>"
+    Set h = h _ "<dl>" _ ..Fact("Class", o.class) _ ..Fact("Pool size", o.pool)
+    If $ISOBJECT(o.settings) {
+        Set it = o.settings.%GetIterator()
+        While it.%GetNext(, .s) { Set h = h _ ..Fact(s.name, $SELECT(s.value = "": "not set", 1: s.value)) }
+    }
+    Quit h _ "</dl></div>"
+}
+
 ClassMethod Logo() As %String
 {
     Quit "<svg viewBox='0 0 32 32' aria-hidden='true'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='#095c7c'/><stop offset='1' stop-color='#45acd1'/></linearGradient></defs><rect width='32' height='32' rx='8' fill='url(#g)'/><g fill='none' stroke='#fff' stroke-width='1.9' stroke-linecap='round'><circle cx='16' cy='16' r='10.2'/><line x1='16' y1='11.4' x2='26.12' y2='17.24'/><line x1='19.98' y1='13.7' x2='19.98' y2='25.39'/><line x1='19.98' y1='18.3' x2='9.86' y2='24.14'/><line x1='16' y1='20.6' x2='5.88' y2='14.76'/><line x1='12.02' y1='18.3' x2='12.02' y2='6.61'/><line x1='12.02' y1='13.7' x2='22.14' y2='7.86'/></g></svg>"
@@ -282,6 +595,8 @@ ClassMethod Css() As %String
     Set c = c _ ".btn{flex:none;display:inline-block;background:var(--accent);color:var(--on);font-weight:600;font-size:.875rem;padding:9px 14px;border-radius:8px;text-decoration:none}.btn.small{padding:5px 12px;font-size:.8125rem}a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}"
     Set c = c _ ".nav{display:block;padding:10px 12px;border-radius:8px;background:var(--soft);color:inherit;text-decoration:none}a.nav:hover{outline:1px solid var(--accent)}.pair{margin-top:4px}.pair a{color:var(--accent);margin-right:14px;font-weight:600}"
     Set c = c _ ".lane{display:flex;align-items:center;gap:10px;font-size:.8125rem}.dot{width:10px;height:10px;border-radius:50%;background:var(--ok);flex:none}.num{margin-left:auto;color:var(--muted)}.none{margin:0;color:var(--muted);font-size:.875rem}"
+    Set c = c _ ".cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}.card{background:var(--soft);border-radius:10px;padding:12px 14px;min-width:0}.top{display:flex;justify-content:space-between;align-items:baseline;gap:8px}.top b{font-weight:600;overflow-wrap:anywhere}.flag{flex:none;font-size:.8125rem;font-weight:600}"
+    Set c = c _ ".card dl{display:grid;grid-template-columns:minmax(84px,auto) minmax(0,1fr);gap:4px 12px;margin:8px 0 0;font-size:.8125rem}.card dt{color:var(--muted)}.card dd{margin:0;overflow-wrap:anywhere}.card dd span{display:block;color:var(--muted);font-size:.75rem}.note{margin:0;color:var(--muted);font-size:.8125rem}"
     Quit c _ "footer{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;color:var(--muted);font-size:.8125rem;border-top:1px solid var(--line);padding-top:12px}"
 }
 
