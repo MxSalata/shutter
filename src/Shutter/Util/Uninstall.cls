@@ -68,15 +68,17 @@ ClassMethod ModuleStatus() As %Status
     While it.%GetNext(, .line) { Write !, "  kept: ", line }
     Write !
     If answer.ok Quit $$$OK
-    Quit $$$ERROR($$$GeneralError, "The uninstall stopped with Shutter's classes still in place, and can be run again: " _ answer.errors.%ToJSON())
+    Quit $$$ERROR($$$GeneralError, "The uninstall stopped " _ $SELECT(answer.stopped '= "": "at its " _ answer.stopped _ " step ", 1: "") _ "with Shutter's classes still in place, and can be run again: " _ answer.errors.%ToJSON())
 }
 
 /// Does it. Refused, with nothing changed, when a production Shutter did not wire still names one of its classes, since
 /// that production would not start once the classes are gone, or when a class of the site's is in the Hospital or
-/// Downstream package, which the package manager removes whole (SiteClassesHere). Returns {ok, removed, kept, errors} as JSON.
+/// Downstream package, which the package manager removes whole (SiteClassesHere). Stops at the first step that fails, with
+/// the later steps and Shutter's configuration left in place, so that running it again finishes (RunSteps). Returns
+/// {ok, removed, kept, errors, stopped} as JSON, stopped naming the step that failed, or "".
 ClassMethod Run() As %String [ SqlProc ]
 {
-    Set out = {"namespace": ($NAMESPACE), "removed": [], "kept": [], "errors": []}
+    Set out = {"namespace": ($NAMESPACE), "removed": [], "kept": [], "errors": [], "stopped": ""}
     Do out.%Set("ok", 0, "boolean")
     If '$SYSTEM.Security.Check("%Admin_Manage", "USE") || '$SYSTEM.Security.Check("%Admin_Secure", "USE") {
         Do out.errors.%Push("The uninstall changes the instance's configuration and security: it needs a user holding %Admin_Manage and %Admin_Secure")
@@ -88,15 +90,33 @@ ClassMethod Run() As %String [ SqlProc ]
     While $TLEVEL { TCOMMIT }
     // The names of Shutter's items, read before the Production step takes them: their messages go in the Messages step.
     Try { Do ..RecordItems() } Catch ex { Do out.errors.%Push("Items: " _ ex.DisplayString()) }
-    For step = "Watched", "Production", "Portal", "DemoNamespacesOff", "Workflow", "Messages", "Interop", "Provider", "Tasks", "Applications", "Grants", "Users", "Roles", "Resources", "Folders", "Globals" {
-        Try {
-            Do $CLASSMETHOD($CLASSNAME(), "Take" _ step, out)
-        } Catch ex {
-            Do out.errors.%Push(step _ ": " _ ex.DisplayString())
-        }
+    If out.errors.%Size() > 0 {
+        Set out.stopped = "Items"
+        Do out.kept.%Push("Everything: the uninstall stopped before its first step, and can be run again")
+    } Else {
+        Do ..RunSteps(out, $LISTBUILD("Watched", "Production", "Portal", "DemoNamespacesOff", "Workflow", "Messages", "Interop", "Provider", "Tasks", "Applications", "Grants", "Users", "Roles", "Resources", "Folders", "Globals"))
     }
     Do out.%Set("ok", out.errors.%Size() = 0, "boolean")
     Quit out.%ToJSON()
+}
+
+/// The steps in order, each Take<step> of the class given, until one throws or adds an error: that step is named in
+/// out.stopped and the ones after it are not run, so a failed step never leaves the Globals step, which goes last and takes
+/// ^Shutter.Config, to wipe the store a run again reads. The class is a parameter for the unit test's stub steps.
+ClassMethod RunSteps(out As %DynamicObject, steps As %List, class As %String = {$CLASSNAME()})
+{
+    For i = 1:1:$LISTLENGTH(steps) {
+        Set step = $LIST(steps, i), before = out.errors.%Size()
+        Try {
+            Do $CLASSMETHOD(class, "Take" _ step, out)
+        } Catch ex {
+            Do out.errors.%Push(step _ ": " _ ex.DisplayString())
+        }
+        Continue:out.errors.%Size()=before
+        Set out.stopped = step
+        If i < $LISTLENGTH(steps) Do out.kept.%Push("The steps after " _ step _ ", which failed, were not run: " _ $LISTTOSTRING($LIST(steps, i + 1, *), ", ") _ ". Run the uninstall again to finish")
+        Quit
+    }
 }
 
 /// Whether a role or resource is Shutter's, by its name alone.
