@@ -4,6 +4,14 @@ Versions follow `major.minor.patch`: a minor release for new features, a patch r
 updates. The version in both `module.xml` files (the one the package manager publishes) is always the version of the
 GitHub tag on the same commit; `scripts/check-versions.py` checks every place the version is written.
 
+## 1.1.1 (8 November 2026)
+
+A fix found by the live board on build 109 at 1.1.0 (`docs/readme/receipt-109.md`, "The board live on build 109, release 1.1.0"):
+
+- The route item an agent reads kept only its history and epoch, because the model view that reduces every item before it leaves IRIS read a route that says whether the receiver offers history as a receiver's body. The specialists then could not see that the receiver takes conditional writes and dry runs, and the live board held every resend for more evidence. The view now reads a route as a route, keeps its capability profile and the history field, and a unit test holds it there. Replay was not affected: a recording answers in the model's place.
+- The README's testing figures name the 1.1.0 run; the install notes say which build a plain install takes when both are loaded, how to choose, and how to change the port; the first step says which case id a fresh install shows.
+- The Shutter in IRIS page lists the production's agents, the model each runs when live and where it comes from, its mode, turns, budget and last run, and the other operations with the settings that hold no secret. It no longer reloads itself every 30 seconds, which took a screen reader back to the top: a Refresh link beside the time reloads it.
+
 ## 1.1.0 (8 November 2026)
 
 What 1.1.0 holds: Shutter watches configured HL7 TCP operations without contacting their receivers. It groups outages,

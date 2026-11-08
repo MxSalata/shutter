@@ -81,6 +81,8 @@ What do the agents add? Not the flag: the matcher had already marked S8, and onl
 - The web app: `demo` / `shutter`.
 - The Management Portal's Visual Trace, read only, as `demo-trace` / `Shutter-Demo-IRIS-Portal`: open https://shutter.mxsalata.com/csp/healthshare/shutter/Shutter.Portal.Guide.cls (or "Shutter in IRIS" in the web app); it first asks you to sign in with GitHub or an emailed one-time code, then signs you in as that user.
 
+The same page also lists the production's agents (the model each runs when live, its mode, turns, token budget and last run) and its other operations with the settings that hold no secret and no address.
+
 **On your machine:** `install.sh` checks Docker, Compose, memory, disk, the ports and the image, and changes nothing until every check passes ([Windows or Apple silicon](https://github.com/MxSalata/shutter/blob/main/docs/readme/running.md#notes-on-the-install)).
 
 ```sh
@@ -91,6 +93,7 @@ git clone https://github.com/MxSalata/shutter.git && cd shutter
 
 # Or the replay edition: the public IRIS for Health image, no Early Access file, no key:
 ./install.sh --replay
+# Already loaded the 109 (or 154) image? ./install.sh
 ```
 
 ```text
@@ -100,15 +103,15 @@ Shutter is ready after 3 min 21 s:
   the portal:    http://localhost:52773/csp/sys/UtilHome.csp  (_SYSTEM / SYS, namespace SHUTTER)
 ```
 
-- **Builds:** judges, please use the AI Hub Community build `2027.1.0AI.109.0`, the one the [Early Access portal](https://evaluation.intersystems.com/Eval/early-access/AIHub) offers since 2 November 2026. Shutter is also verified on `2026.3.0AI.154.0`, the contest's first ([receipt](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt.md)). If you already loaded build 154 (or 109), `./install.sh` with no flag finds that image and uses it.
-- For live agents, set `ANTHROPIC_API_KEY` in `.env` (Anthropic's API only, so with another provider's key it replays too); without a key the board replays, and the case page says so. `SHUTTER_MODEL=claude-sonnet-5-5` in `.env`, set before the first start, halves the cost; on the held-out cases it decided as `claude-opus-5-5` did ([cheaper models](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#cheaper-models)). The replay edition is the same without live agents or knowledge search. Allow Docker at least 5 GB of memory, the minimum, and about 25 GB of free disk.
+- **Builds:** judges, please use the AI Hub Community build `2027.1.0AI.109.0`, the one the [Early Access portal](https://evaluation.intersystems.com/Eval/early-access/AIHub) offers since 2 November 2026. Shutter is also verified on `2026.3.0AI.154.0`, the contest's first ([receipt](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt.md)). If you already loaded build 154 (or 109), `./install.sh` with no flag finds that image and uses it. If only build 154 is loaded, `./install.sh` uses it; with both 109 and 154 loaded it uses 109. For 154 then, run `cp .env.example .env`, set `SHUTTER_IMAGE=irishealth-community:2026.3.0AI.154.0` in it, and run `./install.sh`. Port 52773 or 1972 already in use? `SHUTTER_WEB_PORT=8080 SHUTTER_SUPERSERVER_PORT=1973 ./install.sh` (kept in the `.env` it creates), then use that port in every address below.
+- For live agents, set `ANTHROPIC_API_KEY` in `.env` (Anthropic's API only, so with another provider's key it replays too); without a key the board replays, and the case page says so. `SHUTTER_MODEL=claude-sonnet-5-5` in `.env`, set before the first start, halves the cost; on the held-out cases it decided as `claude-opus-5-5` did ([cheaper models](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#cheaper-models)), and each board member's model can be set on its production item (its `Model` setting). The replay edition is the same without live agents or knowledge search. Allow Docker at least 5 GB of memory, the minimum, and about 25 GB of free disk.
 - **Sign-ins on your machine:** the web app as `approver` / `shutter` (approves) or `operator` / `shutter`; the Management Portal as `_SYSTEM` / `SYS`, namespace `SHUTTER`, or as `approver` / `shutter` for the Workflow inbox.
 
 ### On your machine or in the trial, first
 
 The gate is the same in every mode; **Single investigator** runs live only ([the modes](https://github.com/MxSalata/shutter/blob/main/docs/readme/first-steps.md#the-modes)).
 
-1. In the trial, choose **Explore on my own** (on your machine, **Not now** if a prompt offers the trial). In **Scenarios**, run **S2** in **Board** mode. About 10 to 20 seconds later (a minute live) **Open C-000002** shows its case waiting for approval: **Decide on the resend**, **Review the plan and decide**, **Approve plan**, **Approve this plan**. One conditional write, then "Verified".
+1. In the trial, choose **Explore on my own** (on your machine, **Not now** if a prompt offers the trial). In **Scenarios**, run **S2** in **Board** mode. About 10 to 20 seconds later (a minute live) **Open the case** (C-000001 on a fresh install, C-000002 in the trial) shows its case waiting for approval: **Decide on the resend**, **Review the plan and decide**, **Approve plan**, **Approve this plan**. One conditional write, then "Verified".
 2. Run **S8** in **Rules only** and approve (in the trial it is already approved and written): WARD-B overwrites WARD-C. In **Board** it escalates, writing nothing, and the plan records the dissent.
 
 ![S8 played twice: Rules only overwrites WARD-C; the board escalates and writes nothing](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/s8-rules-and-board.png)
@@ -167,7 +170,7 @@ The three specialists (conformance, encounter and impact) and the coordinator ar
 | IRIS Vector Search | The agents' knowledge bases are IRIS vector tables (`%AI.RAG.VectorStore.IRIS`, FastEmbed `AllMiniLML6V2`, 384 dimensions), `Shutter_Knowledge.contracts` (26 chunks) to `Shutter_Knowledge.explain` (83), searched by the agents' `search_*` tools ([Library.cls](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Knowledge/Library.cls); [a `VECTOR_COSINE` query on build 109](https://github.com/MxSalata/shutter/blob/main/docs/readme/running.md#the-knowledge-in-iris-vector-tables)). For a hospital: the agents look up the site's own interface contract and encounter rules, kept inside IRIS, instead of guessing |
 | Embedded Python | Any IANA feed time zone, through Python's `zoneinfo` ([Time.cls](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Util/Time.cls), `PyOffset`). In SHUTTER: `SELECT Shutter_Util.Time_Probe('20261015092000', 'Europe/Paris')` answers `"iso":"2026-10-15T07:20:00Z"`. For a hospital: a feed in any IANA time zone other than Europe/London (whose rules Shutter keeps in ObjectScript) is put in true event order, summer time included (except the repeated hour at a clock change when a time carries no offset, which reads with the zone's first offset; a time with no offset within an hour of a clock change goes to a person, in any zone the IRIS's zoneinfo knows), and the site profile accepts a feed time zone only when `zoneinfo` knows it ([SiteProfile.cls](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Store/SiteProfile.cls)) |
 | Custom Adapter | The HL7 index walk is Shutter's own inbound adapter, handing batches of message headers to the HL7 Index item ([Index/Adapter.cls](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Index/Adapter.cls)). For a hospital: Shutter knows each encounter's other messages, so it can tell an old resend from the latest state |
-| PEX (Java) | The Second Parser, a Java business operation (`EnsLib.PEX.BusinessOperation` with HAPI 2.6.0): when IRIS can't read a failed message, it says whether the message is sound or malformed; see S25 ([pex/](https://github.com/MxSalata/shutter/tree/main/pex)). For a hospital: whether the sender or the site's schema has to be fixed. `SELECT Shutter.Setup_Doctor()` (the Doctor, Shutter's one-query readiness report) reports `second_parser` |
+| PEX (Java) | The Second Parser, a Java business operation (`EnsLib.PEX.BusinessOperation` with HAPI 2.6.0): when IRIS can't read a failed message, it says whether the message is sound or malformed; see S25 ([pex/](https://github.com/MxSalata/shutter/tree/main/pex)). For a hospital: whether the sender or the site's schema has to be fixed. `SELECT Shutter.Setup_Doctor()` (the Doctor, Shutter's one-query readiness report) reports `second_parser` On an IPM install the jar is not there, so the Second Parser stays disabled until `pex/build.sh` runs; the Docker install has it. |
 | Docker | `install.sh`, or `docker compose up` ([docker-compose.yml](https://github.com/MxSalata/shutter/blob/main/docker-compose.yml), [Dockerfile](https://github.com/MxSalata/shutter/blob/main/Dockerfile)). For a hospital: a full trial on a laptop, away from the live production |
 | IPM | One package for the AI Hub builds, `iris-shutter`, requiring IRIS 2026.3 or later with Interoperability, as the organisers ask: `zpm "install iris-shutter"` (a stock image has no `zpm`: [the six commands](https://github.com/MxSalata/shutter#ipm-on-a-stock-ai-hub-image) add it and point it at the registry), or `zpm "load"` from a clone, as the image build does on 109 and 154 ([module.xml](https://github.com/MxSalata/shutter/blob/main/module.xml)); the replay edition's core alone is [core/module.xml](https://github.com/MxSalata/shutter/blob/main/core/module.xml). For a hospital: one install on its own IRIS for Health with AI Hub. Create and use a namespace called `SHUTTER` first ([the install guide, section 3.1](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md#3-shape-a-shutter-in-its-own-namespace)): a load in `USER` runs, but the web app's "Shutter in IRIS" link answers 404 there and this page's addresses name `SHUTTER`. |
 | Community Opportunity idea [DPI-I-689](https://ideas.intersystems.com/ideas/DPI-I-689) | Interoperability as the traceability tool for AI agents: below. For a hospital: an integration team audits an agent with the Visual Trace and SQL it already knows |
@@ -214,11 +217,11 @@ Each row is played against the demo receiver or a stub listener. **Seen in pract
 
 ## How it is tested
 
-CI reports what follows on [its run at the release commit](https://github.com/MxSalata/shutter/actions/runs/42278108699): every job green, all 771 browser tests passed.
+CI reports what follows on [its run at the 1.1.0 release commit](https://github.com/MxSalata/shutter/actions/runs/42475914697): every job green, all 770 browser tests passed. The live board on build 109 at that release, S2 and S8 with a key, is in [receipt-109.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt-109.md#the-board-live-on-build-109-release-110), with the fault it found and 1.1.1's fix.
 
-- **On a real IRIS, every push to `main` that changes code:** the full install on IRIS for Health Community 2026.2, 37 receiver contract tests, 290 unit tests (8 more on an AI Hub build only) and 26 scenarios end to end through the REST API, one through the demo hospital's production.
+- **On a real IRIS, every push to `main` that changes code:** the full install on IRIS for Health Community 2026.2, 37 receiver contract tests, 492 unit tests (8 more on an AI Hub build only) and 26 scenarios end to end through the REST API, one through the demo hospital's production.
 - **The approval boundary, attacked over HTTP:** [the codes and the check](https://github.com/MxSalata/shutter/blob/main/docs/readme/first-steps.md#the-approval-boundary-attacked-over-http).
-- **Privacy, and a question that tries to act:** [evaluation.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/evaluation.md#what-the-agents-see-and-a-question-that-tries-to-act). **The web app:** 1429 component and 771 browser tests, axe-core on 69 screens and states in 5 appearances.
+- **Privacy, and a question that tries to act:** [evaluation.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/evaluation.md#what-the-agents-see-and-a-question-that-tries-to-act). **The web app:** 1589 component and 770 browser tests, axe-core on 69 screens and states in 5 appearances.
 - **The AI Hub module:** CI can't download an Early Access build, so it builds the core. The module is proven by fresh installs on builds 109 and 154, each Doctor clean ([receipt on 109](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt-109.md), [receipt on 154](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt.md)); every scenario on 109, 29 plays across three modes; the board recorded live on 154 (100 agent runs, 10.00 USD at list prices), which CI replays; and the board live on 109 on 3 November 2026 (S2, four runs, 0.42 USD).
 
 ## Limits, plainly
@@ -283,6 +286,8 @@ Do $SYSTEM.OBJ.Load("<module>/vendor/ipm/zpm-0.10.10.xml", "ck")
 zpm "repo -reset-defaults"
 zpm "install iris-shutter"
 ```
+
+For example: `docker run -d --name shutter-ipm -p 52773:52773 irishealth-community:2026.3.0AI.154.0`, then `docker cp ./shutter shutter-ipm:/home/irisowner/shutter` (that path is `<module>`), then `docker exec -it shutter-ipm iris session IRIS`; change the first 52773 to use another port. For a hospital's own instance, make the last line `zpm "install iris-shutter -Ddemo=0"`. `zpm "install iris-shutter"` installs the latest version published to the registry (check with `zpm "list"`); to install exactly the clone you have, use `zpm "load <module>"` instead of the last two lines. The IPM package carries no Java jar, so on an IPM install the Second Parser stays disabled until you run `pex/build.sh`; the Docker install has it.
 
 ## About the contest
 
