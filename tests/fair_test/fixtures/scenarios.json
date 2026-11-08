@@ -1,0 +1,369 @@
+[
+ {
+  "id": "F01",
+  "title": "Held-out case",
+  "summary": "",
+  "steps": [
+   {
+    "file": "F01-01-A01.hl7"
+   },
+   {
+    "file": "F01-02-A08.hl7"
+   },
+   {
+    "fault": "fail_before_accept",
+    "operation_key": "EPR^NVH^N0048213^V26-00417^transfer^2026-11-18T10:05:00Z"
+   },
+   {
+    "file": "F01-03-A02.hl7"
+   },
+   {
+    "wait": 5
+   },
+   {
+    "fault": "off"
+   }
+  ],
+  "expected": {},
+  "rig": {
+   "failed": "EPR^NVH^N0048213^V26-00417^transfer^2026-11-18T10:05:00Z"
+  }
+ },
+ {
+  "id": "F02",
+  "title": "Held-out case",
+  "summary": "",
+  "steps": [
+   {
+    "file": "F02-01-A01.hl7"
+   },
+   {
+    "manual": {
+     "encounter_id": "V26-00433",
+     "event": "discharge",
+     "event_time": "2026-11-18T16:30:00Z"
+    }
+   },
+   {
+    "file": "F02-02-A02.hl7"
+   }
+  ],
+  "expected": {},
+  "rig": {
+   "failed": "EPR^NVH^N0052871^V26-00433^transfer^2026-11-18T14:10:00Z"
+  }
+ },
+ {
+  "id": "F03",
+  "title": "Held-out case",
+  "summary": "",
+  "steps": [
+   {
+    "file": "F03-01-A01.hl7"
+   },
+   {
+    "manual": {
+     "encounter_id": "V26-00451",
+     "event": "transfer",
+     "event_time": "2026-11-18T11:05:00Z",
+     "ward": "SAU",
+     "source_system": "EPR"
+    }
+   },
+   {
+    "manual": {
+     "encounter_id": "V26-00451",
+     "event": "transfer",
+     "event_time": "2026-11-18T11:40:00Z",
+     "ward": "CCU",
+     "source_system": "EPR"
+    }
+   },
+   {
+    "fault": "fail_before_accept",
+    "operation_key": "EPR^NVH^N0039540^V26-00451^transfer^2026-11-18T11:05:00Z"
+   },
+   {
+    "file": "F03-02-A02.hl7"
+   },
+   {
+    "wait": 5
+   },
+   {
+    "fault": "off"
+   },
+   {
+    "file": "F03-03-A02.hl7"
+   }
+  ],
+  "expected": {},
+  "rig": {
+   "failed": "EPR^NVH^N0039540^V26-00451^transfer^2026-11-18T11:05:00Z"
+  }
+ },
+ {
+  "id": "F04",
+  "title": "Held-out case",
+  "summary": "",
+  "steps": [
+   {
+    "file": "F04-01-A01.hl7"
+   },
+   {
+    "file": "F04-02-A02.hl7"
+   },
+   {
+    "file": "F04-03-A02.hl7"
+   }
+  ],
+  "expected": {},
+  "rig": {
+   "failed": "EPR^NVH^N0061127^V26-00462^transfer^2026-11-18T11:05:00Z"
+  }
+ },
+ {
+  "id": "F05",
+  "title": "Held-out case",
+  "summary": "",
+  "steps": [
+   {
+    "file": "F05-01-A01.hl7"
+   },
+   {
+    "manual": {
+     "encounter_id": "V26-00479",
+     "event": "transfer",
+     "event_time": "2026-11-18T09:30:00Z",
+     "ward": "CCU",
+     "source_system": "FLOW"
+    }
+   },
+   {
+    "fault": "fail_before_accept",
+    "operation_key": "EPR^NVH^N0045719^V26-00479^transfer^2026-11-18T09:30:00Z"
+   },
+   {
+    "file": "F05-02-A02.hl7"
+   },
+   {
+    "wait": 5
+   },
+   {
+    "fault": "off"
+   }
+  ],
+  "expected": {},
+  "rig": {
+   "failed": "EPR^NVH^N0045719^V26-00479^transfer^2026-11-18T09:30:00Z",
+   "profile": {
+    "authoritative_source": "EPR"
+   }
+  }
+ },
+ {
+  "id": "F06",
+  "title": "Held-out case",
+  "summary": "",
+  "steps": [
+   {
+    "file": "F06-01-A01.hl7"
+   },
+   {
+    "manual": {
+     "encounter_id": "V26-00488",
+     "event": "transfer",
+     "event_time": "2026-11-18T01:00:00Z",
+     "ward": "SAU",
+     "source_system": "FLOW"
+    }
+   },
+   {
+    "fault": "fail_before_accept",
+    "operation_key": "EPR^NVH^N0058302^V26-00488^transfer^2026-11-18T00:50:00Z"
+   },
+   {
+    "file": "F06-02-A02.hl7"
+   },
+   {
+    "wait": 5
+   },
+   {
+    "fault": "off"
+   }
+  ],
+  "expected": {},
+  "rig": {
+   "failed": "EPR^NVH^N0058302^V26-00488^transfer^2026-11-18T00:50:00Z"
+  }
+ },
+ {
+  "id": "F07",
+  "title": "Held-out case",
+  "summary": "",
+  "steps": [
+   {
+    "file": "F07-01-A01.hl7"
+   },
+   {
+    "file": "F07-02-A01.hl7"
+   },
+   {
+    "file": "F07-03-A03.hl7"
+   },
+   {
+    "fault": "fail_before_accept",
+    "operation_key": "EPR^NVH^N0042966^V26-00512^transfer^2026-11-18T10:15:00Z"
+   },
+   {
+    "file": "F07-04-A02.hl7"
+   },
+   {
+    "wait": 5
+   },
+   {
+    "fault": "off"
+   }
+  ],
+  "expected": {},
+  "rig": {
+   "failed": "EPR^NVH^N0042966^V26-00512^transfer^2026-11-18T10:15:00Z",
+   "other_encounter": "V26-00388"
+  }
+ },
+ {
+  "id": "F08",
+  "title": "Held-out case",
+  "summary": "",
+  "steps": [
+   {
+    "file": "F08-01-A01.hl7"
+   },
+   {
+    "fault": "delay_response",
+    "operation_key": "EPR^NVH^N0063481^V26-00527^transfer^2026-11-18T12:10:00Z",
+    "seconds": 45
+   },
+   {
+    "file": "F08-02-A02.hl7"
+   },
+   {
+    "wait": 50
+   },
+   {
+    "fault": "off"
+   }
+  ],
+  "expected": {},
+  "rig": {
+   "failed": "EPR^NVH^N0063481^V26-00527^transfer^2026-11-18T12:10:00Z",
+   "read_before_commit": true
+  }
+ },
+ {
+  "id": "F09",
+  "title": "Held-out case",
+  "summary": "",
+  "steps": [
+   {
+    "file": "F09-01-A01.hl7"
+   },
+   {
+    "fault": "fail_before_accept",
+    "operation_key": "EPR^NVH^N0037215^V26-00539^transfer^2026-11-18T12:00:00Z"
+   },
+   {
+    "file": "F09-02-A02.hl7"
+   },
+   {
+    "file": "F09-03-A12.hl7"
+   },
+   {
+    "wait": 5
+   },
+   {
+    "fault": "off"
+   }
+  ],
+  "expected": {},
+  "rig": {
+   "failed": "EPR^NVH^N0037215^V26-00539^transfer^2026-11-18T12:00:00Z",
+   "must_see_before_reading": 3
+  }
+ },
+ {
+  "id": "F10",
+  "title": "Held-out case",
+  "summary": "",
+  "steps": [
+   {
+    "file": "F10-01-A01.hl7"
+   },
+   {
+    "fault": "fail_before_accept",
+    "operation_key": "EPR^NVH^N0056608^V26-00546^transfer^2026-11-18T13:20:00Z"
+   },
+   {
+    "file": "F10-02-A02.hl7"
+   },
+   {
+    "wait": 5
+   },
+   {
+    "fault": "off"
+   }
+  ],
+  "expected": {},
+  "rig": {
+   "failed": "EPR^NVH^N0056608^V26-00546^transfer^2026-11-18T13:20:00Z",
+   "profile": {
+    "model_content": {
+     "free_text": true
+    }
+   }
+  }
+ },
+ {
+  "id": "F11",
+  "title": "Held-out case",
+  "summary": "",
+  "steps": [
+   {
+    "file": "F11-01-A01.hl7"
+   },
+   {
+    "fault": "fail_before_accept",
+    "operation_key": "EPR^NVH^N0049377^V26-00558^transfer^2026-11-18T15:00:00Z"
+   },
+   {
+    "file": "F11-02-A02.hl7"
+   },
+   {
+    "wait": 5
+   },
+   {
+    "fault": "off"
+   }
+  ],
+  "expected": {},
+  "rig": {
+   "failed": "EPR^NVH^N0049377^V26-00558^transfer^2026-11-18T15:00:00Z"
+  }
+ },
+ {
+  "id": "F12",
+  "title": "Held-out case",
+  "summary": "",
+  "steps": [
+   {
+    "file": "F12-01-A01.hl7"
+   },
+   {
+    "file": "F12-02-A02.hl7"
+   }
+  ],
+  "expected": {},
+  "rig": {
+   "failed": "EPR^NVH^N0067732^V26-00744^transfer^2026-11-18T09:30:00Z"
+  }
+ }
+]

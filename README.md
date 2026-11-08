@@ -53,6 +53,18 @@ Instead of a **Resend** in the Message Viewer, Shutter makes each failed deliver
 
 What do the agents add? Not the flag: the matcher had already marked S8, and in Rules only the gate doesn't stop a resend that names no entry. The board checks the entry against this case's evidence, says in words why it applies or doesn't, and keeps any dissent (in S8, the conformance specialist's resend, and why it was overruled). Each agent is given the catalogue's entry and preferred outcome, and the coordinator took it in 24 of 25 recorded plans: agents applying written policy, not answering unaided ([what that does and does not show](https://github.com/MxSalata/shutter/blob/main/docs/readme/evaluation.md)). **Site policy** mode settles 8 of those 11 from the catalogue with no agent and sends S4 and S8 (entry E7) to the board; S7 is not played in that mode.
 
+**Twelve held-out cases.** Made-up failed ADT deliveries at a fictional hospital, written inside the project by an author who had not read the catalogue, against release 1.0.0's code, which was frozen before they were written. The cases, their reference outcomes and the scoring rule were hashed on 6 November 2026, before any run; the hashes are published with the results, so the seal rests on my word. Three runs a case, the agents live on `claude-opus-5-5`; mean loss, lower is better. Both agent modes beat always escalating and wrote nothing wrong. The board did no better than the single investigator, at 3.7 times its cost. With no model, Site policy and Rules only each wrote a cancelled transfer (F09) in all three runs. [Every run](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md).
+
+| Mode | Mean loss | With defensible answers free | Right | Defensible | Needless stop, named | Needless stop, blind | False closure | Wrong write stopped | Wrong write executed | USD a run |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| The board | 0.167 | 0.000 | 30 | 6 | 0 | 0 | 0 | 0 | 0 | 0.48 |
+| Single investigator | 0.167 | 0.000 | 30 | 6 | 0 | 0 | 0 | 0 | 0 | 0.13 |
+| Site policy, no model | 3.500 | 3.500 | 24 | 0 | 0 | 0 | 3 | 6 | 3 | 0 |
+| Rules only | 5.000 | 5.000 | 18 | 0 | 0 | 0 | 0 | 15 | 3 | 0 |
+| Always escalating, computed, per case | 1.250 | 0.833 | 2 | 5 | 5 | 0 | 0 | 0 | 0 | 0 |
+
+36 runs a mode. Single investigator: two F08 runs count as false closures, and its mean loss is 0.500, if the plan made after the gate voided the approval is graded instead of the plan the gate stopped. Site policy: its three board cases had no model and fell back to a plain resend.
+
 ## Try it
 
 | Way to try it | You need | Time |
@@ -104,6 +116,8 @@ The gate is the same in every mode; **Single investigator** runs live only ([the
 **Try to break it,** with S2's case waiting (the first works in the trial too; the rest need your machine): as `operator`, **Approve plan** is disabled and the API answers 403; confirm the dialog in two tabs: one write, the second answering 409; approve the Workflow task with `PlanDigest` empty or wrong: the case blocks. Every click: [first-steps.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/first-steps.md).
 
 **On the online demo, first:** with the judges' account, **Convene the board** on a blocked, escalated or failed case: it investigates again, live. **Break the feed** on the banner: the bed manager goes down for a minute, eight movements fail, and in the demo's rehearsal on 3 November 2026 Shutter ended with **one incident waiting for one approval**, with no model call; on **Incidents**, **Approve release** sends them in order.
+
+**Then the held-out cases** ([fair-test.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md)): read F09, where the source cancelled the transfer six minutes later; with no model, Site policy and Rules only write it anyway, and the board and the single investigator stop, write nothing and name the cancel.
 
 ![Incident I-000001 from S11: eight failed deliveries, six chains, all verified at the receiver in 1 min 42 s](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/incident-s11.png)
 

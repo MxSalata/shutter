@@ -28,6 +28,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RECORDS = os.path.join(ROOT, "fixtures", "records")
 SCENARIOS = os.path.join(ROOT, "fixtures", "scenarios.json")
 CATALOGUE = os.path.join(ROOT, "knowledge", "catalogue", "catalogue.json")
+# The held-out cases' results page, linked from "Not yet measured"; its figures are written there, not computed here.
+FAIR_TEST = "[fair-test.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md)"
 PRICES = os.path.join(ROOT, "src", "Shutter", "Store", "ModelPrice.cls")
 COMPARISON = os.path.join(ROOT, "docs", "readme", "comparison.md")
 OUT_MD = os.path.join(ROOT, "docs", "readme", "evaluation.md")
@@ -839,16 +841,21 @@ def render(ev):
       "been run. A first check, from the repository's history: the batches committed on 19, 20 and 25 October 2026 "
       "(`3b01450`, `7db0e8d`, `f5dd6c0`), on earlier versions of the product and the same model, hold 14 coordinator plans "
       "each, and every plan kept its disposition across all three, S8 included. Every one of those runs was given the "
-      "catalogue's preferred outcome, so this shows stability given the catalogue, not independent reasoning.")
+      "catalogue's preferred outcome, so this shows stability given the catalogue, not independent reasoning. On the "
+      "twelve held-out cases, three live runs a case in each agent mode, every case kept its category across its three "
+      "runs; in one, F08, the single investigator's speed decided which of two safe paths it took.")
     if t["generalist_runs"]:
         w("- **The single investigator.** Shutter can give a case to one generalist agent instead of the board "
           f"(`scenario_check.py --modes single`). {plural(t['generalist_runs'], 'generalist recording')} "
           f"{'is' if t['generalist_runs'] == 1 else 'are'} in `{src['records']}` (see *Recordings not used*), but this "
-          f"document does not yet compare {'it' if t['generalist_runs'] == 1 else 'them'} with the board.")
+          f"document does not yet compare {'it' if t['generalist_runs'] == 1 else 'them'} with the board. On the twelve "
+          f"held-out cases ({FAIR_TEST}) the two reached the same category in every case, and the board cost 3.7 times "
+          "as much.")
     else:
         w("- **The single investigator.** Shutter can give a case to one generalist agent instead of the board "
-          f"(`scenario_check.py --modes single`), but no generalist runs are in `{src['records']}`, so the board is not "
-          "compared with a single agent here.")
+          f"(`scenario_check.py --modes single`), but no generalist runs are in `{src['records']}`, so on these "
+          f"scenarios the board is not compared with a single agent. On the twelve held-out cases ({FAIR_TEST}) the "
+          "two reached the same category in every case, and the board cost 3.7 times as much.")
     reached_any = any(m["text_in_recording"] for p in inj for m in p["injected_note"]["members"].values())
     if inj and not reached_any:
         w("- **Adversarial variants.** No adversarial text reached any agent in these recordings: the one injected note "
@@ -863,8 +870,14 @@ def render(ev):
           "evidence.")
     held = [p for p in scored if p["catalogue_entry"] and p["entry_lists_scenario"]]
     w(f"- **Held-out cases.** In {len(held)} of {len(scored)} scored passes the plan cites a catalogue entry that names "
-      "the same scenario in its `scenarios` field: the knowledge the agents read was written alongside these scenarios. "
-      "No case here was kept back from the authors of the catalogue.")
+      "the same scenario in its `scenarios` field: the knowledge the agents read was written alongside these scenarios, "
+      "and no case here was kept back from the authors of the catalogue. A separate set of twelve cases, written by an "
+      "author who had not read the catalogue and sealed before any run, has since been played three times a case on "
+      f"release 1.0.0's code ({FAIR_TEST}): mean loss 0.167 for the board and for the single investigator, 1.25 for "
+      "always escalating, 3.500 for Site policy and 5.000 for Rules only, with no wrong write proposed or executed by "
+      "either agent mode. Still not measured there: another model, more than three runs a case, a real hospital's "
+      "messages, Site policy with a live board, and the reasons behind each answer, which the rule leaves to two graders "
+      "who have not yet read them.")
     w(f"- **Other models and calibration.** Every run used {', '.join(t['models'])}; there is too little data for a "
       "confidence calibration, and no grading of the summaries' reasoning beyond the disposition, the entry and the "
       "evidence keys.")
