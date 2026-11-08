@@ -141,4 +141,70 @@ Method TestDemoPasses()
     Do $$$AssertEquals(%response.Status, before, "and nothing is written")
 }
 
+/// The runner itself refuses on an instance that is not a demo, so a caller that reaches it over SQL or from the terminal,
+/// not through the routes, changes nothing either: Run, Start and Reset answer not_a_demo_instance with the routes' words,
+/// an open incident stays open and a fixture in the inbound folder stays where it is.
+Method TestRunnerRefusesOffTheDemo()
+{
+    Set runner = "Shutter.Scenarios.Runner"
+    Set words = "Scenarios run and reset on a demo instance only: this instance is a site install, where a reset would abandon its open incidents"
+    Kill ^Shutter.Config("demo")
+    Do ..Mark()
+    // An open incident a reset would abandon, and a file a reset would delete
+    Set sc = ##class(Shutter.Store.Incident).Open("UT-GUARD-RECEIVER", "board", .incident)
+    Do $$$AssertStatusOK(sc, "an open incident to keep")
+    Set hadIn = $DATA(^Shutter.Config("adtIn")) # 10, savedIn = $GET(^Shutter.Config("adtIn"))
+    Set dir = savedIn
+    If dir = "" {
+        Set dir = ##class(%File).NormalizeDirectory(##class(%File).TempFilename("dir"))
+        Do ##class(%File).CreateDirectoryChain(dir)
+        Set ^Shutter.Config("adtIn") = dir
+    }
+    Set file = ##class(%File).NormalizeDirectory(dir) _ "ut-guard-runner.hl7"
+    Set stream = ##class(%Stream.FileCharacter).%New()
+    Do stream.LinkToFile(file)
+    Do stream.Write("MSH|^~\&|UT|GUARD")
+    Do stream.%Save()
+    Kill stream
+    Set before = ..State()
+    Set answers("Run") = $CLASSMETHOD(runner, "Run", "S2", "board")
+    Set answers("Start") = $CLASSMETHOD(runner, "Start", "S2", "board")
+    Set answers("Reset") = $CLASSMETHOD(runner, "Reset")
+    Set answers("Reset over SQL") = ""
+    Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT Shutter_Scenarios.Runner_Reset() AS A")
+    If rs.%Next() Set answers("Reset over SQL") = rs.%Get("A")
+    Set name = ""
+    For {
+        Set name = $ORDER(answers(name))
+        Quit:name=""
+        Set answer = ##class(Shutter.Util.Json).Parse(answers(name), .psc)
+        Do $$$AssertTrue($ISOBJECT(answer), name _ " answers JSON: " _ answers(name))
+        Continue:'$ISOBJECT(answer)
+        Do $$$AssertEquals(answer.error, "not_a_demo_instance", name _ " is refused with not_a_demo_instance")
+        Do $$$AssertEquals(answer.detail, words, name _ " says what the routes say")
+    }
+    Do $$$AssertEquals(..State(), before, "nothing changed: " _ before)
+    Set kept = ##class(Shutter.Store.Incident).%OpenId(incident.%Id())
+    Do $$$AssertEquals($SELECT($ISOBJECT(kept): kept.State, 1: "gone"), "open", "the incident is still open")
+    Do $$$AssertTrue(##class(%File).Exists(file), "the inbound file is still there")
+    // Put back what the test made
+    Do ##class(%File).Delete(file)
+    If savedIn = "" {
+        Do ##class(%File).RemoveDirectory(dir)
+        If hadIn { Set ^Shutter.Config("adtIn") = savedIn } Else { Kill ^Shutter.Config("adtIn") }
+    }
+    Set id = incident.%Id()
+    Kill incident, kept
+    &sql(DELETE FROM Shutter_Store.IncidentEvent WHERE Incident = :id)
+    Do ##class(Shutter.Store.Incident).%DeleteId(id)
+}
+
+/// On the demo the runner's own check lets every call through: Run, Start and Reset behave as before (the reset is called
+/// for real by Shutter.Test.ResetLive, the runs by the scenario checks).
+Method TestRunnerOnTheDemo()
+{
+    Set ^Shutter.Config("demo") = 1
+    Do $$$AssertEquals(##class(Shutter.Scenarios.Runner).NotDemo(), "", "a demo instance passes")
+}
+
 }
