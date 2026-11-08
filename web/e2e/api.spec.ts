@@ -76,10 +76,12 @@ test.describe('the API reference @api', () => {
     await expect(approve).toHaveAttribute('aria-expanded', 'true');
     const panel = routes.locator(`#${await approve.getAttribute('aria-controls')}`);
     await expect(panel).toContainText('Shutter_Approve');
-    await expect(panel.getByRole('table', { name: 'Parameters' }).getByRole('rowheader', { name: /caseId/ })).toBeVisible();
-    await expect(panel.getByRole('table', { name: 'Replies' }).getByRole('row', { name: /^409/ })).toContainText(
-      'wrong_state',
-    );
+    await expect(
+      panel.getByRole('table', { name: 'Parameters' }).getByRole('rowheader', { name: /caseId/ }),
+    ).toBeVisible();
+    await expect(
+      panel.getByRole('table', { name: 'Replies' }).getByRole('row', { name: /^409/ }),
+    ).toContainText('wrong_state');
     await expect(panel.getByLabel('Example body')).toContainText('"decision": "approve"');
     await expect(panel.getByLabel(/as curl$/)).toContainText("-H 'X-Requested-With: Shutter'");
     await expect(panel.getByRole('button', { name: 'Copy the command' })).toBeVisible();
@@ -89,17 +91,21 @@ test.describe('the API reference @api', () => {
     await signIn(page, { detail: 'technical' });
     await go(page, '/api?op=caseApprove', { detail: 'technical' });
     const routes = page.getByRole('region', { name: 'Routes' });
-    const approve = routes.getByRole('button', { name: /^POST \/api\/shutter\/cases\/\{caseId\}\/approvals/ });
+    const approve = routes.getByRole('button', {
+      name: /^POST \/api\/shutter\/cases\/\{caseId\}\/approvals/,
+    });
     await expect(approve).toHaveAttribute('aria-expanded', 'true');
     const panel = routes.locator(`#${await approve.getAttribute('aria-controls')}`);
     await panel.getByRole('button', { name: 'ApprovalDecided' }).click();
-    const shape = page.getByRole('region', { name: 'Shapes' }).getByRole('button', { name: /^ApprovalDecided/ });
+    const shape = page
+      .getByRole('region', { name: 'Shapes' })
+      .getByRole('button', { name: /^ApprovalDecided/ });
     await expect(shape).toHaveAttribute('aria-expanded', 'true');
     await expect(shape).toBeFocused();
     await expect(shape).toBeInViewport();
     const shapePanel = page.locator(`#${await shape.getAttribute('aria-controls')}`);
-    await expect(shapePanel.getByRole('table', { name: 'ApprovalDecided' }).getByRole('row', { name: /^approver/ })).toContainText(
-      'The signed-in user, never a name from the body.',
-    );
+    await expect(
+      shapePanel.getByRole('table', { name: 'ApprovalDecided' }).getByRole('row', { name: /^approver/ }),
+    ).toContainText('The signed-in user, never a name from the body.');
   });
 });

@@ -66,7 +66,11 @@ describe('the API document', () => {
     const groups = groupsOf(routes);
     expect(groups.map((g) => g.tag)).toEqual((API.tags ?? []).map((t) => t.name));
     expect(groups.flatMap((g) => g.routes)).toHaveLength(routes.length);
-    expect(groups.find((g) => g.tag === 'site profile')?.routes.map((r) => r.method)).toEqual(['get', 'put', 'get']);
+    expect(groups.find((g) => g.tag === 'site profile')?.routes.map((r) => r.method)).toEqual([
+      'get',
+      'put',
+      'get',
+    ]);
   });
 });
 
@@ -107,7 +111,10 @@ describe('types and examples', () => {
     expect(typeName({ type: 'string', const: 'Shutter' })).toBe('"Shutter"');
     expect(typeName({ type: ['string', 'null'] })).toBe('string or null');
     expect(choices({ $ref: '#/components/schemas/Mode' })).toContain('board');
-    expect(constraints({ type: 'integer', minimum: 1, maximum: 500, default: 50 })).toEqual(['1 to 500', 'default 50']);
+    expect(constraints({ type: 'integer', minimum: 1, maximum: 500, default: 50 })).toEqual([
+      '1 to 500',
+      'default 50',
+    ]);
   });
 
   it('takes the recorded example when the document has one, and builds one from the shape otherwise', () => {
@@ -115,7 +122,12 @@ describe('types and examples', () => {
     expect(summary).toEqual(API.components?.schemas?.CaseSummary.examples?.[0]);
     expect(typeof summary.caseId).toBe('string');
     const decision = exampleOf({ $ref: '#/components/schemas/ApprovalDecision' });
-    expect(decision).toEqual({ decision: 'approve', planDigest: 'text', expectedVersion: 0, comment: 'text' });
+    expect(decision).toEqual({
+      decision: 'approve',
+      planDigest: 'text',
+      expectedVersion: 0,
+      comment: 'text',
+    });
     const list = exampleOf({ $ref: '#/components/schemas/CaseList' }) as { items: unknown[]; total: number };
     expect(list.items).toHaveLength(1);
     expect(list.total).toBe(0);

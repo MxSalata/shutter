@@ -436,8 +436,8 @@ function RouteLine({ route }: { route: Route }) {
       >
         {route.method.toUpperCase()}
       </Badge>
-      {route.writes ? <VisuallyHidden>(a change)</VisuallyHidden> : null}
       <CodeChip>{route.path}</CodeChip>
+      {route.writes ? <VisuallyHidden>(a change)</VisuallyHidden> : null}
       <Text size="sm" style={{ flex: '1 1 200px', minWidth: 0 }}>
         {route.op.summary}
       </Text>

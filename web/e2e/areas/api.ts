@@ -8,7 +8,12 @@ export const area: Area = {
   tag: '@api',
   screens: [
     { path: '/api', heading: 'API reference', detail: 'technical' },
-    { path: '/api?op=caseApprove', heading: 'API reference', detail: 'technical', name: 'API reference, a route open' },
+    {
+      path: '/api?op=caseApprove',
+      heading: 'API reference',
+      detail: 'technical',
+      name: 'API reference, a route open',
+    },
   ],
   liveWordChecked: false,
 };

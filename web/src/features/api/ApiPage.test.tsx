@@ -16,7 +16,9 @@ describe('ApiPage', () => {
   it('lists every route of the document in its groups, with how to call it first and the shapes last', () => {
     renderUi(<ApiPage />, { detail: 'technical' });
     expect(screen.getByRole('heading', { level: 1, name: 'API reference' })).toBeInTheDocument();
-    expect(screen.getByText(`${routes.length} routes under /api/shutter`, { exact: false })).toBeInTheDocument();
+    expect(
+      screen.getByText(`${routes.length} routes under /api/shutter`, { exact: false }),
+    ).toBeInTheDocument();
     const calling = screen.getByRole('region', { name: 'Calling it' });
     expect(calling).toHaveTextContent('POST /api/shutter/session');
     expect(calling).toHaveTextContent('X-Requested-With: Shutter');
@@ -27,7 +29,24 @@ describe('ApiPage', () => {
       within(routesRegion)
         .getAllByRole('heading', { level: 3 })
         .map((h) => h.textContent),
-    ).toEqual(['Session', 'Health', 'Scenarios', 'Cases', 'Approvals', 'Precedents', 'Escalations', 'Questions', 'Incidents', 'Outages', 'Intake', 'Site profile', 'Settings', 'Index', 'Costs', 'Reviews']);
+    ).toEqual([
+      'Session',
+      'Health',
+      'Scenarios',
+      'Cases',
+      'Approvals',
+      'Precedents',
+      'Escalations',
+      'Questions',
+      'Incidents',
+      'Outages',
+      'Intake',
+      'Site profile',
+      'Settings',
+      'Index',
+      'Costs',
+      'Reviews',
+    ]);
     const shapes = screen.getByRole('region', { name: 'Shapes' });
     expect(within(shapes).getByRole('button', { name: /^CaseSummary/ })).toBeInTheDocument();
     // Nothing is open until asked: a closed route renders no tables
@@ -38,18 +57,18 @@ describe('ApiPage', () => {
     const user = userEvent.setup();
     renderUi(<ApiPage />, { detail: 'technical' });
     await user.type(screen.getByRole('textbox', { name: 'Find' }), 'site-profile');
-    expect(routeButtons().map((b) => b.textContent)).toEqual([
-      expect.stringMatching(/^GET \/api\/shutter\/site-profile/),
-      expect.stringMatching(/^PUT \/api\/shutter\/site-profile/),
-      expect.stringMatching(/^GET \/api\/shutter\/site-profile\/history/),
-    ]);
+    const found = routeButtons();
+    expect(found).toHaveLength(3);
+    expect(found[0]).toHaveAccessibleName(/^GET \/api\/shutter\/site-profile /);
+    expect(found[1]).toHaveAccessibleName(/^PUT \/api\/shutter\/site-profile /);
+    expect(found[2]).toHaveAccessibleName(/^GET \/api\/shutter\/site-profile\/history /);
     await user.selectOptions(screen.getByRole('combobox', { name: 'Show' }), 'changes');
     expect(routeButtons()).toHaveLength(1);
     expect(routeButtons()[0]).toHaveTextContent('Shutter_Configure');
     await user.clear(screen.getByRole('textbox', { name: 'Find' }));
     await user.selectOptions(screen.getByRole('combobox', { name: 'Needs' }), 'Shutter_Intake');
     expect(routeButtons()).toHaveLength(1);
-    expect(routeButtons()[0]).toHaveTextContent('POST /api/shutter/intake');
+    expect(routeButtons()[0]).toHaveAccessibleName(/^POST \/api\/shutter\/intake /);
     await user.type(screen.getByRole('textbox', { name: 'Find' }), 'nothing-like-this');
     expect(screen.getByText(/No route matches/)).toBeInTheDocument();
   });
@@ -68,7 +87,8 @@ describe('ApiPage', () => {
     expect(panel).toHaveTextContent('Yes: send X-Requested-With: Shutter');
     expect(panel).toHaveTextContent('The same key and body replay the first reply');
     expect(panel).toHaveTextContent('docs/CONTRACTS.md section 5');
-    const parameters = within(panel).getByRole('table', { name: 'Parameters' });
+    // The panel opens with a transition: wait for it to be shown before reading its tables by role
+    const parameters = await within(panel).findByRole('table', { name: 'Parameters' });
     expect(within(parameters).getByRole('rowheader', { name: /caseId/ })).toBeInTheDocument();
     const body = within(panel).getByRole('table', { name: /^Body of POST/ });
     expect(within(body).getByRole('rowheader', { name: /^decision/ })).toHaveTextContent('required');
