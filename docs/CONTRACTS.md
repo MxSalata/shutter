@@ -2107,6 +2107,41 @@ with the other stores.
   site profile's policy is `approval` for single and ordered chains at every tier, the board for interleaved ones; a demo
   install keeps the earlier table as the demo's own, labelled setting, marked in the profile's source and on the Site profile
   page (6.4, 4.4).
+- v1.47, 8 Nov 2026 (what the receiver must honestly offer): a receipt or history entry closes a case only if it holds the
+  operation's own digest, ward and bed (`RECEIPT_PAYLOAD_DIFFERS`); a cancel since the receipt stops it
+  (`RECEIPT_THEN_CANCELLED`). A read counts only as the receiver's own answer, and a 200 is a delivery only with its receipt
+  or applied; `receivers[].strict_answers`, default true, turns these off for one receiver. A receiver that offers no readable
+  history gets no resend (`HISTORY_UNSUPPORTED`). No sign of a write by the last read is unknown, and `not_committed` needs the
+  version moved by something else. A write during a rehearsal or preview never resolves (`WRITE_NOT_RELEASED`). The case purge
+  takes only finished cases.
+- v1.47, 8 Nov 2026 (who and when): `feed.source_skew_seconds` (6.4, default 300); `simultaneous_sources` counts another
+  source's movement within it, or at a time that can't be read, and never an update (6.1); `event_time` future also reads the
+  engine's `received_at`, and `clock_change` reads the feed's own zone (6.1); new condition `death_recorded` and entry E19
+  (6.1); the timeline keeps to the case's patient and authority (8.2); E1 v5 needs `event: transfer` and
+  `simultaneous_sources: no`; E7 v3, E13 v5; an unreadable event time doesn't map (E12).
+- v1.47, 8 Nov 2026 (an incident's chains): a chain's next item goes at the version in the previous item's receipt, or the
+  receipt the verification read; only an item with no receipt takes the encounter as read (7.4). An approval under an
+  incident binds the plan's epoch, so a reset voids it with `APPROVAL_RECEIVER_RESET` (1.8). A chain waiting on a case its
+  incident still holds back stops, and the incident goes on (7.4).
+- v1.47, 8 Nov 2026 (further messages for the patient): the evidence's `further_messages`, `Shutter.Util.FurtherMessages` and
+  `Index.Message.ForPatient` (6.1); gate reasons `FURTHER_MOVEMENT`, `NO_FURTHER_MOVEMENT`, `PATIENT_UNREADABLE` and
+  `FURTHER_NOT_READ`; the connector's `further_movement`; the site profile's `further_messages` (6.4); a lost admission on a
+  404 isn't released by policy outside an incident. New scenarios S27 to S32.
+- v1.47, 8 Nov 2026 (what reaches Shutter): the alert route and the acknowledgement route carry the message the failing item
+  was sent, with the session's service as the route (11); a session that sent one item several different messages, or an
+  item that takes no HL7 in a session naming several patients, opens no case from an alert and raises an alert naming the
+  messages (11); alert words the intake does not know, and ErrOutConnectionLost, are `uncertain_outcome` with reason
+  `alert_unread`, which the matcher reads as `receiver_answer` unread (6.1, 11); a 202 with no case id is a refusal, and a
+  forward with no answer or a 502, 503 or 504 is tried again for the forwarder's `FailureTimeout`, 300 s by default and as
+  onboarding sets it (11); an automatic release needs the case's source proved, `APPROVAL_ORIGIN_NOT_PROVED`,
+  `feed.prove_origin` (6.4, 6.5, 11); the intake records the signed-in user (11).
+- v1.47, 8 Nov 2026 (a case with no board answer): `CaseWorkflow.NoBoard` (6.6): outside mode `rules`, a catalogue decision
+  of `board` or `person` with a match goes to `escalated`, disposition `escalate`, no plan, reason `NO_BOARD_ANSWER`, for every
+  member refused or with no recording, no member to convene, and a follower whose board decided nothing; other cases keep the
+  rules path, and mode `rules` is unchanged. `BoardLead.decidedBy`: a lead whose plan came from the rules passes on no
+  decision. `ENTRY_NOT_NAMED_WRITE` (6.5): a write naming no entry while a matched entry calls for no resend is blocked,
+  except a `rules` plan in mode `rules` that the scenario runner played. Gate policy version 2026-11-06.1, so an approval
+  given under 2026-11-01.1 and not yet dispatched is void at dispatch.
 - v1.46, 5 Nov 2026 (a review of this version): `not_committed` says "by the last read" and that a slower receiver can still commit the write (5.1); a write call that answers with an error records its attempt as `uncertain`, and reads as `WRITE_OUTCOME_UNKNOWN`; `GET /cases/{id}/blocked-reason` reads a rehearsal with no usable answer as `BLOCKED`, and a lost write's reason is no longer hidden by an earlier round's gate decision; a reinvestigation without `Shutter_LiveAgents`, or while the provider refuses the key, whose board has no recording leaves the case escalated, with the reason, instead of taking the rules path. Onboarding: an alert the site's own consumer raised is not passed back to it (11); options that are not a JSON object answer `{ok: false, error}` in the plan, the apply and the removal; a `receivers` name matching no item is a warning, and with no item chosen the plan has no `add_alert_intake`; a profile entry with an `api` and no `namespace` counts as taken, with a warning; `OnboardReceiverItem` refuses, naming both, an item that exists with other settings (11.1); a `receivers` option that chooses no item adds no forwarder. The web app keeps the Cases filter and page and the Scenarios mode and filter in the address.
 - v1.45, 5 Nov 2026 (measured on a stock operation): a case for an order, a result or a document keeps `failureKind` `unmappable`,
   E12 and its escalation, and nothing is sent; its failure text, headline, plan and gate detail stop saying the message could not
