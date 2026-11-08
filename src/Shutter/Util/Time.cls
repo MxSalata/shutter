@@ -102,6 +102,9 @@ ClassMethod FromHL7(ts As %String, zone As %String = "", Output hadOffset As %Bo
     If offset = "" {
         // SQL hands an empty string over as $CHAR(0): both mean the profile's zone.
         If ($GET(zone) = "") || (zone = $CHAR(0)) Set zone = $GET(^Shutter.Config("feedZone"))
+        // A read in a watched namespace, which maps Shutter.Util and not Shutter's store or configuration: the zone the
+        // caller took before it went there (Shutter.Util.FurtherMessages.ReadSource).
+        If zone = "" Set zone = $GET(^||Shutter.FeedZone)
         If zone = "" Set zone = ##class(Shutter.Store.SiteProfile).FeedTimeZone()
         Set offset = ..ZoneOffset(zone, iso)
         If offset = "" Quit iso _ "Z"
