@@ -137,7 +137,9 @@ ClassMethod GlobalPrefixes(demo As %Boolean, production As %String) As %String
 ClassMethod TakenByUninstall(production As %String, name As %String, className As %String, ownProduction As %String, ownClassName As %String, onboarded As %String, recorded As %Boolean) As %Boolean
 {
     If ownProduction '= "" {
-        If ..OwnClass(production, ownProduction = "Shutter.Production") Quit 1
+        // The module's own production classes go whole: any Shutter. one, and Hospital.Production by its exact name, which
+        // the module compiles wherever it is loaded. Another Hospital. production in a hospital's namespace is the site's.
+        If ..OwnClass(production, ownProduction = "Shutter.Production") || (production = "Hospital.Production") Quit 1
         If (production = ownProduction) && ..OwnItem(name, className, ownClassName) Quit 1
     }
     Quit (production = onboarded) && recorded

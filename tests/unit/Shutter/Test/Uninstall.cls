@@ -97,6 +97,7 @@ Method TestClassPrefixesInAHospitalsNamespace()
     // A site production called Hospital. that Shutter's items went into is not taken whole, so a hand-added gate there refuses.
     Do $$$AssertEquals($CLASSMETHOD(u, "TakenByUninstall", "Hospital.Path.Production", "My Gate", "Shutter.Operation.Gate", "Hospital.Path.Production", "", "", 0), 0, "a hospital's production named like the demo's")
     Do $$$AssertEquals($CLASSMETHOD(u, "TakenByUninstall", "Hospital.Production", "Gate", "Hospital.Router", "Shutter.Production", "", "", 0), 1, "the demo hospital's definition in Shutter's namespace")
+    Do $$$AssertEquals($CLASSMETHOD(u, "TakenByUninstall", "Hospital.Production", "Shutter Forwarder", "Shutter.Intake.Forwarder", "Site.Production", "", "", 0), 1, "the module's own Hospital.Production, compiled in a hospital's namespace")
 }
 
 /// A plan changes nothing and answers.
