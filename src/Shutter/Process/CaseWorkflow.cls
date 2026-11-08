@@ -1420,7 +1420,7 @@ Method OnlyRefreshable(result As Shutter.Msg.GateResult) As %Boolean
     While iter.%GetNext(.i, .c) {
         Continue:(##class(Shutter.Util.Json).Str(c, "result") = "pass")
         If ##class(Shutter.Util.Json).Str(c, "result") '= "unknown" Return 0
-        If '$LISTFIND($LISTBUILD("STALE_EVIDENCE", "RECEIPT_UNREADABLE", "CAPABILITIES_UNREADABLE", "RECEIVER_UNREADABLE", "ENGINE_UNREADABLE"), ##class(Shutter.Util.Json).Str(c, "reason_code")) Return 0
+        If '$LISTFIND($LISTBUILD("STALE_EVIDENCE", "RECEIPT_UNREADABLE", "CAPABILITIES_UNREADABLE", "RECEIVER_UNREADABLE", "ENGINE_UNREADABLE", "FURTHER_MOVEMENT_NEW"), ##class(Shutter.Util.Json).Str(c, "reason_code")) Return 0
         Set found = 1
     }
     Quit found

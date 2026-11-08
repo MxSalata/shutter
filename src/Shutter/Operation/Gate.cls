@@ -119,6 +119,10 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
             Do ..Check(checks, "ordering", "block", "FURTHER_MOVEMENT", ##class(Shutter.Util.FurtherMessages).Describe(case, further) _ ". Nothing is sent; a person reads both and decides")
         } ElseIf ##class(Shutter.Util.FurtherMessages).Unread(further) '= "" {
             Do ..Check(checks, "ordering", "block", "FURTHER_NOT_READ", "Further messages for this patient could not all be read: " _ ##class(Shutter.Util.FurtherMessages).Unread(further) _ ". Nothing is sent until they can be, or a person decides")
+        } ElseIf (request.Stage '= "proposal") && (##class(Shutter.Util.FurtherNew).Rows(further, summary.%Get("further_messages")).%Size() > 0) {
+            // Another visit's movement the snapshot did not show, on a site that shows one: an approval was given on a plan without
+            // it, so the evidence is collected again and the fresh snapshot voids the approval (Shutter.Util.FurtherNew).
+            Do ..Check(checks, "ordering", "unknown", "FURTHER_MOVEMENT_NEW", ##class(Shutter.Util.FurtherNew).Describe(case, further, summary.%Get("further_messages")) _ ". Nothing is sent on this approval; the evidence is collected again and the plan is made afresh with it shown")
         } ElseIf $ISOBJECT(further) {
             Do ..Check(checks, "ordering", "pass", "NO_FURTHER_MOVEMENT", $SELECT(##class(Shutter.Util.FurtherMessages).Count(further, "shows") > 0: "No further message stops this write for this patient; " _ ##class(Shutter.Util.FurtherMessages).Count(further, "shows") _ " other message(s) on file, shown on the plan", 1: "No further in-patient movement for this patient"))
         }
