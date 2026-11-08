@@ -875,7 +875,10 @@ def render(ev):
       "author who had not read the catalogue and sealed before any run, has since been played three times a case on "
       f"release 1.0.0's code ({FAIR_TEST}): mean loss 0.167 for the board and for the single investigator, 1.25 for "
       "always escalating, 3.500 for Site policy and 5.000 for Rules only, with no wrong write proposed or executed by "
-      "either agent mode. Still not measured there: another model, more than three runs a case, a real hospital's "
+      "either agent mode. Another model was measured there for the board alone: on `claude-sonnet-5-5` and "
+      "`claude-haiku-5-5` it beat always escalating, with no wrong write proposed or executed ("
+      "[cheaper models](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#cheaper-models)). Still "
+      "not measured there: the single investigator on another model, more than three runs a case, a real hospital's "
       "messages, Site policy with a live board, and the reasons behind each answer, which the rule leaves to two graders "
       "who have not yet read them.")
     w(f"- **Other models and calibration.** Every run used {', '.join(t['models'])}; there is too little data for a "
