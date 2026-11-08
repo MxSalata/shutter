@@ -46,6 +46,8 @@ Method OnWardOperation(request As Shutter.Msg.WardOperation, Output response As 
         If $ISOBJECT(guardCase) {
             Set further = ##class(Shutter.Util.FurtherMessages).Find(guardCase)
             Set word = ##class(Shutter.Util.FurtherMessages).Describe(guardCase, further)
+            // A person read these very rows and released the stop; this read gives the same ones.
+            If ##class(Shutter.Util.FurtherMessages).Released(guardCase, further) Set word = ""
             If (word '= "") || ##class(Shutter.Util.FurtherMessages).Unreadable(further) || (##class(Shutter.Util.FurtherMessages).Unread(further) '= "") {
                 Set response.Outcome = "refused", response.ReasonCode = "further_movement"
                 Set response.Error = "Not sent: " _ $SELECT(word '= "": word, ##class(Shutter.Util.FurtherMessages).Unreadable(further): "the patient identifier could not be read", 1: "further messages could not all be read: " _ ##class(Shutter.Util.FurtherMessages).Unread(further))
@@ -55,6 +57,8 @@ Method OnWardOperation(request As Shutter.Msg.WardOperation, Output response As 
         }
     }
     Set body = request.ToWardJSON()
+    // The admission (CONTRACTS 18): shadow mode, a stop and an unknown kind of call are refused here, the last line before the POST.
+    If '##class(Shutter.Util.RecoveryControl).AdmitWard(request, $SELECT($ISOBJECT(..%RequestHeader): ..%RequestHeader.SourceConfigName, 1: ""), ..%ConfigName, body, response, .permit) Quit $$$OK
     $$$TRACE($SELECT(request.DryRun: "Rehearsal", 1: "Operation") _ " " _ request.OperationKey _ $SELECT(request.ExpectedVersion '= "": ", expected version " _ request.ExpectedVersion, 1: ""))
     Set http = ##class(%Net.HttpRequest).%New()
     Set http.ContentType = "application/json"
@@ -77,6 +81,7 @@ Method OnWardOperation(request As Shutter.Msg.WardOperation, Output response As 
     Set parsed = ##class(Shutter.Util.Json).Parse(text, .psc)
     If '$ISOBJECT(parsed) || $$$ISERR(psc) Set parsed = {}
     Do ..Classify(response, sc, parsed, ##class(Shutter.Store.SiteProfile).StrictAnswers(..%ConfigName))
+    Do ##class(Shutter.Util.RecoveryControl).Finish(permit, response)
     // A feed message delivered (answered, whatever the answer) releases the cases that waited for it (v1.29).
     If (request.Purpose = "normal") && (request.SourceMessageId '= "") Do ##class(Shutter.Store.Case).ReleaseWaitingOnMessage(request.SourceMessageId, response.Outcome)
     $$$TRACE("Outcome " _ response.Outcome _ $SELECT(response.ReasonCode '= "": " (" _ response.ReasonCode _ ")", 1: "") _ ", HTTP " _ response.HttpStatus _ ", " _ response.DurationMs _ " ms")

@@ -110,18 +110,48 @@ test.describe('the guide', () => {
     expect(await writes(page)).toEqual(['POST /api/shutter/cases/C-000002/approvals']);
   });
 
+  for (const [name, viewport] of [
+    ['laptop', { width: 1280, height: 800 }],
+    ['phone', { width: 390, height: 844 }],
+  ] as const) {
+    test(`on step 3 the card is beside Approve plan and the pointer covers nothing, at ${name} width`, async ({
+      page,
+    }) => {
+      await page.setViewportSize(viewport);
+      await page.goto('./?trial=tour#/scenarios');
+      const guide = page.getByRole('region', { name: 'Guide' });
+      for (const n of [1, 2]) {
+        await expect(guide).toContainText(`Step ${n} of 9`);
+        await guide.getByRole('button', { name: 'Next' }).click();
+      }
+      await expect(guide).toContainText('Step 3 of 9');
+      const approve = page.locator('[data-tour-action="approve-plan"]');
+      await expect(approve).toBeInViewport();
+      await expect(guide).toBeInViewport();
+      const pointer = page.getByTestId('guide-try-pointer');
+      await expect(pointer).toBeVisible({ timeout: 8_000 });
+      const covered = await pointer.evaluate((el) => {
+        const box = el.getBoundingClientRect();
+        el.style.visibility = 'hidden';
+        const under = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+        el.style.visibility = '';
+        return { text: under?.textContent?.trim().slice(0, 40), inCard: !!under?.closest('.guide-card') };
+      });
+      expect(covered.inCard).toBe(false);
+      expect(covered.text ?? '').not.toContain('Receiver version');
+    });
+  }
+
   test("starts the engineers' tour with Technical on, from its address", async ({ page }) => {
     await page.goto('./?trial=engineer#/scenarios');
-    const welcome = page.getByRole('dialog', { name: 'Welcome to the Shutter trial' });
-    await expect(welcome.getByRole('radio', { name: /For integration engineers/ })).toBeChecked();
-    await welcome.getByRole('button', { name: 'Start the tour' }).click();
+    await expect(page.getByRole('dialog', { name: 'Welcome to the Shutter trial' })).toBeHidden();
     const guide = page.getByRole('region', { name: 'Guide' });
     await expect(guide).toContainText("Engineers' tour · A transfer recovered (S2)");
     await expect(guide).toContainText('Step 1 of 6');
     await expect(
       page.getByRole('radiogroup', { name: 'Detail' }).getByRole('radio', { name: 'Technical' }),
     ).toBeChecked();
-    // The address no longer opens the welcome on a reload
+    // The address no longer starts the tour on a reload
     await expect(page).toHaveURL(/\?trial#\//);
   });
 
@@ -359,6 +389,24 @@ test.describe('the tour with Ask open', () => {
       await expect(guide.getByRole('heading', { level: 2 })).toBeFocused();
     });
   }
+
+  test("leaves Ask's suggested questions clear of the card on a phone, with no scrolling", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    const guide = await atAskStep(page);
+    await page.locator('[data-tour-action="ask-open"]').click();
+    const panel = await besideAsk(page, guide, 390);
+    const questions = panel.locator('.ask-chip:visible');
+    await expect(questions.first()).toBeVisible();
+    const top = (await guide.boundingBox())!.y;
+    const count = await questions.count();
+    expect(count).toBeGreaterThan(0);
+    for (let i = 0; i < count; i++) {
+      const box = (await questions.nth(i).boundingBox())!;
+      expect(box.y + box.height).toBeLessThanOrEqual(top);
+    }
+  });
 
   test('keeps the card before its section from 1440 px, with Ask beside the case', async ({ page }) => {
     await page.setViewportSize({ width: 1600, height: 900 });

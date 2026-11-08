@@ -12,7 +12,8 @@ approval with 403 forbidden, each with nothing stored, no write attempt and the 
 The approver's approval is then sent twice with one Idempotency-Key: the same reply both times, and 409
 idempotency_key_reused for that key with another body. The case resolves with one write attempt, made after a dry run
 bound to the approval; the approval names the signed-in approver, never a name in the body, and a fresh approval of the
-resolved case is refused (409 wrong_state). S20's nurse moves the patient while the plan waits: the approval is voided
+resolved case is refused (409 wrong_state). Two tabs approving a second S2 at the same moment leave one decision and one
+write. S20's nurse moves the patient while the plan waits: the approval is voided
 at dispatch (APPROVAL_RECEIVER_CHANGED) with no write attempt, and the nurse's entry stands. S3's resend of a delivery
 the receiver already holds is blocked by the gate (ALREADY_COMMITTED).
 
@@ -29,6 +30,7 @@ import http.cookiejar
 import json
 import os
 import sys
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -366,6 +368,39 @@ def main():
           bool(gates) and bool(policy) and gates[-1].get("policyVersion") == policy
           and {("authorization", "APPROVAL_VALID"), ("rehearsal", "REHEARSED")} <= passed,
           f"{gates[-1].get('policyVersion') if gates else 'no dispatch gate'}, passed {sorted(passed)}")
+
+    # ---- Two tabs approve at once: one decision stands, and one write ----
+    case = play("S2")
+    race_id = (case or {}).get("caseId")
+    if not race_id or (settle(race_id, "S2", {"awaiting_approval"} | CLOSED) or {}).get("state") != "awaiting_approval":
+        check("the two tabs' S2 waits for approval", False, race_id)
+        return done()
+    view = get(f"/cases/{q(race_id)}/plan") or {}
+    tab = get(f"/cases/{q(race_id)}") or {}
+    race = {"decision": "approve", "planDigest": (view.get("plan") or {}).get("digest"),
+            "expectedVersion": tab.get("version"), "comment": "boundary check: two tabs"}
+    tabs = [Session(args.url).sign_in("approver", password) for _ in range(2)]
+    start = threading.Barrier(2)
+    answers = [None, None]
+
+    def press(i):
+        start.wait()
+        answers[i] = tabs[i].call("POST", f"/cases/{q(race_id)}/approvals", race, key=str(uuid.uuid4()))
+
+    threads = [threading.Thread(target=press, args=(i,)) for i in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    codes = sorted(a[0] for a in answers)
+    check("two approvals at the same moment: one is 202, the other 409 wrong_state or stale_version",
+          codes == [202, 409] and next(a for a in answers if a[0] == 409)[1].get("error") in ("wrong_state", "stale_version"),
+          answers)
+    final = settle(race_id, "S2", CLOSED) or {}
+    attempts = writes(race_id)
+    check("the raced case resolves with one approval and one write attempt",
+          final.get("state") == "resolved" and len(approvals(race_id)) == 1 and len(attempts) == 1,
+          f"{final.get('state')}, {len(approvals(race_id))} approvals, {len(attempts)} attempts")
 
     # ---- S20: the receiving system changes after the approval ----
     expected = next((s.get("expected") or {} for s in (get("/scenarios") or {}).get("scenarios") or []

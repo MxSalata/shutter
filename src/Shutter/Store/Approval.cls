@@ -100,6 +100,11 @@ Method InvalidReason(plan As Shutter.Store.Plan, snapshot As Shutter.Store.Snaps
         If '$ISOBJECT(inc) || (inc.PlanDigest '= ..IncidentPlanDigest) Quit "incident_plan_changed"
         // This approval's own epoch is the one read just before the dispatch: what the person bound is the plan's.
         If (inc.ReceiverEpoch '= "") && (receiverEpoch '= "") && (inc.ReceiverEpoch '= receiverEpoch) Quit "receiver_reset"
+        // This approval is made at each release with the versions of the moment, so what the person read and bound is the
+        // plan's: an upgrade or a changed profile between that approval and this dispatch voids it, and a person looks again.
+        If (inc.CatalogueVersion '= "") && (inc.CatalogueVersion '= ##class(Shutter.Catalogue.Entry).CatalogueVersion()) Quit "catalogue_changed"
+        If (inc.ProfileVersion '= "") && (inc.ProfileVersion '= ##class(Shutter.Util.Json).Str(##class(Shutter.Store.SiteProfile).Current(), "version", 0)) Quit "site_profile_changed"
+        If (inc.PolicyVersion '= "") && (inc.PolicyVersion '= policyVersion) Quit "policy_changed"
         If plan.CatalogueEntry '= ..BoundEntry Quit "item_changed"
         Set cat = $SELECT($ISOBJECT(snapshot): snapshot.SummaryObject().%Get("catalogue"), 1: "")
         If '$ISOBJECT(cat) || (##class(Shutter.Util.Json).Str(cat, "entry") '= ..BoundEntry) || (##class(Shutter.Util.Json).Str(cat, "outcome") '= ..BoundOutcome) Quit "item_changed"

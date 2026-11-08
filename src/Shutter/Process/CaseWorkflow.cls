@@ -396,6 +396,8 @@ Method OnEvidence(case As Shutter.Store.Case, result As Shutter.Msg.EvidenceResu
     }
     // Every investigation starts clean: a policy from an earlier round never carries over to a plan the board makes.
     Set ..Policy = "", ..CatalogueEntry = "", ..CatalogueOutcome = ""
+    // A document case (CONTRACTS 11.2) has one answer in every mode: a person, with no agent and no catalogue.
+    If case.DocumentJSON '= "" Quit ..DocumentToPerson(case)
     // A withheld operation (T31) has one answer in every mode: nothing is sent and a person decides. The gate blocks
     // every plan on it, so a board run would only cost: a burst of merges or cancels would buy one run per message.
     If case.FailureKind = "withheld" {
@@ -608,6 +610,8 @@ Method TakeDiagnosis(case As Shutter.Store.Case, lead As Shutter.Store.BoardLead
     Set plan.summary = "Follows the board of case " _ lead.LeaderCaseId _ " (the same failure signature within " _ window _ " s): " _ disposition _ $SELECT(actionType '= "none": " the operation unchanged at receiver version " _ version _ " unless the gate objects", 1: ", a person decides")
     Set plan.why = "The board convened for case " _ lead.LeaderCaseId _ " decided " _ disposition _ $SELECT(words '= "": "; its members: " _ words, 1: "") _ ". This case shares the receiver, the failure, the receiver's answer, the error and the catalogue match, so the decision is taken without another board; this case's own evidence, gate, rehearsal and approval still apply"
     Set plan.preconditions = [], plan."evidence_refs" = [], plan.disagreements = []
+    // The same thinner review, when the leader's board had a member missing.
+    If $ISOBJECT(leaderPlan.%Get("absent_members")) Set plan."absent_members" = leaderPlan.%Get("absent_members")
     Do lead.Followed()
     Do case.Note("note", "Board not convened: the decision of case " _ lead.LeaderCaseId _ "'s board is taken (" _ disposition _ "); " _ lead.Followers _ " case(s) have followed that board", "system", "lead:" _ lead.%Id())
     Quit ..AdoptPlan(case, plan, "lead:" _ lead.LeaderCaseId)
@@ -1039,7 +1043,7 @@ Method AttachCorrectionSteps(case As Shutter.Store.Case, plan As %DynamicObject)
         }
         Quit:'$ISOBJECT(chosen)
         Quit:(##class(Shutter.Util.Json).Str(chosen, "outcome") '= "correct_history")
-        Set steps = ##class(Shutter.Util.HistoryCorrection).Steps(case, summary)
+        Set steps = ##class(Shutter.Util.HistoryCorrection).Steps(case, summary, entry)
         Set plan."correction_steps" = steps
         Do case.Note("artifact", "Correcting the history: " _ ##class(Shutter.Util.HistoryCorrection).Headline(steps), "system")
     } Catch ex {
@@ -1067,15 +1071,20 @@ Method PolicyPath(case As Shutter.Store.Case, summary As %DynamicObject, cat As 
     Set tier = ##class(Shutter.Store.SiteProfile).TierOf($SELECT(case.Receiver '= "": case.Receiver, 1: ..WardTarget))
     Set kind = $SELECT(..Release: ..ChainKind, 1: $CLASSMETHOD(json, "Str", cat.%Get("conditions"), "chain", "single"))
     Set ..Policy = ##class(Shutter.Store.SiteProfile).Policy(tier, kind)
-    // A receiver's 404 doesn't prove it holds no record for the patient: a lost admission waits for a person, unless the
-    // site's profile says policy may release it.
+    // A released item is authorised by its incident (7.3): by site policy, or under the incident's approval.
+    If ..Release Set ..Policy = $SELECT(..ReleasePolicy = "incident": "incident", ..ReleasePolicy = "automatic": "automatic", 1: ..Policy)
+    // A receiver's 404 doesn't prove it holds no record for the patient: a lost admission waits for a person, inside an
+    // incident too, unless the site's profile says policy may release it. Under the incident's approval a person has.
     Set heldBack = 0
-    If ('..Release) && (..Policy = "automatic") && ##class(Shutter.Util.FurtherMessages).AdmissionOnNotFound(case, summary) && (##class(Shutter.Store.SiteProfile).AdmissionNotFound() = "person") {
+    If (..Policy = "automatic") && ##class(Shutter.Util.FurtherMessages).AdmissionOnNotFound(case, summary) && (##class(Shutter.Store.SiteProfile).AdmissionNotFound() = "person") {
         Set ..Policy = "approval", heldBack = 1
         Do case.Note("note", "A lost admission on the receiver's 404: a person approves, as the site's profile asks (further_messages.admission_not_found)", "system")
     }
-    // A released item is authorised by its incident (7.3): by site policy, or under the incident's approval.
-    If ..Release Set ..Policy = $SELECT(..ReleasePolicy = "incident": "incident", ..ReleasePolicy = "automatic": "automatic", 1: ..Policy)
+    // A person released a stop on this case's further messages: the write after it goes to a person too.
+    If (..Policy = "automatic") && (case.FurtherReleaseJSON '= "") {
+        Set ..Policy = "approval", heldBack = 1
+        Do case.Note("note", "A person released the stop on further messages, which releases nothing else: a person approves the write", "system")
+    }
     // An automatic release writes with no person, so the case's source must be proved (CONTRACTS 11); otherwise a person approves.
     // A lost admission held back above is asked too, so the person is told both.
     If (..Policy = "automatic") || heldBack {
@@ -1142,7 +1151,7 @@ Method PolicyPath(case As Shutter.Store.Case, summary As %DynamicObject, cat As 
         // write it (a resend would move the patient back), so the case escalates with the correcting steps on its plan.
         Set plan.disposition = "escalate"
         Set action.type = "none"
-        Set steps = ##class(Shutter.Util.HistoryCorrection).Steps(case, summary)
+        Set steps = ##class(Shutter.Util.HistoryCorrection).Steps(case, summary, entry)
         Set plan."correction_steps" = steps
         Set plan.preconditions = [], plan.summary = "Catalogue " _ entry _ ", " _ title _ ": the receiver keeps the history of record, so the missing movement is corrected by its team; the steps are on the plan"
         Do case.Note("artifact", "Correcting the history: " _ ##class(Shutter.Util.HistoryCorrection).Headline(steps), "system")
@@ -1171,7 +1180,7 @@ Method BedWaitOutcome(case As Shutter.Store.Case, result As Shutter.Msg.GateResu
             Continue:'$ISOBJECT(c)
             Set rc = ##class(Shutter.Util.Json).Str(c, "reason_code")
             // Further messages for the patient are no wait: a person reads what the check names.
-            If $LISTFIND($LISTBUILD("FURTHER_MOVEMENT", "PATIENT_UNREADABLE", "FURTHER_NOT_READ", "ENGINE_UNREADABLE"), rc) {
+            If $LISTFIND($LISTBUILD("FURTHER_MOVEMENT", "PATIENT_UNREADABLE", "FURTHER_NOT_READ", "UPDATE_LOCATION_DIFFERS", "ENGINE_UNREADABLE"), rc) {
                 Set waited = 1, detail = ##class(Shutter.Util.Json).Str(c, "detail")
                 Set case.Headline = "Stopped for a person: " _ ##class(Shutter.Util.Json).Clip(detail, 200)
                 Return case.Transition("blocked", detail, "gate", "gate:" _ result.DecisionId)
@@ -1222,6 +1231,20 @@ Method NotModelledToPerson(case As Shutter.Store.Case) As %Status
     Set plan.summary = "Receiver category orders_results: not modelled yet, a person handles the failure"
     Set plan.preconditions = [], plan."evidence_refs" = ["route"], plan.disagreements = []
     Quit ..AdoptPlan(case, plan, "policy:not_modelled")
+}
+
+/// A document case goes to a person with a plan of no action. It does not pass the gate, whose checks ask of an ADT operation and
+/// a receiver's API what a metadata record cannot answer: there is nothing here for it to let through.
+Method DocumentToPerson(case As Shutter.Store.Case) As %Status
+{
+    Set ..Policy = "person"
+    Set sc = ##class(Shutter.Store.Plan).Create(case, case.CurrentSnapshot, ##class(Shutter.Util.DocumentCase).Plan(case), "policy:document", .p)
+    Quit:$$$ISERR(sc) sc
+    Set ..PlanId = p.%Id()
+    Set case.CurrentPlan = p, case.Disposition = p.Disposition
+    Set block = ##class(Shutter.Util.Json).Parse(case.DocumentJSON, .psc)
+    Set case.Headline = $SELECT($ISOBJECT(block): block.headline, 1: "Document delivery needs review. Shutter has sent nothing.")
+    Quit case.Transition("escalated", "A " _ ##class(Shutter.Util.DocumentCase).Noun(block) _ " delivery: a person decides. Shutter has sent nothing", "system", "plan:" _ p.%Id())
 }
 
 /// The connector a case's reads, rehearsals and writes go to (v1.25): the case's receiver when the site profile names it
@@ -1348,6 +1371,7 @@ Method OnGateProposal(case As Shutter.Store.Case, result As Shutter.Msg.GateResu
     Set plan = ##class(Shutter.Store.Plan).%OpenId(..PlanId)
     Set sc = case.Transition("gated", "Gate at proposal: " _ result.Outcome _ ". " _ result.Summary, "gate", "gate:" _ result.DecisionId)
     Quit:$$$ISERR(sc) sc
+    Do ##class(Shutter.Store.ShadowObservation).Capture(case, plan, result)
     // A plan that asks for a person is escalated whatever the gate found; the gate's result stays on the case.
     If (plan.Disposition = "escalate") || (plan.Disposition = "more_evidence") {
         Quit case.Transition("escalated", "The plan asks for a person: " _ plan.Summary _ $SELECT(result.Outcome '= "pass": " (the gate noted: " _ result.Summary _ ")", 1: ""), "system", "plan:" _ plan.%Id())
@@ -1359,6 +1383,7 @@ Method OnGateProposal(case As Shutter.Store.Case, result As Shutter.Msg.GateResu
             Set case.CandidateEntry = 1
             Do case.Note("note", "The catalogue has no entry for this pattern; the case is flagged as a candidate entry for a reviewer", "gate", "gate:" _ result.DecisionId)
             If 'plan.IsWrite() {
+                If ..ThinClosure(plan) '= "" Quit ..ThinClosureToPerson(case, plan)
                 Set sc = case.Transition("verifying", "No write; verifying the receiver's state (new pattern, candidate entry)", "system")
                 Quit:$$$ISERR(sc) sc
                 Quit ..SendVerify(case)
@@ -1383,14 +1408,42 @@ Method OnGateProposal(case As Shutter.Store.Case, result As Shutter.Msg.GateResu
         Quit case.Transition("blocked", "The gate did not pass the plan; a person must decide", "gate", "gate:" _ result.DecisionId)
     }
     If plan.IsWrite() {
+        // Shadow mode or a stop (CONTRACTS 18): no dry run either, since it is a request to a receiver.
+        Set refusal = ##class(Shutter.Store.ShadowObservation).Words(plan, result)
+        If refusal '= "" {
+            Set case.Headline = refusal
+            Quit case.Transition("escalated", refusal, "system", "plan:" _ plan.%Id())
+        }
         Set sc = case.Transition("rehearsing", "Rehearsing the exact action as a dry run", "system")
         Quit:$$$ISERR(sc) sc
         Quit ..SendRequestAsync(..WardTargetFor(case), ..WardOperationFor(case, plan, 1), 1, "rehearsal")
     }
-    // superseded or reconcile: nothing is written; verify what the receiver holds and close.
+    // superseded or reconcile: nothing is written; verify what the receiver holds and close. A board with a member missing
+    // doesn't close a case: a person reads what it found.
+    If ..ThinClosure(plan) '= "" Quit ..ThinClosureToPerson(case, plan)
     Set sc = case.Transition("verifying", "No write; verifying the receiver's state", "system")
     Quit:$$$ISERR(sc) sc
     Quit ..SendVerify(case)
+}
+
+/// The board members a plan that writes nothing lacks, by name, or "" when the board was whole. A write is untouched: a
+/// person approves it anyway, and its task says who was missing.
+Method ThinClosure(plan As Shutter.Store.Plan) As %String
+{
+    If plan.Json = "" Quit ""
+    Set absent = plan.PlanObject().%Get("absent_members"), names = ""
+    If '$ISOBJECT(absent) Quit ""
+    Set iter = absent.%GetIterator()
+    While iter.%GetNext(, .name) { Set names = names _ $SELECT(names = "": "", 1: ", ") _ name }
+    Quit names
+}
+
+/// A partial board's plan to send nothing: not closed, but put to a person, who reinvestigates or marks it handled.
+Method ThinClosureToPerson(case As Shutter.Store.Case, plan As Shutter.Store.Plan) As %Status
+{
+    Set names = ..ThinClosure(plan)
+    Set case.Headline = "A person checks this: the board's plan sends nothing, but " _ names _ " did not answer"
+    Quit case.Transition("escalated", "The board's plan (" _ plan.Disposition _ ") writes nothing, but not every member reviewed it: " _ names _ " did not answer. A case isn't closed on a thinner review, so a person decides; nothing was sent. " _ plan.Summary, "system", "plan:" _ plan.%Id())
 }
 
 /// Whether the evidence's lookups all answered: the receiver's state (200, or 404 for an admission), the receipt (200,

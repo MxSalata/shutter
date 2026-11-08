@@ -13,16 +13,17 @@ import {
   VisuallyHidden,
 } from '@mantine/core';
 import { useDisclosure, useMediaQuery } from '@mantine/hooks';
+import { notifications } from '@mantine/notifications';
 import { IconInfoCircle, IconTestPipe } from '@tabler/icons-react';
-import { useId, useSyncExternalStore, type ReactNode } from 'react';
+import { useEffect, useId, useSyncExternalStore, type ReactNode } from 'react';
 import { useCan } from '@/api/hooks';
 import type { Can } from '@/api/types';
 import { TechDetail } from '@/components/TechDetail';
 import { ENV } from '@/env/mode';
 import { journal } from './journal';
-import { journalLine, TRIAL_WORDS, TRIAL_WORDS_SHORT } from './words';
+import { journalLine, TRIAL_RELOADED_WORDS, TRIAL_WORDS, TRIAL_WORDS_SHORT } from './words';
 import { LeaveTrialButton } from './LeaveTrial';
-import { bannerForm } from './visit';
+import { bannerForm, takeLostActions } from './visit';
 
 /**
  * What works here, replayed, for this role: the public demo and judge roles approve but cannot run a scenario or save
@@ -196,6 +197,10 @@ export function TrialBanner() {
   const form = useSyncExternalStore(bannerForm.subscribe, bannerForm.get);
   const compact = form === 'compact';
   const phone = useMediaQuery('(max-width: 47.99em)', false);
+  useEffect(() => {
+    if (takeLostActions())
+      notifications.show({ color: 'grape', title: 'The trial started again', message: TRIAL_RELOADED_WORDS });
+  }, []);
   return (
     <Box
       role="region"

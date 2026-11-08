@@ -19,7 +19,7 @@ Property ToState As %String(%JSONFIELDNAME = "toState", MAXLEN = 32);
 
 Property Text As %String(%JSONFIELDNAME = "text", MAXLEN = 4000);
 
-/// What the entry refers to: plan:<id>, snapshot:<id>, run:<id>, approval:<id>, ens:<header id>, escalation:<seq>, task:<id>.
+/// What the entry refers to: plan:<id>, snapshot:<id>, run:<id>, approval:<id>, ens:<header id>, escalation:<seq>, task:<id>, bundle:<redacted or unredacted>.
 Property Ref As %String(%JSONFIELDNAME = "ref", MAXLEN = 200);
 
 Property Actor As %String(%JSONFIELDNAME = "actor", MAXLEN = 100);

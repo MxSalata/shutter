@@ -385,16 +385,21 @@ export function statesFromCounts(byState: Record<string, number> | undefined): s
   return entries.flatMap(([state, n]) => Array.from({ length: n }, () => state));
 }
 
+/** How many chains the page names before the rest wait behind one button, so the approval stays within reach. */
+export const CHAINS_LISTED = 6;
+
 /**
  * What the one approval covers, in one sentence (9 words for the usual case): "One approval released the ordered
  * chain: C-000038 then C-000043." Waiting, it releases; decided, it released or stopped them.
  */
 export function approvalSentence(covered: Chain[], decision: IncidentApproval | undefined): string {
   const cases = (c: Chain) => c.items.map((i) => i.caseId).join(' then ');
+  const named = covered.slice(0, CHAINS_LISTED).map(cases).join('; ');
+  const rest = covered.length - CHAINS_LISTED;
   const what =
     covered.length === 1
       ? `the ${humanize(covered[0].kind).toLowerCase()} chain: ${cases(covered[0])}`
-      : `${plural(covered.length, 'chain')}: ${covered.map(cases).join('; ')}`;
+      : `${plural(covered.length, 'chain')}: ${named}${rest > 0 ? `; and ${rest} more` : ''}`;
   if (decision?.decision === 'rejected') return `One rejection stopped ${what}. Nothing was sent.`;
   return `One approval ${decision?.decision === 'approved' ? 'released' : 'releases'} ${what}.`;
 }

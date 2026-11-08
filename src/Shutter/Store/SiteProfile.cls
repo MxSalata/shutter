@@ -39,7 +39,7 @@ ClassMethod Default() As %DynamicObject
     Set p.incident = {"threshold": 5, "window_minutes": 10, "quiet_seconds": 60}
     Set p."model_content" = {"free_text": false}
     Set p.feed = {"time_zone": "Europe/London", "prevent_failures": false}
-    Set p."further_messages" = {"in_patient_movement": "stop", "admission_not_found": "person", "scan_seconds": (..#SCANSECONDS)}
+    Set p."further_messages" = {"in_patient_movement": "stop", "a08_location": "stop", "admission_not_found": "person", "scan_seconds": (..#SCANSECONDS)}
     Quit p
 }
 
@@ -67,7 +67,58 @@ ClassMethod Current() As %DynamicObject
         Set p = ##class(Shutter.Util.Json).Parse(row.Json, .sc)
         If $ISOBJECT(p) Set p.version = row.Version Quit p
     }
-    Quit ..Default()
+    Quit $SELECT(..DemoInstall(): ..Default(), 1: ..ForSite(..Default()))
+}
+
+/// Whether this instance is the demo. Every install sets the flag before it seeds; a namespace with no flag has had no
+/// install, and keeps the shipped defaults.
+ClassMethod DemoInstall() As %Boolean
+{
+    Quit ''$GET(^Shutter.Config("demo"), 1)
+}
+
+/// What a non-demo install starts from: the seed or the defaults with the demo's receivers taken out and no automatic
+/// release, so nothing is written with no person until the site says so in its own profile. A site item that happened
+/// to share a demo receiver's name would otherwise be written to by policy. A profile needs a receiver, so a list left
+/// empty gets one draft to fill in, and a draft is never written to. Changes p and returns it.
+ClassMethod ForSite(p As %DynamicObject) As %DynamicObject
+{
+    Set demoNames = $LISTBUILD($PARAMETER("Shutter.Production", "RECEIVER"), "Records Out")
+    Set json = "Shutter.Util.Json"
+    Set keep = [], list = p.%Get("receivers")
+    If $ISOBJECT(list) {
+        Set it = list.%GetIterator()
+        While it.%GetNext(, .r) {
+            If '$LISTFIND(demoNames, $CLASSMETHOD(json, "Str", r, "name")) Do keep.%Push(r)
+        }
+    }
+    If keep.%Size() = 0 Do keep.%Push({"name": "Your first receiver", "system": "a placeholder: rename it to the production item that delivers to your system, and fill it in", "tier": 3, "applies": "arrival_order", "resend_timestamp": "original", "cancels": false, "merges": false, "features": {"conditional_writes": false, "receipts": false, "history": false, "dry_run": false}, "draft": true})
+    Set p.receivers = keep
+    Set teams = p.%Get("teams")
+    If $ISOBJECT(teams) {
+        Set it = teams.%GetIterator()
+        While it.%GetNext(, .team) {
+            Set names = team.%Get("receivers")
+            Continue:'$ISOBJECT(names)
+            Set kept = [], ni = names.%GetIterator()
+            While ni.%GetNext(, .name) {
+                If '$LISTFIND(demoNames, name) Do kept.%Push(name)
+            }
+            Set team.receivers = kept
+        }
+    }
+    Set policy = p.%Get("policy")
+    If $ISOBJECT(policy) {
+        Set it = policy.%GetIterator()
+        While it.%GetNext(.tier, .row) {
+            Continue:'$ISOBJECT(row)
+            Set ri = row.%GetIterator()
+            While ri.%GetNext(.kind, .value) {
+                If value = "automatic" Do row.%Set(kind, "approval")
+            }
+        }
+    }
+    Quit p
 }
 
 ClassMethod Row() As Shutter.Store.SiteProfile
@@ -98,6 +149,7 @@ ClassMethod Store(json As %String, source As %String = "", user As %String = "",
             Set sc = $$$ERROR($$$GeneralError, "stale_version")
             Quit
         }
+        Set oldMode = ##class(Shutter.Util.RecoveryControl).ModeOfJson(row.Json), newMode = ##class(Shutter.Util.RecoveryControl).ModeOfProfile(p)
         TSTART
         Set row.Version = row.Version + 1
         Set row.Json = p.%ToJSON(), row.Source = source, row.UpdatedBy = $EXTRACT(user, 1, 160)
@@ -109,7 +161,7 @@ ClassMethod Store(json As %String, source As %String = "", user As %String = "",
             Set v.Version = row.Version, v.Json = row.Json, v.Source = source, v.UpdatedAt = row.UpdatedAt, v.UpdatedBy = row.UpdatedBy
             Set sc = v.%Save()
         }
-        If $$$ISOK(sc) { TCOMMIT  Kill ^Shutter.Config("feedZone"), ^Shutter.Config("preventFailures")  Do ..SyncWatchedFeed() } Else { TROLLBACK }
+        If $$$ISOK(sc) { TCOMMIT  Kill ^Shutter.Config("feedZone"), ^Shutter.Config("preventFailures")  Do ..SyncWatchedFeed()  If oldMode '= newMode Do ##class(Shutter.Util.RecoveryControl).NoteModeChange(oldMode, newMode, user) } Else { TROLLBACK }
         Set currentVersion = +row.Version
     } Catch ex {
         Set sc = ex.AsStatus()
@@ -135,9 +187,13 @@ ClassMethod Validate(p As %DynamicObject) As %String
     If '$ISOBJECT(p) Quit "the profile must be a JSON object"
     Set it = p.%GetIterator()
     While it.%GetNext(.key, .v) {
-        If '$LISTFIND($LISTBUILD("version", "receivers", "history_policy", "authoritative_source", "unconditional_resend", "merges", "policy", "approvers", "incident", "model_content", "teams", "mail", "feed", "further_messages"), key) Return key _ ": unknown field"
+        If '$LISTFIND($LISTBUILD("version", "receivers", "history_policy", "authoritative_source", "unconditional_resend", "merges", "policy", "approvers", "incident", "model_content", "teams", "mail", "feed", "further_messages", "recovery", "notifications", "reminders", "failure_census"), key) Return key _ ": unknown field"
     }
     If p.%IsDefined("version") && ((p.%Get("version") '= +p.%Get("version")) || (p.%Get("version") < 0)) Quit "version: must be a whole number"
+    Set problem = ..RecoveryProblem(p)
+    If problem '= "" Quit problem
+    Set census = ##class(Shutter.Util.FailureCensus).ProfileProblem(p)
+    If census '= "" Quit census
     Set rcv = p.%Get("receivers")
     If '$ISOBJECT(rcv) || (rcv.%Size() = 0) Quit "receivers: must be a non-empty array"
     Set it = rcv.%GetIterator()
@@ -161,6 +217,13 @@ ClassMethod Validate(p As %DynamicObject) As %String
             If demo.%IsDefined("namespace") && (demo.%GetTypeOf("namespace") '= "string") Return at _ ".demo.namespace: must be a string"
         }
         If r.%IsDefined("cancels") && (r.%GetTypeOf("cancels") '= "boolean") Return at _ ".cancels: must be true or false"
+        // A receiver's document profile (11.2), off when absent.
+        If r.%IsDefined("documents") { Set dp = ##class(Shutter.Util.DocumentCase).SettingsProblem(r.%Get("documents")) If dp '= "" Return at _ ".documents" _ dp }
+        // The site's one line on where to look (Shutter.Util.ReceiverCheck): a hint for a person, never read by the core.
+        If r.%IsDefined("manual_check") {
+            Set problem = ##class(Shutter.Util.ReceiverCheck).ManualCheckProblem(r.%Get("manual_check"))
+            If problem '= "" Return at _ ".manual_check." _ problem
+        }
         // Whether the receiver takes merges (T31); false when absent, and a merge still needs the site's merges: allowed.
         If r.%IsDefined("merges") && (r.%GetTypeOf("merges") '= "boolean") Return at _ ".merges: must be true or false"
         If r.%IsDefined("api") {
@@ -248,6 +311,8 @@ ClassMethod Validate(p As %DynamicObject) As %String
         While fi.%GetNext(.k, .v) {
             If k = "in_patient_movement" {
                 If '$LISTFIND($LISTBUILD("stop", "show"), v) Return "further_messages.in_patient_movement: must be stop or show"
+            } ElseIf k = "a08_location" {
+                If '$LISTFIND($LISTBUILD("stop", "show"), v) Return "further_messages.a08_location: must be stop or show"
             } ElseIf k = "admission_not_found" {
                 If '$LISTFIND($LISTBUILD("person", "policy"), v) Return "further_messages.admission_not_found: must be person or policy"
             } ElseIf k = "scan_seconds" {
@@ -343,6 +408,11 @@ ClassMethod Validate(p As %DynamicObject) As %String
         Set problem = ..ReceiverWatchProblem(r, "receivers[" _ i _ "]", domains)
         If problem '= "" Return problem
     }
+    // The reminder for cases left open: off unless it says so, and its officer's address goes by the mail rules above.
+    If p.%IsDefined("reminders") {
+        Set problem = ##class(Shutter.Util.CaseReminder).ProfileProblem(p.%Get("reminders"), domains)
+        If problem '= "" Quit problem
+    }
     If p.%IsDefined("incident") {
         Set inc = p.%Get("incident")
         If '$ISOBJECT(inc) Quit "incident: must be an object"
@@ -435,6 +505,26 @@ ClassMethod ReceiverWatchProblem(r As %DynamicObject, at As %String, domains As 
     Quit ""
 }
 
+/// recovery.mode and notifications.shadow_delivery, the only keys under those fields. Each may be left out.
+ClassMethod RecoveryProblem(p As %DynamicObject) As %String [ Private ]
+{
+    If p.%IsDefined("recovery") {
+        Set r = p.%Get("recovery")
+        If '$ISOBJECT(r) || 'r.%IsA("%DynamicObject") Return "recovery: must be an object"
+        Set it = r.%GetIterator()
+        While it.%GetNext(.key) { If key '= "mode" Return "recovery." _ key _ ": unknown field" }
+        If r.%IsDefined("mode") && '$LISTFIND($LISTBUILD("shadow", "enabled"), r.%Get("mode")) Return "recovery.mode: must be shadow or enabled"
+    }
+    If p.%IsDefined("notifications") {
+        Set n = p.%Get("notifications")
+        If '$ISOBJECT(n) || 'n.%IsA("%DynamicObject") Return "notifications: must be an object"
+        Set it = n.%GetIterator()
+        While it.%GetNext(.key) { If key '= "shadow_delivery" Return "notifications." _ key _ ": unknown field" }
+        If n.%IsDefined("shadow_delivery") && '$LISTFIND($LISTBUILD("disabled", "enabled"), n.%Get("shadow_delivery")) Return "notifications.shadow_delivery: must be disabled or enabled"
+    }
+    Quit ""
+}
+
 /// The entries of the receivers the site asks Shutter to watch: those with a watch block, none on a profile without one.
 ClassMethod WatchedReceivers() As %DynamicArray
 {
@@ -492,7 +582,17 @@ ClassMethod SeedFromFile(path As %String) As %Status
     If text = "" Quit $$$OK
     Set p = ##class(Shutter.Util.Json).Parse(text, .sc)
     If '$ISOBJECT(p) || $$$ISERR(sc) Quit $$$ERROR($$$GeneralError, "The seed profile " _ path _ " is not a JSON object")
+    If '..DemoInstall() Set p = ..ForSite(p)
     Set row = ..Row()
+    // The file is the same for a site and the demo and says nothing of recovery, which a site's install reads as shadow.
+    // The demo seeds enabled explicitly (CONTRACTS 18), the live hospital's stored form too.
+    If '..SiteInstall() {
+        Do p.%Set("recovery", {"mode": "enabled"})
+        If $ISOBJECT(row) && (row.Source = (path _ " (live hospital)")) && (##class(Shutter.Util.RecoveryControl).ModeOfJson(row.Json) '= "enabled") {
+            Set live = ##class(Shutter.Util.Json).Parse(row.Json, .lsc)
+            If $ISOBJECT(live) Do live.%Set("recovery", {"mode": "enabled"}) Quit ..Store(live.%ToJSON(), row.Source, "install")
+        }
+    }
     // The seed fills an empty store and follows its own file; a profile a person saved (another source) is theirs and
     // is never overwritten by a reinstall or a restart.
     If $ISOBJECT(row) && (row.Source '= path) Quit $$$OK
@@ -543,6 +643,13 @@ ClassMethod SourceSkewSeconds() As %Integer
 ClassMethod FurtherMovement() As %String
 {
     Quit ..FurtherSetting("in_patient_movement", "stop")
+}
+
+/// What a failed or later A08 naming another ward or bed does to a write: stop (the default) or show, for a site that repeats
+/// stale locations on full-state A08s.
+ClassMethod FurtherA08Location() As %String
+{
+    Quit ..FurtherSetting("a08_location", "stop")
 }
 
 /// Who releases a failed admission the receiver answers 404 for: person (the default) or policy, the tier's own.

@@ -69,9 +69,7 @@ test.describe('the guided path', () => {
       await expect(rules.getByText('Not as expected')).toBeVisible();
       await expect(rules.getByText('Resolved', { exact: true })).toHaveCount(0);
       const board = page.getByTestId('compare-board');
-      await expect(board.getByTestId('compare-patient')).toHaveText(
-        'Patient stays in WARD-C; a person decides',
-      );
+      await expect(board.getByTestId('compare-patient')).toHaveText('No overwrite; a person decides');
       await expect(board.getByText('As expected')).toBeVisible();
       // The time and the digests wait behind their fold in Plain
       await expect(

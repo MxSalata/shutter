@@ -45,6 +45,7 @@ import { keys, useCan, useCase } from '@/api/hooks';
 import type { CaseDetail, CaseState, PlanView } from '@/api/types';
 import { TechDetail } from '@/components/TechDetail';
 import { ENV } from '@/env/mode';
+import { compactBanner } from '@/trial/visit';
 import { REPLAY_DONE } from '@/lib/events';
 import { HOSPITAL_NAME } from '@/lib/hospital';
 import { guideCard, guideTarget, useGuideDock } from '@/lib/guideDock';
@@ -531,7 +532,9 @@ function StepCard({
         <Title order={2} fz={22} tabIndex={-1} ref={titleRef} className="guide-title">
           {step.title}
         </Title>
-        <Text fz={18}>{step.say}</Text>
+        <Text fz={18} className="guide-say">
+          {step.say}
+        </Text>
         {step.tryIt && present.tryIt ? (
           <div>
             <Button
@@ -625,9 +628,11 @@ function StepHost({ pos }: { pos: GuidePosition }) {
   const { ring, trying } = useStepMotion(target, tryAction, reduced);
   // Read when the card is placed, not a reason to place it again
   const reducedNow = useRef(reduced);
+  const tryNow = useRef(tryAction);
   useEffect(() => {
     reducedNow.current = reduced;
-  }, [reduced]);
+    tryNow.current = tryAction;
+  }, [reduced, tryAction]);
 
   useEffect(() => {
     if (path) go(path);
@@ -671,7 +676,11 @@ function StepHost({ pos }: { pos: GuidePosition }) {
     let made: HTMLElement | null = null;
     let stopLanding: (() => void) | null = null;
     void (async () => {
-      const el = await waitForTarget(pos.step.target);
+      const section = await waitForTarget(pos.step.target);
+      // A step that invites a press sits just above its control, when the role and the case still offer it
+      const near =
+        section && tryNow.current && pos.step.nearTry ? await waitForTarget(pos.step.nearTry, 2000) : null;
+      const el = near ?? section;
       // The step after an approval waits for the case page's replay to finish, for at most 3 seconds
       if (replay) {
         await replay;
@@ -688,6 +697,7 @@ function StepHost({ pos }: { pos: GuidePosition }) {
       made = document.createElement('div');
       made.className = 'guide-host';
       made.dataset.guideHost = 'true';
+      if (near) made.dataset.guideNear = 'true';
       el.insertAdjacentElement('beforebegin', made);
       setHost(made);
       setTarget(el);
@@ -702,7 +712,7 @@ function StepHost({ pos }: { pos: GuidePosition }) {
       setHost(null);
       setTarget(null);
     };
-  }, [arrived, pos.step.target]);
+  }, [arrived, pos.step.target, pos.step.nearTry]);
 
   // While the card is on the page, Ask about this case opens as a sheet beside it, offering the dock it moves into
   const dock = useGuideDock();
@@ -1011,15 +1021,16 @@ export function Guide() {
   const reduced = useReducedMotion();
   const pos = positionOf(progress);
   const message = useAnnouncement(phase, pos, !!pos && approvedForYou === pos.path);
-  const [welcomeScope] = useState<GuideScope>(() =>
-    ENV.openGuide === 'engineer' ? 'engineer' : progress.scope,
-  );
+  const [welcomeScope] = useState<GuideScope>(progress.scope);
 
-  // On arrival with ?trial=tour or ?trial=engineer the welcome opens with that tour chosen; on a first entry, by itself
+  // On arrival with ?trial=tour or ?trial=engineer that tour starts; on a first entry the welcome opens by itself
   useEffect(() => {
     const s = useGuide.getState();
     if (s.phase !== 'closed') return;
-    if (ENV.openGuide || (!s.snoozed && welcomeDue(s.progress))) s.openWelcome();
+    if (ENV.openGuide) {
+      s.begin(ENV.openGuide);
+      compactBanner();
+    } else if (!s.snoozed && welcomeDue(s.progress)) s.openWelcome();
   }, []);
 
   // Focus goes back where the reader was when a modal or the tour closes
@@ -1041,7 +1052,8 @@ export function Guide() {
     onClose: exit,
     // Focus goes back by hand: where the reader was, or into the step's card
     returnFocus: false,
-    transitionProps: reduced ? { duration: 0 } : undefined,
+    // Closing is at once: no half-faded layer for a screenshot or a first click to meet
+    transitionProps: reduced ? { duration: 0 } : { exitDuration: 0 },
     closeButtonProps: { 'aria-label': 'Exit guide' },
     fullScreen: phone,
     size: 'xl' as const,

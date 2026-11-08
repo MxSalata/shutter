@@ -205,6 +205,176 @@ Method TestTheSiteChooses()
     Do $$$AssertEquals(found.stops.%Size(), 1, "a withdrawn move on this visit still stops")
 }
 
+/// The failed movement of the rows below: a transfer to WARD-B bed BAY2-04.
+ClassMethod A08Subject(event As %String = "transfer") As %DynamicObject
+{
+    Set s = ..Subject(event)
+    Set s.ward = "WARD-B", s.bed = "BAY2-04"
+    Quit s
+}
+
+/// A later A08 on this visit, as the index or the message store reads it, timed after the failed movement.
+ClassMethod A08Row(patch As %DynamicObject = "") As %DynamicObject
+{
+    Set r = {"event": "update", "message_type": "ADT_A08", "visit_number": "ENC-1", "control_id": "M-A08", "location": "WARD-B", "bed": "BAY2-09"}
+    If $ISOBJECT(patch) {
+        Set pi = patch.%GetIterator()
+        While pi.%GetNext(.k, .v) { Do r.%Set(k, v) }
+    }
+    Quit ..Row(r)
+}
+
+Method WeighA08(rows As %DynamicArray, subject As %DynamicObject = "", a08 As %String = "stop") As %DynamicObject
+{
+    Quit ##class(Shutter.Util.FurtherMessages).Classify($SELECT($ISOBJECT(subject): subject, 1: ..A08Subject()), rows, "single", ..#SINCE, "stop", "", a08)
+}
+
+Method AssertA08Stops(rows As %DynamicArray, what As %String)
+{
+    Set found = ..WeighA08(rows)
+    Do $$$AssertEquals(found.stops.%Size(), 1, what _ " stops")
+    If found.stops.%Size() Do $$$AssertEquals(found.stops.%Get(0).why, "a08_location", what _ " stops as a08_location")
+}
+
+Method AssertA08Passes(rows As %DynamicArray, what As %String)
+{
+    Set found = ..WeighA08(rows)
+    Do $$$AssertEquals(found.stops.%Size(), 0, what _ " does not stop")
+    Do $$$AssertEquals(found.shows.%Size(), 0, what _ " is not on the plan")
+}
+
+/// A later A08 on this visit naming another ward or bed than the failed movement's target is a further movement.
+Method TestALaterA08NamingAnotherPlace()
+{
+    Do ..AssertA08Stops([(..A08Row())], "another bed")
+    Do ..AssertA08Stops([(..A08Row({"location": "WARD-C", "bed": "BAY2-04"}))], "another ward")
+    Do ..AssertA08Stops([(..A08Row({"outcome": "applied"}))], "another bed the receiver answered as applied")
+    Do ..AssertA08Stops([(..A08Row({"location": "WARD-C", "bed": ""}))], "another ward with no bed")
+    Set moved = ..A08Subject(), moved.bed = ""
+    Set found = ..WeighA08([(..A08Row({"bed": "BAY2-04"}))], moved)
+    Do $$$AssertEquals(found.stops.%Size(), 1, "a bed named where the failed movement went to ward level")
+    Set found = ..WeighA08([(..A08Row())], ..A08Subject("admit"))
+    Do $$$AssertEquals(found.stops.%Size(), 1, "a failed admission has a target too")
+}
+
+/// What doesn't count: the target repeated, no location, an A08 older than the movement, an A08 that says only the ward.
+Method TestALaterA08ThatDoesNotStop()
+{
+    Do ..AssertA08Passes([(..A08Row({"bed": "BAY2-04"}))], "the target repeated")
+    Do ..AssertA08Passes([(..A08Row({"location": "", "bed": ""}))], "no location")
+    Set bare = ..A08Row(), r = bare.%Remove("location"), r = bare.%Remove("bed")
+    Do ..AssertA08Passes([(bare)], "no location fields")
+    Do ..AssertA08Passes([(..A08Row({"bed": ""}))], "the ward repeated, no bed named")
+    Do ..AssertA08Passes([(..A08Row({"event_time": "2026-10-15T08:10:00Z"}))], "an A08 timed before the failed movement, however late it came")
+    // A06 and A07 map to update too, and this check is about A08: what they change is weighed as before.
+    Do ..AssertA08Passes([(..A08Row({"message_type": "ADT_A06", "outcome": "applied"}))], "an A06 the receiver applied")
+    // A failed discharge or update has no target to differ from.
+    Do $$$AssertEquals(..WeighA08([(..A08Row())], ..Subject("discharge")).stops.%Size(), 0, "a failed discharge has no target")
+    Do $$$AssertEquals(..WeighA08([(..A08Row())], ..Subject("update")).stops.%Size(), 0, "nor has a failed update")
+}
+
+/// A delivery row comes first and knows nothing of PV1-3: the message's own row, later in the list, says where.
+Method TestAnA08DeliveryIsReadWithItsMessage()
+{
+    Set delivery = {"event": "update", "visit_number": "ENC-1", "control_id": "M-A08", "operation_key": "k-a08", "event_time": "2026-10-15T08:30:00Z", "sent_at": (..#LATER), "outcome": "applied", "where": "sent to the receiver, answered applied"}
+    Set found = ..WeighA08([(delivery), (..A08Row())])
+    Do $$$AssertEquals(found.stops.%Size(), 1, "the delivery and its message are one row, and it stops")
+    If found.stops.%Size() {
+        Set item = found.stops.%Get(0)
+        Do $$$AssertEquals(item.location, "WARD-B", "with the message's ward")
+        Do $$$AssertEquals(item.bed, "BAY2-09", "and bed")
+        Do $$$AssertEquals(item."message_type", "ADT_A08", "and its type")
+        Do $$$AssertEquals(item.where, "sent to the receiver, answered applied", "and the delivery's answer")
+    }
+    Do ..AssertA08Passes([(delivery), (..A08Row({"bed": "BAY2-04"}))], "a delivery of an A08 repeating the target")
+    Do ..AssertA08Passes([(delivery)], "a delivery with no message read")
+}
+
+/// An A08 repeating a later movement's target is that movement's echo: the movement is weighed by its own rule.
+Method TestALaterA08RepeatingALaterMovement()
+{
+    Set move = ..Row({"event": "transfer", "message_type": "ADT_A02", "visit_number": "ENC-1", "control_id": "M-A02", "location": "WARD-C", "bed": "BAY1-07", "event_time": "2026-10-15T08:25:00Z"})
+    Do ..AssertA08Passes([(move), (..A08Row({"location": "WARD-C", "bed": "BAY1-07"}))], "the later transfer's own place")
+    Do ..AssertA08Stops([(move), (..A08Row({"location": "WARD-C", "bed": "BAY1-09"}))], "another bed than the later transfer's")
+    Set late = ..Row({"event": "transfer", "message_type": "ADT_A02", "visit_number": "ENC-1", "control_id": "M-A02", "location": "WARD-C", "bed": "BAY1-07", "event_time": "2026-10-15T08:40:00Z"})
+    Do ..AssertA08Stops([(late), (..A08Row({"location": "WARD-C", "bed": "BAY1-07"}))], "a transfer timed after the A08 explains nothing")
+    Set before = ..Row({"event": "admit", "message_type": "ADT_A01", "visit_number": "ENC-1", "control_id": "M-A01", "location": "WARD-A", "bed": "BAY1-01", "event_time": "2026-10-15T08:00:00Z"})
+    Do ..AssertA08Stops([(before), (..A08Row({"location": "WARD-A", "bed": "BAY1-01"}))], "an A08 naming where the patient was before the failed movement")
+    Set other = ..Row({"event": "transfer", "message_type": "ADT_A02", "visit_number": "ENC-2", "control_id": "M-A02", "location": "WARD-C", "bed": "BAY1-07", "event_time": "2026-10-15T08:25:00Z"})
+    Set found = ..WeighA08([(other), (..A08Row({"location": "WARD-C", "bed": "BAY1-07"}))])
+    Do $$$AssertTrue(..HasWhy(found, "a08_location"), "a transfer on another visit explains nothing")
+}
+
+ClassMethod HasWhy(found As %DynamicObject, why As %String) As %Boolean
+{
+    Set it = found.stops.%GetIterator()
+    While it.%GetNext(, .item) { If item.why = why Return 1 }
+    Quit 0
+}
+
+/// A later A08 on another visit follows the existing rule, whatever it names.
+Method TestALaterA08OnAnotherVisit()
+{
+    Set found = ..WeighA08([(..A08Row({"visit_number": "ENC-2"}))])
+    Do $$$AssertEquals(found.stops.%Size(), 0, "it does not stop")
+    Do $$$AssertEquals(found.shows.%Size(), 1, "it shows on the plan")
+    If found.shows.%Size() Do $$$AssertEquals(found.shows.%Get(0).why, "shown", "as any other message on file")
+}
+
+/// The site's further_messages.a08_location: show puts it on the plan and lets it through.
+Method TestALaterA08TheSiteShows()
+{
+    Set found = ..WeighA08([(..A08Row())], "", "show")
+    Do $$$AssertEquals(found.stops.%Size(), 0, "with show it does not stop")
+    Do $$$AssertEquals(found.shows.%Size(), 1, "it is on the plan")
+    If found.shows.%Size() Do $$$AssertEquals(found.shows.%Get(0).why, "a08_location_shown", "as an A08's location")
+    Set case = ..LineCase()
+    Set line = ##class(Shutter.Util.FurtherMessages).Line(case, found.shows.%Get(0))
+    Do $$$AssertTrue(line [ "does not stop the resend", "the plan says so: " _ line)
+    Do $$$AssertTrue(line [ "further_messages.a08_location", "and names the setting: " _ line)
+    Set found = ..WeighA08([(..A08Row({"bed": "BAY2-04"}))], "", "show")
+    Do $$$AssertEquals(found.shows.%Size(), 0, "the target repeated isn't on the plan either")
+    // A cancel on this visit stops whichever the setting says.
+    Set found = ..WeighA08([(..A08Row()), (..Row({"event": "cancel_transfer", "message_type": "ADT_A12", "visit_number": "ENC-1", "control_id": "M-C"}))], "", "show")
+    Do $$$AssertEquals(found.stops.%Size(), 1, "a withdrawn move still stops")
+}
+
+ClassMethod LineCase() As Shutter.Store.Case
+{
+    Set case = ##class(Shutter.Store.Case).%New()
+    Set case.PatientId = "MRN1", case.PatientIdAuthority = "HOSP", case.EncounterId = "ENC-1", case.Event = "transfer", case.Ward = "WARD-B", case.Bed = "BAY2-04"
+    Quit case
+}
+
+/// The words name the patient, the A08 and both places, and a person can't release it as another visit's movement.
+Method TestALaterA08InWords()
+{
+    Set found = ..WeighA08([(..A08Row())])
+    Set line = ##class(Shutter.Util.FurtherMessages).Describe(..LineCase(), found)
+    For word = "MRN1", "ADT_A08", "M-A08", "ward WARD-B bed BAY2-09", "ward WARD-B bed BAY2-04", "further movement" {
+        Do $$$AssertTrue(line [ word, "the line says " _ word _ ": " _ line)
+    }
+    Do $$$AssertTrue(##class(Shutter.Util.FurtherMessages).NotReleasable(found) [ "a08_location", "it isn't another visit's movement, so it can't be released here")
+    Do $$$AssertTrue(##class(Shutter.Util.FurtherMessages).RowsDigest(found) '= "", "it has a digest as any stop has")
+}
+
+/// The two reads give the place: a message read from the store carries its ward and its room and bed, as OperationKey reads them.
+Method TestAnA08ReadFromTheStoreCarriesItsPlace()
+{
+    Set case = ##class(Shutter.Store.Case).%New()
+    Set case.PatientId = "MRN-UT-A08", case.PatientIdAuthority = "HOSP", case.EncounterId = "ENC-UT-A08", case.Event = "transfer"
+    Set low = $ZDATETIME($ZTIMESTAMP, 3, 1, 3)
+    Set mine = ..NewMessage("MSH|^~\&|PAS|HOSP|DOWNSTREAM|HOSP|20261015093000||ADT^A08^ADT_A01|M-UT-A08|P|2.5.1" _ $CHAR(13) _ "EVN|A08|20261015093000" _ $CHAR(13) _ "PID|1||MRN-UT-A08^^^HOSP^MR||SYNTH^A08" _ $CHAR(13) _ "PV1|1|I|WARD-B^BAY2^09^HOSP||||||||||||||||ENC-UT-A08", .h1, .h2)
+    Set rows = ##class(Shutter.Util.FurtherMessages).Scan(case, h1 - 1, low, .full)
+    Do $$$AssertEquals(rows.%Size(), 1, "the A08 is read")
+    If rows.%Size() {
+        Do $$$AssertEquals(rows.%Get(0).location, "WARD-B", "PV1-3.1 is the ward")
+        Do $$$AssertEquals(rows.%Get(0).bed, "BAY2-09", "room and bed as OperationKey reads them")
+    }
+    Do ##class(Ens.MessageHeader).%DeleteId(h1), ##class(Ens.MessageHeader).%DeleteId(h2)
+    Do ##class(EnsLib.HL7.Message).%DeleteId(mine)
+}
+
 /// A person is told both visits, and what is on file. A follower's plan gets none of another patient's.
 Method TestWords()
 {

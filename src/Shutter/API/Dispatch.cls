@@ -28,15 +28,21 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
   <Route Url="/cases/:caseId/snapshot" Method="GET" Call="CaseSnapshot"/>
   <Route Url="/cases/:caseId/runs" Method="GET" Call="CaseRuns"/>
   <Route Url="/cases/:caseId/plan" Method="GET" Call="CasePlan"/>
+  <Route Url="/cases/:caseId/correction-draft" Method="GET" Call="CaseCorrectionDraft"/>
   <Route Url="/cases/:caseId/approvals" Method="GET" Call="CaseApprovals"/>
   <Route Url="/cases/:caseId/approvals" Method="POST" Call="CaseApprove"/>
   <Route Url="/cases/:caseId/precedents" Method="GET" Call="CasePrecedents"/>
   <Route Url="/precedents/:id/retire" Method="POST" Call="PrecedentRetire"/>
   <Route Url="/cases/:caseId/attempts" Method="GET" Call="CaseAttempts"/>
   <Route Url="/cases/:caseId/closure" Method="GET" Call="CaseClosure"/>
+  <Route Url="/cases/:caseId/bundle" Method="POST" Call="CaseBundle"/>
+  <Route Url="/cases/:caseId/bundle-unredacted" Method="POST" Call="CaseBundleUnredacted"/>
   <Route Url="/cases/:caseId/preview-blind-resend" Method="POST" Call="CasePreview"/>
   <Route Url="/cases/:caseId/blocked-reason" Method="GET" Call="CaseBlockedReason"/>
+  <Route Url="/cases/:caseId/receiver-check" Method="GET" Call="CaseReceiverCheck"/>
   <Route Url="/cases/:caseId/reinvestigate" Method="POST" Call="CaseReinvestigate"/>
+  <Route Url="/cases/:caseId/further-stop" Method="GET" Call="CaseFurtherStop"/>
+  <Route Url="/cases/:caseId/further-release" Method="POST" Call="CaseFurtherRelease"/>
   <Route Url="/cases/:caseId/board" Method="POST" Call="CaseBoard"/>
   <Route Url="/cases/:caseId/close" Method="POST" Call="CaseClose"/>
   <Route Url="/cases/:caseId/abandon" Method="POST" Call="CaseAbandon"/>
@@ -51,8 +57,19 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
   <Route Url="/live/storm" Method="POST" Call="LiveStorm"/>
   <Route Url="/settings/schemas" Method="GET" Call="SchemasGet"/>
   <Route Url="/settings/schemas" Method="POST" Call="SchemasImport"/>
+  <Route Url="/settings/namespaces" Method="GET" Call="Shutter.API.Onboarding:List"/>
+  <Route Url="/settings/namespaces/:ns/plan" Method="POST" Call="Shutter.API.Onboarding:Plan"/>
+  <Route Url="/settings/namespaces/:ns/apply" Method="POST" Call="Shutter.API.Onboarding:Apply"/>
+  <Route Url="/settings/namespaces/:ns/test" Method="POST" Call="Shutter.API.Onboarding:Test"/>
+  <Route Url="/settings/namespaces/:ns/removal" Method="GET" Call="Shutter.API.Onboarding:Removal"/>
+  <Route Url="/settings/namespaces/:ns/remove" Method="POST" Call="Shutter.API.Onboarding:Remove"/>
   <Route Url="/site-profile" Method="GET" Call="SiteProfileGet"/>
   <Route Url="/site-profile" Method="PUT" Call="SiteProfilePut"/>
+  <Route Url="/recovery-control" Method="GET" Call="Shutter.API.Recovery:ControlGet"/>
+  <Route Url="/recovery-control/stop" Method="POST" Call="Shutter.API.Recovery:ControlStop"/>
+  <Route Url="/recovery-control/clear" Method="POST" Call="Shutter.API.Recovery:ControlClear"/>
+  <Route Url="/shadow-observations" Method="GET" Call="Shutter.API.Recovery:ReportGet"/>
+  <Route Url="/shadow-observations.csv" Method="GET" Call="Shutter.API.Recovery:ReportCsv"/>
   <Route Url="/site-profile/history" Method="GET" Call="SiteProfileHistory"/>
   <Route Url="/index" Method="GET" Call="IndexStatus"/>
   <Route Url="/index/messages" Method="GET" Call="IndexMessages"/>
@@ -65,6 +82,8 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
   <Route Url="/costs" Method="GET" Call="Costs"/>
   <Route Url="/production-reviews/targets" Method="GET" Call="ProductionReviewTargets"/>
   <Route Url="/cases/:id/whatif" Method="GET" Call="CaseWhatIf"/>
+  <Route Url="/cases/:caseId/warehouse-history" Method="GET" Call="Shutter.API.WarehouseHistory:HistoryGet"/>
+  <Route Url="/cases/:caseId/warehouse-history" Method="POST" Call="Shutter.API.WarehouseHistory:HistoryRead"/>
   <Route Url="/cases/:caseId/questions" Method="GET" Call="CaseQuestions"/>
   <Route Url="/cases/:caseId/questions" Method="POST" Call="CaseQuestionAsk"/>
   <Route Url="/cases/:caseId/questions/suggested" Method="GET" Call="CaseQuestionsSuggested"/>
@@ -77,6 +96,10 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
   <Route Url="/outages" Method="GET" Call="Outages"/>
   <Route Url="/outages/:id" Method="GET" Call="OutageGet"/>
   <Route Url="/outages/:id/acts" Method="POST" Call="OutageAct"/>
+  <Route Url="/failure-census" Method="GET" Call="Shutter.API.FailureCensus:List"/>
+  <Route Url="/failure-census" Method="POST" Call="Shutter.API.FailureCensus:Start"/>
+  <Route Url="/failure-census/([^/.]+)\.csv" Method="GET" Call="Shutter.API.FailureCensus:Csv"/>
+  <Route Url="/failure-census/:id" Method="GET" Call="Shutter.API.FailureCensus:Get"/>
   <Map Prefix="/summaries" Forward="Shutter.API.Summaries"/>
   <Map Prefix="/assist" Forward="Shutter.API.Assist"/>
 </Routes>
@@ -273,6 +296,7 @@ ClassMethod Me() As %Status
     Do can.%Set("approve", $SYSTEM.Security.Check("Shutter_Approve", "USE"), "boolean")
     Do can.%Set("configure", $SYSTEM.Security.Check("Shutter_Configure", "USE"), "boolean")
     Do can.%Set("scenarios", $SYSTEM.Security.Check("Shutter_Scenarios", "USE"), "boolean")
+    Do can.%Set("stopRecovery", $SYSTEM.Security.Check("Shutter_StopRecovery", "USE"), "boolean")
     // May spend the model budget: live questions and convening the board (operators, approvers and judges; not the demo).
     Do can.%Set("liveAgents", $SYSTEM.Security.Check("Shutter_LiveAgents", "USE"), "boolean")
     Set o.can = can
@@ -287,7 +311,7 @@ ClassMethod Health() As %Status
     If $SYSTEM.Security.Check("Shutter_Operate", "USE") Quit ..Json(full)
     // Anyone may ask whether the instance is up and whether it is the demo; the rest is for signed-in users.
     Set o = {}
-    For key = "status", "ok", "demo", "version", "production", "production_state", "mode", "last_live_run", "credentials_ok", "credentials_state" { If full.%IsDefined(key) Do o.%Set(key, full.%Get(key), $CASE(full.%GetTypeOf(key), "boolean": "boolean", "null": "null", : "")) }
+    For key = "status", "ok", "demo", "version", "production", "production_state", "mode", "last_live_run", "credentials_ok", "credentials_state", "receivers_ok", "watched_ok" { If full.%IsDefined(key) Do o.%Set(key, full.%Get(key), $CASE(full.%GetTypeOf(key), "boolean": "boolean", "null": "null", : "")) }
     Do o.%Set("ok", ##class(Shutter.Util.Json).Str(full, "production_state") = "running", "boolean")
     Quit ..Json(o)
 }
@@ -450,6 +474,7 @@ ClassMethod CaseGet(caseId As %String) As %Status
     Set case = ..CaseOr404(caseId)
     If '$ISOBJECT(case) Quit $$$OK
     Set o = ..Project(case)
+    If case.DocumentJSON '= "" Set o.document = ##class(Shutter.Util.DocumentCase).View(case)
     If $ISOBJECT(case.CurrentPlan) Set o.planCreatedBy = case.CurrentPlan.CreatedBy
     // The case's place in its incident (CONTRACTS 7.5), when one holds it.
     If $ISOBJECT(case.Incident) Set o.incidentId = case.Incident.IncidentId, o.incident = ##class(Shutter.Store.ChainItem).IncidentContext(case)
@@ -631,9 +656,15 @@ ClassMethod CaseApprove(caseId As %String) As %Status
         Set extra = {} Set extra.currentVersion = case.Version
         Quit ..Fail("409 Conflict", "stale_version", "expectedVersion is not the case's version", extra)
     }
+    If decision = "approve" { Set refusal = ##class(Shutter.Util.RecoveryControl).CaseApprovalRefusal(plan, .refused) If refusal '= "" Quit ..Fail("409 Conflict", refused, refusal) }
     Set comment = ##class(Shutter.Util.Json).Str(body, "comment")
     // The decider is the signed-in user, never a name from the body; the task takes the digest the body named (CONTRACTS 5).
+    // One decision at a time on a case: two tabs at the same moment could both read the task open and both be told 202. The
+    // second now finds the task gone and answers 409, as a later one does.
+    Lock +^Shutter.Store.CaseDecision(caseId):10
+    If '$TEST Quit ..Fail("409 Conflict", "wrong_state", "Another decision on this case is being made")
     Set result = ##class(Shutter.Util.Workflow).Decide(caseId, $SELECT(decision = "reject": "Reject", 1: "Approve"), digest, comment)
+    Lock -^Shutter.Store.CaseDecision(caseId)
     Set out = ##class(Shutter.Util.Json).Parse(result, .psc)
     If '$ISOBJECT(out) Set out = {"result": (result)}
     If out.%GetTypeOf("error") '= "unassigned" {
@@ -683,12 +714,65 @@ ClassMethod CaseAttempts(caseId As %String) As %Status
     Quit ..Json(out)
 }
 
+/// GET /cases/{id}/correction-draft (CONTRACTS 10): the drafted sequence's text, for an approver, redrawn on every read. It
+/// never reads the receiver and sends nothing; a read of a drawn one is recorded on the case.
+ClassMethod CaseCorrectionDraft(caseId As %String) As %Status
+{
+    If '..Allow("Shutter_Approve") Quit $$$OK
+    Set case = ..CaseOr404(caseId)
+    If '$ISOBJECT(case) Quit $$$OK
+    Set plan = case.CurrentPlan
+    If '$ISOBJECT(plan) Quit ..Fail("404 Not Found", "no_plan", "The case has no plan yet")
+    Set p = plan.PlanObject()
+    If '$ISOBJECT(p.%Get("correction_steps")) Quit ..Fail("409 Conflict", "wrong_outcome", "The case's plan is not a history correction")
+    Set summary = $SELECT($ISOBJECT(case.CurrentSnapshot): case.CurrentSnapshot.SummaryObject(), 1: "")
+    Quit ..Json(##class(Shutter.Util.HistoryDraft).Read(case, ..User(), summary, ##class(Shutter.Util.Json).Str(p, "catalogue_entry")))
+}
+
 ClassMethod CaseClosure(caseId As %String) As %Status
 {
     If '..Allow() Quit $$$OK
     Set case = ..CaseOr404(caseId)
     If '$ISOBJECT(case) Quit $$$OK
     If 'case.IsClosed() Quit ..Fail("404 Not Found", "not_closed", "The case is still " _ case.State)
+    Quit ..Json(..ClosureObject(case))
+}
+
+/// One case's bundle for audit and support handoff (CONTRACTS 5): a file, redacted, and a record on the case.
+ClassMethod CaseBundle(caseId As %String) As %Status
+{
+    If '..Allow("Shutter_Operate", 1) Quit $$$OK
+    Set case = ..CaseOr404(caseId)
+    If '$ISOBJECT(case) Quit $$$OK
+    Set text = ##class(Shutter.API.CaseBundle).Download(case, ..User(), .why)
+    If text = "" Quit ..Fail("409 Conflict", "not_redactable", why)
+    Set %response.ContentType = "application/json"
+    Do %response.SetHeader("Content-Disposition", "attachment; filename=""shutter-case-" _ case.CaseId _ "-redacted.json""")
+    Do %response.SetHeader("Cache-Control", "no-store")
+    Write text
+    Quit $$$OK
+}
+
+/// The same file unredacted, for an approver with a typed reason recorded on the case (CONTRACTS 5). A file, never a link.
+ClassMethod CaseBundleUnredacted(caseId As %String) As %Status
+{
+    If '..Allow("Shutter_Approve", 1) Quit $$$OK
+    Set case = ..CaseOr404(caseId)
+    If '$ISOBJECT(case) Quit $$$OK
+    Set reason = ##class(Shutter.Util.Json).Str(..Body(), "reason")
+    If $ZSTRIP(reason, "<>WC") = "" Quit ..Fail("400 Bad Request", "bad_request", "Say the reason you need the identifiers", {"field": "reason"})
+    Set text = ##class(Shutter.API.CaseBundle).DownloadUnredacted(case, ..User(), reason, .why)
+    If text = "" Quit ..Fail("409 Conflict", "not_recorded", why)
+    Set %response.ContentType = "application/json"
+    Do %response.SetHeader("Content-Disposition", "attachment; filename=""shutter-case-" _ case.CaseId _ "-UNREDACTED.json""")
+    Do %response.SetHeader("Cache-Control", "no-store")
+    Write text
+    Quit $$$OK
+}
+
+/// The closure record of a closed case. Its actors are who took part in the case: taking a file of it (a bundle: ref) is not.
+ClassMethod ClosureObject(case As Shutter.Store.Case) As %DynamicObject
+{
     Set o = {}
     Set o.caseId = case.CaseId, o.state = case.State, o.disposition = case.Disposition, o.outcome = case.Outcome, o.closedAt = case.ClosedAt
     Set vid = "", id = case.%Id()
@@ -710,13 +794,13 @@ ClassMethod CaseClosure(caseId As %String) As %Status
     Do unverified.%Push(..ClosureLimit(case.Receiver))
     Set o.verifiedEffects = verified, o.unverified = unverified
     Set actors = []
-    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT DISTINCT %EXACT(Actor) AS Actor FROM Shutter_Store.CaseEvent WHERE ""Case"" = ? ORDER BY Actor", id)
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT DISTINCT %EXACT(Actor) AS Actor FROM Shutter_Store.CaseEvent WHERE ""Case"" = ? AND (Ref IS NULL OR Ref NOT LIKE 'bundle:%') ORDER BY Actor", id)
     While rs.%Next() { Do actors.%Push(rs.%Get("Actor")) }
     Set o.actors = actors
     Set pv = ""
     &sql(SELECT TOP 1 PolicyVersion INTO :pv FROM Shutter_Store.GateDecision WHERE "Case" = :id ORDER BY ID DESC)
     Set o.policyVersion = $GET(pv)
-    Quit ..Json(o)
+    Quit o
 }
 
 /// The closure's sentence on what was not verified, by the receiver's category: an ADT receiver's reads as it always has; at an
@@ -733,6 +817,8 @@ ClassMethod CasePreview(caseId As %String) As %Status
     If '..Allow("Shutter_Operate", 1) Quit $$$OK
     Set case = ..CaseOr404(caseId)
     If '$ISOBJECT(case) Quit $$$OK
+    Set refusal = ##class(Shutter.Util.RecoveryControl).Refusal(.refused)
+    If refusal '= "" Quit ..Fail("409 Conflict", refused, refusal _ "; nothing was sent")
     If case.IsClosed() Quit ..Fail("409 Conflict", "wrong_state", "The case is closed")
     // A preview is a dry run: it goes only to a receiver whose capability profile, as the case's evidence read it, reports one
     // (v1.21); to any other it would be a live write conditional on nothing, so nothing is sent.
@@ -824,6 +910,16 @@ ClassMethod CaseBlockedReason(caseId As %String) As %Status
     Set o.failingChecks = failing
     Set o.state = case.State, o.headline = case.Headline
     Quit ..Json(o)
+}
+
+/// What to check at the receiver on a stopped case (CONTRACTS 5.2): no model, no receiver call and no write.
+ClassMethod CaseReceiverCheck(caseId As %String) As %Status
+{
+    If '..Allow() Quit $$$OK
+    Set case = ..CaseOr404(caseId)
+    If '$ISOBJECT(case) Quit $$$OK
+    If '$LISTFIND($LISTBUILD("blocked", "escalated", "failed"), case.State) Quit ..Fail("404 Not Found", "not_stopped", "The case is " _ case.State)
+    Quit ..Json(##class(Shutter.Util.ReceiverCheck).ForCase(case))
 }
 
 /// A write whose answer was lost (Verify.Judge: not committed, or unknown after the last read), a rehearsal nobody answered,
@@ -1026,8 +1122,14 @@ ClassMethod CaseReinvestigate(caseId As %String) As %Status
     Set r = ..Idempotent(bodyText, .replayed)
     If replayed Quit $$$OK
     If 'case.IsClosed() || (case.State = "resolved") Quit ..Fail("409 Conflict", "wrong_state", "The case is " _ case.State _ "; only a blocked, escalated or failed case can be reopened")
+    Quit ..Reopen(caseId, $EXTRACT(##class(Shutter.Util.Json).Str(body, "reason"), 1, 2000), bodyText)
+}
+
+/// Sends the case back through fresh evidence, and answers 202: a reinvestigation, or what follows a release.
+ClassMethod Reopen(caseId As %String, reason As %String, bodyText As %String) As %Status [ Private ]
+{
     Set msg = ##class(Shutter.Msg.Reinvestigate).%New()
-    Set msg.CaseId = caseId, msg.RequestedBy = ..User(), msg.Reason = $EXTRACT(##class(Shutter.Util.Json).Str(body, "reason"), 1, 2000)
+    Set msg.CaseId = caseId, msg.RequestedBy = ..User(), msg.Reason = reason
     // Who may spend the model budget (v1.39): the reopened case's runs count against the requester's share, and without
     // the live agents, or while the provider refuses the key, they answer from recordings only (a board with none leaves
     // the case escalated for a person), as a question does (14). Before this every reopening ran live as "system", on nobody's share.
@@ -1050,6 +1152,50 @@ ClassMethod CaseReinvestigate(caseId As %String) As %Status
     Set %response.Status = "202 Accepted"
     Write text
     Quit $$$OK
+}
+
+/// What stops a case's write for further messages, read fresh, with the digest a release must name (CONTRACTS 6.5). Anyone
+/// signed in may read it; a read costs a scan of the patient's messages, so the case page asks only on a stop of this kind.
+ClassMethod CaseFurtherStop(caseId As %String) As %Status
+{
+    If '..Allow() Quit $$$OK
+    Set case = ..CaseOr404(caseId)
+    If '$ISOBJECT(case) Quit $$$OK
+    Set util = "Shutter.Util.FurtherMessages", found = $CLASSMETHOD(util, "Find", case)
+    Set o = {}, rows = []
+    Set it = found.%Get("stops").%GetIterator()
+    While it.%GetNext(, .item) { Do rows.%Push({"line": ($CLASSMETHOD(util, "Line", case, item)), "visit": ($CLASSMETHOD("Shutter.Util.Json", "Str", item, "visit_number"))}) }
+    Set o.rows = rows, o.digest = $CLASSMETHOD(util, "RowsDigest", found), o.whyNot = $CLASSMETHOD(util, "NotReleasable", found)
+    Do o.%Set("releasable", o.whyNot = "", "boolean")
+    Set record = $SELECT(case.FurtherReleaseJSON '= "": ##class(Shutter.Util.Json).Parse(case.FurtherReleaseJSON, .psc), 1: "")
+    If $ISOBJECT(record) {
+        Do record.%Set("stands", $CLASSMETHOD(util, "Released", case, found), "boolean")
+        Set o.release = record
+    } Else {
+        Do o.%Set("release", "", "null")
+    }
+    Quit ..Json(o)
+}
+
+/// A person releases one case's stop on another visit's movement (Shutter_Approve, X-Requested-With; body {digest, reason},
+/// both required): the digest of the rows they read and why. A fresh read must give that digest; the case then goes through
+/// fresh evidence, where the gate checks the same again, every other check runs, and a write waits for its approval.
+ClassMethod CaseFurtherRelease(caseId As %String) As %Status
+{
+    If '..Allow("Shutter_Approve", 1) Quit $$$OK
+    Set case = ..CaseOr404(caseId)
+    If '$ISOBJECT(case) Quit $$$OK
+    Set bodyText = $SELECT($ISOBJECT(%request.Content): %request.Content.Read($$$MaxStringLength), 1: $GET(%request.Content))
+    Set body = ##class(Shutter.Util.Json).Parse(bodyText, .psc)
+    If '$ISOBJECT(body) Set body = {}
+    Set r = ..Idempotent(bodyText, .replayed)
+    If replayed Quit $$$OK
+    Set reason = $ZSTRIP(##class(Shutter.Util.Json).Str(body, "reason"), "<>WC"), digest = ##class(Shutter.Util.Json).Str(body, "digest")
+    If reason = "" Quit ..Fail("400 Bad Request", "bad_request", "Say why it is safe to send", {"field": "reason"})
+    If digest = "" Quit ..Fail("400 Bad Request", "bad_request", "Name the digest of the rows you read", {"field": "digest"})
+    If case.State '= "blocked" Quit ..Fail("409 Conflict", "wrong_state", "The case is " _ case.State _ "; only a blocked case's stop can be released")
+    If '##class(Shutter.Util.FurtherMessages).Release(case, digest, reason, ..User(), .code, .words) Quit ..Fail("409 Conflict", code, words)
+    Quit ..Reopen(caseId, "the stop on further messages was released", bodyText)
 }
 
 /// Close a case the team handled by hand (T31, 2.6): an escalated, blocked or failed case resolves with disposition
@@ -1168,6 +1314,7 @@ ClassMethod Intake() As %Status
     Set body = ##class(Shutter.Util.Json).Parse(bodyText, .psc)
     If '$ISOBJECT(body) || $$$ISERR(psc) Quit ..Fail("400 Bad Request", "bad_request", "The body must be a JSON object with message, failure, source and receiver")
     If $CLASSNAME(body) '= "%Library.DynamicObject" Quit ..Fail("400 Bad Request", "bad_request", "The body must be a JSON object with message, failure, source and receiver")
+    If ##class(Shutter.API.DocumentIntake).Takes(body) Quit ##class(Shutter.API.DocumentIntake).Post(body, bodyText)
     Set message = ""
     If body.%GetTypeOf("message") = "string" Set message = body.%Get("message")
     If $ZSTRIP(message, "<>WC") = "" Quit ..Fail("400 Bad Request", "bad_request", "message is required: the HL7 message's text, segments separated by carriage returns")
@@ -1445,6 +1592,7 @@ ClassMethod IncidentDecide(id As %String, seq As %String) As %Status
         Set extra = {} Set extra.currentDigest = inc.PlanDigest
         Quit ..Fail("409 Conflict", "plan_changed", "planDigest is not the incident plan's digest", extra)
     }
+    If decision = "approve" { Set refusal = ##class(Shutter.Util.RecoveryControl).IncidentApprovalRefusal(.refused) If refusal '= "" Quit ..Fail("409 Conflict", refused, refusal) }
     Set comment = ##class(Shutter.Util.Json).Str(body, "comment")
     // The decider is the signed-in user, never a name from the body; the task takes the digest the body named (CONTRACTS 5).
     Set result = ##class(Shutter.Util.Workflow).Decide(id _ $SELECT(seq '= "": "/" _ seq, 1: ""), $SELECT(decision = "reject": "Reject", 1: "Approve"), digest, comment)
@@ -1722,6 +1870,7 @@ ClassMethod CaseQuestionAsk(caseId As %String) As %Status
     If '..Allow("Shutter_Operate", 1) Quit $$$OK
     Set case = ..CaseOr404(caseId)
     If '$ISOBJECT(case) Quit $$$OK
+    If case.DocumentJSON '= "" Quit ..Fail("409 Conflict", "no_agents", "A document case has no agents, so a person reads its evidence")
     Set shape = "The body must be a JSON object: {tier, question | suggested: {conversation, turn}, conversation?}"
     Set bodyText = $SELECT($ISOBJECT(%request.Content): %request.Content.Read($$$MaxStringLength), 1: $GET(%request.Content))
     Set body = ##class(Shutter.Util.Json).Parse(bodyText, .psc)

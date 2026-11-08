@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.47, 8 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.48, 8 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -146,10 +146,11 @@ For a receiver that takes them (1.1, v1.14): `cancel_admit` and `cancel_transfer
 
 ### 1.5 Faults, for the demos
 
-`POST /downstream/api/faults` `{"mode": "off" | "fail_before_accept" | "commit_drop_response" | "misleading_duplicate_error" | "receipt_lookup_unavailable" | "delay_response", "operation_key": "…", "seconds": n}`. With `operation_key` the fault applies to that key only; without it, to every operation until `off`. Returns 200 `{"mode": …, "operation_key": …}`. `GET /downstream/api/faults` returns the current setting. `POST /downstream/api/faults` also requires the resource `Downstream_Admin` (v1.39), which the downstream system's installer creates beside `Downstream_API` and grants to no role of Shutter's: a caller with `Downstream_API` alone, the production's client among them, is answered 403 `{"error": "forbidden", "detail": "This needs Downstream_Admin"}` and nothing changes; `GET /downstream/api/faults` needs only the web application's resource.
+`POST /downstream/api/faults` `{"mode": "off" | "fail_before_accept" | "commit_drop_response" | "commit_then_409" | "misleading_duplicate_error" | "receipt_lookup_unavailable" | "delay_response", "operation_key": "…", "seconds": n}`. With `operation_key` the fault applies to that key only; without it, to every operation until `off`. Returns 200 `{"mode": …, "operation_key": …}`. `GET /downstream/api/faults` returns the current setting. `POST /downstream/api/faults` also requires the resource `Downstream_Admin` (v1.39), which the downstream system's installer creates beside `Downstream_API` and grants to no role of Shutter's: a caller with `Downstream_API` alone, the production's client among them, is answered 403 `{"error": "forbidden", "detail": "This needs Downstream_Admin"}` and nothing changes; `GET /downstream/api/faults` needs only the web application's resource.
 
 - `fail_before_accept`: 503 before any validation or write.
 - `commit_drop_response`: the operation is committed, then the response is a 504 with no body.
+- `commit_then_409`: the operation is committed, then the response is a 409 `{"error": "version_conflict"}`, as when a proxy answers for the receiver. A retry finds the receipt.
 - `misleading_duplicate_error`: with an `operation_key`, the downstream system answers 409 `{"error": "duplicate_message"}` for that key whatever the version, and writes nothing; without a key, it answers that way when `expected_version` mismatches, instead of `version_conflict`. (A buggy receiver that reports the wrong reason. Nothing else changes.)
 - `delay_response` (v1.33): each real operation (never a dry run) is held for `seconds` (a whole number from 1 to 60, 12 when not given; 422 otherwise), then applied and answered as usual. A slow receiver: a sender whose timeout is shorter gives up on an operation that is still applied, and the sender's next message for the receiver waits behind it. `GET /faults` reports `seconds` with the mode. A scenario's fault step passes `seconds` through (4.3).
 
@@ -293,7 +294,7 @@ system's case (category `history_of_record`) escalates with the correcting steps
 
 ## 4.1 Scenario steps that wait (v1.4)
 
-A step `{"wait_for_state": "awaiting_approval", "timeout": 120}` makes the runner wait until the newest case of the running scenario reaches that state (or the timeout passes, which the runner reports). The runner reads the case in the same namespace:
+A step `{"wait_for_state": "awaiting_approval", "timeout": 120}` makes the runner wait until the newest case of the running scenario reaches that state, or one of several separated by `|` (S26), or the timeout passes, which the runner reports. The runner reads the case in the same namespace:
 
 ```sql
 SELECT TOP 1 State FROM Shutter_Store."Case" WHERE Scenario = ? ORDER BY ID DESC
@@ -401,11 +402,12 @@ caller's process passes; the operator and the approver read the watched hospital
 | --- | --- |
 | none | `POST` and `DELETE /session`; `GET /health` (its summary; the full report needs `Shutter_Operate`) |
 | signed in | `GET /me`, which answers `{username, operator, approver, can: {operate, approve, configure, scenarios, liveAgents}}` from the resources the user holds (`can` since v1.34: the app shows only what the user may do; `liveAgents` is `Shutter_LiveAgents`, below) |
-| `Shutter_Operate` | every other `GET`; `POST /cases/{id}/preview-blind-resend`, `/reinvestigate` (v1.39: the reopened case's agent runs count against the requester's share, and without `Shutter_LiveAgents`, or while the provider refuses the key, they answer from recordings only, `ModeOverride` `replay` as a question's do in 14, and a board with no recording leaves the case escalated for a person, with the reason, and plans nothing; the 202 `{caseId, state: "reopening", requestedBy, liveAgents}` says which) and `/close` (unless the site keeps the two-person rule, below); `POST /cases/{id}/escalations`, `PATCH /cases/{id}/escalations/{seq}` and `POST /cases/{id}/escalations/{seq}/send`; `GET /production-reviews`, `GET /production-reviews/targets` and `GET /production-reviews/{id}`; `POST /production-reviews` (section 13: the review reads only; its agent part takes `Shutter_LiveAgents`, below, and is skipped without it); `GET /cases/{id}/whatif`, `GET /cases/{id}/questions`, `GET /cases/{id}/questions/suggested`, `GET /cases/{id}/questions/{qid}` and `POST /cases/{id}/questions` (section 14: a question reads only, and a live run spends model credit); `GET /settings/schemas` (section 12) |
-| `Shutter_Approve` | `POST /cases/{id}/approvals`; `POST /incidents/{id}/approvals` and `/incidents/{id}/chains/{seq}/approvals`; `POST /cases/{id}/close` where the site profile's `approvers.close_needs_approver` is true; `POST /cases/{id}/abandon` (always an approver's) |
+| `Shutter_Operate` | every other `GET`; `POST /cases/{id}/bundle`; `POST /cases/{id}/preview-blind-resend`, `/reinvestigate` (v1.39: the reopened case's agent runs count against the requester's share, and without `Shutter_LiveAgents`, or while the provider refuses the key, they answer from recordings only, `ModeOverride` `replay` as a question's do in 14, and a board with no recording leaves the case escalated for a person, with the reason, and plans nothing; the 202 `{caseId, state: "reopening", requestedBy, liveAgents}` says which) and `/close` (unless the site keeps the two-person rule, below); `POST /cases/{id}/escalations`, `PATCH /cases/{id}/escalations/{seq}` and `POST /cases/{id}/escalations/{seq}/send`; `GET /production-reviews`, `GET /production-reviews/targets` and `GET /production-reviews/{id}`; `POST /production-reviews` (section 13: the review reads only; its agent part takes `Shutter_LiveAgents`, below, and is skipped without it); `GET /cases/{id}/whatif`, `GET /cases/{id}/questions`, `GET /cases/{id}/questions/suggested`, `GET /cases/{id}/questions/{qid}` and `POST /cases/{id}/questions` (section 14: a question reads only, and a live run spends model credit); `GET /settings/schemas` (section 12) |
+| `Shutter_Approve` | `POST /cases/{id}/approvals`; `POST /incidents/{id}/approvals` and `/incidents/{id}/chains/{seq}/approvals`; `POST /cases/{id}/close` where the site profile's `approvers.close_needs_approver` is true; `POST /cases/{id}/abandon` (always an approver's); `POST /cases/{id}/further-release` (6.5); `POST /cases/{id}/bundle-unredacted` |
 | `Shutter_Scenarios` | `POST /scenarios/{id}/run` and `/scenarios/reset`, and `Shutter.Setup_PurgeStore` (v1.34: the demo controls; the operator and approver roles hold it, the public demo's role does not) |
 | `Shutter_LiveAgents` | Spending the model budget (v1.34, the judges): `POST /cases/{id}/board` (the board convenes live on a blocked, escalated or failed case, 14.5), `POST /cases/{id}/questions` running live, the agent part of `POST /production-reviews` (13.5, v1.39: skipped without it, never refused) and a reinvestigation's live runs (v1.39: recordings only without it); without it a question is answered from recordings only, and one with no recording is refused `409 no_recorded_answer` at once. Operators, approvers and the role `Shutter_Judge` (the public demo's role plus this) hold it; `Shutter_Demo` does not. Every live run counts against the day's budget and the caller's share (9) |
-| `Shutter_Configure` | `PUT /site-profile`; `PATCH /library/{code}`; `POST /settings/schemas` (section 12); `POST /production-reviews/{id}/annotations` and `DELETE /production-reviews/annotations/{annotationId}` (section 13) (v1.34: what changes the site; the approver role holds it, the public demo's role does not) |
+| `Shutter_Configure` | `PUT /site-profile`; `PATCH /library/{code}`; `POST /settings/schemas` (section 12); `GET /settings/namespaces` and the routes under it (11.1; an apply and a removal need `%Admin_Manage` as well); `POST /production-reviews/{id}/annotations` and `DELETE /production-reviews/annotations/{annotationId}` (section 13) (v1.34: what changes the site; the approver role holds it, the public demo's role does not) |
+| `Shutter_StopRecovery` | `POST /recovery-control/stop` (18; operators and approvers hold it, the public demo's roles do not). `POST /recovery-control/clear` needs `Shutter_Configure` and `Shutter_Approve` |
 | `Shutter_Intake` | `POST /intake` (section 11) |
 
 So the person on call (an operator) escalates a case and, once the team that corrects the systems has done so, marks
@@ -430,6 +432,12 @@ Shutter_Util.Workflow_Decide(...)`): the actor is the SQL session's user, never 
 applies, and an approval with an empty digest is refused (`no_digest`). An approver who decides in the Management
 Portal's Workflow inbox pastes the plan digest from the task's message into its `PlanDigest` field; the task's form
 starts empty, so pressing Approve without it binds nothing and the case blocks (or the incident's chains are rejected). The body of `POST /cases/{id}/approvals` is `{decision: "approve" | "reject", planDigest, expectedVersion, comment?}` (v1.39, written down): `expectedVersion` is the case's `version` the caller read and is required; 400 `bad_request` for a decision outside the two; 409 `wrong_state` (with `approval` when a decision was already taken) unless the case awaits approval; 409 `stale_version` with `currentDigest` when `planDigest` is not the current plan's digest, and with `currentVersion` when `expectedVersion` is missing or is not the case's version, so the caller reads the case again and decides on what it sees.
+
+**The case bundle.** `POST /cases/{id}/bundle` (`Shutter_Operate`, `X-Requested-With`; it writes, so it is not a `GET` a link could set off) answers 200 with one JSON file for audit or a support handoff, `Content-Disposition: attachment; filename="shutter-case-<id>-redacted.json"`: `redaction`, alone on the file's first line and starting `REDACTED:`, then `format` (`shutter-case-bundle/1`), `generatedAt`, `generatedBy`, `case` (operational fields and the operation key), `evidence` (every snapshot with its summary and items), `plans`, `gateDecisions`, `approvals`, `attempts`, `verifications`, `receipt` (what `GET /cases/{id}/closure` answers, or null while the case is open) and `notIncluded`. The case's event log, the agents' runs and escalation emails are not in it. Everything passes through the model view (section 9), read from the stored rows, with the same tokens and the map staying in IRIS. Three things go further, since a file leaves with no one to ask: note text stays out whatever `model_content.free_text` says; what a person typed (an approval's `comment`, which becomes `commentPresent`, and a hand closure's or an abandon's reason in `outcome`) stays out, since no map covers it; and a last sweep of the finished object refuses the file if a value of the map is left in a string, a number or a key. Wards, beds, times, message control ids and staff user names remain, and the first line says so. Each file leaves a `note` event on the case, naming who took it and the file's SHA-256; the case's version does not move. A case that cannot be redacted (its message cannot be read, so its names are unknown) answers 409 `not_redactable` with the reason, and nothing is recorded; so does a download whose record cannot be written. A plan's `action` keeps its `type` and `expected_version` as well as what the view's operation allowlist keeps. The digests in the file are of the unredacted rows, so they identify them and cannot be recomputed from it.
+
+**The unredacted bundle.** `POST /cases/{id}/bundle-unredacted` (`Shutter_Approve`, `X-Requested-With`; body `{reason}`, typed by the person, else 400 `bad_request` with `field: "reason"`) answers 200 with the same parts read from the same rows and passed through no view, `Content-Disposition: attachment; filename="shutter-case-<id>-UNREDACTED.json"`: `redaction`, alone on the first line and starting `UNREDACTED:`, which says the file holds identifiable data, then `format` (`shutter-case-bundle-unredacted/1`), `generatedAt`, `generatedBy`, `reason`, `case`, the parts and `notIncluded` (the case's event log, the agents' runs, escalation emails). An operator is refused 403. It calls no model and learns no token. The reason, who took it and the file's SHA-256 go on the case as a `note` event; the case's version does not move, and a download whose record cannot be written answers 409 `not_recorded` with no file. Agents reading the events through the publisher (15) see that a file was taken and not the reason. `POST /cases/{id}/bundle` is unchanged and stays the default.
+
+A download of either kind carries the event ref `bundle:redacted` or `bundle:unredacted`, and the closure receipt's `actors` leave those out, so taking a file doesn't change a closed case's receipt.
 
 `POST /cases/{id}/close` with `{reason}` (v1.14; `Shutter_Operate`, `X-Requested-With`, an `Idempotency-Key`) answers 202 `{caseId, state: "closing", requestedBy, reason}` and sends `Shutter.Msg.CaseClose` to the Case Workflow item: the case resolves with disposition `handled_by_hand`, its state event names the reason and the latest escalation, the current approval is revoked and an open approval task is cancelled; 400 `bad_request` when the body is not a JSON object or `reason` is empty, 404 `not_found`, 409 `wrong_state` unless the case is escalated, blocked or failed, and 409 `stale_version` (with `currentVersion`) when the body's optional `expectedVersion` is not the case's version. Every draft or queued escalation email of the case is cancelled, whatever its seq, so the team is not asked to correct a case already handled, and the state event says how many ("; 2 pending emails cancelled"); a failed one stays failed as history; and no escalation of a case that is no longer blocked, escalated or failed can be edited or sent (`PATCH` and `send` answer 409 `wrong_state`, naming the case's state) (v1.21). It is how a case the team corrected by hand (a withheld merge or cancel, an escalation the PAS team acted on) is closed; `reinvestigate` stays for a correction the receiver's state can prove. The record of a hand closure is the
 state event (its actor is who closed it, its time when, its text the reason and the escalation followed, its `ref` that
@@ -465,6 +473,33 @@ catalogue entry matched (no agent runs; a person decides). The cases list shows 
 `verdict` is what holds of the operation at the receiver: `committed`, `not_committed` or `unknown`; the words "not committed" are written only when they are the verdict.
 
 **What the case does.** The first verification runs at once after the attempt (a lost answer whose write landed, as S3's 504, resolves on the first read). `verified` resolves the case, unless the attempt has no approval, which is a write the receiver made during a rehearsal: nobody released it, so the case escalates with the headline "Escalated: the receiver wrote during a rehearsal, with no release" (`WRITE_NOT_RELEASED`). While `detail.retry` is true the case workflow verifies again after 10, 20 and 40 s (`MaxRefreshes`, 3: reads at about 0, 10, 30 and 70 s after the attempt, the 70 s read being the first past the default settle window). `not_committed` escalates the case: the approval is revoked (it authorised one write, and that write is spent), the headline is "Escalated: the resend was not committed", and the state event reads "Not verified (not_committed): <summary>. The approval is revoked, and nothing is resent without a person: a reinvestigation plans again on fresh evidence" (block reason `WRITE_NOT_COMMITTED`). `unresolved` with `verdict: unknown` after the last read, for a resend, revokes the approval too and escalates with the headline "Escalated: the resend's outcome is unknown" and "Not verified (unknown): <summary>. Whether the receiver applied the resend is unknown; a person must check at the receiver before anything is resent" (`WRITE_OUTCOME_UNKNOWN`). Any other outcome escalates as "Not verified (<outcome>): <summary>". Nothing is ever dispatched or re-planned from a verification: a person reinvestigates, which collects fresh evidence, makes a new plan and asks for a new approval. The settle window applies to every receiver the site profile describes, with or without a receipt endpoint (6.4).
+
+### 5.2 What to check at the receiver
+
+`GET /cases/{id}/receiver-check` (`Shutter_Operate`; 404 `not_found`, and 404 `not_stopped` unless the case is blocked,
+escalated or failed) answers a person's guide for a stopped case, built by `Shutter.Util.ReceiverCheck` with no model call,
+no receiver call and no write. It reads the case's own fields, named values of the snapshot, the receiver's line in the site
+profile, and TXA or OBR of the stored message. It is an allowlist, never a serialised snapshot: it reads no OBX, no NTE and no
+name, and leaves out the failure text and the bed conflict, since a refusal can name the patient in the bed. No gate check,
+catalogue entry or plan reads it.
+
+`{caseId, caseVersion, snapshotId, profileVersion, guideVersion, guideDigest, variant, receiverEvidence: read | unavailable,
+evidenceNote, receiverRead: {at, state, ward, bed} | null, identity: {patientId, authority, encounterId, receiver, sourceSystem,
+messageType, controlId, timeLabel, time, messageRef, sourceRoute, collectedAt}, messageRequest: {kind, summary, note, fields:
+[{label, value, source: message | doubtful | unavailable}]}, laterMovement: {summary, source} | null, queueWarning, checks: [{id,
+where, compare: [text], meanings: [{answer: present | absent | different | cannot_tell, label, text}]}], siteRunbook: text | null,
+unknown: [text], limitations: [text], report}`. There is no verified, safe-to-resend or action field: what a person finds is their
+report, recorded in the reason of the existing hand close. A missing value reads "Not available from this message".
+
+`variant`, first match: `withheld` (a merge or a cancel); `document` (MDM^T02: TXA-12, TXA-2, TXA-4, TXA-17) and `result` (ORU^R01:
+OBR-3, else OBR-2, ORC-3, ORC-2; OBR-4, OBR-7, OBR-25), with a limitation when the message carries more than one item; on a document
+case (11.2) those rows come from the block, by the reader's right, and the stored message is not read, so the number and the status
+show, and the type, the test and the times read as missing;
+`other_message` (any other message that isn't ADT: general words, no check of its own); `uncertain` (the latest write has no answer);
+`already_applied` (a receipt from the receiver naming this operation, or `ALREADY_COMMITTED`, never a matching location); `uncertain`
+(the failure's own outcome); `identity_or_time` (unmappable, unreadable, E11, E12, E13, E18, or those gate codes); `refusal`; `history_correction`
+(the plan has correction steps); `later_movement`; `manual_compare`. `guideDigest` is the SHA-256 of the versioned words, the class's
+`Words` block.
 
 ## 6. The scenario catalogue and the matcher (v1.6)
 
@@ -529,10 +564,23 @@ blocks for a person at once, with no wait. Any other ADT message for the patient
 at the proposal and reads again at dispatch, and the connector reads once more at the moment of the write, answering `refused`
 with reason `further_movement`. An admission the receiver answers 404 for isn't released by the site's policy (a 404 doesn't
 prove there's no record entered by hand under another number): it waits for a person, and the plan says to check the system's own
-screen. An incident's release of such an admission keeps its own path. A site chooses with `further_messages` (6.4). **What this
+screen. Inside an incident too (policy version 2026-11-07.1): the chain goes under the incident's one approval (7.3), whose task asks the same, and a release that still finds a 404 asks a person for that case. A site chooses with `further_messages` (6.4). **What this
 can't see:** a change made by hand at the receiver; a message on a route Shutter's index doesn't watch, once the index has passed it;
 a further message that lands between the connector's read and the receiver's answer; and a merge of a merge. Nothing holds the feed
 during a correction: a hold or a laboratory route can call `Find` as it stands. Proof: S27 to S32, S9, and `Shutter.Test.FurtherMessages`.
+
+**A person releases another visit's stop** (policy version 2026-11-07.1). `GET /cases/{id}/further-stop` (signed in) reads the patient
+afresh: `{rows: [{line, visit}], digest, releasable, whyNot, release}`, with `release` `{digest, by, at, reason, stands}` or null. `POST
+/cases/{id}/further-release` (`Shutter_Approve`, `X-Requested-With`; body `{digest, reason}`, both required, else 400 `bad_request` with
+`field`) takes the digest of the rows the person read and why. It answers 409 `wrong_state` unless the case is blocked, `not_releasable`
+unless every row is another visit's movement (`why: other_visit`) with the identifier read and every namespace read in full, and
+`rows_changed` when a fresh read gives another digest; otherwise it records who, when and why on the case and sends the case through fresh
+evidence (202). The digest is SHA-256 over each stopping row's visit, control id, event and why, sorted, so the same message read from another store
+gives the same digest. Each read before the write, the proposal's snapshot, the dispatch gate's and the connector's, passes the stop
+(`FURTHER_MOVEMENT_RELEASED`) only when it gives that digest: another relevant message voids the release, and the case stops again with
+both rows to read. It covers no unreadable identifier, `FURTHER_NOT_READ`, cancel, merge or change to the record, and releases nothing else:
+every other check runs, and the write needs a person's approval even where the site's policy would release it. The approver may be the
+person who released. Proof: `Shutter.Test.Gate` and `tests/e2e/further_release_check.py`.
 
 **The failsafe at the point of the resend** (v1.29; the requirement of 26 Oct 2026). A resend is already a conditional
 write bound to the version the preflight read, so a PAS message applied at the receiver in between is refused as a version
@@ -638,7 +686,7 @@ In `policy` mode the matcher's decision is:
 - **A receiver of category `orders_results` (v1.23), in every mode:** no board and no investigator: the workflow adopts an
   escalate plan ("not modelled yet"), and the gate appends `RECEIVER_NOT_MODELLED`.
 - **`correct_history` at a `history_of_record` receiver (v1.23):** the policy path's plan escalates with
-  `correction_steps` (section 10) and the case carries a note "Correcting the history: ...".
+  `correction_steps` (section 10, with the drafted sequence's structure from v1.48) and the case carries a note "Correcting the history: ...".
 - The matches, with every condition's observed value, are stored on the case (`catalogue` in the snapshot summary) and
   shown in the app.
 - Recording keys for replays name the case within its scenario: `scenario:<S>:<encounter>:<event>[:<receiver>]|<member>|<cfg>[|round<n>]`
@@ -653,7 +701,9 @@ In `policy` mode the matcher's decision is:
 ### 6.4 The site profile and the policy path
 
 The questionnaire's answers are the site profile (`knowledge/site/profile.json`, versioned; defaults shipped). The core
-reads it through `Shutter.Store.SiteProfile`.
+reads it through `Shutter.Store.SiteProfile`. A non-demo install takes the file through `SiteProfile.ForSite`: the demo's
+receivers (`Downstream Out`, `Records Out`) leave it, a list left empty gets one draft to fill in, and every `automatic`
+in its policy reads `approval`, so it starts with no automatic release. A profile a person saved is never changed.
 
 ```json
 {
@@ -705,6 +755,10 @@ profile a person saved is never touched, and a reinstall leaves both marked sour
   (`current` | `correct`) is derived from the category (`history_of_record` -> `correct`, the others -> `current`) and may
   be set on the entry to override it. The site-wide `history_policy` is deprecated: still accepted, read only for an entry
   with neither a category nor its own policy, and no longer in the seed (profile version 5).
+- **A receiver's runbook line** (`receivers[].manual_check.runbook`, optional): one line of plain text, 300 characters at most, on
+  where to look at this receiver, shown on its stopped cases as a navigation hint and never as evidence (5.2). No HTML, links,
+  credentials, control characters or runs of six digits. It is saved with the profile, and the core reads it as nothing else: no
+  command, mapping or capability.
 - **A demo receiver's namespace** (v1.25): `receivers[].demo.namespace` names the namespace a demo receiver runs in, where
   the scenario runner resets it and sets its faults (`Shutter.Store.SiteProfile.ReceiverNamespace`); absent, the receiver
   is the namespace's own. The shipped seed (profile version 6) lists two receivers: Downstream Out (`current_state`) and
@@ -810,7 +864,7 @@ catalogue versions in force. An automatic release (approver `policy`) writes non
 evidence collector adds `precedents` to every snapshot summary, `{approved, rejected, lastDecision, lastApprover, lastAt,
 lastCaseId, samePolicy, windowDays, signature}`: the active rows of the last `windowDays` days
 (`^Shutter.Config("precedentDays")`, 1 to 3650, 180 by default; the Doctor's `precedent_days`), and `samePolicy` says
-whether the last decision was taken under the policy and site profile versions in force now. A board member who gave no usable answer is on the plan as `absent_members`, by name and under the plan's digest, and the approval task's text names them ("Not every board member's review stands behind this plan: ... did not answer."). The approval task's text
+whether the last decision was taken under the policy and site profile versions in force now. A board member who gave no usable answer is on the plan as `absent_members`, by name and under the plan's digest (a follower's plan carries its leader's); such a plan that writes nothing goes to a person (escalated) and doesn't close (policy version 2026-11-07.1), and one that writes goes on as built, and the approval task's text names them ("Not every board member's review stands behind this plan: ... did not answer."). The approval task's text
 quotes it ("Precedents: approved and verified 2 times, rejected 0 times in the last 180 days; last approved by approver on
 2026-11-02 (case C-000301)", or "Precedents: none; these conditions at this receiver have not reached an approver in the
 last 180 days."), and the case's events note each precedent written. It is for the person and the app: the model view's
@@ -821,6 +875,8 @@ included with `active` false; `POST /precedents/{id}/retire` (`Shutter_Approve`,
 `bad_request` with `field` `reason` without one) retires one, which stays on record and counts for nothing (404 `not_found`;
 409 `already_retired` with `retiredBy`, `retiredAt` and `retiredReason`). A precedent informs the approver and never releases anything: only the policy path above releases without a
 person.
+
+**The reminder for cases left open** (`reminders` in the site profile; absent means off; the addresses as in section 10). A scheduled mail, once a quarter of an hour, by the task "Shutter case reminders" (`Shutter.Util.CaseReminderTask`), through the `Escalation Mail` operation's mail server and `mail.from`. Which cases: `awaiting_approval`, `blocked`, `escalated` and `failed`, leaving out the disposition `abandoned`. Who: at `team_hours` (default 4) the case's team as an escalation picks it, its `mailbox` and not its `cc`; at `officer_hours` (default 8, later than `team_hours`) `officer_address`, named `officer_name`, one bare address in `mail.allowed_domains`. When: open time is elapsed time since `openedAt`; a mail goes only in the window, `window_start` (default 08:00) up to but not including `window_end` (default 18:00) on `days` (default `mon` to `fri`), in `feed.time_zone`, so a case left overnight is in the first mail of the morning. A site's bank holidays are not known. At most one digest an hour to one address, and each case once per threshold (`Shutter.Store.CaseReminder`, unique on the case and the threshold, written when the mail server accepts the digest, so it survives a restart; it records that acceptance and never that a person read it, and the digest's state is `queued`, `accepted` or `failed`). A threshold passed outside the window waits for it: a case left on a Friday evening is in Monday's first mail unless `days` says otherwise, and the mail says so. What it holds: counts, the oldest age, the receiver (a name in the profile's `receivers` or a team's `receivers`, else "a receiver the site profile does not list") and the failure type (the store's word), the case numbers each with its age (100 listed, the rest counted), the subject and text saying the mail waited for the window when a threshold passed before today's window opened, and `sign_in_url`. No failure text, gate reason or other free text. `patient_detail`: `none`, `identifiers` (the default: hospital number with its authority, and visit number) or `identifiers_initial` (and the first letter of the first name, PID-5.2, read from the stored message for the mail and not kept). Never a full name, date of birth, address or NHS number, whatever the setting: a hospital number that is an NHS number by its shape or authority, or that does not read as one word with a digit in it, reads "not shown", as does such a visit number. No identifier goes in the subject. This mail goes out with nobody reviewing it, an exception to the rule that a person reads mail carrying identifiers: it is the site's information governance decision. It writes to no receiver, calls no model and has no effect on the gate, a plan or a closure. Each reminder is a `note` event on the case (ref `reminder:<digest id>`), written without touching the case row. The operation checks once more before it sends (on, in the window, built within half an hour, the address allowed), and then reads again whether the patient detail is the one the text was built at and each case still needs a person, has not had this reminder and is still for this recipient; if not, the digest fails without a warning and the next run builds what is due. A failed send, or none possible, is logged, records nothing, and goes again at the next run; with no mail server nothing is written, not even the `.eml` an escalation falls back on. The text of a digest goes when its send is over; the row keeps who, which case numbers and the answer for 90 days. The Doctor's `case_reminders`: `{enabled}` when off; when on also `warnings` (no mail server, no allowed domain, no officer address, no team, no sign-in address, no task, no run for over an hour, the last run's fault), `patient_detail`, `zone`, `last_run`, `last_accepted` and `last_error`. A reminder does not establish that anyone has taken a case on, and a named officer may be away: Shutter holds no rota.
 
 ### 6.5 The gate's catalogue checks
 
@@ -900,7 +956,7 @@ no member can be convened, or the board a case followed decided nothing, a case 
 is `board` or `person` with at least one match goes straight to `escalated`, disposition `escalate`, with no plan and the
 reason `NO_BOARD_ANSWER`: the event and the headline name the entries and why nobody answered, and a leader's lead is
 `failed`. Any other case (a `policy` decision, a new pattern, no catalogue) falls to the rules path with a note, and mode
-`rules` always takes it, so S8's Rules only pass still resends. A lead begun before the last scenario reset counts for nothing, as the incident
+`rules` always takes it, so S8's Rules only pass still resends. A lead begun before the last scenario reset, or in the same second as it, counts for nothing, as the incident
 detector's window. A judge's forced board and an incident's released chain items never follow. A lead whose leader fails (a workflow error, or an escalation with no summary when its board slot comes), is abandoned or is closed by hand is finished as failed at once (v1.39), so a case of the signature that arrives afterwards leads itself and every case waiting on it takes the rules path without waiting out the bound. The lead's row keeps how
 many followed; `GET /cases/{id}` shows `followsCase` and `leadSignature`. Approvals stay with the existing mechanisms: an
 incident's one task for its chains (7), else one per case.
@@ -1009,17 +1065,33 @@ the framework). The Dockerfile runs it, and a site with Java runs it once by han
 
 - The site's policy per tier and chain kind decides: `automatic` (no task), `approval` (one Workflow task for the
   incident's policy chains), `per_chain` (one task per chain). Board chains are approved as single cases are today.
+  A chain holding a lost admission, one the receiver answers 404 for, is never `automatic` (policy version 2026-11-07.1;
+  6.5): it goes under the one task, on that item's line the question of a record entered by hand, unless the site's
+  `further_messages.admission_not_found` says `policy`. An outage of lost admissions asks one person once.
 - The task says what is bound and what is not: "resend these, in this order; each one is rehearsed, gated and verified
   just before it goes; the chain stops at the first surprise, and the rest comes back to you".
 - The incident's approval binds the plan's digest: for every item, the case, the operation and its payload, the
   catalogue entry and outcome the approver read, and the receiver version it goes at; and the rule for later items:
   each item after the first goes at exactly the version the previous item's verified receipt reports. The task says
   so, and that each operation goes only under the catalogue entry and outcome listed for it.
+- The approval also binds the catalogue, site profile and gate policy versions on the plan (policy version 2026-11-07.1): if
+  any has changed at a dispatch, the gate answers `APPROVAL_CATALOGUE_CHANGED`, `APPROVAL_SITE_PROFILE_CHANGED` or
+  `APPROVAL_POLICY_CHANGED`, that item blocks, nothing is sent, and its chain's rest comes back to a person. So an upgrade
+  during an open incident stops each chain still to be released at its next write: writes already verified stand, an item that
+  writes nothing still closes, and each stopped case can be reinvestigated under the versions now in force. A chain with no
+  person's approval has no approval to void: the new versions decide it on fresh evidence.
 - Task subjects: `Shutter I-nnnnnn: approve the release of N chain(s) to <receiver>` for the shared approval, and
   `Shutter I-nnnnnn/<seq>: ...` per chain; both carry the `PlanDigest` and `Comment` form fields, `PlanDigest` empty
   until the decider fills it (v1.21; before, it was pre-filled with the plan's digest, so an inbox approval always
   matched). An approval with another digest, or none, rejects the chains it covers: their cases are escalated with the
   reason.
+- A task's message holds 2,000 characters (`EnsLib.Workflow.TaskRequest.%Message`). It lists every chain and item when
+  they fit; otherwise the first whole chains, how many chains and operations it leaves out, and the incident page
+  (`/shutter/index.html#/incidents/I-nnnnnn`), which has them all. The digest is always whole, and an approval binds every chain the
+  plan holds, listed in the message or not.
+- An error raising a task, or the Workflow item answering its call with an error, closes nothing: the chains stay
+  `awaiting_approval`, no case fails, an `error` event and an alert name the incident, once for each cause, and the workflow
+  tries again every 5 minutes, reading the approval target afresh. Until a task exists an approval answers 409 `wrong_state`.
 
 ### 7.4 Release
 
@@ -1086,7 +1158,7 @@ Eight failures for six patients to the downstream system, in one burst (the faul
 the fault off): P1 one failed A02 (E2, single); P2 A02 and A03 failed (E4, ordered); P3 A02 failed, A08 applied, a later
 A02 applied, A03 failed (E5, interleaved, board); P4 A02 failed, then a later A02 applied (E1, superseded); P5 A02
 failed after an applied A03 (E6); P6 a failed A01 (E2, single, admit). Expected: the policy chains resolved without the
-board at tier 2 (automatic single, approval ordered), P3 by the board, and the downstream system's final state per
+board at tier 2 (automatic single, approval ordered, and P6 approval, since policy never releases a lost admission), P3 by the board, and the downstream system's final state per
 patient listed in `fixtures/scenarios.json`. Its recordings are hand-written until a key is available.
 
 ## 8. The exact index (v1.9)
@@ -1143,7 +1215,7 @@ separate, later tool.
   patient's message under it is no word on this patient's place, so it can't close the case. The deliveries (`Deliveries`,
   a bed's occupant) and the pending messages (6.5) still read the whole visit, so another patient's message in flight holds
   a write. A patient's later rows under another identifier after a merge the receiver hasn't taken aren't counted either.
-- A scenario for a later movement on a route Shutter does not own, found only by the index, is planned; it is not in `fixtures/scenarios.json` yet.
+- S14 plays a later movement on a route Shutter does not own, found only by the index: the demo item `Other Route In` (`Shutter.Scenarios.Route`, Rules only and Site policy) sends it to `Case Intake Store`, so its header is walked and nothing reaches the receiver. The item types the message under the category its MSH-12 names when that is loaded, as an inbound item's category would. A site's production never gets the item, nor the route in its `HL7 Index` (`Setup.SiteRoutes`).
 - The index row's `Event` is the key's event word (v1.14: `register`, `preadmit`, `person_add`, `person_update`, the cancel words and `merge` included, 32 characters), so registrations, pre-admissions and person updates show between the movements; its `VisitNumber` is `-` for a mapped message with no PV1-19 (an unmappable message without one keeps an empty visit number), and the timeline and the index answer nothing for an encounter of `-` or empty.
 
 ### 8.3 The API
@@ -1272,15 +1344,70 @@ turns as the gaps between them) from stored rows alone, and the DPI-I-689 querie
 
 ## 10. Escalation by email (v1.11)
 
-**Correcting the history** (v1.23). When a `history_of_record` receiver's case escalates with the outcome
+**Correcting the history** (v1.23, v1.48). When a `history_of_record` receiver's case escalates with the outcome
 `correct_history`, the plan carries `correction_steps`: `{receiver, system, category, encounter, missing: {event, ward,
-event_time, source_message_id, operation_key, after}, later: [{event, ward, event_time}], current: {state, ward, version},
-receipt, steps: [text]}`, built by `Shutter.Util.HistoryCorrection` from the case and the snapshot alone. The eight steps,
-in order: hold the case and never resend the original message; confirm the current placement, reading only; confirm the
-gap and where the movement belongs; have the correction approved and recorded; insert the movement as a historic
-movement through the receiver's own correction route, one write by one person; keep the current placement; read the
-history back and have a second person check it; record it on the case and close the case by hand. The escalation draft
-prints them as a section "CORRECTING THE HISTORY"; the case page shows them from the plan.
+event_time, source_message_id, operation_key, after}, later: [{event, ward, event_time, operation_key, source_message_id,
+ens_header_id}], current: {state, ward, version}, receipt, steps: [text], sequence}`, built by
+`Shutter.Util.HistoryCorrection` from the case and the snapshot. The eight steps, in order: hold the case and never resend
+the original message; confirm the current placement, reading only; confirm the gap and where the movement belongs; have the
+correction approved and recorded; correct the record through the receiver's own records procedure, one write by one person
+(a Z99 historic-movement update can't add a movement the receiver never got, so none is offered); under that procedure keep
+the current placement; read the history back and have a second person check it; record it on the case and close the case by
+hand. The escalation draft prints them as a section "CORRECTING THE HISTORY"; the case page shows them from the plan.
+
+**The drafted sequence** (v1.48). Beside the receiver's own procedure, Shutter may draw the exact cancel-and-replay sequence
+a person could send. It sends nothing: there is no Send button and no write path, and the gate, the verifier and the
+approvals never read it. For k later movements it is 2k + 1 messages: k cancels, newest first (A12 for a transfer, A13 for a
+discharge), then the failed movement, then the later movements, oldest first, because a cancel reaches only what is current
+at that step. A replay is the stored message exactly as IRIS gives it back. A cancel is built by a fixed table from the
+message it cancels: MSH-3 to 6, MSH-11, MSH-12, PID, PV1-1, PV1-2, PV1-19 and PV1-44 copied; on an A12 PV1-3 is the cancelled
+message's PV1-6 (HL7: the location before the original transfer), PV1-6 its PV1-3 (Shutter's choice, as the fixtures do) and
+PV1-45 copied; on an A13 PV1-3 is the discharge message's PV1-3, with PV1-6 and PV1-45 empty; MSH-7, MSH-10, EVN-2 and EVN-6
+are placeholders a person fills (`[SENDER: ...]`, `[SITE: ...]`). MSH-9 is `ADT^A12^ADT_A12` or `ADT^A13^ADT_A01`, the
+structure HL7 2.5.1 gives each.
+
+`correction_steps.sequence` is structure only, with no message text, name or address, because the plan is sent, reduced, to a
+model (section 9): `{drawn, reason_code, reason, k, count, receiver_version, observed_at, cancels_flag (true, false, or null
+when the profile has no entry), resend_timestamp, steps: [{n, kind (cancel, replay), trigger, cancels?: {event, ward,
+event_time, operation_key, source_message_id, ens_header_id}, event?, ward?, event_time?, operation_key?, source_message_id?,
+ens_header_id?, body_digest? (of the stored text as IRIS gives it back), non_ascii, after: {by_source, by_receiver}}],
+end: {ward, history}, checked_at}`.
+
+Only E1 and E6 are drawn. The first of these that holds draws nothing, with `reason_code` and a line that starts "No
+sequence:", and the eight steps stay: `not_e1_e6` (another entry, or a failed movement that isn't a transfer); `cancels_false`
+(the profile says false, or has no entry for the receiver: the seed says false for both demo receivers, so a shipped S22 draws
+none); `identifier_unreadable`; `merge_seen`; `forwarded_case` (a case forwarded from another namespace, whose feed isn't indexed here); `feed_not_indexed` (the index behind:
+not yet, not no, so its line starts "No sequence yet:", an approver is offered the read, and every read decides again);
+`pending_message`; `further_message`; `later_undelivered`; `later_not_movement` (a later admission, merge or cancel);
+`history_mismatch` (the receiver's rows and the feed's don't match one for one by operation key); `k_zero`; `time_in_doubt`;
+`history_mismatch` again (the receiver's current placement isn't the last movement of its history, so the first cancel wouldn't
+reach what is current); `body_unreadable`; `pv1_6_empty`; `zbe_present`; `cancel_non_ascii` (what a cancel copies holds a
+character above ASCII: the copy may not match the bytes sent, and a cancel isn't in the message store to resend);
+`receipt_present`. A replay above ASCII doesn't stop it: its text is withheld with a line saying to resend it from the message
+store.
+
+`further_message` is the patient-level check (`Shutter.Index.Message.ForPatient`, asked for every identifier in the failed
+message's PID-3; it respects each identifier's authority, and a row or an identifier with no authority can't be told apart and
+counts): any message for this patient since the reset, on any encounter, that the failed movement and the later
+movements don't account for, with an event time at or after the failed one, received after the failed message or after the
+snapshot, or with no readable time. An earlier stay is not a further message. An update (A08) is a further message like any
+other, inside the span or after it, and one before the failed movement isn't. The check can't see a change made by hand at the receiver, a
+message on a route the index doesn't cover, or a message the index keeps under an identifier the failed message doesn't hold (the
+index keeps one per message: the repetition typed MR, else the first); there is no match on a name or a date of birth, because a
+different patient must not match. The draft says so.
+
+`GET /cases/{id}/correction-draft` (`Shutter_Approve`, an approver's, because this is raw HL7 with a name and an address; 401
+signed out, 403 `forbidden` naming the resource for an operator) gives the text. 404 `not_found`; 404 `no_plan`; 409
+`wrong_outcome` when the plan has no `correction_steps`. Otherwise 200 `{caseId, drawn, reason_code, reason, header: [line],
+messages: [{n, kind, trigger, label, text (null when withheld), withheld, after, body_digest}], cannot_know: [{what, why, does}],
+never: [line], digest, checked_at}`; with `drawn` false the lists are empty. `text` is the message with
+segments ended by a carriage return, as IRIS gives it. Every read runs the checks again on the live index and pending list, so
+`drawn` here wins over the plan's, which is the state at plan time. It never reads the receiver. A read with `drawn` true appends
+a `note` event to the case, "Correction draft read by <user>: <n> messages, digest <digest>", with no message text; a read
+with `drawn` false appends nothing. The email carries one line and none of the text: "A drafted sequence of <n> messages is on
+the case, for an approver to read on the case page; this email carries none of it." or, with `feed_not_indexed`, "No message sequence has been
+drafted yet: the index hadn't caught up with the feed when the plan was made. An approver can read it on the case page, which
+checks again on every read; this email carries none of it." or "No message sequence was drafted: <the reason>."
 
 A blocked, escalated or failed case can be handed to the people who correct systems by hand. The draft is built from
 the stored case without a model (`Shutter.Util.EscalationDraft`): the hospital number and NHS number, the date of birth,
@@ -1295,6 +1422,7 @@ model, the draft says Shutter cannot verify a correction.
 - The site profile's `teams` (array of `{id, name, mailbox, cc?: [...], receivers?: [...], sources?: [...]}` (v1.14: `sources` lists sending applications, MSH-3, such as `PAS`; a merge goes first to the team whose `sources` lists the case's source system, then to the receiver's team, then to the first team; the draft words a merge "Merge of <prior identifier> into <patient identifier>" and a cancel "Cancellation of the transfer at ..."; a cancel carries no ward, section 2); a withheld case's draft says Shutter withheld the message and asks the team to mark the case handled rather than to reinvestigate; `id`, `name` and
   `mailbox` required, ids unique) and `mail` (`allowed_domains`, a list of domain names such as `example.nhs.uk`, required before any email can go: every team `mailbox` and `cc`, and every `to` and `cc` a person types, is one bare address, `local@domain`, with exactly one `@`, no display name, brackets or spaces, no line break or other control character, and a domain equal to one of the list or a subdomain of one (`trust.nhs.net` under `nhs.net`), compared without regard to case; an empty or absent list allows no address, so a profile that names a team mailbox without one is refused (400 `bad_request`, `teams[i].mailbox: no allowed mail domains are set in the site profile (mail.allowed_domains)`), and each entry must be a domain name (`mail.allowed_domains[j]: must be a domain name such as example.nhs.uk (letters, digits, hyphens and dots)`); the addresses are checked when the profile is saved, at `PATCH`, at the send and once more by the operation before it writes or sends (v1.21). `from`: the sender of the emails when set, an address of the same shape (the profile is refused otherwise), else the `Escalation Mail` operation's `From` setting, default `shutter@localhost`. The shipped seed profile sets `allowed_domains` to `["example.nhs.uk"]`, the domain of its teams' mailboxes, and no `from`, v1.21). The team for a case is the one whose `receivers` names the case's receiver, else the first, else the
   profile's `approvers.escalation` text with no mailbox (the person fills one in).
+- The reminder for cases left open goes by this mail server and `mail.from`, with nobody reviewing it: section 6.4, "The reminder for cases left open".
 - `GET /cases/{id}/escalations`; `POST /cases/{id}/escalations` with `{teamId?}` answers 201 with the draft (409
   `wrong_state` unless the case is blocked, escalated or failed; 500 `draft_failed` when `teamId` names no team of the
   profile); `PATCH /cases/{id}/escalations/{seq}` (404 `not_found` for an unknown seq; 400 `bad_request` when the body is
@@ -1474,8 +1602,8 @@ needs only the packages `Shutter.Intake` and `Shutter.Util` for the forwarder an
   proves, in_profile, has_api, draft}], other_operations,
   schemas: [{category, named_by, in_namespace, standard, in_shutter, shutter_name, action}], wired, receiver_prefix, actions: [{do,
   says, ...}], todo, warnings, error}`. `do` is `map_package`, `import_schema`, `add_forwarder`, `rename_alert`,
-  `add_alert_intake`, `set_alert_receivers`, `set_alert_on_error` or `draft_receiver`. Options: `production`, `shutter_host`,
-  `shutter_port`, `ssl_config`, `credential`, `receivers`, `alert_on_error`. Options that are not a JSON object answer `{ok: false, error}` in
+  `add_alert_intake`, `set_alert_receivers`, `set_alert_on_error`, `draft_receiver`, `set_document_receivers` or `enable_documents`. Options: `production`, `shutter_host`,
+  `shutter_port`, `ssl_config`, `credential`, `receivers`, `alert_on_error`, `document_receivers` (item names, comma-separated: both switches of 11.2; a name that isn't a chosen receiver is a warning; taking the namespace off turns off what it turned on). Options that are not a JSON object answer `{ok: false, error}` in
   the plan, the apply and the removal, and change nothing. A `receivers` name that matches no item is a warning; with no item chosen the plan warns and
   has no `add_alert_intake`, since an empty `Receivers` means any item. Reading a namespace (`Onboard.Read`) calls only Ens, %SQL,
   %Dictionary and %SYS classes while it is there, as `ProductionReader` does, since no Shutter class resolves there yet.
@@ -1518,9 +1646,95 @@ needs only the packages `Shutter.Intake` and `Shutter.Util` for the forwarder an
   `^Shutter.Config("schemaNamed", category)` until an import clears it. A held forward (kind `unreadable`) keeps its own path above.
 - **The Doctor** adds `watched_namespaces` (each namespace onboarded or named by a case, read there: `{namespace, onboarded, exists, production,
   production_state, forwarder, alert_intake, pass_to, classes, credential, last_forward, last_forward_error, refused_72h, last_refused,
-  last_case, last_case_at, schemas_missing, operations_unwatched, removed, problems, ok}`; `failure_timeout` in the plan's reading is the effective value: the item's, the default settings', else the class's; a namespace taken off is recorded under `^Shutter.Config("onboardRemoved", namespace)` and reads `removed` with no problems) and `receivers_without_item`; `credentials` tries each onboarded namespace's forwarder credential and each
+  last_case, last_case_at, schemas_missing, operations_unwatched, documents_mismatch, removed, problems, ok}`; `documents_mismatch` says, also among the `problems`, each item the forwarder's `DocumentReceivers` names whose profile has `documents.enabled` off, and each the other way round (11.2); `problems` names an alert intake or forwarder that is disabled wherever it is, and for a namespace onboarded here an item named `Ens.Alert` that is missing or of another class, so `ok` is false then; `failure_timeout` in the plan's reading is the effective value: the item's, the default settings', else the class's; a namespace taken off is recorded under `^Shutter.Config("onboardRemoved", namespace)` and reads `removed` with no problems) and `receivers_without_item`; `credentials` tries each onboarded namespace's forwarder credential and each
   connector item's; `hl7_schemas.needed` adds the watched namespaces' missing categories. `AlertProcess.Classify` reads a TCP connect
   timeout (`ErrOutConnectExpired`) as `delivery_failed`: nothing was sent.
+
+### 11.2 Document exceptions
+
+A failed MDM T01 to T11, or a failed ORU carrying a report as an attachment, at a receiver with a document profile becomes the ordinary case with its no-recovery path and a document block. Nothing is resent, no catalogue entry matches it, no agent is convened, and no copy of the message is kept in Shutter. A receiver with no profile behaves exactly as before. The HL7 version pinned is v2.5.1, chapters 7 and 9.
+
+**Switching it on takes both ends.** The receiver's entry in the site profile (6.4) gets `documents`, and the forwarder's `DocumentReceivers` setting names the item. The onboarding option `document_receivers` sets both, and the Doctor's `documents_mismatch` lists where they disagree (section 11.1). The forwarder reads the delivery there and posts metadata only. With the forwarder not naming it, a whole message posted for such a receiver is read by the route and its text dropped; one over 2 MB is still refused 413. With the profile off, the route answers an envelope `409 documents_off` and the forwarder sends the message the ordinary way.
+
+**`documents` in a receiver's entry.** Every key is named, so a misspelt switch is refused.
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `enabled` | `false` | The switch |
+| `recovery` | `"none"` | The only value this version accepts |
+| `source_namespaces`, `supported_versions` | `[]` | For a later sender. Nothing reads them yet |
+| `ack_level` | `"connection"` | `connection` or `application`. For a later sender |
+| `owner_accepts_acknowledged_recovery` | `false` | For a later sender |
+| `duplicates` | `"unknown"` | `unknown`, `rejects_exact`, `rejects_number`, `replaces` or `files_again`: what the receiver's owner declares |
+| `allowed_completion`, `allowed_confidentiality`, `allowed_availability` | `[]` | An empty list allows nothing. For a later sender |
+| `missing_status_policy` | `"stop"` | The only value |
+| `max_recovery_bytes`, `approval_minutes` | `0`, `15` | For a later sender |
+| `email_details` | `"minimal"` | `minimal`, or `identifiers` to add the hospital number and the document number to the email of a document that isn't restricted |
+| `readback` | `"disabled"` | The only value |
+| `chain_read_limit` | `5000` | Messages to the receiver read for a chain |
+| `report_structures` | `["ORU^R01"]` | The ORU message types (MSH-9) that count as reports here. `[]`: none, so this receiver's ORUs take the ordinary path |
+
+**`POST /intake` with `kind: "document_failure"`** (`Shutter_Intake`): `source` (`namespace`, `production`, `route`, `header_id`, `item`), `receiver`, `failure` as in section 11, `delivery`, `facts` and `chain`, with no text of the message. 202 `{caseId, state, opened}`; 400 `bad_request` naming the field; 409 `documents_off`.
+
+**What is read, by position, from the delivery body:** MSH-3 to -7, -9, -10, -12; every PID-3 repetition; PV1-19; TXA-12, -13, -17, -18, -19. Read from the header of the session's request to the receiver's item, not the session's first message, so a transformation on the route shows what the operation was given. The walk stops at TXA, so no OBX, NTE, name, title, file name or type is read for the fields. The size comes from the engine's own chunk count, and the two digests from a sink the engine writes into one stored piece at a time (at most about 3.6 MB), which keeps nothing.
+
+**The operation key** is `mdm-v1:` and a hash of the receiver, the source namespace, the delivery header, TXA-12, TXA-13, the trigger, the patient binding and the body's digest. It binds one stored delivery. It carries no identifier and is not a document version: a new transmission under a new header is a new case. A missing TXA-12 leaves the identity empty, and nothing stands in for it. The standard lets a sender put a file name in TXA-16 when it has no number; Shutter doesn't use it.
+
+**`GET /cases/{id}` adds `document`,** by the reader's right: `headline`, `trigger`, `document` (`id`, `parent`, `completion`, `confidentiality`, `availability`), `patient.keys`, `size`, `delivery`, `refusal`, `reasons`, `chain`, `sent_nothing`, `body_stored_in_shutter` and `source_verified`. The receiver's own words (`refusal.text`) and a restricted document's identity need `Shutter_Approve`. Without it the answer has `refusal.text_withheld` and, for a restricted document, `identity_withheld`, with the identity gone.
+
+**Restricted** means TXA-18 is V, R or a value the standard doesn't list, on the message or any message of its chain. The case's own columns then carry no patient, and the snapshot and email carry no identity. An absent TXA-18 isn't restricted, since the field is optional, and it does stop a sender.
+
+**The chain** is read live from the source's message store: the requests to the receiver's item, newest first, up to the limit, by the forwarder when it forwards and again by the evidence where this instance has that namespace. There is no index, so no lag. `chain.complete` is false, and the case says why, when the limit is reached, a body can't be read, there are over 50 linked messages, the document has no number, or the namespace isn't here. A complete read still covers only what was read, back to its `since`, on that item. A whole text posted by a forwarder not naming the receiver has digests of that text: its session's delivery under the same control id counts as the message itself, and other rows are compared with what that delivery stored. With no such row in the chain, a route's changes read as different content, and the case says the comparison was with the posted text.
+
+**The reason table.** No catalogue entry; deterministic, from the block.
+
+| Code | Shown | When |
+| --- | --- | --- |
+| `DOC_ID_MISSING` | yes | No usable TXA-12 |
+| `DOC_RESTRICTED` | yes | As above |
+| `DOC_CHAIN_INCOMPLETE` | yes | `chain.complete` false |
+| `DOC_CANCELLED` | yes | A T11 names it, or TXA-19 is CA |
+| `DOC_REPLACED_OR_EDITED` | yes | A T07 or T08 on it, a T09 or T10 naming it as parent, or TXA-19 OB |
+| `DOC_VERSION_CONFLICT` | yes | Its number or control id on other content |
+| `DOC_PARENT_UNPROVEN` | yes | A T05, T06, T09 or T10: the parent is absent, or only known to be in the source's store |
+| `DOC_PATIENT_CHANGED` | yes | Its number on other patient identifiers |
+| `DOC_STATUS_UNPROVEN` | yes | TXA-17 missing, a status outside the standard's tables, or TXA-18 and -19 both absent |
+| `DOC_ENGINE_OWNS_DELIVERY` | yes | The header is Created, Queued, Delivered or Deferred |
+| `DOC_DELIVERY_UNCERTAIN` | yes | An uncertain outcome |
+| `DOC_BODY_UNAVAILABLE` | yes | The source no longer holds the message |
+| `DOC_DUPLICATE_UNDECLARED`, `DOC_RECOVERY_OFF`, `DOC_NOT_ORIGINAL_T02` | no | A sender's check only |
+
+**`Shutter.Util.DocumentEligibility.Check(block, settings, delivery)`** is the one question a later sender must ask, before every send. It answers a code. With `recovery` `none`, it answers `DOC_RECOVERY_OFF`; with no `delivery` object from an engine reader, `DOC_DELIVERY_UNCERTAIN`. Only with every check passing does it answer the code that lets a sender go on, which appears on no screen, email or API answer. Merges and identifier changes aren't read here: the sender's `delivery` must say they were checked and clear.
+
+**A report carried as an attachment.** An ORU counts when any OBX says ED or RP in OBX-2. The value type decides, and nothing clinical is read. An ORU with only numbers or text, or with no OBX, takes the ordinary path, unchanged, at any receiver; so does base64 sent under TX or ST, which reads as text.
+
+- **What is read:** MSH as above; OBR-2, OBR-3 and OBR-25; every PID-3 repetition and PV1-19 before the first attachment; and each OBX's first 64 characters, for OBX-2 alone, held for no longer than the check. Each stored segment is read directly from where the engine keeps it, so a value of any size isn't materialised. The block gets `kind: "report"` and `report` (`placer`, `filler`, `result_status`, `attachment`, `orders`), with `document.id` the OBR-3, else the OBR-2. No OBX-3, OBX-5, NTE, name or title reaches it. An ORU has no confidentiality field, so it has no restricted view.
+- **Several orders in one message:** the identity is the OBR before the first attachment, and the chain's words say how many orders the message has.
+- **The operation key** is `oru-v1:` and a hash of the same fields, with OBR-2 in TXA-13's place.
+- **The one chain rule:** the ORU messages to the same item that name its OBR-3 or its OBR-2, in any OBR and with or without an attachment, are read as above. One with another OBR-25, a missing one included, adds `DOC_RESULT_STATUS_CHANGED` and a sentence naming both statuses in table 0123's words. It doesn't say which message stands, and it reads nothing of the results. No MDM rule applies: the version, patient, status and parent codes are never raised for a report.
+- **The reasons shown** are `DOC_ID_MISSING` (no OBR-2 or OBR-3), `DOC_CHAIN_INCOMPLETE`, `DOC_RESULT_STATUS_CHANGED`, `DOC_ENGINE_OWNS_DELIVERY`, `DOC_DELIVERY_UNCERTAIN` and `DOC_BODY_UNAVAILABLE`.
+- **A profile not taking the type** answers an envelope `409 documents_off`, as a profile that's off does, and the forwarder sends the message the ordinary way.
+
+**Where the document stays:** in the source's message store, under its retention. A receiver's words and a restricted identity are in `Case.DocumentJSON`, which goes with the case's own purge. The snapshot, the events, the email and the model's view hold neither.
+
+### 11.3 The Settings screen for watched namespaces
+
+`Shutter.API.Onboarding`, routes of the REST API that call the same helpers as 11.1 and leave what they do unchanged. All need `Shutter_Configure`; each POST needs
+`X-Requested-With`. The forwarder's password never comes through these routes: `OnboardCredential` stays a terminal command.
+
+- `GET /settings/namespaces` -> `{shutterNamespace, canApply, watched, available}`. `watched` is the Doctor's `watched_namespaces`; `available` is `[{namespace}]`,
+  those with Interoperability enabled, not watched, and neither Shutter's own nor the instance's; `canApply` is whether this user holds `%Admin_Manage`.
+- `POST /settings/namespaces/{ns}/plan` `{options}` -> `{plan, digest}`, and changes nothing. `plan` is 11.1's. `digest` is a SHA-256 of the plan's production, `actions`,
+  `warnings` and `todo` and of the options it was read with. 400 `bad_request` for a body that is not a JSON object, options that are not one, an option 11.1 does not list, or
+  one that is not a plain value, so a slip never runs on the defaults. A namespace that can't be planned answers 200 with `plan.error`.
+- `POST /settings/namespaces/{ns}/apply` `{options, digest}` (`%Admin_Manage`) -> 11.1's apply answer. 400 `bad_request` with no digest. 409 `plan_changed`, with the fresh
+  `{plan, digest}` and nothing changed, when the digest is not the plan's now. The check runs just before the apply and is not one transaction with it; the apply runs that namespace's plan as 11.1 says.
+- `POST /settings/namespaces/{ns}/test` -> 11.1's test answer.
+- `GET /settings/namespaces/{ns}/removal` -> `{namespace, onboarded, production, renamed, items, alertOnError, mappings, drafted}`, read from the record the apply kept, changing
+  nothing. A mapping or a draft listed may still stay; the removal's `kept` then says why.
+- `POST /settings/namespaces/{ns}/remove` `{unmap, credential}` (`%Admin_Manage`) -> 11.1's removal answer. 400 `bad_request` for any other key.
+
+`tests/e2e/onboard_api_check.py` plays these on real productions, and `--record` writes the answers the trial replays (`web/src/mocks/onboarding.json`).
 
 ## 12. The install (v1.15)
 
@@ -1586,7 +1800,7 @@ demo items, switched off on a site install with the others.
   -Dproduction=Your.Production"`), in that production's namespace with the core classes loaded: refuses an empty name or a
   production that does not exist, records it in `^Shutter.Config("production")`, runs the namespace-level parts of a
   non-demo install (no message purge), and adds to the production, when it has none of that name, each of Shutter's
-  items as `Shutter.Production` defines it (`Setup.INSTALLITEMS`: HL7 Index, Case Releaser, Receiver Watch (17), Escalation Mail, Case Workflow, Case Review (13), Incident
+  items as `Shutter.Production` defines it (`Setup.INSTALLITEMS`: HL7 Index, Case Releaser, Receiver Watch (17), Escalation Mail, Case Workflow, Case Review (13), Failure Census (19), Incident
   Workflow, Evidence Collector, the agent items when their class is compiled, Gate, Shutter Approvers, Shutter API,
   Verifier, Case Intake, Case Intake Store; never the feed or the demo items), writes the default settings keyed to it
   (the receiver's address on Evidence Collector and Verifier, no wildcard row) and, when it is running, updates it in
@@ -1616,6 +1830,22 @@ that reached a model (`live` or `record`, never the API mimic) as `{at, status, 
 has, so a capped or failing afternoon shows as such beside the configured mode. The image's compose file has a healthcheck
 on the health route's `"ok": true` (the production running; `wget`, since the image has no `curl`), so `docker compose ps`
 says healthy and `docker compose up --wait` returns when Shutter is ready.
+
+**What each receiver last answered** (v1.48). `ok` stays the production's, since the healthcheck above must not turn on another system's
+health. The Doctor adds `receivers`: for each receiver in the site profile `{name, has_api, state, at, http_status, from, error,
+last_answer_at, last_failure_at, failures_hour, incident}`, from the connector's newest `Shutter.Msg.WardResult` that made a call
+and the evidence's newest `ward_state` items (`from`: `connector` or `evidence`; the status alone, never the body), with no probe. `state` is
+`no_answer`, `server_error` (5xx), `refused` (401 or 403), `failing` (a delivery failed after its newest answer, or in the last hour when
+nothing has read it), `answering`, `not_read` or `no_api`. `receivers_ok` is false when any is in the first four, true when none is
+and one answered, and null when nothing is known; `receivers_state` is `read` or the reading's error; `watched_ok` is false when a
+watched namespace's `ok` is. `GET /health` carries `receivers_ok` and `watched_ok` in its anonymous answer too, and no receiver's name.
+The Health page keeps Ready out of its hero while either is false ("Needs a look", naming the first two and counting the rest, all of them in its Other group), and adds nothing to its first
+layer otherwise.
+
+**Before an install** (v1.48). `Shutter.Util.SiteCheck.Report(namespaces)` (and `Print`, in lines) reads an instance with no Shutter on it,
+with only itself and `Shutter.Util.Onboard` loaded, and changes nothing: `{verdict, says, instance, checks, namespaces: [{namespace,
+production, production_state, checks, operations, verdict}], not_checked}`; `verdict` is `blocked`, `changes_needed` or `works`, a check is
+`{id, result, says, guide}` with `result` `pass`, `warn`, `fail` or `info`. INSTALL, "Before you install".
 
 **The environment at a start** (v1.34). `Shutter.Production`'s `OnStart` calls `Shutter.Setup.ApplyEnvironment(120)`, which
 reads the container's `SHUTTER_DAILY_BUDGET_USD`, `SHUTTER_JUDGE_BUDGET_USD`, `SHUTTER_PUBLIC_DEMO_PASSWORD`,
@@ -2085,8 +2315,124 @@ so a block never appears to enable recovery.
 The demo's `PurgeStore` empties `Shutter.Store.OutageEvent`, `Shutter.Store.Outage` and `Shutter.Store.ReceiverReading`
 with the other stores.
 
+## 18. Shadow mode and the recovery stop (v1.48)
+
+Two different things. **Shadow mode** is a setting: the site profile's `recovery.mode`, `shadow` or `enabled`. Shutter investigates and records what it would propose, and sends no rehearsal, recovery write or blind-resend preview. **The stop** is a latch a person sets, named "Stop Shutter recovery": no new recovery call is admitted until a person clears it. It is kept in the data database, so a restart, a reinstall or a reseed leaves it as it is.
+
+**The mode.**
+- Only an explicit `enabled` enables. A profile with no `recovery`, with no `mode`, or with a value that isn't one of the two reads as shadow, and `PUT /site-profile` refuses such a value, naming it (400).
+- So a new install with no demo starts in shadow, since the shipped `knowledge/site/profile.json` says nothing of it. **An upgrade from a version before this one also comes up in shadow**, unless its profile says otherwise: enabling is a decision, in the normal save of the profile (`Shutter_Configure`). No environment variable enables it.
+- The demo seeds `enabled` explicitly, whenever the seed fills or follows the stored profile, so its behaviour is unchanged. A profile a person saved on the demo keeps what it says.
+- Each change of the mode moves the generation on, like a clear.
+
+**What it covers.** Every call of `Shutter.Operation.Ward` other than a read passes one admission (`Shutter.Util.RecoveryControl.Admit`), immediately before the POST:
+
+| Call | Sender | While shadow or stopped |
+| --- | --- | --- |
+| Rehearsal | `CaseWorkflow.OnGateProposal` | Not sent. The workflow checks first, and the case is escalated |
+| Recovery write | `CaseWorkflow.OnGateDispatch` | Refused at the connector, and the case blocks |
+| Blind-resend preview | `POST /cases/{id}/preview-blind-resend` | 409, and refused at the connector if it gets that far |
+| Any other kind | | Refused always: `unknown_action` |
+
+The refusal is `Outcome` `refused` with `ReasonCode` `recovery_shadow`, `recovery_stopped`, `plan_predates_control`, `plan_unbound`, `control_unavailable` (no lock within 5 s), `control_unreadable` or `unknown_action`. `POST /cases/{id}/approvals` answers 409 with that code to an approve, or `plan_predates_control` when the plan is at or below the floor, once its own state, digest and version checks have passed, so nothing goes on the record. Such a plan stays void, so the words say to reject it and reinvestigate: a case waiting for approval can't be reinvestigated until it is rejected. The incident approvals answer the same codes while shadow or stopped, and say only that it waits: an incident holds no plan row, and each item gathers fresh evidence and makes its plan when released. A reject still goes.
+
+**What it does not cover.** The hospital's ordinary feed and its retries, other systems or people writing to a receiver, Shutter's own records, and reads: preflight, evidence and verification go on, so an earlier attempt's outcome can still be read back. A feed message passes only when it is purpose `normal` with a source header and no case, from an item whose class is `Shutter.Process.ADTToWard` or extends it; the purpose alone isn't enough (`not_original_feed`), and a site's own process that calls the connector directly must extend that class. This pass reads nothing of the control, so nothing that happens to it reaches the feed. A connector other than `Shutter.Operation.Ward` isn't covered: none ships.
+
+**What it promises.** No recovery call is admitted after a stop commits. `Stop` and `Admit` take one short lock, never held across a network call. A call admitted before the stop may still reach the receiver and may still complete; stopping doesn't cancel it. It is listed as outstanding, in the stop's event too.
+
+**A record of every call.** Each admitted call has a `Shutter.Store.DispatchPermit`, committed before the POST, with the SHA-256 of the whole body, bed included. The sender holds a lock on it until the call ends.
+- A call that gets no answer that settles it (`uncertain`, 1.3) has a permit of state `uncertain`. The case reads it back as before, and recovery isn't stopped.
+- A permit still `admitted` whose lock has gone was cut off by a restart or a lost job. It becomes `uncertain`, never "not sent", at the next admission or read of the control, and that **latches the stop**, by `system`. If the message comes round again it is refused, so it is not retried.
+
+**Clearing.** `POST /recovery-control/clear` needs `Shutter_Configure` and `Shutter_Approve`, `reason` and `expectedGeneration` (409 `stale_version` on a generation that moved, 409 `wrong_state` when not stopped). It enables nothing: the mode stays as the profile says. It releases nothing: the control's plan floor rises to the newest plan id at each stop, clear and mode change, and a write under a plan at or below it is refused (`plan_predates_control`), so the case needs fresh evidence and a new plan. Clearing records who saw the calls a restart cut off. They stay `uncertain`: nobody has shown they weren't applied.
+
+A demo reset (`Runner.Reset`, demo only) clears a stop too, with the event `demo_reset`, since it starts the receivers afresh. A site has no such route.
+
+**Routes.**
+- `GET /recovery-control`: `{mode, generation, stopped, stoppedAt, stoppedBy, stopReason, outstanding, outstandingCount, readable, covers, doesNotCover}`. A control that can't be read answers `stopped` true and `readable` false.
+- `POST /recovery-control/stop`: `{reason}`, required. A second stop changes nothing. The actor is the signed-in user; a name in the body is ignored.
+- `GET /shadow-observations?from=&to=&receiver=` and `GET /shadow-observations.csv`: the report. `Shutter_Operate`.
+- `Shutter.Store.RecoveryControlEvent` keeps every stop, clear and mode change, with who, why and what was outstanding.
+
+**Email.** In shadow mode, `Escalation Mail` sends nothing and writes no file: the escalation is marked failed, saying why, and enabling recovery doesn't send it. `notifications.shadow_delivery: "enabled"` in the profile lets them go. A reminder for cases left open (6.4) follows the same rule: in shadow mode none is built or sent, the run logs that it was due, its cases count as not reminded, and the first run after enabling or after that setting sends what is due. A stop doesn't touch email.
+
+**The report.** One row per case that reached Shutter in the period, with its latest observation (`Shutter.Store.ShadowObservation`, one per plan at the proposal gate). The denominator is **cases reaching Shutter**, not all failed deliveries: a failure that never became a case is not in it, and a case not yet investigated stays in it as unobserved. A resend proposal whose proposal gate passed is a **candidate for rehearsal**, and no more: neither a rehearsal nor a dispatch was tested. `recovery_calls_sent`, `rehearsal_performed`, `final_dispatch_tested` and `notification_deliveries` are counted from the permits and the escalations, not assumed from the mode. Patients appear as a reference local to this deployment, a hash keyed by a value the control row keeps and no route returns, since `deployment_id` is printed on every row, so a list of hospital numbers can't re-identify a row; no message text. Shutter keeps no list from a reference back to a patient, so a person who needs the patient behind a row keeps that link, within the run, from the row's `case_id`. Human review of a proposal isn't built, so the report says nothing about whether a proposal was right. **A report authorises nothing:** it enables nothing, releases no plan and closes no uncertain write.
+
+## 19. The failure coverage census (v1.48)
+
+An observer for a pilot's review: of a watched receiver's delivery failures in a window, which have a traceable Shutter case? It runs
+on demand and is off unless the site turns it on. It never opens or closes a case, never resends, and changes nothing in the
+watched namespace. It compares what the engine shows with what Shutter holds, so it says nothing about a message the engine
+completed and the receiving application later lost, and a completed transport acknowledgement stays outside the failure count. It
+is not a replacement for the index (8) or the production review (13), and it does not backfill: a failure it finds with no case
+stays a line in its report.
+
+**The profile.** `failure_census` in the site profile (6.4), absent in the shipped one: `{"enabled": false, "max_window_hours": 24,
+"max_headers": 10000, "retention_days": 30, "settle_seconds": 120}`. An unknown setting or a value out of range is refused when the
+profile is saved. `retention_days`: each run takes away runs older than this. `settle_seconds`: a failure younger than this with no
+case may still be on its way through the forwarder, so it counts as unassessable.
+
+**The scope.** A receiver onboarded from a namespace on this instance (11.1), or a profile entry naming its `namespace` and `item`:
+the caller names the receiver and the window, never a namespace or SQL text. Shutter's own namespace is not a source. The read runs in
+the **Failure Census** item (`Shutter.Operation.FailureCensus`), since a caller's role need not reach the watched namespace's database.
+
+**What counts.** A delivery is an `Ens.MessageHeader` of type request whose target is the receiver's item, created in the window. A
+failure is one whose status at the read is error, suspended, aborted or discarded, or completed with `IsError` set. Other statuses
+are counted as `notFinished`. A failure whose session holds no HL7 message is `excluded`, since the intake (11) takes HL7 only.
+
+**The link.** Each failure is keyed by source namespace, delivery header and target. The candidates are the cases of that namespace and
+that receiver since the window opened, from the case rows and from `Shutter.Msg.ExternalIntake` with the `CaseStarted` in its session,
+since a further failure of an open case's operation goes on that case (`Case.Open`) and the row keeps only the first origin.
+
+| Quality | Code | When |
+|---|---|---|
+| `exact` | `origin_is_this_delivery` | the case's origin header is this delivery |
+| `exact` | `only_delivery_in_session` | the origin is in this delivery's session, and the session sent the item one message (a resend of one body stays one) |
+| `ambiguous` | `several_deliveries_in_session` | the origin is in the session, and the session sent the item several different messages: the candidates are named, none chosen |
+| `none` | `no_case` | no candidate names this delivery or its session |
+
+A control id plays no part. Several failures on one case are many-to-one: each is linked, and `distinctCases` counts the case once.
+`FailureCensus.ResolvedDelivery` is where a resolver of the delivery header goes in for a forward that names some other header of
+the session.
+
+**Eligibility.** `in_scope`, `excluded` or `unknown`. `unknown` codes: `body_missing` (no case, and the delivery's body is gone),
+`settling` (no case, and younger than `settle_seconds`), `case_origin_purged` (a case opened in the window whose origin header is gone:
+its row names the case and the origin, with no delivery).
+
+**Completeness.** `unknown` when the source cannot be read: a namespace that is gone or dismounted, or a query refused. Every total is
+then null, never 0, with the reason in `sourceError`. `incomplete` for any of these in `reasons`: `header_cap_hit`, `case_cap_hit`,
+`header_ids_missing` (ids are issued upwards, so a hole around the window is a purge or a delete), `window_older_than_kept_headers`,
+`own_messages_purged` (Shutter's own store no longer reaches the window's start, so a further failure's trail may be gone),
+`case_origin_purged`, `body_missing`, `settling`. `complete` otherwise. No percentage is given.
+
+**Routes**, all `Shutter_Operate`; POST with `X-Requested-With: Shutter` and an optional `Idempotency-Key`.
+
+- `GET /failure-census` -> `{enabled, statement, maxWindowHours, maxHeaders, scopes: [{receiver, namespace, item}], items: [the latest 50 reports, without rows]}`.
+- `POST /failure-census` `{receiver, from?, to?}` (ISO UTC; `to` defaults to now, `from` to the longest window before it) -> 201 the report without rows, whatever it found; 409 `not_enabled`; 400 `bad_request` for a receiver not registered or a window refused (not whole times, backwards, over the limit, or ending more than a minute from now); 503 `no_service` and `not_queued`, 502 `no_answer`, 500 `census_failed`.
+- `GET /failure-census/{id}` -> `{runId, receiver, namespace, item, window: {from, to}, cutoff, sourceRead: ok | unavailable, sourceError, completeness, complete, reasons, scanned, truncated, maxHeaders, configVersion, productVersion, requestedBy, startedAt, finishedAt, statement, totals: {deliveries, completed, notFinished, failures, eligible, exact, none, ambiguous, excluded, unassessable, missingIds, evidenceGaps, distinctCases}, items: [{sourceNamespace, deliveryHeaderId, target, sessionId, originHeaderId, timeCreated, sourceStatus, bodyClass, family, resendOf, caseIds, linkQuality, eligibility, explanation}]}`; 404 `not_found`. `eligible` is `exact` + `none` + `ambiguous`. `resendOf` is the header the engine records this one as resent from. A status is as it stood at `cutoff`.
+- `GET /failure-census/{id}.csv` -> `text/csv`: `record_type,run_id,receiver,source_namespace,target,delivery_header_id,session_id,origin_header_id,time_created,source_status,body_class,message_family,resend_of,link_quality,case_ids,eligibility,explanation`. The first row is `run`, with the read's status under `source_status`, the completeness under `eligibility` and the reasons under `explanation`, so a file read alone says what it is worth; then one `item` row each. A cell a spreadsheet would run as a formula starts with an apostrophe.
+
+No message content is copied: the rows hold ids, codes, the body's class and the HL7 structure's family (ADT, ORU).
+
 ## Changes
 
+- v1.48, 8 Nov 2026 (the features joined onto 1.47): shadow mode and the recovery stop, section 18, with
+  `Shutter_StopRecovery` (5) and `recovery` and `notifications` in the site profile; the failure coverage census, section 19,
+  with `failure_census` (6.4) and Failure Census in INSTALLITEMS (12); the case bundle and the unredacted bundle with a typed
+  reason, neither moving a closed case's receipt (5); what to check at the receiver (5.2); a person's release of another
+  visit's stop, `GET /cases/{id}/further-stop`, `POST /cases/{id}/further-release` and `FURTHER_MOVEMENT_RELEASED` (6.1, 6.5);
+  a non-demo install through `SiteProfile.ForSite` (6.4), beside the shipped policy and the demo's own table; the reminder for
+  cases left open, `reminders` (6.4), which shadow mode holds; `further_messages.a08_location`, `stop` or `show`, with
+  `UPDATE_LOCATION_DIFFERS` and `UPDATE_LOCATION_SHOWN` (6.4, 6.5); a lost admission never released by policy inside an
+  incident either, a partial board's plan that writes nothing escalated, and an incident's approval void when the catalogue,
+  site profile or gate policy version moved, `APPROVAL_CATALOGUE_CHANGED`, `APPROVAL_SITE_PROFILE_CHANGED` and
+  `APPROVAL_POLICY_CHANGED` (6.1, 6.4, 7.3), gate policy version 2026-11-07.1, so an approval given under 1.47's 2026-11-06.1 and
+  not yet dispatched is void at dispatch; the drafted correction sequence, stopped by every further message for the patient
+  (10); document exceptions, an ORU counted as a report by OBX-2 alone (11.2); the Settings screen for watched namespaces
+  (11.3) and `documents_mismatch` (11.1); what each receiver last answered and the report before an install (12); S14 and
+  S26 (4.1, 8.2) and the fault `commit_then_409` (1.5). The sections these brought as 17 and 18 are 18 and 19 here, after 1.47's
+  receiver outages.
+- v1.48, 7 Nov 2026 (a storm of 200 failures, measured): the shared approval task's message lists the first chains that fit in its 2,000 characters and points to the incident page; an error raising a task no longer abandons the incident, which waits for a person and tries again every 5 minutes (7.3). No API field changes. The incident page lists six chains and offers the rest behind one button.
 - v1.47, 8 Nov 2026 (the engine check): the gate's ordering check reads the engine first for a write on a case with a source
   namespace and an origin header, with `ENGINE_NOT_IN_SCOPE`, `ENGINE_STILL_TRYING`, `ENGINE_DELIVERED`, `RECEIVER_MAY_HOLD_IT`,
   `ENGINE_UNREADABLE` and `ENGINE_SETTLED` (6.5); the case carries `waitsOnEngine` (11); eleven reason codes appended to

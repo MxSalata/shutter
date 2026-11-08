@@ -9,7 +9,7 @@ Class Shutter.Operation.Gate Extends Ens.BusinessOperation
 Parameter INVOCATION = "Queue";
 
 /// Bumped whenever a check changes; recorded on every decision and bound by approvals.
-Parameter POLICYVERSION = "2026-11-06.1";
+Parameter POLICYVERSION = "2026-11-07.1";
 
 Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shutter.Msg.GateResult) As %Status
 {
@@ -88,7 +88,7 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
         Set exact = (plan.OperationKey = case.OperationKey)
         Set op = summary.%Get("operation")
         Set digestOk = (plan.PayloadDigest = "") || (plan.PayloadDigest = ##class(Shutter.Util.Json).Str(op, "payload_digest"))
-        Do ..Check(checks, "intent", $SELECT(exact && digestOk: "pass", 1: "block"), $SELECT(exact && digestOk: "EXACT_OPERATION", 'exact: "DIFFERENT_OPERATION", 1: "PAYLOAD_CHANGED"), $SELECT(exact && digestOk: "The plan resends the case's own operation, unchanged", 1: "The plan's action is not the case's operation unchanged"))
+        Do ..Check(checks, "intent", $SELECT(exact && digestOk: "pass", 1: "block"), $SELECT(exact && digestOk: "EXACT_OPERATION", 'exact: "DIFFERENT_OPERATION", 1: "PAYLOAD_CHANGED"), $SELECT('exact || 'digestOk: "The plan's action is not the case's operation unchanged", plan.PayloadDigest = "": "The plan resends the case's own operation, but names no payload digest, so none was compared; the write takes the payload from the case's evidence", 1: "The plan resends the case's own operation, unchanged"))
     } Else {
         Do ..Check(checks, "intent", "pass", "NO_WRITE", "The plan writes nothing to the receiver")
     }
@@ -106,6 +106,16 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
     // The messages of the encounter pending ahead of this case (v1.29): they hold a write, and a supersession that rests on
     // one of them (v1.34), until they are delivered.
     Set pendingMsgs = summary.%Get("pending_messages")
+    // A failed A08 naming another place than the receiver holds: an update carries no location, so a resend would verify and a
+    // closure would stand with the move undone. A site that repeats stale locations on full-state A08s can show it instead.
+    If (isWrite || (plan.Disposition = "reconcile") || (plan.Disposition = "superseded")) && (##class(Shutter.Catalogue.Matcher).A08Location(summary, case, ##class(Shutter.Catalogue.Matcher).Later(summary, case, chainKind)) = "different") {
+        Set a08Words = ##class(Shutter.Catalogue.Matcher).A08Words(summary, case)
+        If ##class(Shutter.Store.SiteProfile).FurtherA08Location() = "show" {
+            Do ..Check(checks, "ordering", "pass", "UPDATE_LOCATION_SHOWN", a08Words _ ". The site's profile shows it (further_messages.a08_location), so it goes on the plan and stops nothing")
+        } Else {
+            Do ..Check(checks, "ordering", "block", "UPDATE_LOCATION_DIFFERS", a08Words _ ". An update carries no location, so a resend or a closure would leave that undone. Nothing is sent or closed; a person decides")
+        }
+    }
     If isWrite {
         // Whether the engine still has this message, or has delivered it (Shutter.Util.EngineCheck). It comes first: what the engine
         // has done decides whether there is a write to weigh at all. A watched case with no origin header has nothing to read it by.
@@ -115,8 +125,11 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
         Set further = $SELECT(request.Stage = "proposal": summary.%Get("further_messages"), 1: ##class(Shutter.Util.FurtherMessages).Find(case))
         If ##class(Shutter.Util.FurtherMessages).Unreadable(further) {
             Do ..Check(checks, "ordering", "block", "PATIENT_UNREADABLE", "The case's patient identifier could not be read, so what else has happened to this patient is not known; a person decides")
+        } ElseIf ##class(Shutter.Util.FurtherMessages).Released(case, further) {
+            // A person read these very rows and released this stop, and this read gives the same ones. It releases nothing else.
+            Do ..Check(checks, "ordering", "pass", "FURTHER_MOVEMENT_RELEASED", "Another visit's movement, released by a person who read these rows; this read gives the same ones. " _ ##class(Shutter.Util.FurtherMessages).Describe(case, further))
         } ElseIf ##class(Shutter.Util.FurtherMessages).Count(further, "stops") > 0 {
-            Do ..Check(checks, "ordering", "block", "FURTHER_MOVEMENT", ##class(Shutter.Util.FurtherMessages).Describe(case, further) _ ". Nothing is sent; a person reads both and decides")
+            Do ..Check(checks, "ordering", "block", "FURTHER_MOVEMENT", ##class(Shutter.Util.FurtherMessages).Describe(case, further) _ ". Nothing is sent; a person reads both and decides" _ $SELECT(case.FurtherReleaseJSON '= "": ". An earlier release no longer holds: these aren't the rows that person read", 1: ""))
         } ElseIf ##class(Shutter.Util.FurtherMessages).Unread(further) '= "" {
             Do ..Check(checks, "ordering", "block", "FURTHER_NOT_READ", "Further messages for this patient could not all be read: " _ ##class(Shutter.Util.FurtherMessages).Unread(further) _ ". Nothing is sent until they can be, or a person decides")
         } ElseIf $ISOBJECT(further) {
@@ -230,14 +243,16 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
                 Set policy = ##class(Shutter.Store.SiteProfile).Policy(tier, $SELECT(request.ChainKind = "": "single", 1: request.ChainKind))
                 If policy '= "automatic" Set why = "policy_requires_approval"
                 // An admission on a 404 is never released by policy alone (a record may have been entered by hand under another
-                // number), unless the site's profile says so. An incident's release has its own path (7.3).
-                If (why = "") && '$ISOBJECT(case.Incident) && ##class(Shutter.Util.FurtherMessages).AdmissionOnNotFound(case, summary) && (##class(Shutter.Store.SiteProfile).AdmissionNotFound() = "person") Set why = "policy_requires_approval"
+                // number), inside an incident too, unless the site's profile says so.
+                If (why = "") && ##class(Shutter.Util.FurtherMessages).AdmissionOnNotFound(case, summary) && (##class(Shutter.Store.SiteProfile).AdmissionNotFound() = "person") Set why = "policy_requires_approval"
+                // A person released a stop on this case: the write after it goes to a person too.
+                If (why = "") && (case.FurtherReleaseJSON '= "") Set why = "policy_requires_approval"
                 // The plan must have come from the policy path for the entry it names: a board's plan never goes by policy.
                 If (why = "") && ((plan.CatalogueEntry = "") || (plan.CreatedBy '= ("policy:" _ plan.CatalogueEntry))) Set why = "plan_origin"
                 // A write with no person needs the case's source proved (CONTRACTS 11).
                 If why = "" Set unproved = ##class(Shutter.Operation.Origin).Problem(case) Set:unproved'="" why = "origin_not_proved"
             }
-            Do ..Check(checks, "authorization", $SELECT(why = "": "pass", 1: "block"), $SELECT(why = "": "APPROVAL_VALID", why = "policy_requires_approval": "POLICY_REQUIRES_APPROVAL", 1: "APPROVAL_" _ $ZCONVERT(why, "U")), $SELECT(why = "": "Approved by " _ approval.Approver _ " for plan digest " _ $EXTRACT(approval.PlanDigest, 1, 19), why = "origin_not_proved": "Source not verified, so no automatic release: " _ $GET(unproved), why = "item_changed": "The incident's approval bound entry " _ approval.BoundEntry _ " (" _ approval.BoundOutcome _ ") for this item; the plan or the fresh evidence now reads " _ plan.CatalogueEntry _ " (" _ ##class(Shutter.Util.Json).Str(summary.%Get("catalogue"), "outcome") _ ")", 1: "The approval no longer authorises this dispatch: " _ why))
+            Do ..Check(checks, "authorization", $SELECT(why = "": "pass", 1: "block"), $SELECT(why = "": "APPROVAL_VALID", why = "policy_requires_approval": "POLICY_REQUIRES_APPROVAL", 1: "APPROVAL_" _ $ZCONVERT(why, "U")), $SELECT(why = "": "Approved by " _ approval.Approver _ " for plan digest " _ $EXTRACT(approval.PlanDigest, 1, 19), why = "origin_not_proved": "Source not verified, so no automatic release: " _ $GET(unproved), why = "item_changed": "The incident's approval bound entry " _ approval.BoundEntry _ " (" _ approval.BoundOutcome _ ") for this item; the plan or the fresh evidence now reads " _ plan.CatalogueEntry _ " (" _ ##class(Shutter.Util.Json).Str(summary.%Get("catalogue"), "outcome") _ ")", 1: $SELECT(approval.IncidentPlanDigest '= "": "The incident's plan was approved under other versions, or no longer stands, so its approval no longer authorises this dispatch: ", 1: "The approval no longer authorises this dispatch: ") _ why))
         }
     }
 

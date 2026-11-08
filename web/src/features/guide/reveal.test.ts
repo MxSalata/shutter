@@ -47,14 +47,14 @@ describe('landOn and bringIntoFreePart', () => {
     vi.useFakeTimers();
     const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
     Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, value: 5000 });
-    let top = 1000;
+    let top = 500;
     const el = box(document.body, 'host', 0, 10);
     el.getBoundingClientRect = () => ({ top, bottom: top + 10, height: 10 }) as DOMRect;
     const stop = landOn(el, false);
-    expect(scrollTo).toHaveBeenLastCalledWith({ top: 984, behavior: 'smooth' });
-    top = 1200;
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 484, behavior: 'smooth' });
+    top = 700;
     vi.advanceTimersByTime(60);
-    expect(scrollTo).toHaveBeenLastCalledWith({ top: 1184, behavior: 'smooth' });
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 684, behavior: 'smooth' });
     window.dispatchEvent(new Event('wheel'));
     const calls = scrollTo.mock.calls.length;
     top = 1500;
@@ -62,6 +62,16 @@ describe('landOn and bringIntoFreePart', () => {
     expect(scrollTo.mock.calls.length).toBe(calls);
     stop();
     vi.useRealTimers();
+    scrollTo.mockRestore();
+    Reflect.deleteProperty(document.documentElement, 'scrollHeight');
+  });
+
+  it('jumps a distance of more than a screen, rather than glide over a page still settling', () => {
+    const scrollTo = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    Object.defineProperty(document.documentElement, 'scrollHeight', { configurable: true, value: 5000 });
+    const stop = landOn(box(document.body, 'host', 2000, 10), false);
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 1984, behavior: 'auto' });
+    stop();
     scrollTo.mockRestore();
     Reflect.deleteProperty(document.documentElement, 'scrollHeight');
   });

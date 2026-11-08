@@ -202,6 +202,28 @@ Method TestCommitDropResponseCommits()
     Do $$$AssertEquals(again.reason, "already_committed", "and a retry finds the receipt")
 }
 
+/// A proxy between sender and receiver: the commit lands, and the sender is told it conflicted. A retry finds the receipt.
+Method TestCommitThen409()
+{
+    Set encounter = ..Encounter(92)
+    Do ..Admit(encounter)
+    Set transfer = ..Request(encounter, "transfer", "WARD-B", "2026-10-15T09:20:00Z")
+    Set saved = ##class(Downstream.Service).GetFault(.ignore)
+    Do ##class(Downstream.Service).SetFault({"mode": "commit_then_409", "operation_key": (transfer."operation_key")}, .status)
+    Do $$$AssertEquals(status, 200, "the fault is taken")
+    Set rehearsal = ##class(%DynamicObject).%FromJSON(transfer.%ToJSON()), rehearsal."dry_run" = 1
+    Do ##class(Downstream.Service).Apply(rehearsal, .status)
+    Do $$$AssertEquals(status, 200, "a rehearsal is untouched")
+    Set body = ##class(Downstream.Service).Apply(transfer, .status)
+    Do $$$AssertEquals(status, 409, "the answer says conflict")
+    Do $$$AssertEquals(body.error, "version_conflict", "in the words of a real conflict")
+    Do ##class(Downstream.Service).GetReceipt(transfer."operation_key", .status)
+    Do $$$AssertEquals(status, 200, "but the operation was committed")
+    Set again = ##class(Downstream.Service).Apply(transfer, .status)
+    Do ##class(Downstream.Service).SetFault(saved, .ignore)
+    Do $$$AssertEquals(again.reason, "already_committed", "and a retry finds the receipt")
+}
+
 Method TestDelayResponseHoldsThenApplies()
 {
     Set encounter = ..Encounter(91)

@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   agentsBadge,
+  attentionOf,
   budgetLine,
   credentialChecks,
   groupReport,
   licenceSentence,
   provenanceFacts,
+  receiverLine,
+  receiverReadings,
   recordedAt,
   rowInfo,
   utcMinute,
@@ -498,6 +501,30 @@ describe('the row rule', () => {
   });
 });
 
+describe('the reminder for cases left open', () => {
+  it('is quiet when off or complete, and asks for a look with what is missing when on without it', () => {
+    expect(rowInfo('case_reminders', { enabled: false }, {}, false)).toEqual({
+      mark: 'none',
+      tone: null,
+      missing: false,
+    });
+    expect(rowInfo('case_reminders', { enabled: true, warnings: [] }, {}, false).tone).toBeNull();
+    const on = rowInfo(
+      'case_reminders',
+      { enabled: true, warnings: ['No mail server', 'No officer'] },
+      {},
+      false,
+    );
+    expect(on.tone).toBe('attention');
+    expect(on.todo).toBe('No mail server. No officer');
+  });
+
+  it('adds no row to a report that does not send it', () => {
+    const { groups } = groupReport(RECORDED, true);
+    expect(groups.flatMap((g) => g.rows).some((r) => r.key === 'case_reminders')).toBe(false);
+  });
+});
+
 describe('the licence', () => {
   it('is one sentence built from the fields as the report names them, with no sum', () => {
     expect(licenceSentence(RECORDED.license)).toBe(
@@ -592,5 +619,182 @@ describe('the model budget', () => {
       '$1.50 of the $5.00 per reset spent on live runs since the demo last reset (every hour)',
     );
     expect(budgetLine(null, {})).toBeNull();
+  });
+});
+
+describe('a receiver that does not answer, and a watched namespace that cannot hear', () => {
+  const DEAD = {
+    name: 'Downstream Out',
+    has_api: true,
+    state: 'no_answer',
+    at: '2026-11-06T14:02:09Z',
+    http_status: 0,
+    from: 'connector',
+    error: 'ERROR #6059: Unable to open TCP/IP socket',
+    last_answer_at: '2026-11-06T13:10:00Z',
+    incident: 'I-000002',
+  };
+  const WELL = {
+    name: 'Records Out',
+    has_api: true,
+    state: 'answering',
+    at: '2026-11-06T14:00:00Z',
+    http_status: 200,
+  };
+
+  it('keeps Ready when the receivers answer, and says nothing more', () => {
+    const report = { ...RECORDED, receivers: [WELL], receivers_ok: true, watched_ok: true };
+    expect(attentionOf(report)).toEqual([]);
+    expect(verdictOf(report).kind).toBe('ready');
+  });
+
+  it('never leaves Ready with a dead receiver: it needs a look, and names the receiver and when it last answered', () => {
+    const report = { ...RECORDED, receivers: [DEAD, WELL], receivers_ok: false };
+    const v = verdictOf(report);
+    expect(v.kind).toBe('attention');
+    expect(v.word).toBe('Needs a look');
+    expect(v.tone).toBe('attention');
+    expect(v.failing).toEqual([]);
+    expect(verdictStatement(v, false)).toBe('Running, but a receiver is not answering.');
+    expect(v.attention.map((a) => a.line)).toEqual([
+      'Downstream Out: no answer at 6 Nov 2026, 14:02 UTC. Last answered 6 Nov 2026, 13:10 UTC. Incident I-000002.',
+    ]);
+  });
+
+  it('names each state of a receiver in words, and never a healthy or unread one', () => {
+    const line = (state: string, http_status = 0) =>
+      receiverLine(receiverReadings([{ name: 'R', state, http_status, at: '2026-11-06T14:02:09Z' }])[0]);
+    expect(line('server_error', 503)).toBe('R: server error, HTTP 503, at 6 Nov 2026, 14:02 UTC.');
+    expect(line('refused', 401)).toBe("R: refused Shutter's sign-in, HTTP 401, at 6 Nov 2026, 14:02 UTC.");
+    expect(line('failing')).toBe('R: deliveries failing since it last answered at 6 Nov 2026, 14:02 UTC.');
+    const report = {
+      ...RECORDED,
+      receivers: [WELL, { name: 'Lab Out', state: 'not_read' }, { name: 'Docs Out', state: 'no_api' }],
+      receivers_ok: true,
+    };
+    expect(attentionOf(report)).toEqual([]);
+  });
+
+  it('says when a receiver last answered once, when deliveries fail after that answer', () => {
+    const [r] = receiverReadings([
+      {
+        name: 'R',
+        state: 'failing',
+        at: '2026-11-06T14:02:09Z',
+        last_answer_at: '2026-11-06T14:02:09Z',
+        incident: 'I-000003',
+      },
+    ]);
+    expect(receiverLine(r)).toBe(
+      'R: deliveries failing since it last answered at 6 Nov 2026, 14:02 UTC. Incident I-000003.',
+    );
+  });
+
+  it('counts the failures of a receiver nothing has read, and claims no answer it never gave', () => {
+    const line = (fields: Record<string, unknown>) =>
+      receiverLine(receiverReadings([{ name: 'Docs Out', state: 'failing', at: '', ...fields }])[0]);
+    const at = '2026-11-06T14:02:09Z';
+    expect(line({ failures_hour: 3, last_failure_at: at })).toBe(
+      'Docs Out: 3 deliveries failed in the last hour, the last at 6 Nov 2026, 14:02 UTC.',
+    );
+    expect(line({ failures_hour: 1, last_failure_at: at })).toBe(
+      'Docs Out: 1 delivery failed in the last hour, at 6 Nov 2026, 14:02 UTC.',
+    );
+    expect(line({ failures_hour: 2 })).toBe('Docs Out: 2 deliveries failed in the last hour.');
+  });
+
+  it('says not answering only of a receiver that gave no answer', () => {
+    const statement = (receivers: Record<string, unknown>[], trial = false) =>
+      verdictStatement(verdictOf({ ...RECORDED, receivers, receivers_ok: false }), trial);
+    const at = '2026-11-06T14:02:09Z';
+    const refused = { name: 'A', state: 'refused', http_status: 401, at };
+    const broken = { name: 'B', state: 'server_error', http_status: 503, at };
+    const failing = { name: 'C', state: 'failing', at: '', failures_hour: 2, last_failure_at: at };
+    for (const r of [refused, broken, failing])
+      expect(statement([r])).toBe('Running, but a receiver needs a look.');
+    expect(statement([DEAD, refused])).toBe('Running, but 2 receivers need a look.');
+    expect(statement([refused], true)).toBe(
+      'The recorded instance was running, but a receiver needed a look.',
+    );
+    expect(statement([DEAD, refused], true)).toBe(
+      'The recorded instance was running, but 2 receivers needed a look.',
+    );
+  });
+
+  it('a watched namespace with a problem needs a look too, and one taken off does not', () => {
+    const report = {
+      ...RECORDED,
+      watched_ok: false,
+      watched_namespaces: [
+        { namespace: 'PAS', ok: false, problems: ['The alert intake Ens.Alert is disabled', 'Another'] },
+        { namespace: 'OLD', ok: true, removed: true, problems: [] },
+        { namespace: 'LAB', ok: true, problems: [] },
+      ],
+    };
+    const v = verdictOf(report);
+    expect(v.kind).toBe('attention');
+    expect(verdictStatement(v, false)).toBe('Running, but a watched namespace has a problem.');
+    expect(v.attention.map((a) => a.line)).toEqual([
+      'PAS: The alert intake Ens.Alert is disabled (and 1 more).',
+    ]);
+  });
+
+  it('clips a long problem in the hero, whose whole text stays in the report', () => {
+    const problem = Array.from({ length: 30 }, (_, i) => `w${i}`).join(' ');
+    const [a] = attentionOf({
+      ...RECORDED,
+      watched_namespaces: [{ namespace: 'PAS', ok: false, problems: [problem, 'Another'] }],
+    });
+    expect(a.line).toBe(`PAS: ${problem.split(' ').slice(0, 20).join(' ')}... (and 1 more).`);
+  });
+
+  it('both together, past tense in the trial; a failing core check stays Not ready and still lists them', () => {
+    const report = {
+      ...RECORDED,
+      receivers: [DEAD, { ...DEAD, name: 'Lab Out' }],
+      receivers_ok: false,
+      watched_ok: false,
+      watched_namespaces: [{ namespace: 'PAS', ok: false, problems: ['No forwarder item'] }],
+    };
+    expect(verdictStatement(verdictOf(report), false)).toBe(
+      'Running, but 2 receivers are not answering and a watched namespace has a problem.',
+    );
+    expect(verdictStatement(verdictOf(report), true)).toBe(
+      'The recorded instance was running, but 2 receivers were not answering and a watched namespace had a problem.',
+    );
+    const stopped = verdictOf({ ...report, production_state: 'stopped' });
+    expect(stopped.kind).toBe('not-ready');
+    expect(stopped.attention).toHaveLength(3);
+  });
+
+  it('a report that does not carry the checks reads as before', () => {
+    const v = verdictOf(RECORDED);
+    expect(v.kind).toBe('ready');
+    expect(v.attention).toEqual([]);
+  });
+
+  it('marks the rows: false to look at, null as not known, true as a check; ill-shaped receivers come out empty', () => {
+    expect(rowInfo('receivers_ok', true, {}, false)).toMatchObject({ mark: 'check', tone: 'positive' });
+    expect(rowInfo('receivers_ok', false, {}, false)).toMatchObject({ mark: 'x', tone: 'attention' });
+    expect(rowInfo('watched_ok', false, {}, false)).toMatchObject({ mark: 'x', tone: 'attention' });
+    const unknown = rowInfo('receivers_ok', null, {}, false);
+    expect(unknown).toMatchObject({ mark: 'dash', tone: 'neutral', missing: false });
+    expect(unknown.reason?.chip).toBe('Not known yet');
+    expect(receiverReadings(undefined)).toEqual([]);
+    expect(receiverReadings([null])[0]).toMatchObject({ name: '', state: '' });
+  });
+
+  it('the new keys go to the closed Other group, so a healthy report adds nothing to the first layer', () => {
+    const { groups } = groupReport(
+      { ...RECORDED, receivers: [WELL], receivers_ok: true, watched_ok: true },
+      false,
+    );
+    const other = groups.find((g) => g.def.id === 'other');
+    expect(other?.rows.map((r) => r.key)).toEqual(['receivers', 'receivers_ok', 'watched_ok']);
+    expect(groups.map((g) => g.def.id)).toEqual(
+      groupReport(RECORDED, false)
+        .groups.map((g) => g.def.id)
+        .concat('other'),
+    );
   });
 });

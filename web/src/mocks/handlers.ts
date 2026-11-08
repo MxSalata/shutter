@@ -7,12 +7,14 @@ import type {
   AskQuestion,
   CaseQuestion,
   CaseState,
+  CorrectionSteps,
   Costs,
   Escalation,
   IncidentDetail,
   IncidentEvent,
   IncidentSummary,
   Me,
+  RecoveryControl,
   Precedent,
   PrecedentSummary,
   ReviewAgent,
@@ -31,7 +33,9 @@ import {
   validateProfile,
 } from '@/features/site-profile/profile';
 import { digest, draftEscalation, teamFor } from './escalation';
+import { receiverCheckFor, type RecordedCase } from './receiverCheck';
 import { freshHolds, heldView, type CaseFixture, type Hold } from './hold';
+import { onboardingHandlers, resetOnboarding } from './onboarding';
 import { recordedSiteProfile, recordedSiteProfileHistory } from './profile';
 import {
   questionDetail,
@@ -67,6 +71,23 @@ interface ReviewFixtures {
 const recordedReviews: ReviewFixtures = (fixtures as unknown as { productionReviews?: ReviewFixtures })
   .productionReviews ?? { targets: [], list: [], reviews: {} };
 
+/** The recovery control as the demo seeds it: enabled and not stopped (CONTRACTS 18). */
+const RECOVERY: RecoveryControl = {
+  mode: 'enabled',
+  generation: 1,
+  stopped: false,
+  stoppedAt: '',
+  stoppedBy: '',
+  stopReason: '',
+  outstanding: [],
+  outstandingCount: 0,
+  readable: true,
+  covers: 'Rehearsals, recovery writes and blind-resend previews that Shutter itself starts.',
+  doesNotCover:
+    "The hospital's ordinary feed and its retries, other systems or people writing to the receiver, Shutter's own records, and read-back of earlier attempts.",
+};
+let recovery = RECOVERY;
+
 /**
  * The mock's users, with `can` as the server answers it (CONTRACTS 5, v1.34): the operator runs scenarios and cannot
  * configure, the approver can do everything, and `demo` is the public demo's role, which operates and approves but
@@ -77,13 +98,27 @@ const USERS: Record<string, Me> = {
     username: 'operator',
     operator: true,
     approver: false,
-    can: { operate: true, approve: false, configure: false, scenarios: true, liveAgents: true },
+    can: {
+      operate: true,
+      approve: false,
+      configure: false,
+      scenarios: true,
+      stopRecovery: true,
+      liveAgents: true,
+    },
   },
   approver: {
     username: 'approver',
     operator: true,
     approver: true,
-    can: { operate: true, approve: true, configure: true, scenarios: true, liveAgents: true },
+    can: {
+      operate: true,
+      approve: true,
+      configure: true,
+      scenarios: true,
+      stopRecovery: true,
+      liveAgents: true,
+    },
   },
   demo: {
     username: 'demo',
@@ -156,6 +191,7 @@ const recordedLibrary = structuredClone(fixtures.library);
  */
 export function resetMock(signedInAs: keyof typeof USERS | null = 'approver') {
   session = signedInAs ? USERS[signedInAs] : null;
+  recovery = RECOVERY;
   fixtures.library.splice(0, fixtures.library.length, ...structuredClone(recordedLibrary));
   run = null;
   played = {};
@@ -168,6 +204,7 @@ export function resetMock(signedInAs: keyof typeof USERS | null = 'approver') {
   startedReviews = {};
   asked = {};
   resetQuestionIds();
+  resetOnboarding();
 }
 
 /**
@@ -655,6 +692,7 @@ async function decideIncident(request: Request, id: string, seq: number | null) 
 }
 
 export const handlers = [
+  ...onboardingHandlers(csrf, guard),
   http.post(`${BASE}/session`, async ({ request }) => {
     const bad = csrf(request);
     if (bad) return bad;
@@ -750,6 +788,13 @@ export const handlers = [
   http.get(`${BASE}/cases/:id/snapshot`, ({ params }) =>
     part(String(params.id), (c) => withPrecedents(c.snapshot), 'no_snapshot'),
   ),
+  // Warehouse history is a site's own option: the recorded demo has it off, so the panel is not there
+  http.get(`${BASE}/cases/:id/warehouse-history`, ({ params }) => {
+    if (!session) return signedOut();
+    const id = String(params.id);
+    if (!caseOf(id)) return error(404, 'not_found', `No case ${id}`);
+    return HttpResponse.json({ enabled: false, read: null });
+  }),
   // The precedents these conditions matched at the case's receiver when its evidence was collected (above)
   http.get(`${BASE}/cases/:id/precedents`, ({ params }) => {
     if (!session) return signedOut();
@@ -782,6 +827,29 @@ export const handlers = [
   }),
   http.get(`${BASE}/cases/:id/runs`, ({ params }) => part(String(params.id), (c) => c.runs, 'not_found')),
   http.get(`${BASE}/cases/:id/plan`, ({ params }) => part(String(params.id), (c) => c.plan, 'no_plan')),
+  // The recording holds no message text: a draft read in the trial answers with the plan's own reason, and reads nothing
+  http.get(`${BASE}/cases/:id/correction-draft`, ({ params }) => {
+    const id = String(params.id);
+    const c = caseOf(id);
+    if (!session) return signedOut();
+    if (!c) return error(404, 'not_found', `No case ${id}`);
+    if (!c.plan) return error(404, 'no_plan', `No plan for ${id}`);
+    const inner = (c.plan as { plan?: { plan?: { correction_steps?: CorrectionSteps } } }).plan?.plan;
+    const correction = inner?.correction_steps;
+    if (!correction) return error(409, 'wrong_outcome', "The case's plan is not a history correction");
+    return HttpResponse.json({
+      caseId: id,
+      drawn: false,
+      reason_code: correction.sequence?.reason_code ?? '',
+      reason:
+        correction.sequence?.reason ??
+        'No sequence: this recording holds no message text, so none is drawn here.',
+      header: [],
+      messages: [],
+      cannot_know: [],
+      never: [],
+    });
+  }),
   http.get(`${BASE}/cases/:id/approvals`, ({ params }) =>
     part(String(params.id), (c) => c.approvals, 'not_found'),
   ),
@@ -1015,6 +1083,15 @@ export const handlers = [
     if (!caseOf(id)) return error(404, 'not_found', `No case ${id}`);
     return HttpResponse.json(whatIfFor(id));
   }),
+  http.get(`${BASE}/cases/:id/receiver-check`, ({ params }) => {
+    if (!session) return signedOut();
+    const id = String(params.id);
+    const c = caseOf(id);
+    if (!c) return error(404, 'not_found', `No case ${id}`);
+    if (!['blocked', 'escalated', 'failed'].includes(String(c.detail.state)))
+      return error(404, 'not_stopped', `The case is ${String(c.detail.state)}`);
+    return HttpResponse.json(receiverCheckFor(c as unknown as RecordedCase, siteProfile!.profile));
+  }),
   http.get(`${BASE}/cases/:id/questions/suggested`, ({ params }) => {
     if (!session) return signedOut();
     const id = String(params.id);
@@ -1198,6 +1275,29 @@ export const handlers = [
       ref: `escalation:${e.seq}`,
     });
     return HttpResponse.json(e, { status: 202 });
+  }),
+
+  http.get(`${BASE}/recovery-control`, () => HttpResponse.json(recovery)),
+  http.post(`${BASE}/recovery-control/stop`, async ({ request }) => {
+    const { reason } = (await request.json()) as { reason?: string };
+    if (!reason) return HttpResponse.json({ error: 'bad_request' }, { status: 400 });
+    if (!recovery.stopped) {
+      recovery = {
+        ...recovery,
+        stopped: true,
+        stoppedBy: 'you',
+        stoppedAt: new Date().toISOString(),
+        stopReason: reason,
+        generation: recovery.generation + 1,
+      };
+    }
+    return HttpResponse.json(recovery);
+  }),
+  http.post(`${BASE}/recovery-control/clear`, async ({ request }) => {
+    const { reason } = (await request.json()) as { reason?: string };
+    if (!reason) return HttpResponse.json({ error: 'bad_request' }, { status: 400 });
+    recovery = { ...RECOVERY, generation: recovery.generation + 1 };
+    return HttpResponse.json(recovery);
   }),
 
   http.get(`${BASE}/site-profile`, () =>

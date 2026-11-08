@@ -1,5 +1,5 @@
-import { Anchor, Button, Group, Modal, Stack, Text } from '@mantine/core';
-import { useState } from 'react';
+import { Anchor, Button, Group, Paper, Stack, Text } from '@mantine/core';
+import { useId, useState } from 'react';
 import { trialHref } from '@/env/mode';
 
 /** Where the live first-run prompt keeps its dismissal, on this device. */
@@ -15,10 +15,12 @@ const dismissed = () => {
 
 /**
  * The live app's first-run prompt, once per device after sign-in: it points to the trial, where the guide runs, so
- * a first look never happens on a hospital's live data.
+ * a first look never happens on a hospital's live data. A card at the corner of the page, never over it: on the online
+ * demo the page itself holds a case to approve, and the first thing a visitor sees must not hide it.
  */
 export function LiveWelcome() {
   const [open, setOpen] = useState(() => !dismissed());
+  const title = useId();
   const close = () => {
     try {
       window.localStorage.setItem(LIVE_WELCOME_KEY, new Date().toISOString());
@@ -27,10 +29,22 @@ export function LiveWelcome() {
     }
     setOpen(false);
   };
+  if (!open) return null;
   return (
-    <Modal opened={open} onClose={close} title="New here?" centered>
-      <Stack gap="md">
-        <Text>
+    <Paper
+      role="dialog"
+      aria-labelledby={title}
+      className="live-welcome"
+      withBorder
+      shadow="md"
+      p="md"
+      radius="md"
+    >
+      <Stack gap="sm">
+        <Text id={title} fw={700}>
+          New here?
+        </Text>
+        <Text size="sm">
           Try Shutter in the trial environment first: a demo hospital with made-up patients, where each action
           replays a recording and nothing reaches this hospital&apos;s systems.
         </Text>
@@ -46,6 +60,6 @@ export function LiveWelcome() {
           </Button>
         </Group>
       </Stack>
-    </Modal>
+    </Paper>
   );
 }

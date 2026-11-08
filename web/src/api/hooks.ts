@@ -5,15 +5,20 @@ import { isApiError } from '@/lib/errors';
 import {
   CLOSED_STATES,
   type ApprovalDecision,
+  type WarehouseHistoryView,
   type ApprovalsView,
   type AttemptView,
   type BlindResendPreview,
   type BlockedReason,
+  type FurtherStop,
+  type RecoveryControl,
+  type ReceiverCheck,
   type CaseDetail,
   type CaseEvent,
   type CaseList,
   type CaseState,
   type Closure,
+  type CorrectionDraftView,
   type Costs,
   type Health,
   type Escalation,
@@ -69,6 +74,7 @@ export const keys = {
   incident: (id: string) => ['incident', id] as const,
   incidentEvents: (id: string) => ['incident', id, 'events'] as const,
   escalations: (id: string) => ['case', id, 'escalations'] as const,
+  recoveryControl: ['recovery-control'] as const,
   siteProfile: ['site-profile'] as const,
   siteProfileHistory: ['site-profile', 'history'] as const,
   library: ['library'] as const,
@@ -143,6 +149,19 @@ export function isPlaying(run: ScenarioRun | null | undefined): boolean {
   return run?.state === 'running' || run?.state === 'queued';
 }
 
+/** A case in these states is waiting on a person or an incident, or is closed; in any other it is working now. */
+const AT_REST: readonly CaseState[] = [...CLOSED_STATES, 'awaiting_approval', 'grouped'];
+
+/**
+ * The case a finished run left still working, if any. A new run resets the demo receiver under it, so it would end as
+ * Abandoned and its later approval would be blocked with UNKNOWN_ENCOUNTER: Run waits for it.
+ */
+export function settlingCase(list: ScenarioList | null | undefined): Scenario['latestCase'] {
+  if (list?.run?.state !== 'done') return null;
+  const latest = list.scenarios.find((s) => s.id === list.run?.scenario)?.latestCase ?? null;
+  return latest && !AT_REST.includes(latest.state) ? latest : null;
+}
+
 /** The scenarios and, when the API reports it, the current or last background run (T13). */
 export function useScenarios() {
   return useQuery({
@@ -153,7 +172,8 @@ export function useScenarios() {
         ? { scenarios: data, run: null }
         : { scenarios: data.scenarios ?? [], run: data.run ?? null };
     },
-    refetchInterval: (query) => (isPlaying(query.state.data?.run) ? 2_000 : CALM),
+    refetchInterval: (query) =>
+      isPlaying(query.state.data?.run) || settlingCase(query.state.data) ? 2_000 : CALM,
   });
 }
 
@@ -253,12 +273,21 @@ export function useCaseDetails(caseIds: string[]) {
 
 /**
  * A part of a case (events, snapshot, runs, plan...). It refreshes while the case is open; a 404 (no plan yet, no
- * closure yet) is an answer, shown as "not yet", so it reads as null rather than an error.
+ * closure yet) is an answer, shown as "not yet", so it reads as null rather than an error. `notYet` says the case is too
+ * young to have this part: the answer is the same null, with no request, so the browser's console logs no 404.
  */
-function useCasePart<T>(caseId: string, part: string, path: string, open: boolean, enabled = true) {
+function useCasePart<T>(
+  caseId: string,
+  part: string,
+  path: string,
+  open: boolean,
+  enabled = true,
+  notYet = false,
+) {
   return useQuery({
     queryKey: keys.part(caseId, part),
     queryFn: async (): Promise<T | null> => {
+      if (notYet) return null;
       try {
         return await api.get<T>(`/cases/${seg(caseId)}${path}`);
       } catch (e) {
@@ -273,10 +302,26 @@ function useCasePart<T>(caseId: string, part: string, path: string, open: boolea
 
 export const useCaseEvents = (id: string, open: boolean) =>
   useCasePart<CaseEvent[]>(id, 'events', '/events', open);
-export const useSnapshot = (id: string, open: boolean) =>
-  useCasePart<Snapshot>(id, 'snapshot', '/snapshot', open);
+/** A case in this state has no evidence snapshot or plan yet, and it is in this state only once, at its start. */
+export const beforeEvidence = (state: string | undefined) => state === 'detected';
+export const useSnapshot = (id: string, open: boolean, notYet = false) =>
+  useCasePart<Snapshot>(id, 'snapshot', '/snapshot', open, true, notYet);
 export const useRuns = (id: string, open: boolean) => useCasePart<AgentRun[]>(id, 'runs', '/runs', open);
-export const usePlan = (id: string, open: boolean) => useCasePart<PlanView>(id, 'plan', '/plan', open);
+export const usePlan = (id: string, open: boolean, notYet = false) =>
+  useCasePart<PlanView>(id, 'plan', '/plan', open, true, notYet);
+/**
+ * Reads the drafted correction's text (CONTRACTS 10). A mutation, though it is a GET: the server records every read of
+ * a drawn draft on the case, so only a person's click may send one, never a refresh or an invalidation. Nothing keeps
+ * the text once the block is gone.
+ */
+export function useReadCorrectionDraft(caseId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.get<CorrectionDraftView>(`/cases/${seg(caseId)}/correction-draft`),
+    gcTime: 0,
+    onSuccess: () => client.invalidateQueries({ queryKey: keys.part(caseId, 'events') }),
+  });
+}
 export const useApprovals = (id: string, open: boolean) =>
   useCasePart<ApprovalsView>(id, 'approvals', '/approvals', open);
 export const useAttempts = (id: string, open: boolean) =>
@@ -289,6 +334,21 @@ export const useClosure = (id: string, closed: boolean) =>
  */
 export const usePrecedents = (id: string, enabled: boolean) =>
   useCasePart<PrecedentsView>(id, 'precedents', '/precedents', false, enabled);
+
+/** Warehouse history's newest read, and whether it is on at all. A server older than the route answers 404, read as null. */
+export const useWarehouseHistory = (id: string) =>
+  useCasePart<WarehouseHistoryView>(id, 'warehouse-history', '/warehouse-history', false);
+
+/** Read warehouse history now, when a person asks. It changes nothing on the case. */
+export function useReadWarehouseHistory(caseId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<WarehouseHistoryView>(`/cases/${seg(caseId)}/warehouse-history`),
+    onSuccess: async () => {
+      await client.invalidateQueries({ queryKey: keys.part(caseId, 'warehouse-history') });
+    },
+  });
+}
 
 /**
  * Retire a precedent (approver only): it stays on record and counts for nothing. 409 already_retired names who
@@ -367,6 +427,42 @@ export function useReinvestigate(caseId: string) {
       api.post<{ caseId: string; state: string }>(
         `/cases/${seg(caseId)}/reinvestigate`,
         { reason },
+        { idempotencyKey },
+      ),
+    onSettled: async () => {
+      await client.invalidateQueries({ queryKey: keys.case(caseId) });
+    },
+  });
+}
+
+/** The rows that stop a write for another visit's movement, read afresh, with the digest a release must name (CONTRACTS 6.5). */
+export function useFurtherStop(caseId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: keys.part(caseId, 'further-stop'),
+    enabled,
+    queryFn: () => api.get<FurtherStop>(`/cases/${seg(caseId)}/further-stop`),
+  });
+}
+
+/**
+ * An approver releases that one stop for the rows they read, with a reason. 409 rows_changed when a fresh read gives other
+ * rows, not_releasable when the stop isn't only another visit's movement. The case then goes through fresh evidence.
+ */
+export function useFurtherRelease(caseId: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      digest,
+      reason,
+      idempotencyKey,
+    }: {
+      digest: string;
+      reason: string;
+      idempotencyKey: string;
+    }) =>
+      api.post<{ caseId: string; state: string }>(
+        `/cases/${seg(caseId)}/further-release`,
+        { digest, reason },
         { idempotencyKey },
       ),
     onSettled: async () => {
@@ -578,6 +674,34 @@ export function useDecideIncident(incidentId: string) {
       await client.invalidateQueries({ queryKey: keys.incident(incidentId) });
       await client.invalidateQueries({ queryKey: ['incidents'] });
     },
+  });
+}
+
+// ---- the recovery control (CONTRACTS 18) ----
+
+export function useRecoveryControl() {
+  return useQuery({
+    queryKey: keys.recoveryControl,
+    queryFn: () => api.get<RecoveryControl>('/recovery-control'),
+    refetchInterval: 15_000,
+    retry: false,
+  });
+}
+
+export function useStopRecovery() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { reason: string }) => api.post<RecoveryControl>('/recovery-control/stop', body),
+    onSuccess: (data) => client.setQueryData(keys.recoveryControl, data),
+  });
+}
+
+export function useClearRecovery() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { reason: string; expectedGeneration: number }) =>
+      api.post<RecoveryControl>('/recovery-control/clear', body),
+    onSuccess: (data) => client.setQueryData(keys.recoveryControl, data),
   });
 }
 
@@ -799,6 +923,11 @@ export function isAnswering(state: QuestionState | string | undefined): boolean 
 /** The deterministic What-if card (GET /cases/{id}/whatif): no model, so it reads the same with no key. */
 export function useWhatIf(caseId: string, enabled = true) {
   return useCasePart<WhatIf>(caseId, 'whatif', '/whatif', false, enabled);
+}
+
+/** What to check at the receiver (GET /cases/{id}/receiver-check): no model and no receiver call, read when it is opened. */
+export function useReceiverCheck(caseId: string, enabled = true) {
+  return useCasePart<ReceiverCheck>(caseId, 'receiver-check', '/receiver-check', false, enabled);
 }
 
 /** The recorded conversations of the case's scenario; `conversations` is empty when it has none. */

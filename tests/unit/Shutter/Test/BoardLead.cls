@@ -151,6 +151,27 @@ Method Instance() As Shutter.Process.CaseWorkflow
 /// case fails, so the signature attracts no new follower, and the cases already following it are told at once and take
 /// what a case with no board answer gets (OnLeadReady on a failed lead) instead of waiting out the bound. A case that follows it is told
 /// through the production, so the proof that it is told is the scenario runs; here nobody follows, and nobody is told.
+/// The stamps are whole seconds. A replayed board begins and ends within one, so the next scenario's reset can carry the
+/// same stamp as the lead of the run before it, and that run's case must not take the earlier board's decision.
+Method TestALeadInTheSecondOfTheResetIsNotFollowed()
+{
+    Set bl = "Shutter.Store.BoardLead"
+    Kill ^Shutter.Config("leadWindowSeconds"), ^Shutter.Config("resetAt")
+    Set sig = "sha256:test-lead-tie-" _ $JOB _ "-" _ ($PIECE($ZTIMESTAMP, ",", 2) \ 1)
+    Set ..Sigs(sig) = ""
+    Set leader = ..Case("Downstream Out", "x")
+    Set leader.CaseId = "C-TEST-LEADER"
+    Do $$$AssertStatusOK($CLASSMETHOD(bl, "Begin", sig, leader, {"receiver": "Downstream Out"}, .lead), "a lead begins")
+    Set done = $CLASSMETHOD(bl, "Finish", "C-TEST-LEADER", "done", {"disposition": "escalate", "action": {"type": "none"}})
+    Do $$$AssertEquals(done.State, "done", "the board has decided")
+    Set ^Shutter.Config("resetAt") = ##class(Shutter.Util.Time).FromNow(-5)
+    Do $$$AssertTrue($ISOBJECT($CLASSMETHOD(bl, "Current", sig)), "a lead begun after the last reset is followed")
+    Set ^Shutter.Config("resetAt") = lead.StartedAt
+    Do $$$AssertNotTrue($ISOBJECT($CLASSMETHOD(bl, "Current", sig)), "a lead stamped in the second of the reset is not followed")
+    Kill ^Shutter.Config("resetAt")
+    Do $$$AssertTrue($ISOBJECT($CLASSMETHOD(bl, "Current", sig)), "with no reset the lead is followed")
+}
+
 Method TestLeaderFailureFinishesTheLead()
 {
     Set bl = "Shutter.Store.BoardLead"
@@ -174,7 +195,7 @@ Method TestLeaderFailureFinishesTheLead()
 }
 
 /// A member who did not answer is recorded on the plan the others' findings made and named in the approval task, so the
-/// approver sees a thinner review. Whether such a plan should reach a person at all is a site's decision still to make.
+/// approver sees a thinner review.
 Method TestAbsentMembersAreOnThePlanAndTheTask()
 {
     Set c = ..SavedCase("C-TEST-LEAD-P")
@@ -198,6 +219,85 @@ Method TestAbsentMembersAreOnThePlanAndTheTask()
     Do $$$AssertNotTrue(plan.PlanObject().%IsDefined("absent_members"), "records nobody")
     Do $$$AssertNotTrue(##class(Shutter.Process.CaseWorkflow).ApprovalTask(c, plan).%Message [ "did not answer", "and the task says nothing")
     Do ..Purge("C-TEST-LEAD-P")
+}
+
+/// A plan that writes nothing from a board with a member missing goes to a person and doesn't close: a closure rests on the
+/// whole review. A full board's closes as before, and a partial board's write goes on, since a person approves that anyway.
+Method TestAPartialBoardsNoWritePlanGoesToAPerson()
+{
+    Set c = ..SavedCase("C-TEST-LEAD-Q")
+    Set snap = ##class(Shutter.Store.Snapshot).Begin(c)
+    Do $$$AssertStatusOK(snap.%Save(), "a snapshot")
+    Do $$$AssertStatusOK(c.SetSnapshot(snap), "the case's current one")
+    Set wf = ##class(Shutter.Test.QuietWorkflow).%New("Case Workflow")
+    Set wf.CaseId = "C-TEST-LEAD-Q", wf.FailedJSON = ["encounter"].%ToJSON()
+    Do $$$AssertStatusOK(wf.AdoptPlan(c, {"disposition": "superseded", "action": {"type": "none"}, "summary": "A later transfer moved the encounter on"}, "run:1"), "the partial board's plan")
+    Set result = ##class(Shutter.Msg.GateResult).%New()
+    Set result.Outcome = "pass", result.Summary = "Every check passed", result.ChecksJSON = "[]"
+    Do $$$AssertStatusOK(wf.OnGateProposal(c, result), "the gate passed it")
+    Set after = ##class(Shutter.Store.Case).ByCaseId("C-TEST-LEAD-Q")
+    Do $$$AssertEquals(after.State, "escalated", "a person decides, and it doesn't close")
+    Do $$$AssertTrue(after.Headline [ "did not answer", "the case says why: " _ after.Headline)
+    Do ..Purge("C-TEST-LEAD-Q")
+    // A reconcile is a plan that writes nothing too.
+    Set c = ..SavedCase("C-TEST-LEAD-Q")
+    Set snap = ##class(Shutter.Store.Snapshot).Begin(c)
+    Do $$$AssertStatusOK(snap.%Save(), "a snapshot")
+    Do $$$AssertStatusOK(c.SetSnapshot(snap), "the case's current one")
+    Set wf.PlanId = ""
+    Do $$$AssertStatusOK(wf.AdoptPlan(c, {"disposition": "reconcile", "action": {"type": "reconcile", "operation_key": (c.OperationKey)}, "summary": "A receipt exists"}, "run:2"), "a partial board's reconcile")
+    Do $$$AssertStatusOK(wf.OnGateProposal(c, result), "the gate passed it")
+    Do $$$AssertEquals(##class(Shutter.Store.Case).ByCaseId("C-TEST-LEAD-Q").State, "escalated", "a person decides that too")
+    Do ..Purge("C-TEST-LEAD-Q")
+    // A full board's closure goes on to the verifier.
+    Set c = ..SavedCase("C-TEST-LEAD-Q")
+    Set snap = ##class(Shutter.Store.Snapshot).Begin(c)
+    Do $$$AssertStatusOK(snap.%Save(), "a snapshot")
+    Do $$$AssertStatusOK(c.SetSnapshot(snap), "the case's current one")
+    Set wf.FailedJSON = "[]"
+    Do $$$AssertStatusOK(wf.AdoptPlan(c, {"disposition": "superseded", "action": {"type": "none"}, "summary": "A later transfer moved the encounter on"}, "run:3"), "a full board's plan")
+    Do $$$AssertStatusOK(wf.OnGateProposal(c, result), "the gate passed it")
+    Do $$$AssertEquals(##class(Shutter.Store.Case).ByCaseId("C-TEST-LEAD-Q").State, "verifying", "it goes on to close")
+    Do ..Purge("C-TEST-LEAD-Q")
+}
+
+/// A follower takes its leader's decision, and the missing member with it: it is the same thinner review.
+Method TestAFollowerOfAPartialBoardCarriesWhoWasMissing()
+{
+    Set lead = ##class(Shutter.Store.BoardLead).%New()
+    Set lead.LeaderCaseId = "C-TEST-LEAD-O", lead.DecidedBy = "run:1"
+    Set lead.PlanJSON = {"disposition": "superseded", "action": {"type": "none"}, "absent_members": ["Encounter reviewer"], "summary": "A later transfer"}.%ToJSON()
+    Set c = ..NoAnswerCase("C-TEST-LEAD-F2", "board", ..E2())
+    Set wf = ..QuietInstance()
+    Set wf.CaseId = "C-TEST-LEAD-F2", wf.Mode = "board"
+    Do $$$AssertStatusOK(wf.TakeDiagnosis(c, lead), "the follower takes the decision")
+    Set plan = ##class(Shutter.Store.Plan).%OpenId(wf.PlanId)
+    Set absent = plan.PlanObject().%Get("absent_members")
+    Do $$$AssertTrue($ISOBJECT(absent) && (absent.%Size() = 1), "the follower's plan says who was missing")
+    Do ##class(Shutter.Store.Case).PurgeCase(c.%Id())
+}
+
+/// A lost admission released by an incident's automatic policy is asked of a person (the gate would refuse it otherwise), and
+/// one released under the approval a person gave the incident's plan goes on under that approval.
+Method TestAReleasedLostAdmissionAsksAPerson()
+{
+    Set c = ..NoAnswerCase("C-TEST-LEAD-A", "policy", ..E2())
+    Set c.Event = "admit"
+    Do $$$AssertStatusOK(c.%Save(), "an admission")
+    Set summary = {"ward_state_http_status": 404, "operation": {"payload_digest": "sha256:ut"}}
+    Set wf = ..QuietInstance()
+    Set wf.CaseId = "C-TEST-LEAD-A", wf.Mode = "policy", wf.Release = 1, wf.ReleasePolicy = "automatic", wf.ChainKind = "single"
+    Do $$$AssertStatusOK(wf.PolicyPath(c, summary, ..E2()), "the chain's automatic release")
+    Do $$$AssertEquals(wf.Policy, "approval", "a person approves")
+    Do ##class(Shutter.Store.Case).PurgeCase(c.%Id())
+    Set c = ..NoAnswerCase("C-TEST-LEAD-A", "policy", ..E2())
+    Set c.Event = "admit"
+    Do $$$AssertStatusOK(c.%Save(), "an admission")
+    Set wf = ..QuietInstance()
+    Set wf.CaseId = "C-TEST-LEAD-A", wf.Mode = "policy", wf.Release = 1, wf.ReleasePolicy = "incident", wf.ChainKind = "single", wf.IncidentEntry = "E2", wf.IncidentOutcome = "resend"
+    Do $$$AssertStatusOK(wf.PolicyPath(c, summary, ..E2()), "under the incident's approval")
+    Do $$$AssertEquals(wf.Policy, "incident", "that approval stands")
+    Do ##class(Shutter.Store.Case).PurgeCase(c.%Id())
 }
 
 /// A case reopened by someone without the live agents, whose board has no recording: it stays with a person and says why,

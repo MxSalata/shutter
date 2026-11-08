@@ -93,6 +93,7 @@ export function investigatedBy(c: CaseSummary): { who: string; entry?: string } 
   const by = c.planCreatedBy ?? '';
   if (by.startsWith('run:')) return { who: c.mode === 'single' ? 'Single investigator' : 'Board' };
   if (by.startsWith('policy:')) return { who: 'Site policy (no agents)', entry: by.slice('policy:'.length) };
+  if (by.startsWith('lead:')) return { who: `Board of ${by.slice('lead:'.length)}` };
   if (by === 'rules') return { who: 'Rules only' };
   if (by === 'withheld') return { who: 'Withheld: a person decides' };
   if (by) return { who: '-' };

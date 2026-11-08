@@ -49,6 +49,7 @@
       <Resource Name="Shutter.Setup.CLS"/>
       <Resource Name="Shutter.Store.PKG"/>
       <Resource Name="Shutter.Util.PKG"/>
+      <Resource Name="Shutter.Warehouse.PKG"/>
       <!-- The live agents (AI Hub): the agent runner for the bridge, the board members (declarative %AI.Agent classes),
            their tools, the publisher's tools and gateway, the policies, the schemas and the knowledge bases. -->
       <Resource Name="Shutter.Agent.PKG"/>
@@ -74,6 +75,9 @@
       <Resource Name="/knowledge/"/>
       <Resource Name="/fixtures/"/>
       <Resource Name="/www/"/>
+      <!-- zpm "uninstall": before the classes go, everything the install and the onboarding added goes too, with no production
+           of the site's stopped (Shutter.Util.Uninstall). A failed run stops the uninstall with the classes still there. -->
+      <Invoke Class="Shutter.Util.Uninstall" Method="ModuleStatus" Phase="Clean" When="Before" CheckStatus="true"/>
       <!-- Folders, security, the library, prices, recorded runs, the web applications and the production.
            InstallStatus returns a %Status and the Invoke checks it, so a failed install stops the load. -->
       <Invoke Class="Shutter.Setup" Method="InstallStatus" CheckStatus="true">

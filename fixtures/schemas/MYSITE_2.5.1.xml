@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<Category name="MYSITE_2.5.1" std="" base="2.5.1">
+<MessageType name='ADT_A02' structure='ADT_A02' returntype='base:ACK_A02'/>
+<MessageStructure name='ADT_A02' definition='base:MSH~[~base:SFT~]~base:EVN~base:PID~[~base:PD1~]~[~{~base:ROL~}~]~base:PV1~[~base:PV2~]~[~{~base:ROL~}~]~[~{~base:DB1~}~]~[~{~base:OBX~}~]~[~base:PDA~]~[~ZZZ~]' description='ADT_A02 with the site segment'/>
+<SegmentStructure name='ZZZ' description='The site segment'>
+    <SegmentSubStructure piece='1' description='Set ID' symbol='' length='4' required='O' ifrepeating='0'/>
+    <SegmentSubStructure piece='2' description='Site note' symbol='' length='200' required='O' ifrepeating='0'/>
+</SegmentStructure>
+</Category>

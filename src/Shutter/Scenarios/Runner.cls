@@ -226,6 +226,14 @@ ClassMethod Play(found As %DynamicObject, scenario As %String, mode As %String, 
             }
             Quit:error'=""
         } ElseIf step.%IsDefined("file") {
+            // A step naming an item plays through that demo route instead of the inbound folder (S14, S26)
+            If step.%IsDefined("item") {
+                Set error = ##class(Shutter.Scenarios.Route).Play(step.item, step.path)
+                Quit:error'=""
+                Do files.%Push(step.file)
+                Hang 2
+                Continue
+            }
             // A step with the route "hospital" drops the file into the demo hospital's own inbound folder (T33), so
             // the failure happens in the hospital's production and reaches Shutter through its forwarder.
             Set target = inbound
@@ -254,6 +262,13 @@ ClassMethod Play(found As %DynamicObject, scenario As %String, mode As %String, 
             Set answer = ##class(Downstream.Service).SetCapabilities(step.capabilities, .status)
             Set:status'=200 error = "the downstream system refused the capabilities step: " _ answer.%ToJSON()
             Quit:error'=""
+        } ElseIf step.%IsDefined("prevent_failures") {
+            Do ##class(Shutter.Scenarios.SiteSchema).PreventFailures(step."prevent_failures")
+        } ElseIf step.%IsDefined("schema_forget") {
+            Do ##class(Shutter.Scenarios.SiteSchema).Forget(step."schema_forget")
+        } ElseIf step.%IsDefined("schema_import") {
+            Set error = ##class(Shutter.Scenarios.SiteSchema).Import(..FixturesDir() _ step."schema_import")
+            Quit:error'=""
         } ElseIf step.%IsDefined("manual") {
             Set answer = ..Manual(step.manual, .status)
             Set:status'=201 error = "the downstream system refused the manual step: " _ $SELECT($ISOBJECT(answer): answer.%ToJSON(), 1: "HTTP " _ status)
@@ -269,10 +284,13 @@ ClassMethod Play(found As %DynamicObject, scenario As %String, mode As %String, 
 /// A step in words, for <method>Status</method>.
 ClassMethod Describe(step As %DynamicObject) As %String
 {
-    Quit:step.%IsDefined("file") "delivering " _ step.file _ $SELECT(step.%IsDefined("route") && (step.route = "hospital"): " to the demo hospital", 1: "")
+    Quit:step.%IsDefined("file") "delivering " _ step.file _ $SELECT(step.%IsDefined("route") && (step.route = "hospital"): " to the demo hospital", step.%IsDefined("item"): " through " _ step.item, 1: "")
+    Quit:step.%IsDefined("prevent_failures") "turning prevent failures " _ $SELECT(step."prevent_failures": "on", 1: "off") _ " for this run"
+    Quit:step.%IsDefined("schema_forget") "removing the schema " _ step."schema_forget"
+    Quit:step.%IsDefined("schema_import") "importing the schema " _ step."schema_import"
     Quit:step.%IsDefined("fault") "setting the fault to " _ step.fault _ $SELECT(step.%IsDefined("receivers") && $ISOBJECT(step.receivers): " on " _ $REPLACE($REPLACE($REPLACE(step.receivers.%ToJSON(), "[", ""), "]", ""), """", ""), 1: " on the downstream system")
     Quit:step.%IsDefined("wait") "waiting " _ step.wait _ " s"
-    Quit:step.%IsDefined("wait_for_state") "waiting for the case to reach " _ step."wait_for_state"
+    Quit:step.%IsDefined("wait_for_state") "waiting for the case to reach " _ $REPLACE(step."wait_for_state", "|", " or ")
     Quit:step.%IsDefined("capabilities") "changing the downstream system's capabilities"
     If step.%IsDefined("manual") {
         Set entry = step.manual
@@ -323,12 +341,18 @@ ClassMethod WaitForState(scenario As %String, state As %String, timeout As %Inte
             Set problem = rs.%Message
             Return 0
         }
-        If rs.%Next(), rs.%Get("State") = state {
+        If rs.%Next(), ..StateIs(rs.%Get("State"), state) {
             Return 1
         }
         Hang 1
     }
     Quit 0
+}
+
+/// Whether a case's state is the one a wait names, or one of several separated by "|" (S26: awaiting_approval|resolved).
+ClassMethod StateIs(state As %String, wanted As %String) As %Boolean
+{
+    Quit (state '= "") && (("|" _ wanted _ "|") [ ("|" _ state _ "|"))
 }
 
 /// The longest <var>scenario</var>'s steps can take, in seconds: two a file, its waits and each state's timeout.
@@ -395,8 +419,11 @@ ClassMethod Reset() As %String [ SqlProc ]
     }
     Set ^Shutter.Config("mode") = "board"
     Kill ^Shutter.Config("scenario"), ^Shutter.Config("scenarioRun")
+    // S26 turns the hold on for its own run: a run cut off must not leave it on, so the profile's word stands again.
+    Do ##class(Shutter.Scenarios.SiteSchema).PreventFailures(0)
     Set ^Shutter.Config("resetAt") = resetAt
     Set abandoned = ##class(Shutter.Store.Incident).AbandonOpen("scenario reset")
+    Do ##class(Shutter.Util.RecoveryControl).DemoReset($USERNAME)
     // A run record left queued or finished goes with the reset (a queued run whose player stopped would otherwise
     // refuse every later run); one that is playing stays, since that run's own reset comes through here
     Kill:'..Running() ^Shutter.Scenarios("run")

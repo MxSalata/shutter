@@ -44,6 +44,7 @@ import { formatZoned, humanize } from '@/lib/format';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { closableByHand } from './caseAction';
 import { notModelled } from './derive';
+import { ReceiverCheckCard } from './ReceiverCheckCard';
 import { receiverNoun, receiverTeam } from './receiver';
 import { Section } from './Section';
 
@@ -327,7 +328,7 @@ export function EscalationPanel({
         stopped
           ? notModelled(c)
             ? "Shutter resends only ADT. Send it to the team, who check the source's Message Viewer before anyone re-enters it."
-            : "Shutter can't recover this safely. Send it to the team that corrects the systems by hand."
+            : "Shutter can't recover this safely. Send it to the team."
           : 'The emails sent before the team corrected the systems by hand and the case was closed.'
       }
     >
@@ -410,6 +411,7 @@ export function EscalationPanel({
           </Accordion.Item>
         </Accordion>
       ))}
+      {stopped ? <ReceiverCheckCard caseId={c.caseId} /> : null}
       {/* Until the user is read, neither the actions nor the note that they need the operator role */}
       {!stopped || me === undefined ? null : me?.operator ? (
         <Group gap="sm" align="flex-end" wrap="wrap">

@@ -288,6 +288,44 @@ Method Verified(case As Shutter.Store.Case, attempt As Shutter.Store.ExecutionAt
 /// A receiver that is up and refuses a new message every minute keeps the quiet period from ever passing, and every other
 /// failure to it stays grouped. Past the maximum the intake closes, but only while the newest failure is a refusal: a receiver
 /// that answers nothing has nothing to release into, so its incident waits as before.
+/// A chain holding a lost admission isn't the site's policy's to release, whatever its table says: a person approves, under
+/// the incident's one approval, and the task asks them to check the system's own screen.
+Method TestALostAdmissionComesToAPerson()
+{
+    Set inc = ..NewIncident()
+    Set items = $LISTBUILD($LISTBUILD("admit", "2026-10-19T09:20:00Z", "E2", "resend"))
+    Do ..NewChain(inc, 3, "ENC-UTI3", "single", "automatic", "E2", 0, items)
+    Set ch = inc.ChainAt(3), case = ch.ItemAt(1).Case
+    Set detector = "Shutter.Store.IncidentDetector"
+    Do $$$AssertEquals($CLASSMETHOD(detector, "PolicyFor", ch, "automatic"), "automatic", "the receiver knows this encounter, so the table's word stands")
+    Do ..Lost(case)
+    Do $$$AssertEquals($CLASSMETHOD(detector, "PolicyFor", ch, "automatic"), "approval", "a 404 for the admission: a person approves")
+    Do $$$AssertEquals($CLASSMETHOD(detector, "PolicyFor", ch, "per_chain"), "per_chain", "a site that already asks a person keeps its way of asking")
+    Do $$$AssertEquals($CLASSMETHOD(detector, "PolicyFor", inc.ChainAt(2), "automatic"), "automatic", "a transfer's chain isn't touched")
+    Set words = ##class(Shutter.Process.IncidentWorkflow).LostWords({"caseId": (case.CaseId), "event": "admit"})
+    Do $$$AssertTrue(words [ "by hand", "the task's line for it asks about a record entered by hand: " _ words)
+    Do $$$AssertEquals(##class(Shutter.Process.IncidentWorkflow).LostWords({"caseId": (inc.IncidentId _ "-1-1"), "event": "transfer"}), "", "and a transfer's line says nothing more")
+    Set row = ##class(Shutter.Store.SiteProfile).Row(), had = $ISOBJECT(row), saved = $SELECT(had: row.Json, 1: "")
+    Set p = ##class(Shutter.Store.SiteProfile).Current(), version = +p.version
+    Do p.%Remove("version")
+    If p.%GetTypeOf("further_messages") '= "object" Set p."further_messages" = {}
+    Set p."further_messages"."admission_not_found" = "policy"
+    If 'had Set row = ##class(Shutter.Store.SiteProfile).%New(), row.Version = version
+    Set row.Json = p.%ToJSON()
+    Do $$$AssertStatusOK(row.%Save(), "a site that lets policy take a lost admission")
+    Do $$$AssertEquals($CLASSMETHOD(detector, "PolicyFor", ch, "automatic"), "automatic", "keeps its choice")
+    If had { Set row.Json = saved Do row.%Save() } Else { Do ##class(Shutter.Store.SiteProfile).%DeleteId(row.%Id()) }
+}
+
+/// The admission's case, its receiver answering 404.
+Method Lost(case As Shutter.Store.Case)
+{
+    Set summary = {"operation": {"operation_key": (case.OperationKey), "payload_digest": "sha256:ut-lost"}, "epoch": 1, "ward_state_http_status": 404, "validation": {"parsed": true}}
+    Set snap = ##class(Shutter.Store.Snapshot).Begin(case, 300)
+    Do $$$AssertStatusOK(snap.Seal(summary), "the 404's snapshot is sealed")
+    Do $$$AssertStatusOK(case.SetSnapshot(snap), "and current")
+}
+
 Method TestIntakeMaximum()
 {
     Set d = "Shutter.Store.IncidentDetector"

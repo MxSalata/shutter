@@ -14,6 +14,7 @@ import { asArray, asObject } from '@/lib/json';
 import { APPROVALS, caseState, gateOutcome, PROVENANCE, type OutcomeCase } from '@/lib/status';
 import type { Status } from '@/lib/tone';
 import { checksOf, failureKindInWords } from './derive';
+import { planLeader } from './follows';
 import { approvalsByPlan, WRITE_OUTCOMES, type SafetyReceipt } from './receipt';
 import { NOT_CHECKED, notCheckedAtReceiver } from './receiver';
 import { investigationRuns } from './runClock';
@@ -476,15 +477,17 @@ export function proposedSummary(f: CaseFacts): string {
     return 'Nobody proposed a write: Shutter withholds merges and cancels; a person decides.';
   const who = by.startsWith('policy:')
     ? `the site's policy, entry ${by.slice('policy:'.length)}`
-    : by === 'rules'
-      ? 'the rules'
-      : runs.some((r) => r.role === 'coordinator')
-        ? 'the coordinator'
-        : runs.some((r) => r.role === 'generalist')
-          ? 'one agent'
-          : by.startsWith('run:') || !by
-            ? 'unknown'
-            : by;
+    : planLeader(by)
+      ? `the board of case ${planLeader(by)}`
+      : by === 'rules'
+        ? 'the rules'
+        : runs.some((r) => r.role === 'coordinator')
+          ? 'the coordinator'
+          : runs.some((r) => r.role === 'generalist')
+            ? 'one agent'
+            : by.startsWith('run:') || !by
+              ? 'unknown'
+              : by;
   const action =
     p.disposition === 'resend'
       ? `resend the operation unchanged, on condition the receiver is at version ${str(p.expectedVersion)}`

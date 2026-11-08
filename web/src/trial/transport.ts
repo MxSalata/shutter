@@ -4,6 +4,7 @@ import type { TrialRole } from '@/env/mode';
 import fixtures from '@/mocks/fixtures.json';
 import { handlers, resetMock } from '@/mocks/handlers';
 import { journal } from './journal';
+import { noteTrialAction } from './visit';
 
 /** What the trial answers a call no recorded handler knows: a 501 made in the browser, never the network. */
 export const NOT_IN_TRIAL_ANSWER = {
@@ -45,7 +46,9 @@ export function createTrialTransport(role: TrialRole): Transport {
       request.signal,
     );
     const response = answer ?? Response.json(NOT_IN_TRIAL_ANSWER, { status: 501 });
-    journal.add(request.method, new URL(request.url).pathname, response.status);
+    const path = new URL(request.url).pathname;
+    journal.add(request.method, path, response.status);
+    noteTrialAction(request.method, path);
     return response;
   };
 }

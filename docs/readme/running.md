@@ -82,7 +82,7 @@ ORDER BY Member, Mode
 
 ### Other limits
 
-- The shipped site profile asks a person to approve every resend, at every tier (interleaved chains go to the board, whose plan a person then approves). A demo install keeps the earlier table as the demo's own setting, labelled on the Site profile page: it releases the single cases the catalogue settles at tiers 1 and 2 without asking a person, and the online demo asks a person at tier 2. A real site first answers the profile's induction questions.
+- The shipped site profile asks a person to approve every resend, at every tier (interleaved chains go to the board, whose plan a person then approves). A demo install keeps the earlier table as the demo's own setting, labelled on the Site profile page: it releases the single cases the catalogue settles at tiers 1 and 2 without asking a person, and the online demo asks a person at tier 2. A non-demo install also starts with no demo receiver, and a tier releases by policy only once its profile says so: a real site first answers the profile's induction questions.
 - Order communications and results systems are declared but not modelled; a case for one escalates before any model runs.
 - A06 and A07 (a change of patient class) are delivered as an update with no location, although an A06 can carry a new location in PV1-3.
 - Closed cases are kept (the record is the product); only the escalation emails' text and `.eml` files go, 90 days after the case closed (`SHUTTER_ESCALATION_DAYS`), and a site that wants finished cases removed switches the case purge on in the Task Manager: a case still waiting for a person stays.

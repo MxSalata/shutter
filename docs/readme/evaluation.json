@@ -4012,6 +4012,16 @@
    "why": "played in policy mode only"
   },
   {
+   "scenario": "S33",
+   "title": "A failed A08 that moves the patient's bed",
+   "why": "played in policy and rules modes only"
+  },
+  {
+   "scenario": "S34",
+   "title": "A failed transfer, then a later A08 that moves the patient's bed",
+   "why": "played in policy and rules modes only"
+  },
+  {
    "scenario": "S32",
    "title": "A new admission under a new visit number, while the plan awaits approval",
    "why": "played in rules mode only"
@@ -4035,6 +4045,11 @@
    "scenario": "S12",
    "title": "A lost admission at the head of a chain",
    "why": "an incident whose chains the catalogue and the site's policy settle; the board decides none"
+  },
+  {
+   "scenario": "S14",
+   "title": "A later movement only the index has seen",
+   "why": "played in rules and policy modes only"
   },
   {
    "scenario": "S15",
@@ -4065,6 +4080,11 @@
    "scenario": "S20",
    "title": "A nurse moves the patient by hand while the plan awaits approval",
    "why": "played in rules mode only"
+  },
+  {
+   "scenario": "S26",
+   "title": "A schema not loaded here",
+   "why": "played in rules and policy modes only"
   }
  ],
  "not_used": [],

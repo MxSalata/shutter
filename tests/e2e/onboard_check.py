@@ -846,6 +846,9 @@ for r in body["receivers"]:
         r["api"] = {"base": "/beds/api", "state": "/encounters/{encounter}", "receipt": "/receipts/{key}", "capabilities": "/capabilities", "operations": "/operations"}
         r["features"] = {"conditional_writes": True, "receipts": True, "history": True, "dry_run": True}
 body["policy"]["2"]["single"] = "approval"
+# A site's install starts in shadow mode (CONTRACTS 18): recovery reaches this receiver only once it is enabled.
+check("a site's install is in shadow mode", api("GET", "/recovery-control")[1]["mode"] == "shadow")
+body["recovery"] = {"mode": "enabled"}
 body["expectedVersion"] = prof["version"]
 code, saved = api("PUT", "/site-profile", body)
 check("the approver saves the filled-in receiver", code == 200, saved)

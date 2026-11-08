@@ -241,9 +241,9 @@ ClassMethod CreateSecurity(ns As %String, demo As %Boolean) As %Status
     Set hospital = $GET(^|ns|Shutter.Config("hospitalNamespace"))
     New $NAMESPACE
     Set $NAMESPACE = "%SYS"
-    For res = "Shutter_Operate", "Shutter_Approve", "Shutter_Intake", "Shutter_Configure", "Shutter_Scenarios", "Shutter_LiveAgents", "Shutter_Publish" {
+    For res = "Shutter_Operate", "Shutter_Approve", "Shutter_Intake", "Shutter_Configure", "Shutter_Scenarios", "Shutter_LiveAgents", "Shutter_Publish", "Shutter_StopRecovery" {
         If '##class(Security.Resources).Exists(res) {
-            Set sc = ##class(Security.Resources).Create(res, "Shutter: " _ $CASE(res, "Shutter_Approve": "approve or reject recovery plans", "Shutter_Intake": "open a case from another production", "Shutter_Publish": "read cases, incidents, evidence and plans through the MCP publisher", "Shutter_LiveAgents": "spend the model budget: live questions and convening the board", "Shutter_Configure": "change the site: the site profile, the agent library, the schemas, the review annotations", "Shutter_Scenarios": "run and reset the demo's scenarios and purge the store", : "view cases, run scenarios, start investigations"), "")
+            Set sc = ##class(Security.Resources).Create(res, "Shutter: " _ $CASE(res, "Shutter_StopRecovery": "stop Shutter's recovery", "Shutter_Approve": "approve or reject recovery plans", "Shutter_Intake": "open a case from another production", "Shutter_Publish": "read cases, incidents, evidence and plans through the MCP publisher", "Shutter_LiveAgents": "spend the model budget: live questions and convening the board", "Shutter_Configure": "change the site: the site profile, the agent library, the schemas, the review annotations", "Shutter_Scenarios": "run and reset the demo's scenarios and purge the store", : "view cases, run scenarios, start investigations"), "")
             Quit:$$$ISERR(sc)
         }
     }
@@ -274,14 +274,14 @@ ClassMethod CreateSecurity(ns As %String, demo As %Boolean) As %Status
     // Each role is created, or brought to this definition when it exists, so an upgraded instance is tightened too.
     // The approver monitors (traces, messages, the Workflow inbox) and approves; it never starts, stops or purges:
     // %EnsRole_Monitor with the message trace, header and content viewing resources, not %EnsRole_Operator (E2).
-    Set sc = ..EnsureRole("Shutter_Operator", "Shutter operator: cases, scenarios, investigations", "Shutter_Operate:U,Shutter_Scenarios:U,Shutter_LiveAgents:U,Shutter_Publish:U," _ db _ ":RW" _ codeRead _ watchReset _ recordsRW _ ",%Ens_Portal:U", "")
+    Set sc = ..EnsureRole("Shutter_Operator", "Shutter operator: cases, scenarios, investigations", "Shutter_Operate:U,Shutter_Scenarios:U,Shutter_LiveAgents:U,Shutter_Publish:U,Shutter_StopRecovery:U," _ db _ ":RW" _ codeRead _ watchReset _ recordsRW _ ",%Ens_Portal:U", "")
     Quit:$$$ISERR(sc) sc
     // What an approver and the public demo's role share (v1.34): reading, approving, the traces; the approver adds the site's
     // writes (Shutter_Configure) and the demo controls (Shutter_Scenarios), which the demo role never holds.
     Set approverCore = "Shutter_Operate:U,Shutter_Approve:U," _ db _ ":RW" _ codeRead
     Set traces = ",%Ens_MessageTrace:U,%Ens_MessageHeader:U,%Ens_MessageContent:U"
     Set approverRes = approverCore _ watchRead _ traces
-    Set sc = ..EnsureRole("Shutter_Approver", "Shutter approver: everything an operator can, plus approvals, the site's settings and the Workflow inbox", approverCore _ watchReset _ recordsRW _ traces _ ",%Ens_EventLog:U,Shutter_Configure:U,Shutter_Scenarios:U,Shutter_LiveAgents:U", "Shutter_Operator,%EnsRole_Monitor")
+    Set sc = ..EnsureRole("Shutter_Approver", "Shutter approver: everything an operator can, plus approvals, the site's settings and the Workflow inbox", approverCore _ watchReset _ recordsRW _ traces _ ",%Ens_EventLog:U,Shutter_Configure:U,Shutter_Scenarios:U,Shutter_LiveAgents:U,Shutter_StopRecovery:U", "Shutter_Operator,%EnsRole_Monitor")
     Quit:$$$ISERR(sc) sc
     Set sc = ..EnsureRole("Shutter_Demo", "Shutter public demo: reads everything, reinvestigates, approves and asks; cannot run or reset scenarios, save the site profile or the library, or import a schema", approverRes _ ",%Ens_Portal:U", "%EnsRole_Monitor")
     Quit:$$$ISERR(sc) sc
@@ -677,6 +677,8 @@ ClassMethod HardenPortal(hospital As %String = "") As %String [ SqlProc ]
             Do ##class(Security.Applications).Get(app, .ap)
             Set a = {}
             Set a.name = app, a."match_roles_were" = $GET(ap("MatchRoles")), a."resource_was" = $GET(ap("Resource"))
+            // What the uninstall puts back (Shutter.Util.Uninstall.TakePortal). A later start finds it hardened already.
+            If $GET(ap("Resource")) '= "Shutter_Portal" Set ^|ns|Shutter.Config("portalWas", app) = $LISTBUILD($GET(ap("MatchRoles")), $GET(ap("Resource")))
             Kill props
             Set props("MatchRoles") = "", props("Resource") = "Shutter_Portal"
             Set sc = ##class(Security.Applications).Modify(app, .props)
@@ -1222,6 +1224,9 @@ ClassMethod CreateWebApps(ns As %String, root As %String, demo As %Boolean = 1) 
         Set props("Path") = www
         Set props("ServeFiles") = 1
         Set props("Recurse") = 1
+        // A file application has no default page: this class gives /shutter and /shutter/ one, and serves the files.
+        Set props("DispatchClass") = "Shutter.API.WebRoot"
+        Set props("RedirectEmptyPath") = 1
         Set props("UseCookies") = 2
         Set props("CookiePath") = "/shutter/"
         Set props("MatchRoles") = ":Shutter_WebApp"
@@ -1501,6 +1506,7 @@ ClassMethod InstallIntoStatus(production As %String, root As %String = "") As %S
 /// the catalogue and the recorded runs. The same list as Install's.
 ClassMethod SeedAll(root As %String) As %Status [ Private ]
 {
+    Set sc = ##class(Shutter.Util.RecoveryControl).Ensure() Quit:$$$ISERR(sc) sc
     Set sc = ##class(Shutter.Store.BoardMember).Seed() Quit:$$$ISERR(sc) sc
     Set sc = ##class(Shutter.Store.ModelPrice).Seed() Quit:$$$ISERR(sc) sc
     If (root '= "") && ##class(%File).Exists(root _ "knowledge/block-reasons.json") {
@@ -1525,7 +1531,7 @@ ClassMethod SeedAll(root As %String) As %Status [ Private ]
 /// the board, never the feed or the demo (ADT In, ADT to Downstream, Downstream Out, ADT to Records, Records Out,
 /// Scenario Player). Case Intake and Case Intake Store are added once Shutter.Production defines them. A new recovery
 /// item is listed here too.
-Parameter INSTALLITEMS = "HL7 Index,Case Releaser,Receiver Watch,Escalation Mail,Case Workflow,Case Review,Case Question,Incident Workflow,Evidence Collector,Agent Conformance,Agent Encounter,Agent Impact,Agent Coordinator,Agent Board,Gate,Shutter Approvers,Shutter API,Verifier,Case Intake,Case Intake Store,Second Parser";
+Parameter INSTALLITEMS = "HL7 Index,Case Releaser,Receiver Watch,Escalation Mail,Case Workflow,Case Review,Failure Census,Case Question,Incident Workflow,Evidence Collector,Agent Conformance,Agent Encounter,Agent Impact,Agent Coordinator,Agent Board,Gate,Shutter Approvers,Shutter API,Verifier,Case Intake,Case Intake Store,Second Parser";
 
 /// Adds Shutter's items (INSTALLITEMS) to the named production, each as Shutter.Production's compiled definition has
 /// it (class, pool size, enabled, foreground, comment, category, trace flag, schedule and settings), when the
@@ -1583,10 +1589,16 @@ ClassMethod CopyItem(item As Ens.Config.Item, target As Ens.Config.Production) A
     For j = 1:1:item.Settings.Count() {
         Set s = item.Settings.GetAt(j)
         Set t = ##class(Ens.Config.Setting).%New()
-        Set t.Target = s.Target, t.Name = s.Name, t.Value = s.Value
+        Set t.Target = s.Target, t.Name = s.Name, t.Value = $SELECT(s.Name = "Routes": ..SiteRoutes(s.Value), 1: s.Value)
         Do copy.Settings.Insert(t)
     }
     Quit target.Items.Insert(copy)
+}
+
+/// The index's Routes as a site's production gets them: the demo's own route (S14) stays in the demo.
+ClassMethod SiteRoutes(routes As %String) As %String
+{
+    Quit $REPLACE(routes, ",Other Route In", "")
 }
 
 /// The two daily housekeeping tasks (A14): "Shutter message purge" (the standard Ens.Util.Tasks.Purge: every message
@@ -1628,6 +1640,7 @@ ClassMethod EnsureRetentionTasks(ns As %String = "", days As %String = "", purge
     If $$$ISERR(sc) Quit "ERROR: " _ $SYSTEM.Status.GetErrorText(sc)
     // The install's record, for a Doctor report by a caller without access to the Task Manager.
     If made Set ^|ns|Shutter.Config("escalationDays") = escalationDays
+    If $$$ISOK(..EnsureReminderTask(ns)) Set ^|ns|Shutter.Config("reminderTask") = 1
     Quit out _ "; retention " _ $SELECT(made: "created (escalation texts " _ $SELECT(escalationDays > 0: escalationDays _ " days", 1: "kept") _ ")", 1: "exists")
 }
 
@@ -1700,6 +1713,29 @@ ClassMethod EnsureTask(name As %String, ns As %String, class As %String, descrip
     Quit sc
 }
 
+/// The task "Shutter case reminders" (Shutter.Util.CaseReminderTask), every quarter of an hour, made once. It does nothing
+/// until the site profile switches the reminders on.
+ClassMethod EnsureReminderTask(ns As %String) As %Status [ Private ]
+{
+    Set sc = $$$OK
+    Try {
+        New $NAMESPACE
+        Set $NAMESPACE = "%SYS"
+        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM %SYS.Task WHERE Name = ?", "Shutter case reminders")
+        If rs.%Next() Quit
+        Set task = ##class(%SYS.Task).%New()
+        Set task.Name = "Shutter case reminders", task.NameSpace = ns, task.TaskClass = "Shutter.Util.CaseReminderTask"
+        Set task.Description = "Shutter: a reminder mail for cases left open, when the site profile switches it on"
+        Set task.TimePeriod = 0, task.TimePeriodEvery = 1, task.DailyFrequency = 1, task.DailyFrequencyTime = 0, task.DailyIncrement = 15
+        Set task.DailyStartTime = 0, task.DailyEndTime = 86399
+        Set task.RunAsUser = $USERNAME
+        Set sc = task.%Save()
+    } Catch ex {
+        Set sc = ex.AsStatus()
+    }
+    Quit sc
+}
+
 /// Empty Shutter's own tables (cases and everything attached to them, their escalation emails and the .eml files of
 /// those rows included, the precedents and board leads that name them, recordings excepted) on a demo instance, reset
 /// the counters so the next case is C-000001 again, and stamp ^Shutter.Config("resetAt") with the time of the purge, as a
@@ -1714,7 +1750,7 @@ ClassMethod PurgeStore() As %String [ SqlProc ]
     // another instance's files.
     Set emails = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT Seq, Result FROM Shutter_Store.Escalation WHERE Transport = 'file'")
     While emails.%Next() { Do ##class(Shutter.Store.Escalation).RemoveFile(emails.%Get("Result"), emails.%Get("Seq")) }
-    For cls = "Shutter.Store.CaseToken", "Shutter.Store.ChainItem", "Shutter.Store.Chain", "Shutter.Store.IncidentEvent", "Shutter.Store.Incident", "Shutter.Store.Verification", "Shutter.Store.ExecutionAttempt", "Shutter.Store.Approval", "Shutter.Store.Rehearsal", "Shutter.Store.GateDecision", "Shutter.Store.Plan", "Shutter.Store.Finding", "Shutter.Store.CaseQuestion", "Shutter.Store.AgentRun", "Shutter.Store.SnapshotItem", "Shutter.Store.Snapshot", "Shutter.Store.CaseEvent", "Shutter.Store.Escalation", "Shutter.Store.Case", "Shutter.Store.Precedent", "Shutter.Store.BoardLead", "Shutter.Store.ReviewAnnotation", "Shutter.Store.Review", "Shutter.Store.Idempotency", "Shutter.Bridge.ToolCall", "Shutter.Store.OutageEvent", "Shutter.Store.Outage", "Shutter.Store.ReceiverReading" {
+    For cls = "Shutter.Store.WarehouseRead", "Shutter.Store.CaseToken", "Shutter.Store.ChainItem", "Shutter.Store.Chain", "Shutter.Store.IncidentEvent", "Shutter.Store.Incident", "Shutter.Store.Verification", "Shutter.Store.ExecutionAttempt", "Shutter.Store.Approval", "Shutter.Store.Rehearsal", "Shutter.Store.GateDecision", "Shutter.Store.Plan", "Shutter.Store.Finding", "Shutter.Store.CaseQuestion", "Shutter.Store.AgentRun", "Shutter.Store.SnapshotItem", "Shutter.Store.Snapshot", "Shutter.Store.CaseEvent", "Shutter.Store.Escalation", "Shutter.Store.CaseReminder", "Shutter.Store.ReminderDigest", "Shutter.Store.Case", "Shutter.Store.Precedent", "Shutter.Store.BoardLead", "Shutter.Store.ReviewAnnotation", "Shutter.Store.Review", "Shutter.Store.Idempotency", "Shutter.Bridge.ToolCall", "Shutter.Store.OutageEvent", "Shutter.Store.Outage", "Shutter.Store.ReceiverReading" {
         Set sc = $CLASSMETHOD(cls, "%KillExtent")
         If $$$ISERR(sc) Quit
         Set n = n + 1
@@ -1731,6 +1767,7 @@ ClassMethod PurgeStore() As %String [ SqlProc ]
     // Worklist rows whose task is gone (a task deleted by hand) would show as broken entries in the inbox.
     Do ##class(%SQL.Statement).%ExecDirectNoPriv(, "DELETE FROM EnsLib_Workflow.Worklist WHERE Task NOT IN (SELECT ID FROM EnsLib_Workflow.TaskResponse)")
     Kill ^Shutter.Counter, ^Shutter.Scenarios
+    Do ##class(Shutter.Util.RecoveryControl).StoreEmptied()
     // The counters start again, so a new case may carry a purged case's id: the reset stamp keeps a lead begun before
     // the purge from being followed, and the evidence collector from reading older message-store events.
     Set ^Shutter.Config("resetAt") = ##class(Shutter.Util.Time).NowUTC()
@@ -1858,6 +1895,8 @@ ClassMethod Doctor(refresh As %Boolean = 0) As %String [ SqlProc ]
     // The cases still in a working state, and the quiet minutes after which an approver may abandon one (CONTRACTS 5, 12).
     &sql(SELECT COUNT(*) INTO :working FROM Shutter_Store."Case" WHERE State NOT IN ('resolved', 'blocked', 'escalated', 'failed'))
     Set r."working_cases" = +working, r."abandon_after_minutes" = ##class(Shutter.Store.Case).AbandonAfterMinutes()
+    // The reminder for cases left open: on or off, and what it lacks (CONTRACTS 6.4, reminders).
+    Try { Set r."case_reminders" = ##class(Shutter.Util.CaseReminderTask).Status(..TaskId("Shutter case reminders")) } Catch ex { Set r."case_reminders" = {"error": (ex.DisplayString())} }
     // The stored credentials against the users they name (v1.38): the cache, which the production keeps fresh; a caller
     // that may write may refresh it. Never a reason for the Doctor to fail: a request with no roles only reads.
     Try {
@@ -1904,6 +1943,8 @@ ClassMethod Doctor(refresh As %Boolean = 0) As %String [ SqlProc ]
     // The receivers' outages (CONTRACTS 17): what each watched item's settings read, the set gate's and the hold's lines when
     // the build has them, and the blocks a profile declares that no part of this build acts on.
     Try { Set r.outages = ..OutageDoctor() } Catch ex { Set r.outages = {"error": (ex.DisplayString())} }
+    // What each receiver last answered, and whether every watched namespace can be heard; no probe.
+    Do ##class(Shutter.Util.ReceiverHealth).AddTo(r)
     // The hold for a schema not loaded (v1.34, "prevent failures"): the profile's setting and the held cases by category.
     Do r.%Set("prevent_failures", ##class(Shutter.Store.SiteProfile).PreventFailures(), "boolean")
     Set r."held_messages" = ##class(Shutter.Util.Schemas).Held()
@@ -2505,6 +2546,7 @@ ClassMethod ProviderConfigState(mayRead As %Integer = -1) As %String
 ClassMethod RefreshKnowledge(root As %String = "") As %String [ SqlProc ]
 {
     Set out = {}
+    Do ##class(Shutter.Util.RecoveryControl).Ensure()
     // From SQL, another root than the installed one needs the approver's right: it replaces the knowledge wholesale.
     If (root '= "") && $ISOBJECT($GET(%sqlcontext)) && '$SYSTEM.Security.Check("Shutter_Approve", "USE") {
         Set out.error = "Shutter_Approve is required to refresh the knowledge from another root"

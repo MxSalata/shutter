@@ -17,9 +17,11 @@ const IncidentsPage = lazy(() => import('./features/incidents/IncidentsPage'));
 const IncidentPage = lazy(() => import('./features/incidents/IncidentPage'));
 const ReviewsPage = lazy(() => import('./features/reviews/ReviewsPage'));
 const ReviewPage = lazy(() => import('./features/reviews/ReviewPage'));
+const CoveragePage = lazy(() => import('./features/failure-census/CoveragePage'));
 const SiteProfilePage = lazy(() => import('./features/site-profile/SiteProfilePage'));
 const LibraryPage = lazy(() => import('./features/library/LibraryPage'));
 const SettingsPage = lazy(() => import('./features/settings/SettingsPage'));
+const NamespacesPage = lazy(() => import('./features/namespaces/NamespacesPage'));
 const EvaluationPage = lazy(() => import('./features/evaluation/EvaluationPage'));
 const HealthPage = lazy(() => import('./features/health/HealthPage'));
 const NotFoundPage = lazy(() => import('./features/shell/NotFoundPage'));
@@ -50,9 +52,11 @@ export const routes: RouteObject[] = [
               { path: 'incidents/:incidentId', element: <IncidentPage /> },
               { path: 'reviews', element: <ReviewsPage /> },
               { path: 'reviews/:reviewId', element: <ReviewPage /> },
+              { path: 'coverage', element: <CoveragePage /> },
               { path: 'site-profile', element: <SiteProfilePage /> },
               { path: 'library', element: <LibraryPage /> },
               { path: 'settings', element: <SettingsPage /> },
+              { path: 'settings/namespaces', element: <NamespacesPage /> },
               { path: 'evaluation', element: <EvaluationPage /> },
               { path: 'health', element: <HealthPage /> },
               { path: '*', element: <NotFoundPage /> },

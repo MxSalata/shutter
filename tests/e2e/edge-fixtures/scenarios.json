@@ -1,0 +1,394 @@
+[
+  {
+    "id": "S6b",
+    "title": "A catch-up entry after the discharge",
+    "summary": "The 14:00 discharge applied at both receivers; then the 09:30 transfer, recorded at 17:00, is refused by both as an invalid transition. The bed manager closes it with nothing sent; the records system escalates it with the correcting steps.",
+    "steps": [
+      {
+        "file": "S6b-01-A01.hl7"
+      },
+      {
+        "file": "S6b-02-A03.hl7"
+      },
+      {
+        "file": "S6b-03-A02.hl7",
+        "expect": "delivery_fails"
+      }
+    ],
+    "expected": {
+      "modes": [
+        "policy"
+      ],
+      "write": false,
+      "final_state": "discharged",
+      "final_ward": null,
+      "failed_operation_key": "PAS^HOSP^MRN1061^ENC-1061^transfer^2026-10-15T08:30:00Z",
+      "by_receiver": {
+        "Downstream Out": {
+          "disposition": "superseded",
+          "outcome": "none",
+          "write": false,
+          "final_state": "discharged",
+          "final_ward": null
+        },
+        "Records Out": {
+          "disposition": "escalate",
+          "outcome": "correct_history",
+          "write": false,
+          "final_state": "discharged",
+          "final_ward": null
+        }
+      }
+    }
+  },
+  {
+    "id": "S22b",
+    "title": "A write to one of two receivers",
+    "summary": "The 09:20 transfer fails at both receivers and each case's plan waits. Approving one writes to that receiver only.",
+    "steps": [
+      {
+        "file": "S22b-01-A01.hl7"
+      },
+      {
+        "fault": "fail_before_accept",
+        "receivers": [
+          "Downstream Out",
+          "Records Out"
+        ]
+      },
+      {
+        "file": "S22b-02-A02.hl7",
+        "expect": "delivery_fails"
+      },
+      {
+        "wait": 5
+      },
+      {
+        "fault": "off",
+        "receivers": [
+          "Downstream Out",
+          "Records Out"
+        ]
+      }
+    ],
+    "expected": {
+      "modes": [
+        "rules"
+      ],
+      "failed_operation_key": "PAS^HOSP^MRN1221^ENC-1221^transfer^2026-10-15T08:20:00Z",
+      "write": true,
+      "final_state": "admitted",
+      "final_ward": "WARD-B",
+      "disposition": "resend"
+    }
+  },
+  {
+    "id": "S22c",
+    "title": "A backdated transfer",
+    "summary": "The 15:00 transfer applied at both receivers; the 14:00 one, recorded at 16:40, then fails at both. By event time it is overtaken, though it arrived last: the bed manager closes it, the records system escalates with the correcting steps.",
+    "steps": [
+      {
+        "file": "S22c-01-A01.hl7"
+      },
+      {
+        "file": "S22c-02-A02.hl7"
+      },
+      {
+        "fault": "fail_before_accept",
+        "receivers": [
+          "Downstream Out",
+          "Records Out"
+        ]
+      },
+      {
+        "file": "S22c-03-A02.hl7",
+        "expect": "delivery_fails"
+      },
+      {
+        "wait": 5
+      },
+      {
+        "fault": "off",
+        "receivers": [
+          "Downstream Out",
+          "Records Out"
+        ]
+      }
+    ],
+    "expected": {
+      "modes": [
+        "policy"
+      ],
+      "write": false,
+      "final_state": "admitted",
+      "final_ward": "WARD-C",
+      "failed_operation_key": "PAS^HOSP^MRN1222^ENC-1222^transfer^2026-10-15T13:00:00Z",
+      "by_receiver": {
+        "Downstream Out": {
+          "disposition": "superseded",
+          "outcome": "none",
+          "write": false,
+          "final_state": "admitted",
+          "final_ward": "WARD-C"
+        },
+        "Records Out": {
+          "disposition": "escalate",
+          "outcome": "correct_history",
+          "write": false,
+          "final_state": "admitted",
+          "final_ward": "WARD-C"
+        }
+      }
+    }
+  },
+  {
+    "id": "S3b",
+    "title": "The sender repeats the move: the same key",
+    "summary": "The 09:20 transfer fails; while its resend waits for approval the sender repeats it under a new control id, and that lands. The approval is void, and the gate refuses the new plan on the receipt: nothing more is written, and a person decides.",
+    "steps": [
+      {
+        "file": "S3b-01-A01.hl7"
+      },
+      {
+        "fault": "fail_before_accept"
+      },
+      {
+        "file": "S3b-02-A02.hl7",
+        "expect": "delivery_fails"
+      },
+      {
+        "wait": 5
+      },
+      {
+        "fault": "off"
+      },
+      {
+        "wait_for_state": "awaiting_approval",
+        "timeout": 180
+      },
+      {
+        "file": "S3b-03-A02.hl7"
+      }
+    ],
+    "expected": {
+      "modes": [
+        "rules"
+      ],
+      "write": false,
+      "final_state": "admitted",
+      "final_ward": "WARD-B",
+      "failed_operation_key": "PAS^HOSP^MRN1031^ENC-1031^transfer^2026-10-15T08:20:00Z",
+      "history_once": "PAS^HOSP^MRN1031^ENC-1031^transfer^2026-10-15T08:20:00Z",
+      "by_receiver": {
+        "Downstream Out": {
+          "disposition": "resend",
+          "write": false,
+          "final_state": "admitted",
+          "final_ward": "WARD-B",
+          "blocked_by": "APPROVAL_RECEIVER_CHANGED",
+          "final_reason": "ALREADY_COMMITTED"
+        }
+      }
+    }
+  },
+  {
+    "id": "S1b",
+    "title": "The sender repeats the move: a new time",
+    "summary": "A sender with no EVN-6 repeats the failed 09:20 transfer stamped 09:40, while the resend waits for approval, and that lands. It reads as a later transfer: the approval is void, the gate refuses to send the original over it, and a person decides.",
+    "steps": [
+      {
+        "file": "S1b-01-A01.hl7"
+      },
+      {
+        "fault": "fail_before_accept"
+      },
+      {
+        "file": "S1b-02-A02.hl7",
+        "expect": "delivery_fails"
+      },
+      {
+        "wait": 5
+      },
+      {
+        "fault": "off"
+      },
+      {
+        "wait_for_state": "awaiting_approval",
+        "timeout": 180
+      },
+      {
+        "file": "S1b-03-A02.hl7"
+      }
+    ],
+    "expected": {
+      "modes": [
+        "rules"
+      ],
+      "write": false,
+      "final_state": "admitted",
+      "final_ward": "WARD-B",
+      "failed_operation_key": "PAS^HOSP^MRN1011^ENC-1011^transfer^2026-10-15T08:20:00Z",
+      "history_once": "PAS^HOSP^MRN1011^ENC-1011^transfer^2026-10-15T08:40:00Z",
+      "by_receiver": {
+        "Downstream Out": {
+          "disposition": "resend",
+          "write": false,
+          "final_state": "admitted",
+          "final_ward": "WARD-B",
+          "blocked_by": "APPROVAL_RECEIVER_CHANGED",
+          "final_reason": "SUPERSEDED_BY_LATER_EVENT"
+        }
+      }
+    }
+  },
+  {
+    "id": "S2b",
+    "title": "The same operation, mapped differently",
+    "summary": "While the resend of the 09:20 transfer to Ward B waits for approval, the same transfer fails again under the same key carrying Ward C, as after a change of mapping. The case blocks, and nothing is written for either.",
+    "steps": [
+      {
+        "file": "S2b-01-A01.hl7"
+      },
+      {
+        "fault": "fail_before_accept"
+      },
+      {
+        "file": "S2b-02-A02.hl7",
+        "expect": "delivery_fails"
+      },
+      {
+        "wait": 5
+      },
+      {
+        "fault": "off"
+      },
+      {
+        "wait_for_state": "awaiting_approval",
+        "timeout": 180
+      },
+      {
+        "fault": "fail_before_accept"
+      },
+      {
+        "file": "S2b-03-A02.hl7",
+        "expect": "delivery_fails"
+      },
+      {
+        "wait": 5
+      },
+      {
+        "fault": "off"
+      }
+    ],
+    "expected": {
+      "modes": [
+        "rules"
+      ],
+      "write": false,
+      "final_state": "admitted",
+      "final_ward": "WARD-A",
+      "failed_operation_key": "PAS^HOSP^MRN1021^ENC-1021^transfer^2026-10-15T08:20:00Z",
+      "by_receiver": {
+        "Downstream Out": {
+          "disposition": "resend",
+          "write": false,
+          "final_state": "admitted",
+          "final_ward": "WARD-A",
+          "blocked_by": "PAYLOAD_CHANGED"
+        }
+      }
+    }
+  },
+  {
+    "id": "S25b",
+    "title": "A raw line break inside a note",
+    "summary": "The transfer's note holds a bare CR, so the rest of its line reads as a segment. Validation refuses it and nothing is written; nothing rejoins the line.",
+    "steps": [
+      {
+        "file": "S25b-01-A01.hl7"
+      },
+      {
+        "fault": "fail_before_accept",
+        "operation_key": "PAS^HOSP^MRN1251^ENC-1251^transfer^2026-10-15T08:20:00Z"
+      },
+      {
+        "file": "S25b-02-A02.hl7",
+        "expect": "delivery_fails"
+      },
+      {
+        "wait": 5
+      },
+      {
+        "fault": "off"
+      }
+    ],
+    "expected": {
+      "modes": [
+        "policy"
+      ],
+      "write": false,
+      "final_state": "admitted",
+      "final_ward": "WARD-A",
+      "failed_operation_key": "PAS^HOSP^MRN1251^ENC-1251^transfer^2026-10-15T08:20:00Z",
+      "by_receiver": {
+        "Downstream Out": {
+          "disposition": "escalate",
+          "acceptable": [
+            "more_evidence",
+            "resend"
+          ],
+          "write": false,
+          "final_state": "admitted",
+          "final_ward": "WARD-A",
+          "final_reason": "PARSE_FAILED"
+        }
+      }
+    }
+  },
+  {
+    "id": "S25c",
+    "title": "A second PID",
+    "summary": "The transfer carries a second PID. Validation refuses it and nothing is written.",
+    "steps": [
+      {
+        "file": "S25c-01-A01.hl7"
+      },
+      {
+        "fault": "fail_before_accept",
+        "operation_key": "PAS^HOSP^MRN1252^ENC-1252^transfer^2026-10-15T08:20:00Z"
+      },
+      {
+        "file": "S25c-02-A02.hl7",
+        "expect": "delivery_fails"
+      },
+      {
+        "wait": 5
+      },
+      {
+        "fault": "off"
+      }
+    ],
+    "expected": {
+      "modes": [
+        "policy"
+      ],
+      "write": false,
+      "final_state": "admitted",
+      "final_ward": "WARD-A",
+      "failed_operation_key": "PAS^HOSP^MRN1252^ENC-1252^transfer^2026-10-15T08:20:00Z",
+      "by_receiver": {
+        "Downstream Out": {
+          "disposition": "escalate",
+          "acceptable": [
+            "more_evidence",
+            "resend"
+          ],
+          "write": false,
+          "final_state": "admitted",
+          "final_ward": "WARD-A",
+          "final_reason": "PARSE_FAILED"
+        }
+      }
+    }
+  }
+]

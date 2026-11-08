@@ -47,7 +47,7 @@ describe('compareSide', () => {
     expect(b.result).toBe('Escalate, citing E7; no write');
     expect(b.writes).toBe(0);
     expect(b.dissent).toMatch(/^Conformance said resend/);
-    expect(b.patient).toBe('Patient stays in WARD-C; a person decides');
+    expect(b.patient).toBe('No overwrite; a person decides');
   });
 
   it('says a person decides only while one does, and what came of a case the team closed', () => {
@@ -60,7 +60,7 @@ describe('compareSide', () => {
         closure: null,
         snapshot: x.snapshot as unknown as Snapshot,
       }).patient;
-    const stays = 'Patient stays in WARD-C; a person decides';
+    const stays = 'No overwrite; a person decides';
     expect(asIf({ state: 'blocked' })).toBe(stays);
     expect(asIf({ state: 'awaiting_approval' })).toBe(stays);
     expect(asIf({ state: 'resolved', disposition: 'handled_by_hand' })).toBe(

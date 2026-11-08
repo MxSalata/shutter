@@ -17,6 +17,7 @@ import { IconChevronDown, IconPlus, IconTrash, IconVersions } from '@tabler/icon
 import { useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
+import { RunbookField } from './RunbookField';
 import { api } from '@/api/client';
 import { DEMO_READ_ONLY, readOnlyDemo } from '@/api/can';
 import { keys, useCan, useMe, useSaveSiteProfile, useSiteProfile, useWhatIf } from '@/api/hooks';
@@ -273,6 +274,7 @@ function ReceiverFields({
             error={err('system')}
           />
         </SimpleGrid>
+        <RunbookField r={r} i={i} err={err} update={update} />
         <Question n={2} text="What kind of system is it?" acts />
         <CategoryFields r={r} i={i} err={err} update={update} />
         <QuestionDetails

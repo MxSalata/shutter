@@ -412,7 +412,7 @@ describe('CasePage', () => {
       within(top).queryByRole('heading', { name: /Escalated: a person decides/ }),
     ).not.toBeInTheDocument();
     // The gate passed a plan that writes nothing, and says so beside the green check
-    expect(within(top).getByText('Passed: the plan writes nothing')).toBeInTheDocument();
+    expect(within(top).getByText('Passed: no write')).toBeInTheDocument();
     // Three cards first, each under its heading: what happened, what Shutter did and what needs you now, the last in
     // the attention tone since a person has to act; then the receipt as its own band
     const headings = within(top)
@@ -495,10 +495,24 @@ describe('CasePage', () => {
     expect(await within(rules).findByText('Not as expected')).toBeInTheDocument();
     expect(within(rules).queryByText('Resolved')).not.toBeInTheDocument();
     const board = screen.getByTestId('compare-board');
-    expect(within(board).getByTestId('compare-patient')).toHaveTextContent(
-      'Patient stays in WARD-C; a person decides',
-    );
+    expect(within(board).getByTestId('compare-patient')).toHaveTextContent('No overwrite; a person decides');
     expect(await within(board).findByText('As expected')).toBeInTheDocument();
+  });
+
+  it('asks for no plan or snapshot while the case is Detected, so the console logs no 404', async () => {
+    const { detail } = fixtures.cases['C-000002'];
+    server.use(
+      http.get('/api/shutter/cases/C-000002', () => HttpResponse.json({ ...detail, state: 'detected' })),
+    );
+    const asked: string[] = [];
+    const listen = ({ request }: { request: Request }) => void asked.push(new URL(request.url).pathname);
+    server.events.on('request:start', listen);
+    renderCase('C-000002');
+    await screen.findByRole('heading', { level: 1 });
+    await waitFor(() => expect(asked).toContain('/api/shutter/cases/C-000002/approvals'));
+    expect(asked).not.toContain('/api/shutter/cases/C-000002/plan');
+    expect(asked).not.toContain('/api/shutter/cases/C-000002/snapshot');
+    server.events.removeListener('request:start', listen);
   });
 
   it("doesn't mark the board's run wrong once a person has closed it, or while it is running", async () => {
@@ -945,6 +959,33 @@ describe('CasePage', () => {
     expect(within(gate).getAllByText(/\b2 checked later/).length).toBeGreaterThan(0);
   });
 
+  it('says eligible for approval on the receipt, naming the checks still to come, not Passed', async () => {
+    renderCase('C-000002');
+    const top = await outcome();
+    expect(await within(top).findByText('Eligible for approval')).toBeInTheDocument();
+    expect(within(top).getByText('Checked at dispatch: authorization, rehearsal.')).toBeInTheDocument();
+    expect(within(top).queryByText('Passed')).not.toBeInTheDocument();
+  });
+
+  it('names what the evidence read and the after in the approval dialog, with the condition the write goes on', async () => {
+    renderCase('C-000002');
+    await openStep('Gate and decision');
+    const approval = await screen.findByRole('region', { name: 'Approval' });
+    await userEvent.click(await within(approval).findByRole('button', { name: 'Approve plan' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Approve plan v1' });
+    // Read when the case was investigated, so the row says so and carries its time: never a "before" that looks live
+    expect(within(dialog).queryByText('Before')).not.toBeInTheDocument();
+    const held = within(dialog).getByText('Held when read').closest('tr') as HTMLElement;
+    const time = held.querySelector('time[datetime="2026-11-02T14:16:40Z"]') as HTMLElement;
+    expect(time.parentElement?.textContent).toMatch(/^WARD-A at version 1 \(.+\)$/);
+    expect(within(dialog).getByText('After').closest('tr')).toHaveTextContent(/^After\s*WARD-B$/);
+    expect(
+      within(dialog).getByText(
+        /^You approve exactly this: resend the transfer to WARD-B for ENC-1002, conditional on receiver version 1\.$/,
+      ),
+    ).toBeInTheDocument();
+  });
+
   it('names every stage of the progress in words: done, waiting for approval and not yet', async () => {
     renderCase('C-000002');
     const progress = await screen.findByLabelText("The case's progress");
@@ -1222,6 +1263,7 @@ describe('CasePage', () => {
     const approval = await screen.findByRole('region', { name: 'Approval' });
     await userEvent.click(await within(approval).findByRole('button', { name: 'Reject plan' }));
     const dialog = await screen.findByRole('dialog', { name: 'Reject plan v1' });
+    expect(within(dialog).queryByText('Held when read')).not.toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole('button', { name: 'Reject this plan' }));
     await outcomeLine('Blocked: nothing sent');
     expect(await within(approval).findByText('Rejected by approver')).toBeInTheDocument();
@@ -1349,7 +1391,8 @@ describe('CasePage', () => {
     const items = within(within(steps).getByRole('list')).getAllByRole('listitem');
     expect(items).toHaveLength(8);
     expect(items[0]).toHaveTextContent(/^Hold the case/);
-    expect(items[4]).toHaveTextContent(/as a historic movement at its own time/);
+    // The recording's wording, or the wording since v1.47 once the recording has it
+    expect(items[4]).toHaveTextContent(/as a historic movement at its own time|own records procedure/);
     expect(screen.getByText('Records Out')).toBeInTheDocument();
   });
 
@@ -1360,7 +1403,7 @@ describe('CasePage', () => {
     expect(within(receiver).getByText('At Downstream Out')).toBeInTheDocument();
     expect(await within(receiver).findByText('Current state')).toBeInTheDocument();
     expect(within(region).getByTestId('case-receiver-gist')).toHaveTextContent(
-      "Only today's placement matters.",
+      'This receiver keeps only current placement.',
     );
     expect(within(region).queryByTestId('correction-steps')).not.toBeInTheDocument();
   });
