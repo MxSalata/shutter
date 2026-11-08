@@ -157,7 +157,7 @@ CalledAt              User      Tool     Target    Version  DurationMs
 
 ## The same calls as `forwarder`, without `Shutter_Publish`
 
-The forwarder signs in (its password is right: `$SYSTEM.Security.Login("forwarder", "shutter")` returns 1) and holds no `Shutter_Publish` (`$SYSTEM.Security.Check("Shutter_Publish", "USE")` returns 0).
+The forwarder's password is right (`$SYSTEM.Security.Login("forwarder", "shutter")` returns 1), and it holds no `Shutter_Publish` (`$SYSTEM.Security.Check("Shutter_Publish", "USE")` returns 0).
 
 ```text
 $ npx @modelcontextprotocol/inspector@2.11.0 --cli http://127.0.0.1:8765/mcp --transport http \
@@ -184,4 +184,4 @@ $ npx @modelcontextprotocol/inspector@2.11.0 --cli http://127.0.0.1:8765/mcp --t
 (exit code 5)
 ```
 
-No audit row was written for the forwarder. The refusal is `Shutter.Publish.Service`'s `OnAuthenticate` ([Service.cls](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Publish/Service.cls)): a signed-in caller without `Shutter_Publish` gets an error status, and the gateway answers 401.
+No audit row was written for the forwarder. The refusal is the web application's: `/mcp/shutter` requires `Shutter_Publish` ([Setup.cls](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Setup.cls), `EnsurePublishApp`), so the forwarder's sign-in to it fails and the gateway answers 401 before the service runs. `OnAuthenticate` in [Service.cls](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Publish/Service.cls) checks `Shutter_Publish` again, as a second gate.
