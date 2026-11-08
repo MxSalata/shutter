@@ -48,6 +48,14 @@ Method TestWhatTheRefusalLeaves()
     Do $$$AssertEquals($CLASSMETHOD(u, "TakenByUninstall", "Shutter.Production", "Gate", "Shutter.Operation.Gate", "", "", "", 0), 0, "a production of that name in another namespace")
 }
 
+/// A namespace that cannot be read for items refuses the uninstall with the reason: it is never taken for one with none.
+Method TestAnUnreadNamespaceRefuses()
+{
+    Set refused = ##class(Shutter.Util.Uninstall).Refusal($LISTBUILD("SHUTTERNOSUCHNS"))
+    Do $$$AssertTrue(refused [ "could not be read", "refused: " _ refused)
+    Do $$$AssertTrue(refused [ "SHUTTERNOSUCHNS (", "the namespace named with the reason")
+}
+
 /// The demo's global prefixes go only where the demo was installed, in Shutter's own production.
 Method TestGlobalPrefixes()
 {

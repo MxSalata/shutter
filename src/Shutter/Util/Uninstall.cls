@@ -217,20 +217,24 @@ ClassMethod OwnBodyClass(className As %String) As %Boolean
 }
 
 /// Productions that name a class of Shutter's and that the uninstall would not take it out of: a forwarder added by hand,
-/// without the onboarding. "" when there are none. Every namespace with Interoperability is read.
-ClassMethod Refusal() As %String
+/// without the onboarding. "" when there are none. Every namespace with Interoperability is read (namespaces, when given, in
+/// place of every namespace), and one that cannot be read refuses too, with the reason: nothing says it holds none.
+ClassMethod Refusal(namespaces As %List = "") As %String
 {
-    Set found = "", here = $NAMESPACE, ownProduction = ##class(Shutter.Setup).ProductionName()
-    Set demo = ..DemoNamespaces(), all = ..AllNamespaces()
+    Set found = "", unread = "", here = $NAMESPACE, ownProduction = ##class(Shutter.Setup).ProductionName()
+    Set demo = ..DemoNamespaces(), all = $SELECT(namespaces '= "": namespaces, 1: ..AllNamespaces())
     Do ..OwnItems(.own)
     For i = 1:1:$LISTLENGTH(all) {
         Set ns = $LIST(all, i)
-        If '$LISTFIND(demo, ns) Do ..ForeignItems(ns, here, ownProduction, .own, .found)
+        Continue:$LISTFIND(demo, ns)
+        Set problem = ..ForeignItems(ns, here, ownProduction, .own, .found)
+        If problem '= "" Set unread = unread _ $SELECT(unread = "": "", 1: "; ") _ ns _ " (" _ problem _ ")"
     }
     Set classes = ..SiteClassesHere()
-    If (found = "") && (classes = "") Quit ""
+    If (found = "") && (unread = "") && (classes = "") Quit ""
     Set out = ""
     If found '= "" Set out = "These items use Shutter's classes and were not added by its onboarding, so their productions would not start once the classes are gone: " _ found _ ". Take them out first, then run this again"
+    If unread '= "" Set out = out _ $SELECT(out = "": "", 1: ". ") _ "These namespaces could not be read for items that use Shutter's classes, so a production there might not start once the classes are gone: " _ unread _ ". Make them readable to this user, then run this again"
     If classes '= "" Set out = out _ $SELECT(out = "": "", 1: ". ") _ "These classes in " _ $NAMESPACE _ " are not Shutter's, but they are in the Hospital or Downstream package, which the package manager removes whole with Shutter: " _ classes _ ". Move them to a package of your own first, then run this again"
     Quit out
 }
@@ -302,15 +306,19 @@ ClassMethod TakesClass(className As %String, ownNamespace As %Boolean, ByRef mod
     Quit ..OwnClass(className, ownNamespace) || ($DATA(module(className)) > 0)
 }
 
-/// Adds to found the items in one namespace that use Shutter's classes, outside what the uninstall takes out itself.
-ClassMethod ForeignItems(ns As %String, here As %String, ownProduction As %String, ByRef own, ByRef found As %String) [ Private ]
+/// Adds to found the items in one namespace that use Shutter's classes, outside what the uninstall takes out itself. Returns
+/// "" once the namespace is read (or has no Interoperability), or why it could not be read: a namespace that cannot be
+/// entered, a query that fails or any error on the way.
+ClassMethod ForeignItems(ns As %String, here As %String, ownProduction As %String, ByRef own, ByRef found As %String) As %String [ Private ]
 {
     New $NAMESPACE
+    Set problem = "", sc = $$$OK
     Try {
         Set $NAMESPACE = ns
         Quit:'##class(%Dictionary.CompiledClass).%ExistsId("Ens.Config.Item")
         Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT Production, Name, ClassName FROM Ens_Config.Item WHERE " _ ..PrefixWhere("ClassName", (ns = here) && (ownProduction = "Shutter.Production")))
-        While rs.%Next() {
+        If rs.%SQLCODE < 0 Set problem = "SQLCODE " _ rs.%SQLCODE _ ": " _ rs.%Message Quit
+        While rs.%Next(.sc) {
             Set production = rs.%GetData(1), name = rs.%GetData(2)
             // A row in no production starts nothing.
             Continue:production=""
@@ -318,8 +326,12 @@ ClassMethod ForeignItems(ns As %String, here As %String, ownProduction As %Strin
             Set one = name _ " in " _ production _ " (" _ ns _ ")"
             If '$FIND("; " _ found _ "; ", "; " _ one _ "; ") Set found = found _ $SELECT(found = "": "", 1: "; ") _ one
         }
+        If $$$ISERR(sc) Set problem = $SYSTEM.Status.GetErrorText(sc) Quit
+        If rs.%SQLCODE < 0 Set problem = "SQLCODE " _ rs.%SQLCODE _ ": " _ rs.%Message
     } Catch ex {
+        Set problem = ex.DisplayString()
     }
+    Quit problem
 }
 
 /// Each namespace onboarded here, or still holding a mapping or credential from an earlier removal, taken off.
@@ -956,12 +968,14 @@ ClassMethod TaskId(name As %String) As %String
     Quit id
 }
 
+/// The instance's namespaces, by the configuration's own list: the Config.Namespaces table holds every section's rows.
 ClassMethod AllNamespaces() As %List
 {
     New $NAMESPACE
     Set $NAMESPACE = "%SYS", out = ""
-    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT Name FROM Config.Namespaces")
-    While rs.%Next() { Set out = out _ $LISTBUILD(rs.%GetData(1)) }
+    Set rs = ##class(%ResultSet).%New("Config.Namespaces:List")
+    $$$ThrowOnError(rs.Execute("*"))
+    While rs.Next() { Set out = out _ $LISTBUILD(rs.Get("Namespace")) }
     Quit out
 }
 
