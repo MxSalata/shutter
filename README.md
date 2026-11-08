@@ -100,7 +100,7 @@ Shutter is ready after 3 min 21 s:
   the portal:    http://localhost:52773/csp/sys/UtilHome.csp  (_SYSTEM / SYS, namespace SHUTTER)
 ```
 
-- **Builds:** judges, please use the AI Hub Community build `2027.1.0AI.109.0`, the one the [Early Access portal](https://evaluation.intersystems.com/Eval/early-access/AIHub) offers since 2 November 2026. Shutter is also verified on `2026.3.0AI.154.0`, the contest's first ([receipt](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt.md)). If you already loaded build 154 (or 109), `./install.sh` with no flag finds that image and uses it.
+- **Builds:** judges, please use the AI Hub Community build `2027.1.0AI.109.0`, the one the [Early Access portal](https://evaluation.intersystems.com/Eval/early-access/AIHub) offers since 2 November 2026. Shutter is also verified on `2026. If both builds are loaded, a plain `./install.sh` takes 109; set `SHUTTER_IMAGE` in `.env` to choose. Another port: `SHUTTER_WEB_PORT=8080 ./install.sh` (kept in the `.env` it creates).3.0AI.154.0`, the contest's first ([receipt](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt.md)). If you already loaded build 154 (or 109), `./install.sh` with no flag finds that image and uses it.
 - For live agents, set `ANTHROPIC_API_KEY` in `.env` (Anthropic's API only, so with another provider's key it replays too); without a key the board replays, and the case page says so. `SHUTTER_MODEL=claude-sonnet-5-5` in `.env`, set before the first start, halves the cost; on the held-out cases it decided as `claude-opus-5-5` did ([cheaper models](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#cheaper-models)). The replay edition is the same without live agents or knowledge search. Allow Docker at least 5 GB of memory, the minimum, and about 25 GB of free disk.
 - **Sign-ins on your machine:** the web app as `approver` / `shutter` (approves) or `operator` / `shutter`; the Management Portal as `_SYSTEM` / `SYS`, namespace `SHUTTER`, or as `approver` / `shutter` for the Workflow inbox.
 
@@ -108,7 +108,7 @@ Shutter is ready after 3 min 21 s:
 
 The gate is the same in every mode; **Single investigator** runs live only ([the modes](https://github.com/MxSalata/shutter/blob/main/docs/readme/first-steps.md#the-modes)).
 
-1. In the trial, choose **Explore on my own** (on your machine, **Not now** if a prompt offers the trial). In **Scenarios**, run **S2** in **Board** mode. About 10 to 20 seconds later (a minute live) **Open C-000002** shows its case waiting for approval: **Decide on the resend**, **Review the plan and decide**, **Approve plan**, **Approve this plan**. One conditional write, then "Verified".
+1. In the trial, choose **Explore on my own** (on your machine, **Not now** if a prompt offers the trial). In **Scenarios**, run **S2** in **Board** mode. About 10 to 20 seconds later (a minute live) **Open the case** (C-000001 on a fresh install, C-000002 in the trial) shows its case waiting for approval: **Decide on the resend**, **Review the plan and decide**, **Approve plan**, **Approve this plan**. One conditional write, then "Verified".
 2. Run **S8** in **Rules only** and approve (in the trial it is already approved and written): WARD-B overwrites WARD-C. In **Board** it escalates, writing nothing, and the plan records the dissent.
 
 ![S8 played twice: Rules only overwrites WARD-C; the board escalates and writes nothing](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/s8-rules-and-board.png)
@@ -214,11 +214,11 @@ Each row is played against the demo receiver or a stub listener. **Seen in pract
 
 ## How it is tested
 
-CI reports what follows on [its run at the release commit](https://github.com/MxSalata/shutter/actions/runs/42278108699): every job green, all 771 browser tests passed.
+CI reports what follows on [its run at the 1.1.0 release commit](https://github.com/MxSalata/shutter/actions/runs/42475914697): every job green, all 770 browser tests passed. The live board on build 109 at that release, S2 and S8 with a key, is in [receipt-109.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt-109.md#the-board-live-on-build-109-release-110), with the fault it found and 1.1.1's fix.
 
-- **On a real IRIS, every push to `main` that changes code:** the full install on IRIS for Health Community 2026.2, 37 receiver contract tests, 290 unit tests (8 more on an AI Hub build only) and 26 scenarios end to end through the REST API, one through the demo hospital's production.
+- **On a real IRIS, every push to `main` that changes code:** the full install on IRIS for Health Community 2026.2, 37 receiver contract tests, 492 unit tests (8 more on an AI Hub build only) and 26 scenarios end to end through the REST API, one through the demo hospital's production.
 - **The approval boundary, attacked over HTTP:** [the codes and the check](https://github.com/MxSalata/shutter/blob/main/docs/readme/first-steps.md#the-approval-boundary-attacked-over-http).
-- **Privacy, and a question that tries to act:** [evaluation.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/evaluation.md#what-the-agents-see-and-a-question-that-tries-to-act). **The web app:** 1429 component and 771 browser tests, axe-core on 69 screens and states in 5 appearances.
+- **Privacy, and a question that tries to act:** [evaluation.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/evaluation.md#what-the-agents-see-and-a-question-that-tries-to-act). **The web app:** 1589 component and 770 browser tests, axe-core on 69 screens and states in 5 appearances.
 - **The AI Hub module:** CI can't download an Early Access build, so it builds the core. The module is proven by fresh installs on builds 109 and 154, each Doctor clean ([receipt on 109](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt-109.md), [receipt on 154](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt.md)); every scenario on 109, 29 plays across three modes; the board recorded live on 154 (100 agent runs, 10.00 USD at list prices), which CI replays; and the board live on 109 on 3 November 2026 (S2, four runs, 0.42 USD).
 
 ## Limits, plainly

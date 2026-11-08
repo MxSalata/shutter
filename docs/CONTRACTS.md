@@ -2087,6 +2087,8 @@ with the other stores.
 
 ## Changes
 
+- 8 Nov 2026, release 1.1.1 (no interface change): the model view reads a route item as a route before a receiver's body, so
+  the route's capability profile reaches the agents whether or not the route says the receiver offers history (9).
 - v1.47, 8 Nov 2026 (the engine check): the gate's ordering check reads the engine first for a write on a case with a source
   namespace and an origin header, with `ENGINE_NOT_IN_SCOPE`, `ENGINE_STILL_TRYING`, `ENGINE_DELIVERED`, `RECEIVER_MAY_HOLD_IT`,
   `ENGINE_UNREADABLE` and `ENGINE_SETTLED` (6.5); the case carries `waitsOnEngine` (11); eleven reason codes appended to

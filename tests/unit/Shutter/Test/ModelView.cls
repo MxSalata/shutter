@@ -138,6 +138,7 @@ Method TestRouteKeepsItsCapabilities()
     }
     Do $$$AssertTrue($ISOBJECT(item.%Get("capabilities")) && (item.%Get("capabilities").%Get("dry_run") = 1), "and the capability profile itself")
     Do $$$AssertEquals(item.%Get("capabilities_source"), "read from /downstream/api/capabilities", "and where it was read")
+    Do $$$AssertEquals(item.%Get("connector"), "Downstream Out", "and the connector")
     Do $$$AssertEquals(item.%Get("epoch"), 2, "and the epoch")
 }
 

@@ -106,3 +106,35 @@ all 1 as expected
 | coordinator | `claude-opus-5-5` | ok | 18,352 | 863 | 4,258 | 2,129 | 3 | 14.8 s | 14.3 s | 100 ms | 0.102 USD |
 
 The pass cost 0.42 USD; its 20 tool calls all succeeded; prompt caching and AI Hub's own model and tool timings work on build 109 as on 154.
+
+## The board live on build 109, release 1.1.0
+
+8 November 2026, on House, on a separate instance built from the tag `v1.1.0` (`a8cda067`) on build 109, the key in the IRIS wallet and the agents live, S2 and S8 on the board through the REST API, with `claude-opus-5-5`:
+
+```text
+$ python3 tests/e2e/scenario_check.py S2 S8 --modes board --approve
+DIFFERS S2 board: C-000001 escalated, more_evidence, no write, downstream admitted WARD-A: disposition more_evidence, expected resend
+ok      S8 board: C-000002 escalated, escalate, no write, downstream admitted WARD-C
+1 of 2 differ
+```
+
+S8 ran as expected. S2 did not: the board held its resend for more evidence, twice in two passes (0.579 and 0.522 USD), because the impact specialist and the coordinator read the route's capability profile as "history and epoch only", with nothing said about conditional writes, receipts or dry runs. The snapshot's route item carried them all. The cause was in the model view that reduces every item before it leaves IRIS: the route item gained a `history` field in 1.1.0 (whether the receiver offers history), and the view tested the receiver's body shape, which `history` matched, before the route's, so the route lost its capability fields. Replay cannot show this, since a recording answers in the model's place. Release 1.1.1 reads a route as a route first and keeps `history`; with that class loaded into the same instance, S2 ran as recorded:
+
+```text
+$ python3 tests/e2e/scenario_check.py S2 --modes board --approve
+ok      S2 board: C-000004 resolved, resend, one write, downstream admitted WARD-B
+all 1 as expected
+```
+
+| Case | Member | Status | Prompt tokens | Completion | Cache read | Cache written | Iterations | Duration | Model time | Tool time | Tool calls | Cost |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| S8 | encounter | ok | 14,371 | 761 | 5,814 | 0 | 3 | 9.0 s | 8.5 s | 5 ms | 3 | 0.074 USD |
+| S8 | conformance | ok | 17,840 | 1,076 | 5,838 | 0 | 3 | 11.2 s | 10.7 s | 12 ms | 5 | 0.094 USD |
+| S8 | impact | ok | 15,908 | 1,046 | 5,811 | 0 | 3 | 11.3 s | 10.8 s | 24 ms | 4 | 0.086 USD |
+| S8 | coordinator | ok | 19,995 | 1,053 | 6,567 | 0 | 3 | 13.4 s | 13.0 s | 5 ms | 2 | 0.102 USD |
+| S2 (1.1.1) | encounter | ok | 16,679 | 873 | 5,814 | 0 | 3 | 9.9 s | 8.9 s | 47 ms | 6 | 0.085 USD |
+| S2 (1.1.1) | impact | ok | 17,329 | 1,181 | 5,811 | 0 | 3 | 13.2 s | 12.2 s | 49 ms | 6 | 0.094 USD |
+| S2 (1.1.1) | conformance | ok | 14,220 | 1,056 | 5,838 | 0 | 3 | 13.8 s | 12.9 s | 54 ms | 2 | 0.079 USD |
+| S2 (1.1.1) | coordinator | ok | 18,775 | 984 | 6,567 | 0 | 3 | 12.2 s | 11.4 s | 75 ms | 2 | 0.096 USD |
+
+S8's pass cost 0.356 USD and the corrected S2 pass 0.355 USD; the two held S2 passes 1.101 USD together; every run's status was ok, and prompt caching and AI Hub's model and tool timings worked on build 109 as in the earlier run. The whole round, four passes, cost 1.81 USD.
