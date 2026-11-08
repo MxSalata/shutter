@@ -81,6 +81,24 @@ Method TestWithout()
     Do $$$AssertEquals(##class(Shutter.Util.Uninstall).Without("%Developer", $LISTBUILD("Shutter_Approver")), "%Developer", "nothing to take")
 }
 
+/// The demo's class prefixes are Shutter's only in its own namespace running Shutter.Production. In a hospital's namespace
+/// (Shutter's items inside the site's production, or a watched one) a class or production called Hospital. or Downstream.
+/// is the site's: its messages, its log lines and its production stay.
+Method TestClassPrefixesInAHospitalsNamespace()
+{
+    Set u = "Shutter.Util.Uninstall"
+    Do $$$AssertEquals($CLASSMETHOD(u, "ClassPrefixes", 1), "Shutter.,Hospital.,Downstream.", "Shutter's own namespace")
+    Do $$$AssertEquals($CLASSMETHOD(u, "ClassPrefixes", 0), "Shutter.", "a hospital's namespace")
+    Do $$$AssertEquals($CLASSMETHOD(u, "OwnClass", "Hospital.ADT.Message", 0), 0, "a hospital's message class there")
+    Do $$$AssertEquals($CLASSMETHOD(u, "OwnClass", "Shutter.Intake.Forward", 0), 1, "the forward, anywhere")
+    Do $$$AssertEquals($CLASSMETHOD(u, "OwnClass", "Hospital.Production", 1), 1, "the demo hospital's, in Shutter's namespace")
+    Do $$$AssertEquals($CLASSMETHOD(u, "PrefixWhere", "SourceClass", 0), "SourceClass %STARTSWITH 'Shutter.'", "the query in a hospital's namespace")
+    Do $$$AssertEquals($CLASSMETHOD(u, "PrefixWhere", "X", 1), "X %STARTSWITH 'Shutter.' OR X %STARTSWITH 'Hospital.' OR X %STARTSWITH 'Downstream.'", "the query in Shutter's own")
+    // A site production called Hospital. that Shutter's items went into is not taken whole, so a hand-added gate there refuses.
+    Do $$$AssertEquals($CLASSMETHOD(u, "TakenByUninstall", "Hospital.Path.Production", "My Gate", "Shutter.Operation.Gate", "Hospital.Path.Production", "", "", 0), 0, "a hospital's production named like the demo's")
+    Do $$$AssertEquals($CLASSMETHOD(u, "TakenByUninstall", "Hospital.Production", "Gate", "Hospital.Router", "Shutter.Production", "", "", 0), 1, "the demo hospital's definition in Shutter's namespace")
+}
+
 /// A plan changes nothing and answers.
 Method TestPlanAnswersAndChangesNothing()
 {

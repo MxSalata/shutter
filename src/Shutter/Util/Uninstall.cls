@@ -137,10 +137,43 @@ ClassMethod GlobalPrefixes(demo As %Boolean, production As %String) As %String
 ClassMethod TakenByUninstall(production As %String, name As %String, className As %String, ownProduction As %String, ownClassName As %String, onboarded As %String, recorded As %Boolean) As %Boolean
 {
     If ownProduction '= "" {
-        If ..OwnBodyClass(production) Quit 1
+        If ..OwnClass(production, ownProduction = "Shutter.Production") Quit 1
         If (production = ownProduction) && ..OwnItem(name, className, ownClassName) Quit 1
     }
     Quit (production = onboarded) && recorded
+}
+
+/// The class prefixes that are Shutter's: all three in its own namespace running Shutter.Production, where the module put
+/// them; elsewhere (a hospital's namespace, Shutter's items inside the site's production, or a watched one) only Shutter.,
+/// since a class or production called Hospital. or Downstream. there is the site's.
+ClassMethod ClassPrefixes(ownNamespace As %Boolean) As %String
+{
+    Quit $SELECT(ownNamespace: ..#BODYCLASSES, 1: $PIECE(..#BODYCLASSES, ",", 1))
+}
+
+/// Whether a class (or a production) is Shutter's in a namespace of that kind (ClassPrefixes).
+ClassMethod OwnClass(className As %String, ownNamespace As %Boolean) As %Boolean
+{
+    Set prefixes = ..ClassPrefixes(ownNamespace)
+    For i = 1:1:$LENGTH(prefixes, ",") {
+        Set prefix = $PIECE(prefixes, ",", i)
+        If $EXTRACT(className, 1, $LENGTH(prefix)) = prefix Return 1
+    }
+    Quit 0
+}
+
+/// A WHERE clause matching a column against ClassPrefixes.
+ClassMethod PrefixWhere(column As %String, ownNamespace As %Boolean) As %String
+{
+    Set prefixes = ..ClassPrefixes(ownNamespace), where = ""
+    For i = 1:1:$LENGTH(prefixes, ",") Set where = where _ $SELECT(where = "": "", 1: " OR ") _ column _ " %STARTSWITH '" _ $PIECE(prefixes, ",", i) _ "'"
+    Quit where
+}
+
+/// Whether this namespace is Shutter's own, running Shutter.Production (ClassPrefixes).
+ClassMethod OwnNamespaceHere() As %Boolean
+{
+    Quit ##class(Shutter.Setup).ProductionName() = "Shutter.Production"
 }
 
 /// Whether a body class is one of Shutter's.
@@ -175,7 +208,7 @@ ClassMethod ForeignItems(ns As %String, here As %String, ownProduction As %Strin
     Try {
         Set $NAMESPACE = ns
         Quit:'##class(%Dictionary.CompiledClass).%ExistsId("Ens.Config.Item")
-        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT Production, Name, ClassName FROM Ens_Config.Item WHERE ClassName %STARTSWITH 'Shutter.' OR ClassName %STARTSWITH 'Hospital.' OR ClassName %STARTSWITH 'Downstream.'")
+        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT Production, Name, ClassName FROM Ens_Config.Item WHERE " _ ..PrefixWhere("ClassName", (ns = here) && (ownProduction = "Shutter.Production")))
         While rs.%Next() {
             Set production = rs.%GetData(1), name = rs.%GetData(2)
             // A row in no production starts nothing.
@@ -254,8 +287,9 @@ ClassMethod TakeProduction(out As %DynamicObject)
         If $$$ISERR(sc) Do out.errors.%Push("Shutter's items in " _ production _ ": " _ $SYSTEM.Status.GetErrorText(sc)) Quit
         If taken > 0 Do out.removed.%Push(taken _ " items of Shutter's in " _ production _ ", which was updated and not stopped")
     }
-    // The definitions of the module's own production classes here: Shutter.Production's and the demo hospital's.
-    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT Name FROM Ens_Config.Production WHERE Name %STARTSWITH 'Shutter.' OR Name %STARTSWITH 'Hospital.'")
+    // The definitions of the module's own production classes here: Shutter.Production's and the demo hospital's. In a
+    // hospital's namespace a production called Hospital.<something> is the site's: only the module's own name goes.
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT Name FROM Ens_Config.Production WHERE Name %STARTSWITH 'Shutter.' OR " _ $SELECT(production = "Shutter.Production": "Name %STARTSWITH 'Hospital.'", 1: "Name = 'Hospital.Production'"))
     While rs.%Next() { Set own(rs.%GetData(1)) = 1 }
     Set name = ""
     For {
@@ -421,23 +455,25 @@ ClassMethod TakeWorkflow(out As %DynamicObject)
 /// Every message of Shutter's classes here, and what Shutter's own production's items carried.
 ClassMethod TakeMessages(out As %DynamicObject)
 {
-    Set n = ..DeleteMessages($NAMESPACE, ##class(Shutter.Setup).ProductionName() = "Shutter.Production", .problem)
+    Set own = ..OwnNamespaceHere()
+    Set n = ..DeleteMessages($NAMESPACE, own, .problem)
     If problem '= "" Do out.errors.%Push(problem) Quit
     If n > 0 Do out.removed.%Push(n _ " messages in " _ $NAMESPACE)
     // The event log's lines from Shutter's classes.
-    Do ##class(%SQL.Statement).%ExecDirectNoPriv(, "DELETE %NOCHECK FROM Ens_Util.Log WHERE SourceClass %STARTSWITH 'Shutter.' OR SourceClass %STARTSWITH 'Downstream.' OR SourceClass %STARTSWITH 'Hospital.'")
+    Do ##class(%SQL.Statement).%ExecDirectNoPriv(, "DELETE %NOCHECK FROM Ens_Util.Log WHERE " _ ..PrefixWhere("SourceClass", own))
 }
 
 /// Deletes the messages of Shutter's body classes in a namespace, with their bodies, the rest of each session staying. When
-/// wholeNamespace is 1 also every message that went through an item of Shutter.Production: its feed's HL7 messages have the
-/// engine's own body class. Returns how many.
+/// wholeNamespace is 1 (Shutter's own namespace) the demo's body classes too, and every message that went through an item of
+/// Shutter.Production: its feed's HL7 messages have the engine's own body class. Elsewhere a Hospital. or Downstream. body
+/// is the site's and stays (ClassPrefixes). Returns how many.
 ClassMethod DeleteMessages(ns As %String, wholeNamespace As %Boolean = 0, Output problem As %String) As %Integer
 {
     Set problem = "", n = 0
     New $NAMESPACE
     Try {
         Set $NAMESPACE = ns
-        Set where = "MessageBodyClassName %STARTSWITH 'Shutter.' OR MessageBodyClassName %STARTSWITH 'Hospital.' OR MessageBodyClassName %STARTSWITH 'Downstream.'"
+        Set where = ..PrefixWhere("MessageBodyClassName", wholeNamespace)
         If wholeNamespace {
             Set prod = ##class(Ens.Config.Production).%OpenId("Shutter.Production")
             If $ISOBJECT(prod) {
