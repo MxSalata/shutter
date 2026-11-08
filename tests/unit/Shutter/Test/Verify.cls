@@ -446,4 +446,17 @@ XData Rows [ MimeType = application/json ]
 ]
 }
 
+/// A receipt's bed against the operation's (v1.1.2): a null, missing or empty bed on either side says nothing about the
+/// bed, so neither counts as a different bed; a bed that is stated and different does, with both named.
+Method TestReceiptBedNullReadsAsNotStated()
+{
+    Set op = {"payload_digest": "sha256:a", "ward": "WARD-B", "bed": "BAY1-02"}
+    Do $$$AssertEquals(##class(Shutter.Operation.Verify).ReceiptDiffers({"payload_digest": "sha256:a", "ward": "WARD-B", "bed": null}, op), "", "a null bed says nothing")
+    Do $$$AssertEquals(##class(Shutter.Operation.Verify).ReceiptDiffers({"payload_digest": "sha256:a", "ward": "WARD-B"}, op), "", "a missing bed says nothing")
+    Do $$$AssertEquals(##class(Shutter.Operation.Verify).ReceiptDiffers({"payload_digest": "sha256:a", "ward": "WARD-B", "bed": ""}, op), "", "an empty bed says nothing")
+    Do $$$AssertEquals(##class(Shutter.Operation.Verify).ReceiptDiffers({"payload_digest": "sha256:a", "ward": "WARD-B", "bed": "BAY1-02"}, {"payload_digest": "sha256:a", "ward": "WARD-B", "bed": null}), "", "nor on the operation's side")
+    Do $$$AssertEquals(##class(Shutter.Operation.Verify).ReceiptDiffers({"payload_digest": "sha256:a", "ward": "WARD-B", "bed": "BAY2-01"}, op), "bed BAY2-01 against this message's BAY1-02", "a different bed that is stated differs, both named")
+    Do $$$AssertEquals(##class(Shutter.Operation.Verify).ReceiptDiffers({"payload_digest": "sha256:b", "ward": "WARD-B", "bed": null}, op), "its payload digest differs", "a digest that differs still does, with the null bed silent")
+}
+
 }
