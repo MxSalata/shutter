@@ -148,6 +148,7 @@ ClassMethod InstallStatus(root As %String = "", demo As %Boolean = 1, production
         If root '= "" {
             Set sc = ##class(Shutter.Store.SiteProfile).SeedFromFile(root _ "knowledge/site/profile.json") Quit:$$$ISERR(sc)
             // The live hospital (CONTRACTS 4.4, v1.34; decided on 1 Nov 2026): its single cases at tier 2 wait for a person.
+            Set sc = ..DemoProfilePolicy(root _ "knowledge/site/profile.json", demo) Quit:$$$ISERR(sc)
             Set sc = ..LiveProfilePolicy(root _ "knowledge/site/profile.json") Quit:$$$ISERR(sc)
             Set sc = ##class(Shutter.Catalogue.Entry).SeedFromFile(root _ "knowledge/catalogue/catalogue.json", .entries) Quit:$$$ISERR(sc)
             Set ^Shutter.Config("catalogue", "entries") = $GET(entries, 0)
@@ -1289,6 +1290,28 @@ ClassMethod ApplyDefaultSettings(production As %String = "Shutter.Production") A
 /// Make Shutter.Production the namespace's production and start it, when the class is compiled. When InstallInto
 /// put Shutter's items in the site's own production, there is nothing of Shutter's to start, and that production is
 /// never stopped here.
+/// The demo's release policy (v1.1.0; 8 Nov 2026: "approval on every tier by default; the demo keeps its own
+/// setting, labelled"): a demo install (demo 1, or ^Shutter.Config("demo") when -1) whose profile is still the seed's stores
+/// Shutter.Store.SiteProfile.DemoPolicy() as the policy, with the seed's path and " (demo)" as the source, which the seed
+/// leaves alone on a reinstall and the Site profile page labels as the demo's answers. A site install (demo 0) keeps the
+/// shipped table, approval everywhere. A profile a person saved is never touched. Returns a status; nothing changes when
+/// the policy already reads so.
+ClassMethod DemoProfilePolicy(seedPath As %String, demo As %Integer = -1) As %Status
+{
+    If demo = -1 Set demo = +$GET(^Shutter.Config("demo"))
+    Quit:'demo $$$OK
+    Set row = ##class(Shutter.Store.SiteProfile).Row()
+    Quit:'$ISOBJECT(row) $$$OK
+    Set demoSource = seedPath _ " (demo)"
+    Quit:((row.Source '= seedPath) && (row.Source '= demoSource)) $$$OK
+    Set p = ##class(Shutter.Util.Json).Parse(row.Json, .sc)
+    Quit:('$ISOBJECT(p) || $$$ISERR(sc)) $$$OK
+    Set want = ##class(Shutter.Store.SiteProfile).DemoPolicy()
+    Quit:(($ISOBJECT(p.%Get("policy")) && (p.%Get("policy").%ToJSON() = want.%ToJSON())) && (row.Source = demoSource)) $$$OK
+    Do p.%Set("policy", want)
+    Quit ##class(Shutter.Store.SiteProfile).Store(p.%ToJSON(), demoSource, "install", "", .version)
+}
+
 /// The live hospital's policy (CONTRACTS 4.4, v1.34; decided on 1 Nov 2026, "single cases at tier 2 wait for an
 /// approval in the live hospital"): when the install is told SHUTTER_LIVE=1 (or on is 1), the shipped profile's policy for
 /// tier 2, single chains becomes approval, so the demo's visitors always have a case to approve, and the profile is stored
@@ -1301,8 +1324,10 @@ ClassMethod LiveProfilePolicy(seedPath As %String, on As %Integer = -1) As %Stat
     Quit:'on $$$OK
     Set row = ##class(Shutter.Store.SiteProfile).Row()
     Quit:'$ISOBJECT(row) $$$OK
-    Set liveSource = seedPath _ " (live hospital)"
-    Quit:((row.Source '= seedPath) && (row.Source '= liveSource)) $$$OK
+    // The seed's profile, or the demo's (DemoProfilePolicy), or either with the live hospital's mark already on it.
+    Set demoSource = seedPath _ " (demo)"
+    Set liveSource = $SELECT((row.Source = demoSource) || (row.Source = demoSource _ " (live hospital)"): demoSource _ " (live hospital)", 1: seedPath _ " (live hospital)")
+    Quit:((row.Source '= seedPath) && (row.Source '= demoSource) && (row.Source '= liveSource)) $$$OK
     Set p = ##class(Shutter.Util.Json).Parse(row.Json, .sc)
     Quit:('$ISOBJECT(p) || $$$ISERR(sc)) $$$OK
     Set policy = p.%Get("policy")

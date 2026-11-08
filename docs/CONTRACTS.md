@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.46, 5 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.47, 8 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -669,9 +669,9 @@ reads it through `Shutter.Store.SiteProfile`.
   "unconditional_resend": "forbidden",
   "merges": "forbidden",
   "policy": {
-    "1": {"single": "automatic", "ordered": "automatic", "interleaved": "board"},
-    "2": {"single": "automatic", "ordered": "approval", "interleaved": "board"},
-    "3": {"single": "approval", "ordered": "per_chain", "interleaved": "board"}
+    "1": {"single": "approval", "ordered": "approval", "interleaved": "board"},
+    "2": {"single": "approval", "ordered": "approval", "interleaved": "board"},
+    "3": {"single": "approval", "ordered": "approval", "interleaved": "board"}
   },
   "approvers": {"role": "Shutter Approvers", "escalation": "the integration team's on-call",
                 "close_needs_approver": false},
@@ -681,6 +681,16 @@ reads it through `Shutter.Store.SiteProfile`.
   "further_messages": {"in_patient_movement": "stop", "admission_not_found": "person", "scan_seconds": 30}
 }
 ```
+
+**The shipped policy asks a person at every tier** (v1.47, 8 Nov 2026: "approval on every tier by default; the demo
+keeps its own setting, labelled"): `approval` for single and ordered chains at tiers 1 to 3, the board for interleaved ones,
+whose plan a person then approves. A site that wants a tier released by policy says so in its own profile. **The demo keeps
+the earlier table as its own setting:** a demo install (`Shutter.Setup.Install` with `demo` 1) whose profile is still the
+seed's stores `Shutter.Store.SiteProfile.DemoPolicy()` (tiers 1 and 2 single and tier 1 ordered `automatic`, tier 2 ordered
+`approval`, tier 3 `approval` and `per_chain`, interleaved `board`) with the seed's path and `" (demo)"` as the profile's
+source (`Shutter.Setup.DemoProfilePolicy`); the live hospital's rule (4.4) then marks it `" (demo) (live hospital)"` and makes
+tier 2 single an approval. The Site profile page labels such a profile "Demo's answers" instead of "Shipped answers". A
+profile a person saved is never touched, and a reinstall leaves both marked sources alone.
 
 (`teams` and `mail`, optional, are in section 10. The shipped seed profile has both: the integration and PAS teams, and
 `mail.allowed_domains` set to their mailboxes' domain, `example.nhs.uk`.)
@@ -2058,6 +2068,10 @@ with the other stores.
 
 ## Changes
 
+- v1.47, 8 Nov 2026 ("approval on every tier by default; the demo keeps its own setting, labelled"): the shipped
+  site profile's policy is `approval` for single and ordered chains at every tier, the board for interleaved ones; a demo
+  install keeps the earlier table as the demo's own, labelled setting, marked in the profile's source and on the Site profile
+  page (6.4, 4.4).
 - v1.46, 5 Nov 2026 (a review of this version): `not_committed` says "by the last read" and that a slower receiver can still commit the write (5.1); a write call that answers with an error records its attempt as `uncertain`, and reads as `WRITE_OUTCOME_UNKNOWN`; `GET /cases/{id}/blocked-reason` reads a rehearsal with no usable answer as `BLOCKED`, and a lost write's reason is no longer hidden by an earlier round's gate decision; a reinvestigation without `Shutter_LiveAgents`, or while the provider refuses the key, whose board has no recording leaves the case escalated, with the reason, instead of taking the rules path. Onboarding: an alert the site's own consumer raised is not passed back to it (11); options that are not a JSON object answer `{ok: false, error}` in the plan, the apply and the removal; a `receivers` name matching no item is a warning, and with no item chosen the plan has no `add_alert_intake`; a profile entry with an `api` and no `namespace` counts as taken, with a warning; `OnboardReceiverItem` refuses, naming both, an item that exists with other settings (11.1); a `receivers` option that chooses no item adds no forwarder. The web app keeps the Cases filter and page and the Scenarios mode and filter in the address.
 - v1.45, 5 Nov 2026 (measured on a stock operation): a case for an order, a result or a document keeps `failureKind` `unmappable`,
   E12 and its escalation, and nothing is sent; its failure text, headline, plan and gate detail stop saying the message could not
