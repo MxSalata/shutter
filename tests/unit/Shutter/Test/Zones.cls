@@ -71,6 +71,22 @@ Method TestNativeRulesStand()
 
 /// Digits that make no date or time (30 February, a thirteenth month, 24:00:00) read as no time at all, "", in every
 /// zone and with an offset of their own, never as an error; the interval helpers answer "" for them too.
+/// In a watched namespace neither the cached zone nor the site profile is there: the zone the caller set before it moved
+/// (^||Shutter.FeedZone) is read instead, so a time without an offset reads in the feed's zone and the read doesn't fail.
+Method TestTheZoneCarriedIntoAWatchedNamespace()
+{
+    Set cached = $GET(^Shutter.Config("feedZone"))
+    Kill ^Shutter.Config("feedZone")
+    Set ^||Shutter.FeedZone = "UTC"
+    Do $$$AssertEquals(##class(Shutter.Util.Time).FromHL7("20260715100000"), "2026-07-15T10:00:00Z", "read in the carried zone, UTC")
+    Set ^||Shutter.FeedZone = "Europe/London"
+    Do $$$AssertEquals(##class(Shutter.Util.Time).FromHL7("20260715100000"), "2026-07-15T09:00:00Z", "read in the carried zone, London in summer")
+    Set ^Shutter.Config("feedZone") = "UTC"
+    Do $$$AssertEquals(##class(Shutter.Util.Time).FromHL7("20260715100000"), "2026-07-15T10:00:00Z", "the namespace's own cached zone comes first")
+    Kill ^||Shutter.FeedZone
+    If cached = "" { Kill ^Shutter.Config("feedZone") } Else { Set ^Shutter.Config("feedZone") = cached }
+}
+
 Method TestImpossibleDateReadsAsNoTime()
 {
     For ts = "20260230120000", "20261301120000", "20260701240000" {
