@@ -2,7 +2,7 @@
 
 **When a hospital's HL7 delivery fails, the usual fix is Resend, and when two systems move a patient at the same moment, that resend writes over the bed manager's ward with every check passed. Shutter's IRIS AI Hub agents decide how to put the failure right; a deterministic gate decides whether anything is written.**
 
-On an ordinary day a hospital's integration engine can see hundreds of failed messages. Engineers put right what they can by hand, and the rest can go unactioned. Shutter won't fix them all, but it helps with most of the failed patient movements it can see: it resends the ones that pass its checks, and for the rest it stops, writes nothing, and names the patient a person needs to review.
+On an ordinary day a hospital's integration engine can see hundreds of failed messages. Engineers put right what they can by hand, and the rest can go unactioned. Shutter won't fix them all, but it helps with most: in my experience at the hospitals I have worked with, most failures are of the kinds it knows. It resends the failed patient movements that pass its checks, and for the rest it stops, writes nothing, and names the patient a person needs to review.
 
 Shutter is about delivery, not diagnosis: it sends the receiver the operation the failed message asked for, as that message stated it, or nothing, and shows why. Recovery needs a receiver with an API; a plain MLLP receiver gets the investigation and a drafted escalation, never a resend.
 
