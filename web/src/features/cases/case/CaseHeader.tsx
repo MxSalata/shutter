@@ -25,7 +25,7 @@ import { caseOutcome, caseState, type ExpectedScenario, type OutcomeCase } from 
 import { toneText, type Status, type Tone } from '@/lib/tone';
 import { useDetail } from '@/stores/appearance';
 import { forwardedFrom } from './derive';
-import { receiverWords } from './failureMap';
+import { receiverWords } from './failureMapModel';
 import { evidenceOf, messageTypeLabel, messageTypeOf } from './message';
 import { actionHead, headerSentence } from './outcome';
 
