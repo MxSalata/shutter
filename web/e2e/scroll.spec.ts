@@ -251,7 +251,10 @@ test.describe('at a laptop size', () => {
     const y = await scrollY(page);
     expect(y).toBeGreaterThan(0);
     await ask.evaluate((b: HTMLElement) => b.click());
-    await expect(page.getByRole('dialog')).toBeVisible();
+    // At a laptop's width the panel stands beside the page, not over it as the drawer does below 1200 px
+    await expect(
+      page.getByRole('complementary').getByRole('region', { name: 'Ask about this case' }),
+    ).toBeVisible();
     await atRest(page);
     expect(Math.abs((await scrollY(page)) - y)).toBeLessThan(2);
   });
