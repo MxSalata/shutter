@@ -25,7 +25,7 @@ import {
   IconSun,
   IconUserCircle,
 } from '@tabler/icons-react';
-import { Suspense } from 'react';
+import { lazy, Suspense } from 'react';
 import {
   Link,
   NavLink as RouterNavLink,
@@ -34,7 +34,7 @@ import {
   useLocation,
   useNavigate,
 } from 'react-router';
-import { useMe, useSignOut, useSiteProfile } from '@/api/hooks';
+import { useLiveStatus, useMe, useSignOut, useSiteProfile } from '@/api/hooks';
 import { displayZone, setDisplayZone } from '@/lib/format';
 import { APP_NAME } from '@/theme';
 import { BrandMark } from '@/components/BrandMark';
@@ -50,16 +50,34 @@ import { LiveHelpMenu } from '@/features/guide/LiveHelpMenu';
 import { LiveWelcome } from '@/trial/LiveWelcome';
 import { trialChrome } from '@/trial/slot';
 import { bannerForm } from '@/trial/visit';
-import { LiveBanner } from './LiveBanner';
-import {
-  ASSISTANT_ASIDE_WIDTH,
-  AssistantAside,
-  AssistantOverlay,
-  AssistantRouteSync,
-} from '@/features/assistant/AssistantSurface';
+import { AssistantRouteSync } from '@/features/assistant/AssistantRouteSync';
 import { HeaderAssistantButton } from '@/features/assistant/HeaderAssistantButton';
-import { useAssistantWide } from '@/features/assistant/panel';
+import { ASSISTANT_ASIDE_WIDTH, useAssistantWide } from '@/features/assistant/panel';
 import { useAssistant } from '@/features/assistant/store';
+
+/**
+ * Parts of the shell that the first paint does not need, each in a chunk of its own, so the entry stays small
+ * (e2e/trial.spec.ts holds it to its budget): the live hospital's banner, drawn only while the settings say the feed is
+ * live, and the Ask Shutter panel's forms. The shell's own buttons, the panel's among them, stay in the entry.
+ */
+const LiveBanner = lazy(() => import('./LiveBanner').then((m) => ({ default: m.LiveBanner })));
+const AssistantAside = lazy(() =>
+  import('@/features/assistant/AssistantSurface').then((m) => ({ default: m.AssistantAside })),
+);
+const AssistantOverlay = lazy(() =>
+  import('@/features/assistant/AssistantSurface').then((m) => ({ default: m.AssistantOverlay })),
+);
+
+/** The live banner's place: its chunk loads only for an instance whose settings say the hospital feed is live. */
+function LiveBannerSlot() {
+  const live = useLiveStatus();
+  if (!live) return null;
+  return (
+    <Suspense fallback={null}>
+      <LiveBanner />
+    </Suspense>
+  );
+}
 
 /**
  * The count beside Cases: how many cases need a person, from the same queries as the Cases page's tiles. Nothing at
@@ -391,13 +409,15 @@ export function AppLayout() {
       >
         {/* A new page starts at its top; Back returns to where the previous one was left. */}
         <ScrollRestoration />
-        <LiveBanner />
+        <LiveBannerSlot />
         <Suspense fallback={<PageSkeleton />}>
           <Outlet key={displayZone()} />
         </Suspense>
       </AppShell.Main>
-      {beside ? <AssistantAside /> : null}
-      <AssistantOverlay />
+      <Suspense fallback={null}>
+        {beside ? <AssistantAside /> : null}
+        <AssistantOverlay />
+      </Suspense>
       <AssistantRouteSync />
       {chrome ? (
         <>

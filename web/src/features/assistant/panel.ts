@@ -8,6 +8,9 @@ export const ASSISTANT_PANEL_ID = 'ask-panel';
 /** From this width the panel sits beside the page, which keeps its own room; below it the panel is a drawer. */
 export const ASSISTANT_WIDE_QUERY = '(min-width: 75em)';
 
+/** The panel's width beside the page, from the wide breakpoint up. */
+export const ASSISTANT_ASIDE_WIDTH = { lg: 400, xl: 440 };
+
 /** What the panel is about: the case on a case page, otherwise the page by its name. */
 export type AssistantContext = { kind: 'case'; caseId: string } | { kind: 'page'; page: string };
 
