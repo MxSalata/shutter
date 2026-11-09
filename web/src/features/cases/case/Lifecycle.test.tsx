@@ -40,9 +40,9 @@ function renderStrip(c: CaseDetail) {
 describe('Lifecycle of a message resent with its outage', () => {
   it('shows the approval, the send and the settled new header the outage card made, not "not needed"', () => {
     renderStrip(lab([{ runId: 'R8-3', position: 3, state: 'completed', closure: 'sent' }]));
-    expect(screen.getByText('approved on the outage (R8-3)')).toBeInTheDocument();
-    expect(screen.getByText('resent by the engine')).toBeInTheDocument();
-    expect(screen.getByText('new header Completed')).toBeInTheDocument();
+    expect(screen.getByText('approved (R8-3)')).toBeInTheDocument();
+    expect(screen.getByText('resent')).toBeInTheDocument();
+    expect(screen.getByText('header Completed')).toBeInTheDocument();
     // The rehearsal really was not needed
     expect(screen.getByText('not needed')).toBeInTheDocument();
   });
@@ -50,6 +50,6 @@ describe('Lifecycle of a message resent with its outage', () => {
   it('keeps "not needed" where nothing was resent', () => {
     renderStrip(lab([]));
     expect(screen.getAllByText('not needed').length).toBeGreaterThanOrEqual(3);
-    expect(screen.queryByText(/approved on the outage/)).toBeNull();
+    expect(screen.queryByText(/approved \(/)).toBeNull();
   });
 });

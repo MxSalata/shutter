@@ -61,10 +61,11 @@ function GateTable({ d }: { d: GateDecision }) {
             </StackTable.Tr>
           </StackTable.Thead>
           <StackTable.Tbody>
-            {checks.map((c) => {
+            {checks.map((c, i) => {
               const r = CHECK_STATES[checkState(c)];
+              // One check can be recorded twice (an order or result: conformance blocks UNMAPPABLE and passes PARSED)
               return (
-                <StackTable.Tr key={c.check}>
+                <StackTable.Tr key={`${c.check}:${c.reason_code ?? ''}:${i}`}>
                   <StackTable.Td>
                     <Text size="sm">{humanize(c.check)}</Text>
                     {CHECK_QUESTIONS[c.check] ? (

@@ -156,6 +156,20 @@ describe('what the card lists', () => {
     expect(ids('closed')).toEqual(['43']);
   });
 
+  it("matches a header the set gives as a number with the ledger's string", () => {
+    const numbers = lists(
+      [41, 43].map(
+        (n) => ({ headerId: n, controlId: `C${n}` }) as unknown as Outage['lists']['offered'][number],
+      ),
+    );
+    const left = offeredRowsToShow({
+      state: 'closed',
+      lists: numbers,
+      resends: [row(1, 'completed', 'sent')],
+    });
+    expect(left.map((r) => String(r.headerId))).toEqual(['43']);
+  });
+
   it('leaves a closed message out where the ledger lists it', () => {
     const closed = { ...set, closed: [offered('41'), offered('49')] };
     expect(

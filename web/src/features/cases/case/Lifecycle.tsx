@@ -68,9 +68,10 @@ export function Lifecycle({
   );
   const resentWords: Partial<Record<StageKey, string>> = resent
     ? {
-        approval: `approved on the outage (${resent.runId})`,
-        dispatch: 'resent by the engine',
-        verification: resent.closure === 'sent' ? 'new header Completed' : 'the receiver already held it',
+        // Short, so the strip keeps to one line: the run's id names the approval on the outage card
+        approval: `approved (${resent.runId})`,
+        dispatch: 'resent',
+        verification: resent.closure === 'sent' ? 'header Completed' : 'already held',
       }
     : {};
   const firstOpen = statuses.findIndex((s) => s === 'current' || s === 'pending' || s === 'stopped');

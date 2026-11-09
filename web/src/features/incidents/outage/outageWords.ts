@@ -186,9 +186,12 @@ export function readingLabel(reading: string): string {
   return words[reading] ?? asSentence(reading.replace(/_/g, ' ')).replace(/\.$/, '');
 }
 
-/** The header ids the ledger holds a row for: a message sent, already held, handled by hand or left unsent. */
+/**
+ * The header ids the ledger holds a row for: a message sent, already held, handled by hand or left unsent. Compared as
+ * text: the set's rows carry a header id as a number and the ledger's as a string.
+ */
 function ledgerHeaders(o: Pick<Outage, 'resends'>): Set<string> {
-  return new Set((o.resends ?? []).map((r) => r.headerId ?? '').filter(Boolean));
+  return new Set((o.resends ?? []).map((r) => String(r.headerId ?? '')).filter(Boolean));
 }
 
 /**
@@ -200,11 +203,11 @@ export function offeredRowsToShow(o: Pick<Outage, 'state' | 'lists' | 'resends'>
   if (o.state === 'offered') return o.lists.offered;
   if (o.state === 'sending') return [];
   const done = ledgerHeaders(o);
-  return o.lists.offered.filter((r) => !done.has(r.headerId));
+  return o.lists.offered.filter((r) => !done.has(String(r.headerId)));
 }
 
 /** The messages closed with no send of their own that the ledger does not already list (it lists each hand closure). */
 export function closedRowsToShow(o: Pick<Outage, 'lists' | 'resends'>): OutageRow[] {
   const done = ledgerHeaders(o);
-  return (o.lists.closed ?? []).filter((r) => !done.has(r.headerId));
+  return (o.lists.closed ?? []).filter((r) => !done.has(String(r.headerId)));
 }
