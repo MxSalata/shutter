@@ -14,8 +14,8 @@
   <a href="https://github.com/MxSalata/shutter/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT licence" /></a>
 </p>
 <p align="center">
-  <a href="https://mxsalata.github.io/shutter/"><b>Trial</b></a> ·
-  <a href="https://shutter.mxsalata.com">Online demo</a> ·
+  <a href="https://mxsalata.github.io/shutter/"><b>Trial</b> (no IRIS)</a> ·
+  <a href="https://shutter.mxsalata.com">Online demo</a> (real IRIS) ·
   <a href="https://github.com/MxSalata/shutter#try-it">Install</a> ·
   <a href="https://github.com/MxSalata/shutter#how-it-works">How it works</a> ·
   <a href="https://github.com/MxSalata/shutter#where-the-agents-sit">The agents</a> ·
