@@ -72,9 +72,10 @@ the case page (`POST /api/shutter/cases/{id}/escalations` through the API); unti
   first. `SELECT Shutter_Util.Uninstall_Plan()` says what would go and changes nothing. It gives each watched namespace
   one line, its onboarding: under it go that namespace's forwarder and alert items, its two mappings and its credential; the user
   `shutter-fwd` and the Workflow role `Shutter Approvers` go too.
-- **What the uninstall leaves:** the global `^Shutter.AlertIntake` in each watched namespace (the control ids and sessions
-  its alert intake has seen) and the folder `<mgr>/shutter/.fastembed_cache` (the embedding model, about 87 MB): kill the
-  one and delete the other. Users you made yourself, such as an approver, stay with Shutter's roles taken off: disable or
+- **What the uninstall leaves:** it takes the global `^Shutter.AlertIntake` in each watched namespace and the embedding
+  model's folder `<mgr>/shutter/.fastembed_cache` (about 87 MB), both listed in the plan. When Shutter was loaded into an
+  existing namespace such as USER, the model sits in that namespace's database folder (`<mgr>/user/.fastembed_cache`),
+  beside the site's database, and stays: delete it by hand. Users you made yourself, such as an approver, stay with Shutter's roles taken off: disable or
   delete them. The package manager stays in the namespace. A line that says it kept a receiver a person edited is about
   that namespace's onboarding; after the whole uninstall the site profile is gone with every other setting.
 - **The uninstall refuses, changing nothing,** while a production it did not wire still names one of Shutter's classes (an
