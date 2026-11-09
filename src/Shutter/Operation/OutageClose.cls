@@ -55,7 +55,19 @@ ClassMethod Step(outage As Shutter.Store.Outage, entry As %DynamicObject, facts 
     // An offered set (the set gate in the build) stands only while the engine has nothing of the window: a message tried
     // again sends the row back to open. Otherwise the poll computes the set again when a person asked (read_again) or a
     // minute has passed, so a member resent by hand meanwhile moves the digest. A person's row is read again only when asked.
-    If (state = "offered") || ((state = "needs_person") && (outage.ReadAgainAt '= "")) {
+    // A person's row where no run was approved (a busy feed, or the set not computed while something of the window was
+    // tried) is computed again every minute too, so its words and lists follow the engine and it moves on by itself once
+    // nothing is being tried. After an approved run stopped it waits for a person's Read again, as before.
+    If ..Recomputes(state, outage.Approval) && '..IsQuiet(outage, facts, now) {
+        Set since = ##class(Shutter.Util.Time).MillisBetween(outage.SetComputedAt, now)
+        If (outage.ReadAgainAt = "") && (since '= "") && (since < ..#RECOMPUTEMILLIS) Quit ..Save(outage, fields)
+        Set fields.ReadAgainAt = ""
+        Set sc = ..Save(outage, fields)
+        If $$$ISERR(sc) Quit sc
+        // Still busy: the close keeps the row with a person, its set and lists read as they are now.
+        Quit ..Close(outage, entry, facts, now, ..#BUSY)
+    }
+    If (state = "offered") || ((state = "needs_person") && ((outage.ReadAgainAt '= "") || ..Recomputes(state, outage.Approval))) {
         If (state = "offered") && '..IsQuiet(outage, facts, now) {
             // The set is withdrawn, so nothing reads as offered while the engine tries: a list left offered would be read,
             // and approved, as the set of now (found on the Pathology rig, O5.c: the approval met a row back at open).
@@ -90,6 +102,15 @@ ClassMethod Step(outage As Shutter.Store.Outage, entry As %DynamicObject, facts 
         Quit ..Close(outage, entry, facts, now, next.why)
     }
     Quit outage.Advance(next.to, next.why, ..#ACTOR, fields)
+}
+
+/// Why a row stays with a person while the engine is still busy with the window.
+Parameter BUSY = "a busy feed: messages keep failing and the queue is never empty";
+
+/// Whether the poll computes a person's row again by itself, pure: needs_person with no approval on it (nothing was sent).
+ClassMethod Recomputes(state As %String, approval As %String) As %Boolean
+{
+    Quit (state = "needs_person") && (approval = "")
 }
 
 /// Fields alone, when there are any.
@@ -147,7 +168,7 @@ ClassMethod Next(f As %DynamicObject, now As %String) As %DynamicObject
         }
         If twice Set out.to = "closing", out.why = "queue 0, no head message and no header of the window Queued or Delivered, on two polls" Quit out
         Set since = ##class(Shutter.Util.Time).MillisBetween(f.openedAt, now)
-        If (since '= "") && (since >= settle) Set out.to = "needs_person", out.why = "a busy feed: messages keep failing and the queue is never empty" Quit out
+        If (since '= "") && (since >= settle) Set out.to = "needs_person", out.why = ..#BUSY Quit out
         Quit out
     }
     If state = "draining" {
@@ -577,16 +598,38 @@ ClassMethod LinkVerdict(c As %DynamicObject) As %DynamicObject
 {
     Set state = c.state
     If (state = "resolved") || (state = "failed") Quit {"decided": 1, "finished": 1, "resolve": 0, "resolved": 0, "reason": ""}
-    If $LISTFIND($LISTBUILD("awaiting_approval", "approved", "executing", "verifying"), state) Quit ..Open("a person is reviewing it (" _ state _ ")", 1)
-    If '$LISTFIND($LISTBUILD("blocked", "escalated"), state) Quit ..Open("the workflow is still working on it (" _ state _ ")", 1)
-    If $EXTRACT(c.failureReasonCode, 1, 4) = "ack_" Quit ..Open("an application acknowledgement failure (" _ c.failureReasonCode _ "): a Completed header does not settle it", 1)
-    If c.failureKind = "rejected" Quit ..Open("the receiver refused its content: a Completed header does not settle it", 1)
-    If (c.failureKind '= "delivery_failed") && (c.failureKind '= "uncertain_outcome") Quit ..Open("its failure is " _ $SELECT(c.failureKind = "": "of no known kind", 1: c.failureKind) _ ", not a failed delivery: a Completed header does not settle it", 1)
-    If c.identity Quit ..Open("an identity exception: a Completed header does not settle it", 1)
+    If $LISTFIND($LISTBUILD("awaiting_approval", "approved", "executing", "verifying"), state) Quit ..Open("its case waits on a person (" _ $TRANSLATE(state, "_", " ") _ ")", 1)
+    If '$LISTFIND($LISTBUILD("blocked", "escalated"), state) Quit ..Open("Shutter is still working on its case (" _ $TRANSLATE(state, "_", " ") _ ")", 1)
+    If $EXTRACT(c.failureReasonCode, 1, 4) = "ack_" Quit ..Open("the receiver took it and answered with an error (" _ c.failureReasonCode _ "): a person reads the answer on its case", 1)
+    If c.failureKind = "rejected" Quit ..Open("the receiver refused what it says: a person reads the refusal on its case", 1)
+    If (c.failureKind '= "delivery_failed") && (c.failureKind '= "uncertain_outcome") Quit ..Open(..KindWords(c.failureKind), 1)
+    If c.identity Quit ..Open("a question about the patient's identity is open on it: a person checks the patient first", 1)
     If c.%Get("deliveryCustody") = "" Quit {"decided": 0, "finished": 0, "resolve": 0, "resolved": 0, "reason": ""}
     If c.deliveryCustody '= "delivered" Quit ..Open("its own delivery header" _ $SELECT(c.deliveryHeader '= "": " (" _ c.deliveryHeader _ ")", 1: "") _ " reads " _ $SELECT(c.deliveryStatus '= "": c.deliveryStatus, 1: c.deliveryCustody) _ ", not Completed", 0)
     If (c.effectiveAck = "not_established") || (c.effectiveAck = "") Quit ..Open(c.words, 0)
     Quit {"decided": 0, "finished": 1, "resolve": 1, "resolved": 0, "reason": ""}
+}
+
+/// Why a case that is no failed delivery stays for a person, in plain words, by its failure kind.
+ClassMethod KindWords(kind As %String) As %String [ Private ]
+{
+    If kind = "unmappable" Quit "Shutter has no resend of its own for this one message: a person decides on its case"
+    If kind = "withheld" Quit "the site's policy keeps it from any resend: a person decides on its case"
+    If kind = "unreadable" Quit "it could not be read against its HL7 schema: a person reads it on its case"
+    If kind = "" Quit "its failure is of no known kind: a person reads its case"
+    Quit "its failure (" _ kind _ ") is not one the engine settles: a person reads its case"
+}
+
+/// A linked case's reason as it reads now, for the card: "" once it is finished (resolved or failed), the plain words of
+/// LinkVerdict where the case alone decides them, else what the close wrote (its own header's reading then).
+ClassMethod OpenReason(case As Shutter.Store.Case, stored As %String) As %String
+{
+    Set c = {"state": (case.State), "failureKind": (case.FailureKind), "failureReasonCode": (case.FailureReasonCode)}
+    Do c.%Set("identity", ..IdentityException(case), "boolean")
+    Set v = ..LinkVerdict(c)
+    If v.finished Quit ""
+    If v.decided Quit v.reason
+    Quit $SELECT(stored '= "": stored, 1: "its case is still open")
 }
 
 ClassMethod Open(reason As %String, decided As %Boolean) As %DynamicObject [ Private ]

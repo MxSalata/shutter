@@ -71,9 +71,65 @@ ClassMethod One(row As Shutter.Store.Outage, now As %String = "") As %DynamicObj
     Set o = row.ToJSON()
     Set entry = ##class(Shutter.Store.SiteProfile).Receiver(row.Receiver)
     Do ..ComposeActs(o, entry)
+    Set o.openCases = ..OpenCasesNow(o, row.Namespace)
+    // Every message Shutter sent again, whatever came of it, from the ledger (the stored count once held completed sends only).
+    Do o.%Set("sentByShutter", ..Tally(o).attempts, "number")
     Set recovered = ..RecoveredAt(row.%Id())
     Set o.words = ..Words(o, entry, ..Build(), now, recovered)
     Quit o
+}
+
+/// The close's open cases as they read now (CONTRACTS 17.3). The close writes them once, and they go stale as the outage
+/// moves on, so each is read again here: one finished since (resolved by Shutter's resend, closed by hand, failed) leaves
+/// the list, and so does one whose own message the card lists already (offered or closed with no send of its own while the
+/// row is not closed, or in the ledger, which every card shows). What stays still needs a person and is shown nowhere else
+/// on the card, each with its reason in plain words as the case reads now. A case that can't be read stays as written.
+ClassMethod OpenCasesNow(o As %DynamicObject, ns As %String) As %DynamicArray
+{
+    Set stored = o.%Get("openCases"), out = []
+    If '$ISOBJECT(stored) || (stored.%Size() = 0) Quit out
+    Set listed = ..ListedCases(o, ns)
+    Set iter = stored.%GetIterator()
+    While iter.%GetNext(, .one) {
+        Continue:'$ISOBJECT(one)
+        Set case = ##class(Shutter.Store.Case).ByCaseId(..S(one, "caseId"))
+        If '$ISOBJECT(case) Do out.%Push(one) Continue
+        Continue:$LISTFIND(listed, case.CaseId)
+        Set reason = ##class(Shutter.Operation.OutageClose).OpenReason(case, ..S(one, "reason"))
+        Continue:reason=""
+        Do out.%Push({"caseId": (case.CaseId), "reason": (reason), "owner": (..S(one, "owner"))})
+    }
+    Quit out
+}
+
+/// The case ids of the messages the card lists already: each ledger row's case and its message's cases, and while the row
+/// is not closed the cases of lists.offered and lists.closed.
+ClassMethod ListedCases(o As %DynamicObject, ns As %String) As %List
+{
+    Set ids = "", headers = ""
+    If $ISOBJECT(o.%Get("resends")) {
+        Set ri = o.resends.%GetIterator()
+        While ri.%GetNext(, .r) {
+            Set id = ..S(r, "caseId")
+            Set:(id'="")&&'$LISTFIND(ids, id) ids = ids _ $LISTBUILD(id)
+            Set:..S(r, "headerId")'="" headers = headers _ $LISTBUILD(..S(r, "headerId"))
+        }
+    }
+    If (..S(o, "state") '= "closed") && $ISOBJECT(o.%Get("lists")) {
+        For name = "offered", "closed" {
+            Set list = o.lists.%Get(name)
+            Continue:'$ISOBJECT(list)
+            Set li = list.%GetIterator()
+            While li.%GetNext(, .r) { Set:..S(r, "headerId")'="" headers = headers _ $LISTBUILD(..S(r, "headerId")) }
+        }
+    }
+    Set ptr = 0
+    While $LISTNEXT(headers, ptr, h) {
+        Set rows = ##class(Shutter.Util.ResendSet).CaseRows(ns, h)
+        Set ci = rows.%GetIterator()
+        While ci.%GetNext(, .c) { Set:'$LISTFIND(ids, c.caseId) ids = ids _ $LISTBUILD(c.caseId) }
+    }
+    Quit ids
 }
 
 /// Whether "already handled by hand" is offered at this receiver: its duplicates.behaviour is unknown or files_twice, or
@@ -140,7 +196,7 @@ ClassMethod Words(o As %DynamicObject, entry As %DynamicObject = "", build As %D
     } Else {
         Set first = ..KindWords(o, kind, reading, retry, approvable, build, queue, head, now)
     }
-    If (state = "needs_person") && (..SetReason(o) '= "") && (..SetReason(o) '= ..#NOSETGATE) Set first = first _ " A person must act here: " _ ..SetReason(o) _ "."
+    If (state = "needs_person") && (..SetReason(o) '= "") && (..SetReason(o) '= ..#NOSETGATE) Set first = first _ " " _ ..PersonLine(o)
     If (..S(reading, "replyCodeActions") '= "") && (reading.%GetTypeOf("replyCodeActionsStock") = "boolean") && 'reading.replyCodeActionsStock {
         Set first = first _ " This operation's reply actions are the site's own: what an AE, AR or timeout does here follows this string: " _ reading.replyCodeActions _ "."
     }
@@ -169,6 +225,7 @@ ClassMethod Words(o As %DynamicObject, entry As %DynamicObject = "", build As %D
         Set behaviour = $SELECT($ISOBJECT(entry) && $ISOBJECT(entry.%Get("duplicates")): ..S(entry.duplicates, "behaviour"), 1: "")
         Set do = do _ " At this receiver a duplicate is " _ $SELECT(behaviour = "files_twice": "filed twice", 1: "unknown") _ ": before approving, check the receiver for each message. For one already entered by hand, choose Already handled by hand; Shutter then sends nothing for it."
     }
+    If (state = "needs_person") && $ISOBJECT(o.%Get("approval")) Set do = do _ " The run stopped: read the message that stopped it in the Message Viewer; once it is settled, Read again lists what is left."
     If (state '= "closed") && (state '= "paused") {
         If $LISTFIND($LISTBUILD("unlimited", "bounded"), retry) Set do = do _ " " _ ..DuplicateLine(entry)
         If ..Overdue(o, now) Set do = do _ " Down longer than the site's limit: the lab's downtime procedure applies."
@@ -272,16 +329,79 @@ ClassMethod ClosedWords(o As %DynamicObject, retry As %String, recovered As %Str
     Quit text
 }
 
-/// "Nothing remains queued. N deliveries Completed; M was Suspended and still needs action."
+/// Why a person's row lists nothing, from its set's reason. Where no run was approved (a busy feed, or something of the
+/// window was being tried at the close), the poll reads the engine again every minute and lists the messages once nothing is
+/// being tried, so the words say when the reason was read and what comes next. After a run stopped, a person acts.
+ClassMethod PersonLine(o As %DynamicObject) As %String
+{
+    Set reason = ..SetReason(o)
+    If $ISOBJECT(o.%Get("approval")) Quit "A person must act here: " _ reason _ "."
+    Set at = ..Clock(..S(o.%Get("set"), "computedAt"))
+    Quit "Nothing is listed yet: " _ reason _ $SELECT(at '= "": " (read at " _ at _ " UTC)", 1: "") _ ". Shutter reads the engine again every minute and lists the messages once nothing of the window is being tried; Read again does it now."
+}
+
+/// What the window came to: whether anything is queued now (the receiver's reading as it stands, not the close's), the
+/// engine's own deliveries, then what Shutter's ledger did with the rest, by the last row on each message: sent again, the
+/// receiver already held it, handled by hand, failed on Shutter's resend, not sent. A message the ledger closed is no longer
+/// counted among those that ended in Error, and one it failed or left unsent is counted once, by what happened to it.
+/// "Nothing remains queued. 0 deliveries Completed; Shutter sent 3 again, each new header Completed; 2 handled by hand."
 ClassMethod Settled(o As %DynamicObject) As %String
 {
+    Set reading = o.%Get("readings"), queue = +..S(reading, "queue")
+    Set text = $SELECT(queue > 0: queue _ " message" _ $SELECT(queue = 1: " is", 1: "s are") _ " still queued.", 1: "Nothing remains queued.")
     Set s = o.%Get("settled")
-    If '$ISOBJECT(s) Quit "Nothing remains queued."
+    If '$ISOBJECT(s) Quit text
     Set c = +s.completed, u = +s.suspended, e = +s.error
-    Set text = "Nothing remains queued. " _ c _ " deliver" _ $SELECT(c = 1: "y", 1: "ies") _ " Completed"
+    Set t = ..Tally(o)
+    Set e = e - t.counted
+    Set:e<0 e = 0
+    Set text = text _ " " _ c _ " deliver" _ $SELECT(c = 1: "y", 1: "ies") _ " Completed"
+    If t.sent Set text = text _ "; Shutter sent " _ t.sent _ " again, each new header Completed"
+    If t.held Set text = text _ "; " _ t.held _ " the receiver already held"
+    If t.byHand Set text = text _ "; " _ t.byHand _ " handled by hand"
+    If t.failed Set text = text _ "; " _ t.failed _ " failed when Shutter sent " _ $SELECT(t.failed = 1: "it", 1: "them") _ " again and still need" _ $SELECT(t.failed = 1: "s", 1: "") _ " action"
+    If t.notSent Set text = text _ "; " _ t.notSent _ " not sent and still need" _ $SELECT(t.notSent = 1: "s", 1: "") _ " action"
     If u > 0 Set text = text _ "; " _ u _ $SELECT(u = 1: " was", 1: " were") _ " Suspended and still need" _ $SELECT(u = 1: "s", 1: "") _ " action"
     If e > 0 Set text = text _ "; " _ e _ " ended in Error and still need" _ $SELECT(e = 1: "s", 1: "") _ " action"
     Quit text _ "."
+}
+
+/// The ledger by message, pure: the last row on each header decides it. { "sent", "held", "byHand", "failed", "notSent",
+/// "attempts", "counted" }: attempts is every message this outage's runs sent again (whatever came of it), counted every
+/// Error header the ledger or lists.closed accounts for. A row still approved or sending counts in none but attempts while
+/// sending; a lists.closed row is another outage's closure, settled here but never counted as this outage's send.
+ClassMethod Tally(o As %DynamicObject) As %DynamicObject
+{
+    Set t = {"sent": 0, "held": 0, "byHand": 0, "failed": 0, "notSent": 0, "attempts": 0, "counted": 0}
+    Kill last
+    If $ISOBJECT(o.%Get("resends")) {
+        Set ri = o.resends.%GetIterator()
+        While ri.%GetNext(, .r) {
+            Set h = ..S(r, "headerId")
+            Continue:h=""
+            Set last(h) = r
+        }
+    }
+    If $ISOBJECT(o.%Get("lists")) && $ISOBJECT(o.lists.%Get("closed")) {
+        Set ci = o.lists.closed.%GetIterator()
+        While ci.%GetNext(, .r) {
+            Set h = ..S(r, "headerId")
+            Continue:(h="")||$DATA(last(h))
+            // Closed by a ledger row of another outage: counted as settled, but not as one of this outage's sends.
+            Set last(h) = {"state": ($SELECT(..S(r, "closure") = "handled_by_hand": "handled_by_hand", 1: "closed_as_present")), "listed": 1}
+        }
+    }
+    Set h = ""
+    For {
+        Set h = $ORDER(last(h)) Quit:h=""
+        Set state = ..S(last(h), "state")
+        If '..S(last(h), "listed") && $LISTFIND($LISTBUILD("completed", "failed", "unknown", "closed_as_present", "sending"), state) Set t.attempts = t.attempts + 1
+        Set key = $CASE(state, "completed": "sent", "closed_as_present": "held", "handled_by_hand": "byHand", "failed": "failed", "unknown": "failed", "stopped": "notSent", : "")
+        Continue:key=""
+        Do t.%Set(key, t.%Get(key) + 1, "number")
+        Set t.counted = t.counted + 1
+    }
+    Quit t
 }
 
 /// "Recovery attempts initiated by Shutter: 0.", and while anything is queued or being tried, that the engine may be at it.
