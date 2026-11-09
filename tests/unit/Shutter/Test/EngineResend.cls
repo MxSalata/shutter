@@ -7,12 +7,14 @@ Property Made As %String [ MultiDimensional ];
 
 Method OnAfterOneTest(testname As %String) As %Status
 {
+    // The run's rows first, while their outage still exists to find them by: deleted after it, they stayed, and the patient
+    // check's empty-ledger test read them.
+    &sql(DELETE FROM Shutter_Store.ResendRecord WHERE RunId %STARTSWITH 'R' AND OutageId IN (SELECT ID FROM Shutter_Store.Outage WHERE Receiver = 'EngineResend Test'))
     Set class = ""
     For {
         Set class = $ORDER(..Made(class)) Quit:class=""
         Set id = "" For { Set id = $ORDER(..Made(class, id)) Quit:id=""  Do $CLASSMETHOD(class, "%DeleteId", id) }
     }
-    &sql(DELETE FROM Shutter_Store.ResendRecord WHERE RunId %STARTSWITH 'R' AND OutageId IN (SELECT ID FROM Shutter_Store.Outage WHERE Receiver = 'EngineResend Test'))
     Kill ..Made
     Quit $$$OK
 }
