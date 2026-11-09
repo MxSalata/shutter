@@ -33,4 +33,51 @@ Property LastChangedAt As %String(MAXLEN = 30);
 
 Property LastChangedBy As %String(MAXLEN = 160);
 
+Storage Default
+{
+<Data name="RecoveryControlDefaultData">
+<Value name="1">
+<Value>%%CLASSNAME</Value>
+</Value>
+<Value name="2">
+<Value>Name</Value>
+</Value>
+<Value name="3">
+<Value>DeploymentId</Value>
+</Value>
+<Value name="4">
+<Value>ReportKey</Value>
+</Value>
+<Value name="5">
+<Value>Generation</Value>
+</Value>
+<Value name="6">
+<Value>StopLatched</Value>
+</Value>
+<Value name="7">
+<Value>StoppedAt</Value>
+</Value>
+<Value name="8">
+<Value>StoppedBy</Value>
+</Value>
+<Value name="9">
+<Value>StopReason</Value>
+</Value>
+<Value name="10">
+<Value>PlanFloor</Value>
+</Value>
+<Value name="11">
+<Value>LastChangedAt</Value>
+</Value>
+<Value name="12">
+<Value>LastChangedBy</Value>
+</Value>
+</Data>
+<DataLocation>^Shutter.Store.RecoveryControlD</DataLocation>
+<DefaultData>RecoveryControlDefaultData</DefaultData>
+<IdLocation>^Shutter.Store.RecoveryControlD</IdLocation>
+<IndexLocation>^Shutter.Store.RecoveryControlI</IndexLocation>
+<StreamLocation>^Shutter.Store.RecoveryControlS</StreamLocation>
+<Type>%Storage.Persistent</Type>
+}
 }

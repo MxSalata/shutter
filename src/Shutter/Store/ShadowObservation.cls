@@ -67,4 +67,51 @@ ClassMethod Words(plan As Shutter.Store.Plan, result As Shutter.Msg.GateResult) 
     Quit ""
 }
 
+Storage Default
+{
+<Data name="ShadowObservationDefaultData">
+<Value name="1">
+<Value>%%CLASSNAME</Value>
+</Value>
+<Value name="2">
+<Value>CaseId</Value>
+</Value>
+<Value name="3">
+<Value>PlanId</Value>
+</Value>
+<Value name="4">
+<Value>Round</Value>
+</Value>
+<Value name="5">
+<Value>ObservedAt</Value>
+</Value>
+<Value name="6">
+<Value>Disposition</Value>
+</Value>
+<Value name="7">
+<Value>PlanOrigin</Value>
+</Value>
+<Value name="8">
+<Value>CatalogueEntry</Value>
+</Value>
+<Value name="9">
+<Value>GateOutcome</Value>
+</Value>
+<Value name="10">
+<Value>BlockingCodes</Value>
+</Value>
+<Value name="11">
+<Value>Mode</Value>
+</Value>
+<Value name="12">
+<Value>ControlGeneration</Value>
+</Value>
+</Data>
+<DataLocation>^Shutter.Store.ShadowObser75F5D</DataLocation>
+<DefaultData>ShadowObservationDefaultData</DefaultData>
+<IdLocation>^Shutter.Store.ShadowObser75F5D</IdLocation>
+<IndexLocation>^Shutter.Store.ShadowObser75F5I</IndexLocation>
+<StreamLocation>^Shutter.Store.ShadowObser75F5S</StreamLocation>
+<Type>%Storage.Persistent</Type>
+}
 }

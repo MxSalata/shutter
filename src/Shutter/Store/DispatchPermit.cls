@@ -50,4 +50,69 @@ Index StateIdx On State;
 
 Index CaseIdx On CaseId;
 
+Storage Default
+{
+<Data name="DispatchPermitDefaultData">
+<Value name="1">
+<Value>%%CLASSNAME</Value>
+</Value>
+<Value name="2">
+<Value>Token</Value>
+</Value>
+<Value name="3">
+<Value>ActionKind</Value>
+</Value>
+<Value name="4">
+<Value>CaseId</Value>
+</Value>
+<Value name="5">
+<Value>PlanId</Value>
+</Value>
+<Value name="6">
+<Value>OperationKey</Value>
+</Value>
+<Value name="7">
+<Value>Receiver</Value>
+</Value>
+<Value name="8">
+<Value>BodyDigest</Value>
+</Value>
+<Value name="9">
+<Value>Generation</Value>
+</Value>
+<Value name="10">
+<Value>AdmittedAt</Value>
+</Value>
+<Value name="11">
+<Value>EndedAt</Value>
+</Value>
+<Value name="12">
+<Value>State</Value>
+</Value>
+<Value name="13">
+<Value>Outcome</Value>
+</Value>
+<Value name="14">
+<Value>HttpStatus</Value>
+</Value>
+<Value name="15">
+<Value>Job</Value>
+</Value>
+<Value name="16">
+<Value>Orphaned</Value>
+</Value>
+<Value name="17">
+<Value>ReviewedBy</Value>
+</Value>
+<Value name="18">
+<Value>ReviewedAt</Value>
+</Value>
+</Data>
+<DataLocation>^Shutter.Store.DispatchPermitD</DataLocation>
+<DefaultData>DispatchPermitDefaultData</DefaultData>
+<IdLocation>^Shutter.Store.DispatchPermitD</IdLocation>
+<IndexLocation>^Shutter.Store.DispatchPermitI</IndexLocation>
+<StreamLocation>^Shutter.Store.DispatchPermitS</StreamLocation>
+<Type>%Storage.Persistent</Type>
+}
 }

@@ -25,4 +25,48 @@ Property OutstandingCount As %Integer [ InitialExpression = 0 ];
 /// The first of them, by permit id, comma separated.
 Property OutstandingIds As %String(MAXLEN = 1000);
 
+Storage Default
+{
+<Data name="RecoveryControlEventDefaultData">
+<Value name="1">
+<Value>%%CLASSNAME</Value>
+</Value>
+<Value name="2">
+<Value>At</Value>
+</Value>
+<Value name="3">
+<Value>Actor</Value>
+</Value>
+<Value name="4">
+<Value>Action</Value>
+</Value>
+<Value name="5">
+<Value>OldGeneration</Value>
+</Value>
+<Value name="6">
+<Value>NewGeneration</Value>
+</Value>
+<Value name="7">
+<Value>OldState</Value>
+</Value>
+<Value name="8">
+<Value>NewState</Value>
+</Value>
+<Value name="9">
+<Value>Reason</Value>
+</Value>
+<Value name="10">
+<Value>OutstandingCount</Value>
+</Value>
+<Value name="11">
+<Value>OutstandingIds</Value>
+</Value>
+</Data>
+<DataLocation>^Shutter.Store.RecoveryCont4C2D</DataLocation>
+<DefaultData>RecoveryControlEventDefaultData</DefaultData>
+<IdLocation>^Shutter.Store.RecoveryCont4C2D</IdLocation>
+<IndexLocation>^Shutter.Store.RecoveryCont4C2I</IndexLocation>
+<StreamLocation>^Shutter.Store.RecoveryCont4C2S</StreamLocation>
+<Type>%Storage.Persistent</Type>
+}
 }

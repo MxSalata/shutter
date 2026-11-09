@@ -134,4 +134,87 @@ ClassMethod Put(o As %DynamicObject, key As %String, value As %String, type As %
     Do o.%Set(key, $SELECT(type = "string": value, type = "boolean": ''value, 1: +value), type)
 }
 
+Storage Default
+{
+<Data name="ReceiverReadingDefaultData">
+<Value name="1">
+<Value>%%CLASSNAME</Value>
+</Value>
+<Value name="2">
+<Value>Receiver</Value>
+</Value>
+<Value name="3">
+<Value>Namespace</Value>
+</Value>
+<Value name="4">
+<Value>Item</Value>
+</Value>
+<Value name="5">
+<Value>Reading</Value>
+</Value>
+<Value name="6">
+<Value>Status</Value>
+</Value>
+<Value name="7">
+<Value>AdapterState</Value>
+</Value>
+<Value name="8">
+<Value>Queue</Value>
+</Value>
+<Value name="9">
+<Value>HeadHeaderId</Value>
+</Value>
+<Value name="10">
+<Value>ActiveMessage</Value>
+</Value>
+<Value name="11">
+<Value>FailureTimeout</Value>
+</Value>
+<Value name="12">
+<Value>Retry</Value>
+</Value>
+<Value name="13">
+<Value>DefCharEncoding</Value>
+</Value>
+<Value name="14">
+<Value>ReplyCodeActions</Value>
+</Value>
+<Value name="15">
+<Value>ReplyCodeActionsStock</Value>
+</Value>
+<Value name="16">
+<Value>GetReply</Value>
+</Value>
+<Value name="17">
+<Value>StayConnected</Value>
+</Value>
+<Value name="18">
+<Value>SettingSources</Value>
+</Value>
+<Value name="19">
+<Value>UnknownFields</Value>
+</Value>
+<Value name="20">
+<Value>Why</Value>
+</Value>
+<Value name="21">
+<Value>CheckedAt</Value>
+</Value>
+<Value name="22">
+<Value>DownSince</Value>
+</Value>
+<Value name="23">
+<Value>LastHead</Value>
+</Value>
+<Value name="24">
+<Value>ErrorHeaderMark</Value>
+</Value>
+</Data>
+<DataLocation>^Shutter.Store.ReceiverReadingD</DataLocation>
+<DefaultData>ReceiverReadingDefaultData</DefaultData>
+<IdLocation>^Shutter.Store.ReceiverReadingD</IdLocation>
+<IndexLocation>^Shutter.Store.ReceiverReadingI</IndexLocation>
+<StreamLocation>^Shutter.Store.ReceiverReadingS</StreamLocation>
+<Type>%Storage.Persistent</Type>
+}
 }
