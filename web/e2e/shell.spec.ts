@@ -20,9 +20,12 @@ test.describe('the live hospital, as the public role sees it', () => {
     await expect(banner(page).getByTestId('live-line')).toContainText(
       /^Mikolaj's Fictional Hospital, replayed: a new failure every 7 minutes\. Last: S2, \d+ (s|min) ago\. Next: S8 at \d\d:\d\d (GMT|BST|UTC)\.$/,
     );
-    // The trial has no demo hospital to break: the banner says where the storm plays, and offers no button
+    // The trial has no demo hospital to break: the banner says where the storm plays, and its one button hides it
     await expect(banner(page)).toContainText('Break the feed plays on the online demo.');
-    await expect(banner(page).getByRole('button')).toHaveCount(0);
+    await expect(banner(page).getByRole('button')).toHaveCount(1);
+    await expect(
+      banner(page).getByRole('button', { name: 'Hide the hospital feed banner for this session' }),
+    ).toBeVisible();
     // A recording never resets on the hour, though it answers `live.enabled` like the demo
     await expect(banner(page).getByTestId('live-reset-line')).toHaveCount(0);
     for (const [path, heading] of [
