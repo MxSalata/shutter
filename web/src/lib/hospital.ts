@@ -13,3 +13,12 @@ export const PORTAL_SIGN_IN = 'GitHub or an emailed code';
  * demo's own rotation convenes no board, to keep its model budget for the judges).
  */
 export const TRIAL_BOARD_CASE = 'C-000008';
+
+/**
+ * How often the live hospital's player sends a new failure, as the banner and the live sign-in page say it: "a new
+ * failure every 7 minutes", "every minute", or the unnumbered form when the server gave no interval.
+ */
+export function failureCadence(every: number | undefined): string {
+  if (!every || every < 1) return 'a new failure every few minutes';
+  return every === 1 ? 'a new failure every minute' : `a new failure every ${every} minutes`;
+}

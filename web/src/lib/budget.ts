@@ -6,7 +6,7 @@ import { formatUsd } from './format';
  * server reports the live hospital on (`GET /settings` `live.enabled`), resets every hour, so its budget is per reset,
  * never "today".
  */
-export const resetsHourly = (s: { live?: LiveStatus } | undefined | null): boolean =>
+export const resetsHourly = (s: { live?: Pick<LiveStatus, 'enabled'> } | undefined | null): boolean =>
   s?.live?.enabled === true;
 
 /**
@@ -65,4 +65,13 @@ export function budgetNoteLine(s: Settings | undefined): string | null {
   const b = s?.budget;
   if (!b || !(b.dailyUsd > 0)) return null;
   return `${lead(b.dailyUsd, resetsHourly(s) ? 'hour' : 'day')} (so far: ${formatUsd(b.spentTodayUsd ?? 0)}).`;
+}
+
+/**
+ * The live banner's budget note for the one reading it: only an account that runs the live agents (the judges') reads
+ * what the author pays for them. An account without them (the public demo's) reads the line about the hospital's policy
+ * and the board instead, so it is not told of agents it cannot run.
+ */
+export function bannerBudgetNote(s: Settings | undefined, can: { liveAgents: boolean }): string | null {
+  return can.liveAgents ? budgetNoteLine(s) : null;
 }

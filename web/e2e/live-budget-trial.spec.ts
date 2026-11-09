@@ -218,6 +218,9 @@ test.describe(`the live budget on the public demo, against a v1.37 server ${area
       `Most of this hospital's failures are settled by its written policy, with no agent. One went to the live board: ${CASE}`,
     );
     await expect(line.getByRole('link', { name: CASE })).toHaveAttribute('href', `#/cases/${CASE}`);
+    // The board's line stands in the place of the budget's, which is for the judges' account only
+    await expect(banner(page).getByTestId('live-budget-line')).toHaveCount(0);
+    await expect(banner(page).getByTestId('live-reset-line')).toBeVisible();
     const bannerBox = (await banner(page).boundingBox())!;
     const lineBox = (await line.boundingBox())!;
     expect(lineBox.x + lineBox.width).toBeLessThanOrEqual(bannerBox.x + bannerBox.width);
@@ -298,6 +301,68 @@ test.describe(`the live budget on the public demo, against a v1.37 server ${area
     await expect(banner(page).getByTestId('live-board-link')).toHaveText(
       "The hospital's own failures are settled by its written policy, with no agent. See the board decide: S8 in the trial",
     );
+    await expect(banner(page).getByTestId('live-budget-line')).toHaveCount(0);
+    expect(await audit(page)).toEqual([]);
+  });
+
+  // The same settings, the demo build's figure and the instance's cap both sent, for each account in turn
+  const BOTH = settings(
+    { budgetNote: { amountUsd: 15, period: 'day' } },
+    { dailyUsd: 2, spentTodayUsd: 0.4 },
+  );
+
+  for (const { colorScheme } of [{ colorScheme: 'light' }, { colorScheme: 'dark' }] as const)
+    for (const width of [1280, 390])
+      test(`says what the author pays to the judges' account and not to the demo's, at ${width} px, ${colorScheme} ${area.tag}`, async ({
+        page,
+      }) => {
+        // Audited with no motion, as a11y.spec.ts does: axe reads colours mid-transition otherwise
+        await page.emulateMedia({ colorScheme, reducedMotion: 'reduce' });
+        await page.setViewportSize({ width, height: width > 600 ? 800 : 844 });
+        await stubServer(page, BOTH);
+        await page.goto('./#/cases');
+        await expect(banner(page).getByTestId('live-budget-line')).toHaveText(
+          "$15 a day from the author runs the judges' live agents.",
+        );
+        await expect(banner(page).getByTestId('live-board-link')).toHaveCount(0);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+          true,
+        );
+        expect(await audit(page)).toEqual([]);
+        await shot(page, `banner-judge-${width}-${colorScheme}`, banner(page));
+
+        await page.unrouteAll({ behavior: 'wait' });
+        await stubServer(page, BOTH, undefined, DEMO);
+        await page.reload();
+        await expect(banner(page).getByTestId('live-board-link')).toContainText('One went to the live board');
+        await expect(banner(page).getByTestId('live-reset-line')).toBeVisible();
+        await expect(banner(page).getByTestId('live-budget-line')).toHaveCount(0);
+        await expect(banner(page)).not.toContainText(/from the author|judges' live agents/);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+          true,
+        );
+        expect(await audit(page)).toEqual([]);
+        await shot(page, `banner-demo-${width}-${colorScheme}`, banner(page));
+      });
+
+  test("gives the demo's account the notice at the cap, without the line about the budget", async ({
+    page,
+  }) => {
+    await stubServer(
+      page,
+      settings(
+        { agents: { available: false, reason: 'budget', until: inMinutes(35), detail: 'The cap is spent' } },
+        { dailyUsd: 2, spentTodayUsd: 2.04, exhausted: true, resetsAt: inMinutes(35) },
+      ),
+      undefined,
+      DEMO,
+    );
+    await page.goto('./#/cases');
+    await expect(banner(page).getByRole('note')).toBeVisible();
+    expect(await said(page, 'live-unavailable')).toMatch(
+      /^The live AI budget for this demo is used up until/,
+    );
+    await expect(banner(page).getByTestId('live-budget-line')).toHaveCount(0);
     expect(await audit(page)).toEqual([]);
   });
 

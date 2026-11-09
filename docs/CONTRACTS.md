@@ -1357,7 +1357,8 @@ answer, 6.6, as for `budget_exhausted`), `POST /cases/{id}/board` answers `409 l
 (the availability object) before the budget is looked at, and a question from a caller with the live agents is answered from
 its recording when it has one and refused `409 live_unavailable` when it has none. **The demo's budget note** (v1.37):
 `SHUTTER_DEMO_BUDGET_USD` and `SHUTTER_DEMO_BUDGET_PERIOD` (`day` or `hour`, day by default), read at the install and at every
-production start like the cap, set `live.budgetNote = {amountUsd, period}` in `GET /settings` for the live banner: the figure
+production start like the cap, set `live.budgetNote = {amountUsd, period}` in `GET /settings` for the live banner, which says it
+to a caller with `Shutter_LiveAgents` only (the judges; the public demo's role reads the board's line instead): the figure
 the demo's owner spends on live runs, which a site may enforce outside Shutter (a key deactivated at the figure) while the
 cap here guards a burst; absent when unset (an empty, zero or non-numeric value clears it), and the web shows the cap then.
 
@@ -1896,7 +1897,7 @@ and the evidence's newest `ward_state` items (`from`: `connector` or `evidence`;
 `no_answer`, `server_error` (5xx), `refused` (401 or 403), `failing` (a delivery failed after its newest answer, or in the last hour when
 nothing has read it), `answering`, `not_read` or `no_api`. `receivers_ok` is false when any is in the first four, true when none is
 and one answered, and null when nothing is known; `receivers_state` is `read` or the reading's error; `watched_ok` is false when a
-watched namespace's `ok` is. `GET /health` carries `receivers_ok` and `watched_ok` in its anonymous answer too, and no receiver's name.
+watched namespace's `ok` is. `GET /health` carries `receivers_ok` and `watched_ok` in its anonymous answer too, and no receiver's name. Its anonymous answer also carries `live` with only `enabled` and `every_minutes` (the live hospital's switch and its cadence), so the sign-in page can say what stands behind it; nothing else of the player.
 The Health page keeps Ready out of its hero while either is false ("Needs a look", naming the first two and counting the rest, all of them in its Other group), and adds nothing to its first
 layer otherwise.
 

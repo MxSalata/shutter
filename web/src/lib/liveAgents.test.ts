@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Budget, LiveAgents, Settings } from '@/api/types';
-import { budgetNoteLine } from './budget';
+import { bannerBudgetNote, budgetNoteLine } from './budget';
 import { ApiError } from './errors';
 import {
   INSTALL_LEAD,
@@ -344,6 +344,38 @@ describe("the banner's line about the live budget", () => {
     expect(budgetNoteLine(settings({}))).toBeNull();
     expect(budgetNoteLine(settings({ budget: { ...spent, dailyUsd: 0 } }))).toBeNull();
     expect(budgetNoteLine(undefined)).toBeNull();
+  });
+});
+
+describe("who reads the banner's line about the live budget", () => {
+  const judges = { liveAgents: true };
+  const demo = { liveAgents: false };
+
+  it('gives it to an account that runs the live agents, the same line in both forms', () => {
+    const note = settings({ budgetNote: { amountUsd: 15, period: 'day' } });
+    expect(bannerBudgetNote(note, judges)).toBe("$15 a day from the author runs the judges' live agents.");
+    const cap = settings({ budget: { ...spent, spentTodayUsd: 0.4, exhausted: false }, hourly: true });
+    expect(bannerBudgetNote(cap, judges)).toBe(budgetNoteLine(cap));
+    expect(bannerBudgetNote(cap, judges)).toBe(
+      "$2 an hour from the author runs the judges' live agents (so far: $0.40).",
+    );
+  });
+
+  it('gives nothing to an account without them, whatever figure the server sends', () => {
+    expect(bannerBudgetNote(settings({ budgetNote: { amountUsd: 15, period: 'day' } }), demo)).toBeNull();
+    expect(
+      bannerBudgetNote(settings({ budget: { ...spent, exhausted: false }, hourly: true }), demo),
+    ).toBeNull();
+    // The notice that the live agents cannot run is not this line: it still reads the same settings for everyone
+    const out = settings({ budget: spent, hourly: true, budgetNote: { amountUsd: 15, period: 'day' } });
+    expect(bannerBudgetNote(out, demo)).toBeNull();
+    expect(liveUnavailable(out)?.reason).toBe('budget');
+  });
+
+  it('gives nothing to either when no positive figure is sent', () => {
+    expect(bannerBudgetNote(settings({}), judges)).toBeNull();
+    expect(bannerBudgetNote(undefined, judges)).toBeNull();
+    expect(bannerBudgetNote(settings({}), demo)).toBeNull();
   });
 });
 

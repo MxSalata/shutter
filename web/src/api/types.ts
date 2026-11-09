@@ -1526,6 +1526,11 @@ export interface ReviewAnnotation {
 export type Health = Record<string, unknown> & {
   /** False on a site install: no demo, and the Scenario Player is switched off (CONTRACTS 12). */
   demo?: boolean;
+  /**
+   * The live hospital's switch and its cadence, as `GET /settings` `live` gives them, where an answer carries them. The
+   * anonymous answer does not yet (CONTRACTS 12 lists its keys), so the sign-in page reads them only when it does.
+   */
+  live?: Pick<LiveStatus, 'enabled' | 'every_minutes'>;
 };
 
 // ---- asking about a case (CONTRACTS 14: the deterministic card, the questions and their routes) ----

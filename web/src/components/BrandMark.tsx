@@ -2,7 +2,7 @@ import { useId } from 'react';
 
 /**
  * The blades of the mark in a 64-unit square: six, round a hexagonal opening, turning the other way from Aperture's.
- * public/favicon.svg and public/favicon-trial.svg draw the same mark: keep the three alike.
+ * public/favicon.svg, public/favicon-trial.svg and Shutter.Portal.Guide's Logo() draw the same mark: keep the four alike.
  */
 const BLADES = [
   'M32.000 22.000L56.178 35.959A24.5 24.5 0 0 0 47.518 13.041Z',
