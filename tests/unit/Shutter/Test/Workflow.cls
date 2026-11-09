@@ -94,6 +94,36 @@ Method TestDecisionWaitsForATaskOnItsWay()
     Do ..RemoveRole()
 }
 
+/// Two decisions on one case are taken one at a time, so the second finds no open task: when the case's newest task is
+/// complete and bound to the digest the second names, the second is told the decision that stands (decided, with the
+/// action, who took it and when); a task bound to another digest, a decision with no digest and a case with no task
+/// still get no_task.
+Method TestASecondDecisionIsToldTheOneThatStands()
+{
+    Set role = ..#ROLE
+    Do ..RemoveRole()
+    Do $$$AssertStatusOK(##class(EnsLib.Workflow.RoleDefinition).CreateRole(role), "a role of the test's own is made")
+    Set task = ..SavedTask(role, "UT-WF-7")
+    If '$$$AssertTrue($ISOBJECT(task), "a task") Do ..RemoveRole() Quit
+    Do task.%FormValues.SetAt("sha256:7", "PlanDigest")
+    Set task.%Action = "Reject", task.%UserName = $USERNAME
+    Set task.%TaskStatus.IsComplete = 1, task.%TaskStatus.TimeCompleted = $ZDATETIME($ZTIMESTAMP, 3, 1, 3)
+    Do $$$AssertStatusOK(task.%Save(), "the first decision completes the task")
+    Set out = ##class(Shutter.Util.Json).Parse(##class(Shutter.Util.Workflow).NoOpenTask("UT-WF-7", "sha256:7"), .sc)
+    Do $$$AssertEquals(out.code, "decided", "the second decision is told the first stands: " _ out.error)
+    Do $$$AssertEquals(out.action, "Reject", "naming its action")
+    Do $$$AssertEquals(out.user, $USERNAME, "who took it")
+    Do $$$AssertTrue(out.completedAt '= "", "and when")
+    Set out = ##class(Shutter.Util.Json).Parse(##class(Shutter.Util.Workflow).NoOpenTask("UT-WF-7", "sha256:other"), .sc)
+    Do $$$AssertEquals(out.code, "no_task", "a task bound to another digest is not this decision's")
+    Set out = ##class(Shutter.Util.Json).Parse(##class(Shutter.Util.Workflow).NoOpenTask("UT-WF-7", ""), .sc)
+    Do $$$AssertEquals(out.code, "no_task", "nor one that names no digest")
+    Set out = ##class(Shutter.Util.Json).Parse(##class(Shutter.Util.Workflow).NoOpenTask("UT-WF-NONE", "sha256:7"), .sc)
+    Do $$$AssertEquals(out.code, "no_task", "and a case with no task has none")
+    Do ..DeleteTask(task)
+    Do ..RemoveRole()
+}
+
 /// Saves a task after a moment, as the Workflow operation does once the workflow has sent it.
 ClassMethod SaveTaskLater(role As %String, caseId As %String, seconds As %Numeric)
 {

@@ -62,7 +62,7 @@ ClassMethod Decide(caseId As %String, action As %String = "Approve", digest As %
     Set action = $SELECT($ZCONVERT(action, "L") = "reject": "Reject", 1: "Approve")
     If (action = "Approve") && (digest = "") Quit ..ErrorJSON("no_digest", "an approval names the plan digest it binds")
     Set task = ..WaitForTask(caseId, ..#TASKWAIT)
-    If '$ISOBJECT(task) Quit ..ErrorJSON("no_task", "no open approval task for " _ caseId)
+    If '$ISOBJECT(task) Quit ..NoOpenTask(caseId, digest)
     // Two decisions can both find the task open: each takes the task's lock and reads the task again, so the second
     // waits for the first and is told who decided, and one decision stands.
     Set refused = ..Claim(task)
@@ -114,13 +114,36 @@ ClassMethod Claim(task As EnsLib.Workflow.TaskResponse) As %String
     }
     If $ISOBJECT(task.%TaskStatus) && task.%TaskStatus.IsComplete {
         Lock -^Shutter.TaskDecision(id)
-        Set e = {}
-        Set e.code = "decided", e.action = task.%Action, e.user = task.%UserName
-        Do ..SetTime(e, "completedAt", task.%TaskStatus.TimeCompleted)
-        Set e.error = "the task was already decided: " _ task.%Action _ " by " _ task.%UserName _ " at " _ e.completedAt
-        Quit e.%ToJSON()
+        Quit ..DecidedJSON(task)
     }
     Quit ""
+}
+
+/// The decided error for a completed task: its action, who took it and when.
+ClassMethod DecidedJSON(task As EnsLib.Workflow.TaskResponse) As %String
+{
+    Set e = {}
+    Set e.code = "decided", e.action = task.%Action, e.user = task.%UserName
+    Do ..SetTime(e, "completedAt", $SELECT($ISOBJECT(task.%TaskStatus): task.%TaskStatus.TimeCompleted, 1: ""))
+    Set e.error = "the task was already decided: " _ task.%Action _ " by " _ task.%UserName _ " at " _ e.completedAt
+    Quit e.%ToJSON()
+}
+
+/// The answer to a decision that found no open task after the wait. Two decisions on one case are taken one at a time
+/// (CaseApprove's case lock), so the second reaches the task only once the first has completed it and finds none open:
+/// when the case's newest task is complete and bound to the same plan digest, that is the decision that stands, and the
+/// second is told it as decided, naming the action, who took it and when (CONTRACTS 5), rather than waiting on the case
+/// workflow to record the approval. Any other case gets no_task, as before.
+ClassMethod NoOpenTask(caseId As %String, digest As %String) As %String
+{
+    Set none = ..ErrorJSON("no_task", "no open approval task for " _ caseId)
+    If digest = "" Quit none
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT TOP 1 ID FROM EnsLib_Workflow.TaskResponse WHERE ""%Subject"" LIKE ? ORDER BY ID DESC", "Shutter " _ caseId _ ":%")
+    If 'rs.%Next() Quit none
+    Set task = ##class(EnsLib.Workflow.TaskResponse).%OpenId(rs.%Get("ID"))
+    If '$ISOBJECT(task) || '$ISOBJECT(task.%TaskStatus) || 'task.%TaskStatus.IsComplete Quit none
+    If task.%FormValues.GetAt("PlanDigest") '= digest Quit none
+    Quit ..DecidedJSON(task)
 }
 
 /// Gives back the lock Claim took.
