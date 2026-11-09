@@ -74,6 +74,10 @@ Property ControlId As %String(MAXLEN = 200);
 /// Who recorded a hand closure (handled_by_hand), the signed-in user.
 Property RecordedBy As %String(MAXLEN = 128);
 
+/// Why the recovery control halted the run before this row was sent (CONTRACTS 18): recovery_stopped, recovery_shadow,
+/// control_unavailable or control_unreadable; empty otherwise.
+Property Halt As %String(MAXLEN = 32);
+
 /// Whether <var>headerId</var> in <var>ns</var> is a clone one of Shutter's runs made.
 ClassMethod IsOwnClone(ns As %String, headerId As %String) As %Boolean
 {
@@ -137,7 +141,7 @@ ClassMethod Closure(state As %String) As %String
 }
 
 /// One row as the routes give it (CONTRACTS 17.8): {"runId", "position", "headerId", "controlId", "newHeaderId", "state",
-/// "closure", "words", "by", "at", "caseId"}, null where nothing has filled it.
+/// "closure", "words", "by", "at", "caseId", "halt"}, null where nothing has filled it.
 Method ToObject() As %DynamicObject
 {
     Set o = {"runId": (..RunId)}
@@ -147,7 +151,7 @@ Method ToObject() As %DynamicObject
     Do ..Put(o, "closure", ..Closure(..State)), ..Put(o, "words", ..Words)
     Do ..Put(o, "by", $SELECT(..RecordedBy '= "": ..RecordedBy, 1: ..ApprovedBy))
     Do ..Put(o, "at", $SELECT(..EndedAt '= "": ..EndedAt, 1: ..StartedAt))
-    Do ..Put(o, "caseId", ..CaseId)
+    Do ..Put(o, "caseId", ..CaseId), ..Put(o, "halt", ..Halt)
     Quit o
 }
 
@@ -275,6 +279,9 @@ Storage Default
 </Value>
 <Value name="23">
 <Value>RecordedBy</Value>
+</Value>
+<Value name="24">
+<Value>Halt</Value>
 </Value>
 </Data>
 <DataLocation>^Shutter.Store.ResendRecordD</DataLocation>

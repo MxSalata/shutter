@@ -1,5 +1,7 @@
-/// Tier C: the approval's checks and run, the settings it binds, the declared duplicate, and a run that must not send.
-/// The sends themselves are proven on the Pathology rig (O4.d, O5.c, O6, O7, O8).
+/// Tier C: the approval's checks and run, the settings it binds, the declared duplicate, and a run that must not send; the
+/// recovery stop and shadow mode, which refuse the approval and halt a run before its next message (CONTRACTS 18).
+/// The sends themselves are proven on the Pathology rig (O4.d, O5.c, O6, O7, O8) and the halt on a real receiver by
+/// tests/e2e/outage_stop_check.py.
 Class Shutter.Test.EngineResend Extends %UnitTest.TestCase
 {
 
@@ -7,6 +9,17 @@ Property Made As %String [ MultiDimensional ];
 
 /// The stored profile's text before a test added its receiver, put back after it.
 Property ProfileBefore As %String(MAXLEN = "");
+
+/// The recovery control and the profile as they were before the test (Shutter.Test.RecoveryState).
+Property RecoveryBefore As %List;
+
+Method OnBeforeOneTest(testname As %String) As %Status
+{
+    // Each test starts with recovery enabled and not stopped, as a site that resends has it; its own steps change that.
+    Set ..RecoveryBefore = ##class(Shutter.Test.RecoveryState).Keep()
+    Do ##class(Shutter.Test.RecoveryState).Unstopped()
+    Quit $$$OK
+}
 
 Method OnAfterOneTest(testname As %String) As %Status
 {
@@ -25,6 +38,7 @@ Method OnAfterOneTest(testname As %String) As %Status
         If $ISOBJECT(row) Set row.Json = ..ProfileBefore Do row.%Save()
         Set ..ProfileBefore = ""
     }
+    Do ##class(Shutter.Test.RecoveryState).Put(..RecoveryBefore)
     Quit $$$OK
 }
 
@@ -138,7 +152,8 @@ Method TestHandledByHandNotSent()
     Do $$$AssertEquals(..RunRow(reply.approval.id, 1).NewHeaderId, "", "nothing was sent")
 }
 
-/// The test receiver in the stored profile, refusing duplicates with the phrase ALREADY HELD (put back after the test).
+/// The test receiver in the stored profile, refusing duplicates with the phrase ALREADY HELD, and recovery enabled (put back
+/// after the test).
 Method Receiver()
 {
     Set sp = "Shutter.Store.SiteProfile"
@@ -151,6 +166,7 @@ Method Receiver()
     Set p = {}.%FromJSON(row.Json)
     If '$ISOBJECT(p.receivers) Set p.receivers = []
     Do p.receivers.%Push({"name": (..#RECEIVER), "category": "orders_results", "duplicates": {"behaviour": "refuses", "phrase": "ALREADY HELD"}})
+    Do p.%Set("recovery", {"mode": "enabled"})
     Set row.Json = p.%ToJSON()
     Do $$$AssertStatusOK(row.%Save(), "the receiver is in the stored profile")
 }
@@ -267,14 +283,122 @@ Method TestRunThatMustNotSend()
     Do $$$AssertTrue(##class(Shutter.Store.OutageEvent).Of(o.%Id()).%ToJSON() [ "expired", "and says so")
 }
 
-/// An offered outage with a set of two (headers 41 and 44, or the two given), digest d1, approvable.
-Method Offered(a As %String = "41", b As %String = "44") As Shutter.Store.Outage
+/// An offered outage with a set of two (headers 41 and 44, or the two given), or three with a third given, digest d1,
+/// approvable.
+Method Offered(a As %String = "41", b As %String = "44", c As %String = "") As Shutter.Store.Outage
 {
     Do ##class(Shutter.Store.Outage).Open({"name": (..#RECEIVER), "watch": {"namespace": ($NAMESPACE), "item": (..#ITEM)}}, "cant_tell", "a test", "unit", .o)
     Set ..Made("Shutter.Store.Outage", o.%Id()) = ""
     Set ca = $SELECT(a = "41": "CA", 1: ..ControlOf(a)), cb = $SELECT(b = "44": "CF", 1: ..ControlOf(b))
-    Do o.Advance("offered", "listed", "unit", {"SetStatus": "computed", "SetDigest": "d1", "Approvable": 1, "ListOffered": [{"headerId": (a), "controlId": (ca)}, {"headerId": (b), "controlId": (cb)}]})
+    Set list = [{"headerId": (a), "controlId": (ca)}, {"headerId": (b), "controlId": (cb)}]
+    Do:c'="" list.%Push({"headerId": (c), "controlId": (..ControlOf(c))})
+    Do o.Advance("offered", "listed", "unit", {"SetStatus": "computed", "SetDigest": "d1", "Approvable": 1, "ListOffered": (list)})
     Quit o
+}
+
+/// Shutter recovery stopped, then shadow mode: the approval is refused with the control's code and words, and nothing is
+/// recorded (no approval, no ledger row, the row still offered at its version); recovery enabled and not stopped, it goes.
+Method TestApprovalRefusedUnderTheStopAndInShadow()
+{
+    Do ..Receiver()
+    Set api = "Shutter.API.Outages", rc = "Shutter.Util.RecoveryControl"
+    Set o = ..Offered(), id = o.%Id(), version = o.Version
+    Do $$$AssertStatusOK($CLASSMETHOD(rc, "Stop", "a unit test of the outage approval", "appr2"), "stopped")
+    Do $$$AssertEquals($CLASSMETHOD(api, "Approve", o, {"digest": "d1", "note": "checked", "version": (version)}, "appr1", .reply), "409 Conflict", "refused while stopped")
+    Do $$$AssertEquals(reply.error, "recovery_stopped", "recovery_stopped")
+    Do $$$AssertTrue(reply.detail [ "Shutter recovery is stopped, so this resend can't be approved, and nothing was recorded", reply.detail)
+    Do ..NothingRecorded(o, version, "under the stop")
+    // A stale version is still its own answer: the control is asked once the row's own checks hold.
+    Do $$$AssertEquals($CLASSMETHOD(api, "Approve", o, {"digest": "d1", "note": "checked", "version": 99}, "appr1", .reply), "409 Conflict", "a stale version")
+    Do $$$AssertEquals(reply.error, "version_changed", "version_changed first")
+    Do ##class(Shutter.Test.RecoveryState).Unstopped()
+    Do ##class(Shutter.Test.RecoveryState).Mode("shadow")
+    Do $$$AssertEquals($CLASSMETHOD(api, "Approve", o, {"digest": "d1", "note": "checked"}, "appr1", .reply), "409 Conflict", "refused in shadow mode")
+    Do $$$AssertEquals(reply.error, "recovery_shadow", "recovery_shadow")
+    Do $$$AssertTrue(reply.detail [ "Shadow mode: recovery is off at this site, so Shutter will not resend these messages, and nothing was recorded", reply.detail)
+    Do ..NothingRecorded(o, version, "in shadow mode")
+    Do ##class(Shutter.Test.RecoveryState).Mode("enabled")
+    Do $$$AssertEquals($CLASSMETHOD(api, "Approve", o, {"digest": "d1", "note": "checked", "version": (version)}, "appr1", .reply), "200 OK", "enabled and not stopped, it goes")
+    Do $$$AssertEquals(reply.state, "sending", "sending")
+}
+
+/// The outage as it was: offered at its version, no approval, no run.
+Method NothingRecorded(o As Shutter.Store.Outage, version As %Integer, when As %String)
+{
+    Do o.%Reload()
+    Set id = o.%Id()
+    Do $$$AssertEquals(o.State _ "/" _ o.Version _ "/" _ o.Approval, "offered/" _ version _ "/", "the row is as it was " _ when)
+    &sql(SELECT COUNT(*) INTO :n FROM Shutter_Store.ResendRecord WHERE OutageId = :id)
+    Do $$$AssertEquals(n, 0, "no ledger row " _ when)
+}
+
+/// The stop set between two messages of a run: the first went, the second's send is halted before the engine is asked (no
+/// new header), it and the third read stopped with the stop's words and halt recovery_stopped, the outage goes to a person,
+/// and the card says what the run came to. A new approval goes only once the stop is cleared.
+Method TestAStopBetweenTwoMessagesHaltsTheRest()
+{
+    Do ..Receiver()
+    Set a = ..Origin("SA"), b = ..Origin("SB"), c = ..Origin("SC")
+    Set o = ..Offered(a, b, c)
+    Do $$$AssertEquals(##class(Shutter.API.Outages).Approve(o, {"digest": "d1", "note": "checked"}, "appr1", .reply), "200 OK", "approved")
+    Set approval = reply.approval, run = approval.id
+    Set approval.settings = {"DefCharEncoding": "latin1", "IPAddress": "127.0.0.1", "Port": "7202"}
+    // The first message went, as Engine Resend records it.
+    Set r1 = ..RunRow(run, 1)
+    Set r1.State = "completed", r1.NewHeaderId = ..Clone(a, 9, "MSA|AA|SA|"), r1.StartedAt = ##class(Shutter.Util.Time).NowUTC(), r1.EndedAt = r1.StartedAt, r1.Words = "Resent by Shutter"
+    Do $$$AssertStatusOK(r1.%Save(), "the first message sent")
+    // Between the two: a person stops Shutter recovery.
+    Do $$$AssertStatusOK(##class(Shutter.Util.RecoveryControl).Stop("the lab asked us to stop", "appr2"), "stopped")
+    &sql(SELECT COUNT(*) INTO :before FROM Ens.MessageHeader)
+    Set newId = ##class(Shutter.Operation.EngineResend).Send(o, ..RunRow(run, 2), approval, b, "", .sc, .halted)
+    Do $$$AssertEquals(halted _ "/" _ newId, "1/", "the send halted, with no new header")
+    &sql(SELECT COUNT(*) INTO :after FROM Ens.MessageHeader)
+    Do $$$AssertEquals(after, before, "the engine was not asked: no header was made")
+    For pos = 2, 3 {
+        Set r = ..RunRow(run, pos)
+        Do $$$AssertEquals(r.State _ "/" _ r.Halt _ "/" _ r.NewHeaderId _ "/" _ r.StartedAt, "stopped/recovery_stopped//", "message " _ pos _ " not sent, halted by the stop")
+        Do $$$AssertTrue(r.Words [ "not sent: Shutter recovery was stopped by appr2 at " && (r.Words [ ", so the run halted before this message"), r.Words)
+    }
+    Do $$$AssertEquals(..RunRow(run, 1).State, "completed", "the first stays sent")
+    Do o.%Reload()
+    Do $$$AssertEquals(o.State, "needs_person", "the outage waits for a person")
+    Set events = ##class(Shutter.Store.OutageEvent).Of(o.%Id()).%ToJSON()
+    Do $$$AssertTrue(events [ ("so the resend halted before header " _ b _ ": 1 sent before it, 2 not sent. Nothing more goes on this approval: once an approver has cleared the stop in Settings, read the set again and approve it again."), events)
+    Set out = ##class(Shutter.API.Outages).One(o)
+    Do $$$AssertEquals($EXTRACT(out.words.first, 1, 18), "The resend halted ", "the card leads with it")
+    Do $$$AssertTrue(out.words.first [ "The resend halted because Shutter recovery was stopped: 1 of 3 messages were sent and 2 not sent. The rest go only by a new approval once an approver has cleared the stop in Settings", out.words.first)
+    Do $$$AssertEquals(out.resends.%Get(1).halt _ "/" _ out.resends.%Get(0).%GetTypeOf("halt"), "recovery_stopped/null", "halt on the halted rows only: " _ out.resends.%ToJSON())
+    // Read again, the set is offered once more: a new approval is refused until the stop is cleared.
+    Do o.Advance("offered", "listed again", "unit", {"SetStatus": "computed", "SetDigest": "d2", "ListOffered": [{"headerId": (b), "controlId": "SB"}, {"headerId": (c), "controlId": "SC"}]})
+    Do $$$AssertEquals(##class(Shutter.API.Outages).Approve(o, {"digest": "d2", "note": "again"}, "appr1", .reply), "409 Conflict", "still stopped")
+    Do $$$AssertEquals(reply.error, "recovery_stopped", "recovery_stopped")
+    Set control = ##class(Shutter.Util.RecoveryControl).Control()
+    Do $$$AssertStatusOK(##class(Shutter.Util.RecoveryControl).ClearStop("the lab is ready", control.Generation, "appr2"), "cleared")
+    Do $$$AssertEquals(##class(Shutter.API.Outages).Approve(o, {"digest": "d2", "note": "again, with the lab"}, "appr1", .reply), "200 OK", "a new approval once it is cleared")
+    Do $$$AssertTrue(reply.approval.id '= run, "a new run")
+}
+
+/// Shadow mode at the send: halted the same way, with words that say so and halt recovery_shadow.
+Method TestShadowModeAtTheSendHaltsTheRun()
+{
+    Do ..Receiver()
+    Set a = ..Origin("WA"), b = ..Origin("WB")
+    Set o = ..Offered(a, b)
+    Do $$$AssertEquals(##class(Shutter.API.Outages).Approve(o, {"digest": "d1", "note": "checked"}, "appr1", .reply), "200 OK", "approved")
+    Set approval = reply.approval, run = approval.id
+    Set approval.settings = {"DefCharEncoding": "latin1", "IPAddress": "127.0.0.1", "Port": "7202"}
+    Do ##class(Shutter.Test.RecoveryState).Mode("shadow")
+    Set newId = ##class(Shutter.Operation.EngineResend).Send(o, ..RunRow(run, 1), approval, a, "", .sc, .halted)
+    Do $$$AssertEquals(halted _ "/" _ newId, "1/", "halted before the first send")
+    For pos = 1, 2 {
+        Set r = ..RunRow(run, pos)
+        Do $$$AssertEquals(r.State _ "/" _ r.Halt, "stopped/recovery_shadow", "message " _ pos)
+        Do $$$AssertEquals(r.Words, "not sent: the site is in shadow mode, with recovery off, so the run halted before this message", r.Words)
+    }
+    Do o.%Reload()
+    Do $$$AssertEquals(o.State, "needs_person", "to a person")
+    Set first = ##class(Shutter.API.Outages).One(o).words.first
+    Do $$$AssertTrue(first [ "The resend halted because the site is in shadow mode, with recovery off: 0 of 2 messages were sent and 2 not sent. The rest go only by a new approval once the site enables recovery in its site profile", first)
 }
 
 ClassMethod ControlOf(headerId As %String) As %String

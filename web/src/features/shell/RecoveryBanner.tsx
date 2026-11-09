@@ -16,8 +16,8 @@ export function RecoveryBanner() {
   if (c.mode === 'enabled') return null;
   return (
     <StatusNotice tone="attention" title="Shadow mode.">
-      Shutter investigates, but sends no recovery write, rehearsal or resend preview. The hospital&apos;s
-      ordinary feed continues.
+      Shutter investigates, but sends no recovery write, rehearsal, resend preview or outage resend. The
+      hospital&apos;s ordinary feed continues.
     </StatusNotice>
   );
 }

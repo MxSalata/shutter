@@ -36,6 +36,11 @@ export interface Resend {
   /** When the row ended, or when it started while sending. */
   at?: string | null;
   caseId?: string | null;
+  /**
+   * Why the recovery control halted the run before this row was sent (CONTRACTS 18): recovery_stopped, recovery_shadow,
+   * control_unavailable or control_unreadable; null otherwise, and absent from a server before it.
+   */
+  halt?: string | null;
 }
 
 /** The one approval of an offered set: who gave it, when, how long it stands before the first send, and its note. */

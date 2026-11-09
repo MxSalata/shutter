@@ -120,7 +120,7 @@ ClassMethod RefusalOf(control As Shutter.Store.RecoveryControl, Output code As %
     }
     If ..Mode() '= "enabled" {
         Set code = "recovery_shadow"
-        Quit "Shadow mode: Shutter investigates, but sends no recovery write, rehearsal or resend preview"
+        Quit "Shadow mode: Shutter investigates, but sends no recovery write, rehearsal, resend preview or outage resend"
     }
     Quit ""
 }
@@ -154,6 +154,50 @@ ClassMethod IncidentApprovalRefusal(Output code As %String) As %String
     If code = "recovery_stopped" Quit "Shutter recovery is stopped, so this incident can't be approved until the stop is cleared. Its items take fresh evidence when they are released."
     If code = "recovery_shadow" Quit "Shadow mode: recovery is off, so this incident can't be approved until recovery is enabled. Its items take fresh evidence when they are released."
     Quit text
+}
+
+/// Why a person can't approve an outage's resend now, or "" (CONTRACTS 17.8 and 18). Asked once the approval's own checks
+/// have passed, so nothing is recorded. An outage's set holds no plan row: once the stop is cleared or recovery enabled, the
+/// set still offered can be approved as it stands.
+ClassMethod OutageApprovalRefusal(Output code As %String) As %String
+{
+    Set text = ..Refusal(.code)
+    If code = "recovery_stopped" Quit "Shutter recovery is stopped, so this resend can't be approved, and nothing was recorded. The messages stay offered: approve them once an approver has cleared the stop in Settings."
+    If code = "recovery_shadow" Quit "Shadow mode: recovery is off at this site, so Shutter will not resend these messages, and nothing was recorded. Review them in the Message Viewer using the site's recovery procedure, or enable recovery in the site profile first."
+    If code '= "" Quit "The recovery control could not be read, so this resend can't be approved, and nothing was recorded."
+    Quit ""
+}
+
+/// Engine Resend's check before each message (CONTRACTS 17.8 and 18), atomically with any stop: 1 with the control's lock
+/// held, which the caller lets go with ResendHandedOver once the engine has the message, so no stop can commit between this
+/// check and the hand-over; or 0, with no lock held, code and text saying why. The hand-over is a write to the engine's own
+/// queue in this instance, never a network call, so the lock is held for as long as that write takes and no longer.
+ClassMethod HoldForResend(Output code As %String, Output text As %String) As %Boolean
+{
+    Set code = "", text = "", held = 0
+    Try {
+        LOCK +^Shutter.RecoveryControl:..#LOCKWAIT
+        If '$TEST {
+            Set code = "control_unavailable", text = "The recovery control was busy"
+            Quit
+        }
+        Set held = 1
+        Do ..ReconcileLocked()
+        Set text = ..RefusalOf(..Control(), .code)
+    } Catch ex {
+        Set code = "control_unreadable", text = "The recovery control could not be read"
+    }
+    If code '= "" {
+        LOCK:held -^Shutter.RecoveryControl
+        Quit 0
+    }
+    Quit 1
+}
+
+/// The engine has the message HoldForResend admitted (or the hand-over failed): the control's lock goes.
+ClassMethod ResendHandedOver()
+{
+    LOCK -^Shutter.RecoveryControl
 }
 
 /// The connector's check, immediately before its POST: 1 to send, with permit set when the call is a recovery call, or 0
@@ -496,7 +540,7 @@ ClassMethod Read() As %DynamicObject
         Do o.%Set("readable", 0, "boolean")
         Set o.outstanding = [], o.outstandingCount = 0
     }
-    Set o.covers = "Rehearsals, recovery writes and blind-resend previews that Shutter itself starts."
+    Set o.covers = "Rehearsals, recovery writes, blind-resend previews and outage resends that Shutter itself starts; a resend under way halts before its next message."
     Set o.doesNotCover = "The hospital's ordinary feed and its retries, other systems or people writing to the receiver, Shutter's own records, and read-back of earlier attempts."
     Quit o
 }

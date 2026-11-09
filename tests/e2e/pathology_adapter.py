@@ -155,6 +155,9 @@ def declare_receiver(rig, namespace, receiver, facts):
     if facts["category"] == "orders_results":
         # What lets a build with the send offer one here. The set still decides what goes, and a build without it reads this nowhere.
         entry["engine_resend"] = True
+        # And what a site that has Shutter resend here writes beside it: the send holds to shadow mode, as every recovery call
+        # does (CONTRACTS 18, v1.54), and the rig installs as a site does, which starts in shadow mode.
+        profile["recovery"] = {"mode": "enabled"}
     profile["receivers"] = [r for r in profile.get("receivers", []) if r.get("name") != receiver] + [entry]
     profile["expectedVersion"] = str(current["version"])
     code, answer = rig.site_setting("PUT", "/site-profile", profile)

@@ -376,6 +376,114 @@ describe('OutageSection', () => {
     );
   });
 
+  it.each([
+    [
+      'stopped',
+      { mode: 'enabled', stopped: true, stoppedBy: 'appr2', stoppedAt: '2026-11-09T19:40:00Z' },
+      "Shutter recovery is stopped, so this resend can't be approved",
+    ],
+    ['in shadow mode', { mode: 'shadow', stopped: false }, 'Shadow mode: recovery is off at this site'],
+  ])(
+    'holds the approval while Shutter recovery is %s, saying why, and still offers the hand closure',
+    async (_, control, words) => {
+      const posts = recordPosts();
+      serve({ items: [offeredAtUnknown()], receivers: [] });
+      server.use(
+        http.get('/api/shutter/recovery-control', () =>
+          HttpResponse.json({
+            generation: 2,
+            stoppedAt: '',
+            stoppedBy: '',
+            stopReason: '',
+            outstanding: [],
+            outstandingCount: 0,
+            readable: true,
+            covers: '',
+            doesNotCover: '',
+            ...control,
+          }),
+        ),
+      );
+      renderSection();
+      const card = await screen.findByRole('region', { name: 'Outage 7, Results Out' });
+      expect(await within(card).findByTestId('outage-approval-held')).toHaveTextContent(words);
+      expect(within(card).queryByRole('button', { name: 'Approve the resend…' })).toBeNull();
+      expect(within(card).getAllByRole('button', { name: /Already handled by hand/ })).toHaveLength(2);
+      expect(posts).toHaveLength(0);
+    },
+  );
+
+  it('says a refusal by the recovery control in its own words, and that nothing was sent', async () => {
+    serve({ items: [offeredAtUnknown()], receivers: [] });
+    server.use(
+      http.post('/api/shutter/outages/7/approvals', () =>
+        HttpResponse.json(
+          {
+            error: 'recovery_stopped',
+            detail:
+              "Shutter recovery is stopped, so this resend can't be approved, and nothing was recorded. The messages stay offered: approve them once an approver has cleared the stop in Settings.",
+          },
+          { status: 409 },
+        ),
+      ),
+    );
+    renderSection();
+    const card = await screen.findByRole('region', { name: 'Outage 7, Results Out' });
+    await userEvent.click(await within(card).findByRole('button', { name: 'Approve the resend…' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Approve the resend' });
+    await userEvent.type(within(dialog).getByRole('textbox', { name: /What was checked/ }), 'Checked');
+    await userEvent.click(within(dialog).getByRole('checkbox'));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Approve and resend' }));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      "Nothing was sent. Shutter recovery is stopped, so this resend can't be approved, and nothing was recorded.",
+    );
+  });
+
+  it('shows a run the recovery stop halted: the card says so first, and each message not sent says why', async () => {
+    const halted = (n: number, c: string) => ({
+      ...resend(
+        n,
+        c,
+        'stopped',
+        null,
+        'not sent: Shutter recovery was stopped by appr2 at 2026-11-09T19:40:00Z, so the run halted before this message',
+      ),
+      halt: 'recovery_stopped',
+    });
+    serve({
+      items: [
+        outage({
+          state: 'needs_person',
+          words: {
+            first:
+              'The resend halted because Shutter recovery was stopped: 1 of 3 messages were sent and 2 not sent. The rest go only by a new approval once an approver has cleared the stop in Settings: read the set again, then approve it.',
+            do: 'Do: start the listener.',
+            call: 'Call: the lab on 01632 960998.',
+            critical: null,
+          },
+          resends: [
+            resend(1, 'CA', 'completed', 'sent', 'Resent by Shutter'),
+            halted(2, 'CB'),
+            halted(3, 'CC'),
+          ],
+        }),
+      ],
+      receivers: [],
+    });
+    renderSection();
+    const card = await screen.findByRole('region', { name: 'Outage 7, Results Out' });
+    expect(
+      await within(card).findByText(/^The resend halted because Shutter recovery was stopped/),
+    ).toBeInTheDocument();
+    expect(within(card).queryByTestId('outage-failed-resend')).toBeNull();
+    const items = within(within(card).getByTestId('outage-resends')).getAllByRole('listitem');
+    expect(items[1]).toHaveTextContent('Not sent');
+    expect(items[1]).toHaveTextContent(
+      'Not sent: Shutter recovery was stopped by appr2 at 2026-11-09T19:40:00Z, so the run halted before this message.',
+    );
+    expect(within(card).getByText("Shutter's resends: 1 sent, 2 not sent.")).toBeInTheDocument();
+  });
+
   it('closes one offered message as already handled by hand after a confirmation with a note, sending nothing', async () => {
     const posts = recordPosts();
     serve({ items: [offeredAtUnknown()], receivers: [] });

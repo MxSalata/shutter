@@ -910,7 +910,7 @@ export function diffProfiles(a: SiteProfile | undefined, b: SiteProfile): Change
       text:
         b.recovery?.mode === 'enabled'
           ? 'Recovery enabled: Shutter may rehearse and send what its gate and the policy allow. A plan made before this save stays refused; reinvestigate it'
-          : 'Shadow mode: from now on Shutter investigates and sends no recovery write, rehearsal or resend preview',
+          : 'Shadow mode: from now on Shutter investigates and sends no recovery write, rehearsal, resend preview or outage resend',
     });
   if ((before.feed?.prevent_failures === true) !== (b.feed?.prevent_failures === true))
     out.push({

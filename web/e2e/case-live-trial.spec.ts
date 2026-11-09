@@ -143,7 +143,8 @@ const RECOVERY_AT_REST = {
   outstanding: [],
   outstandingCount: 0,
   readable: true,
-  covers: 'Rehearsals, recovery writes and blind-resend previews that Shutter itself starts.',
+  covers:
+    'Rehearsals, recovery writes, blind-resend previews and outage resends that Shutter itself starts; a resend under way halts before its next message.',
   doesNotCover:
     "The hospital's ordinary feed and its retries, other systems or people writing to the receiver, Shutter's own records, and read-back of earlier attempts.",
 };

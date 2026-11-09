@@ -17,6 +17,12 @@ approval safeguards.
   production item with one job, resends one message at a time with every rule read again first, writes the ledger
   before each send, and stops at the first message that doesn't complete. A failed resend shows as failed on the card,
   opens no new case and stops the rest.
+- **Shadow mode and Stop Shutter recovery hold the outage resend too.** While recovery is stopped, or the site is in
+  shadow mode, the approval is refused (409 `recovery_stopped` or `recovery_shadow`) and nothing is recorded, and the
+  card says why in place of the button. Engine Resend reads the stop and the mode last before every message, under the
+  control's lock until the engine has it: either halts the run, its unsent messages read "Not sent" with the reason, and
+  the rest go only by a new approval once the stop is cleared or recovery enabled. Already handled by hand sends nothing
+  and stays allowed (`tests/e2e/outage_stop_check.py` counts it at a real receiver).
 - **Closing what the receiver already has.** A refusal that says the receiver already holds the message closes it as
   already delivered. At a receiver of unknown duplicate handling, an approver can close a message as already handled by
   hand, with a note: nothing is sent, and who and when go on the record.
@@ -46,7 +52,7 @@ approval safeguards.
   the same gate: both close right in all 12 agent runs, and Rules only grades as on 1.0.0
   (`docs/readme/fair-test.md`, "Release 1.3.2: F03 and F07 live").
 - **Tested:** all 56 rows of the pathology rig on build 154; the unit suites on build 154 (1,056 passed) and 2026.2
-  (1,047 passed), none failed; the web suite (1,978 tests). CONTRACTS 1.53 describes the send.
+  (1,047 passed), none failed; the web suite (1,978 tests). CONTRACTS 1.53 and 1.54 describe the send.
 
 ## 1.3.2 (9 November 2026)
 

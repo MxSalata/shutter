@@ -32,7 +32,7 @@ the case page (`POST /api/shutter/cases/{id}/escalations` through the API); unti
   namespace-wide purge unless asked for. The feed, records and scenario items (`ADT In`, `ADT to Downstream`,
   `Downstream Out`, `ADT to Records`, `Records Out` and `Scenario Player`) are present but switched off in shape A (the
   installer disables them in `Shutter.Production`), and not added at all in shape B (`InstallInto`).
-- **A new install starts in shadow mode.** Shutter investigates and records what it would propose, and sends no rehearsal, recovery write or resend preview, and no escalation email; the hospital's ordinary feed goes on as before. A person enables recovery by saving `"recovery": {"mode": "enabled"}` in the site profile. Settings has "Stop Shutter recovery", for any operator or approver, and the shadow report (`docs/CONTRACTS.md`, 18).
+- **A new install starts in shadow mode.** Shutter investigates and records what it would propose, and sends no rehearsal, recovery write, resend preview or outage resend, and no escalation email; the hospital's ordinary feed goes on as before. A person enables recovery by saving `"recovery": {"mode": "enabled"}` in the site profile. Settings has "Stop Shutter recovery", for any operator or approver, and the shadow report (`docs/CONTRACTS.md`, 18).
 - **A receiver with no API is escalated, never resent.** Shutter resends only to a receiver whose site profile entry
   describes its API (state, receipt, capabilities and operations paths). A ward system that takes HL7 over TCP and
   keeps no receipts is investigated and escalated; the team corrects it by hand and marks the case handled.

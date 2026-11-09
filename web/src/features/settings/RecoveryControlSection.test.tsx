@@ -119,7 +119,9 @@ describe('the banner', () => {
     answering(control({ mode: 'shadow' }));
     page(<RecoveryBanner />);
     expect(await screen.findByText('Shadow mode.')).toBeInTheDocument();
-    expect(screen.getByText(/sends no recovery write, rehearsal or resend preview/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/sends no recovery write, rehearsal, resend preview or outage resend/),
+    ).toBeInTheDocument();
     expect(screen.getByText(/ordinary\s+feed continues/)).toBeInTheDocument();
   });
 

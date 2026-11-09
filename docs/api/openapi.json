@@ -8544,7 +8544,7 @@
           "outages"
         ],
         "summary": "Approve an offered set; Engine Resend sends it in order",
-        "description": "One approval of the set the outage offers, naming its digest and the row version, with a note. Only where the build has the sender and the receiver profile entry says engine_resend.",
+        "description": "One approval of the set the outage offers, naming its digest and the row version, with a note. Only where the build has the sender and the receiver profile entry says engine_resend. Refused while Shutter recovery is stopped or the site is in shadow mode (CONTRACTS 18).",
         "x-contract": "docs/CONTRACTS.md section 17.3",
         "x-required-resource": "Shutter_Approve",
         "x-writes": true,
@@ -8700,12 +8700,15 @@
             }
           },
           "409": {
-            "description": "Conflict. wrong_state: The outage is closed.; version_changed: A stale version (with currentVersion).; idempotency_key_reused: The key was used with another body. receiver_check_needed: At this receiver a duplicate is unknown: check the receiver for these messages first, and say so with the approval.",
+            "description": "Conflict. wrong_state: The outage is closed.; version_changed: A stale version (with currentVersion).; idempotency_key_reused: The key was used with another body. receiver_check_needed: At this receiver a duplicate is unknown: check the receiver for these messages first, and say so with the approval. recovery_stopped: Shutter recovery is stopped, so this resend can't be approved, and nothing was recorded (v1.54, CONTRACTS 18). recovery_shadow: Shadow mode: recovery is off at this site, so Shutter will not resend these messages, and nothing was recorded. control_unreadable: The recovery control could not be read.",
             "x-error-codes": [
               "wrong_state",
               "version_changed",
               "idempotency_key_reused",
-              "receiver_check_needed"
+              "receiver_check_needed",
+              "recovery_stopped",
+              "recovery_shadow",
+              "control_unreadable"
             ],
             "content": {
               "application/json": {
@@ -8735,6 +8738,24 @@
                     "value": {
                       "error": "receiver_check_needed",
                       "detail": "At this receiver a duplicate is unknown: check the receiver for these messages first, and say so with the approval."
+                    }
+                  },
+                  "recovery_stopped": {
+                    "value": {
+                      "error": "recovery_stopped",
+                      "detail": "Shutter recovery is stopped, so this resend can't be approved, and nothing was recorded. The messages stay offered: approve them once an approver has cleared the stop in Settings."
+                    }
+                  },
+                  "recovery_shadow": {
+                    "value": {
+                      "error": "recovery_shadow",
+                      "detail": "Shadow mode: recovery is off at this site, so Shutter will not resend these messages, and nothing was recorded. Review them in the Message Viewer using the site's recovery procedure, or enable recovery in the site profile first."
+                    }
+                  },
+                  "control_unreadable": {
+                    "value": {
+                      "error": "control_unreadable",
+                      "detail": "The recovery control could not be read, so this resend can't be approved, and nothing was recorded."
                     }
                   }
                 }
@@ -17017,6 +17038,20 @@
               "string",
               "null"
             ]
+          },
+          "halt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "recovery_stopped",
+              "recovery_shadow",
+              "control_unavailable",
+              "control_unreadable",
+              null
+            ],
+            "description": "v1.54: why the recovery control halted the run before this row was sent (CONTRACTS 18); null otherwise."
           }
         }
       }

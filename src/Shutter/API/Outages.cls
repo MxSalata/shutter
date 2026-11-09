@@ -141,6 +141,10 @@ ClassMethod Words(o As %DynamicObject, entry As %DynamicObject = "", build As %D
         Set first = ..KindWords(o, kind, reading, retry, approvable, build, queue, head, now)
     }
     If (state = "needs_person") && (..SetReason(o) '= "") && (..SetReason(o) '= ..#NOSETGATE) Set first = first _ " A person must act here: " _ ..SetReason(o) _ "."
+    If state = "needs_person" {
+        Set halted = ..HaltLine(o)
+        If halted '= "" Set first = halted _ " " _ first
+    }
     If (..S(reading, "replyCodeActions") '= "") && (reading.%GetTypeOf("replyCodeActionsStock") = "boolean") && 'reading.replyCodeActionsStock {
         Set first = first _ " This operation's reply actions are the site's own: what an AE, AR or timeout does here follows this string: " _ reading.replyCodeActions _ "."
     }
@@ -192,6 +196,31 @@ ClassMethod Words(o As %DynamicObject, entry As %DynamicObject = "", build As %D
         Do words.%Set("critical", "", "null")
     }
     Quit words
+}
+
+/// Where the recovery control halted the latest run (CONTRACTS 18), what it came to and how it goes on, from o.resends; ""
+/// when nothing halted it.
+ClassMethod HaltLine(o As %DynamicObject) As %String
+{
+    Set rows = o.%Get("resends")
+    Quit:'$ISOBJECT(rows) ""
+    Set run = ""
+    Set iter = rows.%GetIterator()
+    While iter.%GetNext(, .r) { Set:$EXTRACT(..S(r, "runId"))="R" run = ..S(r, "runId") }
+    Quit:run="" ""
+    Set code = "", total = 0, sent = 0, halted = 0
+    Set iter = rows.%GetIterator()
+    While iter.%GetNext(, .r) {
+        Continue:..S(r, "runId")'=run
+        Set total = total + 1
+        Set:..S(r, "closure")="sent" sent = sent + 1
+        If ..S(r, "halt") '= "" Set halted = halted + 1 Set:code="" code = ..S(r, "halt")
+    }
+    Quit:'halted ""
+    Set why = $CASE(code, "recovery_stopped": "Shutter recovery was stopped", "recovery_shadow": "the site is in shadow mode, with recovery off", : "the recovery control could not be read")
+    Set after = $CASE(code, "recovery_stopped": "once an approver has cleared the stop in Settings", "recovery_shadow": "once the site enables recovery in its site profile", : "")
+    Set text = "The resend halted because " _ why _ ": " _ sent _ " of " _ total _ " message" _ $SELECT(total = 1: " was", 1: "s were") _ " sent and " _ halted _ " not sent."
+    Quit text _ " The rest go only by a new approval" _ $SELECT(after '= "": " " _ after, 1: "") _ ": read the set again, then approve it."
 }
 
 /// The first line while the outage is open, by the kind the engine shows.
@@ -374,7 +403,9 @@ ClassMethod S(obj As %DynamicObject, key As %String) As %String
 /// A person's one approval of an offered set (tier C): answers the HTTP status, and in reply the outage as the routes give
 /// it or the error. by is the signed-in user. The approval names the set's digest and the row's version, carries a note,
 /// stands APPROVALMINUTES before the first send, and copies the set into the ledger as the run's rows (Shutter.Store.ResendRecord,
-/// state approved), one run per outage; Engine Resend sends them. A replayed Idempotency-Key answers the first reply.
+/// state approved), one run per outage; Engine Resend sends them. A replayed Idempotency-Key answers the first reply. While
+/// Shutter recovery is stopped or the site is in shadow mode it is refused (409 recovery_stopped or recovery_shadow) and
+/// records nothing.
 ClassMethod Approve(row As Shutter.Store.Outage, body As %DynamicObject, by As %String, Output reply As %DynamicObject) As %String
 {
     Set reply = ""
@@ -387,6 +418,10 @@ ClassMethod Approve(row As Shutter.Store.Outage, body As %DynamicObject, by As %
     If $LENGTH(note) > 1000 Set reply = {"error": "bad_request", "detail": "note is longer than 1000 characters"} Quit "400 Bad Request"
     If body.%IsDefined("version") && (+body.%Get("version") '= +row.Version) Set reply = {"error": "version_changed", "detail": "The outage has moved on: read it again", "currentVersion": (+row.Version)} Quit "409 Conflict"
     If digest '= row.SetDigest Set reply = {"error": "set_changed", "detail": "The set has changed since it was read: read it again and approve what it lists now", "currentDigest": (row.SetDigest)} Quit "409 Conflict"
+    // Shadow mode and the recovery stop (CONTRACTS 18): asked once the row, its version and its digest hold, so a refused
+    // approval puts nothing on the record and the set stays offered.
+    Set refusal = ##class(Shutter.Util.RecoveryControl).OutageApprovalRefusal(.code)
+    If code '= "" Set reply = {"error": (code), "detail": (refusal)} Quit "409 Conflict"
     // Ask first (v1.53): only where a receiver refuses duplicates is a resend safe with no check.
     If ..ByHand(##class(Shutter.Store.SiteProfile).Receiver(row.Receiver)) && '((body.%GetTypeOf("receiverChecked") = "boolean") && body.receiverChecked) Set reply = {"error": "receiver_check_needed", "detail": (..#RECEIVERCHECK)} Quit "409 Conflict"
     Set offered = row.GetList("ListOffered")

@@ -12,6 +12,7 @@ import {
 } from '@tabler/icons-react';
 import { isApiError } from '@/lib/errors';
 import type { Tone } from '@/lib/tone';
+import type { RecoveryControl } from '@/api/types';
 import type { Outage, Resend } from './types';
 
 /*
@@ -129,6 +130,20 @@ export function canApprove(o: Pick<Outage, 'state' | 'approvable' | 'set' | 'lis
   );
 }
 
+/**
+ * Why the approval is held by the recovery control (CONTRACTS 18), or '' when it isn't: Shutter recovery stopped, or the
+ * site in shadow mode. The server refuses the approval then (409), so the card says so instead of offering it. A control
+ * the page has not read holds nothing here: the server still refuses.
+ */
+export function approvalHeld(c: Pick<RecoveryControl, 'mode' | 'stopped'> | undefined): string {
+  if (!c) return '';
+  if (c.stopped)
+    return "Shutter recovery is stopped, so this resend can't be approved. The messages stay offered: approve them once an approver has cleared the stop in Settings.";
+  if (c.mode !== 'enabled')
+    return "Shadow mode: recovery is off at this site, so Shutter will not resend these messages. Review them in the Message Viewer using the site's recovery procedure, or enable recovery in the site profile first.";
+  return '';
+}
+
 /** The approval's consequence, first in its dialog. */
 export function approveConsequence(o: Pick<Outage, 'receiver' | 'lists'>): string {
   const n = o.lists.offered.length;
@@ -153,6 +168,12 @@ export function refusalWords(e: unknown): string {
       return `Nothing was sent: ${detail || 'the outage is no longer offered.'}`;
     case 'not_approvable':
       return `Nothing was sent: ${detail || 'this receiver is not set up for a resend.'}`;
+    case 'recovery_stopped':
+      return `Nothing was sent. ${e.detail || "Shutter recovery is stopped, so this resend can't be approved until an approver clears the stop in Settings."}`;
+    case 'recovery_shadow':
+      return `Nothing was sent. ${e.detail || 'Shadow mode: recovery is off at this site, so Shutter will not resend these messages.'}`;
+    case 'control_unreadable':
+      return `Nothing was sent. ${e.detail || 'The recovery control could not be read.'}`;
     default:
       return `Nothing was sent: ${detail || afterColon(e.message)}`;
   }
