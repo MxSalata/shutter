@@ -132,6 +132,8 @@ ClassMethod Apply(encounterBody As %String, view As %DynamicObject, eventTime As
     // 4. A modifierExtension anywhere.
     Set path = ..FindKey(enc, "modifierExtension", "")
     Quit:path'="" ..Refuse("FHIR_MODIFIER_EXTENSION", "modifier_extension", path, .detail)
+    // implicitRules is a modifier element of every resource: a body read under rules Shutter does not know is not rewritten.
+    Quit:enc.%GetTypeOf("implicitRules")'="unassigned" ..Refuse("FHIR_MODIFIER_EXTENSION", "implicit_rules", "/implicitRules", .detail)
 
     // 5. A narrative: the move would leave it describing the old location.
     Quit:enc.%GetTypeOf("text")'="unassigned" ..Refuse("FHIR_NARRATIVE_PRESENT", "narrative", "/text", .detail)
@@ -185,6 +187,11 @@ ClassMethod Apply(encounterBody As %String, view As %DynamicObject, eventTime As
         Do ..Refuse("FHIR_SHAPE_UNSUPPORTED", "open_entries", "/location", .detail)
         Set detail."open_entries" = count
         Quit "FHIR_SHAPE_UNSUPPORTED"
+    }
+
+    // An extension on the open entry's own status (FHIR's _status) would come to describe "completed".
+    If locations.%Get(open).%GetTypeOf("_status") '= "unassigned" {
+        Quit ..Refuse("FHIR_SHAPE_UNSUPPORTED", "status_extension", "/location/" _ open _ "/_status", .detail)
     }
 
     // 9. The receiver's active location is the message's prior one, and the target is somewhere else.
@@ -260,6 +267,9 @@ ClassMethod ViewProblem(view) As %String [ Private ]
     Quit:'view.%IsA("%Library.DynamicObject") "/"
     Quit:view.%GetTypeOf("prior_location")'="string" "/prior_location"
     Quit:view.%GetTypeOf("target_location")'="string" "/target_location"
+    // An empty one is a message with no location (PV1-6 or PV1-3 absent), not a receiver whose location differs.
+    Quit:view."prior_location"="" "/prior_location"
+    Quit:view."target_location"="" "/target_location"
     Quit:view.%GetTypeOf("location_map")'="array" "/location_map"
     Set map = view."location_map", problem = ""
     For j = 0:1:map.%Size() - 1 {
