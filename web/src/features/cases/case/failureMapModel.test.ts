@@ -212,3 +212,25 @@ describe("the receiver's description in words", () => {
     expect(receiverWords('')).toEqual({ name: '', api: '' });
   });
 });
+
+describe("a product's own name and a result's path", () => {
+  it("keeps a proper name's capitals and takes no article, and draws a result going to no ward", () => {
+    const c = {
+      ...detail('C-000002'),
+      event: 'r01',
+      ward: 'WARD-A',
+      failureKind: 'unmappable',
+      failureOutcome: 'rejected',
+      failureText: 'This message is ORU, not ADT: a person decides',
+    } as unknown as CaseDetail;
+    const snap = structuredClone(snapshot('C-000002'));
+    const route = snap.items.find((i) => i.kind === 'route');
+    (route!.data as Record<string, unknown>).receiver = 'Quillon Lab';
+    const m = failureMapOf(c, snap, caseOutcome({ state: 'escalated', disposition: 'escalate' }));
+    expect(m.message.plain).toBe('Result');
+    expect(m.steps.join(' ')).toContain('Receiver: Quillon Lab, refused');
+    expect(m.steps.join(' ')).not.toMatch(/the quillon/i);
+    // A common noun keeps its article and its lower case
+    expect(mapOf('C-000002').steps.join(' ')).toMatch(/Receiver: the [a-z]/);
+  });
+});

@@ -271,7 +271,8 @@ test.describe('the case page made easier to read', () => {
     const heading = page.getByRole('heading', { name: 'Escalations' });
     await expect(heading).toBeFocused();
     await expect(heading).toBeInViewport();
-    await expect(page.getByRole('button', { name: /^Escalate to the/ })).toBeInViewport();
+    // The button names the team the draft is for (the site profile's team for this receiver)
+    await expect(page.getByRole('button', { name: /^Escalate to / })).toBeInViewport();
   });
 
   test('keeps the approve dialog in its own words while it closes', async ({ page }) => {

@@ -1,4 +1,4 @@
-import type { CaseEvent, GateCheck, GateDecision, SnapshotItem } from '@/api/types';
+import type { CaseEvent, CaseResend, GateCheck, GateDecision, SnapshotItem } from '@/api/types';
 import { asArray, asObject } from '@/lib/json';
 import { formatTime, humanize } from '@/lib/format';
 
@@ -19,6 +19,22 @@ export function notModelled(c: {
   const outcome = str(c.failureOutcome);
   if (outcome === 'uncertain') return 'unknown';
   return outcome === 'rejected' ? 'refused' : 'not_delivered';
+}
+
+/**
+ * Whether a case is an order or a result, and which: "result" (an ORU, event R01, R30 and the like) or "order" (ORM,
+ * OML and the like, event O01, O21 ...), by the event code or the structure a message Shutter does not model names in its
+ * failure text; null for anything else. An order or a result goes to no ward and asks for no bed, so its sentence names
+ * neither.
+ */
+export function orderOrResult(c: { event?: unknown; failureText?: unknown }): 'order' | 'result' | null {
+  const event = str(c.event);
+  if (/^r\d\d$/i.test(event)) return 'result';
+  if (/^o\d\d$/i.test(event)) return 'order';
+  const structure = /^This message is ([^ ,]+), not ADT:/.exec(str(c.failureText))?.[1] ?? '';
+  if (/^(ORU|OUL)/i.test(structure)) return 'result';
+  if (/^O/i.test(structure)) return 'order';
+  return null;
 }
 
 /** The kind whose words fit the case: for a message Shutter does not model, the one that says what the receiver did. */
@@ -102,6 +118,9 @@ export function describeItem(item: SnapshotItem, receiver?: string): string {
       if (status === 200)
         return `${humanize(str(b.state))}${b.ward ? ` in ${str(b.ward)}` : ''}, version ${str(b.version)}${b.epoch !== undefined ? `, epoch ${str(b.epoch)}` : ''}; ${asArray(b.history).length} operations in its history`;
       if (status === 404) return `${noun.charAt(0).toUpperCase()}${noun.slice(1)} has no such encounter`;
+      // A receiver whose description names no state endpoint (an orders and results receiver with no API) was not asked
+      if (!status && /no state endpoint/.test(str(b.error)))
+        return `Not read: ${noun} has no record Shutter reads (no state endpoint in its description)`;
       return `Could not be read (HTTP ${status || 'none'}): unknown`;
     }
     case 'receipt': {
@@ -111,7 +130,30 @@ export function describeItem(item: SnapshotItem, receiver?: string): string {
       if (status === 200)
         return `Committed: version ${str(b.version_before)} to ${str(b.version_after)}, at ${formatTime(str(b.applied_at))}`;
       if (status === 404) return `No receipt: ${noun} did not commit this operation`;
+      // -1: the receiver keeps no receipts (no receipt path in its description), as against 0 for no answer
+      if (status === -1) return `Not read: ${noun} keeps no receipts Shutter reads`;
       return `The lookup did not answer (HTTP ${status || 'none'}): committed or not is unknown`;
+    }
+    case 'pending_messages': {
+      const n = Number(d.count ?? asArray(d.items).length) || 0;
+      return n
+        ? `${n} later message${n === 1 ? '' : 's'} of the encounter not yet delivered: a resend waits for ${n === 1 ? 'it' : 'them'}`
+        : 'None: no later message of the encounter is waiting to be delivered';
+    }
+    case 'further_messages': {
+      if (d.identifier === 'unreadable') return 'Not read: the message names no patient Shutter can look up';
+      const stops = asArray(d.stops).length;
+      const shows = asArray(d.shows).length;
+      const unread = str(d.unread);
+      if (!stops && !shows)
+        return `None found for the patient after this message${unread ? `; not read in full: ${unread}` : ''}`;
+      return [
+        stops ? `${stops} that stop${stops === 1 ? 's' : ''} a write` : '',
+        shows ? `${shows} shown on the plan` : '',
+        unread ? `not read in full: ${unread}` : '',
+      ]
+        .filter(Boolean)
+        .join('; ');
     }
     case 'later_event':
       return `${humanize(str(d.event))}${d.ward ? ` to ${str(d.ward)}` : ''} at ${formatTime(str(d.event_time))} (${humanize(str(d.outcome))})`;
@@ -127,9 +169,17 @@ export function describeItem(item: SnapshotItem, receiver?: string): string {
       return `Forwarded from ${from || 'another production'}`;
     }
     default:
-      return str(d.text) || item.source;
+      return str(d.text) || `Recorded from ${SOURCE_WORDS[item.source] ?? 'the production'}`;
   }
 }
+
+/** Where an evidence item was read, in words: the snapshot's source names are identifiers, not for a reader. */
+const SOURCE_WORDS: Record<string, string> = {
+  message_store: 'the message store',
+  production: 'the production',
+  validator: "the message's schema",
+  ward_api: "the receiver's API",
+};
 
 /** The workflow's phases and the case states that belong to each (Shutter.Process.CaseWorkflow). */
 export const PHASES = [
@@ -231,3 +281,17 @@ export function eventRounds(events: CaseEvent[]): CaseEvent[][] {
   }
   return rounds;
 }
+
+/**
+ * The outage resend that settled the case's message, if one did: the latest row of an approved run (never a hand closure)
+ * that the engine sent, closed as sent or as already held at the receiver. The case's own plan may have proposed no write;
+ * this is what Shutter did afterwards, through the outage card.
+ */
+export function outageResend(c: { resends?: CaseResend[] | null }): CaseResend | undefined {
+  return (c.resends ?? [])
+    .filter((r) => !r.runId.startsWith('H') && (r.closure === 'sent' || r.closure === 'already_delivered'))
+    .at(-1);
+}
+
+/** The run's approval id, as the ledger names the run ("R8-3"). */
+export const resendApproval = (r: CaseResend) => r.runId;

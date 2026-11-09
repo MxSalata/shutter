@@ -18,6 +18,8 @@ import {
   decisionSummary,
   evidenceSummary,
   failedSummary,
+  failedTitle,
+  headerSentence,
   nextAction,
   outcomeCaseOf,
   outcomeReason,
@@ -369,5 +371,54 @@ describe("the next action's head and rest", () => {
       head: 'Hand the merge to the PAS team named for the sending application',
       rest: 'Mark the case handled when it confirms what it did.',
     });
+  });
+});
+
+describe('an order or a result, and a message resent with its outage', () => {
+  const result = (more: Partial<CaseDetail> = {}): CaseFacts => {
+    const f = factsOf('C-000002');
+    return {
+      ...f,
+      c: {
+        ...f.c,
+        event: 'r01',
+        ward: 'WARD-A',
+        bed: 'BAY1-01',
+        sourceSystem: 'QUILLON',
+        failureKind: 'unmappable',
+        failureOutcome: 'error',
+        failureHttpStatus: undefined,
+        failureReasonCode: 'alert',
+        failureText: 'This message is ORU, not ADT: a person decides',
+        ...more,
+      } as CaseDetail,
+    };
+  };
+
+  it('names a result as a result, going to no ward', () => {
+    const { c } = result();
+    expect(headerSentence(c)).toBe('The QUILLON result was not delivered: alert.');
+    expect(failedSummary(c)).toBe('QUILLON result was not delivered: alert.');
+    expect(failedTitle(c)).toBe('Result was not delivered');
+  });
+
+  it('says what the outage resend did: who approved it, what the engine sent, and how it ended', () => {
+    const words = 'Resent by Shutter at 19:18 under approval R8-3 by appr1; new header 481 Completed.';
+    const f = result({
+      state: 'resolved',
+      disposition: 'escalate',
+      resends: [{ runId: 'R8-3', position: 3, state: 'completed', closure: 'sent', words, headerId: '444' }],
+    });
+    expect(actionHeadline(f)).toBe('Resent it through the engine with the outage, under approval R8-3');
+    expect(writtenSummary(f)).toBe(
+      'Resent by Shutter at 19:18 under approval R8-3 by appr1; new header 481 Completed; the engine sent the stored message unchanged.',
+    );
+    expect(releaseStatus(f)?.label).toBe('Approved on the outage (R8-3)');
+    // A hand closure is no resend
+    const byHand = result({
+      state: 'resolved',
+      resends: [{ runId: 'H8', position: 0, state: 'handled_by_hand', closure: 'handled_by_hand' }],
+    });
+    expect(writtenSummary(byHand)).not.toMatch(/Resent/);
   });
 });

@@ -1398,8 +1398,9 @@ describe('CasePage', () => {
     expect(within(region).getByTestId('case-receiver-gist')).toHaveTextContent(
       'The history must be complete.',
     );
-    // The escalation goes to the team that owns this receiver, not a generic downstream system
-    expect((await screen.findAllByText(/the Records Out team/)).length).toBeGreaterThan(0);
+    // The escalation button names the team the draft is made for: no team lists Records Out, so the site's first, as
+    // the server picks it (the dialog then says that team does not list the receiver)
+    expect(await screen.findByRole('button', { name: 'Escalate to Integration team…' })).toBeInTheDocument();
     // The steps wait behind the card's details, so the three cards keep one size
     expect(within(region).queryByTestId('correction-steps')).not.toBeInTheDocument();
     await userEvent.click(await within(region).findByRole('button', { name: 'Why, and what to do' }));

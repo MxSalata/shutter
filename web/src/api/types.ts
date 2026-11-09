@@ -330,6 +330,24 @@ export interface CaseDetail extends CaseSummary {
   incident?: CaseIncident;
   /** A document case's block (CONTRACTS 11.2), by the reader's right. */
   document?: CaseDocument;
+  /** Shutter's resends of the case's message through an outage (v1.53, CONTRACTS 17.8): the ledger's rows on its header. */
+  resends?: CaseResend[];
+}
+
+/** One row of the resend ledger on a case's origin header, as `GET /cases/{id}` gives it (CONTRACTS 17.8). */
+export interface CaseResend {
+  runId: string;
+  position: number;
+  headerId?: string | null;
+  controlId?: string | null;
+  newHeaderId?: string | null;
+  state: string;
+  /** sent, already_delivered, handled_by_hand, failed or unknown; null while approved, sending or stopped. */
+  closure?: string | null;
+  words?: string | null;
+  by?: string | null;
+  at?: string | null;
+  caseId?: string | null;
 }
 
 /** What a document or report case shows: metadata only, and nothing of its content. */
