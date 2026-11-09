@@ -82,6 +82,23 @@ Method TestClassifyNeverGuessesNotDelivered()
     }
 }
 
+/// A queue alert on a message the engine still holds is no failure, so no case; on one that has ended in error it goes on, and
+/// no other alert is judged by the header's status (the engine can raise it before it marks the header).
+Method TestQueueAlertOnAMessageStillTried()
+{
+    Set ap = "Shutter.Intake.AlertProcess"
+    Set wait = "QueueWaitAlert: Message Header Id '654' queued for config item 'Lab Out' has been waiting for 31 seconds"
+    Set count = "QueueCountAlert: Queue for config item 'Lab Out' has 4 messages"
+    For status = 1, 2, 3 {
+        Do $$$AssertTrue($CLASSMETHOD(ap, "EngineHolds", wait, status), "a queue-wait alert, header status " _ status _ ": the engine holds it")
+        Do $$$AssertTrue($CLASSMETHOD(ap, "EngineHolds", count, status), "a queue-count alert, header status " _ status)
+    }
+    For status = 5, 8, 9 { Do $$$AssertNotTrue($CLASSMETHOD(ap, "EngineHolds", wait, status), "a queue-wait alert on a header that ended (" _ status _ ") goes on") }
+    Do $$$AssertNotTrue($CLASSMETHOD(ap, "EngineHolds", "ERROR <Ens>ErrOutConnectExpired: TCP Connect timeout period (5) expired for 127.0.0.1:7431", 3), "an error alert is never judged by the status")
+    Do $$$AssertNotTrue($CLASSMETHOD(ap, "EngineHolds", "Something about QueueWaitAlert: later", 2), "the setting's name must lead the words")
+    Do $$$AssertNotTrue($CLASSMETHOD(ap, "EngineHolds", wait, ""), "no status read: not held")
+}
+
 /// A forward on words Classify does not know says so in its reason code, which the matcher reads as no answer at all.
 Method TestForwardOnWordsItDoesNotKnow()
 {
