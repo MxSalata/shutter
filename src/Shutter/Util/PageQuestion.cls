@@ -5,7 +5,9 @@
 /// ">" and "&" in it is written as a JSON escape (AsData), so no text in it can close the tag or read as markup. Who may ask is the
 /// case questions' rule for a live answer: Shutter_LiveAgents, the day's budget and the caller's share, and the provider's
 /// answer to the key. The run is the Explain agent in the tier "page": its knowledge search (the explain collection) and
-/// SubmitAnswer, with no evidence tool and no tool that writes, a small token budget and few turns. Nothing is recorded.
+/// SubmitAnswer, with no evidence tool and no tool that writes, a small token budget and few turns. Nothing is recorded and
+/// nothing is replayed: the run follows the Agent Board item's own Mode, live when it is live or record, refused when it
+/// replays (RunMode, Refuses), and no recording of a page question is stored or served.
 Class Shutter.Util.PageQuestion
 {
 
@@ -137,6 +139,58 @@ ClassMethod Admit(liveAllowed As %Boolean, avail As %DynamicObject, mode As %Str
     Quit 1
 }
 
+/// The Agent Board item's own Mode, resolved as its runs resolve it (Shutter.Bridge.Operation.Agent ResolveMode): the item
+/// <var>item</var> of the production, its Mode setting, auto when it has none. With no production the instance's auto.
+ClassMethod ItemMode(item As %String = "Agent Board") As %String
+{
+    Set setting = "auto"
+    Try {
+        Set prod = ##class(Ens.Config.Production).%OpenId(##class(Shutter.Setup).ProductionName())
+        If $ISOBJECT(prod) {
+            For i = 1:1:prod.Items.Count() {
+                Set it = prod.Items.GetAt(i)
+                Continue:it.Name'=item
+                For j = 1:1:it.Settings.Count() {
+                    Set st = it.Settings.GetAt(j)
+                    If (st.Name = "Mode") && (st.Value '= "") Set setting = st.Value
+                }
+                Quit
+            }
+        }
+    } Catch {
+        Set setting = "auto"
+    }
+    Quit ##class(Shutter.Bridge.Operation.Agent).ResolveMode(setting)
+}
+
+/// The mode a page question runs in, from the item's own mode as resolved: live when the item runs live or records (a page
+/// question is never a recording), else "" with the words the person reads: a page question is never replayed.
+ClassMethod RunMode(itemMode As %String, Output detail As %String) As %String
+{
+    Set detail = ""
+    Set m = $ZCONVERT(itemMode, "L")
+    If (m = "live") || (m = "record") Quit "live"
+    Set detail = "No model answers here: the Agent Board item replays recordings, and a question about a page is answered live only, never from a recording"
+    Quit ""
+}
+
+/// Whether a run is a page question's: its agent class is the tier's.
+ClassMethod IsPageRun(agentClass As %String) As %Boolean
+{
+    Quit $GET(agentClass) = ..#AGENTCLASS
+}
+
+/// Whether the agent item refuses a run before any runner sees it: a page question's run in any mode but live, with the
+/// words of RunMode. Nothing of it is replayed or recorded.
+ClassMethod Refuses(spec As Shutter.Bridge.RunSpec, Output detail As %String) As %Boolean
+{
+    Set detail = ""
+    If '$ISOBJECT(spec) || '..IsPageRun(spec.AgentClass) Quit 0
+    If spec.Mode = "live" Quit 0
+    Do ..RunMode(spec.Mode, .detail)
+    Quit 1
+}
+
 /// The ids an answer may cite: "page" and each "id" in the summary's lists (a case, a scenario, an incident), comma separated.
 ClassMethod CiteIds(context As %DynamicObject) As %String
 {
@@ -171,8 +225,8 @@ ClassMethod Context(questionId As %String, page As %String, question As %String,
 }
 
 /// The agent's request for a page question: the Explain agent in the tier page, SubmitAnswer, the tier's budget and turns,
-/// who asked (for the budget's share), no record key, and a mode of live when the instance would record: a page question
-/// is never recorded.
+/// who asked (for the budget's share), no record key, and a mode of live when the item would record: a page question is
+/// never recorded. The agent item decides again from its own Mode (RunMode), so a run is never recorded or replayed.
 ClassMethod Request(questionId As %String, page As %String, question As %String, onScreen As %DynamicObject, askedBy As %String, resolvedMode As %String = "") As Shutter.Bridge.Msg.AgentRequest
 {
     Set req = ##class(Shutter.Bridge.Msg.AgentRequest).%New()

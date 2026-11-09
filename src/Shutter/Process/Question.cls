@@ -149,7 +149,7 @@ Method OnPageRequest(request As Shutter.Msg.PageQuestionRequest, Output response
     $$$TRACE("Question " _ q.QuestionId _ " about the " _ q.Page _ " page asked by " _ request.AskedBy)
     Set rsc = ..Reply(started)
     If $$$ISERR(rsc) $$$TRACE("The early reply was not sent: " _ $SYSTEM.Status.GetErrorText(rsc))
-    Set mode = ##class(Shutter.Bridge.Operation.Agent).ResolveMode("auto")
+    Set mode = ##class(Shutter.Util.PageQuestion).ItemMode(..AgentTarget)
     Set req = ##class(Shutter.Util.PageQuestion).Request(q.QuestionId, q.Page, q.Question, q.Context(), q.AskedBy, mode)
     Do q.Answering()
     Set ..ExplainPending = 1

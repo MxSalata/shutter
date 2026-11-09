@@ -8,9 +8,17 @@ Class Shutter.Bridge.Runner.Replay Extends Shutter.Bridge.Runner
 
 Method Run(spec As Shutter.Bridge.RunSpec, ByRef response As Shutter.Bridge.Msg.AgentResponse) As %Status
 {
+    Set response.StartedAt = ##class(Shutter.Util.Time).NowUTC()
+    If ##class(Shutter.Util.PageQuestion).IsPageRun(spec.AgentClass) {
+        // A question about a page is never answered from a recording, whatever is stored under its key.
+        Do ..Stamp(spec, response)
+        Set response.Mode = "replay", response.Status = "no_model", response.DurationMs = 0
+        Do ##class(Shutter.Util.PageQuestion).RunMode("replay", .detail)
+        Set response.Error = detail
+        Quit $$$OK
+    }
     Set key = spec.ReplayKey()
     Set record = ##class(Shutter.Bridge.Record).Find(key)
-    Set response.StartedAt = ##class(Shutter.Util.Time).NowUTC()
     If '$ISOBJECT(record) {
         Do ..Stamp(spec, response)
         Set response.Mode = "replay"

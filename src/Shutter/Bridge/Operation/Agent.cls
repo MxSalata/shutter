@@ -98,7 +98,11 @@ Method OnAgentRequest(request As Shutter.Bridge.Msg.AgentRequest, Output respons
     // The provider refusing the key (Shutter.Util.LiveAgents, v1.37): while a live run failed with an authentication error
     // in the last fifteen minutes, a run that would call a model is refused here with no call, as the budget refuses one.
     // A run that would call a model with such a setting is refused before anything is looked up with it.
-    If (spec.Mode '= "replay") && (keyed '= "") {
+    If ##class(Shutter.Util.PageQuestion).Refuses(spec, .pageWhy) {
+        // A page question is answered live or not at all: never from a recording, never into one.
+        Set response.Status = "no_model"
+        Set response.Error = pageWhy
+    } ElseIf (spec.Mode '= "replay") && (keyed '= "") {
         Set response.Status = "error"
         Set response.Error = ##class(Shutter.Util.Secret).Refusal(keyed)
     } ElseIf (spec.Mode '= "replay") && ##class(Shutter.Util.LiveAgents).ProviderDown(.downUntil, .downText) {

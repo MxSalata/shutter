@@ -2004,7 +2004,7 @@ ClassMethod PageQuestionAsk() As %Status
     // Who may spend the model budget, as a live case question: the live agents' resource, the day's budget and the caller's
     // share, the provider's answer to the key, and a model to answer at all. A page has no recorded answers.
     Set avail = ##class(Shutter.Util.LiveAgents).Availability(..User())
-    Set mode = ##class(Shutter.Bridge.Operation.Agent).ResolveMode("auto")
+    Set mode = $CLASSMETHOD(pq, "ItemMode")
     If '$CLASSMETHOD(pq, "Admit", $SYSTEM.Security.Check("Shutter_LiveAgents", "USE"), avail, mode, .status, .code, .detail) {
         Set extra = ""
         If code = "live_unavailable" Set extra = {} Set extra.live = avail
