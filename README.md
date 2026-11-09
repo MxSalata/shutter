@@ -16,7 +16,7 @@
 <p align="center">
   <a href="https://mxsalata.github.io/shutter/"><b>Trial</b></a> ·
   <a href="https://shutter.mxsalata.com">Online demo</a> ·
-  <a href="https://github.com/MxSalata/shutter#try-it">Try it</a> ·
+  <a href="https://github.com/MxSalata/shutter#try-it">Install</a> ·
   <a href="https://github.com/MxSalata/shutter#how-it-works">How it works</a> ·
   <a href="https://github.com/MxSalata/shutter#where-the-agents-sit">The agents</a> ·
   <a href="https://github.com/MxSalata/shutter#ai-hub-inside-shutter">AI Hub</a> ·
