@@ -7,6 +7,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { keys } from '@/api/hooks';
 import type { DetailLevel } from '@/env/mode';
+import { instanceLine } from '@/lib/instance';
 import { PROOF, proofFrom } from '@/lib/proof';
 import { server } from '@/mocks/node';
 import { resetMock } from '@/mocks/handlers';
@@ -25,9 +26,9 @@ const HEADLINE =
   'Shutter fixes a failed HL7 transfer only when its checks pass. Otherwise it stops and names the patient.';
 const PURPOSE = 'When a patient movement fails to reach another system, Shutter finds out why.';
 
-function renderLogin(demo: boolean, detail: DetailLevel = 'plain') {
+function renderLogin(demo: boolean, detail: DetailLevel = 'plain', health: Record<string, unknown> = {}) {
   useAppearance.setState({ detail });
-  server.use(http.get('/api/shutter/health', () => HttpResponse.json({ ok: true, demo })));
+  server.use(http.get('/api/shutter/health', () => HttpResponse.json({ ok: true, demo, ...health })));
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const router = createMemoryRouter(
     [
@@ -339,6 +340,98 @@ describe('LoginPage, the proof on a demo install', () => {
   });
 });
 
+/** The public demo's health answer, as a server that says its live hospital's switch and cadence there would send it. */
+const LIVE_HOSPITAL = { live: { enabled: true, every_minutes: 7 } };
+const PUBLIC_DEMO_LINE = `Live on a real IRIS for Health instance with AI Hub (build ${PROOF.recordedOn?.build}): an Interoperability production with made-up patients, a new failure every 7 minutes, reset on the hour.`;
+
+describe('LoginPage, the line on what stands behind it', () => {
+  beforeEach(() => resetMock(null));
+
+  it("says it under the heading on the public demo, in Mikolaj's words, with the build from the evaluation", async () => {
+    renderLogin(true, 'plain', LIVE_HOSPITAL);
+    const line = await screen.findByTestId('sign-in-instance');
+    expect(PROOF.recordedOn?.build).toBe('2026.3.0AI.154.0');
+    expect(line).toHaveTextContent(PUBLIC_DEMO_LINE);
+    // Right under the h1, before the form's first field, and on both viewports (no data-viewport on it or its parents)
+    const h1 = screen.getByRole('heading', { level: 1, name: 'Sign in' });
+    expect(h1.nextElementSibling).toBe(line);
+    expect(line.closest('[data-viewport]')).toBeNull();
+    // Plain words: no disclosure holds it, and no code chip
+    expect(line.closest('details, [data-tech-detail]')).toBeNull();
+    expect(line.querySelector('code')).toBeNull();
+  });
+
+  it("says it the same in Technical, and the build only where the instance's live hospital is on", async () => {
+    renderLogin(true, 'technical', LIVE_HOSPITAL);
+    expect(await screen.findByTestId('sign-in-instance')).toHaveTextContent(PUBLIC_DEMO_LINE);
+  });
+
+  it("follows the player's own cadence, as the banner does", async () => {
+    renderLogin(true, 'plain', { live: { enabled: true, every_minutes: 1 } });
+    expect(await screen.findByTestId('sign-in-instance')).toHaveTextContent(
+      /made-up patients, a new failure every minute, reset on the hour\.$/,
+    );
+  });
+
+  it('says only that it is a real IRIS instance on a demo install whose health says no live hospital', async () => {
+    renderLogin(true);
+    await screen.findByText(/The demo installs two users/);
+    const line = await screen.findByTestId('sign-in-instance');
+    expect(line).toHaveTextContent(/^Live on a real IRIS for Health instance\.$/);
+    expect(line).not.toHaveTextContent(/made-up|reset|every|build|AI Hub/);
+  });
+
+  it('says only that on a demo install whose live hospital is off', async () => {
+    renderLogin(true, 'plain', { live: { enabled: false, every_minutes: 7 } });
+    await screen.findByText(/The demo installs two users/);
+    expect(await screen.findByTestId('sign-in-instance')).toHaveTextContent(
+      /^Live on a real IRIS for Health instance\.$/,
+    );
+  });
+
+  it("says nothing of the kind on a hospital's own install, even if its health named a live hospital", async () => {
+    const { client, container } = renderLogin(false, 'plain', LIVE_HOSPITAL);
+    await screen.findByRole('button', { name: 'Sign in' });
+    await waitFor(() => expect(client.getQueryState(keys.health)?.status).toBe('success'));
+    expect(screen.queryByTestId('sign-in-instance')).not.toBeInTheDocument();
+    expect(container).not.toHaveTextContent(/production with made-up patients|reset on the hour|real IRIS/);
+  });
+
+  it('says nothing before the health answer comes, nor when it fails', async () => {
+    useAppearance.setState({ detail: 'plain' });
+    server.use(
+      http.get('/api/shutter/health', () => HttpResponse.json({ error: 'internal' }, { status: 500 })),
+    );
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const router = createMemoryRouter([{ path: '/login', element: <LoginPage /> }], {
+      initialEntries: ['/login'],
+    });
+    render(
+      <MantineProvider theme={theme}>
+        <QueryClientProvider client={client}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>
+      </MantineProvider>,
+    );
+    expect(screen.queryByTestId('sign-in-instance')).not.toBeInTheDocument();
+    await waitFor(() => expect(client.getQueryState(keys.health)?.status).toBe('error'));
+    expect(screen.queryByTestId('sign-in-instance')).not.toBeInTheDocument();
+  });
+
+  it('leaves the build out when the evaluation names no image, and says no more than the signals give', () => {
+    expect(instanceLine({ demo: true, ...LIVE_HOSPITAL }, null)).toBe(
+      'Live on a real IRIS for Health instance with AI Hub: an Interoperability production with made-up patients, a new failure every 7 minutes, reset on the hour.',
+    );
+    expect(instanceLine({ demo: true, live: { enabled: true } }, PROOF.recordedOn)).toMatch(
+      /made-up patients, a new failure every few minutes, reset on the hour\.$/,
+    );
+    expect(instanceLine({ demo: true }, PROOF.recordedOn)).toBe('Live on a real IRIS for Health instance.');
+    expect(instanceLine({ demo: false, ...LIVE_HOSPITAL }, PROOF.recordedOn)).toBeNull();
+    expect(instanceLine({ ...LIVE_HOSPITAL }, PROOF.recordedOn)).toBeNull();
+    expect(instanceLine(undefined, PROOF.recordedOn)).toBeNull();
+  });
+});
+
 describe('LoginPage, the way into the trial', () => {
   beforeEach(() => resetMock(null));
 
@@ -387,14 +480,35 @@ describe('LoginPage, how much it says', () => {
   const PLAIN_BUDGET = 170;
   const TECHNICAL_BUDGET = Math.round(PLAIN_BUDGET * 1.5);
 
+  // The line on the instance under the heading (Mikolaj's words, 9 Nov 2026) has a limit of its own, one sentence of at
+  // most 32 words, and the rest of the page keeps the budget it had before it
+  const INSTANCE_LINE_LIMIT = 32;
+
   it('stays within its budget in Plain, on a laptop and on a phone', async () => {
     const { container } = await renderDemoLogin('plain');
+    const line = wordCount((await screen.findByTestId('sign-in-instance')).textContent);
+    expect(line).toBeLessThanOrEqual(INSTANCE_LINE_LIMIT);
     const laptop = wordsOn(container, 'laptop').length;
     const phone = wordsOn(container, 'phone').length;
-    console.log(`sign-in words, Plain: laptop ${laptop}, phone ${phone}`);
-    expect(laptop).toBeLessThanOrEqual(PLAIN_BUDGET);
-    expect(phone).toBeLessThanOrEqual(PLAIN_BUDGET);
+    console.log(`sign-in words, Plain: laptop ${laptop}, phone ${phone}, of them the line ${line}`);
+    expect(laptop - line).toBeLessThanOrEqual(PLAIN_BUDGET);
+    expect(phone - line).toBeLessThanOrEqual(PLAIN_BUDGET);
     expect(phone).toBeLessThan(laptop);
+  });
+
+  it('stays within it on the public demo too, where the line on the instance is at its longest', async () => {
+    const { container } = renderLogin(true, 'plain', LIVE_HOSPITAL);
+    await screen.findByText(/The demo installs two users/);
+    const line = wordCount((await screen.findByTestId('sign-in-instance')).textContent);
+    expect(line).toBeGreaterThan(20);
+    expect(line).toBeLessThanOrEqual(INSTANCE_LINE_LIMIT);
+    const laptop = wordsOn(container, 'laptop').length;
+    const phone = wordsOn(container, 'phone').length;
+    console.log(
+      `sign-in words, Plain, public demo: laptop ${laptop}, phone ${phone}, of them the line ${line}`,
+    );
+    expect(laptop - line).toBeLessThanOrEqual(PLAIN_BUDGET);
+    expect(phone - line).toBeLessThanOrEqual(PLAIN_BUDGET);
   });
 
   it('stays within 1.5 times that in Technical', async () => {

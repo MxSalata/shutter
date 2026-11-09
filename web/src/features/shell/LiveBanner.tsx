@@ -6,9 +6,9 @@ import { useCan, useCasesOnce, useIncidents, useLiveStatus, useSettings } from '
 import type { IncidentState, IncidentSummary, LiveStatus } from '@/api/types';
 import { TRIAL, trialHref } from '@/env/mode';
 import type { StormRefusal } from '@/features/storm/view';
-import { budgetNoteLine, resetsHourly } from '@/lib/budget';
+import { bannerBudgetNote, resetsHourly } from '@/lib/budget';
 import { formatAge, formatTime, parseTime, zoneLabel } from '@/lib/format';
-import { HOSPITAL_NAME, TRIAL_BOARD_CASE } from '@/lib/hospital';
+import { failureCadence, HOSPITAL_NAME, TRIAL_BOARD_CASE } from '@/lib/hospital';
 import { liveUnavailable } from '@/lib/liveAgents';
 import { isStormShown, STORM_IN_TRIAL } from '@/lib/storm';
 import { useNow } from '@/lib/useNow';
@@ -29,12 +29,6 @@ const StormStrip = lazy(() => import('@/features/storm/StormStrip').then((m) => 
 const LiveUnavailableNotice = lazy(() =>
   import('@/components/LiveUnavailableNotice').then((m) => ({ default: m.LiveUnavailableNotice })),
 );
-
-/** "a new failure every 7 minutes", "every minute", or the unnumbered form when the server gave no interval. */
-function cadence(every: number | undefined): string {
-  if (!every || every < 1) return 'a new failure every few minutes';
-  return every === 1 ? 'a new failure every minute' : `a new failure every ${every} minutes`;
-}
 
 /** The story due next and its clock ("S8", "14:12 BST"), or null when none is due or its time has passed (the player is behind or stopped). */
 function nextDue(live: LiveStatus, now: number): { scenario: string; clock: string; at: number } | null {
@@ -121,9 +115,11 @@ function usePulse(at: string | undefined): number {
  * in its own place (so it is neither drawn nor announced twice). A refusal stands under the bar as a calm notice. A
  * trial page has no demo hospital to break: its banner says where the storm plays instead.
  *
- * The live budget: a short note, figure first, says what the author pays for the live agents (`budgetNoteLine`), and
- * while the live agents cannot run (the budget used up, the provider refusing the key) the notice under the notes says
- * so plainly, until when, and where to install Shutter with one's own key. Neither is in the trial.
+ * The live budget: a short note, figure first, says what the author pays for the live agents (`budgetNoteLine`), to an
+ * account that runs them (the judges') only: an account without them (the public demo's) reads the line about the
+ * hospital's policy and the board in its place (`bannerBudgetNote`). While the live agents cannot run (the budget used
+ * up, the provider refusing the key) the notice under the notes says so plainly, until when, and where to install
+ * Shutter with one's own key, to everyone. Neither is in the trial.
  *
  * The hourly reset: the public demo goes back to its frozen image on the hour, so a note says so. A trial page never
  * resets (its recording answers `live.enabled` too), so it never shows it.
@@ -163,7 +159,8 @@ export function LiveBanner() {
         </Button>
       </div>
     );
-  const note = TRIAL ? null : budgetNoteLine(settings);
+  // Only the judges' account runs the live agents, so only it reads what they cost the author
+  const note = TRIAL ? null : bannerBudgetNote(settings, can);
   const unavailable = TRIAL ? null : liveUnavailable(settings);
   const feed = TRIAL ? 'replayed' : 'live';
   const name = `${HOSPITAL_NAME}, ${feed}`;
@@ -247,7 +244,7 @@ export function LiveBanner() {
             <span className="live-ident">
               <span className="live-name">{HOSPITAL_NAME}</span>
               {said(`, ${feed}: `)}
-              <span className="live-cadence">{cadence(live.every_minutes)}</span>
+              <span className="live-cadence">{failureCadence(live.every_minutes)}</span>
               {said('.')}
             </span>
             {last || next ? (

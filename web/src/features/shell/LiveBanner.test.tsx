@@ -441,6 +441,49 @@ describe('the live budget on the banner', () => {
     expect(await notice()).toHaveTextContent('The live AI service for this demo is unavailable for now.');
   });
 
+  it("says it to the judges' account, which runs the live agents, with no board line in its place", async () => {
+    resetMock('judge');
+    liveWith({ budgetNote: { amountUsd: 15, period: 'day' } }, { dailyUsd: 2, spentTodayUsd: 0.4 });
+    renderFrame();
+    expect(await budgetLine()).toHaveTextContent(
+      /^\$15 a day from the author runs the judges' live agents\.$/,
+    );
+    expect(within(await banner()).getByTestId('live-reset-line')).toBeInTheDocument();
+    expect(within(await banner()).queryByTestId('live-board-link')).not.toBeInTheDocument();
+    expect(await axeViolations(await banner())).toEqual([]);
+  });
+
+  it('keeps it from the public demo account, which cannot run them: the board line stands there instead', async () => {
+    resetMock('demo');
+    server.use(
+      http.get('*/cases', () =>
+        HttpResponse.json({ items: [{ caseId: 'C-000002', scenario: 'S8', mode: 'policy' }], total: 1 }),
+      ),
+    );
+    // Both figures sent, the demo build's own and the instance's cap: neither is said to this account
+    liveWith({ budgetNote: { amountUsd: 15, period: 'day' } }, { dailyUsd: 2, spentTodayUsd: 0.4 });
+    renderFrame();
+    const b = await banner();
+    expect(await within(b).findByTestId('live-board-link')).toHaveTextContent(
+      "Most of this hospital's failures are settled by its written policy, with no agent. One went to the live board: C-000002",
+    );
+    expect(within(b).getByTestId('live-reset-line')).toBeInTheDocument();
+    expect(within(b).queryByTestId('live-budget-line')).not.toBeInTheDocument();
+    expect(b).not.toHaveTextContent(/from the author|judges' live agents/);
+    expect(await axeViolations(b)).toEqual([]);
+  });
+
+  it('still gives the public demo account the notice at the cap, without the line about the budget', async () => {
+    resetMock('demo');
+    const resets = inMinutes(40);
+    liveWith({}, { dailyUsd: 2, spentTodayUsd: 2.05, exhausted: true, resetsAt: resets });
+    renderFrame();
+    expect(await notice()).toHaveTextContent(
+      `The live AI budget for this demo is used up until ${clock(resets)}, when the demo resets.`,
+    );
+    expect(within(await banner()).queryByTestId('live-budget-line')).not.toBeInTheDocument();
+  });
+
   it('follows live.agents when the server sends it, and the budget when it does not', async () => {
     liveWith(
       { agents: { available: true, reason: null, until: null } },

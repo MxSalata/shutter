@@ -17,6 +17,8 @@ import { useHealth, useMe, useSignIn } from '@/api/hooks';
 import { BrandMark } from '@/components/BrandMark';
 import { TechDetail } from '@/components/TechDetail';
 import { describeError, isApiError } from '@/lib/errors';
+import { instanceLine } from '@/lib/instance';
+import { PROOF } from '@/lib/proof';
 import { APP_NAME } from '@/theme';
 import { ProofPanel } from './ProofPanel';
 import { TrialCard } from './TrialCard';
@@ -25,6 +27,10 @@ import { TrialCard } from './TrialCard';
  * The live sign-in page, in two halves: what Shutter is for and the proof for it (`ProofPanel`), and the password form
  * with the way into the trial under it (`TrialCard`). Trial pages never show it: the trial opens signed in, and its own
  * sign-in page (src/trial/TrialSignIn.tsx) offers roles with no password. So nothing here names a trial user.
+ *
+ * Under the heading, a demo install says it is a real IRIS for Health instance, and the public demo (its live hospital
+ * on, as its health answer says) adds its build, its production of made-up patients, the player's cadence and the hourly
+ * reset (`instanceLine`). It is plain words, on a laptop and on a phone alike.
  */
 export default function LoginPage() {
   const me = useMe();
@@ -45,6 +51,8 @@ export default function LoginPage() {
   // A demo install (the server's flag) or the contest's own instance: the proof describes its recordings. A hospital's
   // own install shows the headline and the purpose alone.
   const demo = health.data?.demo === true;
+  // What stands behind the page, said only as far as the instance's own health answer says it (lib/instance.ts)
+  const instance = instanceLine(health.data, PROOF.recordedOn);
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -84,7 +92,14 @@ export default function LoginPage() {
                       {APP_NAME}
                     </Text>
                   </Group>
-                  <Title order={1}>Sign in</Title>
+                  <Stack gap={4}>
+                    <Title order={1}>Sign in</Title>
+                    {instance ? (
+                      <Text size="sm" c="dimmed" m={0} data-testid="sign-in-instance">
+                        {instance}
+                      </Text>
+                    ) : null}
+                  </Stack>
                   {message ? (
                     <Alert color="red" variant="light" role="alert">
                       {message}

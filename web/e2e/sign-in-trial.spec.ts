@@ -13,21 +13,24 @@ import { signIn as signInArea } from './areas';
 const LAPTOP = { width: 1280, height: 800 };
 const PHONE = { width: 390, height: 844 };
 
-/** The stand-in for a demo install: nobody signed in, and a health report that says it is a demo. */
-async function stubDemoInstance(page: Page) {
+/**
+ * The stand-in for a demo install: nobody signed in, and a health report that says it is a demo, with what else a test
+ * gives it (the public demo's live hospital).
+ */
+async function stubDemoInstance(page: Page, health: Record<string, unknown> = {}) {
   await page.route('**/api/shutter/**', (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith('/me'))
       return route.fulfill({ status: 401, json: { error: 'unauthorized', detail: 'Not signed in' } });
     if (path.endsWith('/health'))
-      return route.fulfill({ json: { ok: true, demo: true, version: 'stub', checks: [] } });
+      return route.fulfill({ json: { ok: true, demo: true, version: 'stub', checks: [], ...health } });
     return route.fulfill({ status: 404, json: { error: 'not_found', detail: 'Not on the stub' } });
   });
 }
 
 /** The sign-in page, once the health report has said it is a demo (the demo users' disclosure is the sign). */
-async function openLive(page: Page) {
-  await stubDemoInstance(page);
+async function openLive(page: Page, health: Record<string, unknown> = {}) {
+  await stubDemoInstance(page, health);
   await page.goto('./#/login');
   await expect(page.getByRole('button', { name: /^Sign in$/ })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Demo users' })).toBeVisible();
@@ -122,3 +125,81 @@ for (const { colorScheme, contrast, palette } of MODES) {
     });
   });
 }
+
+/** The public demo's health answer, where its live hospital's switch and cadence are said, as the banner reads them. */
+const PUBLIC_DEMO = { live: { enabled: true, every_minutes: 7 } };
+const PUBLIC_DEMO_LINE =
+  'Live on a real IRIS for Health instance with AI Hub (build 2026.3.0AI.154.0): an Interoperability production with made-up patients, a new failure every 7 minutes, reset on the hour.';
+
+/** Saves a picture for the record when E2E_SHOTS names a folder. */
+async function shot(page: Page, name: string) {
+  if (!process.env.E2E_SHOTS) return;
+  await page.screenshot({ path: `${process.env.E2E_SHOTS}/${name}.png`, fullPage: true });
+}
+
+test.describe('the line on what stands behind the live sign-in page', () => {
+  for (const colorScheme of ['light', 'dark'] as const)
+    for (const viewport of [LAPTOP, PHONE])
+      test(`says the public demo's instance and production under the heading, at ${viewport.width} px, ${colorScheme} ${signInArea.tag}`, async ({
+        page,
+      }) => {
+        await page.emulateMedia({ colorScheme, reducedMotion: 'reduce' });
+        await page.setViewportSize(viewport);
+        await openLive(page, PUBLIC_DEMO);
+        const line = page.getByTestId('sign-in-instance');
+        await expect(line).toBeVisible();
+        await expect(line).toHaveText(PUBLIC_DEMO_LINE);
+        // Right under the h1, and inside the viewport's width
+        const h1 = (await page.getByRole('heading', { level: 1, name: 'Sign in' }).boundingBox())!;
+        const box = (await line.boundingBox())!;
+        expect(box.y).toBeGreaterThanOrEqual(h1.y + h1.height);
+        expect(box.y - (h1.y + h1.height)).toBeLessThan(16);
+        expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+          viewport.width,
+        );
+        expect(await audit(page)).toEqual([]);
+        await shot(page, `sign-in-${viewport.width}-${colorScheme}`);
+      });
+
+  test(`keeps the form in reach on a phone with the line in place ${signInArea.tag}`, async ({ page }) => {
+    await page.setViewportSize(PHONE);
+    await openLive(page, PUBLIC_DEMO);
+    await expect(page.getByTestId('sign-in-instance')).toBeVisible();
+    // The User name field, which the page focuses, is on the first screen
+    const field = (await page.getByLabel('User name').boundingBox())!;
+    expect(field.y + field.height).toBeLessThanOrEqual(PHONE.height);
+  });
+
+  test(`says only that it is a real IRIS instance on a demo install with no live hospital ${signInArea.tag}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(LAPTOP);
+    await openLive(page);
+    await expect(page.getByTestId('sign-in-instance')).toHaveText('Live on a real IRIS for Health instance.');
+    await expect(page.locator('main')).not.toContainText(
+      /production with made-up patients|reset on the hour/,
+    );
+  });
+
+  test(`says none of it on a hospital's own install ${signInArea.tag}`, async ({ page }) => {
+    await page.setViewportSize(LAPTOP);
+    await page.route('**/api/shutter/**', (route) => {
+      const path = new URL(route.request().url()).pathname;
+      if (path.endsWith('/me'))
+        return route.fulfill({ status: 401, json: { error: 'unauthorized', detail: 'Not signed in' } });
+      if (path.endsWith('/health'))
+        return route.fulfill({
+          json: { ok: true, demo: false, version: 'stub', checks: [], ...PUBLIC_DEMO },
+        });
+      return route.fulfill({ status: 404, json: { error: 'not_found', detail: 'Not on the stub' } });
+    });
+    await page.goto('./#/login');
+    await expect(page.getByRole('button', { name: /^Sign in$/ })).toBeVisible();
+    await page.waitForLoadState('networkidle');
+    await expect(page.getByTestId('sign-in-instance')).toHaveCount(0);
+    await expect(page.locator('main')).not.toContainText(
+      /real IRIS|production with made-up patients|reset on the hour/,
+    );
+  });
+});
