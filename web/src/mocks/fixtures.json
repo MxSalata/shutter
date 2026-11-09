@@ -83416,7 +83416,7 @@
  },
  "health": {
   "namespace": "SHUTTER",
-  "version": "1.3.2",
+  "version": "1.4.0",
   "installed_at": "2026-11-02T03:03:04Z",
   "demo": true,
   "mode": "policy",

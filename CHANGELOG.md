@@ -4,6 +4,50 @@ Versions follow `major.minor.patch`: a minor release for new features, a patch r
 updates. The version in both `module.xml` files (the one the package manager publishes) is always the version of the
 GitHub tag on the same commit; `scripts/check-versions.py` checks every place the version is written.
 
+## 1.4.0 (9 November 2026)
+
+Pathology, tier C: after one approval, Shutter resends an outage's messages that never reached the receiver, one at a
+time, in order, through the engine itself. Also in this release: the order and result findings working end to end
+(1.3.0's known issue), an escalation email that reads saved when no mail server delivered it, and a compact list of the
+approval safeguards.
+
+- **One approval resends an outage's offered messages.** An approver approves the offered set on the Incidents page
+  (`POST /outages/:id/approvals`: the set's digest, the outage's version and a note); at a receiver whose handling of
+  duplicates isn't declared, they also confirm they checked the receiver for each message. **Engine Resend**, a
+  production item with one job, resends one message at a time with every rule read again first, writes the ledger
+  before each send, and stops at the first message that doesn't complete. A failed resend shows as failed on the card,
+  opens no new case and stops the rest.
+- **Closing what the receiver already has.** A refusal that says the receiver already holds the message closes it as
+  already delivered. At a receiver of unknown duplicate handling, an approver can close a message as already handled by
+  hand, with a note: nothing is sent, and who and when go on the record.
+- **The patient check, narrowed for orders and results.** A result on another order no longer holds the set. A
+  message still holds for a newer message on the same or a linked order (an amendment, a cancellation, a reflex order),
+  a newer message for the patient that can't be shown to be about other orders, any merge or identity change of the
+  patient, an unresolved case on the same order, or anything Shutter can't read. Patient movements keep the
+  patient-wide rule, and a newer message Shutter can't read now holds them too.
+- **The engine's attempt history.** Measured on build 154: a forced stop or a crash mid-read leaves no log row, and
+  the engine then puts the message back looking as if it was never sent. The set now refuses a message whose life
+  crosses a production start or a message the engine put back, so such a message is never resent
+  (`tests/e2e/attempt_history_check.py` proves the five cases).
+- **The order and result findings reach the case** (fixing 1.3.0's known issue): the snapshot store refused the
+  findings item; the receiver's own words are read from the engine's log row; the count of failures sharing a
+  character covers every field; a message's cases are found by its namespace and header.
+- **A queue alert on a message the engine still holds opens no case.**
+- **Email with no mail server reads "Saved, not delivered".** An escalation written as an `.eml` file is marked saved,
+  with a "Send it again" once a mail server is set; only a mail the mail server accepted reads Sent. Escalations stored
+  before 1.4.0 as sent through the file read as saved.
+- **The Evaluation page's approval safeguards** are a compact list: one line per check with its required outcome, and
+  the detail behind a disclosure, on a phone about half the height of the old table.
+- **The live demo.** The banner's budget line shows only to the judges' account; the sign-in page says it is live on a
+  real IRIS for Health instance with AI Hub, with the build, when the instance says its live hospital is on (the
+  anonymous health answer now carries `live` with only `enabled` and `every_minutes`); Shutter in IRIS shows the
+  current mark.
+- **F03 and F07 played live on release 1.3.2**, three runs each in Rules only, single investigator and board under
+  the same gate: both close right in all 12 agent runs, and Rules only grades as on 1.0.0
+  (`docs/readme/fair-test.md`, "Release 1.3.2: F03 and F07 live").
+- **Tested:** all 56 rows of the pathology rig on build 154; the unit suites on build 154 (1,056 passed) and 2026.2
+  (1,047 passed), none failed; the web suite (1,978 tests). CONTRACTS 1.53 describes the send.
+
 ## 1.3.2 (9 November 2026)
 
 A patch for the phone layout and two tests.
