@@ -7,7 +7,7 @@ GitHub tag on the same commit; `scripts/check-versions.py` checks every place th
 ## 1.3.0 (9 November 2026)
 
 Pathology, tier B: for an outage at a receiver of orders and results, Shutter now lists the messages that never reached
-it, for a person, and explains each failed order or result on its case page. Shutter still sends none of them. The FHIR
+it, for a person. Shutter still sends none of them. The FHIR
 R4 receiver is in development: some of its parts are in the release and tested, and no case uses them yet.
 
 - **The resend set on an outage.** When an outage closes, Shutter works out, in the production's own job, which failed
@@ -17,10 +17,12 @@ R4 receiver is in development: some of its parts are in the release and tested, 
   M never reached the receiver and are listed for a person. Shutter will not send these messages." The set is computed
   again each minute and on **Read again**, a message the engine tries again sends the outage back to open, and nothing
   changed writes no event. An outage with errors and nothing offered stays with a person.
-- **What Shutter found on an order or result case.** The case page's Evidence tab shows who holds the message (the
-  engine, still trying), the receiver's own words read field by field (MSA and each ERR), the OBX those words name,
-  matched against every OBX-3, and where a character above plain ASCII stands as stored and as sent. They are for a
-  person only: the escalation draft names the segment, field and code, never a result's value, units or comment.
+- **Known issue: what Shutter found on an order or result case.** The parts that read who holds the message, the
+  receiver's own words (MSA and each ERR), the OBX those words name and where a character above plain ASCII stands are in
+  the release and pass their unit tests, but on the pathology test rig these findings did not reach the case end to end
+  (the characters' fields, the count of shared failures and the OBX named). The fix comes in 1.3.2. The outage lists,
+  their patient checks and the outage email passed on the rig. The escalation draft never takes a result's value, units
+  or comment.
 - **The outage email.** Outage Mailer, an item a site adds and switches on per receiver, sends one email per outage
   state the receiver's entry names, at most one every 10 minutes, naming the receiver, the counts and the page, never a
   patient.
