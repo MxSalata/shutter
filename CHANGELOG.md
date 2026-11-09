@@ -4,6 +4,17 @@ Versions follow `major.minor.patch`: a minor release for new features, a patch r
 updates. The version in both `module.xml` files (the one the package manager publishes) is always the version of the
 GitHub tag on the same commit; `scripts/check-versions.py` checks every place the version is written.
 
+## 1.3.2 (9 November 2026)
+
+A patch for the phone layout and two tests.
+
+- **The live banner on a phone.** The notes under the banner's bar now use the width kept for the close button, which
+  sits only in the band's top corner, so the budget line stays on one line at 360 px.
+- **Tests.** The trial transport test knows the one route the recorded trial answers `not_in_trial` on purpose
+  (receiver outages), and the live budget test audits the Convene dialog with no motion, as the accessibility suite
+  does.
+- **README.** The "Why I built it" paragraph says production exposes conditions test environments cannot fully reproduce.
+
 ## 1.3.0 (9 November 2026)
 
 Pathology, tier B: for an outage at a receiver of orders and results, Shutter now lists the messages that never reached

@@ -316,7 +316,7 @@ For example: `docker run -d --name shutter-ipm -p 52773:52773 irishealth-communi
 
 ## About the contest
 
-Shutter is an entry to the InterSystems Programming Contest "AI Agents in Interoperability Workflows" (Open Exchange contest 49). *Why I built it:* my background is interoperability with 28 NHS hospitals in the UK, and real testing of an integration only happens in production, where a receiver behaves in a way nobody foresaw, a message arrives out of order, or someone fixes something by hand. Shutter is a safety net for those cases, made for a clinical setting, where a wrong write has a patient on the other end.
+Shutter is an entry to the InterSystems Programming Contest "AI Agents in Interoperability Workflows" (Open Exchange contest 49). *Why I built it:* my background is interoperability with 28 NHS hospitals in the UK, and production exposes conditions that test environments cannot fully reproduce: a receiver behaves in a way nobody foresaw, a message arrives out of order, or someone fixes something by hand. Shutter is a safety net for those cases, made for a clinical setting, where a wrong write has a patient on the other end.
 
 | Judged on | Where |
 | --- | --- |
