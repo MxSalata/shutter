@@ -133,6 +133,21 @@ const ME = {
 };
 
 /** The stand-in for a v1.35 server, signed in as an approver. Precedent 11 has been retired meanwhile by another. */
+const RECOVERY_AT_REST = {
+  mode: 'enabled',
+  generation: 1,
+  stopped: false,
+  stoppedAt: '',
+  stoppedBy: '',
+  stopReason: '',
+  outstanding: [],
+  outstandingCount: 0,
+  readable: true,
+  covers: 'Rehearsals, recovery writes and blind-resend previews that Shutter itself starts.',
+  doesNotCover:
+    "The hospital's ordinary feed and its retries, other systems or people writing to the receiver, Shutter's own records, and read-back of earlier attempts.",
+};
+
 async function stubServer(page: Page) {
   const list = precedents();
   const view = held();
@@ -177,6 +192,11 @@ async function stubServer(page: Page) {
         return json(route, { scenarios: fixtures.scenarios, run: null });
       case '/site-profile':
         return json(route, fixtures.siteProfile);
+      // Release 1.2.0's recovery switch, at rest, and the warehouse history a site has not turned on
+      case '/recovery-control':
+        return json(route, RECOVERY_AT_REST);
+      case `${c}/warehouse-history`:
+        return json(route, { enabled: false, read: null });
       case '/cases':
         return json(route, { items: [{ ...recorded.summary, ...view.open }], total: 1 });
       case c:

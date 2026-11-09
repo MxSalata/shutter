@@ -152,7 +152,7 @@ describe('EvaluationPage', () => {
       'https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#release-11x',
     );
     // Above the self-graded tile: the board's proposals on its own recorded scenarios
-    const own = within(headline()).getByText('recorded failures where the board chose the expected action');
+    const own = within(headline()).getByText('recorded failures, the expected action chosen');
     expect(card.compareDocumentPosition(own) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
