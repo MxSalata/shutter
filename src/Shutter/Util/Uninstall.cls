@@ -656,20 +656,24 @@ ClassMethod TakeMessages(out As %DynamicObject)
 
 /// Deletes the messages of Shutter's body classes in a namespace, with their bodies, the rest of each session staying. When
 /// wholeNamespace is 1 (Shutter's own namespace) the demo's body classes too; elsewhere a Hospital. or Downstream. body is
-/// the site's and stays (ClassPrefixes). Also every message to or from one of items, the names of Shutter's items: its
-/// feed's HL7 messages and its approval tasks have the engine's own body classes. Such a body goes with its last header, as
-/// a site's item may have sent it on too. Returns how many.
+/// the site's and stays (ClassPrefixes). Also the messages to or from one of items, the names of Shutter's items, that are
+/// Shutter's (MessageWhere): its feed's HL7 messages and its approval tasks have the engine's own body classes. Such a body
+/// goes with its last header, as a site's item may have sent it on too. Returns how many.
 ClassMethod DeleteMessages(ns As %String, wholeNamespace As %Boolean = 0, Output problem As %String, items As %List = "") As %Integer
 {
     Set problem = "", n = 0
     New $NAMESPACE
     Try {
         Set $NAMESPACE = ns
-        Set where = ..PrefixWhere("MessageBodyClassName", wholeNamespace) _ ..ItemWhere(items)
-        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID, MessageBodyClassName, MessageBodyId FROM Ens.MessageHeader WHERE " _ where)
-        While rs.%Next() {
-            Set bodyClass = rs.%GetData(2), bodyId = rs.%GetData(3)
-            Do ##class(Ens.MessageHeader).%DeleteId(rs.%GetData(1))
+        // The rows are read whole before any goes, as the session test reads the table being deleted from.
+        Kill ^||Shutter.Uninstall
+        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID, MessageBodyClassName, MessageBodyId FROM Ens.MessageHeader WHERE " _ ..MessageWhere(wholeNamespace, items))
+        While rs.%Next() { Set ^||Shutter.Uninstall(rs.%GetData(1)) = $LISTBUILD(rs.%GetData(2), rs.%GetData(3)) }
+        Set id = ""
+        For {
+            Set id = $ORDER(^||Shutter.Uninstall(id), 1, row) Quit:id=""
+            Set bodyClass = $LIST(row, 1), bodyId = $LIST(row, 2)
+            Do ##class(Ens.MessageHeader).%DeleteId(id)
             Set n = n + 1
             Continue:(bodyClass = "")||(bodyId = "")
             If '..OwnClass(bodyClass, wholeNamespace) {
@@ -681,7 +685,21 @@ ClassMethod DeleteMessages(ns As %String, wholeNamespace As %Boolean = 0, Output
     } Catch ex {
         Set problem = ex.DisplayString()
     }
+    Kill ^||Shutter.Uninstall
     Quit n
+}
+
+/// The WHERE clause on Ens.MessageHeader for the messages DeleteMessages takes: a body of Shutter's classes (ClassPrefixes),
+/// or a message to or from one of items, the names of Shutter's items. In Shutter's own namespace (wholeNamespace) its
+/// production is the one that ran there, and such a message goes by the name alone. In a site's production a name like
+/// Gate or Verifier may be an item of another production of the site's, so such a message goes only in one of Shutter's
+/// sessions: a session holding a message of Shutter's own body classes, as every run through its items does.
+ClassMethod MessageWhere(wholeNamespace As %Boolean, items As %List) As %String
+{
+    Set bodies = ..PrefixWhere("MessageBodyClassName", wholeNamespace), names = ..ItemWhere(items)
+    Quit:names="" bodies
+    Quit:wholeNamespace bodies _ names
+    Quit bodies _ " OR ((" _ $EXTRACT(names, 5, *) _ ") AND SessionId IN (SELECT SessionId FROM Ens.MessageHeader WHERE " _ ..PrefixWhere("MessageBodyClassName", 0) _ "))"
 }
 
 /// The part of a WHERE clause on Ens.MessageHeader matching a message to or from one of items, the names of Shutter's

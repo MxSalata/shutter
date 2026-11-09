@@ -159,6 +159,29 @@ Method TestItemWhere()
     Do $$$AssertEquals($CLASSMETHOD(u, "ItemWhere", $LISTBUILD("It's")), " OR SourceConfigName IN ('It''s') OR TargetConfigName IN ('It''s')", "a quote doubled")
 }
 
+/// In a site's production a message to an item named like Shutter's goes only in one of Shutter's sessions: a header of
+/// another production with the same item name stays. Rows of the test's own, in two sessions of their own.
+Method TestMessagesOfAnotherProductionStay()
+{
+    Set u = "Shutter.Util.Uninstall", base = 2000000000 + $RANDOM(100000000)
+    Set ids = ""
+    For row = $LISTBUILD(base, "Shutter.Msg.GateRequest", "Shutter API", "Gate"), $LISTBUILD(base, "EnsLib.HL7.Message", "Case Intake", "Gate"), $LISTBUILD(base + 1, "EnsLib.HL7.Message", "Site Router", "Gate") {
+        Set h = ##class(Ens.MessageHeader).%New()
+        Set h.SessionId = $LIST(row, 1), h.MessageBodyClassName = $LIST(row, 2), h.SourceConfigName = $LIST(row, 3), h.TargetConfigName = $LIST(row, 4)
+        Do $$$AssertStatusOK(h.%Save(), "a header of the test's")
+        Set ids = ids _ $LISTBUILD(h.%Id())
+    }
+    Set selected = ""
+    Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT ID FROM Ens.MessageHeader WHERE ID IN (" _ $LISTTOSTRING(ids) _ ") AND (" _ $CLASSMETHOD(u, "MessageWhere", 0, $LISTBUILD("Gate")) _ ") ORDER BY ID")
+    Do $$$AssertTrue(rs.%SQLCODE >= 0, "the clause runs: " _ rs.%SQLCODE _ " " _ rs.%Message)
+    While rs.%Next() { Set selected = selected _ $LISTBUILD(rs.%GetData(1)) }
+    Do $$$AssertEquals($LISTTOSTRING(selected), $LISTTOSTRING($LIST(ids, 1, 2)), "Shutter's session only, not another production's Gate")
+    Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT COUNT(*) FROM Ens.MessageHeader WHERE ID IN (" _ $LISTTOSTRING(ids) _ ") AND (" _ $CLASSMETHOD(u, "MessageWhere", 1, $LISTBUILD("Gate")) _ ")")
+    Do rs.%Next()
+    Do $$$AssertEquals(rs.%GetData(1), 3, "in Shutter's own namespace, by the name alone")
+    For i = 1:1:$LISTLENGTH(ids) Do ##class(Ens.MessageHeader).%DeleteId($LIST(ids, i))
+}
+
 /// A plan changes nothing and answers.
 Method TestPlanAnswersAndChangesNothing()
 {
