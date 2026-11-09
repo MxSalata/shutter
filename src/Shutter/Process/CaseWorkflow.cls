@@ -1879,12 +1879,20 @@ Parameter CANCELRETRYSECONDS = 60;
 
 /// A cancel that waits for its task's decision lock is tried again: an alarm keyed by the try and the round
 /// (cancel:retry:<try>:<round>) brings it back to OnCancelRetry. After the last try the task stays open for a person, and
-/// the case says so. An alarm that cannot be sent is noted on the case, and the task stays open.
+/// the case says so. An alarm is sent only by an instance the running production hosts: one made outside it (a unit test's)
+/// has no dispatch name, so Ens.Host would throw <UNDEFINED> and log it; it notes on the case that the task stays open and
+/// logs a warning. An alarm that cannot be sent is noted on the case, and the task stays open.
 Method CancelLater(case As Shutter.Store.Case, tries As %Integer) As %Status
 {
     If tries >= ..#CANCELTRIES {
         $$$LOGWARNING("The approval task of case " _ case.CaseId _ " is still open after " _ tries _ " tries to cancel it under its decision lock")
         Do case.Note("error", "The approval task is still open after " _ tries _ " tries to cancel it under its decision lock; a person decides it or cancels it in the Workflow inbox", "system")
+        Quit $$$OK
+    }
+    // Ens.Host reads the sender's dispatch name before it queues anything: without it there is nobody to bring the alarm back.
+    If $GET($$$DispatchNameToConfigName(..%ConfigName)) = "" {
+        $$$LOGWARNING("The cancel of the approval task of case " _ case.CaseId _ " is not tried again, as " _ ..%ConfigName _ " is not an item of the running production; the task stays open")
+        Do case.Note("note", "The cancel of the approval task is not tried again, as this workflow is not an item of the running production; the task stays open for a person to decide or cancel in the Workflow inbox", "system")
         Quit $$$OK
     }
     Try {

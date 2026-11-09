@@ -119,7 +119,9 @@ Method TestABusyCancellationTriesAgain()
 }
 
 /// An approval wait that runs out while the lock stays busy past both claims never cancels without the lock: the task is
-/// left open as it was, the case notes that the cancel waits and keeps awaiting approval, and it does not escalate.
+/// left open as it was, the case notes that the cancel waits and keeps awaiting approval, and it does not escalate. The
+/// test's workflow is not an item of the running production, so the cancel is not tried again: the case says so, and the
+/// Event Log has no error for it.
 Method TestAnApprovalWaitStillBusyWaits()
 {
     If '..Ready(.made) Quit
@@ -127,6 +129,7 @@ Method TestAnApprovalWaitStillBusyWaits()
     If '$$$AssertTrue($ISOBJECT(task), "an open task") Do ..Tidy(made) Quit
     Set id = task.%Id()
     Kill ^Shutter.Test("lock")
+    Set since = ..LastLogId()
     Lock +^Shutter.TaskDecision(id)
     Job ##class(Shutter.Test.DecisionLock).TimeoutInJob("UT-WF-L5")
     Set out = ..JobAnswer(30)
@@ -138,6 +141,9 @@ Method TestAnApprovalWaitStillBusyWaits()
     Do $$$AssertEquals(..Notes("UT-WF-L5", "%cancel waits%(busy)%"), 1, "the case notes that the cancel waits on the busy lock")
     Do $$$AssertEquals(..Notes("UT-WF-L5", "%without its decision lock%"), 0, "and nothing was cancelled without it")
     Do $$$AssertEquals(..Notes("UT-WF-L5", "%escalat%"), 0, "and the case did not escalate")
+    Do $$$AssertEquals(..Notes("UT-WF-L5", "%not tried again, as this workflow is not an item of the running production%"), 1, "the case notes that the cancel is not tried again outside the production")
+    Do $$$AssertEquals(..Notes("UT-WF-L5", "%could not be set to try again%"), 0, "and no alarm was tried")
+    Do $$$AssertEquals(..ErrorRows(since, "UT-WF-L5"), 0, "and the Event Log has no error and no runtime error for it")
     Do ##class(Shutter.Test.Workflow).DeleteTask(task)
     Do ..DeleteCase("UT-WF-L5")
     Do ..Tidy(made)
@@ -153,6 +159,7 @@ Method TestAWaitingCancelIsTriedAgainUnderTheLock()
     Set id = task.%Id()
     If '$$$AssertStatusOK(..SavedCase("UT-WF-L6"), "a case of the test's own") Do ##class(Shutter.Test.Workflow).DeleteTask(task) Do ..Tidy(made) Quit
     Kill ^Shutter.Test("lock")
+    Set since = ..LastLogId()
     Lock +^Shutter.TaskDecision(id)
     Job ##class(Shutter.Test.DecisionLock).CancelInJob("UT-WF-L6")
     Set out = ..JobAnswer(30)
@@ -171,6 +178,7 @@ Method TestAWaitingCancelIsTriedAgainUnderTheLock()
     Do $$$AssertStatusOK(task.%Reload(), "the task is read again")
     Do $$$AssertEquals($EXTRACT(task.%FormValues.GetAt("Comment"), 1, 11), "Cancelled: ", "and the cancellation ran: " _ task.%FormValues.GetAt("Comment"))
     Do $$$AssertEquals(..Notes("UT-WF-L6", "%without its decision lock%"), 0, "under the lock")
+    Do $$$AssertEquals(..ErrorRows(since, "UT-WF-L6"), 0, "and the Event Log has no error and no runtime error for it")
     Do ##class(Shutter.Test.Workflow).DeleteTask(task)
     Do ..DeleteCase("UT-WF-L6")
     Do ..Tidy(made)
@@ -224,6 +232,23 @@ Method Notes(caseId As %String, like As %String) As %Integer
 {
     Set n = 0
     &sql(SELECT COUNT(*) INTO :n FROM Shutter_Store.CaseEvent WHERE "Case"->CaseId = :caseId AND Text LIKE :like)
+    Quit +n
+}
+
+/// The Event Log's last row, so a test reads only the rows written after it.
+Method LastLogId() As %Integer
+{
+    Set id = 0
+    &sql(SELECT MAX(ID) INTO :id FROM Ens_Util.Log)
+    Quit +id
+}
+
+/// The Event Log's rows after since that are errors naming the case or the test's workflow, or errors and warnings with
+/// an ObjectScript runtime error from the alarm send, as tests/e2e/eventlog_check.py would count them.
+Method ErrorRows(since As %Integer, caseId As %String) As %Integer
+{
+    Set n = 0, wf = "%UT Case Workflow%", cs = "%" _ caseId _ "%"
+    &sql(SELECT COUNT(*) INTO :n FROM Ens_Util.Log WHERE ID > :since AND ((Type = 2 AND (Text LIKE :cs OR Text LIKE :wf)) OR (Type IN (2, 3) AND Text LIKE '%queueRequestAsync%')))
     Quit +n
 }
 
