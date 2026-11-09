@@ -50,6 +50,7 @@ export function forwardedFrom(source: {
 
 /** What each kind of observation is, as the evidence lists name them. */
 const KIND_LABELS: Record<string, string> = {
+  findings: 'What Shutter found in the order or result',
   operation: 'The failed operation',
   error: 'What the connector reported',
   message: 'The HL7 message',
