@@ -124,6 +124,44 @@ Method CloseIfStale() As %Boolean
     Quit 1
 }
 
+/// The questions asked before the cutoff (an ISO UTC time), each with its runs and their tool calls, as the retention task
+/// takes them with the cases' retention days and the uninstall takes them all: the typed text, the summary of the screen
+/// and the answer go with the row. Returns how many went; failed counts those a transaction gave back.
+ClassMethod PurgeBefore(cutoff As %String, Output failed As %Integer) As %Integer
+{
+    Set n = 0, failed = 0
+    If cutoff = "" Quit 0
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Shutter_Store.PageQuestion WHERE AskedAt IS NOT NULL AND AskedAt < ?", cutoff)
+    While rs.%Next() { If $$$ISOK(..PurgeQuestion(rs.%Get("ID"))) { Set n = n + 1 } Else { Set failed = failed + 1 } }
+    Quit n
+}
+
+/// One question, the runs that answered it (a page question's run has no case) and their tool calls, in one transaction.
+ClassMethod PurgeQuestion(id As %String) As %Status
+{
+    Set qid = ""
+    &sql(SELECT QuestionId INTO :qid FROM Shutter_Store.PageQuestion WHERE ID = :id)
+    If (SQLCODE '= 0) || (qid = "") Quit $$$ERROR($$$GeneralError, "No page question with the row " _ id)
+    Set keys = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT EnsMessageId FROM Shutter_Store.AgentRun WHERE QuestionId = ? AND ""Case"" IS NULL AND EnsMessageId IS NOT NULL", qid)
+    Set runKeys = ""
+    While keys.%Next() { Set runKeys = runKeys _ $LISTBUILD(keys.%Get("EnsMessageId")) }
+    TSTART
+    Set sc = ..Exec("DELETE FROM Shutter_Bridge.ToolCall WHERE RunKey IN (SELECT EnsMessageId FROM Shutter_Store.AgentRun WHERE QuestionId = ? AND ""Case"" IS NULL AND EnsMessageId IS NOT NULL)", qid)
+    If $$$ISOK(sc) Set sc = ..Exec("DELETE FROM Shutter_Store.AgentRun WHERE QuestionId = ? AND ""Case"" IS NULL", qid)
+    If $$$ISOK(sc) Set sc = ..%DeleteId(id)
+    If $$$ISOK(sc) { TCOMMIT } Else { TROLLBACK  Quit sc }
+    For i = 1:1:$LISTLENGTH(runKeys) { Kill ^Shutter.Counter("toolcall", $LIST(runKeys, i)) }
+    Quit sc
+}
+
+/// One SQL statement with one argument, as a status.
+ClassMethod Exec(sql As %String, arg As %String) As %Status [ Private ]
+{
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, sql, arg)
+    If rs.%SQLCODE < 0 Quit $$$ERROR($$$GeneralError, "SQLCODE " _ rs.%SQLCODE _ ": " _ rs.%Message)
+    Quit $$$OK
+}
+
 /// The question for the panel: its page, its text, its state and its answer (no summary: the asker sent it).
 Method ToObject() As %DynamicObject
 {
