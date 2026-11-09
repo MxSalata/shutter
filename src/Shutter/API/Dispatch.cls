@@ -99,6 +99,7 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
   <Route Url="/outages" Method="GET" Call="Outages"/>
   <Route Url="/outages/:id" Method="GET" Call="OutageGet"/>
   <Route Url="/outages/:id/acts" Method="POST" Call="OutageAct"/>
+  <Route Url="/outages/:id/approvals" Method="POST" Call="OutageApprove"/>
   <Route Url="/failure-census" Method="GET" Call="Shutter.API.FailureCensus:List"/>
   <Route Url="/failure-census" Method="POST" Call="Shutter.API.FailureCensus:Start"/>
   <Route Url="/failure-census/([^/.]+)\.csv" Method="GET" Call="Shutter.API.FailureCensus:Csv"/>
@@ -1781,6 +1782,35 @@ ClassMethod OutageAct(id As %String) As %Status
     Set r = ..Idempotent(bodyText, .replayed)
     If replayed Quit $$$OK
     Set status = ##class(Shutter.API.Outages).Act(row, body, ..User(), .reply)
+    Set text = reply.%ToJSON()
+    If +status < 300 Do ..Remember(bodyText, status, text)
+    Set %response.Status = status
+    Set %response.ContentType = "application/json"
+    Write text
+    Quit $$$OK
+}
+
+/// A person's one approval of an offered set: { "digest", "version", "note" }, an approver's. The sender, Engine Resend, a
+/// production job, sends the set; this records the approval and the run. Bounded and idempotent as the acts are.
+ClassMethod OutageApprove(id As %String) As %Status
+{
+    If '..Allow("Shutter_Approve", 1) Quit $$$OK
+    Set row = ..OutageOr404(id)
+    If '$ISOBJECT(row) Quit $$$OK
+    Set max = ##class(Shutter.API.Outages).#MAXBODY
+    Set bodyText = ""
+    If $ISOBJECT(%request.Content) {
+        If %request.Content.Size > max Quit ..Fail("413 Payload Too Large", "too_large", "The body is longer than " _ max _ " characters")
+        Set bodyText = %request.Content.Read(max + 1)
+    } Else {
+        Set bodyText = $GET(%request.Content)
+    }
+    If $LENGTH(bodyText) > max Quit ..Fail("413 Payload Too Large", "too_large", "The body is longer than " _ max _ " characters")
+    Set body = ##class(Shutter.Util.Json).Parse(bodyText, .psc)
+    If '$ISOBJECT(body) || 'body.%IsA("%DynamicObject") Quit ..Fail("400 Bad Request", "bad_request", "The body must be a JSON object")
+    Set r = ..Idempotent(bodyText, .replayed)
+    If replayed Quit $$$OK
+    Set status = ##class(Shutter.API.Outages).Approve(row, body, ..User(), .reply)
     Set text = reply.%ToJSON()
     If +status < 300 Do ..Remember(bodyText, status, text)
     Set %response.Status = status

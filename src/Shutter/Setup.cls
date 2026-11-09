@@ -1650,7 +1650,7 @@ ClassMethod SeedAll(root As %String) As %Status [ Private ]
 /// the board, never the feed or the demo (ADT In, ADT to Downstream, Downstream Out, ADT to Records, Records Out,
 /// Scenario Player). Case Intake and Case Intake Store are added once Shutter.Production defines them. A new recovery
 /// item is listed here too.
-Parameter INSTALLITEMS = "HL7 Index,Case Releaser,Receiver Watch,Escalation Mail,Case Workflow,Case Review,Failure Census,Case Question,Incident Workflow,Evidence Collector,Agent Conformance,Agent Encounter,Agent Impact,Agent Coordinator,Agent Board,Gate,Shutter Approvers,Shutter API,Verifier,Case Intake,Case Intake Store,Second Parser";
+Parameter INSTALLITEMS = "HL7 Index,Case Releaser,Receiver Watch,Engine Resend,Escalation Mail,Case Workflow,Case Review,Failure Census,Case Question,Incident Workflow,Evidence Collector,Agent Conformance,Agent Encounter,Agent Impact,Agent Coordinator,Agent Board,Gate,Shutter Approvers,Shutter API,Verifier,Case Intake,Case Intake Store,Second Parser";
 
 /// Adds Shutter's items (INSTALLITEMS) to the named production, each as Shutter.Production's compiled definition has
 /// it (class, pool size, enabled, foreground, comment, category, trace flag, schedule and settings), when the
