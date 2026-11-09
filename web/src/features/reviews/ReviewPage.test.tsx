@@ -295,29 +295,48 @@ describe('ReviewPage', () => {
     expect(rows().map((r) => r.dataset.finding)).toEqual(recorded['PR-000001'].findings.map((f) => f.id));
   });
 
-  it('counts the review as tiles, with no tile for a severity that has no findings', async () => {
+  it('counts the review on one line: the findings with each tier, and the window counts, every number as text', async () => {
     renderAt('/reviews/PR-000001');
     await screen.findByRole('heading', { name: 'Review PR-000001' });
     const summary = within(screen.getByRole('region', { name: 'Summary' }));
-    expect(summary.getByText('Errors logged').closest('.stat-tile')).toHaveTextContent('94');
-    expect(summary.getByText('Errors logged').closest('.stat-tile')).toHaveTextContent('in the window');
-    expect(summary.getByText('Messages in error').closest('.stat-tile')).toHaveTextContent('90');
-    expect(summary.getByText('High').closest('.stat-tile')).toHaveTextContent('1');
-    expect(summary.getByText('Medium').closest('.stat-tile')).toHaveTextContent('10');
-    expect(summary.getByText('Low').closest('.stat-tile')).toHaveTextContent('2');
-    expect(summary.getByText('Findings').closest('.stat-tile')).toHaveTextContent('13');
-    // Nothing marked: the findings tile's caption says nothing of marks
+    expect(summary.getByText('findings').closest('.review-summary-count')).toHaveTextContent('13');
+    // The tiers are a bar (a picture, hidden from a screen reader) and a legend with the count of each
+    expect(summary.getByText('1 high')).toBeInTheDocument();
+    expect(summary.getByText('10 medium')).toBeInTheDocument();
+    expect(summary.getByText('2 low')).toBeInTheDocument();
+    expect(summary.queryByText(/info/)).not.toBeInTheDocument();
+    expect(document.querySelector('.severity-bar')).toHaveAttribute('aria-hidden');
+    expect(document.querySelectorAll('.severity-bar > span')).toHaveLength(3);
+    expect(summary.getByText('In the window')).toBeInTheDocument();
+    expect(summary.getByText('errors logged').closest('li')).toHaveTextContent('94');
+    expect(summary.getByText('messages in error').closest('li')).toHaveTextContent('90');
+    // Nothing marked: the legend says nothing of marks
     expect(summary.queryByText(/marked/)).not.toBeInTheDocument();
-    // With a finding marked, and a zero in a tier: the zero is in the caption, not a tile of its own
+    // With a finding marked, and a zero in a tier: the zero stays in the legend, quietly, with no segment in the bar
     cleanup();
     const noHigh = marked();
     Object.assign(noHigh.summary.bySeverity ?? {}, { high: 0 });
     server.use(http.get(`${BASE}/production-reviews/PR-000001`, () => HttpResponse.json(noHigh)));
     renderAt('/reviews/PR-000001');
     await screen.findByRole('heading', { name: 'Review PR-000001' });
-    const tiles = within(screen.getByRole('region', { name: 'Summary' }));
-    expect(tiles.queryByText('High')).not.toBeInTheDocument();
-    expect(tiles.getByText('0 high · 1 marked')).toBeInTheDocument();
+    const legend = within(screen.getByRole('region', { name: 'Summary' }));
+    expect(legend.queryByText('High')).not.toBeInTheDocument();
+    expect(legend.getByText('0 high').closest('li')).toHaveAttribute('data-zero');
+    expect(legend.getByText('1 marked')).toBeInTheDocument();
+    expect(document.querySelectorAll('.severity-bar > span')).toHaveLength(2);
+    // A review with no findings says so once, with the count still there
+    cleanup();
+    const none = structuredClone(recorded['PR-000001']);
+    none.findings = [];
+    none.summary = { ...none.summary, findings: 0, bySeverity: { high: 0, medium: 0, low: 0, info: 0 } };
+    server.use(http.get(`${BASE}/production-reviews/PR-000001`, () => HttpResponse.json(none)));
+    renderAt('/reviews/PR-000001');
+    await screen.findByRole('heading', { name: 'Review PR-000001' });
+    const empty = within(screen.getByRole('region', { name: 'Summary' }));
+    expect(empty.getByText('findings').closest('.review-summary-count')).toHaveTextContent('0');
+    expect(empty.getByText('Nothing in any tier')).toBeInTheDocument();
+    expect(empty.queryByText(/0 high/)).not.toBeInTheDocument();
+    expect(document.querySelector('.severity-bar')).toBeNull();
   });
 
   it('lists the findings closed under their severity, each with its title, chip, summary and case count', async () => {
