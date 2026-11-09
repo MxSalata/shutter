@@ -126,7 +126,8 @@ function ExpectedCell({ p }: { p: EvaluationPass }) {
     .join(' ');
   return (
     <Stack gap={2} align="flex-start">
-      <DispositionBadge disposition={p.expected.disposition} />
+      {/* No tab stop per row, as for the members' and the plan's badges: the action's definition is the same in each */}
+      <DispositionBadge disposition={p.expected.disposition} focusable={false} />
       {/* The space keeps the cell's text "Escalate (or more evidence)", as the stacked layout reads it out */}
       {note ? (
         <>
