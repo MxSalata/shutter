@@ -310,16 +310,24 @@ ClassMethod TakesClass(className As %String, ownNamespace As %Boolean, ByRef mod
 }
 
 /// Adds to found the items in one namespace that use Shutter's classes, outside what the uninstall takes out itself. Returns
-/// "" once the namespace is read (or has no Interoperability), or why it could not be read: a namespace that cannot be
-/// entered, a query that fails or any error on the way.
-ClassMethod ForeignItems(ns As %String, here As %String, ownProduction As %String, ByRef own, ByRef found As %String) As %String [ Private ]
+/// "" once the namespace is read (or has no Interoperability), or cannot be entered by design (Unenterable, EntrySkipped):
+/// no production runs there. Otherwise why it could not be read: a namespace that is not configured or that refuses this
+/// user, a query that fails or any error on the way. query replaces the items' query, for the unit test.
+ClassMethod ForeignItems(ns As %String, here As %String, ownProduction As %String, ByRef own, ByRef found As %String, query As %String = "") As %String
 {
     New $NAMESPACE
     Set problem = "", sc = $$$OK
+    Quit:..Unenterable(ns) ""
     Try {
-        Set $NAMESPACE = ns
+        Try {
+            Set $NAMESPACE = ns
+        } Catch entry {
+            If ..EntrySkipped(..Configured(ns), entry.Name) Return ""
+            Throw entry
+        }
         Quit:'##class(%Dictionary.CompiledClass).%ExistsId("Ens.Config.Item")
-        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT Production, Name, ClassName FROM Ens_Config.Item WHERE " _ ..PrefixWhere("ClassName", (ns = here) && (ownProduction = "Shutter.Production")))
+        If query = "" Set query = "SELECT Production, Name, ClassName FROM Ens_Config.Item WHERE " _ ..PrefixWhere("ClassName", (ns = here) && (ownProduction = "Shutter.Production"))
+        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, query)
         If rs.%SQLCODE < 0 Set problem = "SQLCODE " _ rs.%SQLCODE _ ": " _ rs.%Message Quit
         While rs.%Next(.sc) {
             Set production = rs.%GetData(1), name = rs.%GetData(2)
@@ -335,6 +343,44 @@ ClassMethod ForeignItems(ns As %String, here As %String, ownProduction As %Strin
         Set problem = ex.DisplayString()
     }
     Quit problem
+}
+
+/// Whether a namespace cannot be entered by design, so that the refusal does not read it: the configuration's %ALL, which
+/// only maps into the others, and a namespace whose globals or routines database is dismounted.
+ClassMethod Unenterable(ns As %String) As %Boolean
+{
+    Quit:ns="%ALL" 1
+    New $NAMESPACE
+    Set out = 0
+    Try {
+        Set $NAMESPACE = "%SYS"
+        Quit:'##class(Config.Namespaces).Get(ns, .props)
+        For db = $GET(props("Globals")), $GET(props("Routines")) {
+            Continue:db=""
+            Kill dp
+            Continue:'##class(Config.Databases).Get(db, .dp)
+            Set d = ##class(SYS.Database).%OpenId($GET(dp("Directory")))
+            If $ISOBJECT(d) && 'd.Mounted Set out = 1
+        }
+    } Catch ex {
+    }
+    Quit out
+}
+
+/// Whether the configuration lists a namespace.
+ClassMethod Configured(ns As %String) As %Boolean
+{
+    New $NAMESPACE
+    Set $NAMESPACE = "%SYS"
+    Quit ##class(Config.Namespaces).Exists(ns)
+}
+
+/// Whether a failed entry into a namespace is skipped rather than refused: the <NAMESPACE> error on one the configuration
+/// lists, which cannot be entered (its database not there or not mounted), so no production runs in it. A namespace that
+/// is not configured, or an entry this user is refused, still refuses the uninstall.
+ClassMethod EntrySkipped(configured As %Boolean, error As %String) As %Boolean
+{
+    Quit configured && ($PIECE(error, ">", 1) = "<NAMESPACE")
 }
 
 /// Each namespace onboarded here, or still holding a mapping or credential from an earlier removal, taken off.

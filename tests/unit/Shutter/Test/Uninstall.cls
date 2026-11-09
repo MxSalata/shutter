@@ -56,6 +56,24 @@ Method TestAnUnreadNamespaceRefuses()
     Do $$$AssertTrue(refused [ "SHUTTERNOSUCHNS (", "the namespace named with the reason")
 }
 
+/// A namespace that cannot be entered by design is skipped, while a query that fails in one that was entered still refuses.
+Method TestAnUnenterableNamespaceIsSkipped()
+{
+    Set u = "Shutter.Util.Uninstall"
+    Do $$$AssertEquals($CLASSMETHOD(u, "Unenterable", "%ALL"), 1, "the configuration's %ALL")
+    Do $$$AssertEquals($CLASSMETHOD(u, "Unenterable", "%SYS"), 0, "a mounted namespace is read")
+    Do $$$AssertEquals($CLASSMETHOD(u, "EntrySkipped", 1, "<NAMESPACE>"), 1, "a configured one that cannot be entered")
+    Do $$$AssertEquals($CLASSMETHOD(u, "EntrySkipped", 0, "<NAMESPACE>"), 0, "one that is not configured")
+    Do $$$AssertEquals($CLASSMETHOD(u, "EntrySkipped", 1, "<PROTECT>"), 0, "an entry this user is refused")
+    Do $$$AssertEquals(##class(Shutter.Util.Uninstall).Refusal($LISTBUILD("%ALL")), "", "%ALL is not read, and nothing is refused")
+    Kill own
+    Set found = ""
+    Set problem = $CLASSMETHOD(u, "ForeignItems", $NAMESPACE, $NAMESPACE, "Shutter.Production", .own, .found, "SELECT Production, Name, ClassName FROM Shutter_Test.NoSuchTable")
+    Do $$$AssertTrue(problem [ "SQLCODE", "a failed query in an entered namespace refuses: " _ problem)
+    Set found = ""
+    Do $$$AssertEquals($CLASSMETHOD(u, "ForeignItems", "%ALL", $NAMESPACE, "Shutter.Production", .own, .found), "", "and %ALL gives no reason")
+}
+
 /// The demo's global prefixes go only where the demo was installed, in Shutter's own production.
 Method TestGlobalPrefixes()
 {
