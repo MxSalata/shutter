@@ -1,6 +1,35 @@
-# Shutter: AI Hub agents for failed HL7 deliveries
-
-**The AI board proposes; the gate disposes.**
+<p align="center">
+  <img src="https://raw.githubusercontent.com/MxSalata/shutter/main/web/public/favicon.svg" width="96" alt="Shutter's mark" />
+</p>
+<h1 align="center">Shutter</h1>
+<p align="center"><b>IRIS AI Hub agents for failed HL7 deliveries, in an Interoperability production.</b></p>
+<p align="center">The AI board proposes; the gate disposes.</p>
+<p align="center">
+  <a href="https://github.com/MxSalata/shutter/actions/workflows/ci.yml"><img src="https://github.com/MxSalata/shutter/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
+  <a href="https://github.com/MxSalata/shutter/tags"><img src="https://img.shields.io/github/v/tag/MxSalata/shutter?label=version&color=0e7299" alt="Version" /></a>
+  <a href="https://mxsalata.github.io/shutter/"><img src="https://img.shields.io/badge/trial-try%20it-45acd1" alt="Trial" /></a>
+  <a href="https://shutter.mxsalata.com"><img src="https://img.shields.io/badge/online%20demo-live-2f9e6b" alt="Online demo" /></a>
+  <a href="https://github.com/MxSalata/shutter#try-it"><img src="https://img.shields.io/badge/docker-compose%20up-2496ed?logo=docker&logoColor=white" alt="Docker" /></a>
+  <a href="https://github.com/MxSalata/shutter#ipm-on-a-stock-ai-hub-image"><img src="https://img.shields.io/badge/IPM-iris--shutter-095c7c" alt="IPM package" /></a>
+  <a href="https://github.com/MxSalata/shutter/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT licence" /></a>
+</p>
+<p align="center">
+  <a href="https://mxsalata.github.io/shutter/"><b>Trial</b></a> ·
+  <a href="https://shutter.mxsalata.com">Online demo</a> ·
+  <a href="https://github.com/MxSalata/shutter#try-it">Try it</a> ·
+  <a href="https://github.com/MxSalata/shutter#how-it-works">How it works</a> ·
+  <a href="https://github.com/MxSalata/shutter#where-the-agents-sit">The agents</a> ·
+  <a href="https://github.com/MxSalata/shutter#ai-hub-inside-shutter">AI Hub</a> ·
+  <a href="https://github.com/MxSalata/shutter#how-it-is-tested">Testing</a> ·
+  <a href="https://github.com/MxSalata/shutter#limits-plainly">Limits</a> ·
+  <a href="https://github.com/MxSalata/shutter#technology-bonuses">Bonuses</a>
+</p>
+<p align="center">
+  <a href="https://openexchange.intersystems.com/package/Shutter">Open Exchange</a> ·
+  <a href="https://community.intersystems.com/post/building-shutter-iris-ai-hub-what-worked-what-was-hard-and-what-it-cost">The article</a> ·
+  <a href="https://github.com/MxSalata/shutter/blob/main/CHANGELOG.md">What's new</a> ·
+  <a href="https://github.com/MxSalata/shutter/releases">Releases</a>
+</p>
 
 **When a hospital's HL7 delivery fails, the usual fix is Resend, and when two systems move a patient at the same moment, that resend writes over the bed manager's ward with every check passed. Shutter's IRIS AI Hub agents decide how to put the failure right; a deterministic gate decides whether anything is written.**
 
