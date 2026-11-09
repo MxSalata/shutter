@@ -313,6 +313,82 @@ Method TestWriteFileKeepsEachHeaderOnOneLine()
     Do $$$AssertEquals($EXTRACT(body, 1, 7), "PATIENT", "the body follows the blank line")
 }
 
+// ---- v1.53: saved is not delivered ----
+
+/// No mail server: MarkSaved reads saved, with savedAt and no sentAt, and the case's line says nobody was emailed.
+Method TestSavedIsNotSent()
+{
+    Set e = ..Escalation(1, "queued")
+    Do $$$AssertStatusOK(e.MarkSaved("/tmp/" _ ..#CASEID _ "-escalation-1.eml"), "saved as a file")
+    Do $$$AssertEquals(..Column(1, "State") _ "/" _ ..Column(1, "Transport"), "saved/file", "state saved, transport file")
+    Do $$$AssertTrue(..Column(1, "SavedAt") '= "", "savedAt")
+    Do $$$AssertEquals(..Column(1, "SentAt"), "", "no sentAt")
+    Set o = e.ToObject()
+    Do $$$AssertEquals(o.state, "saved", "the route reads saved")
+    Do $$$AssertTrue(o.savedAt '= "", "and savedAt")
+    Do $$$AssertNotTrue(o.%IsDefined("sentAt"), "and no sentAt")
+    Do $$$AssertEquals(..LastEvent("escalation").text, "Escalation 1 saved as an email file, not delivered: /tmp/" _ ..#CASEID _ "-escalation-1.eml. No mail server is set, so nobody was emailed.", "the case's line")
+    // MarkSent with a file goes the same way, so no caller can mark a file sent.
+    Set f = ..Escalation(2, "queued")
+    Do $$$AssertStatusOK(f.MarkSent("file", "/tmp/x.eml"), "a file through MarkSent")
+    Do $$$AssertEquals(..Column(2, "State"), "saved", "still saved")
+}
+
+/// Through the mail server: sent, with sentAt, and the case's line says the server took it.
+Method TestSmtpReadsSent()
+{
+    Set e = ..Escalation(1, "queued")
+    Do $$$AssertStatusOK(e.MarkSent("smtp", "The mail server relay.example.nhs.uk accepted it, which does not show anyone has read it for pas@example.nhs.uk"), "sent")
+    Do $$$AssertEquals(..Column(1, "State"), "sent", "state sent")
+    Do $$$AssertTrue(..Column(1, "SentAt") '= "", "sentAt")
+    Do $$$AssertEquals(e.ToObject().state, "sent", "the route reads sent")
+    Do $$$AssertTrue($EXTRACT(..LastEvent("escalation").text, 1, 54) = "Escalation 1 sent through the mail server: The mail se", ..LastEvent("escalation").text)
+}
+
+/// A row stored before 1.4.0 as a file and sent reads saved everywhere, with savedAt from its sentAt; nothing is migrated;
+/// the hand close names it saved.
+Method TestOldFileRowReadsSaved()
+{
+    Do ..Escalation(1, "sent", "file", "/tmp/old.eml")
+    Set e = ##class(Shutter.Store.Escalation).BySeq(##class(Shutter.Store.Case).%OpenId(..CaseRowId), 1)
+    Set o = e.ToObject()
+    Do $$$AssertEquals(o.state _ "/" _ o.savedAt, "saved/2026-10-20T10:05:00Z", "saved, savedAt from sentAt")
+    Do $$$AssertNotTrue(o.%IsDefined("sentAt"), "no sentAt")
+    Do $$$AssertEquals(..Column(1, "State"), "sent", "the row itself is not migrated")
+    Do $$$AssertEquals(e.ShownState(), "saved", "ShownState")
+    Set case = ##class(Shutter.Store.Case).%OpenId(..CaseRowId)
+    Do $$$AssertStatusOK(##class(Shutter.Store.Case).CloseByHand(case, "the team corrected the PAS", "approver"), "closed by hand after it")
+    Do $$$AssertEquals($EXTRACT(..LastEvent("state").text, * - 6, *), "(saved)", "the close's words name it saved: " _ ..LastEvent("state").text)
+}
+
+/// The person's act is a queue: "queued by <user> for <to>; digest of the text queued"; a saved one can go again.
+Method TestQueueNoteSaysQueued()
+{
+    Set e = ..Escalation(1, "draft")
+    Do $$$AssertStatusOK(e.Queue("d1", "operator"), "queued")
+    Do $$$AssertEquals(..LastEvent("escalation").text, "Escalation 1 queued by operator for pas@example.nhs.uk; digest of the text queued d1", "the case's line")
+    Set f = ..Escalation(2, "saved", "file", "/tmp/y.eml")
+    Do $$$AssertStatusOK(f.Queue("d1", "operator"), "a saved escalation can go again")
+    Do $$$AssertEquals(..Column(2, "State"), "queued", "queued")
+    Do ..Escalation(3, "sent", "smtp", "accepted")
+    Set g = ##class(Shutter.Store.Escalation).BySeq(##class(Shutter.Store.Case).%OpenId(..CaseRowId), 3)
+    Do $$$AssertStatusNotOK(g.Queue("d1", "operator"), "a sent one cannot")
+}
+
+/// The shadow report's notification_deliveries counts what went through a mail server, never a file.
+Method TestSavedIsNoDelivery()
+{
+    Do ..Escalation(1, "saved", "file", "/tmp/a.eml")
+    Do ..Escalation(2, "sent", "file", "/tmp/b.eml")
+    Set r = {}
+    Do ##class(Shutter.Util.ShadowReport).AddCalls(r, ..#CASEID, ..CaseRowId)
+    Do $$$AssertEquals(r."notification_deliveries", 0, "a saved file, and an old row written as one, emailed nobody")
+    Do ..Escalation(3, "sent", "smtp", "accepted")
+    Set r = {}
+    Do ##class(Shutter.Util.ShadowReport).AddCalls(r, ..#CASEID, ..CaseRowId)
+    Do $$$AssertEquals(r."notification_deliveries", 1, "one through the mail server")
+}
+
 // ---- helpers ----
 
 /// An escalation row of the test case, made directly (no draft: the text is the test's own).

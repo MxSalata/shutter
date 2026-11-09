@@ -71,12 +71,13 @@ ClassMethod AddObservation(r As %DynamicObject, caseId As %String) [ Private ]
 }
 
 /// What actually went out for the case, counted from the permits and the escalations, not assumed from the mode.
-ClassMethod AddCalls(r As %DynamicObject, caseId As %String, rowId As %String) [ Private ]
+ClassMethod AddCalls(r As %DynamicObject, caseId As %String, rowId As %String)
 {
     Set rehearsals = 0, writes = 0, mails = 0
     &sql(SELECT COUNT(*) INTO :rehearsals FROM Shutter_Store.DispatchPermit WHERE CaseId = :caseId AND ActionKind = 'rehearsal')
     &sql(SELECT COUNT(*) INTO :writes FROM Shutter_Store.DispatchPermit WHERE CaseId = :caseId AND ActionKind = 'recovery')
-    &sql(SELECT COUNT(*) INTO :mails FROM Shutter_Store.Escalation WHERE "Case" = :rowId AND State = 'sent')
+    // Sent through a mail server only: an escalation saved as a file (v1.53), or a row of before written as one, emailed nobody.
+    &sql(SELECT COUNT(*) INTO :mails FROM Shutter_Store.Escalation WHERE "Case" = :rowId AND State = 'sent' AND (Transport IS NULL OR Transport <> 'file'))
     Set r."rehearsal_performed" = $SELECT(rehearsals > 0: "true", 1: "false"), r."final_dispatch_tested" = $SELECT(writes > 0: "true", 1: "false")
     Set r."recovery_calls_sent" = rehearsals + writes, r."notification_deliveries" = +mails
 }

@@ -8,12 +8,13 @@ that GET /me names each one's roles; that deciding a case's approval needs Shutt
 that reading a drafted correction's text (GET /cases/{id}/correction-draft) is the approver's; that an unredacted case bundle
 (POST /cases/{id}/bundle-unredacted) is the approver's, with a typed reason and the header, and says so on its first line,
 while the operator's bundle stays redacted; that changing the agent library (PATCH /library/{code}) is refused to the
-operator (403) and allowed to the approver (200), and the item is then put back as it was; that the operator drafts
-and sends an escalation, the edit refusing a second @, a line break in the subject and a field that is not a string,
-and the case's timeline names who sent it and the digest of the text sent; that closing a case by hand (POST
-/cases/{id}/close) is the operator's by default, with who, when and the reason on the case's record, cancels every
-pending email, and leaves no email to edit or send; and that with the site profile's approvers.close_needs_approver
-on, the operator is refused (403) and the approver closes the case, while a misspelt approvers key is refused (400); and
+operator (403) and allowed to the approver (200), and the item is then put back as it was; that the operator drafts and
+sends an escalation, the edit refusing a second @, a line break in the subject and a field that is not a string, and the
+case's timeline names who queued it and the digest of the text queued, the email then saved as a file with no mail
+server; that closing a case by hand (POST /cases/{id}/close) is the operator's by default, with who, when and the reason
+on the case's record, cancels every pending email, and leaves no email to edit or send; and that with the site profile's
+approvers.close_needs_approver on, the operator is refused (403) and the approver closes the case, while a misspelt
+approvers key is refused (400); and
 that reading the production reviews and starting one (agent false) is the operator's, while annotating a finding and
 revoking an annotation need Shutter_Approve (403 for the operator), every review route is 401 signed out and each change
 is 403 csrf without the X-Requested-With header; and, when SHUTTER_PUBLIC_DEMO_PASSWORD names the user demo's password (the
@@ -345,7 +346,7 @@ def main():
         check("and the draft is still cancelled",
               next((x for x in items or [] if x.get("seq") == a.get("seq")), {}).get("state") == "cancelled", items)
 
-        # ---- an escalation: the operator's, with who sent it and the digest of the text sent ----
+        # ---- an escalation: the operator's, with who queued it and the digest of the text queued ----
         status, draft = operator.call("POST", f"/cases/{second}/escalations", {}, idempotent=True)
         draft = draft or {}
         check(f"operator: POST /cases/{second}/escalations: 201 draft with a recipient",
@@ -364,18 +365,19 @@ def main():
         status, body = operator.call("POST", f"/cases/{second}/escalations/{seq}/send", {"bodyDigest": digest}, idempotent=True)
         check("operator: the send bound to the digest: 202 queued", status == 202 and (body or {}).get("sentBy") == "operator", f"{status} {body}")
 
-        def sent():
+        # With no mail server set (as in CI), the operation saves the email as a file: it reads saved, never sent.
+        def saved_as_file():
             _, items = operator.call("GET", f"/cases/{second}/escalations")
             e = next((x for x in items or [] if x.get("seq") == seq), {})
-            return e if e.get("state") == "sent" else None
+            return e if e.get("state") == "saved" else None
 
-        e = wait(sent, args.timeout) or {}
-        check("the escalation is sent, by the operator, with the digest of the text read",
-              e.get("sentBy") == "operator" and bool(e.get("sentAt")) and e.get("bodyDigest") == digest, e)
+        e = wait(saved_as_file, args.timeout) or {}
+        check("the escalation is saved as an email file, queued by the operator, with the digest of the text read",
+              e.get("sentBy") == "operator" and bool(e.get("savedAt")) and not e.get("sentAt") and e.get("bodyDigest") == digest, e)
         _, events = operator.call("GET", f"/cases/{second}/events")
-        line = next((x for x in events or [] if x.get("ref") == f"escalation:{seq}" and " sent by " in x.get("text", "")), {})
-        check("the timeline names who sent it, when, and the digest of the text sent",
-              line.get("actor") == "operator" and bool(line.get("at")) and line.get("text", "").endswith(f"digest of the text sent {digest}"), line)
+        line = next((x for x in events or [] if x.get("ref") == f"escalation:{seq}" and " queued by " in x.get("text", "")), {})
+        check("the timeline names who queued it, when, and the digest of the text queued",
+              line.get("actor") == "operator" and bool(line.get("at")) and line.get("text", "").endswith(f"digest of the text queued {digest}"), line)
 
         # ---- the two-person rule ----
         status, body = put_profile({**saved, "approvers": {**(saved.get("approvers") or {}), "close_needs_approver": True}})

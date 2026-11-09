@@ -578,7 +578,7 @@ ClassMethod CloseByHand(case As Shutter.Store.Case, reason As %String, actor As 
     If +seq > 0 {
         Set esc = ##class(Shutter.Store.Escalation).BySeq(case, +seq)
         Set followed = "; after escalation " _ (+seq)
-        If $ISOBJECT(esc) Set followed = followed _ $SELECT(esc.TeamName '= "": " to " _ esc.TeamName, 1: "") _ " (" _ esc.State _ ")"
+        If $ISOBJECT(esc) Set followed = followed _ $SELECT(esc.TeamName '= "": " to " _ esc.TeamName, 1: "") _ " (" _ esc.ShownState() _ ")"
         Set ref = "escalation:" _ (+seq)
     }
     // An email not yet sent would tell the team to correct a case already handled: every draft or queued one is

@@ -651,7 +651,7 @@ Method TestShadowSendsNoEmail()
             Do $$$AssertTrue(e.Result [ "shadow", "and says why: " _ e.Result)
             Do $$$AssertEquals(written, 0, "and no file")
         } Else {
-            Do $$$AssertEquals(e.State, "sent", "enabled: the negative control sends: " _ e.Result)
+            Do $$$AssertEquals(e.State, "saved", "enabled: the negative control writes it (saved as a file: no mail server here): " _ e.Result)
             Do $$$AssertTrue(##class(%File).Exists(e.Result), "and the file is written: " _ e.Result)
         }
     }

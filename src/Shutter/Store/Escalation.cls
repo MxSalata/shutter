@@ -11,8 +11,9 @@ Property Seq As %Integer(%JSONFIELDNAME = "seq") [ Required ];
 
 Index CaseSeq On (Case, Seq) [ Unique ];
 
-/// draft, queued, sent, failed, cancelled.
-Property State As %String(%JSONFIELDNAME = "state", MAXLEN = 16, VALUELIST = ",draft,queued,sent,failed,cancelled") [ InitialExpression = "draft" ];
+/// draft, queued, sent (the mail server accepted it), saved (v1.53: written as an .eml file with no mail server set, so
+/// nobody was emailed), failed, cancelled.
+Property State As %String(%JSONFIELDNAME = "state", MAXLEN = 16, VALUELIST = ",draft,queued,sent,saved,failed,cancelled") [ InitialExpression = "draft" ];
 
 Property TeamId As %String(%JSONFIELDNAME = "teamId", MAXLEN = 64);
 
@@ -45,6 +46,9 @@ Property EditedAt As %String(%JSONFIELDNAME = "editedAt", MAXLEN = 30);
 Property SentBy As %String(%JSONFIELDNAME = "sentBy", MAXLEN = 100);
 
 Property SentAt As %String(%JSONFIELDNAME = "sentAt", MAXLEN = 30);
+
+/// When the operation saved it as an .eml file (state saved, v1.53), UTC; sentAt stays empty then.
+Property SavedAt As %String(%JSONFIELDNAME = "savedAt", MAXLEN = 30);
 
 /// smtp, or file when no mail server is configured (the .eml is written to the operation's folder).
 Property Transport As %String(%JSONFIELDNAME = "transport", MAXLEN = 16);
@@ -117,6 +121,12 @@ Method ToObject() As %DynamicObject
     Set sc = ..%JSONExportToString(.json)
     Set o = $SELECT($$$ISOK(sc): ##class(%DynamicObject).%FromJSON(json), 1: {})
     Set o.caseId = ..Case.CaseId
+    // A row stored before v1.53 that was written as a file reads saved, with savedAt from its sentAt: nothing is migrated.
+    If (..State = "sent") && (..Transport = "file") {
+        Set o.state = "saved"
+        If ..SavedAt = "" Set o.savedAt = ..SentAt
+        Do o.%Remove("sentAt")
+    }
     // An empty body is left out of the export; a purged escalation says so with an empty one.
     If ..PurgedAt '= "" Set o.body = ""
     Quit o
@@ -165,11 +175,18 @@ Method Edit(subject As %String, body As %String, to As %String, cc As %String, u
     Quit ..%Save()
 }
 
+/// The state as every route and count reads it: a row stored before v1.53 that was written as a file reads saved.
+Method ShownState() As %String
+{
+    Quit $SELECT((..State = "sent") && (..Transport = "file"): "saved", 1: ..State)
+}
+
 /// Queue the send: the digest must be the one of the text the person last read, and the subject and addresses must
-/// still pass (the allowed domains may have changed since the edit, or the row was changed outside the API).
+/// still pass (the allowed domains may have changed since the edit, or the row was changed outside the API). A saved
+/// escalation can go again, as a draft or a failed one can: once a mail server is set the same text is sent.
 Method Queue(bodyDigest As %String, user As %String) As %Status
 {
-    If '$LISTFIND($LISTBUILD("draft", "failed"), ..State) Quit $$$ERROR($$$GeneralError, "Escalation " _ ..Seq _ " is " _ ..State)
+    If '$LISTFIND($LISTBUILD("draft", "failed", "saved"), ..ShownState()) Quit $$$ERROR($$$GeneralError, "Escalation " _ ..Seq _ " is " _ ..ShownState())
     If ..PurgedProblem() '= "" Quit $$$ERROR($$$GeneralError, ..PurgedProblem())
     If bodyDigest '= ..BodyDigest Quit $$$ERROR($$$GeneralError, "bodyDigest is not the digest of the escalation's current text")
     If ..ToAddr = "" Quit $$$ERROR($$$GeneralError, "The escalation has no recipient")
@@ -178,16 +195,30 @@ Method Queue(bodyDigest As %String, user As %String) As %Status
     Set ..State = "queued", ..SentBy = user
     Set sc = ..%Save()
     Quit:$$$ISERR(sc) sc
-    // The record names the digest of the text sent, so the timeline alone shows what the person approved for sending.
-    Quit ..Note("Escalation " _ ..Seq _ " sent by " _ user _ " to " _ ..ToAddr _ "; digest of the text sent " _ ..BodyDigest, user)
+    // The record names the digest of the text queued, so the timeline alone shows what the person approved for sending. The
+    // person's act is a queue: whether the mail server took it or it was saved as a file is the operation's line after.
+    Quit ..Note("Escalation " _ ..Seq _ " queued by " _ user _ " for " _ ..ToAddr _ "; digest of the text queued " _ ..BodyDigest, user)
 }
 
+/// The mail server accepted it (smtp): state sent. The server's acceptance is not a delivery to a person, and its words
+/// say so. A file goes through MarkSaved.
 Method MarkSent(transport As %String, result As %String) As %Status
 {
+    If transport = "file" Quit ..MarkSaved(result)
     Set ..State = "sent", ..Transport = transport, ..Result = $EXTRACT(result, 1, 2000), ..SentAt = ##class(Shutter.Util.Time).NowUTC()
     Set sc = ..%Save()
     Quit:$$$ISERR(sc) sc
-    Quit ..Note("Escalation " _ ..Seq _ " delivered (" _ transport _ "): " _ $EXTRACT(result, 1, 300), "system")
+    Quit ..Note("Escalation " _ ..Seq _ " sent through the mail server: " _ $EXTRACT(result, 1, 300), "system")
+}
+
+/// No mail server is set, so the email was written as an .eml file at path (v1.53): state saved, savedAt, sentAt empty.
+/// Nobody was emailed, and the case's line says so.
+Method MarkSaved(path As %String) As %Status
+{
+    Set ..State = "saved", ..Transport = "file", ..Result = $EXTRACT(path, 1, 2000), ..SavedAt = ##class(Shutter.Util.Time).NowUTC(), ..SentAt = ""
+    Set sc = ..%Save()
+    Quit:$$$ISERR(sc) sc
+    Quit ..Note("Escalation " _ ..Seq _ " saved as an email file, not delivered: " _ $EXTRACT(path, 1, 300) _ ". No mail server is set, so nobody was emailed.", "system")
 }
 
 Method MarkFailed(error As %String) As %Status
@@ -212,7 +243,7 @@ Method PurgeText(days As %Integer) As %Status
     Set ..Body = "", ..PurgedAt = ##class(Shutter.Util.Time).NowUTC()
     Set sc = ..%Save()
     Quit:$$$ISERR(sc) sc
-    Quit ..Note("Escalation " _ ..Seq _ ": the email's text was removed " _ days _ " days after the case closed; the digest of the text sent, the recipients and who sent it stay on record", "system")
+    Quit ..Note("Escalation " _ ..Seq _ ": the email's text was removed " _ days _ " days after the case closed; the digest of the text " _ $SELECT(..ShownState() = "saved": "saved", 1: "sent") _ ", the recipients and who sent it stay on record", "system")
 }
 
 /// The retention task's pass (Shutter.Util.RetentionTask): the text of every escalation of a case closed before the
@@ -322,6 +353,9 @@ Storage Default
 </Value>
 <Value name="21">
 <Value>PurgedAt</Value>
+</Value>
+<Value name="22">
+<Value>SavedAt</Value>
 </Value>
 </Data>
 <DataLocation>^Shutter.Store.EscalationD</DataLocation>
