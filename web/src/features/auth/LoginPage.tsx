@@ -11,7 +11,7 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
-import { useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router';
 import { useHealth, useMe, useSignIn } from '@/api/hooks';
 import { BrandMark } from '@/components/BrandMark';
@@ -35,6 +35,10 @@ export default function LoginPage() {
   const from = (location.state as { from?: string } | null)?.from || '/home';
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  // Focus starts on User name (data-autofocus works only inside a focus trap, and this page has none), without
+  // scrolling: a phone shows the proof above the form
+  const userName = useRef<HTMLInputElement>(null);
+  useEffect(() => userName.current?.focus({ preventScroll: true }), []);
 
   if (me.data) return <Navigate to={from} replace />;
 
@@ -60,12 +64,16 @@ export default function LoginPage() {
         : '';
 
   return (
-    <Center mih="100vh" p="md" style={{ background: 'var(--shutter-page)' }}>
+    <Center
+      component="main"
+      id="main-content"
+      mih="100vh"
+      p="md"
+      style={{ background: 'var(--shutter-page)' }}
+    >
       <Grid gutter="lg" maw={1080} w="100%" align="flex-start">
-        <Grid.Col span={{ base: 12, md: 7 }}>
-          <ProofPanel figures={demo} />
-        </Grid.Col>
-        <Grid.Col span={{ base: 12, md: 5 }}>
+        {/* The form first in the reading order, so its h1 and User name come before the proof; it still shows second */}
+        <Grid.Col span={{ base: 12, md: 5 }} order={2}>
           <Stack gap="md">
             <Paper p={{ base: 'lg', md: 'xl' }} withBorder radius="md" shadow="xs">
               <form onSubmit={submit}>
@@ -88,7 +96,7 @@ export default function LoginPage() {
                     value={username}
                     onChange={(e) => setUsername(e.currentTarget.value)}
                     required
-                    data-autofocus
+                    ref={userName}
                   />
                   <PasswordInput
                     label="Password"
@@ -100,11 +108,15 @@ export default function LoginPage() {
                   <Button type="submit" loading={signIn.isPending} fullWidth>
                     Sign in
                   </Button>
-                  {/* The demo users and their password only on a demo instance (the server's flag). */}
+                  {/* The demo users and their password only on a demo instance (the server's flag). An install's own
+                      users come first: the online demo's user has no password on an install unless it was given one. */}
                   {demo ? (
                     <>
                       <Text size="sm">
-                        On the online demo, sign in as <b>demo</b> / <code>shutter</code>.
+                        Your own install: <b>approver</b> or <b>operator</b> / <code>shutter</code>.
+                      </Text>
+                      <Text size="sm">
+                        Online demo: <b>demo</b> / <code>shutter</code>.
                       </Text>
                       <TechDetail label="Demo users" kind="explain">
                         The demo installs two users: <b>operator</b> runs scenarios, reads cases, escalates
@@ -120,6 +132,9 @@ export default function LoginPage() {
             </Paper>
             <TrialCard />
           </Stack>
+        </Grid.Col>
+        <Grid.Col span={{ base: 12, md: 7 }} order={1}>
+          <ProofPanel figures={demo} />
         </Grid.Col>
       </Grid>
     </Center>

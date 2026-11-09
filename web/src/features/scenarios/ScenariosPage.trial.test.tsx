@@ -15,6 +15,7 @@ import ScenariosPage from './ScenariosPage';
 import { SCENARIOS_LEAD } from './scenarioText';
 import { S8_RULES_DIAGRAM_NOTE, S8_RULES_SEE } from './TryFirst';
 import { PLAIN_BUDGET, TECHNICAL_BUDGET } from './wordBudget';
+import definitions from '../../../../fixtures/scenarios.json';
 
 /** The page as the trial shows it: the recorded cases, answered in the browser. */
 vi.mock('@/env/mode', async (importOriginal) => {
@@ -214,6 +215,19 @@ describe('ScenariosPage in the trial', () => {
     } finally {
       Date.now = realNow;
     }
+  });
+
+  it('says how many of the scenarios have recordings here, and that the rest run on an install', async () => {
+    renderTrial();
+    await loaded();
+    const list = screen.getByRole('region', { name: 'Every scenario' });
+    const rows = within(list).getAllByRole('button', { name: /^Run S\d+[a-z]?$/ }).length;
+    expect(
+      within(list).getByText(
+        `${rows} of the ${definitions.length} scenarios have recordings here; the rest run on an install.`,
+        { exact: false },
+      ),
+    ).toBeInTheDocument();
   });
 
   it('keeps the first layer within its word budget, in Plain and in Technical', async () => {

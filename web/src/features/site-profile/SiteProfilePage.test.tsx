@@ -157,6 +157,20 @@ describe('SiteProfilePage', () => {
     );
   });
 
+  it('gives focus back to the button that opened the review when it is cancelled or closed with Escape', async () => {
+    renderPage();
+    const open = await screen.findByRole('button', { name: 'Confirm these answers…' });
+    await userEvent.click(open);
+    await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await waitFor(() => expect(open).toHaveFocus());
+    await userEvent.click(open);
+    await screen.findByRole('dialog');
+    await userEvent.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await waitFor(() => expect(open).toHaveFocus());
+  });
+
   it('asks whether closing a case by hand needs an approver, and sends the answer with the profile', async () => {
     renderPage();
     const rule = await screen.findByRole('switch', { name: /^Closing a case by hand needs an approver/ });

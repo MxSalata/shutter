@@ -12,7 +12,7 @@ import {
   useComputedColorScheme,
   useMantineColorScheme,
 } from '@mantine/core';
-import { useSyncExternalStore, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useRef, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react';
 import { useDisclosure } from '@mantine/hooks';
 import {
   IconContrast,
@@ -243,6 +243,25 @@ function PortalNavLink({ onClick }: { onClick: () => void }) {
   );
 }
 
+/**
+ * After a change of page (never the first load), focus moves to the page itself (the main region, focusable by script
+ * only), so a screen reader starts reading the new page: when focus was left in the menu or the header, or fell to the
+ * document when the link that was used went away. A page that has already put focus on something of its own keeps it.
+ */
+function useFocusOnPageChange(pathname: string) {
+  const previous = useRef(pathname);
+  useEffect(() => {
+    if (previous.current === pathname) return;
+    previous.current = pathname;
+    const active = document.activeElement;
+    const left =
+      !active ||
+      active === document.body ||
+      !!active.closest('.mantine-AppShell-navbar, .mantine-AppShell-header');
+    if (left) document.getElementById(MAIN_ID)?.focus({ preventScroll: true });
+  }, [pathname]);
+}
+
 /** Whether a navigation entry is the current page's section: its page, or a page under it (a case under Cases). */
 const isActive = (pathname: string, to: string) => pathname === to || pathname.startsWith(`${to}/`);
 
@@ -266,6 +285,7 @@ export function AppLayout() {
   // 56 px live; a trial page's banner adds 40 px, 32 px once it is one line, and 36 px on a phone (styles.css keeps
   // --shutter-header-h, which sticky parts and scrolled-to sections clear, the same, in rem as AppShell turns these)
   const header = chrome ? { base: 92, sm: banner === 'compact' ? 88 : 96 } : 56;
+  useFocusOnPageChange(pathname);
   return (
     <AppShell
       header={{ height: header }}

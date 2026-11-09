@@ -76,8 +76,8 @@ function AtReceiver({ c }: { c: CaseSummary }) {
   return (
     <div className="at-receiver">
       {name}
-      <StatusBadge {...writes(c.writes)} />
-      {c.verification ? <StatusBadge {...verification(c.verification)} /> : null}
+      <StatusBadge {...writes(c.writes)} focusable={false} />
+      {c.verification ? <StatusBadge {...verification(c.verification)} focusable={false} /> : null}
     </div>
   );
 }
@@ -270,13 +270,14 @@ export function CasesTable({
                     </Anchor>
                     <ForwardedBadge c={c} />
                   </Group>
-                  <Timestamp iso={c.openedAt} age size="xs" />
+                  {/* No tab stop on a row's time, its badges or its action: the case link is the row's one stop */}
+                  <Timestamp iso={c.openedAt} age size="xs" focusable={false} />
                 </StackTable.Td>
                 <StackTable.Td data-label="Outcome">
-                  <OutcomeBadge c={c} scenario={scenario} />
+                  <OutcomeBadge c={c} scenario={scenario} focusable={false} />
                 </StackTable.Td>
                 <StackTable.Td data-label="Proposed action" data-label-hidden className="case-last">
-                  <DispositionBadge disposition={c.disposition} />
+                  <DispositionBadge disposition={c.disposition} focusable={false} />
                   {proposalNote(c) ? (
                     <Text size="xs" c="dimmed" mt={2}>
                       {proposalNote(c)}

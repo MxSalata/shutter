@@ -6,7 +6,14 @@ import { PROOF, playedFor, playedResult, proofFrom, type ProofSource } from './p
 
 describe("the proof's figures, from the board's evaluation", () => {
   it("counts the board's proposals: 24 of 24 scored passes, 25 passes in 24 cases, 1 not scored", () => {
-    expect(PROOF.board).toEqual({ matched: 24, scored: 24, passes: 25, cases: 24, notScored: 1 });
+    expect(PROOF.board).toEqual({
+      matched: 24,
+      scored: 24,
+      passes: 25,
+      cases: 24,
+      notScored: 1,
+      scenarios: 19,
+    });
     expect(PROOF.specialists).toEqual({ conformance: 13, encounter: 21, impact: 23 });
   });
 

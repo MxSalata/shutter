@@ -199,7 +199,8 @@ function MemberCell({
     m.confidence !== null && m.confidence !== undefined ? `${Math.round(m.confidence * 100)}%` : '';
   return (
     <Stack gap={2} align="flex-start">
-      <DispositionBadge disposition={m.disposition} />
+      {/* No tab stop per badge in a 25-row table: an action's definition is the same in every row */}
+      <DispositionBadge disposition={m.disposition} focusable={false} />
       {confidence || outweighed ? (
         <Text size="xs" c="dimmed">
           {confidence ? (
@@ -221,7 +222,7 @@ function PlanCell({ p }: { p: EvaluationPass }) {
   const m = p.members.coordinator;
   return (
     <Stack gap={4} align="flex-start">
-      {m ? <DispositionBadge disposition={m.disposition} /> : <Text size="sm">-</Text>}
+      {m ? <DispositionBadge disposition={m.disposition} focusable={false} /> : <Text size="sm">-</Text>}
       {planDiffers(p) ? <StatusBadge tone="blocking" label="Not as expected" /> : null}
       {p.catalogue_entry ? (
         <CodeChip data-label="Entry">

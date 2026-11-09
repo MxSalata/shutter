@@ -1,9 +1,10 @@
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, render, screen, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { isValidElement, type ReactElement } from 'react';
-import { createMemoryRouter, RouterProvider } from 'react-router';
+import { isValidElement, useEffect, useRef, type ReactElement } from 'react';
+import { createMemoryRouter, RouterProvider, useLocation } from 'react-router';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetMock } from '@/mocks/handlers';
 import { server } from '@/mocks/node';
@@ -72,6 +73,35 @@ describe('the shell', () => {
     await vi.waitFor(() => expect(answered).toBe(true));
     await within(nav).findByRole('link', { name: 'Cases' });
     expect(within(nav).queryByRole('link', { name: /Shutter in IRIS/ })).not.toBeInTheDocument();
+  });
+
+  it('moves focus to the page after a page is chosen in the menu, and leaves it alone on the first load', async () => {
+    renderFrame('/home');
+    const main = document.getElementById('main-content')!;
+    const nav = await screen.findByRole('navigation', { name: 'Main' });
+    expect(main).not.toHaveFocus();
+    const link = within(nav).getByRole('link', { name: /^Cases/ });
+    link.focus();
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => expect(main).toHaveFocus());
+  });
+
+  it('leaves focus where a page put it after a change of page', async () => {
+    function OwnFocus() {
+      const { pathname } = useLocation();
+      const field = useRef<HTMLInputElement>(null);
+      useEffect(() => {
+        if (pathname === '/cases') field.current?.focus();
+      }, [pathname]);
+      return <input ref={field} aria-label="Own field" />;
+    }
+    renderFrame('/home', <OwnFocus />);
+    const nav = await screen.findByRole('navigation', { name: 'Main' });
+    within(nav)
+      .getByRole('link', { name: /^Cases/ })
+      .focus();
+    await userEvent.keyboard('{Enter}');
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Own field' })).toHaveFocus());
   });
 
   it('groups the navigation as Operate, Results and Configure, each icon in its section hue', async () => {

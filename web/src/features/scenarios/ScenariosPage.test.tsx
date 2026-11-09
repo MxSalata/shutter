@@ -8,6 +8,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { keys } from '@/api/hooks';
 import type { CaseSummary, Scenario } from '@/api/types';
 import { server } from '@/mocks/node';
+import { recordedSiteProfile } from '@/mocks/profile';
 import { resetMock, writesOf } from '@/mocks/handlers';
 import type { CaseFixture } from '@/mocks/hold';
 import { caseOutcome } from '@/lib/status';
@@ -230,10 +231,22 @@ describe('ScenariosPage', () => {
   });
 
   it('leads with the induction prompt on an instance running the shipped profile', async () => {
+    const view = recordedSiteProfile()!;
+    server.use(
+      http.get('/api/shutter/site-profile', () =>
+        HttpResponse.json({ ...view, source: view.source.replace(' (demo)', '') }),
+      ),
+    );
     renderScenarios();
     const prompt = await screen.findByText('Shutter is running on the shipped site profile');
     const heading = screen.getByRole('heading', { name: 'Scenarios' });
     expect(prompt.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("calls the demo's answers the demo's, as the site profile does, not the shipped profile", async () => {
+    renderScenarios();
+    expect(await screen.findByText("Shutter is running on the demo's answers")).toBeInTheDocument();
+    expect(screen.queryByText('Shutter is running on the shipped site profile')).not.toBeInTheDocument();
   });
 
   it("marks a scenario a mode doesn't play, at full contrast, and says which modes it is", async () => {
@@ -427,6 +440,7 @@ describe('ScenariosPage, as each role has it', () => {
     expect(words).not.toMatch(/You will see/);
     // Nobody is asked to answer the induction questions in a read-only demo
     expect(screen.queryByText('Shutter is running on the shipped site profile')).not.toBeInTheDocument();
+    expect(screen.queryByText("Shutter is running on the demo's answers")).not.toBeInTheDocument();
   });
 
   it('gives the public demo its own three, in the mode its hospital plays them, each with the case it has', async () => {
@@ -748,7 +762,7 @@ describe('ScenariosPage, its rows and its proof', () => {
     const line = (await screen.findByText(/^Tested on/)).closest<HTMLElement>('[data-proof-line]')!;
     // The words a reader sees (the definitions the terms carry for screen readers aside)
     expect(visibleText(line)).toContain(
-      `Tested on ${board.scored} recorded board passes, each against its scenario's expected action: the board chose it every time. Played end to end on ${played.of} of the scenarios: the board ${played.board}, Rules only ${played.rules}.`,
+      `Tested on ${board.scored} recorded cases from ${board.scenarios} scenarios (an incident gives several), the board chose the expected action every time. Played end to end on ${played.of} one-failure scenarios: the board ${played.board}, Rules only ${played.rules}.`,
     );
     expect(within(line).getByRole('link', { name: 'See the evaluation' })).toHaveAttribute(
       'href',

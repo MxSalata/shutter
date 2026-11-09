@@ -2,7 +2,14 @@ import { describe, expect, it } from 'vitest';
 import type { Scenario } from '@/api/types';
 import { PROOF, playedFor } from '@/lib/proof';
 import definitions from '../../../../fixtures/scenarios.json';
-import { hl7Events, proofParts, recordedLine, splitSummary } from './scenarioText';
+import {
+  hl7Events,
+  proofParts,
+  recordedLine,
+  scenarioCount,
+  SCENARIOS_DEFINED,
+  splitSummary,
+} from './scenarioText';
 
 const scenarios = definitions as unknown as Scenario[];
 const def = (id: string) => scenarios.find((s) => s.id === id)!;
@@ -82,13 +89,12 @@ describe('proofParts', () => {
   it('takes its figures from the evaluation, never typed', () => {
     const parts = proofParts(PROOF);
     expect(parts.tested).toBe(
-      `Tested on ${PROOF.board!.scored} recorded board passes, each against its scenario's expected action: the board chose it every time.`,
+      `Tested on ${PROOF.board!.scored} recorded cases from ${PROOF.board!.scenarios} scenarios (an incident gives several), the board chose the expected action every time.`,
     );
     expect(parts.played).toEqual({
       of: PROOF.played!.of,
       board: PROOF.played!.board,
       rules: PROOF.played!.rules,
-      counted: 'of the scenarios',
     });
     expect(parts.bases).toBe(
       `(${PROOF.board!.scored} scored passes, proposed action; ${PROOF.played!.of} scenarios, played end to end)`,
@@ -98,17 +104,41 @@ describe('proofParts', () => {
   it('follows other figures, and leaves out a sentence the evaluation cannot give', () => {
     const board = { matched: 22, scored: 24, passes: 25, cases: 24, notScored: 1 };
     expect(proofParts({ board, played: null })).toEqual({
-      tested:
-        "Tested on 24 recorded board passes, each against its scenario's expected action: the board chose it in 22 of them.",
+      tested: 'Tested on 24 recorded cases, the board chose the expected action in 22 of them.',
       played: null,
       bases: '(24 scored passes, proposed action)',
     });
     const played = { of: 9, board: 8, rules: 3, scenarios: [] };
     expect(proofParts({ board: null, played })).toEqual({
       tested: null,
-      played: { of: 9, board: 8, rules: 3, counted: 'recorded failures' },
+      played: { of: 9, board: 8, rules: 3 },
       bases: '(9 scenarios, played end to end)',
     });
     expect(proofParts({ board: null, played: null })).toEqual({ tested: null, played: null, bases: null });
+  });
+
+  it('names the unit: recorded cases, and the scenarios they come from when there are fewer', () => {
+    const board = { matched: 24, scored: 24, passes: 25, cases: 24, notScored: 1, scenarios: 19 };
+    expect(proofParts({ board, played: null }).tested).toBe(
+      'Tested on 24 recorded cases from 19 scenarios (an incident gives several), the board chose the expected action every time.',
+    );
+    expect(proofParts({ board: { ...board, scenarios: 24 }, played: null }).tested).toBe(
+      'Tested on 24 recorded cases, the board chose the expected action every time.',
+    );
+  });
+});
+
+describe('scenarioCount', () => {
+  it('counts the scenarios Shutter defines', () => {
+    expect(SCENARIOS_DEFINED).toBe(scenarios.length);
+  });
+
+  it('says in the trial how many of them have recordings and where the rest run', () => {
+    expect(scenarioCount(26, true)).toBe(
+      `26 of the ${scenarios.length} scenarios have recordings here; the rest run on an install.`,
+    );
+    expect(scenarioCount(scenarios.length, true)).toBe(`${scenarios.length} in all.`);
+    expect(scenarioCount(scenarios.length, false)).toBe(`${scenarios.length} in all.`);
+    expect(scenarioCount(26, false)).toBe('26 in all.');
   });
 });

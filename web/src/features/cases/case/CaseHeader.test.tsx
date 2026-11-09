@@ -169,9 +169,15 @@ describe('the case header facts: the patient and the message', () => {
     expect(document.body).not.toHaveTextContent('SYNTH');
   });
 
-  it("names a merge's structure as IRIS does: ADT^A40 parses as ADT_A39", () => {
+  it("names a merge's event first and its structure as IRIS does: ADT^A40 parses as ADT_A39", () => {
     renderUi(<CaseHeader c={recorded('C-000012')} snapshot={snapshot('C-000012')} />);
-    expect(screen.getByTestId('case-message-type')).toHaveTextContent('2.5.1:ADT_A39');
+    expect(screen.getByTestId('case-message-type')).toHaveTextContent('ADT^A40 (structure 2.5.1:ADT_A39)');
+  });
+
+  it('says a withheld merge was never sent, with no reason code after it as if it were an error', () => {
+    renderUi(<CaseHeader c={recorded('C-000012')} snapshot={snapshot('C-000012')} />);
+    expect(document.body).toHaveTextContent('merge was withheld, never sent.');
+    expect(document.body).not.toHaveTextContent('never sent: merge');
   });
 
   it('adds, in Technical, the version a message declares when the route parsed it as another', () => {

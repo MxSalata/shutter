@@ -2007,6 +2007,20 @@ body {
   background: var(--shutter-trial-filled);
   color: #fff;
 }
+/* Below 360 px the header has no room for the label: the mark alone, the label kept for screen readers. */
+@media (max-width: 22.49em) {
+  .trial-pill .mantine-Badge-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .trial-pill .mantine-Badge-section {
+    margin: 0;
+  }
+}
 
 /* A tab bar that stays under the header while the page scrolls. */
 .sticky-tabs {

@@ -10,6 +10,22 @@ export const SCENARIOS_LEAD = {
 };
 
 /**
+ * How many scenarios Shutter defines (fixtures/scenarios.json; scenarioText.test checks the figure against it). The trial
+ * lists only the ones with recordings, so it says how many of these it has and where the rest are.
+ */
+export const SCENARIOS_DEFINED = 32;
+
+/**
+ * The count beside "Every scenario": "32 in all.", or, in the trial's list of recordings when it is short of them, "26 of
+ * the 32 scenarios have recordings here; the rest run on an install."
+ */
+export function scenarioCount(listed: number, trial: boolean, defined = SCENARIOS_DEFINED): string {
+  return trial && listed < defined
+    ? `${listed} of the ${defined} scenarios have recordings here; the rest run on an install.`
+    : `${listed} in all.`;
+}
+
+/**
  * A scenario's description as the list shows it: its first sentence in full, and the rest behind "More about <id>",
  * never cut mid-sentence. The split is at the first full stop followed by a space, so a version number ("HL7 2.4
  * messages", "2.5.1.") stays whole.
@@ -64,16 +80,12 @@ export function recordedLine(played: { board: PlayedResult; rules: PlayedResult 
 /** The proof line's parts, each left out when the evaluation cannot give its figures. */
 export interface ProofParts {
   /**
-   * "Tested on 24 recorded board passes, each against its scenario's expected action: the board chose it every time."
-   * A pass is the evaluation's unit (its "scored passes"): one recorded pass of the board over one case, so the count
-   * is of passes, not of scenarios or agent runs.
+   * "Tested on 24 recorded cases from 19 scenarios (an incident gives several), the board chose the expected action
+   * every time." The unit is named, so the case count is not read as a count of scenarios.
    */
   tested: string | null;
-  /**
-   * Played end to end: how many scenarios, what they are counted as ("of the scenarios" after the passes, "recorded
-   * failures" alone), and the board's and Rules only's expected outcomes.
-   */
-  played: { of: number; board: number; rules: number; counted: string } | null;
+  /** Played end to end on the one-failure scenarios: how many, the board's and Rules only's expected outcomes. */
+  played: { of: number; board: number; rules: number } | null;
   /** The bases in an engineer's words, for Technical. */
   bases: string | null;
 }
@@ -82,7 +94,11 @@ export interface ProofParts {
 export function proofParts(proof: Pick<Proof, 'board' | 'played'>): ProofParts {
   const { board, played } = proof;
   const tested = board
-    ? `Tested on ${board.scored} recorded board passes, each against its scenario's expected action: the board chose it ${
+    ? `Tested on ${board.scored} recorded cases${
+        board.scenarios && board.scenarios < board.scored
+          ? ` from ${board.scenarios} scenarios (an incident gives several)`
+          : ''
+      }, the board chose the expected action ${
         board.matched === board.scored ? 'every time' : `in ${board.matched} of them`
       }.`
     : null;
@@ -92,14 +108,7 @@ export function proofParts(proof: Pick<Proof, 'board' | 'played'>): ProofParts {
   ].filter(Boolean);
   return {
     tested,
-    played: played
-      ? {
-          of: played.of,
-          board: played.board,
-          rules: played.rules,
-          counted: board ? 'of the scenarios' : 'recorded failures',
-        }
-      : null,
+    played: played ? { of: played.of, board: played.board, rules: played.rules } : null,
     bases: bases.length ? `(${bases.join('; ')})` : null,
   };
 }

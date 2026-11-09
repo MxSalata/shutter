@@ -14,7 +14,7 @@ import {
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconChevronDown, IconPlus, IconTrash, IconVersions } from '@tabler/icons-react';
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '@/api/client';
@@ -792,6 +792,15 @@ function Profile({
   const [problem, setProblem] = useState<Problem>(null);
   const [reviewing, setReviewing] = useState(0);
   const [saveProblem, setSaveProblem] = useState<SaveProblem>(null);
+  // The button that opened the review, and whether a cancel should give focus back to it: the dialog is unmounted on
+  // close, so the modal cannot return focus itself
+  const opener = useRef<HTMLElement | null>(null);
+  const refocus = useRef(false);
+  useEffect(() => {
+    if (!refocus.current || reviewing) return;
+    refocus.current = false;
+    if (opener.current?.isConnected) opener.current.focus();
+  }, [reviewing]);
 
   const [checking, setChecking] = useState(false);
 
@@ -841,6 +850,7 @@ function Profile({
     }
     setProblem(null);
     setSaveProblem(null);
+    opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setReviewing((n) => n + 1);
   };
 
@@ -1113,7 +1123,10 @@ function Profile({
             saving={save.isPending || checking}
             readOnly={reading}
             problem={saveProblem}
-            onCancel={() => setReviewing(0)}
+            onCancel={() => {
+              refocus.current = true;
+              setReviewing(0);
+            }}
             onSave={onSave}
             onLoadTheirs={() => void loadTheirs()}
           />

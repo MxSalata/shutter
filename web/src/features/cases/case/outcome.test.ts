@@ -269,6 +269,10 @@ describe("the story steps' summaries", () => {
     );
   });
 
+  it('gives no reason code for a withheld message, which was never sent', () => {
+    expect(failedSummary(factsOf('C-000012').c)).toBe('PAS merge was withheld, never sent.');
+  });
+
   it('says what the receiver holds and that it has no receipt', () => {
     expect(evidenceSummary(factsOf('C-000008').snapshot)).toBe(
       'When Shutter looked, the receiver held the encounter admitted in WARD-C at version 2; no receipt for this operation; PAS and BEDMGR have the same event time.',
