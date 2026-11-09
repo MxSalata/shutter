@@ -4,6 +4,37 @@ Versions follow `major.minor.patch`: a minor release for new features, a patch r
 updates. The version in both `module.xml` files (the one the package manager publishes) is always the version of the
 GitHub tag on the same commit; `scripts/check-versions.py` checks every place the version is written.
 
+## 1.3.0 (9 November 2026)
+
+Pathology, tier B: for an outage at a receiver of orders and results, Shutter now lists the messages that never reached
+it, for a person, and explains each failed order or result on its case page. Shutter still sends none of them. The FHIR
+R4 receiver is in development: some of its parts are in the release and tested, and no case uses them yet.
+
+- **The resend set on an outage.** When an outage closes, Shutter works out, in the production's own job, which failed
+  messages of its window were queued, offered, reached the receiver or were refused, each with its reason, and checks
+  every patient on them: every PID-3 identifier, the receiver's newer messages for the same patient, and Shutter's open
+  cases for that patient. An outage with messages that never reached the receiver reads **offered**: "N messages failed;
+  M never reached the receiver and are listed for a person. Shutter will not send these messages." The set is computed
+  again each minute and on **Read again**, a message the engine tries again sends the outage back to open, and nothing
+  changed writes no event. An outage with errors and nothing offered stays with a person.
+- **What Shutter found on an order or result case.** The case page's Evidence tab shows who holds the message (the
+  engine, still trying), the receiver's own words read field by field (MSA and each ERR), the OBX those words name,
+  matched against every OBX-3, and where a character above plain ASCII stands as stored and as sent. They are for a
+  person only: the escalation draft names the segment, field and code, never a result's value, units or comment.
+- **The outage email.** Outage Mailer, an item a site adds and switches on per receiver, sends one email per outage
+  state the receiver's entry names, at most one every 10 minutes, naming the receiver, the counts and the page, never a
+  patient.
+- **Outages on the Incidents page.** The receivers' outages sit above the incidents: one line per watched receiver, loud
+  when its watcher is stale, and a card per outage with its own words, the engine's alerts, the lists, and only the
+  actions it allows, for an approver.
+- **A message of a watched namespace is copied whole.** A message read in a hospital's namespace and used after
+  switching back loaded its segments from Shutter's own message of the same id, so the patient check could hold the
+  wrong patient. It is now copied whole while switched (found on the pathology test rig).
+- **FHIR R4, in development.** The plan builder, the verifier's decision and a test FHIR server held to IRIS for
+  Health's own FHIR server's answers are in the release, compiled and tested; nothing in the case workflow calls them,
+  and Shutter does not recover a write to a FHIR server ([fhir.md](docs/readme/fhir.md)).
+- **CONTRACTS 1.51** describes the set, Read again and the findings.
+
 ## 1.2.1 (9 November 2026)
 
 Fixes found by the checks run on 1.2.0 on IRIS 2026.2 and AI Hub build 154, and stored maps for six tables so a later
