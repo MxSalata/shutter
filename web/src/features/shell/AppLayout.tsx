@@ -34,7 +34,7 @@ import {
   useLocation,
   useNavigate,
 } from 'react-router';
-import { useLiveStatus, useMe, useSignOut, useSiteProfile } from '@/api/hooks';
+import { useLiveStatus, useMe, useRecoveryControl, useSignOut, useSiteProfile } from '@/api/hooks';
 import { displayZone, setDisplayZone } from '@/lib/format';
 import { APP_NAME } from '@/theme';
 import { BrandMark } from '@/components/BrandMark';
@@ -58,9 +58,11 @@ import { useAssistant } from '@/features/assistant/store';
 /**
  * Parts of the shell that the first paint does not need, each in a chunk of its own, so the entry stays small
  * (e2e/trial.spec.ts holds it to its budget): the live hospital's banner, drawn only while the settings say the feed is
- * live, and the Ask Shutter panel's forms. The shell's own buttons, the panel's among them, stay in the entry.
+ * live, the recovery banner, drawn only while recovery is in shadow mode or stopped, and the Ask Shutter panel's forms.
+ * The shell's own buttons, the panel's among them, stay in the entry.
  */
 const LiveBanner = lazy(() => import('./LiveBanner').then((m) => ({ default: m.LiveBanner })));
+const RecoveryBanner = lazy(() => import('./RecoveryBanner').then((m) => ({ default: m.RecoveryBanner })));
 const AssistantAside = lazy(() =>
   import('@/features/assistant/AssistantSurface').then((m) => ({ default: m.AssistantAside })),
 );
@@ -75,6 +77,17 @@ function LiveBannerSlot() {
   return (
     <Suspense fallback={null}>
       <LiveBanner />
+    </Suspense>
+  );
+}
+
+/** The recovery banner's place: its chunk loads only while recovery is in shadow mode or stopped. */
+function RecoveryBannerSlot() {
+  const c = useRecoveryControl().data;
+  if (!c || (!c.stopped && c.mode === 'enabled')) return null;
+  return (
+    <Suspense fallback={null}>
+      <RecoveryBanner />
     </Suspense>
   );
 }
@@ -409,6 +422,7 @@ export function AppLayout() {
       >
         {/* A new page starts at its top; Back returns to where the previous one was left. */}
         <ScrollRestoration />
+        <RecoveryBannerSlot />
         <LiveBannerSlot />
         <Suspense fallback={<PageSkeleton />}>
           <Outlet key={displayZone()} />

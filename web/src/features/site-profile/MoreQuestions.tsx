@@ -1,12 +1,20 @@
 import { Alert, Button, Fieldset, Group, SimpleGrid, Stack, Text } from '@mantine/core';
 import { IconPlus, IconTrash } from '@tabler/icons-react';
-import { useState } from 'react';
+import { useState, type ChangeEvent } from 'react';
 import type { SiteProfile, SiteTeam } from '@/api/types';
 import { Section } from '@/components/Section';
-import { Checkbox, Radio, Switch, TextInput } from './controls';
+import { TechDetail } from '@/components/TechDetail';
+import { Checkbox, NativeSelect, NumberInput, Radio, Switch, TextInput } from './controls';
 import { useEditable } from './editable';
 import { IANA_ZONE, ZONE_LABELS, newTeam, parseList } from './profile';
 import { Question, QuestionDetails } from './Question';
+import {
+  DAY_LABELS,
+  DETAIL_LABELS,
+  REMINDER_DEFAULTS,
+  reminderPreview,
+  type Reminders,
+} from './reminderPreview';
 
 type Problem = { path: string; message: string } | null;
 type SetDraft = (fn: (d: SiteProfile) => void) => void;
@@ -457,10 +465,232 @@ function PreventFailures({
   );
 }
 
+function Recovery({
+  draft,
+  setDraft,
+  problem,
+}: {
+  draft: SiteProfile;
+  setDraft: SetDraft;
+  problem: Problem;
+}) {
+  return (
+    <Section
+      id="site-recovery"
+      title="Recovery"
+      note="Off is shadow mode: Shutter investigates and sends no recovery write, rehearsal or resend preview. The hospital's ordinary feed goes on either way."
+    >
+      <Question n={14} text="May Shutter attempt recovery here, within its gate and the policy above?" acts />
+      <Switch
+        id="site-recovery-mode"
+        label="Enable recovery"
+        description="Off (the default on a new install). Enabling it releases no plan made before: those are reinvestigated. No report enables it."
+        checked={draft.recovery?.mode === 'enabled'}
+        onChange={(e) => {
+          const v = e.currentTarget.checked;
+          setDraft((d) => {
+            d.recovery = { mode: v ? 'enabled' : 'shadow' };
+          });
+        }}
+        error={problem?.path === 'recovery.mode' ? problem.message : undefined}
+      />
+      <QuestionDetails
+        keys={[['recovery.mode', draft.recovery?.mode, 'shadow']]}
+        more="An emergency stop is apart from this: Stop Shutter recovery, in Settings, latches at once and outlives a restart."
+      />
+    </Section>
+  );
+}
+
+function CaseReminders({
+  draft,
+  setDraft,
+  problem,
+}: {
+  draft: SiteProfile;
+  setDraft: SetDraft;
+  problem: Problem;
+}) {
+  const r = draft.reminders;
+  const set = (fn: (x: Reminders) => void) =>
+    setDraft((d) => {
+      d.reminders = { ...(d.reminders ?? {}) };
+      fn(d.reminders);
+    });
+  const err = (key: string) =>
+    problem && problem.path.replace(/\[\d+\]$/, '') === `reminders.${key}` ? problem.message : undefined;
+  const preview = reminderPreview(r);
+  const text = (key: 'officer_name' | 'officer_address' | 'window_start' | 'window_end' | 'sign_in_url') => ({
+    id: `site-reminders-${key}`,
+    error: err(key),
+    onChange: (e: ChangeEvent<HTMLInputElement>) => {
+      const v = e.currentTarget.value;
+      set((x) => {
+        if (v) x[key] = v;
+        else delete x[key];
+      });
+    },
+  });
+  const hours = (key: 'team_hours' | 'officer_hours') => ({
+    id: `site-reminders-${key}`,
+    min: 1,
+    max: 720,
+    allowDecimal: false,
+    value: r?.[key] ?? REMINDER_DEFAULTS[key],
+    error: err(key),
+    onChange: (v: string | number) =>
+      set((x) => {
+        if (typeof v === 'number') x[key] = v;
+      }),
+  });
+  return (
+    <Section
+      id="site-reminders"
+      title="Reminders"
+      note="A scheduled mail when a case that needs a person stays open. It writes to no receiver, calls no model and moves no case."
+    >
+      <Question n={15} text="Should anyone be reminded of cases left open?" acts />
+      <Switch
+        id="site-reminders-enabled"
+        label="Send reminders for cases left open"
+        description="Off (the default). On: the receiver's team first, then a named clinical officer, in the feed's time zone."
+        checked={r?.enabled === true}
+        onChange={(e) => {
+          const v = e.currentTarget.checked;
+          set((x) => {
+            x.enabled = v;
+          });
+        }}
+        error={err('enabled')}
+      />
+      {r?.enabled ? (
+        <Stack gap="sm">
+          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+            <NumberInput label="Team, after hours open" {...hours('team_hours')} />
+            <NumberInput label="Officer, after hours open" {...hours('officer_hours')} />
+            <TextInput label="Clinical officer" value={r.officer_name ?? ''} {...text('officer_name')} />
+            <TextInput
+              label="Officer's address"
+              description="In an allowed mail domain"
+              value={r.officer_address ?? ''}
+              {...text('officer_address')}
+            />
+            <TextInput
+              label="Window opens"
+              type="time"
+              value={r.window_start ?? REMINDER_DEFAULTS.window_start}
+              {...text('window_start')}
+            />
+            <TextInput
+              label="Window closes"
+              type="time"
+              value={r.window_end ?? REMINDER_DEFAULTS.window_end}
+              {...text('window_end')}
+            />
+          </SimpleGrid>
+          <Checkbox.Group
+            id="site-reminders-days"
+            label="Days"
+            value={[...(r.days ?? REMINDER_DEFAULTS.days)]}
+            onChange={(v) =>
+              set((x) => {
+                x.days = Object.keys(DAY_LABELS).filter((d) => v.includes(d));
+              })
+            }
+            error={err('days')}
+          >
+            <Group gap="sm" mt={4}>
+              {Object.entries(DAY_LABELS).map(([d, label]) => (
+                <Checkbox key={d} value={d} label={label} />
+              ))}
+            </Group>
+          </Checkbox.Group>
+          <NativeSelect
+            id="site-reminders-patient_detail"
+            label="Patient detail in the mail"
+            description="This mail goes out with nobody reviewing it. What it carries is your site's information governance decision."
+            value={r.patient_detail ?? REMINDER_DEFAULTS.patient_detail}
+            data={Object.entries(DETAIL_LABELS).map(([value, label]) => ({ value, label }))}
+            onChange={(e) => {
+              const v = e.currentTarget.value;
+              set((x) => {
+                x.patient_detail = v;
+              });
+            }}
+            error={err('patient_detail')}
+          />
+          <TextInput
+            label="Sign-in address"
+            description="The link in the mail, such as https://shutter.example.nhs.uk/shutter/"
+            value={r.sign_in_url ?? ''}
+            {...text('sign_in_url')}
+          />
+        </Stack>
+      ) : null}
+      <TechDetail label="Preview with made-up patients" kind="explain">
+        <Stack gap={4}>
+          <Text size="sm">Nothing is sent from here.</Text>
+          <Text size="sm" fw={600}>
+            {preview.subject}
+          </Text>
+          <Text size="sm" style={{ whiteSpace: 'pre-line' }}>
+            {preview.body}
+          </Text>
+        </Stack>
+      </TechDetail>
+      <QuestionDetails
+        keys={[['reminders.enabled', r?.enabled, 'false']]}
+        more="Cases awaiting approval, blocked, escalated or failed, abandoned ones aside. Each is reminded once per threshold. Nothing goes outside the window, so a case left overnight is in the first mail of the morning, and at most one mail an hour goes to anyone. Bank holidays aren't known. Never a full name, date of birth, address or NHS number. A failed send goes again at the next run. In shadow mode none goes, unless the profile's notifications.shadow_delivery says enabled."
+      />
+    </Section>
+  );
+}
+
 /**
- * Questions 9 to 13: escalation teams and mail, the feed's time zone, note text for the model, merges, and whether the
- * feed is held while a schema is missing.
+ * Questions 9 to 14: escalation teams and mail, the feed's time zone, note text for the model, merges, whether the
+ * feed is held while a schema is missing, and recovery; question 15: reminders for cases left open.
  */
+function A08Location({
+  draft,
+  setDraft,
+  problem,
+}: {
+  draft: SiteProfile;
+  setDraft: SetDraft;
+  problem: Problem;
+}) {
+  const value = draft.further_messages?.a08_location;
+  return (
+    <Section id="site-a08" title="An A08 location">
+      <Question
+        n={16}
+        text="Should a failed or later A08 naming another ward or bed stop for a person?"
+        acts
+      />
+      <NativeSelect
+        id="site-further_messages-a08_location"
+        label="When an A08 names another place"
+        value={value ?? 'stop'}
+        data={[
+          { value: 'stop', label: 'Stop for a person' },
+          { value: 'show', label: 'Put it on the plan' },
+        ]}
+        onChange={(e) => {
+          const v = e.currentTarget.value as 'stop' | 'show';
+          setDraft((d) => {
+            d.further_messages = { ...(d.further_messages ?? {}), a08_location: v };
+          });
+        }}
+        error={problem?.path === 'further_messages.a08_location' ? problem.message : undefined}
+      />
+      <QuestionDetails
+        keys={[['further_messages.a08_location', value, 'stop']]}
+        more="Shutter sends an A08 as an update, which carries no location, so a move by A08 never reaches the receiver. Stop, the default: nothing is sent or closed, and a person checks the patient. Show suits a site whose full-state A08s repeat stale locations: it goes on the plan and lets the write through. Only the ward and bed are compared, as the operation key reads them from PV1-3. An A08 at the failed movement's target, or with no location, stops nothing either way."
+      />
+    </Section>
+  );
+}
+
 export function MoreQuestions({
   draft,
   setDraft,
@@ -477,6 +707,9 @@ export function MoreQuestions({
       <Model draft={draft} setDraft={setDraft} />
       <Merges draft={draft} setDraft={setDraft} problem={problem} />
       <PreventFailures draft={draft} setDraft={setDraft} problem={problem} />
+      <Recovery draft={draft} setDraft={setDraft} problem={problem} />
+      <CaseReminders draft={draft} setDraft={setDraft} problem={problem} />
+      <A08Location draft={draft} setDraft={setDraft} problem={problem} />
     </>
   );
 }

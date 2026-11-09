@@ -1,5 +1,5 @@
 /// The publisher's tools (Shutter.Publish.Tools; CONTRACTS 15, v1.35): the shapes, that no patient or encounter identifier
-/// leaves, and the audit row per call. Runs where the aihub module is loaded (the tools class is compiled) and is reported
+/// leaves, what a person typed for an unredacted file stays in IRIS, and the audit row per call. Runs where the aihub module is loaded (the tools class is compiled) and is reported
 /// as skipped on the core edition.
 Class Shutter.Test.Publish Extends %UnitTest.TestCase
 {
@@ -36,6 +36,13 @@ Method TestPublisher()
         Set events = $CLASSMETHOD(t, "GetEvents", row.caseId, 5), want = want + 1
         Do $$$AssertTrue(events.%IsDefined("events") && (events.count <= 5), "GetEvents answers at most five")
         If (case.EncounterId '= "") Do $$$AssertNotTrue(events.%ToJSON() [ case.EncounterId, "nor from the events")
+        // An unredacted file's reason is a person's words, which no map covers: the event says one was taken, and no more.
+        Set eid = case.%Id()
+        Do ##class(Shutter.Store.CaseEvent).Append(case, "note", "", "", "Unredacted case bundle downloaded by ut-records; reason: UT-TYPED-WORDS; SHA-256 sha256:0", "ut-records", "bundle:unredacted")
+        Set events = $CLASSMETHOD(t, "GetEvents", row.caseId, 5), want = want + 1
+        Do $$$AssertNotTrue(events.%ToJSON() [ "UT-TYPED-WORDS", "an unredacted file's reason does not leave")
+        Do $$$AssertTrue(events.%ToJSON() [ "bundle:unredacted", "and the event is still there")
+        &sql(DELETE FROM Shutter_Store.CaseEvent WHERE "Case" = :eid AND Ref = 'bundle:unredacted' AND Actor = 'ut-records')
         Set plan = $CLASSMETHOD(t, "GetPlan", row.caseId)
         Do $$$AssertTrue(plan.%IsDefined("plan") || (plan.error = "no_plan"), "GetPlan answers the plan or no_plan")
         // A plan the case does not have yet writes no audit row (v1.37), nor does an unknown case or incident.

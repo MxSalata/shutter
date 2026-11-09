@@ -110,7 +110,7 @@ XData ProductionDefinition
   </Item>
   <Item Name="HL7 Index" Category="Feed" ClassName="Shutter.Index.Indexer" PoolSize="1" Enabled="true" Foreground="false" Comment="The exact index of the watched HL7 traffic: one row per message with the visit number, patient, event, time, location, operation key and route, filled a few seconds behind the feed" LogTraceEvents="false" Schedule="">
     <Setting Target="Adapter" Name="CallInterval">5</Setting>
-    <Setting Target="Adapter" Name="Routes">ADT In,Case Intake</Setting>
+    <Setting Target="Adapter" Name="Routes">ADT In,Case Intake,Other Route In</Setting>
   </Item>
   <Item Name="Case Releaser" Category="Recovery" ClassName="Shutter.Operation.Releaser" PoolSize="1" Enabled="true" Foreground="false" Comment="Releases the cases no other host can: those waiting on a message a watched production has since delivered, and those held for a schema that is loaded now; one sweep every few seconds, each with candidates recorded as a run" LogTraceEvents="false" Schedule="">
     <Setting Target="Adapter" Name="CallInterval">5</Setting>
@@ -142,6 +142,8 @@ XData ProductionDefinition
     <Setting Target="Host" Name="SettleSeconds">15</Setting>
   </Item>
   <Item Name="Case Review" Category="Recovery" ClassName="Shutter.Process.Review" PoolSize="1" Enabled="true" Foreground="false" Comment="One instance per production review: the read-only sweep of a production's settings, errors and failures over a window, stored, then the review agent's ranking of the findings" LogTraceEvents="true" Schedule="">
+  </Item>
+  <Item Name="Failure Census" Category="Recovery" ClassName="Shutter.Operation.FailureCensus" PoolSize="1" Enabled="true" Foreground="false" Comment="On demand and off unless the site profile turns it on: compares a watched receiver's failed deliveries with the cases. It reads and reports, and never opens a case or sends anything" LogTraceEvents="true" Schedule="">
   </Item>
   <Item Name="Case Question" Category="Recovery" ClassName="Shutter.Process.Question" PoolSize="1" Enabled="true" Foreground="false" Comment="One instance per question about a case: the Explain agent, or the board's members and then the coordinator, asked through the Agent Board item with the case's model view and the what-if facts; the answer checked against them before it is stored; nothing written" LogTraceEvents="true" Schedule="">
   </Item>
@@ -182,6 +184,12 @@ XData ProductionDefinition
   <Item Name="Shutter Approvers" Category="Recovery" ClassName="EnsLib.Workflow.Operation" PoolSize="1" Enabled="true" Foreground="false" Comment="Approval tasks for the Workflow role of the same name" LogTraceEvents="true" Schedule="">
   </Item>
   <Item Name="Shutter API" Category="Recovery" ClassName="Shutter.Service.API" PoolSize="0" Enabled="true" Foreground="false" Comment="Requests the REST API sends into the production, so that they show in the trace" LogTraceEvents="true" Schedule="">
+  </Item>
+  <Item Name="Other Route In" Category="Demo" ClassName="Shutter.Scenarios.Route" PoolSize="0" Enabled="true" Foreground="false" Comment="S14's route: a message on a route whose delivery Shutter does not watch, seen only by the index" LogTraceEvents="false" Schedule="">
+    <Setting Target="Host" Name="TargetConfigName">Case Intake Store</Setting>
+  </Item>
+  <Item Name="Site Feed In" Category="Demo" ClassName="Shutter.Scenarios.Route" PoolSize="0" Enabled="true" Foreground="false" Comment="S26's feed: a site's messages whose schema, named in MSH-12, may not be loaded here" LogTraceEvents="false" Schedule="">
+    <Setting Target="Host" Name="TargetConfigName">ADT to Downstream</Setting>
   </Item>
   <Item Name="Scenario Player" Category="Demo" ClassName="Shutter.Operation.ScenarioPlayer" PoolSize="1" Enabled="true" Foreground="false" Comment="Plays a demo scenario's steps in its own job, so a run never needs a new process and shows in the trace" LogTraceEvents="true" Schedule="">
   </Item>

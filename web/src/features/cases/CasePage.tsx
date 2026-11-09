@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link, useLocation, useParams, useSearchParams } from 'react-router';
 import {
+  beforeEvidence,
   isOpen,
   keys,
   useCase,
@@ -23,6 +24,7 @@ import { REPLAY_DONE, SHOW_APPROVAL } from '@/lib/events';
 import { usePrefersReducedMotion, useStagedReveal } from '@/lib/motion';
 import { caseOutcome } from '@/lib/status';
 import type { Tone } from '@/lib/tone';
+import { CaseBundleDownload } from './case/CaseBundleDownload';
 import { CaseHeader } from './case/CaseHeader';
 import { Lifecycle, REPLAYED_STAGES, type StageKey } from './case/Lifecycle';
 import { FailureMap } from './case/FailureMap';
@@ -31,6 +33,7 @@ import { CaseActionButton } from './case/CaseActionButton';
 import { caseActionOf, type ActionPlace } from './case/caseAction';
 import { closeNeedsApprover } from '../site-profile/profile';
 import { EvidencePanel } from './case/EvidencePanel';
+import { WarehouseHistoryPanel } from './case/WarehouseHistoryPanel';
 import { revealSection } from './case/revealSection';
 import { EscalationPanel } from './case/EscalationPanel';
 import { AbandonPanel } from './case/AbandonPanel';
@@ -45,10 +48,12 @@ import { s8Pair } from './case/compare';
 import { SHOW_EVIDENCE } from './case/evidenceLinks';
 import { rounds } from './case/derive';
 import { nextAction, outcomeCaseOf, provenanceOf, recordedApprovalTime } from './case/outcome';
+import { FurtherStopPanel } from './case/FurtherStopPanel';
 import { useCaseFacts } from './case/useCaseFacts';
 import { AskButton } from './ask/AskSurface';
 import { useAssistant } from '@/features/assistant/store';
 import { ConveneBoard } from './case/ConveneBoard';
+import { DocumentPanel } from './case/DocumentPanel';
 
 /** The portal's base path (/csp/<namespace>/) for links to messages, read from the case's trace link. */
 function portalBase(visualTrace: string | undefined): string {
@@ -313,9 +318,11 @@ function CaseBody({ c }: { c: CaseDetail }) {
         next={headerNext}
         actions={
           <>
-            <ConveneBoard c={c} />
+            {c.document ? null : <ConveneBoard c={c} />}
             <CaseActionButton action={action} onGo={goToAction} />
-            <AskButton open={asking} onToggle={() => (asking ? closeAsk(false) : openAsk(c.caseId))} />
+            {c.document ? null : (
+              <AskButton open={asking} onToggle={() => (asking ? closeAsk(false) : openAsk(c.caseId))} />
+            )}
           </>
         }
       />
@@ -393,9 +400,13 @@ function CaseBody({ c }: { c: CaseDetail }) {
                   receiver={c.receiver}
                 />
               ) : null}
+              {c.document ? <DocumentPanel c={c} /> : null}
               {/* A stopped case's hand-off to the team, with the action it serves, after the board; the main button
                   only when escalating is the action */}
               {stopped ? <EscalationPanel c={c} primary={nextAction(facts).escalate} /> : null}
+              {c.state === 'blocked' && facts.blocked?.code === 'FURTHER_MOVEMENT' ? (
+                <FurtherStopPanel c={c} />
+              ) : null}
               <AbandonPanel c={c} events={events.data} />
               <CaseStory
                 c={c}
@@ -416,9 +427,11 @@ function CaseBody({ c }: { c: CaseDetail }) {
               caseId={c.caseId}
               receiver={c.receiver}
               open={open}
+              notYet={beforeEvidence(c.state)}
               focus={focus}
               onFocused={clearFocus}
             />
+            <WarehouseHistoryPanel caseId={c.caseId} canRead={me?.can?.operate ?? me?.operator ?? false} />
           </Tabs.Panel>
           <Tabs.Panel value="audit" pt="md" {...PANEL}>
             <Stack gap="md">
@@ -434,6 +447,7 @@ function CaseBody({ c }: { c: CaseDetail }) {
               {/* A stopped case's hand-off is part of its next action; once closed by hand, it is history here */}
               {!stopped ? <EscalationPanel c={c} /> : null}
               <PortalLinks c={c} runs={facts.runs} portalBase={base} />
+              <CaseBundleDownload caseId={c.caseId} />
             </Stack>
           </Tabs.Panel>
         </Tabs>

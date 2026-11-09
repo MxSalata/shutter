@@ -23,8 +23,7 @@ afterAll(() => server.close());
 
 const HEADLINE =
   'Shutter fixes a failed HL7 transfer only when its checks pass. Otherwise it stops and names the patient.';
-const PURPOSE =
-  'When a patient movement fails to reach another system, Shutter finds out why and writes a fix only once its checks pass.';
+const PURPOSE = 'When a patient movement fails to reach another system, Shutter finds out why.';
 
 function renderLogin(demo: boolean, detail: DetailLevel = 'plain') {
   useAppearance.setState({ detail });
@@ -405,6 +404,13 @@ describe('LoginPage, how much it says', () => {
     console.log(`sign-in words, Technical: laptop ${laptop}, phone ${phone}`);
     expect(laptop).toBeLessThanOrEqual(TECHNICAL_BUDGET);
     expect(phone).toBeLessThanOrEqual(TECHNICAL_BUDGET);
+  });
+
+  it("says beside the figures that the agents were given the catalogue's entry and outcome", async () => {
+    await renderDemoLogin('plain');
+    const said = "The agents were given the catalogue's matching entry and preferred outcome.";
+    expect(screen.getByText(said)).toBeInTheDocument();
+    expect(screen.getByText(/^Recorded failures: the board/)).toHaveTextContent(said);
   });
 
   it('keeps each element to its limit', async () => {

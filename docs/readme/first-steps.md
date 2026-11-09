@@ -59,7 +59,7 @@ For a hospital trying Shutter beside a real production, as [the install guide](h
 
 ![Incident I-000001 from S11: eight failed deliveries, six chains, all verified at the receiver in 1 min 42 s](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/incident-s11.png)
 
-All 32 scenarios (S1 to S32 without S14 and S26, with S23 in three parts; CI plays 26 of them end to end), step by step, and where each part of the task shows: [docs/readme/scenarios.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/scenarios.md).
+All 36 scenarios (S1 to S34, with S23 in three parts; CI played 26 of them end to end at the 1.1.0 release), step by step, and where each part of the task shows: [docs/readme/scenarios.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/scenarios.md).
 
 ## The approval boundary, attacked over HTTP
 

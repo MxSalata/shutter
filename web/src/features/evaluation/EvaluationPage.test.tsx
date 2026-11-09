@@ -120,7 +120,7 @@ describe('EvaluationPage', () => {
     // What the agents had to go on, carried over from the evaluation so the page doesn't overclaim
     expect(
       within(hero).getByText(
-        /coordinator is given the catalogue's entry and took its outcome in 24 of 25 plans, S8 included/,
+        /agents are given the catalogue's matching entry and preferred outcome. The coordinator took that outcome in 24 of 25 plans, S8 included/,
       ),
     ).toBeInTheDocument();
     // The side by side of S8's two cases, found among the recorded cases
@@ -163,9 +163,7 @@ describe('EvaluationPage', () => {
       within(hero).getByRole('heading', { name: "The board's proposals", level: 3 }),
     ).toBeInTheDocument();
     expect(within(hero).getByText('24 of 24')).toBeInTheDocument();
-    expect(
-      within(hero).getByText('recorded failures where the board chose the expected action'),
-    ).toBeInTheDocument();
+    expect(within(hero).getByText('recorded failures, the expected action chosen')).toBeInTheDocument();
     // The tested caption, in the tile's data detail
     expect(
       within(hero).getByText("scored passes proposed the scenario's expected action"),

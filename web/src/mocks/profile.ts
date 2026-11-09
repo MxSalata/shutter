@@ -19,7 +19,8 @@ function withSeedMail(profile: SiteProfile): SiteProfile {
 
 export function recordedSiteProfile(): SiteProfileView | null {
   const view = recorded.siteProfile ? structuredClone(recorded.siteProfile) : null;
-  return view ? { ...view, profile: withSeedMail(view.profile) } : null;
+  // The demo seeds recovery as enabled (CONTRACTS 18).
+  return view ? { ...view, profile: { ...withSeedMail(view.profile), recovery: { mode: 'enabled' } } } : null;
 }
 
 export function recordedSiteProfileHistory(): SiteProfileVersionEntry[] {

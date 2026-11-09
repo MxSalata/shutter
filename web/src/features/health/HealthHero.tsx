@@ -1,11 +1,12 @@
 import { Group, Stack, Text, VisuallyHidden } from '@mantine/core';
-import { IconCheck, IconHistory, IconX } from '@tabler/icons-react';
+import { IconAlertTriangle, IconCheck, IconHistory, IconX } from '@tabler/icons-react';
 import { CodeChip } from '@/components/CodeChip';
 import { HeroBand } from '@/components/HeroBand';
 import { StatusBadge } from '@/components/StatusBadge';
 import { toneText } from '@/lib/tone';
 import {
   agentsBadge,
+  HERO_ATTENTION_LINES,
   recordedAt,
   sent,
   utcMinute,
@@ -18,7 +19,8 @@ import type { Proof } from '@/lib/proof';
 /**
  * The verdict: whether the installation is ready, in one sentence, with the core checks listed under it (a failing one
  * says what to do), the production, namespace and version as chips, when the report was read (in the trial, which
- * shows a recording), and where the agents run. The agents badge is never part of the verdict.
+ * shows a recording), where the agents run, and what needs a look beyond the core checks (a receiver not answering, a
+ * watched namespace that cannot be heard). The agents badge is never part of the verdict.
  */
 export function HealthHero({
   report,
@@ -69,6 +71,26 @@ export function HealthHero({
               </li>
             ))}
           </ul>
+        ) : null}
+        {verdict.attention.length ? (
+          <ul className="health-checks" role="list" aria-label="What needs a look">
+            {verdict.attention.slice(0, HERO_ATTENTION_LINES).map((a) => (
+              <li key={a.line} data-passed="false">
+                <IconAlertTriangle
+                  size={16}
+                  stroke={2.2}
+                  aria-hidden
+                  style={{ color: toneText('attention') }}
+                />
+                <span>{a.line}</span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        {verdict.attention.length > HERO_ATTENTION_LINES ? (
+          <Text size="sm">
+            {`and ${verdict.attention.length - HERO_ATTENTION_LINES} more, in the Other group.`}
+          </Text>
         ) : null}
         {verdict.notSent && verdict.results.length ? (
           <Text size="sm" c="dimmed">

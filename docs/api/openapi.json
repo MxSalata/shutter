@@ -8536,6 +8536,604 @@
           }
         }
       }
+    },
+    "/api/shutter/cases/{caseId}/correction-draft": {
+      "get": {
+        "tags": [
+          "cases"
+        ],
+        "x-idempotent": false,
+        "parameters": [
+          {
+            "name": "caseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^C-[0-9]+$"
+            },
+            "description": "The case's public id, such as C-000064.",
+            "example": "C-000064"
+          }
+        ],
+        "operationId": "caseCorrectionDraft",
+        "summary": "A history correction's drafted sequence",
+        "description": "Needs Shutter_Approve.\n\nThe drafted sequence's text, redrawn on every read: it never reads the receiver and sends nothing, and a read is recorded on the case.\n\nCONTRACTS 10.",
+        "x-contract": "docs/CONTRACTS.md section 10",
+        "x-required-resource": "Shutter_Approve",
+        "x-writes": false,
+        "x-dispatch": "Shutter.API.Dispatch.CaseCorrectionDraft",
+        "responses": {
+          "200": {
+            "description": "The drafted sequence.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in. unauthenticated: Sign in first.",
+            "x-error-codes": [
+              "unauthenticated"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden. forbidden: This needs Shutter_Approve.",
+            "x-error-codes": [
+              "forbidden"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found. not_found: No case with that id.",
+            "x-error-codes": [
+              "not_found"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict. wrong_outcome: The case's plan is not a history correction.",
+            "x-error-codes": [
+              "wrong_outcome"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/shutter/cases/{caseId}/bundle": {
+      "post": {
+        "tags": [
+          "cases"
+        ],
+        "x-idempotent": false,
+        "parameters": [
+          {
+            "name": "caseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^C-[0-9]+$"
+            },
+            "description": "The case's public id, such as C-000064.",
+            "example": "C-000064"
+          }
+        ],
+        "operationId": "caseBundle",
+        "summary": "One case's redacted bundle, as a file",
+        "description": "Needs Shutter_Operate and X-Requested-With: Shutter.\n\nThe case for audit and a support handoff, redacted, as a JSON file (Content-Disposition attachment); the download is recorded on the case.\n\nCONTRACTS 5.",
+        "x-contract": "docs/CONTRACTS.md section 5",
+        "x-required-resource": "Shutter_Operate",
+        "x-writes": true,
+        "x-dispatch": "Shutter.API.Dispatch.CaseBundle",
+        "responses": {
+          "200": {
+            "description": "The redacted bundle, as a file.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in. unauthenticated: Sign in first.",
+            "x-error-codes": [
+              "unauthenticated"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden. forbidden or csrf: This needs Shutter_Operate and the header X-Requested-With: Shutter.",
+            "x-error-codes": [
+              "forbidden",
+              "csrf"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found. not_found: No case with that id.",
+            "x-error-codes": [
+              "not_found"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict. not_redactable: The case could not be redacted.",
+            "x-error-codes": [
+              "not_redactable"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/shutter/cases/{caseId}/bundle-unredacted": {
+      "post": {
+        "tags": [
+          "cases"
+        ],
+        "x-idempotent": false,
+        "parameters": [
+          {
+            "name": "caseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^C-[0-9]+$"
+            },
+            "description": "The case's public id, such as C-000064.",
+            "example": "C-000064"
+          }
+        ],
+        "operationId": "caseBundleUnredacted",
+        "summary": "One case's bundle with its identifiers, for an approver with a reason",
+        "description": "Needs Shutter_Approve and X-Requested-With: Shutter.\n\nThe same file unredacted, never a link; the typed reason is recorded on the case.\n\nCONTRACTS 5.",
+        "x-contract": "docs/CONTRACTS.md section 5",
+        "x-required-resource": "Shutter_Approve",
+        "x-writes": true,
+        "x-dispatch": "Shutter.API.Dispatch.CaseBundleUnredacted",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "reason"
+                ],
+                "properties": {
+                  "reason": {
+                    "type": "string",
+                    "description": "Why the identifiers are needed."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The unredacted bundle, as a file.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request. bad_request: Say the reason you need the identifiers.",
+            "x-error-codes": [
+              "bad_request"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in. unauthenticated: Sign in first.",
+            "x-error-codes": [
+              "unauthenticated"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden. forbidden or csrf: This needs Shutter_Approve and the header X-Requested-With: Shutter.",
+            "x-error-codes": [
+              "forbidden",
+              "csrf"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found. not_found: No case with that id.",
+            "x-error-codes": [
+              "not_found"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict. not_recorded: The download could not be recorded.",
+            "x-error-codes": [
+              "not_recorded"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/shutter/cases/{caseId}/receiver-check": {
+      "get": {
+        "tags": [
+          "cases"
+        ],
+        "x-idempotent": false,
+        "parameters": [
+          {
+            "name": "caseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^C-[0-9]+$"
+            },
+            "description": "The case's public id, such as C-000064.",
+            "example": "C-000064"
+          }
+        ],
+        "operationId": "caseReceiverCheck",
+        "summary": "What to check at the receiver on a stopped case",
+        "description": "Needs Shutter_Operate.\n\nNo model, no receiver call and no write.\n\nCONTRACTS 5.2.",
+        "x-contract": "docs/CONTRACTS.md section 5.2",
+        "x-required-resource": "Shutter_Operate",
+        "x-writes": false,
+        "x-dispatch": "Shutter.API.Dispatch.CaseReceiverCheck",
+        "responses": {
+          "200": {
+            "description": "The checks to make at the receiver.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in. unauthenticated: Sign in first.",
+            "x-error-codes": [
+              "unauthenticated"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden. forbidden: This needs Shutter_Operate.",
+            "x-error-codes": [
+              "forbidden"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found. not_found: No case with that id.",
+            "x-error-codes": [
+              "not_found"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/shutter/cases/{caseId}/further-stop": {
+      "get": {
+        "tags": [
+          "cases"
+        ],
+        "x-idempotent": false,
+        "parameters": [
+          {
+            "name": "caseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^C-[0-9]+$"
+            },
+            "description": "The case's public id, such as C-000064.",
+            "example": "C-000064"
+          }
+        ],
+        "operationId": "caseFurtherStop",
+        "summary": "What stops a case's write for further messages",
+        "description": "Needs Shutter_Operate.\n\nRead fresh, with the digest a release must name; a read scans the patient's messages.\n\nCONTRACTS 6.5.",
+        "x-contract": "docs/CONTRACTS.md section 6.5",
+        "x-required-resource": "Shutter_Operate",
+        "x-writes": false,
+        "x-dispatch": "Shutter.API.Dispatch.CaseFurtherStop",
+        "responses": {
+          "200": {
+            "description": "The further messages that stop the write, and their digest.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in. unauthenticated: Sign in first.",
+            "x-error-codes": [
+              "unauthenticated"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden. forbidden: This needs Shutter_Operate.",
+            "x-error-codes": [
+              "forbidden"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found. not_found: No case with that id.",
+            "x-error-codes": [
+              "not_found"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/shutter/cases/{caseId}/further-release": {
+      "post": {
+        "tags": [
+          "cases"
+        ],
+        "x-idempotent": true,
+        "parameters": [
+          {
+            "name": "caseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^C-[0-9]+$"
+            },
+            "description": "The case's public id, such as C-000064.",
+            "example": "C-000064"
+          }
+        ],
+        "operationId": "caseFurtherRelease",
+        "summary": "A person releases a case's stop on another visit's movement",
+        "description": "Needs Shutter_Approve and X-Requested-With: Shutter.\n\nThe digest of the rows the person read, and why. A fresh read must give that digest; the case then goes through fresh evidence, where the gate checks the same again, every other check runs, and a write waits for its approval. An Idempotency-Key replays the first reply.\n\nCONTRACTS 6.5.",
+        "x-contract": "docs/CONTRACTS.md section 6.5",
+        "x-required-resource": "Shutter_Approve",
+        "x-writes": true,
+        "x-dispatch": "Shutter.API.Dispatch.CaseFurtherRelease",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "digest",
+                  "reason"
+                ],
+                "properties": {
+                  "digest": {
+                    "type": "string",
+                    "description": "The digest GET further-stop gave for the rows read."
+                  },
+                  "reason": {
+                    "type": "string",
+                    "description": "Why it is safe to send."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The release, recorded; the case is investigated again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request. bad_request: The reason or the digest is missing.",
+            "x-error-codes": [
+              "bad_request"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in. unauthenticated: Sign in first.",
+            "x-error-codes": [
+              "unauthenticated"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden. forbidden or csrf: This needs Shutter_Approve and the header X-Requested-With: Shutter.",
+            "x-error-codes": [
+              "forbidden",
+              "csrf"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found. not_found: No case with that id.",
+            "x-error-codes": [
+              "not_found"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict. wrong_state, or a code of the release: only a blocked case, and a fresh read must give the digest.",
+            "x-error-codes": [
+              "wrong_state"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {

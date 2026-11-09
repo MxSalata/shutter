@@ -49,6 +49,7 @@
       <Resource Name="Shutter.Setup.CLS"/>
       <Resource Name="Shutter.Store.PKG"/>
       <Resource Name="Shutter.Util.PKG"/>
+      <Resource Name="Shutter.Warehouse.PKG"/>
       <!-- The live agents (AI Hub): the agent runner for the bridge, the board members (declarative %AI.Agent classes),
            their tools, the publisher's tools and gateway, the policies, the schemas and the knowledge bases. -->
       <Resource Name="Shutter.Agent.PKG"/>

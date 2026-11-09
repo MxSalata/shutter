@@ -440,7 +440,7 @@ function Headline({
       ) : null}
       {t.plans_with_a_catalogue_outcome ? (
         <Text size="sm">
-          {`The coordinator is given the catalogue's entry and took its outcome in ${t.plans_taking_the_preferred_outcome ?? 0} of ${t.plans_with_a_catalogue_outcome} plans, S8 included: written policy applied to evidence, not answers reached unaided.`}
+          {`The agents are given the catalogue's matching entry and preferred outcome. The coordinator took that outcome in ${t.plans_taking_the_preferred_outcome ?? 0} of ${t.plans_with_a_catalogue_outcome} plans, S8 included: policy applied to evidence, not answers reached unaided.`}
         </Text>
       ) : null}
 
@@ -452,7 +452,7 @@ function Headline({
           label="The board's proposals"
           labelOrder={3}
           figure={b?.scored ? `${b.matched} of ${b.scored}` : 'None scored'}
-          caption="recorded failures where the board chose the expected action"
+          caption="recorded failures, the expected action chosen"
           tone={allMatched ? 'positive' : b?.scored ? 'blocking' : undefined}
           status={
             allMatched ? (

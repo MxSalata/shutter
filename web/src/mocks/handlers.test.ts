@@ -514,6 +514,7 @@ describe("the public demo's role", () => {
       approve: true,
       configure: true,
       scenarios: true,
+      stopRecovery: true,
       liveAgents: true,
     });
     expect(await can('operator')).toEqual({
@@ -521,6 +522,7 @@ describe("the public demo's role", () => {
       approve: false,
       configure: false,
       scenarios: true,
+      stopRecovery: true,
       liveAgents: true,
     });
     // The public demo's own user replays; a judge spends the day's model budget (v1.34)

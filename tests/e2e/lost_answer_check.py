@@ -9,8 +9,9 @@ line: a write nobody answered must never read as nothing sent. So the check asks
 uncertain, no verification that says not committed before the receiver's write landed, the case resolved as verified and
 never blocked, no event that says the write was refused, and the receiver holding the transfer exactly once. With
 --seconds at 50 the write lands 35 s after the attempt is recorded, past the read at 30 s, so the settle window is on
-trial too (CONTRACTS 1.3 and 5.1). The default is 50 because a hold of 60 s can tie with the web gateway's own timeout
-of 60 s: one run in four at 60 s never wrote, and five in five at 50 s did.
+trial too (CONTRACTS 1.3 and 5.1). The hold stays under 60 s because the web gateway's own timeout of 60 s ends the
+request and the write with it, with no licence pressure needed: measured on a stock install, every write held 59 s or
+less applied, none held 61 s or more did, and at 60 s the two tie. A longer hold would test the gateway, so it is refused.
 
 Signs in as the demo users `operator` and `approver` (password from SHUTTER_PASSWORD, default "shutter"); the receiver
 is read and faulted through its API (--downstream-user and --downstream-password, default _SYSTEM / SYS). It plays a
@@ -55,12 +56,14 @@ def set_fault(args, body):
 def main():
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--url", default="http://localhost:52773")
-    p.add_argument("--seconds", type=int, default=50, help="how long the receiver holds the write, above 15")
+    p.add_argument("--seconds", type=int, default=50, help="how long the receiver holds the write, 16 to 59")
     p.add_argument("--mode", default="rules", help="the mode S2 is played in; rules needs no recordings")
     p.add_argument("--timeout", type=int, default=300, help="seconds to wait for each step")
     p.add_argument("--downstream-user", default="_SYSTEM")
     p.add_argument("--downstream-password", default="SYS")
     args = p.parse_args()
+    if not 15 < args.seconds < 60:
+        p.error("--seconds must be from 16 to 59: at 15 or less the connector gets its answer, and at 60 or more the web gateway can end the write")
 
     password = os.environ.get("SHUTTER_PASSWORD", "shutter")
     operator = Session(args.url).sign_in("operator", password)

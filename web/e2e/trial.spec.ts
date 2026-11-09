@@ -90,13 +90,11 @@ test.describe('the trial on the build IRIS serves', () => {
     stub.enter();
     await page.goto('./?trial=tour#/scenarios');
     await expect(page.getByRole('region', { name: 'Trial environment' })).toBeVisible();
-    // The address is normalised to ?trial, so a reload does not open the welcome again
+    // The address is normalised to ?trial, so a reload does not start the tour again
     await expect(page).toHaveURL(/\/shutter\/\?trial#\/scenarios$/);
-    const welcome = page.getByRole('dialog', { name: 'Welcome to the Shutter trial' });
-    await expect(welcome).toBeVisible();
-    await welcome.getByRole('button', { name: 'Start the tour' }).click();
+    await expect(page.getByRole('dialog', { name: 'Welcome to the Shutter trial' })).toBeHidden();
 
-    // The quick tour, Next by Next: the guide approves the held S2 case for the reader on its decision step
+    // The quick tour starts by itself, Next by Next: the guide approves the held S2 case for the reader on its decision step
     const guide = page.getByRole('region', { name: 'Guide' });
     for (let n = 1; n <= 9; n++) {
       await expect(guide).toContainText(`Step ${n} of 9`);

@@ -119,6 +119,11 @@ ClassMethod ApplyLocked(request As %DynamicObject, key As %String, digest As %St
         Set status = 504
         Quit ""
     }
+    If 'dryRun, status = 201, ..FaultFor(key) = "commit_then_409" {
+        // Committed, then something between the sender and the receiver answers that it conflicted
+        Set status = 409
+        Quit {"error": "version_conflict"}
+    }
     Quit result
 }
 
@@ -412,9 +417,9 @@ ClassMethod FaultFor(key As %String) As %String
 ClassMethod SetFault(request As %DynamicObject, Output status As %Integer) As %DynamicObject
 {
     Set mode = request.%Get("mode")
-    If '$LISTFIND($LISTBUILD("off", "fail_before_accept", "commit_drop_response", "misleading_duplicate_error", "receipt_lookup_unavailable", "delay_response"), mode) {
+    If '$LISTFIND($LISTBUILD("off", "fail_before_accept", "commit_drop_response", "commit_then_409", "misleading_duplicate_error", "receipt_lookup_unavailable", "delay_response"), mode) {
         Set status = 422
-        Quit {"error": "invalid_request", "detail": "mode must be off, fail_before_accept, commit_drop_response, misleading_duplicate_error, receipt_lookup_unavailable or delay_response"}
+        Quit {"error": "invalid_request", "detail": "mode must be off, fail_before_accept, commit_drop_response, commit_then_409, misleading_duplicate_error, receipt_lookup_unavailable or delay_response"}
     }
     // delay_response holds each real operation for seconds (1 to 60, 12 when not given)
     Set seconds = request.%Get("seconds")

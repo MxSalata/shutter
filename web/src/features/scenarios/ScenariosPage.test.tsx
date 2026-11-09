@@ -288,6 +288,25 @@ describe('ScenariosPage', () => {
     expect(within(s).getByText('Nothing written')).toBeInTheDocument();
   });
 
+  it("keeps Run off while the last run's case is still working, and on once it waits on a person", async () => {
+    const s2 = scenarioDefs.find((d) => d.id === 'S2')!;
+    const run = { scenario: 'S2', mode: 'rules', startedAt: '', state: 'done', files: [], timeouts: [] };
+    const latest = { caseId: 'C-000055', disposition: '', headline: '' };
+    let state = 'investigating';
+    server.use(
+      http.get('/api/shutter/scenarios', () =>
+        HttpResponse.json({ scenarios: [{ ...s2, latestCase: { ...latest, state } }], run }),
+      ),
+    );
+    renderScenarios();
+    expect(await screen.findByRole('button', { name: 'Run S2' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Reset' })).toBeEnabled();
+    state = 'awaiting_approval';
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Run S2' })).toBeEnabled(), {
+      timeout: 5_000,
+    });
+  });
+
   it("links each receiver's case of a scenario that opens one per receiver, beside its latest", async () => {
     const s22 = scenarioDefs.find((d) => d.id === 'S22')!;
     const s2 = scenarioDefs.find((d) => d.id === 'S2')!;

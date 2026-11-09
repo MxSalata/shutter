@@ -5,7 +5,16 @@ import { compactBanner } from '@/trial/visit';
 import * as guide from './controller';
 import type { GuideProgress } from './controller';
 import type { GuideScope } from './registry';
-import { forgetProgress, loadProgress, saveProgress, snoozeWelcome, welcomeSnoozed } from './storage';
+import {
+  forgetProgress,
+  forgetSnoozed,
+  loadProgress,
+  loadSnoozed,
+  saveProgress,
+  saveSnoozed,
+  snoozeWelcome,
+  welcomeSnoozed,
+} from './storage';
 
 /**
  * What the guide shows now: nothing, the welcome, a step's card before its section, the chapter picker, or the finish
@@ -18,7 +27,8 @@ interface GuideState {
   phase: GuidePhase;
   /**
    * Explore on my own, or the welcome closed: it stays closed for the rest of the visit and opens again on the next.
-   * The visit outlasts a reload and a link into the trial (storage.ts, snoozeWelcome).
+   * The visit outlasts a reload and a link into the trial (storage.ts, snoozeWelcome), and the tab keeps it as well, a
+   * full page load included (storage.ts, saveSnoozed).
    */
   snoozed: boolean;
   /** The step after Next approved the held case for the reader: its card says so, once. */
@@ -61,13 +71,14 @@ export const useGuide = create<GuideState>()((set, get) => {
   return {
     progress: loadProgress(),
     phase: 'closed',
-    snoozed: welcomeSnoozed(),
+    snoozed: welcomeSnoozed() || loadSnoozed(),
     approvedForYou: null,
     pointAt: null,
     openedAt: 0,
     openWelcome: () => set({ phase: 'welcome', pointAt: null }),
     notNow: () => {
       snoozeWelcome();
+      saveSnoozed();
       set({ phase: 'closed', snoozed: true });
     },
     dontShowAgain: () => {
@@ -103,6 +114,7 @@ export const useGuide = create<GuideState>()((set, get) => {
     point: (action) => set({ phase: 'closed', pointAt: action }),
     reset: () => {
       forgetProgress();
+      forgetSnoozed();
       set({
         progress: loadProgress(),
         phase: 'closed',

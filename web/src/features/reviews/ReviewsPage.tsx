@@ -185,6 +185,14 @@ export default function ReviewsPage() {
             </Table.ScrollContainer>
           ) : null}
         </Section>
+        {TRIAL ? null : (
+          <Text size="sm">
+            <Anchor component={Link} to="/coverage">
+              Source failure coverage
+            </Anchor>
+            : which of a watched receiver&apos;s failed deliveries have a case. Off unless a site turns it on.
+          </Text>
+        )}
         {reviews.data ? (
           <ApiSource endpoint="GET /api/shutter/production-reviews?limit=100" data={reviews.data} />
         ) : null}

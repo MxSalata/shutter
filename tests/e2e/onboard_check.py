@@ -846,6 +846,9 @@ for r in body["receivers"]:
         r["api"] = {"base": "/beds/api", "state": "/encounters/{encounter}", "receipt": "/receipts/{key}", "capabilities": "/capabilities", "operations": "/operations"}
         r["features"] = {"conditional_writes": True, "receipts": True, "history": True, "dry_run": True}
 body["policy"]["2"]["single"] = "approval"
+# A site's install starts in shadow mode (CONTRACTS 18): recovery reaches this receiver only once it is enabled.
+check("a site's install is in shadow mode", api("GET", "/recovery-control")[1]["mode"] == "shadow")
+body["recovery"] = {"mode": "enabled"}
 body["expectedVersion"] = prof["version"]
 code, saved = api("PUT", "/site-profile", body)
 check("the approver saves the filled-in receiver", code == 200, saved)
@@ -963,7 +966,17 @@ bed_failure_timeout(0)
 time.sleep(3)
 
 step("An automatic release needs a proved source: a post with an invented header waits for a person, and a real failure still goes")
-check("site policy releases tier 2 by itself", profile_edit(lambda b: b["policy"]["2"].update(single="automatic")) == 200)
+# These are admissions the receiver answers 404 for, which policy releases only where the site's profile says so, inside an
+# incident too (policy version 2026-11-07.1); this step is about the source, so it says so for its length, and puts it back.
+lost_before = api("GET", "/site-profile")[1]["profile"].get("further_messages", {}).get("admission_not_found", "person")
+
+
+def release_by_policy(b):
+    b["policy"]["2"].update(single="automatic")
+    b.setdefault("further_messages", {})["admission_not_found"] = "policy"
+
+
+check("site policy releases tier 2 by itself", profile_edit(release_by_policy) == 200)
 import base64
 
 
@@ -1016,7 +1029,12 @@ if hit:
         time.sleep(2)
     print(json.dumps({k: c.get(k) for k in ("caseId", "state", "headline")})[:300])
     check("and it still goes by itself, verified at the receiver", c.get("state") == "resolved" and at_beds(f"ENC-A0d{tag}")[1].get("state") == "admitted", (c.get("state"), at_beds(f"ENC-A0d{tag}")))
-check("the policy goes back", profile_edit(lambda b: b["policy"]["2"].update(single="approval")) == 200)
+def policy_back(b):
+    b["policy"]["2"].update(single="approval")
+    b.setdefault("further_messages", {})["admission_not_found"] = lost_before
+
+
+check("the policy goes back", profile_edit(policy_back) == 200)
 
 # ---- the guard and the reload ----
 step("A load in a live namespace is refused; a reload keeps everything")

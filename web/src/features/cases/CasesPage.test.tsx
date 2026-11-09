@@ -59,6 +59,12 @@ describe('ForwardedBadge', () => {
 });
 
 describe('investigatedBy', () => {
+  it("names the leader's board for a follower's plan", () => {
+    expect(investigatedBy({ ...base, mode: 'board', planCreatedBy: 'lead:C-000007' }).who).toBe(
+      'Board of C-000007',
+    );
+  });
+
   const at = (mode: CaseSummary['mode'], more: Partial<CaseSummary> = {}) =>
     investigatedBy({ ...base, mode, ...more });
 

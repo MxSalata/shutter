@@ -475,6 +475,83 @@ Method TestEveryReasonCodeHasARow()
     Do $$$AssertEquals(missing, "", "every reason code is asserted by a row" _ $SELECT(missing = "": "", 1: "; missing: " _ missing))
 }
 
+/// A person's release at the dispatch gate and at the connector, each on its own fresh read: the same rows pass, and another
+/// relevant message voids the release at both. Release is the route's step: it refuses a digest that isn't the fresh read's.
+Method TestAReleaseHoldsOnlyForTheRowsRead()
+{
+    Set row = ..IndexRow("UT-GATE-REL-1", "ENC-UT-NEW", "UT-NEW")
+    Set more = ""
+    Try {
+        Set case = ..NewCase({})
+        Set found = ##class(Shutter.Util.FurtherMessages).Find(case)
+        Set digest = ##class(Shutter.Util.FurtherMessages).RowsDigest(found)
+        Do $$$AssertNotTrue(##class(Shutter.Util.FurtherMessages).Release(case, "sha256:other", "I read them", "user:ut", .code, .words), "a wrong digest is refused")
+        Do $$$AssertEquals(code, "rows_changed", "and says so: " _ words)
+        Do $$$AssertEquals(case.FurtherReleaseJSON, "", "and nothing is recorded")
+        Do $$$AssertTrue(##class(Shutter.Util.FurtherMessages).Release(case, digest, "A separate day case; I read both visits", "user:ut", .code, .words), "the digest of the rows read is taken")
+        Do $$$AssertTrue(case.FurtherReleaseJSON [ "A separate day case", "the reason is recorded on the case")
+        Do $$$AssertTrue(case.FurtherReleaseJSON [ "user:ut", "with who gave it")
+        Do $$$AssertTrue(..NotedOn(case, "A separate day case"), "and on its timeline")
+        Do $$$AssertTrue(##class(Shutter.Util.FurtherMessages).Released(case, ##class(Shutter.Util.FurtherMessages).Find(case)), "it stands on a fresh read")
+        Set response = ..AtConnector(case)
+        Do $$$AssertNotEquals(response.ReasonCode, "further_movement", "the connector lets the released rows through")
+        Set more = ..IndexRow("UT-GATE-REL-2", "ENC-UT-NEWER", "UT-NEWER")
+        Do $$$AssertNotTrue(##class(Shutter.Util.FurtherMessages).Released(case, ##class(Shutter.Util.FurtherMessages).Find(case)), "another relevant message voids it")
+        Set response = ..AtConnector(case)
+        Do $$$AssertEquals(response.ReasonCode, "further_movement", "at the connector too")
+        Do $$$AssertTrue(response.Error [ "ENC-UT", "which says what it found: " _ response.Error)
+    } Catch ex {
+        Do $$$AssertTrue(0, "no error: " _ ex.DisplayString())
+    }
+    Do ##class(Shutter.Index.Message).%DeleteId(row.%Id())
+    If $ISOBJECT(more) Do ##class(Shutter.Index.Message).%DeleteId(more.%Id())
+}
+
+/// What a release can't cover is refused at the route's step, and the words say why: an unreadable identifier, and a cancel of
+/// this visit, whatever digest is named.
+Method TestAReleaseIsRefusedForWhatItCannotCover()
+{
+    Set case = ..NewCase({})
+    Set case.PatientId = ""
+    Do $$$AssertNotTrue(##class(Shutter.Util.FurtherMessages).Release(case, "sha256:any", "reason", "user:ut", .code, .words), "an unreadable identifier is refused")
+    Do $$$AssertEquals(code, "not_releasable", "as not releasable: " _ words)
+    Do $$$AssertEquals(case.FurtherReleaseJSON, "", "nothing recorded")
+    Set further = {"identifier": "read", "stops": [{"why": "cancel", "event": "cancel_transfer", "visit_number": "ENC-UT1", "control_id": "MSG-9"}], "shows": [], "unread": ""}
+    Do $$$AssertTrue(##class(Shutter.Util.FurtherMessages).NotReleasable(further) [ "cancel", "a cancel of this visit isn't another visit's movement")
+    Set further = {"identifier": "read", "stops": [{"why": "other_visit", "event": "admit", "visit_number": "ENC-2", "control_id": "MSG-9"}], "shows": [], "unread": "the read ran out"}
+    Do $$$AssertTrue(##class(Shutter.Util.FurtherMessages).NotReleasable(further) [ "could not all be read", "nor is a read that didn't finish")
+    Set further = {"identifier": "read", "stops": [], "shows": [], "unread": ""}
+    Do $$$AssertTrue(##class(Shutter.Util.FurtherMessages).NotReleasable(further) '= "", "nor is a read with nothing to release")
+    Set one = {"identifier": "read", "stops": [{"why": "other_visit", "event": "admit", "visit_number": "ENC-2", "control_id": "MSG-9", "where": "received", "location": "WARD-C"}], "shows": [], "unread": ""}
+    Set same = {"identifier": "read", "stops": [{"why": "other_visit", "event": "admit", "visit_number": "ENC-2", "control_id": "MSG-9", "where": "received in HOSPITAL"}], "shows": [], "unread": ""}
+    Do $$$AssertEquals(##class(Shutter.Util.FurtherMessages).RowsDigest(one), ##class(Shutter.Util.FurtherMessages).RowsDigest(same), "the same message from another store gives the same digest")
+}
+
+Method IndexRow(doc As %String, visit As %String, control As %String) As Shutter.Index.Message
+{
+    Set row = ##class(Shutter.Index.Message).%New()
+    Set row.DocId = doc, row.PatientId = "MRN-UT1", row.PatientIdAuthority = "HOSP", row.VisitNumber = visit, row.Event = "admit", row.MessageType = "ADT_A01"
+    Set row.ControlId = control, row.EventTime = "2026-10-20T09:00:00Z", row.TimeCreated = "2099-01-01 00:00:00"
+    Do $$$AssertStatusOK(row.%Save(), "the index's row " _ doc _ " is saved")
+    Quit row
+}
+
+Method AtConnector(case As Shutter.Store.Case) As Shutter.Msg.WardResult
+{
+    Set request = ##class(Shutter.Msg.WardOperation).%New()
+    Set request.Purpose = "recovery", request.CaseId = case.CaseId, request.OperationKey = case.OperationKey
+    Set ward = ##class(Shutter.Operation.Ward).%New("UT Ward")
+    Do ward.OnWardOperation(request, .response)
+    Quit response
+}
+
+Method NotedOn(case As Shutter.Store.Case, text As %String) As %Boolean
+{
+    Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT Text FROM Shutter_Store.CaseEvent WHERE ""Case"" = ?", case.%Id())
+    While rs.%Next() { If rs.%Get("Text") [ text Return 1 }
+    Quit 0
+}
+
 /// Runs the rows of one group and asserts each one's expectations.
 Method RunRows(group As %String)
 {
@@ -524,6 +601,10 @@ Method Run(row As %DynamicObject) As %DynamicObject
         Set inc.Receiver = case.Receiver, inc.Mode = "policy", inc.State = "releasing", inc.OpenedAt = case.OpenedAt
         Set inc.PlanDigest = ##class(Shutter.Util.Json).Str(row.incident, "plan_digest")
         If row.incident.%IsDefined("epoch") Set inc.ReceiverEpoch = row.incident.epoch
+        // What the incident's plan recorded: "current" is the version in force now.
+        Set inc.CatalogueVersion = ..Recorded(row.incident, "catalogue_version", ##class(Shutter.Catalogue.Entry).CatalogueVersion())
+        Set inc.ProfileVersion = ..Recorded(row.incident, "profile_version", ##class(Shutter.Util.Json).Str(##class(Shutter.Store.SiteProfile).Current(), "version", 0))
+        Set inc.PolicyVersion = ..Recorded(row.incident, "policy_version", ##class(Shutter.Operation.Gate).#POLICYVERSION)
         Do $$$AssertStatusOK(inc.%Save(), row.name _ ": the incident is saved")
         Set i%MadeIncidents(inc.%Id()) = ""
         Do $$$AssertStatusOK(case.SetIncident(inc), row.name _ ": the case belongs to the incident")
@@ -541,6 +622,12 @@ Method Run(row As %DynamicObject) As %DynamicObject
     If row.%IsDefined("summary") Do ..Merge(summary, ..Fill(##class(%DynamicAbstractObject).%FromJSON($REPLACE(row.summary.%ToJSON(), "{other}", otherId)), key))
     Set fresh = 300
     If row.%IsDefined("snapshot") Set fresh = +row.snapshot."fresh_seconds"
+    // A person's release of a further-movement stop: of the rows the summary holds, or of the digest the row names.
+    If row.%IsDefined("release") {
+        Set digest = $SELECT(row.release = "the rows": ##class(Shutter.Util.FurtherMessages).RowsDigest(summary.%Get("further_messages")), 1: row.release)
+        Set case.FurtherReleaseJSON = {"digest": (digest), "by": "user:ut", "at": "2026-10-19T10:00:00Z", "reason": "unit test"}.%ToJSON()
+        Do $$$AssertStatusOK(case.%Save(), row.name _ ": the release is recorded")
+    }
     Set snap = ##class(Shutter.Store.Snapshot).Begin(case, fresh)
     Set sc = snap.Seal(summary)
     Do $$$AssertStatusOK(sc, row.name _ ": the snapshot is sealed")
@@ -775,6 +862,13 @@ ClassMethod Purge(id As %String)
     Kill ^Shutter.Counter("event", id), ^Shutter.Counter("plan", id), ^Shutter.Counter("snapshot", id)
 }
 
+/// A version a row's incident recorded: none when the row doesn't say, the one in force when it says current.
+ClassMethod Recorded(incident As %DynamicObject, key As %String, current As %String) As %String
+{
+    Set value = ##class(Shutter.Util.Json).Str(incident, key)
+    Quit $SELECT(value = "current": current, 1: value)
+}
+
 /// Deletes a test incident; its cases are purged by their own rows.
 ClassMethod PurgeIncident(id As %String)
 {
@@ -889,7 +983,8 @@ XData Rows [ MimeType = application/json ]
    "expect": [["intent", "block", "PAYLOAD_CHANGED"]], "outcome": "block"},
   {"group": "intent", "name": "a plan that names no payload digest",
    "plan": {"action": {"payload_digest": null}},
-   "expect": [["intent", "pass", "EXACT_OPERATION"]]},
+   "expect": [["intent", "pass", "EXACT_OPERATION"]],
+   "contains": [["intent", "EXACT_OPERATION", "names no payload digest"]]},
   {"group": "intent", "name": "a plan that writes nothing",
    "plan": {"disposition": "escalate", "action": null},
    "expect": [["intent", "pass", "NO_WRITE"], ["ordering", "pass", "NOT_APPLICABLE"], ["state_transition", "pass", "NOT_APPLICABLE"], ["concurrency", "pass", "NOT_APPLICABLE"], ["capability", "pass", "NOT_APPLICABLE"]], "outcome": "pass"},
@@ -906,6 +1001,37 @@ XData Rows [ MimeType = application/json ]
   {"group": "ordering", "name": "a resend with a new admission for the patient on another visit stops and names both visits",
    "summary": {"further_messages": {"identifier": "read", "stops": [{"why": "other_visit", "event": "admit", "message_type": "ADT_A01", "visit_number": "ENC-OTHER", "event_time": "2026-10-19T10:00:00Z", "control_id": "MSG-9"}], "shows": [], "unread": ""}},
    "expect": [["ordering", "block", "FURTHER_MOVEMENT"]], "contains": [["ordering", "FURTHER_MOVEMENT", "visit ENC-OTHER"], ["ordering", "FURTHER_MOVEMENT", "visit ENC-UT1"]], "outcome": "block"},
+  {"group": "ordering", "name": "a failed A08 naming another bed stops the resend, naming the patient and both places", "case": {"event": "update"},
+   "summary": {"message": {"a08_ward": "WARD-A", "a08_bed": "BAY1-09"}, "ward_state": {"bed": "BAY1-01"}},
+   "expect": [["ordering", "block", "UPDATE_LOCATION_DIFFERS"]], "contains": [["ordering", "UPDATE_LOCATION_DIFFERS", "MRN-UT1"], ["ordering", "UPDATE_LOCATION_DIFFERS", "different location"], ["ordering", "UPDATE_LOCATION_DIFFERS", "ward WARD-A bed BAY1-09"], ["ordering", "UPDATE_LOCATION_DIFFERS", "ward WARD-A bed BAY1-01"]], "outcome": "block"},
+  {"group": "ordering", "name": "a failed A08 naming another ward stops the resend", "case": {"event": "update"},
+   "summary": {"message": {"a08_ward": "WARD-B"}},
+   "expect": [["ordering", "block", "UPDATE_LOCATION_DIFFERS"]], "outcome": "block"},
+  {"group": "ordering", "name": "a failed A08 naming another bed closes nothing as reconciled", "case": {"event": "update"},
+   "summary": {"message": {"a08_ward": "WARD-A", "a08_bed": "BAY1-09"}, "ward_state": {"bed": "BAY1-01"}, "receipt_http_status": 200, "receipt": {"operation_key": "{key}"}}, "plan": {"disposition": "reconcile", "action": null},
+   "expect": [["ordering", "block", "UPDATE_LOCATION_DIFFERS"]], "outcome": "block"},
+  {"group": "ordering", "name": "a failed A08 naming another bed closes nothing as superseded", "case": {"event": "update"},
+   "summary": {"message": {"a08_ward": "WARD-A", "a08_bed": "BAY1-09"}, "ward_state": {"bed": "BAY1-01"}}, "plan": {"disposition": "superseded", "action": null},
+   "expect": [["ordering", "block", "UPDATE_LOCATION_DIFFERS"]], "outcome": "block"},
+  {"group": "ordering", "name": "a plan that hands a failed A08 to a person isn't stopped", "case": {"event": "update"},
+   "summary": {"message": {"a08_ward": "WARD-A", "a08_bed": "BAY1-09"}, "ward_state": {"bed": "BAY1-01"}}, "plan": {"disposition": "escalate", "action": null},
+   "absent": [["ordering", "UPDATE_LOCATION_DIFFERS"], ["ordering", "UPDATE_LOCATION_SHOWN"]], "expect": []},
+  {"group": "ordering", "name": "a failed A08 with no PV1-3 goes as today", "case": {"event": "update"},
+   "summary": {"ward_state": {"bed": "BAY1-01"}},
+   "absent": [["ordering", "UPDATE_LOCATION_DIFFERS"], ["ordering", "UPDATE_LOCATION_SHOWN"]], "expect": [["ordering", "pass", "NO_LATER_EVENT"]], "outcome": "pass"},
+  {"group": "ordering", "name": "a failed A08 at the receiver's own ward and bed goes as today", "case": {"event": "update"},
+   "summary": {"message": {"a08_ward": "WARD-A", "a08_bed": "BAY1-01"}, "ward_state": {"bed": "BAY1-01"}},
+   "absent": [["ordering", "UPDATE_LOCATION_DIFFERS"], ["ordering", "UPDATE_LOCATION_SHOWN"]], "expect": [["ordering", "pass", "NO_LATER_EVENT"]], "outcome": "pass"},
+  {"group": "ordering", "name": "a site that shows it lets the resend through and says so", "case": {"event": "update"},
+   "profile": {"further_messages": {"a08_location": "show"}},
+   "summary": {"message": {"a08_ward": "WARD-A", "a08_bed": "BAY1-09"}, "ward_state": {"bed": "BAY1-01"}},
+   "absent": [["ordering", "UPDATE_LOCATION_DIFFERS"]], "expect": [["ordering", "pass", "UPDATE_LOCATION_SHOWN"]], "contains": [["ordering", "UPDATE_LOCATION_SHOWN", "MRN-UT1"], ["ordering", "UPDATE_LOCATION_SHOWN", "further_messages.a08_location"]], "outcome": "pass"},
+  {"group": "ordering", "name": "a later A08 naming another place stops the write of a failed transfer as a further movement",
+   "summary": {"further_messages": {"identifier": "read", "stops": [{"why": "a08_location", "event": "update", "message_type": "ADT_A08", "visit_number": "ENC-UT1", "event_time": "2026-10-19T10:00:00Z", "control_id": "MSG-9", "location": "WARD-B", "bed": "BAY2-09"}], "shows": [], "unread": ""}},
+   "expect": [["ordering", "block", "FURTHER_MOVEMENT"]], "contains": [["ordering", "FURTHER_MOVEMENT", "ward WARD-B bed BAY2-09"], ["ordering", "FURTHER_MOVEMENT", "MRN-UT1"], ["ordering", "FURTHER_MOVEMENT", "ADT_A08"]], "outcome": "block"},
+  {"group": "ordering", "name": "a later A08 the site shows is on the plan and stops nothing",
+   "summary": {"further_messages": {"identifier": "read", "stops": [], "shows": [{"why": "a08_location_shown", "event": "update", "message_type": "ADT_A08", "visit_number": "ENC-UT1", "event_time": "2026-10-19T10:00:00Z", "control_id": "MSG-9", "location": "WARD-B", "bed": "BAY2-09"}], "unread": ""}},
+   "expect": [["ordering", "pass", "NO_FURTHER_MOVEMENT"]], "contains": [["ordering", "NO_FURTHER_MOVEMENT", "shown on the plan"]], "outcome": "pass"},
   {"group": "ordering", "name": "a further movement comes before a pending message in the checks, so the workflow doesn't wait",
    "summary": {"further_messages": {"identifier": "read", "stops": [{"why": "cancel", "event": "cancel_transfer", "visit_number": "ENC-UT1", "event_time": "2026-10-19T10:00:00Z", "control_id": "MSG-9"}], "shows": [], "unread": ""}, "pending_messages": [{"event": "cancel_transfer", "event_time": "2026-10-19T10:00:00Z", "operation_key": "k-later", "control_id": "MSG-9", "ens_header_id": "77", "sent_at": "2026-10-19 09:01:00.000", "receiver": "Downstream Out", "where": "received, not yet delivered to the receiver"}]},
    "expect": [["ordering", "block", "FURTHER_MOVEMENT"], ["ordering", "block", "NEWER_MESSAGE_PENDING"]], "contains": [["ordering", "FURTHER_MOVEMENT", "cancel of the transfer"], ["ordering", "FURTHER_MOVEMENT", "MRN-UT1"]], "outcome": "block"},
@@ -1213,6 +1339,58 @@ XData Rows [ MimeType = application/json ]
   {"group": "engine", "name": "the live read, at a namespace that does not exist, blocks",
    "case": {"source_namespace": "UTNOSUCHNAMESPACE", "origin_header_id": "1"},
    "expect": [["ordering", "unknown", "ENGINE_UNREADABLE"]], "outcome": "unknown"},
+  {"group": "authorization", "name": "an automatic release of a lost admission inside an incident: never by policy, there too",
+   "incident": {"plan_digest": "sha256:ut-incident"}, "case": {"event": "admit"}, "summary": {"ward_state_http_status": 404, "ward_state": null},
+   "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2", "action": {"expected_version": 0}}, "approval": {"approver": "policy"}, "request": {"chain_kind": "single"},
+   "profile": {"policy": {"2": {"single": "automatic"}}},
+   "expect": [["authorization", "block", "POLICY_REQUIRES_APPROVAL"]], "outcome": "block"},
+  {"group": "authorization", "name": "the same admission under the approval a person gave the incident's plan",
+   "incident": {"plan_digest": "sha256:ut-incident"}, "case": {"event": "admit"}, "summary": {"ward_state_http_status": 404, "ward_state": null, "catalogue": {"decision": "policy", "entry": "E2", "outcome": "resend", "matches": [{"id": "E2", "preferred": {"outcome": "resend"}}]}},
+   "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2", "action": {"expected_version": 0}},
+   "approval": {"incident_plan_digest": "sha256:ut-incident", "bound_entry": "E2", "bound_outcome": "resend"},
+   "expect": [["authorization", "pass", "APPROVAL_VALID"]]},
+  {"group": "authorization", "name": "an approval under an incident, the catalogue, profile and gate policy as its plan recorded them",
+   "incident": {"plan_digest": "sha256:ut-incident", "catalogue_version": "current", "profile_version": "current", "policy_version": "current"}, "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2"},
+   "summary": {"catalogue": {"decision": "policy", "entry": "E2", "outcome": "resend", "matches": [{"id": "E2", "preferred": {"outcome": "resend"}}]}},
+   "approval": {"incident_plan_digest": "sha256:ut-incident", "bound_entry": "E2", "bound_outcome": "resend"},
+   "expect": [["authorization", "pass", "APPROVAL_VALID"]], "outcome": "pass"},
+  {"group": "authorization", "name": "an approval under an incident, the catalogue changed since its plan",
+   "incident": {"plan_digest": "sha256:ut-incident", "catalogue_version": "E2:0", "profile_version": "current", "policy_version": "current"}, "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2"},
+   "summary": {"catalogue": {"decision": "policy", "entry": "E2", "outcome": "resend", "matches": [{"id": "E2", "preferred": {"outcome": "resend"}}]}},
+   "approval": {"incident_plan_digest": "sha256:ut-incident", "bound_entry": "E2", "bound_outcome": "resend"},
+   "expect": [["authorization", "block", "APPROVAL_CATALOGUE_CHANGED"]], "outcome": "block"},
+  {"group": "authorization", "name": "an approval under an incident, the site profile changed since its plan",
+   "incident": {"plan_digest": "sha256:ut-incident", "catalogue_version": "current", "profile_version": "-1", "policy_version": "current"}, "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2"},
+   "summary": {"catalogue": {"decision": "policy", "entry": "E2", "outcome": "resend", "matches": [{"id": "E2", "preferred": {"outcome": "resend"}}]}},
+   "approval": {"incident_plan_digest": "sha256:ut-incident", "bound_entry": "E2", "bound_outcome": "resend"},
+   "expect": [["authorization", "block", "APPROVAL_SITE_PROFILE_CHANGED"]], "outcome": "block"},
+  {"group": "authorization", "name": "an approval under an incident, the gate policy changed since its plan: an upgrade during an open incident",
+   "incident": {"plan_digest": "sha256:ut-incident", "catalogue_version": "current", "profile_version": "current", "policy_version": "2000-01-01.1"}, "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2"},
+   "summary": {"catalogue": {"decision": "policy", "entry": "E2", "outcome": "resend", "matches": [{"id": "E2", "preferred": {"outcome": "resend"}}]}},
+   "approval": {"incident_plan_digest": "sha256:ut-incident", "bound_entry": "E2", "bound_outcome": "resend"},
+   "expect": [["authorization", "block", "APPROVAL_POLICY_CHANGED"]], "outcome": "block"},
+  {"group": "ordering", "name": "another visit's movement a person released, the rows the same",
+   "release": "the rows", "summary": {"further_messages": {"identifier": "read", "stops": [{"why": "other_visit", "event": "admit", "message_type": "ADT_A01", "visit_number": "ENC-OTHER", "event_time": "2026-10-19T10:00:00Z", "control_id": "MSG-9"}], "shows": [], "unread": ""}},
+   "expect": [["ordering", "pass", "FURTHER_MOVEMENT_RELEASED"]]},
+  {"group": "ordering", "name": "another visit's movement released for other rows: a further message voids it",
+   "release": "sha256:rows-read-earlier", "summary": {"further_messages": {"identifier": "read", "stops": [{"why": "other_visit", "event": "admit", "message_type": "ADT_A01", "visit_number": "ENC-OTHER", "event_time": "2026-10-19T10:00:00Z", "control_id": "MSG-9"}], "shows": [], "unread": ""}},
+   "expect": [["ordering", "block", "FURTHER_MOVEMENT"]], "outcome": "block"},
+  {"group": "ordering", "name": "a release doesn't cover a cancel of this visit",
+   "release": "the rows", "summary": {"further_messages": {"identifier": "read", "stops": [{"why": "cancel", "event": "cancel_transfer", "visit_number": "ENC-UT1", "event_time": "2026-10-19T10:00:00Z", "control_id": "MSG-9"}], "shows": [], "unread": ""}},
+   "expect": [["ordering", "block", "FURTHER_MOVEMENT"]], "outcome": "block"},
+  {"group": "ordering", "name": "a release doesn't cover a merge beside another visit's movement",
+   "release": "the rows", "summary": {"further_messages": {"identifier": "read", "stops": [{"why": "other_visit", "event": "admit", "message_type": "ADT_A01", "visit_number": "ENC-OTHER", "event_time": "2026-10-19T10:00:00Z", "control_id": "MSG-9"}, {"why": "merge", "event": "merge", "visit_number": "ENC-OTHER", "event_time": "2026-10-19T10:00:00Z", "control_id": "MSG-10"}], "shows": [], "unread": ""}},
+   "expect": [["ordering", "block", "FURTHER_MOVEMENT"]], "outcome": "block"},
+  {"group": "ordering", "name": "a release doesn't cover a read that didn't finish",
+   "release": "the rows", "summary": {"further_messages": {"identifier": "read", "stops": [{"why": "other_visit", "event": "admit", "message_type": "ADT_A01", "visit_number": "ENC-OTHER", "event_time": "2026-10-19T10:00:00Z", "control_id": "MSG-9"}], "shows": [], "unread": "the read of HOSPITAL ran out of its 30 seconds with messages left"}},
+   "expect": [["ordering", "block", "FURTHER_MOVEMENT"]], "outcome": "block"},
+  {"group": "ordering", "name": "a release doesn't cover an unreadable identifier",
+   "release": "sha256:anything", "summary": {"further_messages": {"identifier": "unreadable", "stops": [], "shows": [], "unread": ""}},
+   "expect": [["ordering", "block", "PATIENT_UNREADABLE"]], "outcome": "block"},
+  {"group": "authorization", "name": "a released stop's write still needs a person: policy doesn't release it",
+   "release": "sha256:anything", "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2"}, "approval": {"approver": "policy"}, "request": {"chain_kind": "single"},
+   "profile": {"policy": {"2": {"single": "automatic"}}},
+   "expect": [["authorization", "block", "POLICY_REQUIRES_APPROVAL"]], "outcome": "block"},
   {"group": "authorization", "name": "an automatic release of a case whose source cannot be proved",
    "case": {"source_namespace": "UTNOSUCHNAMESPACE", "origin_header_id": "1"}, "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2"}, "approval": {"approver": "policy"}, "request": {"chain_kind": "single"},
    "profile": {"policy": {"2": {"single": "automatic"}}},

@@ -20,10 +20,10 @@ A scenario whose expected outcome says "incident" (S11) has several cases: the c
 opens, approves its plan and its cases' plans with --approve, and compares each encounter's chain (kind, who decided,
 the catalogue entries), its writes and the downstream system's final state with expected.encounters.
 
-A scenario that names the modes it is defined for (expected.modes: S7, S11, S12, S17 to S22, S23a to S23c, S24, S25)
-is skipped in the others. S7 is not defined for site policy, which resends without asking anyone, so no plan waits for
+A scenario that names the modes it is defined for (expected.modes: S4, S7, S11, S12, S14, S17 to S22, S23a to S23c, S24 to
+S26) is skipped in the others. S4 is not defined for single, whose stop is kept with its reason in expected.not_defined; S7 is not defined for site policy, which resends without asking anyone, so no plan waits for
 its later transfer; S20 is defined for rules only; S21 for the board, rules and site policy; S22 to S25 for the board
-and site policy; S27 to S31 for site policy, S27 to S29 and S32 for rules.
+and site policy; S14 and S26 for rules and site policy; S27 to S31 and S33 and S34 for site policy, S27 to S29 and S32 to S34 for rules.
 expected.by_mode adds to or replaces the expected outcome in one mode (S21: rules alone propose the resend and the gate
 blocks it, where site policy escalates on the catalogue's E13 before any write is planned). S21's rules pass is the
 gate's catch, not a right answer from rules: S13's identical rules run, judged by its own expectation, differs. So
@@ -44,6 +44,11 @@ A scenario whose message goes to several receivers and fails at more than one (S
 under expected.by_receiver: one case per failed delivery and receiver, each judged by its receiver's own disposition,
 outcome (the catalogue outcome the plan took, such as none or correct_history), write, final state and ward. Each receiver's
 state is read through its own API, at the base path its entry in the site profile names (GET /site-profile).
+
+expected.held (S26) marks a case that blocks while its schema is missing and is released by the run's own import, so it is
+judged only once the run's steps have finished; expected.failure_kind is the kind the case opened with. expected.index_later
+(S14) is a row the case's timeline must carry from the exact index: from a route Shutter does not own, later than the
+failure, with its outcome unknown.
 
 It plays scenarios: each run resets the downstream system. Don't run it on an instance someone else is using.
 """
@@ -203,6 +208,9 @@ def settle(args, operator, approver, scenario, case, run_state):
 
     def settled():
         nonlocal approved
+        # S26: blocked is the hold, not the end, until the run has imported the schema that releases the case
+        if scenario["expected"].get("held") and run_state() in ("queued", "running"):
+            return None
         _, c = operator.call("GET", f"/cases/{urllib.parse.quote(case['caseId'])}")
         if c["state"] == "blocked" and waiting_on_another(operator, case["caseId"]):
             # S23a: the case waits for the case about its bed's occupant, and is released when that one closes. With
@@ -488,6 +496,23 @@ def judge(args, operator, scenario, mode, final, receiver=None):
             if (o or {}).get("operationKey") != expected["waits_on_key"]:
                 differences.append(f"waited on {other} ({(o or {}).get('operationKey')}), expected the case of "
                                    f"{expected['waits_on_key']}")
+    if expected.get("failure_kind") and final.get("failureKind") != expected["failure_kind"]:
+        differences.append(f"failure kind {final.get('failureKind')}, expected {expected['failure_kind']}")
+    if expected.get("index_later"):
+        # Only the exact index saw it (CONTRACTS 8.2): on the timeline from its route, later, and of unknown outcome
+        want = expected["index_later"]
+        _, snapshot = operator.call("GET", f"/cases/{caseid}/snapshot")
+        rows = ((snapshot or {}).get("summary") or {}).get("timeline") or []
+        row = next((r for r in rows if r.get("operation_key") == want["operation_key"]), None)
+        if not row:
+            differences.append(f"no row for {want['operation_key']} on the timeline")
+        else:
+            seen = {"source": row.get("source"), "route": row.get("route"), "event": row.get("event"),
+                    "ward": row.get("ward"), "outcome": row.get("outcome"), "later": row.get("later")}
+            wanted = {"source": "index", "route": want["route"], "event": want["event"], "ward": want["ward"],
+                      "outcome": "unknown", "later": True}
+            if seen != wanted:
+                differences.append(f"the index's row reads {seen}, expected {wanted}")
     if expected.get("source"):
         # A case forwarded from another production names where it came from (CONTRACTS 11)
         _, case = operator.call("GET", f"/cases/{caseid}")

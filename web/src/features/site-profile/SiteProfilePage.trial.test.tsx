@@ -91,3 +91,31 @@ describe('SiteProfilePage in the trial', () => {
     expect(text).not.toMatch(/\blive\b/i);
   });
 });
+
+describe('the reminder for cases left open, in the trial', () => {
+  it('is off, and previews a digest with made-up patients, with nothing sent', async () => {
+    renderPage();
+    const on = await screen.findByRole('switch', { name: /Send reminders for cases left open/ });
+    expect(on).not.toBeChecked();
+    expect(screen.getByRole('button', { name: 'Preview with made-up patients' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    expect(screen.getByText(/Nothing is sent from here/)).toBeInTheDocument();
+    expect(screen.getByText(/C-000101, hospital number TEST-0001/)).toBeInTheDocument();
+  });
+
+  it('says whose decision the patient detail is, and the preview follows it', async () => {
+    renderPage();
+    await userEvent.click(await screen.findByRole('switch', { name: /Send reminders for cases left open/ }));
+    const select = await screen.findByRole('combobox', { name: 'Patient detail in the mail' });
+    expect(select).toHaveValue('identifiers');
+    expect(select).toHaveAccessibleDescription(
+      "This mail goes out with nobody reviewing it. What it carries is your site's information governance decision.",
+    );
+    await userEvent.selectOptions(select, 'identifiers_initial');
+    expect(screen.getByText(/visit V-1001, first name A/)).toBeInTheDocument();
+    await userEvent.selectOptions(select, 'none');
+    expect(screen.queryByText(/TEST-0001/)).not.toBeInTheDocument();
+  });
+});

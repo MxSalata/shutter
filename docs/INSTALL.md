@@ -32,12 +32,43 @@ the case page (`POST /api/shutter/cases/{id}/escalations` through the API); unti
   namespace-wide purge unless asked for. The feed, records and scenario items (`ADT In`, `ADT to Downstream`,
   `Downstream Out`, `ADT to Records`, `Records Out` and `Scenario Player`) are present but switched off in shape A (the
   installer disables them in `Shutter.Production`), and not added at all in shape B (`InstallInto`).
+- **A new install starts in shadow mode.** Shutter investigates and records what it would propose, and sends no rehearsal, recovery write or resend preview, and no escalation email; the hospital's ordinary feed goes on as before. A person enables recovery by saving `"recovery": {"mode": "enabled"}` in the site profile. Settings has "Stop Shutter recovery", for any operator or approver, and the shadow report (`docs/CONTRACTS.md`, 18).
 - **A receiver with no API is escalated, never resent.** Shutter resends only to a receiver whose site profile entry
   describes its API (state, receipt, capabilities and operations paths). A ward system that takes HL7 over TCP and
   keeps no receipts is investigated and escalated; the team corrects it by hand and marks the case handled.
 - **A receiver's outage is one incident (v1.1.0).** Give a receiver's profile entry a `watch` block and Shutter reads what the
   engine shows about its HL7 TCP operation, never the receiver, opens one outage for the time it is down, says what to do
   and whom to call, and closes it when every message has settled. It sends no orders or results (section 11).
+
+## Before you install: will it work here?
+
+A report from this guide's list, for an instance with nothing of Shutter on it. It changes nothing on the instance but the two
+classes it loads, which you delete afterwards. In a terminal on the server, as `_SYSTEM` or another user who can reach every
+namespace, in `USER` or any namespace of your choice:
+
+```objectscript
+Do $SYSTEM.OBJ.Load("<repository>/src/Shutter/Util/Onboard.cls", "ck")
+Do $SYSTEM.OBJ.Load("<repository>/src/Shutter/Util/SiteCheck.cls", "ck")
+Do ##class(Shutter.Util.SiteCheck).Print()
+Do $SYSTEM.OBJ.Delete("Shutter.Util.SiteCheck,Shutter.Util.Onboard")
+```
+
+`Print("PAS,PATHOLOGY")` looks only at the namespaces you name, and `Report` answers the same as JSON. With no name it looks at every
+namespace with Interoperability on and a production. It says one of three things, with what it found by name and the section of this
+guide that deals with it: **blocked** (a check fails: fix it first), **changes needed** (it can go here, with those changes), or
+nothing found against it.
+
+- **The instance:** the version and which package fits it, this user's rights, IPM, free licence units, the web server's port.
+- **Each namespace:** Interoperability, the running production, the item named `Ens.Alert` (two of them, or the name `Site Alerts`
+  taken, stops an apply; your own is renamed and still gets every alert first), default settings keyed to that name, and the
+  categories its services name.
+- **Each stock HL7 operation:** `AlertOnError`, `FailureTimeout` -1, `GetReply`, and how many messages failed there in the last seven
+  days and how many were ADT, at most the newest 2,000. Only ADT to a receiver with an API can be resent.
+
+**What it can't tell you:** whether a receiver has an API that meets the contract, what a green message means at that receiver
+beyond its settings (9.9), and whether your database is on backed-up storage. It sends no message and calls no receiver. Once Shutter
+is installed, the onboarding plan (9.1) goes further, and `SELECT Shutter.Setup_OnboardTest('<namespace>')` opens a first case with
+nothing sent.
 
 ## 2. What an install creates
 
@@ -294,7 +325,7 @@ Shape A:
    no domain set no email can go, and a profile that names a team mailbox without one is refused, so replace the
    shipped `example.nhs.uk` with the trust's; a profile saved before this rule that names teams and no domains sends
    nothing until an approver saves the list), the feed's time zone, `merges: forbidden`.
-5. Set the `Escalation Mail` operation's SMTP server.
+5. Set the `Escalation Mail` operation's SMTP server. Reminders for cases left open use the same server, and are off until the site profile's question 15 turns them on (`docs/CONTRACTS.md`, `reminders`).
 6. Onboard each watched namespace (section 9), which adds the forwarder and the alert intake. If your own process delivers
    and you want it to report failures itself, call the forwarder from it on a failed delivery. With the site profile's "prevent failures" on (section
    7): where a routing engine routes the feed, set its `Validation` (`dm`) and its `BadMessageHandler` to the forwarder
@@ -306,6 +337,10 @@ Shape A:
    receiver's state, and the escalation draft names the right team.
 8. Switch the investigation mode to `policy` for the easy chains once the catalogue's entries are reviewed; watch the
    first weeks on the Settings and costs page and in the Doctor report (`SELECT Shutter.Setup_Doctor()`).
+   `ok` in the health route says Shutter's production runs, and no more. `receivers_ok` says whether each receiver answered when
+   Shutter last read it, and `watched_ok` whether each watched namespace can still be heard (the alert intake and the forwarder
+   there and enabled). Shutter sends no probe: a receiver that died since its last read reads as it last answered, with the time,
+   so silence is not proof. An outside monitor on `receivers_ok`, `watched_ok` and `last_forward` is still yours to set up.
 
 Shape B: section 4 in place of steps 1, 2 and 6; the rest as above.
 
@@ -373,6 +408,8 @@ category has to be loaded in Shutter's namespace too.
 
 ## 8. Upgrading in place
 
+**Upgrading to a version with shadow mode needs a decision.** A stored profile with no `recovery` field reads as shadow, so an instance that was resending comes up in shadow until a person saves `"recovery": {"mode": "enabled"}` in the site profile. The demo seeds it. Plans made before that save don't go: reinvestigate them (`docs/CONTRACTS.md`, 18).
+
 The image keeps Shutter's code; the `shutter-mgr` volume keeps the data: the data databases of the SHUTTER, HOSPITAL and
 RECORDS namespaces under `db/`, and the HL7 folders. So `docker compose down` and `up` keep every case, approval, review,
 profile change and recording, and a rebuilt image (a newer Shutter) starts against the same data. Proven on 1 November 2026:
@@ -436,6 +473,10 @@ long-lived jobs keep the earlier code until then.
   shows one leaves the shared approval for its own case. A demo install keeps the stop.
 - **A large incident's approval.** An incident above about four chains, which 1.1.1 abandoned with every case `failed`,
   now raises one task that lists the first chains and binds them all (CONTRACTS 7.3).
+- **Approvals given before the upgrade.** The gate's policy version moves from `2026-11-06.1` to `2026-11-07.1`, so a
+  plan approved before the upgrade and not yet dispatched is refused at dispatch with `APPROVAL_POLICY_CHANGED`, and an
+  incident's approval is void the same way. Investigate the case again and approve the new plan. As at 1.1.0, precedents
+  recorded under the old version aren't found until approvers decide again under the new one.
 
 ## 9. Onboarding several namespaces
 
@@ -453,6 +494,10 @@ Pathology or Documents namespace gets a durable case and a drafted email per fai
 terminal session on the server). The apply and the removal check `%Admin_Manage`, and it is not enough alone: a role holding only that, with no database
 resources, got Access Denied. Options are one JSON object: any other text answers `ok: false` with an `error`, in the plan, the apply
 and the removal, and changes nothing. Answers are JSON.
+
+**The same steps in the app.** Settings and costs, then Watched namespaces, shows each namespace's state, reads the plan, applies it, sends the test failure and takes a
+namespace off, through the same helpers. The plan comes first and nothing changes until you apply it, and an apply is refused if the plan has moved since you read it. It needs
+`Shutter_Configure`, and to apply or take off the same user as above. The credential stays a terminal line (9.3), so the password never passes through the app.
 
 **Before you start, for each receiver: know what a green message means there.** A completed message does not always mean the
 message was processed. **A message accepted by a transport ACK and then lost downstream raises nothing in Shutter today.** Section 9.9 says
@@ -554,14 +599,14 @@ test environment (section 5, step 7).
 
 **9.5 Check it.** `SELECT Shutter.Setup_Doctor()` has `watched_namespaces`, one entry per namespace onboarded or named by a
 case: `production`, `production_state`, `forwarder`, `alert_intake`, `pass_to`, `classes`, `credential`, `last_forward`,
-`last_forward_error`, `refused_72h`, `last_refused`, `last_case`, `schemas_missing`, `operations_unwatched`, `removed`, `problems`
+`last_forward_error`, `refused_72h`, `last_refused`, `last_case`, `schemas_missing`, `operations_unwatched`, `documents_mismatch`, `removed`, `problems`
 in words and `ok`. `last_forward_error` is the last forward only, and the next good one clears it; `refused_72h` counts every refused
 forward over three days, so a daily read still sees a lost failure. `operations_unwatched` lists HL7 operations added since the last
 apply, whose failures reach the site's consumer and open no case: run the plan and the apply again. A namespace taken off reads
 `removed` and has no problems. `credentials` tries each namespace's stored
 sign-in. `hl7_schemas.missing` includes what a watched namespace's services name.
 
-The web application is at `/shutter/index.html`; `/shutter` and `/shutter/` answer 404.
+The web application is at `/shutter/index.html`; `/shutter` and `/shutter/` go on to it.
 
 **9.6 Fill in the receivers.** In the app's site profile (an approver's), review each draft: its system, category
 (`current_state`, `history_of_record` or `orders_results`), tier and team, and remove `draft` when you save. Use the name the
@@ -577,6 +622,12 @@ each) or `board`; a missing or unknown one reads as `approval`. Only a tier the 
 receiver with no person, through the gate's checks alone. A demo install keeps the earlier table as its own, labelled setting: tiers 1
 and 2 write a single failed message with no approval, tier 1 an ordered chain too, and the online demo's live hospital (`SHUTTER_LIVE=1`) asks a person for a single failed message at tier 2
 as well.
+A non-demo install also starts with no automatic release of its own: the seed's demo receivers are replaced by one draft to fill
+in, and every `automatic` in its policy reads `approval`, so every write waits for a person. The earlier table is also what you can
+choose for your own tiers: tier 1 writes a single failed message or an ordered chain with no approval; tier 2 writes a single failed
+message with no approval and asks for one on an ordered chain; tier 3, a draft's tier, asks for approval on both. An interleaved
+failure goes to the board at every tier. So setting a tier's `policy` to `automatic` and giving a receiver at that tier an API is
+what lets a case write to it with no person, through the gate's checks alone.
 
 **Giving a receiver its API.** Only a receiver with state, receipt, capabilities and operations paths can be recovered. Add
 them in the profile, then, since Shutter writes through a connector item of that receiver's name in its own production:
@@ -705,6 +756,36 @@ another message of a session that has already handed one to Shutter gets no case
 
 **Not there: waiting for an ACK that never comes.** Nothing times out a message whose application ACK has not arrived. This is planned, not built.
 
+### 9.10 Document exceptions
+
+By default a failed MDM or ORU gets the ordinary case below, with the message copied whole into Shutter's store and its first 50 OBX and NTE values into the case's snapshot, and one over 2 MB gets no case. To have a receiver's documents and reports open metadata-only cases instead, at any size and with no copy in Shutter, pass the option to the plan and the apply (9.1, 9.2), which sets both switches:
+
+```sql
+SELECT Shutter.Setup_OnboardApply('DOCUMENTS', '{"document_receivers": "Results Out"}')
+```
+
+Or set them by hand:
+
+1. In the site profile, on the receiver's entry, add this. Saving it needs `Shutter_Configure`.
+
+```json
+"documents": {"enabled": true}
+```
+
+2. In the production's Portal page, on the **Shutter Forwarder** item, set **DocumentReceivers** to the operation's item name. The production picks it up on Update.
+
+The Doctor's `documents_mismatch` (9.5) lists any receiver where only one of the two is on.
+
+Then a failed MDM T01 to T11 there opens a case that shows the document number, the parent, every PID-3 identifier, the statuses and the delivery, and says what the message store holds for that document. **Nothing is resent, and no model is involved.** The email is a notice with a link. A restricted document (TXA-18 V or R) shows its identity only to a holder of `Shutter_Approve`, as does the receiver's own wording of a refusal.
+
+**What it can't tell you.** Whether the receiver filed the document, whether it holds another copy, or whether the identifiers name the right patient. Merges and identifier changes aren't read. A chain covers the messages to that one item back to the time the case states, so a retention purge or another route is outside it. A chain's messages are read one by one: a receiver with many messages a day may need a higher `chain_read_limit`, at the cost of a longer read.
+
+**Reports (ORU).** An ORU counts when any OBX says ED or RP in OBX-2. A PDF sent as base64 under TX or ST reads as text, and takes the ordinary path. Its case shows the order (OBR-2), the report number (OBR-3), the result status (OBR-25) and every PID-3 identifier, with no result and no attachment. An ORU with only numbers or text stays as it is today. `"report_structures"` in `documents` names the message types that count, `["ORU^R01"]` by default.
+
+A further message for the same order or report under another result status is said plainly on the case, both statuses named. That is all it reads of a chain: it doesn't say which message stands, or what changed. An ORU has no confidentiality field, so a report has no restricted view, and the identifiers show to any operator.
+
+The document itself stays in the source's message store, subject to that store's retention. If it's purged, the case stays and says so. Fields and codes: `docs/CONTRACTS.md`, section 11.2.
+
 ## 10. What a watched namespace does not get
 
 Say these plainly to whoever owns the feed.
@@ -716,7 +797,7 @@ Say these plainly to whoever owns the feed.
   section 9; the Site profile page keeps it as stored). The demo's profile keeps the stop (CONTRACTS 6.4 and 6.5). It can't see a change made by hand
   at the receiver, or a message on a route the index doesn't watch once the index has passed it. In a watched namespace it reads every
   HL7 header since the case's own at each write, for at most 30 seconds (`further_messages.scan_seconds`), and a read that runs out blocks the write (`FURTHER_NOT_READ`). Nothing holds the feed during a
-  correction, and a person who reinvestigates a stopped case meets the same stop until they close it by hand.
+  correction, and a person who reinvestigates a stopped case meets the same stop until they close it by hand, or, where it is only another visit's movement, an approver releases it on the case page for the rows they read.
 - **A forwarder sign-in can open a case for any receiver.** An invented movement goes to a person, as the source can't be proved, but a genuine message posted again passes
   that check, so at a tier that releases by policy (9.6) it can write with no approval. A user per namespace does not close this (section 3.5), so that password deserves an integration credential's care.
 - **A message accepted by a transport ACK and then lost downstream raises nothing in Shutter today.** The engine completed it, so no alert comes and no case
@@ -747,9 +828,9 @@ Say these plainly to whoever owns the feed.
   session gets the alert in section 9.9.
 - **Alert words Shutter does not know are not read as "not delivered".** A site's own class's words, a `QueueWaitAlert` on a message still being tried, or a
   connection lost after the frame went (`ErrOutConnectionLost`) open a case with an uncertain outcome that matches no entry that resends, so it goes to the board or a person.
-- **Nothing over 2 MB, and nothing that is not HL7.** The intake answers 413 or 400, so a large MDM with its document inline, or a FHIR
-  body, is a warning in the event log and no case. A smaller MDM's document is kept whole in the case's snapshot: a governance
-  question for the trust.
+- **Nothing over 2 MB, and nothing that is not HL7.** The intake answers 413 or 400, so a large MDM or ORU with its document inline, or a FHIR
+  body, is a warning in the event log and no case. A smaller MDM's document is copied whole into Shutter's store, and its first 50
+  OBX and NTE values into the case's snapshot: a governance question for the trust. A receiver with a document profile (section 9.10) avoids both for MDM and for an ORU with an attachment.
 - **The prevent-failures route (section 7) through a stock routing engine** can name the wrong reason: the engine holds the message, but
   the case reads as a schema failure of the standard the message itself names, because the header's source is the router. Use
   it through a process that checks the category, as the demo hospital's does, or test it first with your feed.

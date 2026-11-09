@@ -115,7 +115,7 @@ The gate holds in every mode but S8's recorded **Rules only** run (above). **Sin
 
 **Try to break it,** with S2's case waiting: as `operator`, **Approve plan** is disabled and the API answers 403 (this one works in the trial too); confirm the dialog in two tabs: one write, then 409; approve the Workflow task with `PlanDigest` empty or wrong: the case blocks. Every click: [first-steps.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/first-steps.md).
 
-One web app for a PC and a phone, 57 screens and states tested at a phone's width. **32 scenarios** (S1 to S32 without S14 and S26, with S23 in three parts), 26 of them played end to end in CI: [scenarios.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/scenarios.md).
+One web app for a PC and a phone, 57 screens and states tested at a phone's width. **36 scenarios** (S1 to S34, with S23 in three parts), 26 of them played end to end in CI at the 1.1.0 release: [scenarios.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/scenarios.md).
 
 ## How it works
 
@@ -142,6 +142,18 @@ One web app for a PC and a phone, 57 screens and states tested at a phone's widt
 6. **One conditional write, then verification:** a dry run, a fresh read, a second gate, one write at the expected version, then a check of the receiver's history.
 
 A resend needs a receiver with [an API](https://github.com/MxSalata/shutter/blob/main/docs/readme/receiver-contract.md) offering a readable history and dry runs; a plain MLLP receiver gets the investigation and a drafted escalation, never a resend.
+
+**For a site getting ready to pilot it:**
+
+- **Shadow mode:** a new install with no demo investigates and records what it would propose, sends nothing to a receiver, and reports those cases, until the site profile says `enabled` ([CONTRACTS 18](https://github.com/MxSalata/shutter/blob/main/docs/CONTRACTS.md#18-shadow-mode-and-the-recovery-stop-v150)).
+- **A stop switch:** **Stop Shutter recovery** on the Settings page refuses every recovery call Shutter makes until an approver clears it.
+- **The failure census:** of a watched receiver's failed deliveries in a window, which have a Shutter case; it reads only, and is off unless turned on ([CONTRACTS 19](https://github.com/MxSalata/shutter/blob/main/docs/CONTRACTS.md#19-the-failure-coverage-census-v150)).
+- **What to check at the receiver:** a stopped case lists what a person should look at on the receiver's own screen, with no model call.
+- **Documents:** a failed MDM or report-carrying ORU becomes a case that resends nothing and keeps no copy of the message ([CONTRACTS 11.2](https://github.com/MxSalata/shutter/blob/main/docs/CONTRACTS.md#112-document-exceptions)).
+- **Warehouse history:** a receiver with no API can publish its earlier movements in two tables, shown to the person beside the case and never used to write ([warehouse-history.md](https://github.com/MxSalata/shutter/blob/main/docs/warehouse-history.md)).
+- **The receiver conformance kit:** a script a site and the receiver's supplier run against a test endpoint to see which parts of the recovery contract it showed; it enables nothing ([receiver-conformance.md](https://github.com/MxSalata/shutter/blob/main/docs/receiver-conformance.md)).
+- **The pilot pack:** templates for a hospital deciding whether, how far and how to stop a pilot: scope, stages, hazard log, daily review, outcome report ([docs/pilot](https://github.com/MxSalata/shutter/blob/main/docs/pilot/00-decision-record.md)).
+- **The case bundle:** one JSON file of a case for audit or a support handoff, redacted, or unredacted for an approver who types a reason.
 
 **Sign-in stays inside IRIS:** Shutter keeps no users or passwords of its own; IRIS roles say what a person may do. The workflows are ObjectScript rather than BPL because they wait on a board answering in parallel, timeouts, re-plans and expiring approvals, and are unit-tested with the gate; every step is still a production message, so the Visual Trace shows it ([why](https://github.com/MxSalata/shutter/blob/main/docs/readme/ai-hub.md#sign-in-the-workflows-and-the-two-productions)).
 
@@ -205,7 +217,7 @@ The full walk-through: [tracing.md](https://github.com/MxSalata/shutter/blob/mai
 
 ## What can go wrong when you resend
 
-Played against the demo receiver; "in CI" is IRIS for Health Community 2026.2 with the agents replaying recorded runs, and *seen in practice* means I have met it at hospitals. All thirteen, and what each leaves out: [edge-cases.md](https://github.com/MxSalata/shutter/blob/main/docs/edge-cases.md).
+Played against the demo receiver; "in CI" is IRIS for Health Community 2026.2 with the agents replaying recorded runs, and *seen in practice* means I have met it at hospitals. All twenty-two, and what each leaves out: [edge-cases.md](https://github.com/MxSalata/shutter/blob/main/docs/edge-cases.md).
 
 | What goes wrong | What Shutter does | Proof |
 | --- | --- | --- |
@@ -225,10 +237,10 @@ Figures from [CI's run at the 1.1.0 release commit](https://github.com/MxSalata/
 
 - **Not yet measured at a hospital:** the scenarios are ours, the data is synthetic and the receiver is a demo bed manager built for them.
 - **A resend needs a receiver API** the site profile describes; a plain MLLP receiver gets a case and a drafted email, never a resend.
-- **Every resend waits for a person** under the shipped site profile (a demo install keeps its own labelled table). Without a key the agents replay recordings; **if the model fails** or there is none, no agent or rules plan is released without a person ([how](https://github.com/MxSalata/shutter/blob/main/docs/readme/model-fails.md)).
+- **Every resend waits for a person** under the shipped site profile (a demo install keeps its own labelled table), and a new install with no demo starts in shadow mode, which writes nothing until the site enables recovery. Without a key the agents replay recordings; **if the model fails** or there is none, no agent or rules plan is released without a person ([how](https://github.com/MxSalata/shutter/blob/main/docs/readme/model-fails.md)).
 - **A large incident is approved once, and its task lists only the first chains:** the Workflow message holds 2,000 characters, so above about four chains it names how many it leaves out and points to the incident page; one approval binds every chain. 40 and 200 failures were released whole at about 3 s an item; at 1,000 only the first 50 items were measured ([the measurements](https://github.com/MxSalata/shutter/blob/main/docs/readme/storm-at-scale.md#after-the-fix)).
-- **Nothing tells anyone** that an outage opened or an approval went undecided for 24 hours: the site's own alert, or a person watching, must.
-- **Onboarding edits the watched production**, and Shutter has no stop switch of its own: a disabled connector item holds its writes in its queue (tested on build 109).
+- **Nothing tells anyone** that an outage opened or an approval went undecided for 24 hours: the site's own alert, or a person watching, must. A reminder mail for cases left open is a site profile setting, off unless the site turns it on.
+- **Onboarding edits the watched production.** **Stop Shutter recovery** on the Settings page refuses Shutter's own recovery calls, but not the hospital's feed; IRIS's own stop holds everything: a disabled connector item holds its writes in its queue (tested on build 109).
 
 Every other limit, with effect, workaround and status: [limits.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/limits.md). For a clinical safety officer: [SAFETY.md](https://github.com/MxSalata/shutter/blob/main/docs/SAFETY.md), the hazards, data flow and what a site still owes.
 
@@ -253,7 +265,7 @@ curl http://localhost:52773/api/shutter/health   # "ok":true once the production
 
 **Troubleshooting.** `install.sh` prints `[fix]` at each check it stops at, and gives up after 25 minutes with the log's last 30 lines; `SELECT Shutter.Setup_Doctor()` in the SQL page (namespace `SHUTTER`, as `_SYSTEM`) is the readiness report. "License limit exceeded": `docker compose restart`. The rest: [troubleshooting.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/troubleshooting.md).
 
-**To stop all writes:** disable each connector item that writes to a receiver (Downstream Out, and Records Out for the second receiver), or `Do ##class(Ens.Director).EnableConfigItem("Downstream Out", 0, 1)`; its writes wait in its queue, and Shutter reads the receiver again before any write ([the test](https://github.com/MxSalata/shutter/blob/main/docs/readme/limits.md#stopping-every-write)).
+**To stop all writes:** **Stop Shutter recovery** on the Settings page refuses every recovery call Shutter makes until an approver clears it ([CONTRACTS 18](https://github.com/MxSalata/shutter/blob/main/docs/CONTRACTS.md#18-shadow-mode-and-the-recovery-stop-v150)). To hold everything a connector sends, the feed's messages included, disable each connector item that writes to a receiver (Downstream Out, and Records Out for the second receiver), or `Do ##class(Ens.Director).EnableConfigItem("Downstream Out", 0, 1)`; its writes wait in its queue, and Shutter reads the receiver again before any write ([the test](https://github.com/MxSalata/shutter/blob/main/docs/readme/limits.md#stopping-every-write)).
 
 ### IPM on a stock AI Hub image
 

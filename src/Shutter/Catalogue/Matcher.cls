@@ -84,6 +84,8 @@ ClassMethod Conditions(case As Shutter.Store.Case, summary As %DynamicObject, ch
     // death_recorded: whether the message records a death or clears one (PID-29, PID-30), as the evidence read it
     Set death = $SELECT($ISOBJECT(msg): $CLASSMETHOD(json, "Str", msg, "death_recorded"), 1: "")
     Set c."death_recorded" = $SELECT((death = "yes") || (death = "cleared") || (death = "unreadable"): death, 1: "no")
+    // a08_location: a failed A08's own PV1-3 against what the receiver holds. The gate acts on it, by the site's profile.
+    Set c."a08_location" = ..A08Location(summary, case, later)
     Set c.chain = $SELECT(chainKind = "": "single", 1: chainKind)
     // receiver_category (v1.23): what kind of system the case's receiver is, from its site profile entry
     Set c."receiver_category" = ##class(Shutter.Store.SiteProfile).ReceiverCategory(case.Receiver)
@@ -169,6 +171,52 @@ ClassMethod Holds(pattern As %DynamicObject, conditions As %DynamicObject) As %B
         }
     }
     Quit 1
+}
+
+/// A failed A08's PV1-3 (the evidence's a08_ward and a08_bed, which only an A08 carries) against the ward and bed the receiver
+/// holds: different, same, or none when there is nothing to compare: no location on the message, no receiver read, a patient
+/// the receiver has discharged, or a later movement applied since, so the receiver has moved on from what the A08 says. An A08
+/// repeating an earlier movement that failed too is the same: that movement's own case delivers it. A receiver that reports
+/// no bed at all is compared by the ward.
+ClassMethod A08Location(summary As %DynamicObject, case As Shutter.Store.Case, later As %DynamicArray = "") As %String
+{
+    If case.Event '= "update" Quit "none"
+    Set json = "Shutter.Util.Json", msg = summary.%Get("message"), state = summary.%Get("ward_state")
+    If '$ISOBJECT(msg) || '$ISOBJECT(state) Quit "none"
+    Set ward = $CLASSMETHOD(json, "Str", msg, "a08_ward"), bed = $CLASSMETHOD(json, "Str", msg, "a08_bed")
+    If (ward = "") && (bed = "") Quit "none"
+    Set held = $CLASSMETHOD(json, "Str", state, "ward")
+    If ($CLASSMETHOD(json, "Str", summary, "ward_state_http_status") '= 200) || (held = "") || ($CLASSMETHOD(json, "Str", state, "state") = "discharged") Quit "none"
+    If '$ISOBJECT(later) Set later = ..Later(summary, case)
+    If '$LISTFIND($LISTBUILD("none", "update"), ..LaterApplied(summary, case, later)) Quit "none"
+    Set heldBed = $SELECT(state.%GetTypeOf("bed") = "unassigned": bed, 1: $CLASSMETHOD(json, "Str", state, "bed"))
+    If '##class(Shutter.Util.FurtherMessages).LocationDiffers(ward, bed, held, heldBed) Quit "same"
+    Quit $SELECT(..RepeatsAFailedMovement(summary, case, ward, bed): "same", 1: "different")
+}
+
+/// Whether an earlier admission or transfer of the timeline, not delivered, is what the A08's ward and bed repeat.
+ClassMethod RepeatsAFailedMovement(summary As %DynamicObject, case As Shutter.Store.Case, ward As %String, bed As %String) As %Boolean [ Private ]
+{
+    Set json = "Shutter.Util.Json", timeline = summary.%Get("timeline")
+    If '$ISOBJECT(timeline) Quit 0
+    Set iter = timeline.%GetIterator()
+    While iter.%GetNext(, .ev) {
+        Continue:'$ISOBJECT(ev)
+        Set e = $CLASSMETHOD(json, "Str", ev, "event"), outcome = $CLASSMETHOD(json, "Str", ev, "outcome")
+        Continue:((e '= "admit") && (e '= "transfer"))
+        Continue:((outcome = "applied") || (outcome = "already_committed"))
+        Continue:($CLASSMETHOD(json, "Str", ev, "event_time") ]] case.EventTime)
+        Continue:##class(Shutter.Util.FurtherMessages).LocationDiffers(ward, bed, $CLASSMETHOD(json, "Str", ev, "ward"), $CLASSMETHOD(json, "Str", ev, "bed"))
+        Return 1
+    }
+    Quit 0
+}
+
+/// What a failed A08 says and what the receiver holds, for a person.
+ClassMethod A08Words(summary As %DynamicObject, case As Shutter.Store.Case) As %String
+{
+    Set json = "Shutter.Util.Json", util = "Shutter.Util.FurtherMessages", msg = summary.%Get("message"), state = summary.%Get("ward_state")
+    Quit "For patient " _ case.PatientId _ " (" _ case.PatientIdAuthority _ "), this A08 on visit " _ case.EncounterId _ " carried a different location: " _ $CLASSMETHOD(util, "PlaceWords", $CLASSMETHOD(json, "Str", msg, "a08_ward"), $CLASSMETHOD(json, "Str", msg, "a08_bed")) _ ", where the receiver holds " _ $CLASSMETHOD(util, "PlaceWords", $CLASSMETHOD(json, "Str", state, "ward"), $CLASSMETHOD(json, "Str", state, "bed"))
 }
 
 /// The later events for the encounter (Later: applied ones, and outside a chain a later transfer whose delivery failed

@@ -1,0 +1,316 @@
+{
+  "contract_version": "shutter-recovery-v1",
+  "base_path_example": "/downstream/api",
+  "checks": [
+    {
+      "id": 1,
+      "stimulus": "GET /capabilities",
+      "pass_condition": "A strict JSON object that declares conditional_writes, receipts, history and dry_run true, an integer epoch, and a retention and idempotency statement, which the report records. A receiver without one of them, or whose answer cannot be read, is not tested further: the other checks read not_supported.",
+      "sections": [
+        "1.8"
+      ],
+      "required": true,
+      "evidence_about": "receiver"
+    },
+    {
+      "id": 2,
+      "stimulus": "GET an unknown encounter and an unknown receipt",
+      "pass_condition": "Exactly 404 unknown_encounter and 404 no_receipt as JSON, not an HTML page or an unrelated 404. Until this passes absence cannot be established, so nothing is written.",
+      "sections": [
+        "1.2",
+        "1.3"
+      ],
+      "required": true,
+      "evidence_about": "receiver"
+    },
+    {
+      "id": 3,
+      "stimulus": "Dry run of an admission at expected version 0",
+      "pass_condition": "200, would_apply true, encounter_before null, encounter_after consistent with the plan. Afterwards there is still no encounter, history or receipt.",
+      "sections": [
+        "1.1",
+        "1.4"
+      ],
+      "required": true,
+      "evidence_about": "receiver"
+    },
+    {
+      "id": 4,
+      "stimulus": "Real admission at expected version 0",
+      "pass_condition": "201, applied true, one admitted state at version 1, one history row and a matching committed receipt, in the answer and in the reads.",
+      "sections": [
+        "1.1",
+        "1.2",
+        "1.3",
+        "1.4"
+      ],
+      "required": true,
+      "evidence_about": "receiver"
+    },
+    {
+      "id": 5,
+      "stimulus": "Repeat a committed operation, with another source_message_id and the old expected version",
+      "pass_condition": "200 already_committed with the original receipt; no new history row or version.",
+      "sections": [
+        "1.1",
+        "1.6"
+      ],
+      "required": true,
+      "evidence_about": "receiver"
+    },
+    {
+      "id": 6,
+      "stimulus": "The committed key with another ward and a correctly recomputed digest",
+      "pass_condition": "409 key_reused_with_different_payload; nothing changes.",
+      "sections": [
+        "1.1",
+        "1.6"
+      ],
+      "required": true,
+      "evidence_about": "receiver"
+    },
+    {
+      "id": 7,
+      "stimulus": "A new key with an incorrect payload digest",
+      "pass_condition": "422 payload_digest_mismatch; no change and no receipt.",
+      "sections": [
+        "1.1",
+        "1.6"
+      ],
+      "required": true,
+      "evidence_about": "receiver"
+    },
+    {
+      "id": 8,
+      "stimulus": "A new operation at the wrong expected version",
+      "pass_condition": "409 version_conflict that reports the expected and the correct current version; no change and no receipt.",
+      "sections": [
+        "1.1",
+        "1.4"
+      ],
+      "required": true,
+      "evidence_about": "receiver"
+    },
+    {
+      "id": 9,
+      "stimulus": "An operation for an encounter with another declared synthetic patient",
+      "pass_condition": "422 patient_mismatch; the encounter's identity does not change.",
+      "sections": [
+        "1.1",
+        "1.2"
+      ],
+      "required": true,
+      "evidence_about": "receiver"
+    },
+    {
+      "id": 10,
+      "stimulus": "Transfer, update and discharge of a declared encounter the receiver has never seen",
+      "pass_condition": "422 unknown_encounter each time; no encounter and no receipt.",
+      "sections": [
+        "1.1",
+        "1.4"
+      ],
+      "required": true,
+      "evidence_about": "receiver"
+    },
+    {
+      "id": 11,
+      "stimulus": "Missing fields, an invalid event, malformed beds and times, a ward or bed where none belongs, a body that is not an object",
+      "pass_condition": "422 invalid_request for each, reported as its own subcheck; nothing is written.",
+      "sections": [
+        "1.1"
+      ],
+      "required": true,
+      "evidence_about": "receiver"
+    },
+    {
+      "id": 12,
+      "stimulus": "A valid transfer, update and discharge in turn",
+      "pass_condition": "A transfer changes the placement, an update does not, a discharge clears it; each adds one version and one history row with the exact operation.",
+      "sections": [
+        "1.1",
+        "1.2",
+        "1.3",
+        "1.4"
+      ],
+      "required": true,
+      "evidence_about": "receiver"
+    },
+    {
+      "id": 13,
+      "stimulus": "Admit an admitted encounter; transfer, update, discharge and admit after a discharge",
+      "pass_condition": "422 invalid_transition with state and event; state, history and receipts do not change.",
+      "sections": [
+        "1.1",
+        "1.4"
+      ],
+      "required": true,
+      "evidence_about": "receiver"
+    },
+    {
+      "id": 14,
+      "stimulus": "Place a second encounter in an occupied bed, as a real call and as a dry run",
+      "pass_condition": "409 bed_occupied both times, naming the declared occupant by encounter id, since and version and no patient identifiers; neither encounter changes. An occupant outside the declared set stops the run.",
+      "sections": [
+        "1.1"
+      ],
+      "required": true,
+      "evidence_about": "receiver"
+    },
+    {
+      "id": 15,
+      "stimulus": "Bed freeing and conflict scope: transfer out, discharge, transfer to ward level, own bed, ward level, the same bed name on another ward",
+      "pass_condition": "A freed bed can be taken; the encounter's own bed, a ward-level placement and the same name on another ward never conflict.",
+      "sections": [
+        "1.1",
+        "1.2"
+      ],
+      "required": true,
+      "evidence_about": "receiver"
+    },
+    {
+      "id": 16,
+      "stimulus": "Repeat a committed key with only the bed changed",
+      "pass_condition": "200 already_committed, with the receipt and encounter still showing the original bed. The bed is outside the payload digest, so a sender must compare it: conforming here does not make such a sender safe.",
+      "sections": [
+        "1.1",
+        "1.6"
+      ],
+      "required": true,
+      "evidence_about": "receiver"
+    },
+    {
+      "id": 17,
+      "stimulus": "Two different operations at once at the same expected version",
+      "pass_condition": "Exactly one commits; the other is 409 version_conflict or 503 ward_unavailable; no partial state or duplicate version.",
+      "sections": [
+        "1.1",
+        "1.4"
+      ],
+      "required": true,
+      "evidence_about": "receiver"
+    },
+    {
+      "id": 18,
+      "stimulus": "Two identical operations at once",
+      "pass_condition": "One business effect, one history row and one receipt, whichever answer arrives first.",
+      "sections": [
+        "1.1",
+        "1.3"
+      ],
+      "required": true,
+      "evidence_about": "receiver"
+    },
+    {
+      "id": 19,
+      "stimulus": "Two placements at once into one bed; a dry-run transfer out of a bed at the same time as a real placement into it",
+      "pass_condition": "Never two occupants, and never a placement into a bed that only an uncommitted dry run seemed to free. A pass means no such result in the rounds run, not that none is possible.",
+      "sections": [
+        "1.1"
+      ],
+      "required": true,
+      "evidence_about": "receiver"
+    },
+    {
+      "id": 20,
+      "stimulus": "Dry runs that would be refused",
+      "pass_condition": "200 would_apply false with the refusal as reason (bed_occupied is 409 itself, check 14); nothing persists and no receipt appears.",
+      "sections": [
+        "1.1"
+      ],
+      "required": true,
+      "evidence_about": "receiver"
+    },
+    {
+      "id": 21,
+      "stimulus": "Compare what was sent with the receipt, the history row and the encounter for every committed operation",
+      "pass_condition": "Key, encounter, event, event time, ward, bed, digest and versions agree on the receipt and the history row, patient and authority on the encounter (the receipt carries no patient). A matching key alone is not enough.",
+      "sections": [
+        "1.2",
+        "1.3",
+        "1.6"
+      ],
+      "required": true,
+      "evidence_about": "receiver"
+    },
+    {
+      "id": 22,
+      "stimulus": "The kit's loopback proxy drops the answer after the receiver has answered",
+      "pass_condition": "The sender saw no answer; the committed operation is found by receipt and in the history, without a second write. Shutter's own read-back is not exercised by the kit.",
+      "sections": [
+        "1.3",
+        "5.1"
+      ],
+      "required": true,
+      "evidence_about": "receiver"
+    },
+    {
+      "id": 23,
+      "stimulus": "The proxy holds a write past the sender's timeout, holds an answer, and answers a receipt lookup with 503",
+      "pass_condition": "No answer is unknown, never absence, and after the proxy's own 503 the direct read still finds the commit; a 404 read while a write is in flight is not final. The report gives the observed timing and infers no maximum commit delay.",
+      "sections": [
+        "1.3",
+        "1.9",
+        "5.1"
+      ],
+      "required": true,
+      "evidence_about": "receiver"
+    },
+    {
+      "id": 24,
+      "stimulus": "The kit against its own mutant stubs: an HTML 200, malformed JSON, a wrong identity, partial history, a mismatched receipt; and its own reading of no answer, a 503 and an HTML 404",
+      "pass_condition": "The kit rejects each, reads those three as unknown, and passes the correct stub. This is evidence about the kit, not about the receiver.",
+      "sections": [
+        "1.1",
+        "1.2",
+        "1.3"
+      ],
+      "required": true,
+      "evidence_about": "kit"
+    },
+    {
+      "id": 25,
+      "stimulus": "An operator's reset or restore outside the kit, in a disposable environment",
+      "pass_condition": "The epoch has moved since an earlier report, and Shutter refuses old approvals in its own integration test. The kit issues no reset and runs no Shutter, so this is not_run unless the epoch comparison fails.",
+      "sections": [
+        "1.7",
+        "1.8"
+      ],
+      "required": false,
+      "evidence_about": "receiver"
+    },
+    {
+      "id": 26,
+      "stimulus": "Read earlier committed history and receipts again after later operations",
+      "pass_condition": "They have not changed during the run. Retention beyond the run remains the receiver's declaration.",
+      "sections": [
+        "1.2",
+        "1.3"
+      ],
+      "required": true,
+      "evidence_about": "receiver"
+    }
+  ],
+  "extensions": [
+    {
+      "id": "cancels",
+      "sections": [
+        "1.1",
+        "1.4",
+        "2"
+      ],
+      "status": "not_run",
+      "note": "A declared extension of a receiver whose site profile says cancels: true. The kit sends no cancel and claims nothing about them."
+    },
+    {
+      "id": "merges",
+      "sections": [
+        "1.1",
+        "1.4",
+        "2"
+      ],
+      "status": "not_run",
+      "note": "A declared extension of a receiver whose site profile says merges: true. The kit sends no merge and claims nothing about them."
+    }
+  ]
+}

@@ -25,6 +25,7 @@ import { Link } from 'react-router';
 import { useListParams } from '@/lib/listParams';
 import {
   isPlaying,
+  settlingCase,
   useCan,
   useCases,
   useHealth,
@@ -776,8 +777,11 @@ export default function ScenariosPage() {
   useJudgeLanding(!!scenarios.data);
   const current = scenarios.data?.run ?? null;
   const busy = isPlaying(current) ? `A run of ${current?.scenario} is still playing` : '';
-  /** Why Reset is disabled now, or "". */
+  /** Why Reset is disabled now, or "". Reset stays on while a case settles: it is the way out of one that never does. */
   const resetWhy = playerOff ? PLAYER_OFF : !canRun ? RESET_NEEDS_ROLE : busy;
+  const settling = settlingCase(scenarios.data);
+  const runBusy =
+    busy || (settling ? `${settling.caseId} is still settling: a new run now would abandon it` : '');
 
   const start = (s: Scenario, m: Mode = mode) =>
     run.mutate(
@@ -811,7 +815,7 @@ export default function ScenariosPage() {
             ? `${modeLabel(m)} mode has no recordings here`
             : !canRun
               ? RUN_NEEDS_ROLE
-              : busy || pending;
+              : runBusy || pending;
 
   // The induction prompt leads the page on an instance, as the site profile's questionnaire is designed; the demo, whose
   // profile is a recording nobody answers, keeps it below the fold, under the scenarios, so the guided path comes first.
@@ -932,7 +936,7 @@ export default function ScenariosPage() {
                 lookOnly={hidden}
                 canRun={canRun}
                 playerOff={playerOff}
-                busy={busy || pending}
+                busy={runBusy || pending}
                 starting={run.isPending && run.variables?.id === s.id && run.variables?.mode === mode}
                 onRun={() => start(s)}
               />

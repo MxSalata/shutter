@@ -26,6 +26,9 @@ function EvaluationLink() {
   );
 }
 
+/** What the figures measure, beside them: the agents did not reach these answers unaided. */
+const GIVEN_THE_ENTRY = "The agents were given the catalogue's matching entry and preferred outcome.";
+
 /**
  * The left half of the live sign-in page: what Shutter is for, in the app's best line, and the proof for it. The proof
  * (three tiles and where the runs were recorded) shows only where the figures describe the install in front of the
@@ -45,6 +48,7 @@ export function ProofPanel({ figures, proof = PROOF }: { figures: boolean; proof
     board && `Recorded failures: the board ${board.matched} of ${board.scored}.`,
     played &&
       `On the same ${plural(played.of, 'failure')}: the board ${played.board}, Rules only ${played.rules}.`,
+    GIVEN_THE_ENTRY,
   ].filter((s): s is string => !!s);
 
   const recorded = proof.runs
@@ -75,8 +79,7 @@ export function ProofPanel({ figures, proof = PROOF }: { figures: boolean; proof
           Otherwise it stops and names the patient.
         </Text>
         <Text size="lg" m={0} maw="34em">
-          When a patient movement fails to reach another system, Shutter finds out why and writes a fix only
-          once its checks pass.
+          When a patient movement fails to reach another system, Shutter finds out why.
         </Text>
         <TechDetail label="How it decides" kind="data">
           For HL7 v2 ADT feeds on InterSystems IRIS for Health: a fix is written only when the gate passes and
@@ -126,6 +129,9 @@ export function ProofPanel({ figures, proof = PROOF }: { figures: boolean; proof
                   ) : null}
                 </StatTile>
               ) : null}
+              <Text size="sm" m={0} style={{ gridColumn: '1 / -1' }}>
+                {GIVEN_THE_ENTRY}
+              </Text>
               <Box style={{ gridColumn: '1 / -1' }}>
                 <StatTile
                   label="Safety"

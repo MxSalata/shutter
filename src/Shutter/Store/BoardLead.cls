@@ -64,7 +64,9 @@ ClassMethod Current(signature As %String) As Shutter.Store.BoardLead
     If 'rs.%Next() Quit ""
     Set lead = ..%OpenId(rs.%Get("ID"))
     If '$ISOBJECT(lead) Quit ""
-    If (resetAt '= "") && (lead.StartedAt ']] resetAt) && (lead.StartedAt '= resetAt) Quit ""
+    // The stamps are whole seconds: a lead in the reset's own second counts as before it, since a replayed board can begin
+    // and end in the second the next run resets. The other way round the worst is one more board.
+    If (resetAt '= "") && (lead.StartedAt ']] resetAt) Quit ""
     Quit lead
 }
 

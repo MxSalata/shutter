@@ -39,6 +39,8 @@ export interface Can {
   configure: boolean;
   /** Running and resetting scenarios. */
   scenarios: boolean;
+  /** Stopping Shutter recovery (CONTRACTS 18). Absent from an older server, which has no such control. */
+  stopRecovery?: boolean;
   /**
    * Spending the day's model budget (the resource Shutter_LiveAgents, CONTRACTS 5): convening the board on a case, and
    * asking a question that no recording answers. The public demo's own user has it not; a judge, an operator and an
@@ -84,6 +86,28 @@ export interface AccessReport {
   recordedAt?: string;
   roles: AccessRole[];
   rows: AccessRow[];
+}
+
+/** The recovery control (`GET /recovery-control`, CONTRACTS 18). */
+export interface RecoveryControl {
+  mode: 'shadow' | 'enabled';
+  generation: number;
+  stopped: boolean;
+  stoppedAt: string;
+  stoppedBy: string;
+  stopReason: string;
+  outstanding: {
+    id: number;
+    kind: string;
+    caseId: string;
+    receiver: string;
+    admittedAt: string;
+    state: string;
+  }[];
+  outstandingCount: number;
+  readable: boolean;
+  covers: string;
+  doesNotCover: string;
 }
 
 export interface Me {
@@ -304,6 +328,35 @@ export interface CaseDetail extends CaseSummary {
   links: { visualTrace: string; workflowTrace: string };
   /** The case's place in its incident, when one holds it. */
   incident?: CaseIncident;
+  /** A document case's block (CONTRACTS 11.2), by the reader's right. */
+  document?: CaseDocument;
+}
+
+/** What a document or report case shows: metadata only, and nothing of its content. */
+export interface CaseDocument {
+  /** "report" for an ORU carrying a report as an attachment; absent for an MDM. */
+  kind?: 'report';
+  report?: { placer?: string; filler?: string; result_status?: string; attachment?: string; orders?: number };
+  headline: string;
+  trigger: string;
+  restricted?: boolean;
+  identity_withheld?: boolean;
+  sent_nothing?: boolean;
+  body_stored_in_shutter?: boolean;
+  source_verified?: boolean;
+  reasons?: { code: string; words: string }[];
+  document?: {
+    id?: string;
+    parent?: string;
+    completion?: string;
+    confidentiality?: string;
+    availability?: string;
+  };
+  patient?: { keys?: { id: string; authority?: string; type?: string }[] };
+  size?: { stored_bytes?: number; over_intake_limit?: boolean };
+  delivery?: { status?: string; header_id?: string; time_created?: string; time_processed?: string };
+  refusal?: { ack_code?: string; reason_code?: string; text?: string; text_withheld?: boolean };
+  chain?: { complete?: boolean; says?: string[] };
 }
 
 export interface CaseEvent {
@@ -529,10 +582,83 @@ export interface CorrectionSteps {
     operation_key?: string;
     after?: string;
   };
-  later?: { event?: string; ward?: string; event_time?: string }[];
+  later?: {
+    event?: string;
+    ward?: string;
+    event_time?: string;
+    operation_key?: string;
+    source_message_id?: string;
+    ens_header_id?: string;
+  }[];
   current?: { state?: string; ward?: string; version?: number | string };
   receipt?: string;
   steps: string[];
+  /** The drafted sequence's structure (v1.47); a plan from an older server has none. */
+  sequence?: CorrectionSequence;
+}
+
+/** One message of a drafted sequence on the plan: its place and its wards, never its text. */
+export interface CorrectionSequenceStep {
+  n: number;
+  kind: 'cancel' | 'replay';
+  trigger: string;
+  cancels?: {
+    event?: string;
+    ward?: string;
+    event_time?: string;
+    operation_key?: string;
+    source_message_id?: string;
+    ens_header_id?: string;
+  };
+  event?: string;
+  ward?: string;
+  event_time?: string;
+  operation_key?: string;
+  source_message_id?: string;
+  ens_header_id?: string;
+  body_digest?: string;
+  non_ascii?: boolean;
+  after?: { by_source?: string; by_receiver?: string };
+}
+
+/** The sequence a person could send, as it stood at plan time (CONTRACTS 10): structure only, because the model reads the plan. */
+export interface CorrectionSequence {
+  drawn: boolean;
+  reason_code?: string;
+  reason?: string;
+  k?: number;
+  count?: number;
+  receiver_version?: number | string;
+  observed_at?: string;
+  cancels_flag?: boolean | null;
+  resend_timestamp?: string;
+  steps?: CorrectionSequenceStep[];
+  end?: { ward?: string; history?: string[] };
+  checked_at?: string;
+}
+
+/** `GET /cases/{id}/correction-draft`, for an approver: the text, redrawn on the read. Its `drawn` wins over the plan's. */
+export interface CorrectionDraftView {
+  caseId: string;
+  drawn: boolean;
+  reason_code?: string;
+  reason?: string;
+  header: string[];
+  messages: {
+    n: number;
+    kind: 'cancel' | 'replay';
+    trigger: string;
+    label: string;
+    /** Segments end with a carriage return, as IRIS gives it; null when withheld. */
+    text: string | null;
+    withheld?: string;
+    after?: string;
+    body_digest?: string;
+  }[];
+  cannot_know: { what: string; why: string; does: string }[];
+  never: string[];
+  digest?: string;
+  checked_at?: string;
 }
 
 export interface PlanView {
@@ -629,6 +755,15 @@ export interface BlockedReason {
   reevaluateWhen: string;
   text: string;
   checks?: GateCheck[];
+}
+
+/** GET /cases/{id}/further-stop (CONTRACTS 6.5). */
+export interface FurtherStop {
+  rows: { line: string; visit: string }[];
+  digest: string;
+  releasable: boolean;
+  whyNot: string;
+  release: { digest: string; by: string; at: string; reason: string; stands: boolean } | null;
 }
 
 export interface BlindResendPreview {
@@ -871,6 +1006,8 @@ export interface SiteReceiver {
   merges?: boolean;
   api?: Record<string, string>;
   features?: Record<string, boolean>;
+  /** The site's one line on where to look at this receiver, shown as a hint on a stopped case; never evidence. */
+  manual_check?: { runbook?: string };
   [key: string]: unknown;
 }
 
@@ -912,8 +1049,35 @@ export interface SiteProfile {
   /** How rigid the check of further messages for the patient is (CONTRACTS 6.5). Absent means stop and person. */
   further_messages?: {
     in_patient_movement?: 'stop' | 'show';
+    a08_location?: 'stop' | 'show';
     admission_not_found?: 'person' | 'policy';
     scan_seconds?: number;
+  };
+  /** Anything but an explicit enabled is shadow: nothing is rehearsed or sent (CONTRACTS 18). */
+  recovery?: { mode?: 'shadow' | 'enabled' };
+  /** Whether a person's escalation email goes out in shadow mode; it doesn't, unless this says enabled. */
+  notifications?: { shadow_delivery?: 'disabled' | 'enabled' };
+  /** The failure census (CONTRACTS 19): off unless enabled; the server checks its limits. */
+  failure_census?: {
+    enabled?: boolean;
+    max_window_hours?: number;
+    max_headers?: number;
+    retention_days?: number;
+    settle_seconds?: number;
+  };
+  /** A scheduled mail for cases left open (CONTRACTS 6.4): off unless enabled, in the feed's time zone. */
+  reminders?: {
+    enabled?: boolean;
+    team_hours?: number;
+    officer_hours?: number;
+    officer_name?: string;
+    officer_address?: string;
+    window_start?: string;
+    window_end?: string;
+    days?: string[];
+    /** none, identifiers or identifiers_initial; never a full name, date of birth, address or NHS number. */
+    patient_detail?: string;
+    sign_in_url?: string;
   };
 }
 
@@ -1445,6 +1609,57 @@ export interface WhatIf {
   facts: WhatIfFact[];
 }
 
+/** One value of what a message asked: from the message, read but open to doubt, or not there. */
+export interface ReceiverCheckField {
+  label: string;
+  value: string;
+  source: 'message' | 'doubtful' | 'unavailable';
+}
+
+/**
+ * GET /cases/{id}/receiver-check: what to check at the receiver on a stopped case, with no model and no receiver call
+ * (CONTRACTS 5.2). A person's guide: it has no verified, safe-to-resend or action field. 404 not_stopped otherwise.
+ */
+export interface ReceiverCheck {
+  caseId: string;
+  caseVersion: number;
+  snapshotId: string;
+  profileVersion: number;
+  guideVersion: string;
+  guideDigest: string;
+  variant: string;
+  receiverEvidence: 'read' | 'unavailable';
+  evidenceNote: string;
+  receiverRead: { at: string; state: string; ward: string; bed: string } | null;
+  identity: {
+    patientId: string;
+    authority: string;
+    encounterId: string;
+    receiver: string;
+    sourceSystem: string;
+    messageType: string;
+    controlId: string;
+    timeLabel: string;
+    time: string;
+    messageRef: string;
+    sourceRoute: string;
+    collectedAt: string;
+  };
+  messageRequest: { kind: string; summary: string; note: string; fields: ReceiverCheckField[] };
+  laterMovement: { summary: string; source: string } | null;
+  queueWarning: string;
+  checks: {
+    id: string;
+    where: string;
+    compare: string[];
+    meanings: { answer: string; label: string; text: string }[];
+  }[];
+  siteRunbook: string | null;
+  unknown: string[];
+  limitations: string[];
+  report: string;
+}
+
 /** Shutter.Schema.Answer: what the Explain agent, and each board member, submits. */
 export interface Answer {
   answer: string;
@@ -1588,4 +1803,54 @@ export interface PageQuestion {
   answer: Answer | null;
   /** When the trial's answer was made, when it carries it (the mock does; the server does not send it). */
   recordedAt?: string | null;
+}
+
+/** One row of a warehouse history read, reduced: exactly as the site's export gave it, and never the patient again. */
+export interface WarehouseRow {
+  source_event_id: string;
+  revision: number;
+  record_status: 'active' | 'cancelled' | 'retracted';
+  encounter_authority: string | null;
+  encounter_id: string | null;
+  event_kind: string;
+  event_time: string | null;
+  time_precision: string;
+  source_recorded_at: string | null;
+  source_modified_at: string | null;
+  ward: string | null;
+  bed: string | null;
+  supersedes_event_id: string | null;
+}
+
+/** One read of warehouse history (docs/warehouse-history.md): historical context for a person, used by no decision. */
+export interface WarehouseRead {
+  readAt: string;
+  readBy: string;
+  status: 'ok' | 'no_rows' | 'no_batch' | 'no_identity' | 'withheld' | 'invalid' | 'unavailable';
+  /** Why, for invalid and unavailable. */
+  category: string;
+  dataset: string;
+  generation: string;
+  batch: string;
+  sequence: number | null;
+  sourceSystem: string;
+  receiverReference: string;
+  sourceWatermark: string;
+  watermarkKnown: boolean;
+  historyCompleteFrom: string;
+  publishedAt: string;
+  ageMinutes: number | null;
+  freshness: 'within' | 'older' | 'unknown';
+  rowCount: number;
+  truncated: boolean;
+  generationChanged: boolean;
+  queryVersion: string;
+  resultDigest: string;
+  rows: WarehouseRow[];
+}
+
+/** GET and POST /cases/{id}/warehouse-history. */
+export interface WarehouseHistoryView {
+  enabled: boolean;
+  read: WarehouseRead | null;
 }

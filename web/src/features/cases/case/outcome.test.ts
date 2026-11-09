@@ -305,6 +305,15 @@ describe("the story steps' summaries", () => {
     expect(proposedSummary(unread)).toMatch(/^Unknown: /);
   });
 
+  it("names the leader's board on a plan a follower took from it, not the plan's raw author", () => {
+    const plan = factsOf('C-000008').plan!;
+    const followed = factsOf('C-000008', {
+      plan: { ...plan, plan: { ...plan.plan, createdBy: 'lead:C-000007' } },
+      runs: [],
+    });
+    expect(proposedSummary(followed)).toMatch(/^The board of case C-000007: /);
+  });
+
   it('says the gate and the release apart', () => {
     expect(decisionSummary(factsOf('C-000008'))).toMatch(
       /^Gate passed \d+ of \d+ applicable checks at proposal; no approval needed: the plan writes nothing\.$/,

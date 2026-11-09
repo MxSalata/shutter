@@ -159,7 +159,12 @@ ClassMethod GetEvents(caseId As %String, limit As %Integer = 50) As %DynamicObje
         For k = "seq", "kind", "at", "createdAt", "actor", "ref", "fromState", "toState", "state" {
             If e.%IsDefined(k) Do kept.%Set(k, e.%Get(k))
         }
-        If e.%IsDefined("text") Set kept.text = ..Text(case, e.%Get("text"))
+        // What a person typed for an unredacted file: no map covers it, so it stays in IRIS.
+        If e.%Get("ref") = "bundle:unredacted" {
+            Set kept.text = "An approver took an unredacted bundle; the reason stays in IRIS"
+        } ElseIf e.%IsDefined("text") {
+            Set kept.text = ..Text(case, e.%Get("text"))
+        }
         Do o.events.%Push(kept)
     }
     Set o.count = o.events.%Size()

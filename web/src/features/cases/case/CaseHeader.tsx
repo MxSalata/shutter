@@ -28,6 +28,7 @@ import { toneText, type Status, type Tone } from '@/lib/tone';
 import { useDetail } from '@/stores/appearance';
 import { forwardedFrom } from './derive';
 import { receiverWords } from './failureMapModel';
+import { followedBoard } from './follows';
 import { evidenceOf, messageTypeLabel, messageTypeOf } from './message';
 import { actionHead, headerSentence } from './outcome';
 import { FailedAt } from './TechFacts';
@@ -196,6 +197,7 @@ export function CaseHeader({
   // MSH-9 as the server read it from the message, else as the evidence recorded it
   const msh9 = c.messageType || message?.messageType || '';
   const entry = catalogueEntryOf(c);
+  const board = followedBoard(c);
   return (
     <PageHeader
       title={`Case ${c.caseId}`}
@@ -376,6 +378,18 @@ export function CaseHeader({
                       {place}
                     </Text>
                   ) : null}
+                </Stack>
+              </Meta>
+            ) : null}
+            {board ? (
+              <Meta label="Follows the board of">
+                <Stack gap={0}>
+                  <Anchor component={Link} to={`/cases/${encodeURIComponent(board.caseId)}`} size="sm">
+                    {board.caseId}
+                  </Anchor>
+                  <Text size="xs" c="dimmed">
+                    {board.note}
+                  </Text>
                 </Stack>
               </Meta>
             ) : null}

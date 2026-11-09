@@ -17,6 +17,7 @@ import { IconChevronDown, IconPlus, IconTrash, IconVersions } from '@tabler/icon
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
+import { RunbookField } from './RunbookField';
 import { api } from '@/api/client';
 import { DEMO_READ_ONLY, readOnlyDemo } from '@/api/can';
 import { keys, useCan, useMe, useSaveSiteProfile, useSiteProfile, useWhatIf } from '@/api/hooks';
@@ -273,6 +274,7 @@ function ReceiverFields({
             error={err('system')}
           />
         </SimpleGrid>
+        <RunbookField r={r} i={i} err={err} update={update} />
         <Question n={2} text="What kind of system is it?" acts />
         <CategoryFields r={r} i={i} err={err} update={update} />
         <QuestionDetails
@@ -1019,7 +1021,7 @@ function Profile({
             <Stack gap="xs">
               <Text size="md" data-testid={reading && !dirty ? 'demo-read-only' : undefined}>
                 {demoPolicy
-                  ? "The release policy is the demo's own choice, so its scenarios show a resend the policy releases at tiers 1 and 2; the shipped default asks a person at every tier. "
+                  ? "The demo's own release policy: tiers 1 and 2 release by policy, where the shipped default asks a person at every tier. "
                   : "They are defaults, not this site's choices. "}
                 {editable
                   ? 'Check the questions below, then confirm or change them and save.'

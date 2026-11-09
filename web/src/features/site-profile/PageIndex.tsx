@@ -8,6 +8,9 @@ const PAGE_INDEX: { id: string; label: string }[] = [
   { id: 'site-incident', label: 'Incidents, 8' },
   { id: 'site-escalation', label: 'Escalation, 9' },
   { id: 'site-feed', label: 'Feed, model, merges, 10 to 13' },
+  { id: 'site-recovery', label: 'Recovery, 14' },
+  { id: 'site-reminders', label: 'Reminders, 15' },
+  { id: 'site-a08', label: 'An A08 location, 16' },
   { id: 'site-versions', label: 'Versions' },
 ];
 

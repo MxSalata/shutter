@@ -11,7 +11,10 @@ you can close, which comes back for an open incident; **clearer screens** for an
 clinician (the case page's key facts first, more in the Technical view, a colour and icon per disposition, an API page,
 an access comparison, the scenario diagrams' expected end); the fix for the null bed that held a settled case for a
 person; an incident of any size under one approval; a supported **uninstall and upgrade**; another visit's movement
-shown on the plan on a new install, while an upgrade keeps a site's stop; and fixes found in three rounds of review.
+shown on the plan on a new install, while an upgrade keeps a site's stop; for a site getting ready to pilot,
+**shadow mode** and a **stop switch**, a **failure census**, document exceptions, warehouse history, a guide to what to
+check at the receiver, a case bundle, the **receiver conformance kit** and the **pilot pack**; and fixes found in three
+rounds of review.
 
 - **A receipt whose bed is null says nothing about the bed.** The receipt check read a JSON null bed as a different bed
   (`RECEIPT_PAYLOAD_DIFFERS`), so a person got a case the receipt had settled (held-out case F03). Beds are now compared
@@ -84,7 +87,7 @@ shown on the plan on a new install, while an upgrade keeps a site's stop; and fi
 - **Docs truth for 1.2.0.** The README's first screen gives the trial first, then the online demo, then
   `./install.sh --replay`, and a Measured box with each figure's release; `docs/readme/model-fails.md` maps each agent
   run status to what the case does, with the real bounds; the safety and limits pages say what 1.2.0 does as shipped;
-  the F03 null-bed runs are published with the fair test; contracts v1.48. `docs/INSTALL.md` shows `InstallInto` with a
+  the F03 null-bed runs are published with the fair test; contracts v1.48, and v1.50 with the pilot features below. `docs/INSTALL.md` shows `InstallInto` with a
   site's own production name.
 - **The health page.** Each group lists its checks first and its facts apart under **Details**.
 - **The API page.** `docs/api/openapi.json` describes every route (an OpenAPI 3.1 file that CI checks against the
@@ -108,6 +111,44 @@ shown on the plan on a new install, while an upgrade keeps a site's stop; and fi
   diagrams name their expected end and stay readable on a phone; and keyboard focus stays where you expect it.
 - **A receiver declared with no API** is named by its item and namespace in the email, the case page and the history,
   and its stop says it was declared with no API and that a person fills in its entry in the site profile.
+- **Shadow mode and the recovery stop.** A new install with no demo, and an upgrade whose site profile doesn't say,
+  starts in shadow: Shutter investigates and records what it would propose, and sends no rehearsal, recovery write or
+  blind-resend preview, until the profile's `recovery.mode` says `enabled`; `GET /shadow-observations` and its CSV report
+  the period's cases. **Stop Shutter recovery** on the Settings page (`Shutter_StopRecovery`, which operators and
+  approvers hold) refuses every recovery call at the connector from the moment it commits; clearing it takes an
+  approver, enables nothing and leaves every earlier plan void. The demo seeds `enabled`, so it behaves as before.
+  CONTRACTS 18.
+- **The failure coverage census.** Off unless the site turns it on: of a watched receiver's failed deliveries in a
+  window, which have a traceable Shutter case, with a CSV that says what the read is worth; it reads only and copies no
+  message content. CONTRACTS 19.
+- **What to check at the receiver.** A blocked, escalated or failed case lists what a person should look at on the
+  receiver's own screen, built from the case's own fields with no model call and no receiver call.
+- **Document exceptions.** A failed MDM, or an ORU carrying a report, at a receiver with a document profile becomes a
+  case that resends nothing, convenes no agent and keeps no copy of the message; the Settings screen for watched
+  namespaces shows where the forwarder and the profile disagree (`documents_mismatch`).
+- **Warehouse history.** A receiver with no API can publish its earlier movements in two tables, shown to a person
+  beside the case and never used to write (`docs/warehouse-history.md`).
+- **The receiver conformance kit.** `scripts/receiver-conformance.py`, run by a site and the receiver's supplier against
+  a test endpoint, reports which parts of the recovery contract it showed; it enables nothing (`docs/receiver-conformance.md`).
+- **The pilot pack.** `docs/pilot/`: a decision record, scope, stage plan, roles, hazard log, data flow, receiver
+  acceptance, stop and withdraw, daily review, outcome report and a safety case template, for a hospital deciding
+  whether and how far to pilot. It claims no compliance.
+- **The case bundle.** One JSON file of a case for audit or a support handoff, redacted for an operator, or unredacted
+  for an approver who types a reason; neither moves a closed case's receipt.
+- **A person releases another visit's stop.** An approver who has read the other visit's messages releases that one
+  stop with a reason (`FURTHER_MOVEMENT_RELEASED`); every other check still runs. `further_messages.a08_location`,
+  `stop` or `show`, decides a later A08 that names another ward or bed (S33, S34).
+- **A non-demo install starts with no automatic release.** The seed's demo receivers become one draft to fill in, and
+  every `automatic` in its policy reads `approval`. A reminder mail for cases left open is a site profile setting,
+  `reminders`, off when absent and held in shadow mode. The drafted correction sequence for a history-of-record receiver
+  stops at every further message for the patient. The Doctor lists what each receiver last answered, and a
+  report reads an instance before an install.
+- **An incident's approval is void when the catalogue, the site profile or the gate policy moved** since it was given
+  (`APPROVAL_CATALOGUE_CHANGED`, `APPROVAL_SITE_PROFILE_CHANGED`, `APPROVAL_POLICY_CHANGED`). Gate policy version
+  2026-11-07.1, so an approval given under 2026-11-06.1 and not yet dispatched is void at dispatch. A lost admission is
+  never released by policy inside an incident either.
+- **Four more scenarios:** S14, a later movement only the index has seen; S26, a schema not loaded here; S33 and S34, an
+  A08 that moves the patient's bed; 36 in all, S1 to S34 with S23 in three parts.
 - **Fixes found in review before the release.**
   - The decision lock is given back when cancelling an approval task fails, and a refused second decision names the
     decision that stands.

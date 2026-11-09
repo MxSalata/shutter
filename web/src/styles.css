@@ -1536,6 +1536,10 @@ main[data-assistant='beside'] .stack-scroll {
     width: 100%;
     border-left: 0;
   }
+  /* The step's words were read before Ask opened: on a phone they give way to Ask's suggested questions */
+  .guide-card[data-docked] .guide-say {
+    display: none;
+  }
 }
 .ask-readonly {
   background: var(--mantine-color-default-hover);
@@ -2444,6 +2448,18 @@ main[data-assistant='beside'] .stack-scroll {
 /* Just after the case's tab bar, as on the Evidence tab, where the panel itself is the section: a tab panel's own gap. */
 .sticky-tabs ~ .guide-host {
   margin-top: var(--mantine-spacing-md);
+}
+/* The live first-run prompt: at the corner, over nothing a visitor needs first. */
+.live-welcome {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 150;
+  width: min(420px, calc(100vw - 32px));
+}
+/* Just above the control it invites a press of: room for the Try it pointer, which sits over the control's start. */
+.guide-host[data-guide-near] {
+  margin-bottom: 48px;
 }
 .guide-host-floating {
   position: fixed;

@@ -1,6 +1,7 @@
 import type { ChainKind, ReceiverCategory, SiteProfile, SiteReceiver, SiteTeam } from '@/api/types';
 import { CATEGORY_TEXT, categoryOf, historyPolicyOf } from '@/lib/categories';
 import type { GlossaryKey } from '@/lib/glossary';
+import { DETAIL_LABELS, REMINDER_DEFAULTS } from './reminderPreview';
 
 /**
  * The site profile's questionnaire, without React: labels, the diff the review and the history show, the port of
@@ -327,7 +328,79 @@ function receiverWatchProblem(r: Record<string, unknown>, at: string, domains: s
   return '';
 }
 
+/** The port of ReceiverCheck.ManualCheckProblem: one optional line of plain text, a place to look; "" when it passes. */
+export function manualCheckProblem(mc: unknown): string {
+  if (!isObject(mc) || Array.isArray(mc)) return 'must be an object';
+  for (const k of Object.keys(mc)) if (k !== 'runbook') return `${k}: unknown field`;
+  if (!('runbook' in mc)) return '';
+  const v = mc.runbook;
+  if (typeof v !== 'string') return 'runbook: must be text';
+  if (v.trim() === '') return 'runbook: must not be blank';
+  if (v.length > 300) return 'runbook: at most 300 characters';
+  // eslint-disable-next-line no-control-regex
+  if (/[\x00-\x1f\x7f]/.test(v)) return 'runbook: one line, with no control characters';
+  if (v.includes('<')) return 'runbook: plain text only, no HTML';
+  if (/:\/\/|\bwww\.|\bmailto:|\bjavascript:/i.test(v)) return 'runbook: no links';
+  if (/\b(password|passwd|pwd|secret|token|api[ _-]?key)\s*[:=]/i.test(v)) return 'runbook: no credentials';
+  if (/\d{6}/.test(v)) return 'runbook: no patient examples or identifiers';
+  return '';
+}
+
 /** The port of SiteProfile.Validate: "" when the profile is valid, else the server's message for the first problem. */
+/** The port of Shutter.Util.CaseReminder.ProfileProblem. */
+function remindersProblem(r: unknown, domains: string[]): string {
+  if (!isObject(r) || Array.isArray(r)) return 'reminders: must be an object';
+  const known = [
+    'enabled',
+    'team_hours',
+    'officer_hours',
+    'officer_name',
+    'officer_address',
+    'window_start',
+    'window_end',
+    'days',
+    'patient_detail',
+    'sign_in_url',
+  ];
+  for (const k of Object.keys(r)) if (!known.includes(k)) return `reminders.${k}: unknown setting`;
+  if ('enabled' in r && typeof r.enabled !== 'boolean') return 'reminders.enabled: must be true or false';
+  for (const k of ['team_hours', 'officer_hours']) {
+    const n = r[k];
+    if (k in r && (typeof n !== 'number' || !Number.isInteger(n) || n < 1 || n > 720))
+      return `reminders.${k}: must be a whole number of hours from 1 to 720`;
+  }
+  const teamHours = (r.team_hours as number | undefined) ?? REMINDER_DEFAULTS.team_hours;
+  const officerHours = (r.officer_hours as number | undefined) ?? REMINDER_DEFAULTS.officer_hours;
+  if (officerHours <= teamHours) return 'reminders.officer_hours: must be later than team_hours';
+  const time = /^([01][0-9]|2[0-3]):[0-5][0-9]$/;
+  const start = r.window_start ?? REMINDER_DEFAULTS.window_start;
+  const end = r.window_end ?? REMINDER_DEFAULTS.window_end;
+  if (typeof start !== 'string' || !time.test(start))
+    return 'reminders.window_start: must be a time such as 08:00';
+  if (typeof end !== 'string' || !time.test(end)) return 'reminders.window_end: must be a time such as 08:00';
+  if (end <= start) return 'reminders.window_end: must be later than window_start';
+  if ('days' in r) {
+    if (!Array.isArray(r.days) || r.days.length === 0) return 'reminders.days: must name at least one day';
+    for (const [j, d] of r.days.entries())
+      if (!['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].includes(d as string))
+        return `reminders.days[${j}]: must be mon, tue, wed, thu, fri, sat or sun`;
+  }
+  if ('patient_detail' in r && !Object.hasOwn(DETAIL_LABELS, String(r.patient_detail)))
+    return 'reminders.patient_detail: must be none, identifiers or identifiers_initial';
+  for (const k of ['officer_name', 'officer_address', 'sign_in_url'])
+    if (k in r && typeof r[k] !== 'string') return `reminders.${k}: must be text`;
+  const name = controlProblem((r.officer_name as string | undefined) ?? '');
+  if (name) return `reminders.officer_name: ${name}`;
+  if (r.officer_address) {
+    const problem = mailboxProblem(r.officer_address as string, domains);
+    if (problem) return `reminders.officer_address: ${problem}`;
+  }
+  // eslint-disable-next-line no-control-regex
+  if (r.sign_in_url && !/^https?:\/\/[^\s\u0000-\u001f\u007f-\u009f]+$/.test(r.sign_in_url as string))
+    return 'reminders.sign_in_url: must be an address starting http:// or https://, with no spaces';
+  return '';
+}
+
 export function validateProfile(p: unknown): string {
   if (!isObject(p)) return 'the profile must be a JSON object';
   const top = [
@@ -345,6 +418,10 @@ export function validateProfile(p: unknown): string {
     'mail',
     'feed',
     'further_messages',
+    'recovery',
+    'notifications',
+    'reminders',
+    'failure_census',
   ];
   for (const key of Object.keys(p)) if (!top.includes(key)) return `${key}: unknown field`;
   if ('version' in p && (!numeric(p.version) || asNumber(p.version) < 0))
@@ -370,6 +447,10 @@ export function validateProfile(p: unknown): string {
       if (!isObject(r.demo) || Array.isArray(r.demo)) return `${at}.demo: must be an object`;
       if ('namespace' in r.demo && typeof r.demo.namespace !== 'string')
         return `${at}.demo.namespace: must be a string`;
+    }
+    if ('manual_check' in r) {
+      const problem = manualCheckProblem(r.manual_check);
+      if (problem) return `${at}.manual_check.${problem}`;
     }
     if ('cancels' in r && typeof r.cancels !== 'boolean') return `${at}.cancels: must be true or false`;
     if ('merges' in r && typeof r.merges !== 'boolean') return `${at}.merges: must be true or false`;
@@ -423,6 +504,25 @@ export function validateProfile(p: unknown): string {
       if (k !== 'close_needs_approver' && typeof v !== 'string') return `approvers.${k}: must be a string`;
     }
   }
+  // The census's limits are the server's to check (CONTRACTS 19): the page has no field for them, and keeps them as read.
+  if ('failure_census' in p && (!isObject(p.failure_census) || Array.isArray(p.failure_census)))
+    return 'failure_census: must be an object';
+  // Whether Shutter attempts recovery at all, and whether email goes out while it doesn't (CONTRACTS 18).
+  if ('recovery' in p) {
+    if (!isObject(p.recovery)) return 'recovery: must be an object';
+    for (const [k, v] of members(p.recovery)) {
+      if (k !== 'mode') return `recovery.${k}: unknown setting`;
+      if (v !== 'shadow' && v !== 'enabled') return 'recovery.mode: must be shadow or enabled';
+    }
+  }
+  if ('notifications' in p) {
+    if (!isObject(p.notifications)) return 'notifications: must be an object';
+    for (const [k, v] of members(p.notifications)) {
+      if (k !== 'shadow_delivery') return `notifications.${k}: unknown setting`;
+      if (v !== 'disabled' && v !== 'enabled')
+        return 'notifications.shadow_delivery: must be disabled or enabled';
+    }
+  }
   // The feed: the time zone of timestamps that carry no offset, and whether a message whose schema is not loaded is held.
   if ('feed' in p) {
     if (!isObject(p.feed)) return 'feed: must be an object';
@@ -452,6 +552,8 @@ export function validateProfile(p: unknown): string {
     for (const [k, v] of members(fm)) {
       if (k === 'in_patient_movement') {
         if (v !== 'stop' && v !== 'show') return 'further_messages.in_patient_movement: must be stop or show';
+      } else if (k === 'a08_location') {
+        if (v !== 'stop' && v !== 'show') return 'further_messages.a08_location: must be stop or show';
       } else if (k === 'admission_not_found') {
         if (v !== 'person' && v !== 'policy')
           return 'further_messages.admission_not_found: must be person or policy';
@@ -534,6 +636,10 @@ export function validateProfile(p: unknown): string {
     const problem = receiverWatchProblem(r as Record<string, unknown>, `receivers[${i}]`, domains);
     if (problem) return problem;
   }
+  if ('reminders' in p) {
+    const problem = remindersProblem(p.reminders, domains);
+    if (problem) return problem;
+  }
   if ('incident' in p) {
     if (!isObject(p.incident)) return 'incident: must be an object';
     for (const [k, n] of members(p.incident)) {
@@ -580,7 +686,7 @@ export function problemField(text: string): { path: string; message: string } | 
 /** The DOM id of the control for a path, or "" when the page has no control for it (api, features). */
 export function fieldId(path: string): string {
   let m =
-    /^receivers\[(\d+)\]\.(name|system|category|history_policy|tier|applies|resend_timestamp|cancels|merges)$/.exec(
+    /^receivers\[(\d+)\]\.(name|system|category|history_policy|tier|applies|resend_timestamp|cancels|merges|manual_check\.runbook)$/.exec(
       path,
     );
   if (m) return `site-receivers-${m[1]}-${m[2]}`;
@@ -596,8 +702,11 @@ export function fieldId(path: string): string {
   m = /^mail\.(from|allowed_domains)(\[\d+\])?$/.exec(path);
   if (m) return `site-mail-${m[1]}`;
   if (path === 'merges') return 'site-merges';
+  m = /^reminders\.(\w+)(\[\d+\])?$/.exec(path);
+  if (m) return `site-reminders-${m[1]}`;
   if (path === 'feed.time_zone') return 'site-feed-time_zone';
   if (path === 'feed.prevent_failures') return 'site-feed-prevent_failures';
+  if (path === 'recovery.mode') return 'site-recovery-mode';
   if (path === 'model_content.free_text') return 'site-model_content-free_text';
   return '';
 }
@@ -615,8 +724,11 @@ export function describePath(path: string): string {
     return `Team ${Number(m[1]) + 1}${m[2] ? `, ${m[2] === 'cc' ? 'copies' : m[2]}` : ''}${m[3] ? ` ${Number(m[3]) + 1}` : ''}`;
   m = /^mail\.(\w+)(?:\[(\d+)\])?$/.exec(path);
   if (m) return `Mail, ${m[1].replace(/_/g, ' ')}${m[2] ? ` ${Number(m[2]) + 1}` : ''}`;
+  m = /^reminders\.(\w+)(?:\[\d+\])?$/.exec(path);
+  if (m) return `Reminders, ${m[1].replace(/_/g, ' ')}`;
   if (path === 'feed.time_zone') return 'Feed, time zone';
   if (path === 'feed.prevent_failures') return 'Feed, prevent failures';
+  if (path === 'recovery.mode') return 'Recovery, mode';
   if (path === 'model_content.free_text') return 'Model, note text';
   if (path === 'approvers.close_needs_approver') return 'Approvers, closing a case by hand';
   return path.replace(/_/g, ' ');
@@ -682,6 +794,8 @@ function receiverChanges(a: SiteReceiver, b: SiteReceiver, p: SiteProfile): Chan
       lessOversight: b.merges === true,
     });
   if (!same(a.api, b.api)) out.push({ path: 'api', text: `${name}, its endpoints changed` });
+  if (!same(a.manual_check, b.manual_check))
+    out.push({ path: 'manual_check', text: `${name}, the site's runbook line changed` });
   if (!same(a.features, b.features))
     out.push({ path: 'features', text: `${name}, its declared features changed` });
   // The outage keys. A person still approves every engine resend, so none of these counts as less oversight, and the
@@ -776,6 +890,7 @@ export function diffProfiles(a: SiteProfile | undefined, b: SiteProfile): Change
         text: `Incidents, ${label}: from ${show({}, before.incident?.[k])} to ${show({}, b.incident?.[k])}`,
       });
   out.push(...teamChanges(before, b));
+  out.push(...reminderChanges(before, b));
   const domains = (p: SiteProfile) => (p.mail?.allowed_domains ?? []).join(', ');
   if (domains(before) !== domains(b))
     out.push({ path: 'mail.allowed_domains', text: `Allowed mail domains: ${domains(b) || 'any'}` });
@@ -789,6 +904,14 @@ export function diffProfiles(a: SiteProfile | undefined, b: SiteProfile): Change
       path: 'feed.time_zone',
       text: `Feed time zone: from ${before.feed?.time_zone || 'not answered (read as UTC)'} to ${b.feed?.time_zone || 'not answered (read as UTC)'}. Every operation key read from now on uses it`,
     });
+  if ((before.recovery?.mode === 'enabled') !== (b.recovery?.mode === 'enabled'))
+    out.push({
+      path: 'recovery.mode',
+      text:
+        b.recovery?.mode === 'enabled'
+          ? 'Recovery enabled: Shutter may rehearse and send what its gate and the policy allow. A plan made before this save stays refused; reinvestigate it'
+          : 'Shadow mode: from now on Shutter investigates and sends no recovery write, rehearsal or resend preview',
+    });
   if ((before.feed?.prevent_failures === true) !== (b.feed?.prevent_failures === true))
     out.push({
       path: 'feed.prevent_failures',
@@ -796,6 +919,14 @@ export function diffProfiles(a: SiteProfile | undefined, b: SiteProfile): Change
         b.feed?.prevent_failures === true
           ? "Prevent failures: from now on, a message whose HL7 schema isn't loaded here is held as a case, and nothing is sent until the schema is imported"
           : "Prevent failures off: a message whose HL7 schema isn't loaded here is delivered as before",
+    });
+  if ((before.further_messages?.a08_location ?? 'stop') !== (b.further_messages?.a08_location ?? 'stop'))
+    out.push({
+      path: 'further_messages.a08_location',
+      text:
+        b.further_messages?.a08_location === 'show'
+          ? "An A08's location: from now on, a failed or later A08 that names another ward or bed goes on the plan and doesn't stop the write"
+          : "An A08's location: a failed or later A08 that names another ward or bed stops the write for a person",
     });
   if ((before.model_content?.free_text === true) !== (b.model_content?.free_text === true))
     out.push({
@@ -840,6 +971,39 @@ function teamText(t: SiteTeam, first: boolean) {
   ];
   const routes = parts.join(', and ') || 'no receiver: only when a person picks it on the case';
   return `${t.name || 'unnamed'} <${t.mailbox || 'no mailbox'}>${t.cc?.length ? `, copies ${t.cc.join(', ')}` : ''}, for ${routes}`;
+}
+
+/** The reminder's settings that changed, in words; switching it on says plainly that nobody reviews the mail. */
+function reminderChanges(a: SiteProfile, b: SiteProfile): Change[] {
+  const out: Change[] = [];
+  const from = a.reminders ?? {};
+  const to = b.reminders ?? {};
+  if ((from.enabled ?? false) !== (to.enabled ?? false))
+    out.push({
+      path: 'reminders.enabled',
+      text: to.enabled
+        ? 'Reminders for cases left open: on, sent with nobody reviewing them'
+        : 'Reminders for cases left open: off',
+    });
+  if ((from.patient_detail ?? 'identifiers') !== (to.patient_detail ?? 'identifiers'))
+    out.push({
+      path: 'reminders.patient_detail',
+      text: `Patient detail in reminders: ${DETAIL_LABELS[to.patient_detail ?? 'identifiers'] ?? to.patient_detail}`,
+    });
+  const rest: [keyof typeof to, string][] = [
+    ['team_hours', 'first reminder (hours)'],
+    ['officer_hours', 'later reminder (hours)'],
+    ['officer_name', 'officer'],
+    ['officer_address', 'officer address'],
+    ['window_start', 'window start'],
+    ['window_end', 'window end'],
+    ['days', 'days'],
+    ['sign_in_url', 'sign-in address'],
+  ];
+  for (const [k, label] of rest)
+    if (!same(from[k], to[k]))
+      out.push({ path: `reminders.${k}`, text: `Reminders, ${label}: ${show({}, to[k])}` });
+  return out;
 }
 
 /** Teams added, removed or changed, matched by id (a team whose id changed reads as removed and added). */

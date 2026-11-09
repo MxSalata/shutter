@@ -14,7 +14,7 @@ import {
 } from '@mantine/core';
 import { IconPlayerPlay, IconShieldCheck } from '@tabler/icons-react';
 import { Link } from 'react-router';
-import { useCases, usePlan } from '@/api/hooks';
+import { beforeEvidence, useCases, usePlan } from '@/api/hooks';
 import { TRIAL, trialHref } from '@/env/mode';
 import { byEnv } from '@/env/copy';
 import { TRIAL_BOARD_CASE } from '@/lib/hospital';
@@ -249,8 +249,16 @@ const DEMO_FIRST: Featured[] = [
 ];
 
 /** What you will see, with the catalogue entry the case's plan cites when the card has a case in its mode. */
-function SeeWithEntry({ caseId, see }: { caseId: string; see: (entry?: string) => string }) {
-  const plan = usePlan(caseId, false).data;
+function SeeWithEntry({
+  caseId,
+  state,
+  see,
+}: {
+  caseId: string;
+  state: string;
+  see: (entry?: string) => string;
+}) {
+  const plan = usePlan(caseId, false, beforeEvidence(state)).data;
   return <Text size="md">{see(plan?.plan?.catalogueEntry || undefined)}</Text>;
 }
 
@@ -372,7 +380,7 @@ export function TryFirst({
                   <Stack gap={4}>
                     <Text className="overline">{demo ? 'What it shows' : 'You will see'}</Text>
                     {inMode ? (
-                      <SeeWithEntry caseId={inMode.caseId} see={see} />
+                      <SeeWithEntry caseId={inMode.caseId} state={inMode.state} see={see} />
                     ) : (
                       <Text size="md">{see()}</Text>
                     )}

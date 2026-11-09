@@ -93,6 +93,10 @@ Property WaitsOnEngine As %String(%JSONFIELDNAME = "waitsOnEngine", MAXLEN = 200
 
 Index WaitsEngineIdx On WaitsOnEngine;
 
+/// A person's release of a stop on another visit's movement (POST /cases/{id}/further-release, CONTRACTS 6.5), as JSON:
+/// {digest, by, at, reason}. It holds only while a fresh read gives the same digest (Shutter.Util.FurtherMessages.Released).
+Property FurtherReleaseJSON As %String(%JSONINCLUDE = "none", MAXLEN = 4000);
+
 /// The case whose board this one follows (v1.35, one board per failure signature) while that board runs; "" otherwise.
 Property FollowsCase As %String(%JSONFIELDNAME = "followsCase", MAXLEN = 32);
 
@@ -159,6 +163,10 @@ Property CandidateEntry As %Boolean(%JSONFIELDNAME = "candidateEntry") [ Initial
 
 /// One line for the queue: what happened and what was decided.
 Property Headline As %String(%JSONFIELDNAME = "headline", MAXLEN = 500);
+
+/// The document block of a document case (CONTRACTS 11.2, Shutter.Util.DocumentCase): metadata only. Not projected: the API
+/// gives it by the reader's right.
+Property DocumentJSON As %String(%JSONINCLUDE = "none", MAXLEN = "");
 
 /// The closing summary.
 Property Outcome As %String(%JSONFIELDNAME = "outcome", MAXLEN = 4000);
@@ -231,6 +239,7 @@ ClassMethod Open(op As %DynamicObject, failureKind As %String, failureText As %S
     Set case.EventTime = op."event_time"
     Set case.EnsSessionId = ensSessionId
     Set case.SourceHeaderId = sourceHeaderId
+    If op.%IsDefined("document_stage") Set case.DocumentJSON = ##class(Shutter.Util.DocumentCase).Unstage(op."document_stage")
     Set case.Mode = $SELECT(mode = "": "board", 1: mode)
     Set case.Scenario = $GET(^Shutter.Config("scenario"))
     Set case.ScenarioRecorded = (case.Scenario '= "") && (case.Scenario = $GET(^Shutter.Config("scenarioRun")))
@@ -296,7 +305,7 @@ ClassMethod PurgeCase(id As %String) As %Status
     While emails.%Next() { Set files = files _ $LISTBUILD($LISTBUILD(emails.%Get("Seq"), emails.%Get("Result"))) }
     TSTART
     Set sc = ..Exec("DELETE FROM Shutter_Bridge.ToolCall WHERE RunKey IN (SELECT EnsMessageId FROM Shutter_Store.AgentRun WHERE ""Case"" = ? AND EnsMessageId IS NOT NULL)", id)
-    For table = "Shutter_Store.CaseToken", "Shutter_Store.ChainItem", "Shutter_Store.Verification", "Shutter_Store.ExecutionAttempt", "Shutter_Store.Approval", "Shutter_Store.Rehearsal", "Shutter_Store.GateDecision", "Shutter_Store.Finding", "Shutter_Store.AgentRun", "Shutter_Store.CaseQuestion", "Shutter_Store.Plan", "Shutter_Store.Escalation" {
+    For table = "Shutter_Store.WarehouseRead", "Shutter_Store.CaseToken", "Shutter_Store.ChainItem", "Shutter_Store.Verification", "Shutter_Store.ExecutionAttempt", "Shutter_Store.Approval", "Shutter_Store.Rehearsal", "Shutter_Store.GateDecision", "Shutter_Store.Finding", "Shutter_Store.AgentRun", "Shutter_Store.CaseQuestion", "Shutter_Store.Plan", "Shutter_Store.Escalation", "Shutter_Store.CaseReminder" {
         If $$$ISOK(sc) Set sc = ..Exec("DELETE FROM " _ table _ " WHERE ""Case"" = ?", id)
     }
     If $$$ISOK(sc) Set sc = ..Exec("DELETE FROM Shutter_Store.SnapshotItem WHERE Snapshot IN (SELECT ID FROM Shutter_Store.Snapshot WHERE ""Case"" = ?)", id)
@@ -957,6 +966,12 @@ Storage Default
 </Value>
 <Value name="52">
 <Value>WaitsOnEngine</Value>
+</Value>
+<Value name="53">
+<Value>DocumentJSON</Value>
+</Value>
+<Value name="54">
+<Value>FurtherReleaseJSON</Value>
 </Value>
 </Data>
 <DataLocation>^Shutter.Store.CaseD</DataLocation>

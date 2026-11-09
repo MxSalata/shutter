@@ -77,7 +77,7 @@ describe('SiteProfilePage', () => {
     const beds = within(cards).getByRole('listitem', { name: 'Downstream Out' });
     expect(within(beds).getByText('Current state')).toBeInTheDocument();
     expect(within(beds).getByText('Tier 2, operations')).toBeInTheDocument();
-    expect(within(beds).getByText("Only today's placement matters.")).toBeInTheDocument();
+    expect(within(beds).getByText('This receiver keeps only current placement.')).toBeInTheDocument();
     expect(within(beds).getByText('Overtaken failure: closes, no write.')).toBeInTheDocument();
     // The whole sentence the case page reads stays in the card's second layer
     expect(within(beds).getByText(/An overtaken failure closes with no write/)).toBeInTheDocument();
@@ -365,6 +365,32 @@ describe('SiteProfilePage', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 8' }));
     expect(await screen.findByText('Version 8 saved')).toBeInTheDocument();
     expect(puts[0].body.feed).toMatchObject({ prevent_failures: true });
+  });
+
+  it('lets a site show an A08 location rather than stop on it, and keeps the other further-message settings', async () => {
+    const view = recordedSiteProfile()!;
+    view.profile.further_messages = { in_patient_movement: 'show', scan_seconds: 60 };
+    server.use(http.get(`${BASE}/site-profile`, () => HttpResponse.json(view)));
+    renderPage();
+    const select = await screen.findByRole('combobox', {
+      name: 'When an A08 names another place',
+    });
+    expect(select).toHaveValue('stop');
+    await userEvent.selectOptions(select, 'show');
+    await userEvent.click(screen.getByRole('button', { name: 'Review and save…' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(
+      within(dialog).getByText(
+        "An A08's location: from now on, a failed or later A08 that names another ward or bed goes on the plan and doesn't stop the write",
+      ),
+    ).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 8' }));
+    expect(await screen.findByText('Version 8 saved')).toBeInTheDocument();
+    expect(puts[0].body.further_messages).toEqual({
+      in_patient_movement: 'show',
+      scan_seconds: 60,
+      a08_location: 'show',
+    });
   });
 
   it('confirms the shipped answers with no change, which records who answered', async () => {

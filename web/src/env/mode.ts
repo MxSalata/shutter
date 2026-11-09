@@ -19,7 +19,7 @@ export interface Env {
   canLeave: boolean;
   /** The trial's user at start: `?as=operator|approver|demo|judge`, else the approver. */
   role: TrialRole;
-  /** `?trial=tour` opens the guide's quick tour on arrival, `?trial=engineer` the integration engineers' tour. */
+  /** `?trial=tour` starts the guide's quick tour on arrival, `?trial=engineer` the integration engineers' tour. */
   openGuide: 'quick' | 'engineer' | false;
   /**
    * `?trial=judge`: the judges' path. The page opens on Scenarios in Rules only mode, scrolled to the S8 card, with no
@@ -98,8 +98,8 @@ export const TRIAL = ENV.trial;
 
 /**
  * The address after start: `?trial=tour`, `?trial=engineer` and `?trial=judge` become `?trial`, so a reload does not
- * open the tour's welcome again or take the judges' path a second time; the rest of the address, and React Router's own
- * history state, are kept.
+ * start the tour again or take the judges' path a second time; the rest of the address, and React Router's own history
+ * state, are kept.
  */
 export function normalisedSearch(search: string): string {
   return search.replace(/([?&])trial=(tour|engineer|judge)(?=&|$)/, '$1trial');

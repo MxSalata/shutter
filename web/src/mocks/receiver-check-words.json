@@ -1,0 +1,268 @@
+{
+  "version": "1",
+  "missing": "Not available from this message",
+  "no_encounter": "No encounter supplied",
+  "evidence": {
+    "no_api": "Shutter cannot read this receiving system. These checks come from the failed message and Shutter's records, and don't show what the receiver holds now.",
+    "unreadable": "Shutter could not read this encounter at the receiver. These checks come from the failed message and Shutter's records, and don't show what the receiver holds now.",
+    "documents": "Shutter cannot read this receiver's documents or reports. These checks come from the failed message and Shutter's records, and don't show what the receiver holds now.",
+    "read": "The receiver evidence below was read at {at}. It may have changed since then."
+  },
+  "queue": "Before correcting anything: check whether the original message is still queued, retrying or awaiting an application acknowledgement. It may still arrive.",
+  "report": "Put what you find in the reason when you mark the case handled. That stays a person's report: it isn't verified and doesn't authorise a resend.",
+  "asked_note": "A later valid change may mean that this is no longer the correct current state.",
+  "several_items": "This message contains more than one report or document item. Check the original message and each item; this card does not establish that all were filed.",
+  "other_message": "This card has no specific check for this message type. Check the original in the source's Message Viewer.",
+  "later_known": "A later message for this encounter is on Shutter's record.",
+  "time_doubtful": "Whether the event time is true: an event in this encounter's order can't have happened then.",
+  "bed_occupied": "The receiver reported the requested bed as occupied.",
+  "refused": "The receiver refused this message.",
+  "document_asked": "File this document against the patient and episode named here.",
+  "result_asked": "File this report against the patient and order named here.",
+  "attempted": "The send got no answer.",
+  "variants": {
+    "manual_compare": {
+      "where": "The encounter's details, then its movement history.",
+      "compare": ["Patient number and authority", "Visit number", "State", "Ward", "Bed", "Effective time"],
+      "meanings": {
+        "present": [
+          "It shows what the message asked",
+          "A person's observation that fits. It doesn't show that this message caused it."
+        ],
+        "absent": [
+          "Nothing of this movement",
+          "Unresolved: it may be missing, or may still arrive. Correct it only by the site's agreed procedure; this alone doesn't authorise a resend."
+        ],
+        "different": [
+          "A different or later placement",
+          "Read the movement history in time order before correcting anything."
+        ],
+        "cannot_tell": [
+          "No encounter, several, or conflicting identity",
+          "Stop and resolve the identity first."
+        ]
+      },
+      "unknown": [
+        "Whether the original can still arrive.",
+        "Without a movement history, a current placement doesn't show what became of this message."
+      ]
+    },
+    "later_movement": {
+      "note": "This movement belongs at its own time, not necessarily as the current placement. Never move the patient back to make this message true.",
+      "where": "The current placement and the movement history, including the later movement.",
+      "compare": [
+        "Patient number and authority",
+        "Visit number",
+        "Ward",
+        "Bed",
+        "Effective time",
+        "The later movement"
+      ],
+      "meanings": {
+        "present": [
+          "This movement is in the history at its time",
+          "It fits this message arriving or being entered another way. It doesn't show which."
+        ],
+        "absent": [
+          "This movement is missing from the history",
+          "At a current-state receiver, a correct later placement may be enough for manual handling. At a history-of-record receiver the gap can still need correcting."
+        ],
+        "different": [
+          "The placement differs from both",
+          "Read the history in time order before correcting anything."
+        ],
+        "cannot_tell": [
+          "No history you can see",
+          "The current placement may be known while this message's fate stays unknown."
+        ]
+      },
+      "unknown": ["Whether the original can still arrive."]
+    },
+    "already_applied": {
+      "note": "The receiver's own receipt or history names this operation.",
+      "where": "The encounter and the recorded event at the receiver.",
+      "compare": ["Patient number and authority", "Visit number", "Ward", "Bed", "Event time"],
+      "meanings": {
+        "present": [
+          "The screen matches",
+          "A person's observation that supports the receiver's record. Keep the two apart."
+        ],
+        "absent": [
+          "The event isn't on the screen",
+          "Investigate: the screen and the record disagree. This doesn't authorise a resend."
+        ],
+        "different": [
+          "The screen contradicts it",
+          "Investigate. Don't discard the receipt, and this doesn't authorise a resend."
+        ],
+        "cannot_tell": ["You can't tell", "Keep the case stopped and escalate."]
+      },
+      "unknown": ["Whether anything changed at the receiver after that read."]
+    },
+    "refusal": {
+      "note": "This card shows no other patient's details: see the receiver's own screens.",
+      "where": "Placement details and the site's bed or occupancy view.",
+      "compare": ["Requested ward", "Requested bed", "What the occupancy view shows now"],
+      "meanings": {
+        "present": [
+          "The patient is in the requested place",
+          "A person's observation that fits. It doesn't show that this message caused it."
+        ],
+        "absent": [
+          "The place is now free",
+          "That alone doesn't authorise the old move: check that it still applies."
+        ],
+        "different": ["It is still occupied", "Unresolved. Follow the site's bed procedure."],
+        "cannot_tell": ["You can't tell", "Keep the case stopped and escalate."]
+      },
+      "unknown": ["Why the receiver refused, beyond what it said.", "Whether the move still applies."]
+    },
+    "identity_or_time": {
+      "note": "Only the fields Shutter could read reliably are shown as read.",
+      "where": "The source's registration or message, then a patient and episode search at the receiver.",
+      "compare": ["Patient number and authority", "Visit number", "Event time at the source"],
+      "meanings": {
+        "present": [
+          "One clear match",
+          "Compare it with the message, then resolve the mapping or the time at the source."
+        ],
+        "absent": ["No match", "Don't create an encounter. Resolve the identity or the mapping first."],
+        "different": [
+          "Several, or conflicting",
+          "Don't guess which record was meant. Resolve the identity first."
+        ],
+        "cannot_tell": [
+          "The time can't be settled",
+          "Ask the source which time is right before correcting anything."
+        ]
+      },
+      "unknown": ["Which record or time the message meant."]
+    },
+    "uncertain": {
+      "where": "The queue or message trace, the receiver's event history, and any receipt or application audit you can see.",
+      "compare": [
+        "Patient number and authority",
+        "Visit number",
+        "Ward",
+        "Bed",
+        "Effective time",
+        "When it was sent"
+      ],
+      "meanings": {
+        "present": [
+          "The screen shows it",
+          "This doesn't show the attempt has finished, or that this attempt made it."
+        ],
+        "absent": ["The screen doesn't show it", "This doesn't show that it can't arrive later."],
+        "different": ["Something different", "Read the history in time order before correcting anything."],
+        "cannot_tell": ["You can't tell", "Keep the case stopped and escalate."]
+      },
+      "unknown": ["Whether the attempt was applied, or still can be."]
+    },
+    "history_correction": {
+      "note": "Two things, kept apart: this missing movement at its own time, and the later placement, which stays.",
+      "where": "The movement history, and the receiver's approved route for correcting history.",
+      "compare": [
+        "Patient number and authority",
+        "Visit number",
+        "This movement's ward, bed and time",
+        "The later movement"
+      ],
+      "meanings": {
+        "present": [
+          "This movement is in the history",
+          "Nothing is missing on this screen. Report what you saw."
+        ],
+        "absent": [
+          "It is missing",
+          "Correct the history by the receiver's own route, keeping the current placement."
+        ],
+        "different": ["The history differs", "Read it in time order before correcting anything."],
+        "cannot_tell": [
+          "You can't see the history",
+          "Ask the receiver's team. This card doesn't know their procedure."
+        ]
+      },
+      "unknown": ["The receiver's correction procedure.", "Whether the original can still arrive."]
+    },
+    "document": {
+      "where": "The document list, and the rejected or unfiled queue if the site uses one.",
+      "compare": [
+        "Patient number and authority",
+        "Encounter",
+        "Document number",
+        "Type",
+        "Document time",
+        "Status",
+        "Whether it opens"
+      ],
+      "meanings": {
+        "present": [
+          "Filed against the right record, and it opens",
+          "A person's report that it was handled. A matching title alone is weak."
+        ],
+        "absent": ["Missing", "Unresolved. Don't re-enter it while the original may still arrive."],
+        "different": [
+          "Unreadable, duplicated or on another record",
+          "Unresolved: that isn't a successful filing."
+        ],
+        "cannot_tell": ["You can't tell", "Open the original in the source's Message Viewer, and escalate."]
+      },
+      "unknown": ["Whether this document reached the receiver.", "Whether the original can still arrive."]
+    },
+    "result": {
+      "where": "The patient's report list, and the rejected or unfiled queue if the site uses one.",
+      "compare": [
+        "Patient number and authority",
+        "Encounter",
+        "Order or report number",
+        "Test",
+        "Observation time",
+        "Status",
+        "Whether it opens"
+      ],
+      "meanings": {
+        "present": [
+          "Filed against the right record, and it opens",
+          "A person's report that it was handled. A matching test name alone is weak."
+        ],
+        "absent": ["Missing", "Unresolved. Don't re-enter it while the original may still arrive."],
+        "different": [
+          "Unreadable, duplicated or on another record",
+          "Unresolved: that isn't a successful filing."
+        ],
+        "cannot_tell": ["You can't tell", "Open the original in the source's Message Viewer, and escalate."]
+      },
+      "unknown": ["Whether this report reached the receiver.", "Whether the original can still arrive."]
+    },
+    "withheld": {
+      "note": "Shutter never sends this by itself.",
+      "where": "The site's identity or cancellation procedure.",
+      "compare": ["Patient number and authority", "Visit number", "What was requested"],
+      "meanings": {
+        "present": [
+          "Already done by hand",
+          "A person owns the decision. This card neither approves it nor proves its effect."
+        ],
+        "absent": ["Not done", "A person decides whether to apply it, in the systems concerned."],
+        "different": ["Something else was done", "Check the records concerned, and escalate."],
+        "cannot_tell": ["You can't tell", "Keep the case stopped and escalate."]
+      },
+      "unknown": ["The effect of this operation at the receiver."]
+    },
+    "other_message": {
+      "where": "The source's Message Viewer, then the receiver.",
+      "compare": ["Patient number and authority", "Message type", "Control id"],
+      "meanings": {
+        "present": [
+          "You find it at the receiver",
+          "A person's report. It doesn't show that this message caused it."
+        ],
+        "absent": ["You don't", "Unresolved. Don't re-enter it while the original may still arrive."],
+        "different": ["Something different", "Check the original before correcting anything."],
+        "cannot_tell": ["You can't tell", "Keep the case stopped and escalate."]
+      },
+      "unknown": ["What this message did at the receiver."]
+    }
+  }
+}

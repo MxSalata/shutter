@@ -32,6 +32,60 @@ const copy = (): SiteProfile => structuredClone(recorded);
 const FEED_ZONE =
   'feed.time_zone: must be UTC, Europe/London, a fixed offset such as +01:00 (up to 14:00), or an IANA zone name this IRIS knows (for example Europe/Paris)';
 
+describe('the failure census setting (CONTRACTS 19)', () => {
+  const base = {
+    receivers: [{ name: 'Out', tier: 2 }],
+    policy: { '1': { single: 'automatic' }, '2': { single: 'automatic' }, '3': { single: 'approval' } },
+  };
+
+  it('a stored profile with it is one the page can save', () => {
+    expect(validateProfile({ ...base, failure_census: { enabled: true } })).not.toContain('failure_census');
+  });
+
+  it('refuses what is not an object', () => {
+    expect(validateProfile({ ...base, failure_census: true })).toBe('failure_census: must be an object');
+    expect(validateProfile({ ...base, failure_census: [] })).toBe('failure_census: must be an object');
+  });
+});
+
+describe('the recovery mode (CONTRACTS 18)', () => {
+  const base = (): Record<string, unknown> => ({
+    receivers: [{ name: 'Out', tier: 2 }],
+    policy: { '1': { single: 'automatic' }, '2': { single: 'automatic' }, '3': { single: 'approval' } },
+  });
+
+  it('a stored profile with the mode is one the page can save', () => {
+    expect(validateProfile({ ...base(), recovery: { mode: 'enabled' } })).not.toContain('recovery');
+    expect(validateProfile({ ...base(), recovery: { mode: 'shadow' } })).not.toContain('recovery');
+    expect(validateProfile({ ...base(), notifications: { shadow_delivery: 'disabled' } })).not.toContain(
+      'notifications',
+    );
+  });
+
+  it('refuses what the server refuses', () => {
+    expect(validateProfile({ ...base(), recovery: { mode: 'on' } })).toBe(
+      'recovery.mode: must be shadow or enabled',
+    );
+    expect(validateProfile({ ...base(), recovery: { mood: 'enabled' } })).toBe(
+      'recovery.mood: unknown setting',
+    );
+    expect(validateProfile({ ...base(), recovery: 'enabled' })).toBe('recovery: must be an object');
+  });
+
+  it('enabling and going back to shadow are spelt out before the save', () => {
+    const on = diffProfiles(
+      { ...base(), recovery: { mode: 'shadow' } } as never,
+      {
+        ...base(),
+        recovery: { mode: 'enabled' },
+      } as never,
+    );
+    expect(on.find((c) => c.path === 'recovery.mode')?.text).toContain('Recovery enabled');
+    const off = diffProfiles({ ...base(), recovery: { mode: 'enabled' } } as never, base() as never);
+    expect(off.find((c) => c.path === 'recovery.mode')?.text).toContain('Shadow mode');
+  });
+});
+
 describe('validateProfile, the port of SiteProfile.Validate', () => {
   it('accepts the recorded profile', () => {
     expect(validateProfile(recorded)).toBe('');
@@ -229,11 +283,21 @@ describe('validateProfile, the port of SiteProfile.Validate', () => {
   it('accepts the further-message, source-skew and source-proof settings, as the server ships and reads them', () => {
     const p = {
       ...copy(),
-      further_messages: { in_patient_movement: 'stop', admission_not_found: 'person', scan_seconds: 30 },
+      further_messages: {
+        in_patient_movement: 'stop',
+        a08_location: 'stop',
+        admission_not_found: 'person',
+        scan_seconds: 30,
+      },
       feed: { time_zone: 'UTC', source_skew_seconds: 0, prove_origin: false },
     };
     expect(validateProfile(p)).toBe('');
-    p.further_messages = { in_patient_movement: 'show', admission_not_found: 'policy', scan_seconds: 600 };
+    p.further_messages = {
+      in_patient_movement: 'show',
+      a08_location: 'show',
+      admission_not_found: 'policy',
+      scan_seconds: 600,
+    };
     p.feed.source_skew_seconds = 3600;
     expect(validateProfile(p)).toBe('');
   });
@@ -248,6 +312,7 @@ describe('validateProfile, the port of SiteProfile.Validate', () => {
       { further_messages: { admission_not_found: 'maybe' } },
       'further_messages.admission_not_found: must be person or policy',
     ],
+    [{ further_messages: { a08_location: 'maybe' } }, 'further_messages.a08_location: must be stop or show'],
     [{ further_messages: { in_patient: 'stop' } }, 'further_messages.in_patient: unknown setting'],
     [
       { further_messages: { scan_seconds: 0 } },

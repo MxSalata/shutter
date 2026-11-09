@@ -138,13 +138,14 @@ ClassMethod Read(ns As %String, production As %String = "", credential As %Strin
                 }
             }
             If cls = "Shutter.Intake.Forwarder" {
-                Set f = {"item": (item.Name), "server": ($GET(s("HTTPServer"))), "port": ($GET(s("HTTPPort"))), "ssl": ($GET(s("SSLConfig"))), "credential": ($GET(s("Credentials"))), "path": ($GET(s("IntakePath"), "/api/shutter/intake")), "prefix": ($GET(s("ReceiverPrefix")))}
+                Set f = {"item": (item.Name), "server": ($GET(s("HTTPServer"))), "port": ($GET(s("HTTPPort"))), "ssl": ($GET(s("SSLConfig"))), "credential": ($GET(s("Credentials"))), "path": ($GET(s("IntakePath"), "/api/shutter/intake")), "prefix": ($GET(s("ReceiverPrefix"))), "document_receivers": ($GET(s("DocumentReceivers")))}
                 Do f.%Set("enabled", ''item.Enabled, "boolean")
                 Set out.forwarder = f
             }
             If item.Name = "Ens.Alert" {
                 Set a = {"item": (item.Name), "class": (cls), "pass_to": ($GET(s("PassTo"))), "receivers": ($GET(s("Receivers"))), "forwarder_target": ($GET(s("ForwarderTarget"), "Shutter Forwarder"))}
                 Do a.%Set("is_shutter", cls = "Shutter.Intake.AlertProcess", "boolean")
+                Do a.%Set("enabled", ''item.Enabled, "boolean")
                 Set out.alert = a
                 Set out."alert_items" = out.%Get("alert_items") + 1
             }
@@ -473,6 +474,7 @@ ClassMethod Plan(ns As %String, options As %DynamicObject = "") As %DynamicObjec
         Set o = plan.operations.%Get(i - 1)
         If 'o."in_profile" Do actions.%Push({"do": "draft_receiver", "name": (o."reported_as"), "item": (o.name), "says": ("Draft a site profile entry for " _ o."reported_as" _ ": tier 3, no API, every feature false, so its failures escalate and nothing is resent until a person fills it in")})
     }
+    Do ..PlanDocuments(plan, $CLASSMETHOD(json, "Str", options, "document_receivers"), listed, prefix, forwarder, forwarderName, read.production)
     If 'read.credential Do plan.todo.%Push("No credential " _ credential _ " in " _ ns _ ": run Do ##class(Shutter.Setup).OnboardCredential(""" _ ns _ """) in a terminal, as a user who may manage security; it asks for the password and never prints it")
     For i = 1:1:plan.operations.%Size() {
         Set o = plan.operations.%Get(i - 1)
@@ -482,6 +484,66 @@ ClassMethod Plan(ns As %String, options As %DynamicObject = "") As %DynamicObjec
     }
     If (read.state = "stopped") Do plan.warnings.%Push("The production " _ read.production _ " is stopped: the definition changes, and the items start when the site starts it")
     Quit plan
+}
+
+/// The option document_receivers: both switches of a document profile (CONTRACTS 11.2) for the chosen items, the forwarder's
+/// DocumentReceivers and the site profile's documents.enabled, as actions. What is on already needs none.
+ClassMethod PlanDocuments(plan As %DynamicObject, names As %String, listed As %List, prefix As %String, forwarder As %DynamicObject, forwarderName As %String, production As %String) [ Private ]
+{
+    Quit:names=""
+    Set have = $SELECT($ISOBJECT(forwarder): forwarder."document_receivers", 1: ""), grown = have
+    For i = 1:1:$LENGTH(names, ",") {
+        Set name = $ZSTRIP($PIECE(names, ",", i), "<>W")
+        Continue:name=""
+        If '$LISTFIND(listed, name) Do plan.warnings.%Push("The option document_receivers names " _ name _ ", and no receiver in " _ production _ " has that name: it is left out. Check the spelling") Continue
+        If '$LISTFIND($LISTFROMSTRING($ZSTRIP(grown, "*W")), $ZSTRIP(name, "*W")) Set grown = grown _ $SELECT(grown = "": "", 1: ",") _ name
+        Set reported = ##class(Shutter.Intake.Forwarder).ReportedReceiver(name, prefix)
+        If '##class(Shutter.Util.DocumentCase).Enabled(reported) Do plan.actions.%Push({"do": "enable_documents", "name": (reported), "item": (name), "says": ("Turn documents.enabled on for " _ reported _ " in the site profile")})
+    }
+    If grown '= have Do plan.actions.%Push({"do": "set_document_receivers", "item": (forwarderName), "receivers": (grown), "says": ("Set DocumentReceivers on " _ forwarderName _ " to " _ grown)})
+}
+
+/// documents.enabled turned on for each receiver the plan chose, in one save of the site profile, keeping the rest of its entry.
+ClassMethod EnableDocuments(ns As %String, plan As %DynamicObject, Output count As %Integer) As %Status
+{
+    Set count = 0, profile = ##class(Shutter.Store.SiteProfile).Current(), list = profile.%Get("receivers")
+    Quit:'$ISOBJECT(list) $$$OK
+    Set ai = plan.actions.%GetIterator()
+    While ai.%GetNext(, .a) {
+        Continue:a.do'="enable_documents"
+        Set li = list.%GetIterator()
+        While li.%GetNext(, .r) {
+            Continue:##class(Shutter.Util.Json).Str(r, "name")'=a.name
+            If r.%GetTypeOf("documents") '= "object" Set r.documents = {}
+            Do r.documents.%Set("enabled", 1, "boolean")
+            Set count = count + 1, ^Shutter.Config("onboard", ns, "documents", a.name) = a.item
+        }
+    }
+    If count = 0 Quit $$$OK
+    Quit ##class(Shutter.Store.SiteProfile).Store(profile.%ToJSON(), "onboarding", "documents " _ ns)
+}
+
+/// Where a namespace's two document switches disagree, in words for the Doctor: an item the forwarder names whose profile is off,
+/// and an item whose profile is on that the forwarder doesn't name.
+ClassMethod DocumentSwitches(read As %DynamicObject) As %DynamicArray
+{
+    Set out = [], f = read.forwarder
+    If '$ISOBJECT(f) Quit out
+    Set names = f."document_receivers", prefix = f.prefix, named = ""
+    For i = 1:1:$LENGTH(names, ",") {
+        Set name = $ZSTRIP($PIECE(names, ",", i), "<>W")
+        Continue:name=""
+        Set named = named _ $LISTBUILD(name)
+        If '##class(Shutter.Util.DocumentCase).Enabled(##class(Shutter.Intake.Forwarder).ReportedReceiver(name, prefix)) Do out.%Push(name _ " is on the forwarder's DocumentReceivers and its site profile entry has documents.enabled off, so its documents take the ordinary path, with a copy in Shutter")
+    }
+    Set it = read.items.%GetIterator()
+    While it.%GetNext(, .item) {
+        Continue:'$CASE(item.kind, "hl7_operation": 1, "operation": 1, : 0)
+        Continue:$LISTFIND(named, item.name)
+        Set reported = ##class(Shutter.Intake.Forwarder).ReportedReceiver(item.name, prefix)
+        If ##class(Shutter.Util.DocumentCase).Enabled(reported) Do out.%Push(reported _ " has documents.enabled on in the site profile and the forwarder's DocumentReceivers does not name " _ item.name _ ", so a document over 2 MB there opens no case")
+    }
+    Quit out
 }
 
 /// Carries out a namespace's plan, action by action, and answers what changed and what a person still has to do. Run again,
@@ -510,7 +572,7 @@ ClassMethod Apply(ns As %String, options As %DynamicObject = "") As %DynamicObje
                 Quit:$$$ISERR(sc)
                 Set ^Shutter.Config("onboard", ns, "schemas", a.category) = a.as
                 Do out.changed.%Push(a.says)
-            } ElseIf a.do '= "draft_receiver" {
+            } ElseIf (a.do '= "draft_receiver") && (a.do '= "enable_documents") {
                 Do productionActions.%Push(a)
             }
         }
@@ -539,6 +601,12 @@ ClassMethod Apply(ns As %String, options As %DynamicObject = "") As %DynamicObje
         If count > 0 {
             Set di = plan.actions.%GetIterator()
             While di.%GetNext(, .a) { If a.do = "draft_receiver" Do out.changed.%Push(a.says) }
+        }
+        Set esc = ..EnableDocuments(ns, plan, .enabled)
+        If $$$ISERR(esc) Set out.error = $SYSTEM.Status.GetErrorText(esc) Quit
+        If enabled > 0 {
+            Set di = plan.actions.%GetIterator()
+            While di.%GetNext(, .a) { If a.do = "enable_documents" Do out.changed.%Push(a.says) }
         }
         Set oi = plan.operations.%GetIterator()
         While oi.%GetNext(, .o) { Set ^Shutter.Config("onboard", ns, "receivers", o.name) = o."reported_as" }
@@ -612,8 +680,8 @@ ClassMethod EditProduction(ns As %String, production As %String, actions As %Dyn
                 If a.do = "rename_alert" {
                     Set found.Name = a.to
                 } Else {
-                    Set settingName = $CASE(a.do, "set_alert_receivers": "Receivers", "set_alert_on_error": "AlertOnError")
-                    Set value = $CASE(a.do, "set_alert_receivers": a.receivers, "set_alert_on_error": "1")
+                    Set settingName = $CASE(a.do, "set_alert_receivers": "Receivers", "set_alert_on_error": "AlertOnError", "set_document_receivers": "DocumentReceivers")
+                    Set value = $CASE(a.do, "set_alert_receivers": a.receivers, "set_alert_on_error": "1", "set_document_receivers": a.receivers)
                     Set one = ""
                     For j = 1:1:found.Settings.Count() { If found.Settings.GetAt(j).Name = settingName Set one = found.Settings.GetAt(j) Quit }
                     If '$ISOBJECT(one) { Set one = ##class(Ens.Config.Setting).%New(), one.Target = "Host", one.Name = settingName Do found.Settings.Insert(one) }
@@ -848,6 +916,12 @@ ClassMethod Remove(ns As %String, options As %DynamicObject = "") As %DynamicObj
                     Set dropped = dropped + 1
                     Do out.removed.%Push("The draft receiver " _ name _ " in the site profile")
                     Continue
+                }
+                // The switch the option turned on goes off with the forwarder that read it.
+                If $DATA(^Shutter.Config("onboard", ns, "documents", name)) && (r.%GetTypeOf("documents") = "object") {
+                    Do r.documents.%Set("enabled", 0, "boolean")
+                    Set dropped = dropped + 1
+                    Do out.removed.%Push("documents.enabled on " _ name _ " in the site profile")
                 }
                 If ##class(Shutter.Util.Json).Str(r, "namespace") = ns Do out.kept.%Push("The receiver " _ name _ " in the site profile: a person edited it")
                 Do keep.%Push(r)
@@ -1148,6 +1222,25 @@ ClassMethod ReceiversWithoutItem() As %DynamicArray
     Quit out
 }
 
+/// What stops a namespace's failures reaching Shutter though the rest of it looks well: the forwarder or Shutter's intake
+/// disabled, and for a namespace onboarded here, no item named Ens.Alert or another class under that name (a redeploy from
+/// source does this). A namespace a case names but nobody onboarded reports its own way, so no intake there is no fault.
+ClassMethod IntakeProblems(onboarded As %Boolean, production As %String, forwarder As %DynamicObject, alert As %DynamicObject) As %DynamicArray
+{
+    Set out = []
+    If $ISOBJECT(forwarder) && 'forwarder.enabled Do out.%Push("The forwarder " _ forwarder.item _ " is disabled in " _ production _ ": failures there open no case")
+    If $ISOBJECT(alert) && alert."is_shutter" {
+        If 'alert.enabled Do out.%Push("The alert intake Ens.Alert is disabled in " _ production _ ": failures there open no case. Enable it")
+    } ElseIf onboarded {
+        If $ISOBJECT(alert) {
+            Do out.%Push("The item Ens.Alert in " _ production _ " is " _ alert.class _ ", not Shutter's alert intake: failures there open no case. Run the plan and the apply again")
+        } Else {
+            Do out.%Push("No alert intake in " _ production _ ", so failures there open no case. Run the plan and the apply again")
+        }
+    }
+    Quit out
+}
+
 /// The namespaces Shutter watches: those onboarded here, and those a case names as its source. Each with its state and its
 /// problems in words, for the Doctor. {namespace, onboarded, exists, production, production_state, forwarder,
 /// alert_intake, pass_to, classes, credential, last_forward, last_forward_error, last_case, schemas_missing, problems, ok}.
@@ -1201,18 +1294,23 @@ ClassMethod Watched() As %DynamicArray
             }
         }
         Set w."operations_unwatched" = unwatched
+        Set w."documents_mismatch" = ..DocumentSwitches(read)
         Do w.%Set("removed", (seen(ns) '= 1) && $DATA(^Shutter.Config("onboardRemoved", ns)), "boolean")
         If read.error '= "" Do w.problems.%Push(read.error)
         If w.removed {
             // Taken off on purpose: its cases stay, and nothing about it is a problem now.
         } ElseIf read.exists && (read.error = "") {
             If 'w.forwarder Do w.problems.%Push("No forwarder item in " _ read.production)
+            Set intake = ..IntakeProblems(seen(ns) = 1, read.production, f, a), pi = intake.%GetIterator()
+            While pi.%GetNext(, .said) { Do w.problems.%Push(said) }
             If 'w.classes Do w.problems.%Push("The forwarder's classes do not all resolve in " _ ns)
             If w.forwarder && 'w.credential Do w.problems.%Push("No credential " _ read."credential_name" _ " in " _ ns)
             If read.state '= "running" Do w.problems.%Push("The production " _ read.production _ " is " _ read.state)
             If missing.%Size() > 0 Do w.problems.%Push("Schemas missing in Shutter: " _ missing.%ToJSON())
             If w."last_forward_error" '= "" Do w.problems.%Push("The last forward was refused: " _ $EXTRACT(w."last_forward_error", 1, 200))
             If w."refused_72h" > 0 Do w.problems.%Push(w."refused_72h" _ " forwards refused in the last 72 hours, the last at " _ w."last_refused" _ ": those failures have no case. Search the event log for: Shutter did not take")
+            Set di = w."documents_mismatch".%GetIterator()
+            While di.%GetNext(, .said) { Do w.problems.%Push(said) }
             If unwatched.%Size() > 0 Do w.problems.%Push("HL7 operations the alert intake does not hear, so their failures open no case: " _ unwatched.%ToJSON() _ ". Run the plan and the apply again")
         }
         Do w.%Set("ok", w.problems.%Size() = 0, "boolean")
