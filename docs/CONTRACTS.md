@@ -1479,19 +1479,28 @@ model, the draft says Shutter cannot verify a correction.
   for the email as it would stand after the edit (a `to` the edit leaves empty is 422 `address_not_allowed` too)
   (v1.21). All need
   `Shutter_Operate`; the writes need `X-Requested-With` and take an `Idempotency-Key`. The escalation keeps who drafted,
-  edited and sent it (`draftedBy` and `draftedAt`, `editedBy` and `editedAt`, `sentBy`, and `sentAt` when the operation
-  delivered it), and the case event of the send names who sent it, to whom and, since v1.17, the digest of the text sent
-  ("Escalation 1 sent by operator to ...; digest of the text sent <bodyDigest>").
+  edited and sent it (`draftedBy` and `draftedAt`, `editedBy` and `editedAt`, `sentBy`, the person who pressed send, and
+  `sentAt` when the operation sent it through the mail server, or since v1.53 `savedAt` when it saved it as a file), and
+  the case event of the send names who queued it, for whom and, since v1.17, the digest of the text ("Escalation 1 queued
+  by operator for ...; digest of the text queued <bodyDigest>" since v1.53; it read "sent by ... digest of the text sent"
+  before the transport was known).
 - The `Escalation Mail` operation (`Shutter.Operation.EscalationMail`, `EnsLib.EMail.OutboundAdapter`) sends through the
   site's mail server when the adapter's `SMTPServer` is set (first-time configuration; the NHS relay at most trusts),
   and otherwise writes an `.eml` file to its `OutputFolder` (default `<mgr>/shutter/out/mail`), so the demo and CI need
-  no mail server. Before writing or sending, it checks the subject and the addresses once more against the profile as it
+  no mail server. **An escalation written as a file reads `saved`, not `sent`** (v1.53): nobody was emailed, and its case
+  event says "Escalation 1 saved as an email file, not delivered: <path>. No mail server is set, so nobody was emailed."
+  One the mail server accepted reads `sent`, its event "Escalation 1 sent through the mail server: <the server's words>"
+  (the server's acceptance shows no person has read it, and the words say so). A row stored before v1.53 with `transport`
+  `file` and `state` `sent` reads `saved`, with `savedAt` from its `sentAt`, on every route and in every count, so nothing
+  is migrated; the shadow report's `notification_deliveries` counts `sent` alone. A `saved` escalation can be sent again,
+  as a draft or a failed one can, once a mail server is set; a case is closed by hand after an escalation that was sent or
+  saved, and the close's words name its state. Before writing or sending, it checks the subject and the addresses once more against the profile as it
   stands and marks the escalation `failed` with `Refused before sending, <field>: <problem>` when they no longer pass
   (the domains changed after the send was accepted, or the row was changed outside the API); a failed escalation can be
   edited and sent again. In the `.eml` every header value is one line: tab, CR and LF become spaces and other control
   characters are removed, and a header longer than 78 characters is folded at a space or a comma with CRLF and one
   space (RFC 5322 2.2.3); the SMTP message's subject and addresses go through the same cleaning (v1.21). States:
-  `draft`, `queued`, `sent`, `failed` and `cancelled` (closing the case by hand, `POST /cases/{id}/close` in 5, cancels
+  `draft`, `queued`, `sent`, `saved` (v1.53), `failed` and `cancelled` (closing the case by hand, `POST /cases/{id}/close` in 5, cancels
   every draft or queued email of the case); each step is a case event of kind `escalation`. Then
   `POST /cases/{id}/close` marks the manual correction as handled; `POST /cases/{id}/reinvestigate` collects fresh evidence and can plan another resend.
 - Retention (v1.21). The daily task "Shutter retention" removes the text of an escalation (`body`, the one copy of the
@@ -1604,7 +1613,13 @@ needs only the packages `Shutter.Intake` and `Shutter.Util` for the forwarder an
   An alert does not name its message, so a session that sent the item several different HL7 messages, or, for an item that takes no HL7, whose messages name more than one patient, opens no case: a warning and an alert to `PassTo` name the messages by control id and header, once per session and item (`^Shutter.AlertIntake("several", session, item)`, kept a day).
   An alert whose session has no HL7 message, from an item outside `Receivers`, or from the forwarder itself is passed on only,
   as is (v1.52) a queue alert (`QueueWaitAlert` or `QueueCountAlert` leading its words) on a message whose header to the alerting
-  item still reads Created, Queued or Delivered: the engine is still trying it, so nothing failed and no case opens. No other
+  item still reads Created, Queued or Delivered: the engine is still trying it, so nothing failed and no case opens.
+  **Shutter's own resend opens no case** (v1.53): a forward whose header in its source namespace is a clone one of
+  Shutter's runs made (`Shutter.Store.ResendRecord.NewHeaderId`), or an origin with a ledger row that has started, is
+  answered by Case Intake with 202 and the message's earlier case (`opened` false; `caseId` empty when it has none), so the
+  session is marked seen, and the alert's words go on that case as an event of kind `resend` ("the engine alerted on
+  Shutter's resend: ..."), or with no case on the outage as an alert line (17.8). The alert itself was passed on to the
+  site's consumer first, as every alert is. No other
   alert is judged by the header's status, since the engine can raise one before it marks the header; both sends are
   asynchronous, so the feed never waits. The forwarder's refusal is a warning in the event log, as for the sending
   process, and an `Ens.AlertRequest` to the production's `Ens.Alert`, so the site's own consumer hears of a failure that has no case. The demo hospital's production carries the item with `Receivers` `Downstream Out`, and its connector raises an alert
@@ -2361,9 +2376,11 @@ All under `/api/shutter`, JSON in and out.
   [Row], "refused": [Row] }, "openCases": [ { "caseId", "reason", "owner" } ], "linkedCases": [ { "caseId", "state",
   "headerId", "resolved" } ], "outcome", "version", "set": { "digest", "computedAt",
   "setPolicyVersion", "status": "computed|not_computed|withheld", "reason" }, "approvable": false, "approval": null,
-  "sentByShutter": 0, "acts": ["pause", "close"], "words": { "first", "do", "call", "critical" } }`. `Row` is `{
-  "headerId", "controlId", "timeCreated", "status", "attempts", "reason", "patient": { "id", "authority" }, "sibling": {
-  "headerId", "status", "at" } }`. Every field is present from the first moment: empty lists, zero counts, null where
+  "sentByShutter": 0, "acts": ["pause", "close"], "resends": [Resend], "words": { "first", "do", "call", "critical" }
+  }`, with `lists.closed` (v1.53) beside the other four. `Row` is `{ "headerId", "controlId", "timeCreated", "status",
+  "attempts", "reason", "patient": { "id", "authority" }, "sibling": { "headerId", "status", "at" }, "acts": [..],
+  "closure", "closedBy", "closedAt" }`; `acts`, `closure`, `closedBy` and `closedAt` are v1.53's (17.8): `acts` is empty and
+  the other three null except where 17.8 sets them. `Resend` is one row of the ledger (17.8). Every field is present from the first moment: empty lists, zero counts, null where
   nothing has filled it. `linkedCases` is every case linked by receiver and time at the close, `resolved` true for one this
   close resolved; `outcome` is the close's words, such as "Transport outage closed. 2 delivery exceptions still need review."
   or "5 messages failed and were not offered; a person reads the trace.", or null. `Outage.ToJSON()` serialises the row, and
@@ -2378,9 +2395,12 @@ All under `/api/shutter`, JSON in and out.
   tried again sends the row back to `open` with the set withdrawn (`set.reason` "the engine is trying a message of the
   window again"). A page shows only the acts the row lists. `approvable` is true only when the build has the send and the
   receiver has `engine_resend`; `approval`, when present, is `{ "id", "by", "givenAt", "goodUntil", "digest", "note" }`. A
-  list of what to send again is `lists.offered[].controlId` in order.
-- `POST /outages/:id/acts` (`Shutter_Approve`, the CSRF header) with `{ "act": "pause", "until": "<UTC time>" }` or `{
-  "act": "close", "reason": "..." }`, and optionally `"version"`. 200 with the outage as `GET /outages/:id` gives it; 400
+  list of what to send again is `lists.offered[].controlId` in order. While a row is `offered` at a receiver whose
+  `duplicates.behaviour` is `unknown` or `files_twice`, or that declares none, `acts` also lists `handled_by_hand` (v1.53,
+  17.8).
+- `POST /outages/:id/acts` (`Shutter_Approve`, the CSRF header) with `{ "act": "pause", "until": "<UTC time>" }`, `{
+  "act": "close", "reason": "..." }`, `{ "act": "read_again" }` or (v1.53, 17.8) `{ "act": "handled_by_hand", "headerId",
+  "note" }`, and optionally `"version"`. 200 with the outage as `GET /outages/:id` gives it; 400
   `bad_request` for an act the row doesn't list or one it lists that this build's route doesn't handle (the row is left as it was), a pause with no time, or one not in the future, or a close with no reason or
   one over 1,000 characters; 409 `wrong_state` on a closed row, `version_changed` (with `currentVersion`) on a stale
   version; 413 `too_large` for a body over 8,192 characters, refused before it is parsed. A pause moves the row to
@@ -2456,7 +2476,116 @@ so a block never appears to enable recovery.
 ### 17.7 The reset
 
 The demo's `PurgeStore` empties `Shutter.Store.OutageEvent`, `Shutter.Store.Outage` and `Shutter.Store.ReceiverReading`
-with the other stores.
+with the other stores, and since v1.53 `Shutter.Store.ResendRecord`: the purge resets the case counters, so a ledger row's
+`CaseId` left behind would name a new case of the same id.
+
+### 17.8 The send (v1.51 to v1.53)
+
+At a receiver whose profile entry says `engine_resend`, in a build with `Shutter.Operation.EngineResend`, a person's one
+approval of an offered set has the engine send each message again, in order, from Shutter's production. Design and rule
+examples: `docs/design-1.4.0.md`.
+
+**The set** (`Shutter.Util.ResendSet`, computed by the poll in the watched namespace). The item first: the production
+running, the item enabled, its queue at 0, its `Status` not Retry, no head message, and its `FailureTimeout` read and not
+-1; a failed condition gives `set.status` `not_computed` with the reason. Then each origin header to the item in the window,
+in header id order, goes to one list, by the first rule that places it:
+
+1. Queued or Delivered: `queued`. Completed: no list. Any status but Error: `refused`.
+2. (v1.53) A ledger row for it `closed_as_present` or `handled_by_hand`: `closed`, with `closure` `already_delivered` or
+   `handled_by_hand`, `closedBy` and `closedAt`.
+3. Its copies in the session: a copy resent by hand is `queued` while tried and `refused` after; a clone of Shutter's
+   whose every attempt never opened stands in the origin's place; any other clone of Shutter's is `refused` ("Shutter
+   resent it at HH:MM and that copy reads <status>").
+4. Every retained attempt a connection that never opened (`Shutter.Util.EngineWords.Attempts`); a reached attempt is
+   `reached`, words it can't read are `refused`.
+5. The log reaching back past it.
+6. No production start and no active message put back on a queue since it was created (`EngineRead.Interrupted`, v1.53).
+7. The patient check passes; a message it holds is `refused` with "held by the patient check: <why>".
+
+The rest are `offered`. `set.digest` is the SHA-256 of `SETPOLICYVERSION` and the offered header ids in order, so a new
+rule version voids an approval not yet sent.
+
+**The patient check** (`Shutter.Util.PatientCheck.Check(ns, item, originHeaderId, receiver, exclude, members)`;
+`exclude` the set's and the run's case ids, `members` the set's or the run's header ids). It reads every PID by name and
+every PID-3 repetition as a key, identifier and authority (PID-3.4.1, then PID-3.4); the message's body unreadable, no
+PID, or a key with a blank authority holds it. Its answer: `{ "hold", "scope": "order|patient", "patients": [ { "pid",
+"keys", "hold", "rule", "why", "newer", "cases" } ], "why", "read_ms", "headers_read" }`, `rule` one of `same_order`,
+`linked_order`, `same_patient`, `replacement`, `identity`, `open_case`, `unreadable` or `cap`.
+
+- **The patient-wide rule** (`scope` `patient`): ADT and every other message, an order or result with no order number,
+  and any message at a receiver whose category is not `orders_results`. It holds the message when a newer header to the
+  item (less this run's own clones, at most 2,000 read) is Queued, Delivered or Completed and its body shares a key, or
+  when Shutter has an unresolved case (any state but `resolved`, less `exclude`) for a key at this receiver. Since v1.53 a
+  newer body that can't be read holds it too.
+- **The order rule** (`scope` `order`, v1.53): an ORM, OML, OMG, OMI, ORU or OUL at an `orders_results` receiver with an
+  order number. Every ORC and OBR gives a placer (ORC-2, else OBR-2), a filler (ORC-3, else OBR-3) and its parents (ORC-8
+  and OBR-29). Two numbers are the same when their identifiers are equal and their namespaces equal or either blank; a
+  placer is compared with placers and a filler with fillers. Two order groups are related when any number or parent is
+  the same, and proven distinct when not related and both carry a placer or both a filler. A message is about other
+  orders when each side has an order group and every pair is proven distinct. It holds the message when:
+  1. a newer header to the item, of any status and any patient, not in `members`, has a related order group
+     (`same_order` or `linked_order`): "a newer message on the same order (placer ORD1) reached the receiver at 03:13
+     (control id ...)", or, one not reached, "... header 812, reads Suspended: a person decides the order's messages
+     together";
+  2. a newer header to the item, Queued, Delivered or Completed, shares a patient key and is not about other orders, or
+     carries a replacement in ORC-1 (RP, RU, RO, RQ, RR, XO, XR, XX) (`same_patient`, `replacement`); a result of another
+     order for the same patient does not hold it;
+  3. a body of the namespace newer than the message's, to any item, is an ADT merge or identity change (A18, A24, A30, A34,
+     A35, A36, A37, A39, A40, A41, A42, A44, A45, A46, A47, A48, A49, A50 or A51) naming a key in PID-3 or MRG-1, or one of
+     Shutter's cases on such an event naming a key was opened after the message was created (`identity`); more than 5,000
+     ADT bodies read, or a failed read, holds every candidate (`cap`, `unreadable`);
+  4. Shutter has an unresolved case at this receiver for a key, less `exclude`, whose stored copy is not about other orders
+     or can't be read (`open_case`);
+  5. a newer body or a case's copy can't be read (`unreadable`).
+  A merge that never passes through the watched namespace is not seen, and the card says so.
+
+**The approval.** `POST /outages/:id/approvals` (`Shutter_Approve`, the CSRF header, an `Idempotency-Key`) with `{
+"digest", "note", "version"?, "receiverChecked"? }`. 409 `wrong_state` unless the row is `offered` with `set.status`
+`computed` and something offered; 409 `not_approvable`; 409 `set_changed` with `currentDigest`; 409 `version_changed`
+with `currentVersion`; (v1.53) 409 `receiver_check_needed` at a receiver whose `duplicates.behaviour` is not `refuses`
+when `receiverChecked` is not true ("At this receiver a duplicate is unknown: check the receiver for these messages
+first, and say so with the approval."); 400 `bad_request` with no digest or no note, or a note over 1,000 characters. It
+records `approval` (`goodUntil` 15 minutes on), writes the run's ledger rows `approved` in the set's order, and moves the
+row to `sending`.
+
+**The ledger** (`Shutter.Store.ResendRecord`): one row per message, `state` `approved`, `sending`, `completed`, `failed`,
+`closed_as_present`, `handled_by_hand`, `stopped` or `unknown`, with `ControlId` and `RecordedBy` (v1.53). `resends` on the
+outage (v1.53) gives its rows in position order: `{ "runId", "position", "headerId", "controlId", "newHeaderId", "state",
+"closure", "words", "by", "at", "caseId" }`, `closure` `sent`, `already_delivered`, `handled_by_hand`, `failed` or
+`unknown`, and null while approved, sending or stopped; `by` the approver, or the person who recorded a hand closure.
+`GET /cases/{id}` carries `resends` too (v1.53): the rows on the case's origin header.
+
+**Engine Resend** (`Shutter.Operation.EngineResend`, a business service polling for `sending` rows). Before each message it
+reads the item's gate, the settings the approval bound (`DefCharEncoding`, `IPAddress`, `Port`) and the set's rules again;
+it writes the row `sending`, calls the stock `Ens.MessageHeader.ResendDuplicatedMessage` (the stored body, unchanged),
+and reads the new header until it settles, within the item's `FailureTimeout` and `ConnectTimeout` and 10 s. A row found
+`sending` (a restart mid-call) stops the run with nothing more sent.
+
+- Completed: the row `completed`, the message's case resolved with what was sent.
+- Error or Suspended with the receiver's declared duplicate answer: the row `closed_as_present`; since v1.53 the
+  message's own cases are resolved with disposition `already_delivered`: "Already delivered: the receiver reported it
+  already holds this message (MSA-3: <its words>); the engine never delivered it by this route, and a hand entry would
+  explain it. Shutter has not compared the stored result or amendment." Only that message's cases, never every case
+  linked to it. The answer is declared when MSA-1 is AE or AR and an ERR-3 equals `duplicates.code`, or MSA-3 (trimmed)
+  equals `duplicates.phrase` or, since v1.53, starts with it and the next character is neither a letter nor a digit.
+- Anything else: the row `failed`, every row not sent `stopped`, the outage `needs_person`; since v1.53 the message's case
+  gains an event of kind `resend` ("Shutter's resend of this message failed at HH:MM: new header N ended <status> (<the
+  receiver's words>). Nothing more was sent; the outage waits for a person."), its state unchanged. Read again, a failed
+  message is `refused` by rule 3, so it is never offered again.
+- A patient the check holds is skipped (`stopped`, "not sent: <why>") and the run goes on; a copy resent by someone else
+  stops it.
+
+**Already handled by hand** (v1.53). `POST /outages/:id/acts` with `{ "act": "handled_by_hand", "headerId", "note",
+"version"? }`, where the row is `offered` and the header's Row in `lists.offered` lists the act (a receiver whose
+`duplicates.behaviour` is `unknown` or `files_twice`, or that declares none). 400 `bad_request` for a header not offered,
+a row that doesn't list the act, or a note empty or over 1,000 characters; 409 `wrong_state` unless `offered`; 409
+`version_changed`. Under the row's lock and version it writes a ledger row `handled_by_hand` (`RunId` "H" and the outage id,
+`RecordedBy` the signed-in user, `EndedAt` now, `Words` "Handled by hand, recorded by <user> at HH:MM: <note>. Shutter sent
+nothing for it."), moves the Row from `offered` to `closed` with `closure`, `closedBy` and `closedAt`, computes the digest
+over what stays offered, writes an event `handled_by_hand`, marks the row to read again, and closes the message's own
+cases by hand (`Shutter.Store.Case.CloseByHand`) with the same words. Nothing is sent: an approval given before it stops at
+that message's recheck. The card's `do` line at such a receiver says to check the receiver before approving, and that
+Already handled by hand sends nothing for a message.
 
 ## 18. Shadow mode and the recovery stop (v1.50)
 
@@ -2570,7 +2699,16 @@ No message content is copied: the rows hold ids, codes, the body's class and the
   outage refuses its messages too: a person sends them. Proof: `tests/e2e/attempt_history_check.py`. A message's cases in
   a watched namespace are those with that `sourceNamespace` and `originHeaderId` (a case's `sourceHeaderId` is Shutter's own
   copy and is never matched against another namespace's header), for the patient check's own cases and for what a send
-  resolves.
+  resolves. Also for 1.4.0 (`docs/design-1.4.0.md`): the patient check narrowed for orders and results to the same or a
+  linked order, with merges, replacements, unresolved cases on the same order and anything unread still holding, and a
+  newer body that can't be read holding on both paths (17.8, `set_policy_version` moves again when built); `lists.closed`,
+  a Row's `acts`, `closure`, `closedBy` and `closedAt`, `resends` on the outage and the case, and the act
+  `handled_by_hand` (17.3, 17.8); the approval's `receiverChecked` and 409 `receiver_check_needed` where a receiver's
+  duplicates are not refused; the declared phrase matched as the start of MSA-3 at a word's end; an already-held message's
+  cases resolved `already_delivered`; a failed resend's event on its case; no case opened for Shutter's own resend (11);
+  an escalation saved as a file reads `saved`, not `sent`, with `savedAt`, and the send's case event says queued (10);
+  `ResendRecord` in the demo's purge (17.7). Storage slots appended: `Escalation.SavedAt`, `ResendRecord.ControlId` and
+  `RecordedBy`, `Outage.ListClosed`. No route is added or removed.
 - v1.52, 9 Nov 2026 (for 1.4.0, found on the Pathology rig): `findings` is a snapshot item kind, so an order or result
   case's evidence no longer fails when it adds the item (before, every such case ended `failed` with no snapshot). The
   character finding adds `shared` (`failures`, `of_failures`, `characters`, or `why`): how many of the receiver's failures in
