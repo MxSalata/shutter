@@ -529,13 +529,15 @@ export interface IncidentFilters {
   limit?: number;
 }
 
-export function useIncidents(filters: IncidentFilters) {
+/** The incidents list; `enabled` false asks nothing (the live banner asks only on the live hospital). */
+export function useIncidents(filters: IncidentFilters, enabled = true) {
   const params = new URLSearchParams();
   for (const [k, v] of Object.entries(filters)) if (v !== undefined && v !== '') params.set(k, String(v));
   const query = params.toString();
   return useQuery({
     queryKey: keys.incidents(filters),
     queryFn: () => api.get<IncidentList>(`/incidents${query ? `?${query}` : ''}`),
+    enabled,
     refetchInterval: (q) => (q.state.data?.items.some((i) => i.state !== 'closed') ? LIVE * 2 : CALM),
   });
 }

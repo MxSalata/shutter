@@ -227,7 +227,12 @@ describe('Break the feed: who sees it', () => {
     renderFrame();
     const feed = await screen.findByRole('region', { name: "Mikolaj's Fictional Hospital, replayed" });
     expect(await within(feed).findByText(STORM_IN_TRIAL)).toBeVisible();
-    expect(within(feed).queryByRole('button')).not.toBeInTheDocument();
+    // Its one button closes the banner: no storm to start here
+    expect(
+      within(feed)
+        .getAllByRole('button')
+        .map((b) => b.getAttribute('aria-label')),
+    ).toEqual(['Hide the hospital feed banner for this session']);
     // No address to the demo in the app yet, so no link
     expect(within(feed).queryByRole('link')).not.toBeInTheDocument();
     expect(screen.queryByTestId('storm-strip')).not.toBeInTheDocument();
