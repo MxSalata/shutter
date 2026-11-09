@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.53, 9 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.54, 9 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -818,7 +818,9 @@ keeps `further_messages.in_patient_movement: stop`, which a demo install writes 
   endpoint: no receipt lookup, and the capabilities are the declared features, which the route item records as
   `capabilities_source`. A second entry with a name already taken is refused (`.name: must be unique`). An entry with `features` and no `api` is a receiver with no API of its own, such as a plain
   MLLP system (v1.40): it has no paths, so nothing is read in its place, and with its features declared false the gate
-  blocks any write. An entry with neither reads the default paths, as a profile from before v1.8 does. An entry with neither a capabilities endpoint nor declared features reads as capabilities unread (`capabilities_source` "not declared by the site profile", status 0), and the gate answers `CAPABILITIES_UNREADABLE` (v1.39). An entry without `api` takes the downstream system's paths. `dry_run: false` in a receiver's declared features, or in
+  blocks any write. So is an entry of category `orders_results` with no `api` (v1.54): a laboratory or order system has no
+  receiver API Shutter reads, so it has no paths and its label names no address. An entry with neither reads the default
+  paths, as a profile from before v1.8 does. An entry with neither a capabilities endpoint nor declared features reads as capabilities unread (`capabilities_source` "not declared by the site profile", status 0), and the gate answers `CAPABILITIES_UNREADABLE` (v1.39). An entry without `api` takes the downstream system's paths. `dry_run: false` in a receiver's declared features, or in
   its capability profile, means the gate offers no resend to it (`DRY_RUN_UNSUPPORTED`) and the connector refuses to send
   a dry run to it (v1.21). Declare all four flags: for a receiver with no capabilities endpoint the route takes the
   declared features, and a flag left out reads as false there (the connector alone reads an absent flag as true, so the
@@ -2347,7 +2349,7 @@ read. Durations are elapsed time, never a number of polls. This table is the one
 | `closing` | Every header of the window settled and read; the set computed where the build has a set gate | the drain rule, the no-retry path, or Read again | with a set gate: `offered` when the set lists a message that never reached the receiver, otherwise as with none, `set.reason` naming the condition when the set was not computed. With no set gate: no Error header of the window, `closed`; any, `needs_person` ("N messages failed and were not offered; a person reads the trace", `set.status` `not_computed`, `set.reason` "no set gate in this build") |
 | `offered` | The never-opened list is on the card; at a receiver with `engine_resend` an approval is offered | `closing` | approval given (`sending`); the set's digest moved (recomputed, stays `offered`); a person closes with a reason (`closed`); a dirty read (`open`) |
 | `sending` | One at a time, each row of the ledger written before the call | approval | run done (`closed`); a send not Completed, a stop or a restart mid-run (`needs_person`) |
-| `needs_person` | Something a person must do: a stopped run, a busy feed, an unreadable check, an expired approval | as above | read again and offer again (`closing`); a person closes (`closed`) |
+| `needs_person` | Something a person must do: a stopped run, a busy feed, an unreadable check, an expired approval | as above | read again and offer again (`closing`); a person closes (`closed`). With no approval on the row (nothing was sent), the poll computes it again every minute as it does an `offered` row (v1.54): while the engine still tries something of the window it stays here, its set and lists read as they are now, with no event; once nothing is tried it moves on as a close does. After an approved run stopped, only a person's Read again computes it |
 | `paused` | Down on purpose until a time | a person's act | the time, or a person (`open` or `closed`) |
 | `closed` | | | never |
 
@@ -2383,12 +2385,15 @@ All under `/api/shutter`, JSON in and out.
   "closure", "closedBy", "closedAt" }`; `acts`, `closure`, `closedBy` and `closedAt` are v1.53's (17.8): `acts` is empty and
   the other three null except where 17.8 sets them. `Resend` is one row of the ledger (17.8). Every field is present from the first moment: empty lists, zero counts, null where
   nothing has filled it. `linkedCases` is every case linked by receiver and time at the close, `resolved` true for one this
-  close resolved; `outcome` is the close's words, such as "Transport outage closed. 2 delivery exceptions still need review."
+  close resolved; `openCases` is read again on every read (v1.54): a case finished since (resolved, by Shutter's resend or
+  by hand, or failed) leaves it, and so does one whose message the card lists already (the ledger, and while the row is
+  not closed `lists.offered` and `lists.closed`), each `reason` in plain words as the case reads now; `outcome` is the close's words, such as "Transport outage closed. 2 delivery exceptions still need review."
   or "5 messages failed and were not offered; a person reads the trace.", or null. `Outage.ToJSON()` serialises the row, and
   the route adds `words`.
 - `set.status` and `set.reason` are the one name for the set's state on every surface: `not_computed` with its reason ("no
   set gate in this build", or the condition that failed), `withheld` with "down on purpose", `computed` with its digest.
-- `acts` holds `pause` and `close` while the row is not closed, and nothing once it is; a build with the set gate
+- `acts` holds `pause` and `close` while the row is not closed, and nothing once it is or while it is `sending` (v1.54: a
+  pause or a close would not stop the send, so the route refuses them then); a build with the set gate
   (`Shutter.Util.ResendSet`) lists `["pause", "read_again", "close"]`. `read_again` marks the row (`ReadAgainAt`, an event
   `read_again` naming the person) and answers the row at once: the REST process never switches to the watched namespace, so
   the next poll of `Receiver Watch` (every 5 s), a production job, computes the set there and clears the mark. An `offered`
@@ -2426,10 +2431,16 @@ words follow the build (`Shutter.API.Outages.Words`, a pure method with a table 
   and may already be held there". Can't tell: "Whether the listener is back cannot be read from the engine at this receiver:
   it will show on the next send.", then by tier as Down. On return: "The engine's connection recovered at HH:MM." (only at a
   retrying item, where the adapter read connected), "Delivery backlog drained at HH:MM. Application processing has not been
-  independently checked.", "Nothing remains queued. N deliveries Completed; M was Suspended and still needs action." Closed:
+  independently checked.", "Nothing remains queued. N deliveries Completed; M was Suspended and still needs action." (v1.54:
+  "Nothing remains queued." only while the receiver's reading shows its queue at 0, else "N messages are still queued.";
+  after a send, what Shutter's ledger did with each message by its last row: "Shutter sent N again, each new header
+  Completed", "N the receiver already held", "N handled by hand", "N failed when Shutter sent them again and still need
+  action", "N not sent and still need action", and only the Error headers the ledger does not account for "ended in
+  Error"). Closed:
   "Transport outage closed.", with "N delivery exceptions still need review." while cases stay open. Where the item's
   `ReplyCodeActions` is not the engine's default, the string is printed with "This operation's reply actions are the site's
-  own: what an AE, AR or timeout does here follows this string". Always last: "Recovery attempts initiated by Shutter: 0.",
+  own: what an AE, AR or timeout does here follows this string". Always last: "Recovery attempts initiated by Shutter: 0." (v1.54: `sentByShutter` counts every message this outage's
+  runs sent again, whatever came of it, from the ledger),
   with "The integration engine may still be delivering or retrying." while messages are queued or a head message is read, and "Nothing
   is sent to the receiver to check this."
 - `do`: "Do: " and the site's runbook line; at Refusing "Do: a person decides in the Message Viewer; Shutter does not
@@ -2710,6 +2721,13 @@ No message content is copied: the rows hold ids, codes, the body's class and the
   an escalation saved as a file reads `saved`, not `sent`, with `savedAt`, and the send's case event says queued (10);
   `ResendRecord` in the demo's purge (17.7). Storage slots appended: `Escalation.SavedAt`, `ResendRecord.ControlId` and
   `RecordedBy`, `Outage.ListClosed`. No route is added or removed.
+- v1.54, 9 Nov 2026 (for 1.4.0, the hands-on test's should-fix findings): an outage's `openCases` is read again on every
+  read, and its reasons are plain words (17.3); `sentByShutter` and the card's settled words count what Shutter's ledger did
+  (17.4); a `sending` row lists no act (17.3); a `needs_person` row with no approval is computed again every minute (17.2).
+  An orders and results receiver the site gave no `api` has no receiver API: no paths and no address in its label (6.4), so
+  the evidence asks nothing of the demo receiver's address for it, and the gate's identity check reads not applicable
+  (`NOT_APPLICABLE`) rather than unreadable. The evidence's route names a forwarded message's own route. An order or
+  result case's blocked reason gives its own next step. No route, field or storage slot is added or removed.
 - v1.52, 9 Nov 2026 (for 1.4.0, found on the Pathology rig): `findings` is a snapshot item kind, so an order or result
   case's evidence no longer fails when it adds the item (before, every such case ended `failed` with no snapshot). The
   character finding adds `shared` (`failures`, `of_failures`, `characters`, or `why`): how many of the receiver's failures in

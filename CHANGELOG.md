@@ -36,6 +36,16 @@ approval safeguards.
 - **Email with no mail server reads "Saved, not delivered".** An escalation written as an `.eml` file is marked saved,
   with a "Send it again" once a mail server is set; only a mail the mail server accepted reads Sent. Escalations stored
   before 1.4.0 as sent through the file read as saved.
+- **The outage card and the case page say what happened.** After a run, a closed outage lists only the cases that
+  still need a person, in plain words; its counts follow Shutter's own sends (sent, already held, handled by hand,
+  failed, not sent); a card that is sending offers no Pause or Close and no longer lists its messages as still to
+  review; a hand closure is listed once; the engine's raw alert lines are folded; a person's outage reached while
+  messages were still queued is read again every minute, and says when its reason was read. A case resolved by the
+  outage resend shows the resend, its approval and the new header on its own page. An order or result case names its
+  own route, asks no demo receiver address, gives its own next step, and is called a result or an order, with no ward or
+  bed. In shadow mode the escalation dialog says before the send that no email goes and no file is saved, and the
+  escalate button names the team the draft is for. A hospital's own install no longer offers the demo hospital's trial
+  on its sign-in page.
 - **The Evaluation page's approval safeguards** are a compact list: one line per check with its required outcome, and
   the detail behind a disclosure, on a phone about half the height of the old table.
 - **The live demo.** The banner's budget line shows only to the judges' account; the sign-in page says it is live on a

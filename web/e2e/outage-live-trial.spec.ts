@@ -558,9 +558,8 @@ for (const colorScheme of ['light', 'dark'] as const)
           key: expect.any(String),
         },
       ]);
-      await expect(card.getByTestId('outage-closed')).toContainText(
-        'Control id N52 (header 44)Handled by hand',
-      );
+      // Listed once, in the ledger, and not again among the messages closed with no send of their own
+      await expect(card.getByTestId('outage-closed')).toHaveCount(0);
       await expect(card.getByRole('button', { name: /^Already handled by hand: control id / })).toHaveCount(
         1,
       );
