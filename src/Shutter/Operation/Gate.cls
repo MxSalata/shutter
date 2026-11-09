@@ -106,6 +106,8 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
     // The messages of the encounter pending ahead of this case (v1.29): they hold a write, and a supersession that rests on
     // one of them (v1.34), until they are delivered.
     Set pendingMsgs = summary.%Get("pending_messages")
+    // Whether the dispatch reading found another visit's movement the snapshot did not show (FURTHER_MOVEMENT_NEW, below).
+    Set furtherNew = 0
     If isWrite {
         // Whether the engine still has this message, or has delivered it (Shutter.Util.EngineCheck). It comes first: what the engine
         // has done decides whether there is a write to weigh at all. A watched case with no origin header has nothing to read it by.
@@ -122,6 +124,7 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
         } ElseIf (request.Stage '= "proposal") && (##class(Shutter.Util.FurtherNew).Rows(further, summary.%Get("further_messages")).%Size() > 0) {
             // Another visit's movement the snapshot did not show, on a site that shows one: an approval was given on a plan without
             // it, so the evidence is collected again and the fresh snapshot voids the approval (Shutter.Util.FurtherNew).
+            Set furtherNew = 1
             Do ..Check(checks, "ordering", "unknown", "FURTHER_MOVEMENT_NEW", ##class(Shutter.Util.FurtherNew).Describe(case, further, summary.%Get("further_messages")) _ ". Nothing is sent on this approval: the evidence is read again and the plan made afresh with it shown, or a person decides")
         } ElseIf $ISOBJECT(further) {
             Do ..Check(checks, "ordering", "pass", "NO_FURTHER_MOVEMENT", $SELECT(##class(Shutter.Util.FurtherMessages).Count(further, "shows") > 0: "No further message stops this write for this patient; " _ ##class(Shutter.Util.FurtherMessages).Count(further, "shows") _ " other message(s) on file, shown on the plan", 1: "No further in-patient movement for this patient"))
@@ -237,7 +240,9 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
                 // number), unless the site's profile says so. An incident's release has its own path (7.3).
                 If (why = "") && '$ISOBJECT(case.Incident) && ##class(Shutter.Util.FurtherMessages).AdmissionOnNotFound(case, summary) && (##class(Shutter.Store.SiteProfile).AdmissionNotFound() = "person") Set why = "policy_requires_approval"
                 // Nor is a write that shows another visit's movement, in the snapshot or read again now: nobody would read it.
-                If (why = "") && (##class(Shutter.Util.ShownVisit).In(summary) || ##class(Shutter.Util.ShownVisit).Any($GET(further))) Set why = "policy_requires_approval"
+                // A movement the snapshot did not show is the unknown FURTHER_MOVEMENT_NEW instead, which the workflow refreshes
+                // (CONTRACTS 6.5): the plan is made afresh and the policy asked again on the fresh snapshot, which shows it.
+                If (why = "") && (##class(Shutter.Util.ShownVisit).In(summary) || ('furtherNew && ##class(Shutter.Util.ShownVisit).Any($GET(further)))) Set why = "policy_requires_approval"
                 // The plan must have come from the policy path for the entry it names: a board's plan never goes by policy.
                 If (why = "") && ((plan.CatalogueEntry = "") || (plan.CreatedBy '= ("policy:" _ plan.CatalogueEntry))) Set why = "plan_origin"
                 // A write with no person needs the case's source proved (CONTRACTS 11).

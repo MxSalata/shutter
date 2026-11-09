@@ -406,6 +406,41 @@ Method TestANewVisitAfterTheApprovalOnAShowProfile()
     Do ##class(Shutter.Index.Message).%DeleteId(row.%Id())
 }
 
+/// The same new visit under a release the site's policy made, with no person (S32 at an automatic tier): the dispatch gate
+/// answers unknown with FURTHER_MOVEMENT_NEW and does not also call for a person's approval, so the workflow refreshes the
+/// evidence and plans the case again (CONTRACTS 6.5), and the policy is asked again on the fresh snapshot, which shows the
+/// visit. A person's approval of the same plan gives the same answer.
+Method TestANewVisitAfterAPolicyRelease()
+{
+    Set row = ##class(Shutter.Index.Message).%New()
+    Set row.DocId = "UT-GATE-FURTHER-4", row.PatientId = "MRN-UT1", row.PatientIdAuthority = "HOSP", row.VisitNumber = "ENC-UT-NEW", row.Event = "admit", row.MessageType = "ADT_A01"
+    Set row.ControlId = "UT-NEW-4", row.EventTime = "2026-10-20T09:00:00Z", row.TimeCreated = "2099-01-01 00:00:00"
+    Do $$$AssertStatusOK(row.%Save(), "the index's row is saved")
+    Try {
+        For approver = "policy", "person" {
+            Set approval = $SELECT(approver = "policy": {"approver": "policy"}, 1: {})
+            Set run = ..Run({"name": ("a new visit after a release by " _ approver), "approval": (approval), "request": {"chain_kind": "single"},
+                "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2"},
+                "profile": {"policy": {"2": {"single": "automatic"}}, "further_messages": {"in_patient_movement": "show"}}})
+            Do $$$AssertEquals(..Found(run.checks, "ordering", "FURTHER_MOVEMENT_NEW"), "unknown", approver _ ": the dispatch gate doesn't pass a visit the plan did not show")
+            Do $$$AssertEquals(..Found(run.checks, "authorization", "POLICY_REQUIRES_APPROVAL"), "", approver _ ": no call for a person's approval beside it (" _ ..Codes(run.checks, "authorization") _ ")")
+            Do $$$AssertEquals(..Found(run.checks, "authorization", "APPROVAL_VALID"), "pass", approver _ ": the approval itself stands until the fresh snapshot")
+            Do $$$AssertEquals(run.response.Outcome, "unknown", approver _ ": the outcome is unknown")
+            Set wf = ##class(Shutter.Process.CaseWorkflow).%New("Case Workflow")
+            Do $$$AssertTrue(wf.OnlyRefreshable(run.response), approver _ ": the workflow refreshes the evidence and plans the case again (" _ run.response.Summary _ ")")
+            Do ..OnAfterOneTest()
+        }
+        Set run = ..Run({"name": "a new visit after a release by policy, stop", "approval": {"approver": "policy"}, "request": {"chain_kind": "single"},
+            "plan": {"catalogue_entry": "E2", "outcome": "preferred", "created_by": "policy:E2"},
+            "profile": {"policy": {"2": {"single": "automatic"}}, "further_messages": {"in_patient_movement": "stop"}}})
+        Do $$$AssertEquals(..Found(run.checks, "ordering", "FURTHER_MOVEMENT"), "block", "stop: the gate still blocks")
+        Do $$$AssertEquals(..Found(run.checks, "ordering", "FURTHER_MOVEMENT_NEW"), "", "stop: with the stop alone")
+    } Catch ex {
+        Do $$$AssertTrue(0, "no error: " _ ex.DisplayString())
+    }
+    Do ##class(Shutter.Index.Message).%DeleteId(row.%Id())
+}
+
 /// The engine check through the gate itself: every answer, in the ordering group, and the outcome it makes.
 Method TestEngine()
 {
