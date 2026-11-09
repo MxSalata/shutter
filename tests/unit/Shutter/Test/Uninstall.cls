@@ -294,6 +294,41 @@ Method TestAStubRunTakesTheIntakeOnly()
     Kill ^|ns|Shutter.UninstallTestKeep, ^|ns|UninstallTestKeep
 }
 
+/// The plan names the page question store, with how many questions it holds, and takes none of them.
+Method TestThePlanListsThePageQuestionStore()
+{
+    Set u = "Shutter.Util.Uninstall", t = "Shutter.Test.PageQuestionPurge"
+    Set qid = $CLASSMETHOD(t, "Ask", "u", "1900-01-01T00:00:00Z", .key)
+    Set plan = ##class(%DynamicObject).%FromJSON($CLASSMETHOD(u, "Plan"))
+    Set removes = "", it = plan.removes.%GetIterator()
+    While it.%GetNext(, .line) { Set removes = removes _ $LISTBUILD(line) }
+    Do $$$AssertTrue($LISTFIND(removes, $CLASSMETHOD(u, "PageQuestionsLine", $CLASSMETHOD(u, "PageQuestionCount"))), "the page question store")
+    Do $$$AssertEquals($CLASSMETHOD(t, "Left", qid, key), "1|1|1", "and the question, its run and its tool call are still there")
+    Do $CLASSMETHOD(t, "Clear", $LISTBUILD(qid), $LISTBUILD(key))
+}
+
+/// A run's page question step takes the questions with their runs and tool calls: through a stub step that takes only those
+/// asked before 1900-01-02, an old question of the test's goes and a new one stays.
+Method TestAStubRunTakesThePageQuestions()
+{
+    Set u = "Shutter.Util.Uninstall", t = "Shutter.Test.PageQuestionPurge"
+    Set old = $CLASSMETHOD(t, "Ask", "x", "1900-01-01T00:00:00Z", .oldKey)
+    Set new = $CLASSMETHOD(t, "Ask", "y", ##class(Shutter.Util.Time).NowUTC(), .newKey)
+    Set out = {"removed": [], "kept": [], "errors": [], "stopped": ""}
+    Do $CLASSMETHOD(u, "RunSteps", out, $LISTBUILD("PageQuestions"), $CLASSNAME())
+    Do $$$AssertEquals(out.stopped, "", "the step ran")
+    Do $$$AssertEquals(out.removed.%Get(0), $CLASSMETHOD(u, "PageQuestionsLine", 1), "and said what it took")
+    Do $$$AssertEquals($CLASSMETHOD(t, "Left", old, oldKey), "0|0|0", "the question, its run and its tool call are gone")
+    Do $$$AssertEquals($CLASSMETHOD(t, "Left", new, newKey), "1|1|1", "the one the stub leaves stays")
+    Do $CLASSMETHOD(t, "Clear", $LISTBUILD(old, new), $LISTBUILD(oldKey, newKey))
+}
+
+/// The stub of the page question step: only questions asked before 1900-01-02, the test's own.
+ClassMethod TakePageQuestions(out As %DynamicObject)
+{
+    Do ##class(Shutter.Util.Uninstall).TakePageQuestions(out, "1900-01-02T00:00:00Z")
+}
+
 /// A namespace other than the test's own, to stand in for a watched one.
 ClassMethod Watched() As %String
 {

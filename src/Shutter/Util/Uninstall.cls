@@ -53,6 +53,7 @@ ClassMethod Plan() As %String [ SqlProc ]
     For name = "Shutter retention", "Shutter message purge" { If ..TaskId(name) '= "" Do out.removes.%Push("The task " _ name) }
     Do ..UsersPlan(out)
     If ##class(%File).DirectoryExists(..CacheFolder()) Do out.removes.%Push("The folder " _ ..CacheFolder())
+    Do out.removes.%Push(..PageQuestionsLine(..PageQuestionCount()))
     Do out.removes.%Push("Every case, approval, incident and setting of Shutter's, and the folders under " _ ..Folder() _ ": cases are not kept, so export what you must keep first")
     Do out.keeps.%Push("The namespace " _ $NAMESPACE _ " itself and its databases: it may hold other things, and removing it is yours to do")
     Do out.%Set("ok", out.refused = "", "boolean")
@@ -97,7 +98,7 @@ ClassMethod Run() As %String [ SqlProc ]
         Set out.stopped = "Items"
         Do out.kept.%Push("Everything: the uninstall stopped before its first step, and can be run again")
     } Else {
-        Do ..RunSteps(out, $LISTBUILD("Watched", "Production", "Portal", "DemoNamespacesOff", "Workflow", "Messages", "Interop", "Provider", "Tasks", "Applications", "Grants", "Users", "Roles", "Resources", "Folders", "Globals"))
+        Do ..RunSteps(out, $LISTBUILD("Watched", "Production", "Portal", "DemoNamespacesOff", "Workflow", "Messages", "Interop", "Provider", "Tasks", "Applications", "Grants", "Users", "Roles", "Resources", "Folders", "PageQuestions", "Globals"))
     }
     Do out.%Set("ok", out.errors.%Size() = 0, "boolean")
     Quit out.%ToJSON()
@@ -978,6 +979,29 @@ ClassMethod HoldsDatabase(dir As %String) As %Boolean
         }
     }
     Quit 0
+}
+
+/// The questions asked about a page from the Ask Shutter panel, with their runs and tool calls (Shutter.Store.PageQuestion,
+/// which no case holds), all of them; the cutoff is a parameter for the unit test's stub step, which takes only its own.
+ClassMethod TakePageQuestions(out As %DynamicObject, cutoff As %String = "9999-12-31T23:59:59Z")
+{
+    Set n = ##class(Shutter.Store.PageQuestion).PurgeBefore(cutoff, .failed)
+    If failed > 0 Do out.errors.%Push("PageQuestions: " _ failed _ " page question(s) could not be taken") Quit
+    Do out.removed.%Push(..PageQuestionsLine(n))
+}
+
+/// The plan's and the run's line for the page questions.
+ClassMethod PageQuestionsLine(n As %Integer) As %String
+{
+    Quit "The page question store Shutter.Store.PageQuestion: " _ n _ " question(s) asked from the Ask Shutter panel, with their runs and tool calls"
+}
+
+/// How many page questions there are here.
+ClassMethod PageQuestionCount() As %Integer
+{
+    Set n = 0
+    &sql(SELECT COUNT(*) INTO :n FROM Shutter_Store.PageQuestion)
+    Quit +n
 }
 
 /// Last of all: every global of Shutter's in this namespace, the tables' data and the configuration with them.
