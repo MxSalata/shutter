@@ -80,7 +80,7 @@ The single investigator scores 0.500 if two F08 runs are graded on the plan made
 | Way to try it | You need | Time |
 | --- | --- | --- |
 | **The trial**: recorded runs; nothing leaves the browser | Nothing to install | [The quick tour](https://mxsalata.github.io/shutter/?trial=tour): 9 steps, about 4 minutes; [the engineers' tour](https://mxsalata.github.io/shutter/?trial=engineer): 6 steps, about 3 |
-| **The online demo**: a live hospital, a new failure every 7 minutes; any resend waits for you | The sign-ins above | [Four steps](https://github.com/MxSalata/shutter/blob/main/docs/readme/first-steps.md#on-the-online-demo-first): **Convene the board** live, then **Break the feed** |
+| **The online demo**: a live hospital, a new failure every 7 minutes; any resend waits for you | The sign-ins above | [Four steps](https://github.com/MxSalata/shutter/blob/main/docs/readme/first-steps.md#on-the-online-demo-first): **Convene the board** live (the judges' account only; `demo` reads and approves cases that wait), then **Break the feed** |
 | **The replay edition**, `./install.sh --replay`: no AI Hub, the board replaying its recorded live runs | Docker; no key, no Early Access file | 2 min 21 s measured on a test VM, about 8 min on 8 cores and 5 GB, after the 6 GB image pull |
 | **The AI Hub edition**, `./install.sh --image-file ...`: live agents, or their recordings without a key | Docker, the build 109 file from the Early Access portal; `ANTHROPIC_API_KEY` for live agents | 2 min 52 s measured on build 109, up to 15 min on a smaller machine ([receipt](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt-109.md)) |
 
