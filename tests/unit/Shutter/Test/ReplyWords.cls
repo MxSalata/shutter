@@ -82,10 +82,16 @@ Method TestLengths()
     Do $$$AssertTrue(w.quote [ "no reply here", "from the end, where the words stand")
 }
 
-/// The saved reply's id is read off the row; a reply that can't be opened falls back to the flat read.
+/// The row's "response N@EnsLib.HL7.Message" is an object reference, never opened as an id: a stored message of that
+/// number is another message (found on the pathology rig). A given id that can't be opened falls back to the flat read.
 Method TestReplyIdAndFallback()
 {
-    Do $$$AssertEquals(##class(Shutter.Util.ReplyWords).ReplyId(..#BOILER), "913", "because response 913@EnsLib.HL7.Message")
+    Set other = ##class(EnsLib.HL7.Message).ImportFromString("MSH|^~\&|A|B|C|D|20261105100001||ACK|O1|P|2.5.1" _ $CHAR(13) _ "MSA|AA|O1|Another message", .sc)
+    Do $$$AssertStatusOK(other.%Save(), "a stored message")
+    Set row = $REPLACE(..#BOILER, "913@", other.%Id() _ "@") _ "MSA|AE|T-5|Test code not recognised: ZZUNK"
+    Set w = ##class(Shutter.Util.ReplyWords).Read(row)
+    Do $$$AssertEquals(w.source _ "|" _ w.msa1 _ "|" _ w.msa3, "log|AE|Test code not recognised: ZZUNK", "the row's own words, not the message of that number")
+    Do ##class(EnsLib.HL7.Message).%DeleteId(other.%Id())
     Set w = ##class(Shutter.Util.ReplyWords).Read(..#BOILER _ "MSA|AE|T-4|Patient not found", "999999999")
     Do $$$AssertEquals(w.source, "log", "an id that does not open: the flat read")
     Do $$$AssertEquals(w.msa3, "Patient not found", "its words")
