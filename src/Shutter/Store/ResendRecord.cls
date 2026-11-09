@@ -33,9 +33,10 @@ Index NewHeaderIdx On (Namespace, NewHeaderId);
 /// The case of the message, when it has one.
 Property CaseId As %String(MAXLEN = 32);
 
-/// sending (before the call), completed, failed (the new header did not end Completed), stopped (not sent: the run
+/// sending (before the call), completed, failed (the new header did not end Completed), closed_as_present (the receiver
+/// already held it, so it was not sent), handled_by_hand (a person resent or re-entered it), stopped (not sent: the run
 /// stopped before it) or unknown (a restart mid-call).
-Property State As %String(MAXLEN = 16, VALUELIST = ",sending,completed,failed,stopped,unknown") [ InitialExpression = "sending" ];
+Property State As %String(MAXLEN = 24, VALUELIST = ",sending,completed,failed,closed_as_present,handled_by_hand,stopped,unknown") [ InitialExpression = "sending" ];
 
 /// SHA-256 of the stored body before the call, hex.
 Property DigestBefore As %String(MAXLEN = 64);
