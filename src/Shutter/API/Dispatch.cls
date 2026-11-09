@@ -467,78 +467,38 @@ ClassMethod Cases() As %Status
     If offset < 0 Set offset = 0
     If offset > 100000 Set offset = 100000
     Set where = "", args = 0
-    If state '= "" Set where = where _ " AND c.State = ?", args = args + 1, args(args) = state
-    If scenario '= "" Set where = where _ " AND c.Scenario = ?", args = args + 1, args(args) = scenario
+    If state '= "" Set where = where _ " AND State = ?", args = args + 1, args(args) = state
+    If scenario '= "" Set where = where _ " AND Scenario = ?", args = args + 1, args(args) = scenario
     Set total = 0
-    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT COUNT(*) AS N FROM Shutter_Store.""Case"" c WHERE 1=1" _ where, args...)
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT COUNT(*) AS N FROM Shutter_Store.""Case"" WHERE 1=1" _ where, args...)
     If rs.%Next() Set total = rs.%Get("N")
-    // One page: only the first offset + limit ids are read, newest first, and the offset is skipped (E8); then the
-    // page's own rows are read with every column they show, in one query, so nothing is computed for a skipped row
-    Set ids = ..PageIds(offset + limit, where, .args), page = ""
-    For i = offset + 1:1:$LISTLENGTH(ids) Set page = page _ $LISTBUILD($LIST(ids, i))
-    If page '= "" {
-        Set rs = ..CaseRows(page)
-        While rs.%Next() {
-            Set id = rs.%Get("ID")
-            Set rows(id) = $LISTBUILD(rs.%Get("PlanCreatedBy"), rs.%Get("Writes"), rs.%Get("Verification")), rows(id, "technical") = ..RowOf(rs)
-        }
-    }
-    Set items = []
-    For i = 1:1:$LISTLENGTH(page) {
-        Set id = $LIST(page, i)
-        Continue:'$DATA(rows(id))
-        Set c = ##class(Shutter.Store.Case).%OpenId(id)
+    // One page: only the first offset + limit ids are read, newest first, and the offset is skipped (E8).
+    // The current plan's origin, the writes and the latest verification come with the ids, so the list opens no plan,
+    // attempt or verification row for its columns. A write is an attempt that reached the receiver and may have landed
+    // (applied, already committed or uncertain), as the case page's receipt counts them.
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT TOP " _ (offset + limit) _ " c.ID, p.CreatedBy AS PlanCreatedBy,"
+        _ " (SELECT COUNT(*) FROM Shutter_Store.ExecutionAttempt a WHERE a.""Case"" = c.ID AND a.Outcome IN ('applied', 'already_committed', 'uncertain')) AS Writes,"
+        _ " (SELECT TOP 1 v.Outcome FROM Shutter_Store.Verification v WHERE v.""Case"" = c.ID ORDER BY v.ID DESC) AS Verification"
+        _ " FROM Shutter_Store.""Case"" c LEFT JOIN Shutter_Store.Plan p ON c.CurrentPlan = p.ID WHERE 1=1" _ where _ " ORDER BY c.ID DESC", args...)
+    Set items = [], n = 0
+    While rs.%Next() {
+        Set n = n + 1
+        If n <= offset Continue
+        Set c = ##class(Shutter.Store.Case).%OpenId(rs.%Get("ID"))
         Continue:'$ISOBJECT(c)
         Set o = ..Project(c)
         If $ISOBJECT(c.Incident) Set o.incidentId = c.Incident.IncidentId
         // Who made the current plan (the board's or the investigator's run, the site's policy, rules alone)
-        Set planCreatedBy = $LIST(rows(id), 1)
-        If planCreatedBy '= "" Set o.planCreatedBy = planCreatedBy
-        Set o.writes = +$LIST(rows(id), 2), o.verification = $LIST(rows(id), 3)
+        If rs.%Get("PlanCreatedBy") '= "" Set o.planCreatedBy = rs.%Get("PlanCreatedBy")
+        Set o.writes = +rs.%Get("Writes"), o.verification = rs.%Get("Verification")
         // The facts Technical shows on the row: the message's type, where it came in, the receiver's class, when the
         // failure was reported, the plan's version and digest, and the trace links (read only; no patient field)
-        Do ..Technical(c, o, .seen, rows(id, "technical"))
+        Do ..Technical(c, o, .seen)
         Do items.%Push(o)
     }
     Set out = {}
     Set out.items = items, out.total = total
     Quit ..Json(out)
-}
-
-/// The ids of the cases list, newest first, as many as top asks: where is the list's filter on the case (alias c), with
-/// its arguments. Nothing else is read here, so a deep page skips its earlier rows cheaply.
-ClassMethod PageIds(top As %Integer, where As %String, ByRef args) As %List
-{
-    Set ids = "", rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT TOP " _ top _ " c.ID FROM Shutter_Store.""Case"" c WHERE 1=1" _ where _ " ORDER BY c.ID DESC", args...)
-    While rs.%Next() { Set ids = ids _ $LISTBUILD(rs.%Get("ID")) }
-    Quit ids
-}
-
-/// The rows of the cases with these ids, in no particular order, with every column the list shows, read in this one
-/// query (a test runs it too). The current plan's origin, the writes and the latest verification come with them, so the
-/// list opens no plan, attempt or verification row for its columns. A write is an attempt that reached the receiver and
-/// may have landed (applied, already committed or uncertain), as the case page's receipt counts them. The Technical
-/// columns come with them too (the plan's version, digest and entry, the source header's sender and body, and when the
-/// feed reported the failure), so a row costs no header open and no query of its own: only an HL7 source message is
-/// opened, for its MSH-9.
-ClassMethod CaseRows(ids As %List) As %SQL.StatementResult
-{
-    Quit ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT c.ID, p.CreatedBy AS PlanCreatedBy,"
-        _ " (SELECT COUNT(*) FROM Shutter_Store.ExecutionAttempt a WHERE a.""Case"" = c.ID AND a.Outcome IN ('applied', 'already_committed', 'uncertain')) AS Writes,"
-        _ " (SELECT TOP 1 v.Outcome FROM Shutter_Store.Verification v WHERE v.""Case"" = c.ID ORDER BY v.ID DESC) AS Verification,"
-        _ " p.Version AS PlanVersion, p.Digest AS PlanDigest, p.CatalogueEntry AS PlanEntry,"
-        _ " h.ID AS HeaderId, h.SourceConfigName AS HeaderSource, h.MessageBodyClassName AS BodyClass, h.MessageBodyId AS BodyId,"
-        _ " (SELECT TOP 1 fh.TimeCreated FROM Ens.MessageHeader fh, Shutter_Msg.CaseIntake fi WHERE fh.SessionId = c.EnsSessionId"
-        _ " AND fh.MessageBodyClassName = 'Shutter.Msg.CaseIntake' AND fi.ID = fh.MessageBodyId"
-        _ " AND (c.Receiver IS NULL OR fi.Receiver = c.Receiver) ORDER BY fh.ID) AS FailedAt"
-        _ " FROM Shutter_Store.""Case"" c LEFT JOIN Shutter_Store.Plan p ON c.CurrentPlan = p.ID"
-        _ " LEFT JOIN Ens.MessageHeader h ON h.ID = c.SourceHeaderId WHERE c.ID %INLIST ?", ids)
-}
-
-/// A list row's Technical columns, as Technical takes them.
-ClassMethod RowOf(rs As %SQL.StatementResult) As %DynamicObject
-{
-    Quit {"header": (rs.%Get("HeaderId")), "headerSource": (rs.%Get("HeaderSource")), "bodyClass": (rs.%Get("BodyClass")), "bodyId": (rs.%Get("BodyId")), "failedAt": (rs.%Get("FailedAt")), "planVersion": (rs.%Get("PlanVersion")), "planDigest": (rs.%Get("PlanDigest")), "planEntry": (rs.%Get("PlanEntry"))}
 }
 
 ClassMethod CaseGet(caseId As %String) As %Status
@@ -582,12 +542,9 @@ ClassMethod CaseGet(caseId As %String) As %Status
 /// reported the failure, the time of the case intake's header in the case's session for its receiver (UTC, to the
 /// millisecond); the current plan's version, digest and catalogue entry; and the Visual Trace links. Nothing here names
 /// the patient: MSH-9 and the items' names only. seen keeps what a list reads once (the production, the item classes,
-/// the portal path) between its rows. row, from the list's own query, gives the source header's sender and body, when the
-/// failure was reported and the plan's columns, so a list row opens no header and runs no query of its own; with no row
-/// (a case's own page) each is read here, to the same answer.
-ClassMethod Technical(case As Shutter.Store.Case, o As %DynamicObject, ByRef seen, row As %DynamicObject = "")
+/// the portal path) between its rows.
+ClassMethod Technical(case As Shutter.Store.Case, o As %DynamicObject, ByRef seen)
 {
-    Set json = "Shutter.Util.Json", given = $ISOBJECT(row)
     If '$DATA(seen("production")) {
         Set seen("production") = ##class(Shutter.Setup).ProductionName(), seen("portal") = ..PortalPath()
         Set prod = ##class(Ens.Config.Production).%OpenId(seen("production"))
@@ -602,22 +559,12 @@ ClassMethod Technical(case As Shutter.Store.Case, o As %DynamicObject, ByRef see
     Set links.visualTrace = seen("portal") _ "EnsPortal.VisualTrace.zen?SESSIONID=" _ case.EnsSessionId
     Set links.workflowTrace = seen("portal") _ "EnsPortal.VisualTrace.zen?SESSIONID=" _ case.WorkflowSessionId
     Set o.links = links
-    // The source header's sender and body: the list's row has them, a case's page opens the header
-    If given {
-        Set hasHeader = ($CLASSMETHOD(json, "Str", row, "header") '= "")
-        Set headerSource = $CLASSMETHOD(json, "Str", row, "headerSource")
-        Set bodyClass = $CLASSMETHOD(json, "Str", row, "bodyClass"), bodyId = $CLASSMETHOD(json, "Str", row, "bodyId")
-    } Else {
-        Set header = $SELECT(case.SourceHeaderId = "": "", 1: ##class(Ens.MessageHeader).%OpenId(case.SourceHeaderId))
-        Set hasHeader = $ISOBJECT(header)
-        Set headerSource = $SELECT(hasHeader: header.SourceConfigName, 1: "")
-        Set bodyClass = $SELECT(hasHeader: header.MessageBodyClassName, 1: ""), bodyId = $SELECT(hasHeader: header.MessageBodyId, 1: "")
-    }
+    Set header = $SELECT(case.SourceHeaderId = "": "", 1: ##class(Ens.MessageHeader).%OpenId(case.SourceHeaderId))
     // MSH-9's type and trigger, from the message itself: the case keeps only Shutter's event word
     Set type = ""
     Try {
-        If hasHeader && (bodyClass '= "") && $CLASSMETHOD(bodyClass, "%Extends", "EnsLib.HL7.Message") {
-            Set msg = $CLASSMETHOD(bodyClass, "%OpenId", bodyId)
+        If $ISOBJECT(header) && (header.MessageBodyClassName '= "") && $CLASSMETHOD(header.MessageBodyClassName, "%Extends", "EnsLib.HL7.Message") {
+            Set msg = $CLASSMETHOD(header.MessageBodyClassName, "%OpenId", header.MessageBodyId)
             If $ISOBJECT(msg) {
                 // By position (segment 1 is MSH): a path by segment name finds nothing in a message with no DocType
                 Set type = msg.GetValueAt("1:9.1")
@@ -635,32 +582,22 @@ ClassMethod Technical(case As Shutter.Store.Case, o As %DynamicObject, ByRef see
         If case.SourceRoute '= "" Set o.sourceItem = case.SourceRoute
     } Else {
         Set o.production = seen("production")
-        If hasHeader && (headerSource '= "") Set o.sourceItem = headerSource
+        If $ISOBJECT(header) && (header.SourceConfigName '= "") Set o.sourceItem = header.SourceConfigName
         // The receiver's item is in this production only for a case of its own feed
         If (case.Receiver '= "") && ($GET(seen("class", case.Receiver)) '= "") Set o.receiverClass = seen("class", case.Receiver)
     }
     // When the feed reported the failure: the case intake it sent, in the case's session, for the case's receiver
     If case.EnsSessionId '= "" {
-        If given {
-            Set t = $CLASSMETHOD(json, "Str", row, "failedAt")
-        } Else {
-            Set sql = "SELECT TOP 1 h.TimeCreated AS T FROM Ens.MessageHeader h, Shutter_Msg.CaseIntake i WHERE h.SessionId = ? AND h.MessageBodyClassName = 'Shutter.Msg.CaseIntake' AND i.ID = h.MessageBodyId"
-            Set args = 1, args(1) = case.EnsSessionId
-            If case.Receiver '= "" Set sql = sql _ " AND i.Receiver = ?", args = 2, args(2) = case.Receiver
-            Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, sql _ " ORDER BY h.ID", args...)
-            Set t = $SELECT(rs.%Next(): rs.%Get("T"), 1: "")
-        }
+        Set sql = "SELECT TOP 1 h.TimeCreated AS T FROM Ens.MessageHeader h, Shutter_Msg.CaseIntake i WHERE h.SessionId = ? AND h.MessageBodyClassName = 'Shutter.Msg.CaseIntake' AND i.ID = h.MessageBodyId"
+        Set args = 1, args(1) = case.EnsSessionId
+        If case.Receiver '= "" Set sql = sql _ " AND i.Receiver = ?", args = 2, args(2) = case.Receiver
+        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, sql _ " ORDER BY h.ID", args...)
         // TimeCreated drops trailing zeros ("19:00:02.5"): written back to the millisecond, "19:00:02.500"
-        If t '= "" Set o.failedAt = $TRANSLATE($ZDATETIME($ZDATETIMEH(t, 3), 3, 1, 3), " ", "T") _ "Z"
+        If rs.%Next() && (rs.%Get("T") '= "") Set o.failedAt = $TRANSLATE($ZDATETIME($ZDATETIMEH(rs.%Get("T"), 3), 3, 1, 3), " ", "T") _ "Z"
     }
-    // The current plan: its version, its digest and its catalogue entry (the list's row has them from its join)
+    // The current plan: its version, its digest and its catalogue entry
     Set planId = case.CurrentPlanGetObjectId()
-    If given {
-        Set version = $CLASSMETHOD(json, "Str", row, "planVersion"), digest = $CLASSMETHOD(json, "Str", row, "planDigest"), entry = $CLASSMETHOD(json, "Str", row, "planEntry")
-        If version '= "" Do o.%Set("planVersion", +version, "number")
-        If digest '= "" Set o.planDigest = digest
-        If entry '= "" Set o.catalogueEntry = entry
-    } ElseIf planId '= "" {
+    If planId '= "" {
         &sql(SELECT Version, Digest, CatalogueEntry INTO :version, :digest, :entry FROM Shutter_Store.Plan WHERE ID = :planId)
         If SQLCODE = 0 {
             If version '= "" Do o.%Set("planVersion", +version, "number")

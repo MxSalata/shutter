@@ -164,7 +164,7 @@ rounds of review.
   - In a site's own production the uninstall takes only messages from sessions that hold one of Shutter's, skips
     namespaces nobody can enter, and selects processes by class; the upgrade keeps the stop even when an older profile
     fails today's checks; an approval counts as decided only when it was; a policy release that meets a new movement is
-    planned again; and the cases list reads each row's technical facts in its own query.
+    planned again.
   - Ask Shutter follows the Agent Board item's own Mode and is never recorded or replayed; a page answer may cite a
     listed id with a path, as its tool accepts; its questions are cleared at sign-out, measured as the server measures
     them, and purged on the cases' retention days, and the uninstall takes them.
