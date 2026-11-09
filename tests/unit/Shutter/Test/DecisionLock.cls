@@ -2,7 +2,8 @@
 /// and reads the task again before it decides. A decision that meets one under way waits for it and is then told who
 /// decided, what and when; one that waits past the lock's wait is refused as busy; and a cancellation (the approval wait
 /// running out, a case closed by hand or abandoned) leaves a task decided meanwhile as it was decided, while one that
-/// finds the lock busy tries once more and then cancels, so the approval wait still escalates. The first
+/// finds the lock busy tries once more and then, still busy, never cancels without the lock: it leaves the task open and
+/// notes on the case that the cancel waits, and the next try cancels under the lock, or finds the decision that stands. The first
 /// decision is played here by the test itself, holding the lock as Decide does while it completes the task, and the
 /// second runs in a job of its own, as a second request would. The tests make a Workflow role of their own, with the
 /// session's user in it, and remove the role, the membership, any Workflow user they made and the tasks they save.
@@ -117,9 +118,9 @@ Method TestABusyCancellationTriesAgain()
     Do ..Tidy(made)
 }
 
-/// An approval wait that runs out while the lock stays busy past both claims still cancels the task, notes that it did
-/// so without the lock, and escalates the case, rather than ending as though a decision had reached the task.
-Method TestAnApprovalWaitStillBusyEscalates()
+/// An approval wait that runs out while the lock stays busy past both claims never cancels without the lock: the task is
+/// left open as it was, the case notes that the cancel waits and keeps awaiting approval, and it does not escalate.
+Method TestAnApprovalWaitStillBusyWaits()
 {
     If '..Ready(.made) Quit
     Set task = ##class(Shutter.Test.Workflow).SavedTask(..#ROLE, "UT-WF-L5")
@@ -130,16 +131,107 @@ Method TestAnApprovalWaitStillBusyEscalates()
     Job ##class(Shutter.Test.DecisionLock).TimeoutInJob("UT-WF-L5")
     Set out = ..JobAnswer(30)
     Lock -^Shutter.TaskDecision(id)
-    Do $$$AssertEquals(out.state, "escalated", "the case escalates: " _ out.%ToJSON())
+    Do $$$AssertEquals(out.state, "awaiting_approval", "the case keeps awaiting approval: " _ out.%ToJSON())
+    Do $$$AssertStatusOK(task.%Reload(), "the task is read again")
+    Do $$$AssertEquals(+task.%TaskStatus.IsComplete, 0, "and is still open")
+    Do $$$AssertEquals(task.%FormValues.GetAt("Comment"), "", "and not cancelled: " _ task.%FormValues.GetAt("Comment"))
+    Do $$$AssertEquals(..Notes("UT-WF-L5", "%cancel waits%(busy)%"), 1, "the case notes that the cancel waits on the busy lock")
+    Do $$$AssertEquals(..Notes("UT-WF-L5", "%without its decision lock%"), 0, "and nothing was cancelled without it")
+    Do $$$AssertEquals(..Notes("UT-WF-L5", "%escalat%"), 0, "and the case did not escalate")
+    Do ##class(Shutter.Test.Workflow).DeleteTask(task)
+    Do ..DeleteCase("UT-WF-L5")
+    Do ..Tidy(made)
+}
+
+/// A cancel left waiting by a lock held through every claim is tried again once the lock is given back, and then cancels
+/// the task under the lock, with nothing noted as done without it.
+Method TestAWaitingCancelIsTriedAgainUnderTheLock()
+{
+    If '..Ready(.made) Quit
+    Set task = ##class(Shutter.Test.Workflow).SavedTask(..#ROLE, "UT-WF-L6")
+    If '$$$AssertTrue($ISOBJECT(task), "an open task") Do ..Tidy(made) Quit
+    Set id = task.%Id()
+    If '$$$AssertStatusOK(..SavedCase("UT-WF-L6"), "a case of the test's own") Do ##class(Shutter.Test.Workflow).DeleteTask(task) Do ..Tidy(made) Quit
+    Kill ^Shutter.Test("lock")
+    Lock +^Shutter.TaskDecision(id)
+    Job ##class(Shutter.Test.DecisionLock).CancelInJob("UT-WF-L6")
+    Set out = ..JobAnswer(30)
+    Lock -^Shutter.TaskDecision(id)
+    Do $$$AssertEquals(out.waits, 1, "the lock held through every claim leaves the cancel waiting: " _ out.%ToJSON())
+    Do $$$AssertStatusOK(task.%Reload(), "the task is read again")
+    Do $$$AssertEquals(+task.%TaskStatus.IsComplete, 0, "and is still open")
+    Do $$$AssertEquals(task.%FormValues.GetAt("Comment"), "", "and not cancelled")
+    Do $$$AssertEquals(..Notes("UT-WF-L6", "%cancel waits%(busy)%"), 1, "the case notes that the cancel waits")
+    // The next try, with the lock free.
+    Kill ^Shutter.Test("lock")
+    Job ##class(Shutter.Test.DecisionLock).CancelInJob("UT-WF-L6")
+    Set out = ..JobAnswer(30)
+    Do $$$AssertEquals(out.waits, 0, "the next try takes the lock: " _ out.%ToJSON())
+    Do $$$AssertEquals(out.decided, 0, "and finds no decision")
     Do $$$AssertStatusOK(task.%Reload(), "the task is read again")
     Do $$$AssertEquals($EXTRACT(task.%FormValues.GetAt("Comment"), 1, 11), "Cancelled: ", "and the cancellation ran: " _ task.%FormValues.GetAt("Comment"))
-    Set n = 0
-    &sql(SELECT COUNT(*) INTO :n FROM Shutter_Store.CaseEvent WHERE "Case"->CaseId = 'UT-WF-L5' AND Kind = 'error' AND Text LIKE '%without its decision lock (busy)%')
-    Do $$$AssertEquals(+n, 1, "and the case notes the busy lock")
+    Do $$$AssertEquals(..Notes("UT-WF-L6", "%without its decision lock%"), 0, "under the lock")
     Do ##class(Shutter.Test.Workflow).DeleteTask(task)
-    &sql(DELETE FROM Shutter_Store.CaseEvent WHERE "Case"->CaseId = 'UT-WF-L5')
-    &sql(DELETE FROM Shutter_Store."Case" WHERE CaseId = 'UT-WF-L5')
+    Do ..DeleteCase("UT-WF-L6")
     Do ..Tidy(made)
+}
+
+/// A decision that completes the task while its cancel waits stands: the next try finds it decided and leaves the task
+/// as the decision left it, its action and comment unchanged.
+Method TestADecisionWhileTheCancelWaitsStands()
+{
+    If '..Ready(.made) Quit
+    Set task = ##class(Shutter.Test.Workflow).SavedTask(..#ROLE, "UT-WF-L7")
+    If '$$$AssertTrue($ISOBJECT(task), "an open task") Do ..Tidy(made) Quit
+    Set id = task.%Id()
+    If '$$$AssertStatusOK(..SavedCase("UT-WF-L7"), "a case of the test's own") Do ##class(Shutter.Test.Workflow).DeleteTask(task) Do ..Tidy(made) Quit
+    Kill ^Shutter.Test("lock")
+    Lock +^Shutter.TaskDecision(id)
+    Job ##class(Shutter.Test.DecisionLock).CancelInJob("UT-WF-L7")
+    Set out = ..JobAnswer(30)
+    Do $$$AssertEquals(out.waits, 1, "the cancel waits: " _ out.%ToJSON())
+    // The decision under way completes the task, then gives the lock back.
+    Do $$$AssertStatusOK(task.%Reload(), "the task is read again")
+    Set task.%Action = "Approve", task.%UserName = $USERNAME
+    Do task.%FormValues.SetAt("the decision", "Comment")
+    Set task.%TaskStatus.IsComplete = 1, task.%TaskStatus.TimeCompleted = $ZDATETIME($ZTIMESTAMP, 3, 1, 3)
+    Do $$$AssertStatusOK(task.%Save(), "a decision completes the task")
+    Lock -^Shutter.TaskDecision(id)
+    Kill ^Shutter.Test("lock")
+    Job ##class(Shutter.Test.DecisionLock).CancelInJob("UT-WF-L7")
+    Set out = ..JobAnswer(30)
+    Do $$$AssertEquals(+out.waits, 0, "the next try waits no more: " _ out.%ToJSON())
+    Do $$$AssertStatusOK(task.%Reload(), "the task is read again")
+    Do $$$AssertEquals(task.%Action, "Approve", "and keeps its decision, not Cancel")
+    Do $$$AssertEquals(task.%FormValues.GetAt("Comment"), "the decision", "and its comment")
+    Do $$$AssertEquals(+task.%TaskStatus.IsComplete, 1, "complete")
+    Do ##class(Shutter.Test.Workflow).DeleteTask(task)
+    Do ..DeleteCase("UT-WF-L7")
+    Do ..Tidy(made)
+}
+
+/// A case of the test's own, saved so the cancellation's notes reach it.
+Method SavedCase(caseId As %String) As %Status
+{
+    Do ..DeleteCase(caseId)
+    Set case = ##class(Shutter.Store.Case).%New()
+    Set case.CaseId = caseId, case.OperationKey = "UT decision lock", case.State = "failed"
+    Quit case.%Save()
+}
+
+/// The case's events whose text is like the pattern.
+Method Notes(caseId As %String, like As %String) As %Integer
+{
+    Set n = 0
+    &sql(SELECT COUNT(*) INTO :n FROM Shutter_Store.CaseEvent WHERE "Case"->CaseId = :caseId AND Text LIKE :like)
+    Quit +n
+}
+
+/// Removes a case of the test's own and its events.
+Method DeleteCase(caseId As %String)
+{
+    &sql(DELETE FROM Shutter_Store.CaseEvent WHERE "Case"->CaseId = :caseId)
+    &sql(DELETE FROM Shutter_Store."Case" WHERE CaseId = :caseId)
 }
 
 /// The tests need Shutter_Approve, which the decision checks first: without it they are skipped. Then the role of the
@@ -218,17 +310,18 @@ ClassMethod TimeoutInJob(caseId As %String)
     }
 }
 
-/// A cancellation of the case's open task, as the case workflow makes one when its approval wait runs out.
+/// A cancellation of the case's open task, as the case workflow makes one when its approval wait runs out, on the saved
+/// case when there is one.
 ClassMethod CancelInJob(caseId As %String)
 {
     Set ^Shutter.Test("lock", "started") = 1
     Try {
-        Set case = ##class(Shutter.Store.Case).%New()
-        Set case.CaseId = caseId
+        Set case = ##class(Shutter.Store.Case).ByCaseId(caseId)
+        If '$ISOBJECT(case) Set case = ##class(Shutter.Store.Case).%New(), case.CaseId = caseId
         Set wf = ##class(Shutter.Process.CaseWorkflow).%New("UT Case Workflow")
-        Set decided = 0
-        Set sc = wf.CancelOpenTask(case, "system", "a unit test's wait", .decided)
-        Set ^Shutter.Test("lock") = {"decided": (+decided), "ok": ($SYSTEM.Status.IsOK(sc))}.%ToJSON()
+        Set decided = 0, waits = 0
+        Set sc = wf.CancelOpenTask(case, "system", "a unit test's wait", .decided, .waits)
+        Set ^Shutter.Test("lock") = {"decided": (+decided), "waits": (+waits), "ok": ($SYSTEM.Status.IsOK(sc))}.%ToJSON()
     } Catch ex {
         Set ^Shutter.Test("lock") = {"code": "error", "error": (ex.DisplayString())}.%ToJSON()
     }
