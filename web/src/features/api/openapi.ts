@@ -79,6 +79,8 @@ export interface Operation {
   'x-idempotent'?: boolean;
   /** The ObjectScript method that serves it. */
   'x-dispatch'?: string;
+  /** The ways in, when they differ from the document's: an empty entry means it answers with no sign-in. */
+  security?: Record<string, string[]>[];
 }
 
 export interface Tag {
@@ -104,6 +106,8 @@ export interface ApiDocument {
   openapi: string;
   info: { title: string; version: string; summary?: string; description?: string };
   tags?: Tag[];
+  /** The ways in every operation takes unless it names its own. */
+  security?: Record<string, string[]>[];
   paths: Record<string, Partial<Record<Method, Operation>> & { parameters?: Parameter[] }>;
   components?: {
     schemas?: Record<string, Schema>;
@@ -131,6 +135,8 @@ export interface Route {
   resources: string[];
   writes: boolean;
   idempotent: boolean;
+  /** It answers before anyone signs in (its security lists an empty entry); otherwise a sign-in comes first. */
+  open: boolean;
   /** The path's and the operation's parameters, each resolved from the document's components. */
   parameters: Parameter[];
 }
@@ -175,6 +181,7 @@ export function routesOf(doc: ApiDocument = API): Route[] {
         resources: resourcesOf(op),
         writes: op['x-writes'] === true,
         idempotent: op['x-idempotent'] === true,
+        open: (op.security ?? doc.security ?? []).some((s) => Object.keys(s).length === 0),
         parameters: [...(item.parameters ?? []), ...(op.parameters ?? [])].map((p) =>
           resolveParameter(p, doc),
         ),

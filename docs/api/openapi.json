@@ -249,6 +249,54 @@
         }
       }
     },
+    "/api/shutter/access": {
+      "get": {
+        "operationId": "access",
+        "tags": [
+          "session"
+        ],
+        "summary": "What each of Shutter's roles may do, beside what the caller may",
+        "description": "Shutter.API.Access's report, for the Settings page's Your access table: for each thing a person can do in Shutter (view, approve, scenarios, liveAgents, configure, inbox, guide, trace, publisher), the resources it needs, whether this instance has it at all, each installed role's answer and the caller's own. Read only, a comparison and never a switch: it names roles and resources, never a user. The roles' columns come from Security.Roles for a caller who may read it (read now), otherwise from the record the install, the portal's hardening and each start of the production write (read recorded, with recordedAt), or none before any record; the caller's own column always comes from the resources they hold, as GET /me reads them.\n\nAny signed-in user.\n\nCONTRACTS 5.",
+        "x-contract": "docs/CONTRACTS.md section 5",
+        "x-required-resource": null,
+        "x-writes": false,
+        "x-idempotent": false,
+        "x-dispatch": "Shutter.API.Dispatch.Access",
+        "responses": {
+          "200": {
+            "description": "The roles, the rows and where the roles' columns were read from.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessReport"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in. unauthenticated: Sign in first.",
+            "x-error-codes": [
+              "unauthenticated"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "unauthenticated": {
+                    "value": {
+                      "error": "unauthenticated",
+                      "detail": "Sign in first"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/shutter/health": {
       "get": {
         "operationId": "health",
@@ -8185,6 +8233,310 @@
         },
         "required": [
           "reason"
+        ]
+      },
+      "AccessReport": {
+        "description": "GET /access (CONTRACTS 5): what each of Shutter's roles may do beside what the signed-in user may, read only. It names roles and resources, never a user.",
+        "type": "object",
+        "properties": {
+          "demo": {
+            "type": "boolean"
+          },
+          "portalHardened": {
+            "type": "boolean",
+            "description": "The public demo's portal hardening is on: the Management Portal's pages need the resource Shutter_Portal."
+          },
+          "read": {
+            "type": "string",
+            "enum": [
+              "now",
+              "recorded",
+              "none"
+            ],
+            "description": "Where the roles' columns came from: Security.Roles now, the record (with recordedAt), or none yet, when every role reads as not installed."
+          },
+          "recordedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccessRole"
+            }
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccessRow"
+            }
+          }
+        },
+        "required": [
+          "demo",
+          "portalHardened",
+          "read",
+          "roles",
+          "rows"
+        ],
+        "examples": [
+          {
+            "demo": true,
+            "portalHardened": false,
+            "read": "recorded",
+            "recordedAt": "2026-11-02T14:56:18Z",
+            "roles": [
+              {
+                "role": "Shutter_Demo",
+                "installed": true
+              },
+              {
+                "role": "Shutter_Judge",
+                "installed": true
+              },
+              {
+                "role": "Shutter_Operator",
+                "installed": true
+              },
+              {
+                "role": "Shutter_Approver",
+                "installed": true
+              },
+              {
+                "role": "Shutter_Trace",
+                "installed": true
+              }
+            ],
+            "rows": [
+              {
+                "id": "view",
+                "needs": [
+                  [
+                    "Shutter_Operate:U"
+                  ]
+                ],
+                "available": true,
+                "roles": {
+                  "Shutter_Demo": true,
+                  "Shutter_Judge": true,
+                  "Shutter_Operator": true,
+                  "Shutter_Approver": true,
+                  "Shutter_Trace": false
+                },
+                "you": false
+              },
+              {
+                "id": "approve",
+                "needs": [
+                  [
+                    "Shutter_Approve:U"
+                  ]
+                ],
+                "available": true,
+                "roles": {
+                  "Shutter_Demo": true,
+                  "Shutter_Judge": true,
+                  "Shutter_Operator": false,
+                  "Shutter_Approver": true,
+                  "Shutter_Trace": false
+                },
+                "you": false
+              },
+              {
+                "id": "scenarios",
+                "needs": [
+                  [
+                    "Shutter_Scenarios:U"
+                  ]
+                ],
+                "available": true,
+                "roles": {
+                  "Shutter_Demo": false,
+                  "Shutter_Judge": false,
+                  "Shutter_Operator": true,
+                  "Shutter_Approver": true,
+                  "Shutter_Trace": false
+                },
+                "you": false
+              },
+              {
+                "id": "liveAgents",
+                "needs": [
+                  [
+                    "Shutter_LiveAgents:U"
+                  ]
+                ],
+                "available": true,
+                "roles": {
+                  "Shutter_Demo": false,
+                  "Shutter_Judge": true,
+                  "Shutter_Operator": true,
+                  "Shutter_Approver": true,
+                  "Shutter_Trace": false
+                },
+                "you": false
+              },
+              {
+                "id": "configure",
+                "needs": [
+                  [
+                    "Shutter_Configure:U"
+                  ]
+                ],
+                "available": true,
+                "roles": {
+                  "Shutter_Demo": false,
+                  "Shutter_Judge": false,
+                  "Shutter_Operator": false,
+                  "Shutter_Approver": true,
+                  "Shutter_Trace": false
+                },
+                "you": false
+              },
+              {
+                "id": "inbox",
+                "needs": [
+                  [
+                    "%Ens_Portal:U",
+                    "Shutter_Approve:U"
+                  ]
+                ],
+                "available": true,
+                "roles": {
+                  "Shutter_Demo": true,
+                  "Shutter_Judge": true,
+                  "Shutter_Operator": false,
+                  "Shutter_Approver": true,
+                  "Shutter_Trace": false
+                },
+                "you": false
+              },
+              {
+                "id": "guide",
+                "needs": [
+                  [
+                    "Shutter_Portal:U"
+                  ],
+                  [
+                    "Shutter_Operate:U"
+                  ]
+                ],
+                "available": true,
+                "roles": {
+                  "Shutter_Demo": true,
+                  "Shutter_Judge": true,
+                  "Shutter_Operator": true,
+                  "Shutter_Approver": true,
+                  "Shutter_Trace": false
+                },
+                "you": false
+              },
+              {
+                "id": "trace",
+                "needs": [
+                  [
+                    "%Ens_Portal:U",
+                    "%Ens_MessageTrace:U"
+                  ]
+                ],
+                "available": true,
+                "roles": {
+                  "Shutter_Demo": true,
+                  "Shutter_Judge": true,
+                  "Shutter_Operator": false,
+                  "Shutter_Approver": true,
+                  "Shutter_Trace": true
+                },
+                "you": false
+              },
+              {
+                "id": "publisher",
+                "needs": [
+                  [
+                    "Shutter_Publish:U"
+                  ]
+                ],
+                "available": true,
+                "roles": {
+                  "Shutter_Demo": false,
+                  "Shutter_Judge": false,
+                  "Shutter_Operator": true,
+                  "Shutter_Approver": true,
+                  "Shutter_Trace": false
+                },
+                "you": false
+              }
+            ]
+          }
+        ]
+      },
+      "AccessRole": {
+        "description": "One of the roles Shutter installs, as GET /access reads it (CONTRACTS 5).",
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string"
+          },
+          "installed": {
+            "type": "boolean",
+            "description": "Whether the role is defined on this instance."
+          }
+        },
+        "required": [
+          "role",
+          "installed"
+        ]
+      },
+      "AccessRow": {
+        "description": "What a person can do in Shutter, as one row of the access table.",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": [
+              "view",
+              "approve",
+              "scenarios",
+              "liveAgents",
+              "configure",
+              "inbox",
+              "guide",
+              "trace",
+              "publisher"
+            ]
+          },
+          "needs": {
+            "type": "array",
+            "description": "The resources it needs: one of the alternatives, each a list of resource:permission all of which are needed.",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "available": {
+            "type": "boolean",
+            "description": "False when this instance has nothing to hold: the Shutter in IRIS page off a demo, the publisher off AI Hub."
+          },
+          "roles": {
+            "type": "object",
+            "description": "Each role's answer, by role name, from the role's resources and its granted roles'.",
+            "additionalProperties": {
+              "type": "boolean"
+            }
+          },
+          "you": {
+            "type": "boolean",
+            "description": "The signed-in user's own answer, from the resources they hold."
+          }
+        },
+        "required": [
+          "id",
+          "needs",
+          "available",
+          "roles",
+          "you"
         ]
       },
       "AgentItem": {

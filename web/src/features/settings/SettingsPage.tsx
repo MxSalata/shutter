@@ -6,6 +6,7 @@ import { ApiSource } from '@/components/ApiSource';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { PageHeader } from '@/components/PageHeader';
 import { PageSkeleton } from '@/components/PageSkeleton';
+import { AccessSection } from './AccessSection';
 import { AgentsSection } from './AgentsSection';
 import { CostsSection } from './CostsSection';
 import { PricesSection } from './PricesSection';
@@ -65,6 +66,7 @@ export default function SettingsPage() {
           <>
             <SettingsTiles s={s} costs={costs.data} />
             {s ? <Flags s={s} /> : null}
+            <AccessSection />
             {s ? <AgentsSection s={s} /> : null}
             <CostsSection costs={costs} settings={s} />
             {s ? <PricesSection prices={s.prices} /> : null}
