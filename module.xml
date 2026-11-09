@@ -3,7 +3,7 @@
   <Document name="iris-shutter.ZPM">
     <Module>
       <Name>iris-shutter</Name>
-      <Version>1.2.0</Version>
+      <Version>1.2.1</Version>
       <Description>Shutter: supervised recovery for InterSystems IRIS Interoperability. A failed message is a case, not a retry: a board of AI Hub agents investigates it, a deterministic gate and a person decide, IRIS carries out the exact approved action and verifies it. This package is the whole of Shutter for an InterSystems IRIS AI Hub build (2026.3 or later, builds 154 and 109 of the early access): the production, the store, the gate, the web application, the demo and the live agents (declarative %AI.Agent classes with typed tools, policies, schemas and knowledge bases). The core alone, for a plain IRIS for Health Community 2026.2 that replays recorded agent runs, is the module in the repository's core/ folder, loaded by path.</Description>
       <Keywords>interoperability,hl7,recovery,ai agents,ai hub,workflow,contest</Keywords>
       <Author>

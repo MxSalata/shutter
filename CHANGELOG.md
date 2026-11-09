@@ -4,6 +4,25 @@ Versions follow `major.minor.patch`: a minor release for new features, a patch r
 updates. The version in both `module.xml` files (the one the package manager publishes) is always the version of the
 GitHub tag on the same commit; `scripts/check-versions.py` checks every place the version is written.
 
+## 1.2.1 (9 November 2026)
+
+Fixes found by the checks run on 1.2.0 on IRIS 2026.2 and AI Hub build 154, and stored maps for six tables so a later
+upgrade keeps their rows in place.
+
+- **Two decisions at once.** When two people decide the same approval at the same moment, the second is now told the
+  decision that stands (the action, who took it and when) once the first has completed the task, instead of a "no task"
+  answer.
+- **A cancel waiting for an approval's lock.** A cancel that finds the approval task's decision lock taken is tried again
+  only by a workflow the running production hosts. One made outside it notes on the case that the task stays open and
+  logs a warning, instead of an alarm that IRIS refused and the Event Log kept as a runtime error.
+- **Stored maps for six tables.** `OutageEvent`, `ReceiverReading`, `RecoveryControl`, `RecoveryControlEvent`,
+  `ShadowObservation` and `DispatchPermit` now keep the storage map 1.2.0 compiled for them in their sources, so a
+  property added later takes a new slot at the end and an upgrade reads every existing row as before.
+- **The cases list is read once per visit.** Home and the live hospital banner no longer ask for the cases list again
+  each time they show; a decision on a held case marks the lists out of date, so Home's link to a held plan is read again.
+- **Tests.** The roles test reads the cases list's queries from where this build holds them, and the tour's scroll test
+  starts the engineers' tour from its own address.
+
 ## 1.2.0 (9 November 2026)
 
 What 1.2.0 holds: **Ask Shutter**, a panel that answers questions about the page on screen; a **live hospital banner**
