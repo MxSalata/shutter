@@ -2393,7 +2393,7 @@ All under `/api/shutter`, JSON in and out.
   the next poll of `Receiver Watch` (every 5 s), a production job, computes the set there and clears the mark. An `offered`
   row is computed again by the poll every minute, so a member resent by hand moves the digest; a message of the window
   tried again sends the row back to `open` with the set withdrawn (`set.reason` "the engine is trying a message of the
-  window again"). A page shows only the acts the row lists. `approvable` is true only when the build has the send and the
+  window again"), `lists.offered` empty and no digest (v1.53), so nothing reads as offered while the engine tries. A page shows only the acts the row lists. `approvable` is true only when the build has the send and the
   receiver has `engine_resend`; `approval`, when present, is `{ "id", "by", "givenAt", "goodUntil", "digest", "note" }`. A
   list of what to send again is `lists.offered[].controlId` in order. While a row is `offered` at a receiver whose
   `duplicates.behaviour` is `unknown` or `files_twice`, or that declares none, `acts` also lists `handled_by_hand` (v1.53,
