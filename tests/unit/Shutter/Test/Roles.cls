@@ -97,11 +97,12 @@ Method TestApiRolesHaveSqlSelect()
     Do $$$AssertNotTrue(..CanSelect("Shutter_Trace", "Shutter_Store.Case"), "the trace role has no SELECT on the case store")
 }
 
-/// The tables the cases list's two queries name (Shutter.API.Dispatch PageIds and CaseRows), read from their source.
+/// The tables the cases list's queries name (Shutter.API.Dispatch Cases, which reads the page, and Technical, which
+/// reads each row's facts; and PageIds and CaseRows where a build has them), read from their source.
 ClassMethod ListTables() As %List
 {
     Set tables = ""
-    For method = "PageIds", "CaseRows" {
+    For method = "Cases", "Technical", "PageIds", "CaseRows" {
         Set def = ##class(%Dictionary.MethodDefinition).%OpenId("Shutter.API.Dispatch||" _ method)
         Continue:'$ISOBJECT(def)
         Do def.Implementation.Rewind()
