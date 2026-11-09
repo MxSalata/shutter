@@ -64,6 +64,26 @@ describe('the API document', () => {
     ]);
   });
 
+  it('describes the questions about a page beside the case questions, live only to ask, read by the one who asked', () => {
+    const ask = byId('pageQuestionAsk');
+    const get = byId('pageQuestionGet');
+    expect([ask.method, ask.path]).toEqual(['post', `${BASE_PATH}/page-questions`]);
+    expect([get.method, get.path]).toEqual(['get', `${BASE_PATH}/page-questions/{qid}`]);
+    expect(ask.resources).toEqual(['Shutter_Operate', 'Shutter_LiveAgents']);
+    expect(get.resources).toEqual(['Shutter_Operate']);
+    expect(ask.writes).toBe(true);
+    expect(ask.idempotent).toBe(true);
+    expect(get.writes).toBe(false);
+    expect(ask.parameters.map((p) => p.name)).toEqual(['X-Requested-With', 'Idempotency-Key']);
+    expect(get.parameters.map((p) => p.name)).toEqual(['qid']);
+    expect(ask.op['x-contract']).toBe('docs/CONTRACTS.md section 14.6');
+    const questions =
+      groupsOf(routes)
+        .find((g) => g.tag === 'questions')
+        ?.routes.map((r) => r.id) ?? [];
+    expect(questions.slice(-2)).toEqual(['pageQuestionAsk', 'pageQuestionGet']);
+  });
+
   it('resolves a path parameter declared in the components', () => {
     const approve = byId('caseApprove');
     expect(approve.parameters.map((p) => p.name)).toEqual(['caseId', 'X-Requested-With', 'Idempotency-Key']);

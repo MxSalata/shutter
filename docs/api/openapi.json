@@ -47,7 +47,7 @@
     },
     {
       "name": "questions",
-      "description": "Asking about a case: the What-if card and the questions (CONTRACTS 14)."
+      "description": "Asking about a case: the What-if card and the questions (CONTRACTS 14); and asking about a page of the web app, the Ask Shutter panel (14.6)."
     },
     {
       "name": "incidents",
@@ -7773,6 +7773,362 @@
         }
       }
     },
+    "/api/shutter/page-questions": {
+      "post": {
+        "operationId": "pageQuestionAsk",
+        "tags": [
+          "questions"
+        ],
+        "summary": "Ask about a page of the web app",
+        "description": "The Ask Shutter panel on a page that is not a case's: the page's name, the question and the web app's summary of what is in view (ids and labels only). The Explain agent answers it live in the tier page, with the explain collection's search and SubmitAnswer and nothing that reads a case or writes; the answer may cite only page or an id the summary lists. Nothing is written but the question's own row and its run, nothing is recorded, and the run spends model credit as a live case question does.\n\nNeeds Shutter_Operate and Shutter_LiveAgents: a page has no recorded answers, so without Shutter_LiveAgents the question is refused 403 live_agents_only. A change: send X-Requested-With: Shutter. An Idempotency-Key replays the first reply.\n\nCONTRACTS 14.6.",
+        "x-contract": "docs/CONTRACTS.md section 14.6",
+        "x-required-resource": [
+          "Shutter_Operate",
+          "Shutter_LiveAgents"
+        ],
+        "x-writes": true,
+        "x-idempotent": true,
+        "x-dispatch": "Shutter.API.Dispatch.PageQuestionAsk",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XRequestedWith"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AskPageQuestion"
+              },
+              "example": {
+                "page": "cases",
+                "question": "Which of these cases needs me first?",
+                "context": {
+                  "title": "Cases",
+                  "headings": [
+                    "Needs a person"
+                  ],
+                  "items": [
+                    {
+                      "id": "C-000064",
+                      "kind": "case",
+                      "label": "C-000064 Needs a person"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Where the question sits; read the answer with GET /page-questions/{qid}.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageQuestionAsked"
+                },
+                "example": {
+                  "questionId": "P-000001",
+                  "page": "cases",
+                  "state": "pending",
+                  "askedBy": "judge"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request. bad_request: A body over 16000 characters, a page's name that is not one (a lower-case word with hyphens, at most 40 characters), a question missing or over 500 characters, or a context out of shape or over 4000 characters as the agent reads it. Or: Idempotency-Key is longer than 128 characters.",
+            "x-error-codes": [
+              "bad_request"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "bad_request": {
+                    "value": {
+                      "error": "bad_request",
+                      "detail": "A body over 16000 characters, a page's name that is not one (a lower-case word with hyphens, at most 40 characters), a question missing or over 500 characters, or a context out of shape or over 4000 characters as the agent reads it. Or: Idempotency-Key is longer than 128 characters"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in. unauthenticated: Sign in first.",
+            "x-error-codes": [
+              "unauthenticated"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "unauthenticated": {
+                    "value": {
+                      "error": "unauthenticated",
+                      "detail": "Sign in first"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden. forbidden: This needs Shutter_Operate.; csrf: Changes need the header X-Requested-With: Shutter.; live_agents_only: Questions about a page are answered live only: they need Shutter_LiveAgents, which the judges' account has.",
+            "x-error-codes": [
+              "forbidden",
+              "csrf",
+              "live_agents_only"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "forbidden": {
+                    "value": {
+                      "error": "forbidden",
+                      "detail": "This needs Shutter_Operate"
+                    }
+                  },
+                  "csrf": {
+                    "value": {
+                      "error": "csrf",
+                      "detail": "Changes need the header X-Requested-With: Shutter"
+                    }
+                  },
+                  "live_agents_only": {
+                    "value": {
+                      "error": "live_agents_only",
+                      "detail": "Questions about a page are answered live only: they need Shutter_LiveAgents, which the judges' account has"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict. live_unavailable: The day's budget or the caller's share is spent, or the model provider refuses the key (with live).; no_model: No model answers here (the agents replay recordings, and a page has none): live answers need a model key.; idempotency_key_reused: The key was used with another body.",
+            "x-error-codes": [
+              "live_unavailable",
+              "no_model",
+              "idempotency_key_reused"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "live_unavailable": {
+                    "value": {
+                      "error": "live_unavailable",
+                      "detail": "The day's budget or the caller's share is spent, or the model provider refuses the key (with live)"
+                    }
+                  },
+                  "no_model": {
+                    "value": {
+                      "error": "no_model",
+                      "detail": "No model answers here (the agents replay recordings, and a page has none): live answers need a model key"
+                    }
+                  },
+                  "idempotency_key_reused": {
+                    "value": {
+                      "error": "idempotency_key_reused",
+                      "detail": "The key was used with another body"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error. question_failed: The question could not be stored.",
+            "x-error-codes": [
+              "question_failed"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "question_failed": {
+                    "value": {
+                      "error": "question_failed",
+                      "detail": "The question could not be stored"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad gateway. no_answer: The item did not answer.",
+            "x-error-codes": [
+              "no_answer"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "no_answer": {
+                    "value": {
+                      "error": "no_answer",
+                      "detail": "The item did not answer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service unavailable. no_service: The production's API service is not running.; not_queued: The request could not be queued.",
+            "x-error-codes": [
+              "no_service",
+              "not_queued"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "no_service": {
+                    "value": {
+                      "error": "no_service",
+                      "detail": "The production's API service is not running"
+                    }
+                  },
+                  "not_queued": {
+                    "value": {
+                      "error": "not_queued",
+                      "detail": "The request could not be queued"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/shutter/page-questions/{qid}": {
+      "get": {
+        "operationId": "pageQuestionGet",
+        "tags": [
+          "questions"
+        ],
+        "summary": "A question about a page and its answer",
+        "description": "For the one who asked it; anyone else gets 404, as for an id that is not there. A question left pending or answering for 10 minutes is marked failed when it is read. The summary of the screen is not sent back: the asker sent it.\n\nNeeds Shutter_Operate.\n\nCONTRACTS 14.6.",
+        "x-contract": "docs/CONTRACTS.md section 14.6",
+        "x-required-resource": "Shutter_Operate",
+        "x-writes": false,
+        "x-idempotent": false,
+        "x-dispatch": "Shutter.API.Dispatch.PageQuestionGet",
+        "parameters": [
+          {
+            "name": "qid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^P-[0-9]+$"
+            },
+            "description": "The question's id, such as P-000001.",
+            "example": "P-000001"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The question, its state and its answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PageQuestion"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in. unauthenticated: Sign in first.",
+            "x-error-codes": [
+              "unauthenticated"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "unauthenticated": {
+                    "value": {
+                      "error": "unauthenticated",
+                      "detail": "Sign in first"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden. forbidden: This needs Shutter_Operate.",
+            "x-error-codes": [
+              "forbidden"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "forbidden": {
+                    "value": {
+                      "error": "forbidden",
+                      "detail": "This needs Shutter_Operate"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found. not_found: No question P-000001 of yours about a page.",
+            "x-error-codes": [
+              "not_found"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "not_found": {
+                    "value": {
+                      "error": "not_found",
+                      "detail": "No question P-000001 of yours about a page"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/shutter/outages": {
       "get": {
         "operationId": "outages",
@@ -9012,6 +9368,37 @@
         "required": [
           "approvals",
           "tasks"
+        ]
+      },
+      "AskPageQuestion": {
+        "description": "POST /page-questions: the page's name, the question and the web app's summary of the screen (CONTRACTS 14.6).",
+        "type": "object",
+        "properties": {
+          "page": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]{0,39}$",
+            "description": "The page's name as the web app sends it: a lower-case word with hyphens, at most 40 characters.",
+            "examples": [
+              "cases",
+              "incidents",
+              "settings"
+            ]
+          },
+          "question": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "description": "Trimmed, with its control characters removed."
+          },
+          "context": {
+            "type": "object",
+            "description": "The summary of what is in view (features/assistant/screen.ts): the page's title, its lead, its section headings and the things it links to by id, as {id, kind, label}, and nothing else. Plain keys, at most three levels deep and forty entries wide in one place, texts cut at 200 characters; at most 4000 characters as the agent reads it. It reaches the agent as data, never instructions."
+          }
+        },
+        "required": [
+          "page",
+          "question",
+          "context"
         ]
       },
       "AskQuestion": {
@@ -12635,6 +13022,133 @@
             }
           }
         }
+      },
+      "PageQuestion": {
+        "description": "GET /page-questions/{qid}: the question, its state and its answer (Shutter.Store.PageQuestion).",
+        "type": "object",
+        "properties": {
+          "questionId": {
+            "type": "string"
+          },
+          "tier": {
+            "type": "string",
+            "enum": [
+              "page"
+            ]
+          },
+          "page": {
+            "type": "string"
+          },
+          "question": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/QuestionState"
+          },
+          "askedBy": {
+            "type": "string"
+          },
+          "askedAt": {
+            "type": "string"
+          },
+          "answeredAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Null until set."
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why the answer was refused (schema_failed) or the run failed."
+          },
+          "mode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "examples": [
+              "live"
+            ],
+            "description": "Always live: a page question is never a recording."
+          },
+          "model": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "costUsd": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "ensMessageId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The Visual Trace link's message id."
+          },
+          "answer": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Answer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The accepted answer, null until answered; each cite is page or an id the summary listed."
+          }
+        },
+        "required": [
+          "questionId",
+          "tier",
+          "page",
+          "question",
+          "state",
+          "askedBy",
+          "askedAt",
+          "answeredAt",
+          "error",
+          "mode",
+          "model",
+          "costUsd",
+          "ensMessageId",
+          "answer"
+        ]
+      },
+      "PageQuestionAsked": {
+        "description": "POST /page-questions answers 202 with the question's id.",
+        "type": "object",
+        "properties": {
+          "questionId": {
+            "type": "string",
+            "examples": [
+              "P-000001"
+            ]
+          },
+          "page": {
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/QuestionState"
+          },
+          "askedBy": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "questionId",
+          "page",
+          "state",
+          "askedBy"
+        ]
       },
       "Plan": {
         "type": "object",
