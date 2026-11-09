@@ -250,10 +250,26 @@ ClassMethod ToolNames(toolsets As %String = "") As %List
     Quit ##class(Shutter.Bridge.Catalogue).Expected(toolsets, "SubmitAnswer", ..#KNOWLEDGE)
 }
 
+/// The id of <var>citeIds</var> (comma separated) that a cite names: the cite with its outer spaces trimmed when it is one
+/// of them, otherwise its head (what comes before the first ".", "[" or ":", as in history[2] or C-000001.state) when that
+/// is one; "" when neither. The submit tools (Shutter.Schema.Answer.CheckCommon) and the page question's check
+/// (CheckAnswer) both match cites with it, so a cite a tool accepts is one the check accepts. It is here, in the core,
+/// because the core edition ships without Shutter.Schema.
+ClassMethod CiteListed(cite As %String, citeIds As %String) As %String
+{
+    Set c = $ZSTRIP(cite, "<>W")
+    Quit:c="" ""
+    Set ids = $LISTFROMSTRING(citeIds, ",")
+    Quit:$LISTFIND(ids, c) c
+    Set head = $PIECE($PIECE($PIECE(c, ".", 1), "[", 1), ":", 1)
+    Quit:(head '= "")&&$LISTFIND(ids, head) head
+    Quit ""
+}
+
 /// Check an answer on its way back: an object with the answer in words (at most 1200 characters), cites that are ids the
 /// summary listed (or "page"), and a confidence of high, medium or low when given. A cite is matched as the submit tool
-/// matches it (Shutter.Schema.Answer.CiteListed: trimmed, or by its head, as in C-000001.state) and kept as the id it
-/// names. 1, or 0 and the problem.
+/// matches it (CiteListed: trimmed, or by its head, as in C-000001.state) and kept as the id it names. 1, or 0 and the
+/// problem.
 ClassMethod CheckAnswer(answer As %DynamicObject, citeIds As %String, Output problem As %String) As %Boolean
 {
     Set problem = ""
@@ -266,7 +282,7 @@ ClassMethod CheckAnswer(answer As %DynamicObject, citeIds As %String, Output pro
         If t '= "array" Set problem = "cites must be a list" Quit 0
         For i = 0:1:answer.cites.%Size() - 1 {
             Set c = answer.cites.%Get(i)
-            Set id = $SELECT($ISOBJECT(c): "", 1: ##class(Shutter.Schema.Answer).CiteListed(c, citeIds))
+            Set id = $SELECT($ISOBJECT(c): "", 1: ..CiteListed(c, citeIds))
             If id = "" Set problem = "cites[" _ i _ "] is not an id the page listed" Quit
             Do answer.cites.%Set(i, id)
         }
