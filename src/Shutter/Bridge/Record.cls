@@ -54,6 +54,7 @@ ClassMethod Store(spec As Shutter.Bridge.RunSpec, response As Shutter.Bridge.Msg
     Set draft = ..%New()
     Set draft.Model = response.Model, draft.ResponseJSON = response.ToObject().%ToJSON()
     If ..IsMock(draft) Quit $$$ERROR($$$GeneralError, "A run the API mimic answered is never stored as a recording")
+    If ##class(Shutter.Util.PageQuestion).IsPageRun(spec.AgentClass) Quit $$$ERROR($$$GeneralError, "A question about a page is never stored as a recording")
     Set key = spec.ReplayKey()
     Set record = ..Find(key)
     If '$ISOBJECT(record) Set record = ..%New(), record.Key = key

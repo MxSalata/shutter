@@ -72,6 +72,11 @@ ClassMethod FromRequest(request As Shutter.Bridge.Msg.AgentRequest, op As Shutte
     // The mimic's switch is read once: the mode and the runner's provider both follow this reading.
     Set s.MockConfig = ##class(Shutter.Setup).MockConfig()
     Set s.Mode = $SELECT(request.ModeOverride '= "": request.ModeOverride, 1: ##class(Shutter.Bridge.Operation.Agent).ResolveMode(op.Mode, s.MockConfig))
+    // A page question follows the item's own Mode: live when it runs live or records, else its mode, which the item refuses.
+    If ##class(Shutter.Util.PageQuestion).IsPageRun(s.AgentClass) {
+        Set itemMode = ##class(Shutter.Bridge.Operation.Agent).ResolveMode(op.Mode, s.MockConfig)
+        Set s.Mode = $SELECT(##class(Shutter.Util.PageQuestion).RunMode(itemMode) = "live": "live", 1: itemMode)
+    }
     Set s.RunnerClass = op.Runner
     Set s.ProviderConfig = op.ProviderConfig, s.Model = op.Model
     Set s.MaxIterations = $SELECT(+request.MaxIterations > 0: +request.MaxIterations, 1: op.MaxIterations)
