@@ -349,7 +349,10 @@ Method TestANewVisitAfterTheApprovalOnAShowProfile()
     Try {
         For setting = "show", "unset" {
             Set profile = $SELECT(setting = "show": {"further_messages": {"in_patient_movement": "show"}}, 1: {"further_messages": null})
+            // A site's install: a demo's unset reads stop (Shutter.Test.DemoMovement), a site's reads show.
+            Set demo = $GET(^Shutter.Config("demo")), ^Shutter.Config("demo") = 0
             Set run = ..Run({"name": ("a new visit after the approval, " _ setting), "approval": {}, "profile": (profile)})
+            If demo = "" { Kill ^Shutter.Config("demo") } Else { Set ^Shutter.Config("demo") = demo }
             Do $$$AssertEquals(..Found(run.checks, "ordering", "FURTHER_MOVEMENT_NEW"), "unknown", setting _ ": the dispatch gate doesn't pass a visit the plan did not show")
             Do $$$AssertTrue(..Detail(run.checks, "ordering", "FURTHER_MOVEMENT_NEW") [ "ENC-UT-NEW", setting _ ": and names the new visit")
             Do $$$AssertEquals(..Found(run.checks, "ordering", "NO_FURTHER_MOVEMENT"), "", setting _ ": no pass beside it")
