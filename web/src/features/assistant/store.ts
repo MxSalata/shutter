@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { SIGNED_OUT } from '@/api/hooks';
 
 /**
  * The Ask Shutter panel's state: whether it is open, remembered per tab (`sessionStorage`, so a reload keeps it and
@@ -65,6 +66,14 @@ export const useAssistant = create<AssistantState>((set, get) => ({
   addAsked: (page, asked) =>
     set((s) => ({ threads: { ...s.threads, [page]: [...(s.threads[page] ?? []), asked] } })),
 }));
+
+/**
+ * A sign-out forgets the questions asked in this tab, as the guide does: on a shared tab the next person to sign in never
+ * sees the last one's questions (whose answers only the asker may read). The panel's open or closed state stays, like the
+ * appearance.
+ */
+if (typeof window !== 'undefined')
+  window.addEventListener(SIGNED_OUT, () => useAssistant.setState({ threads: {}, autoAsk: null }));
 
 /** For tests: the panel closed, nothing to auto-ask, no threads. */
 export function resetAssistantForTests(): void {
