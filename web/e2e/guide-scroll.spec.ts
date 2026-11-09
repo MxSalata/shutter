@@ -66,8 +66,14 @@ const measure = (page: Page) =>
     };
   });
 
+/** The engineers' tour starts by itself from its address; the quick tour from the welcome's Start the tour. */
 async function startTour(page: Page, tour: Tour) {
-  await page.goto(`./?trial${tour === 'engineer' ? '=engineer' : ''}#/scenarios`);
+  if (tour === 'engineer') {
+    await page.goto('./?trial=engineer#/scenarios');
+    await expect(page.getByRole('region', { name: 'Guide' })).toBeVisible();
+    return;
+  }
+  await page.goto('./?trial#/scenarios');
   const welcome = page.getByRole('dialog', { name: 'Welcome to the Shutter trial' });
   await welcome.getByRole('button', { name: 'Start the tour' }).click();
 }
