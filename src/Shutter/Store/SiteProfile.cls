@@ -798,14 +798,61 @@ ClassMethod ReceiverNames() As %DynamicArray
     Quit out
 }
 
-/// The receiver's description for a person: its system text and base path.
+/// The receiver's description for a person: its display name and base path.
 ClassMethod ReceiverLabel(name As %String) As %String
 {
     Set r = ..Receiver(name)
-    Set system = $SELECT($ISOBJECT(r): ##class(Shutter.Util.Json).Str(r, "system"), 1: "")
-    If ..HasNoApi(r) Quit $SELECT(system = "": name, 1: system)
+    Set system = ..DisplayName(r, name)
+    If ..HasNoApi(r) Quit system
     Set base = ##class(Shutter.Util.Json).Str($SELECT($ISOBJECT(r) && $ISOBJECT(r.%Get("api")): r.%Get("api"), 1: ..DefaultApi()), "base", "/downstream/api")
-    Quit $SELECT(system = "": name, 1: system) _ " (" _ base _ ")"
+    Quit system _ " (" _ base _ ")"
+}
+
+/// The words the onboarding puts after a drafted receiver's item and namespace in its system text, until a person fills it in.
+Parameter DRAFTSYSTEM = ": draft, a person fills this in";
+
+/// The name a person reads for a receiver entry: its system text as written; for a draft whose system is still the
+/// onboarding's placeholder (or empty), the item and namespace it was drafted from; else the receiver's name.
+ClassMethod DisplayName(entry, name As %String = "") As %String
+{
+    Set json = "Shutter.Util.Json"
+    If '$ISOBJECT(entry) Quit name
+    If name = "" Set name = $CLASSMETHOD(json, "Str", entry, "name")
+    Set system = $CLASSMETHOD(json, "Str", entry, "system")
+    If ..IsDraft(entry) {
+        Set note = ..#DRAFTSYSTEM
+        If (system '= "") && ($EXTRACT(system, *-$LENGTH(note)+1, *) '= note) Quit system
+        Set item = $CLASSMETHOD(json, "Str", entry, "item"), ns = $CLASSMETHOD(json, "Str", entry, "namespace")
+        If item = "" {
+            Set item = $SELECT(system '= "": $EXTRACT(system, 1, *-$LENGTH(note)), 1: name)
+        } ElseIf ns '= "" {
+            Set item = item _ " in " _ ns
+        }
+        Quit $SELECT(item '= "": item, 1: name)
+    }
+    Quit $SELECT(system = "": name, 1: system)
+}
+
+/// Whether a receiver entry is a draft the onboarding made: declared with no API, every feature false, until a person
+/// fills in its details and saves it without draft.
+ClassMethod IsDraft(entry) As %Boolean
+{
+    Quit $ISOBJECT(entry) && ##class(Shutter.Util.Json).Bool(entry, "draft", 0)
+}
+
+/// For a receiver whose entry is still a draft, what the gate and the email say instead of an unreadable receiver: it was
+/// declared with no API and a person fills in its details. Empty for any other receiver.
+ClassMethod DraftDetail(name As %String) As %String
+{
+    Set r = ..Receiver(name)
+    If '..IsDraft(r) Quit ""
+    Quit "The receiver " _ ..DisplayName(r, name) _ " was declared with no API when its namespace was onboarded, so there is nothing to read; a person fills in its details"
+}
+
+/// The next action for a receiver whose entry is still a draft.
+ClassMethod DraftNextAction(name As %String) As %String
+{
+    Quit "Fill in the receiver's entry in the site profile (what the system is, its category and tier, and its API if it has one), save it without draft, then reinvestigate the case. Nothing is sent meanwhile."
 }
 
 /// The policy for a tier and a chain kind: automatic, approval, per_chain or board. Tier 3 never

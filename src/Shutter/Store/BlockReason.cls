@@ -28,6 +28,21 @@ ClassMethod ByCode(code As %String) As Shutter.Store.BlockReason
     Quit ..%OpenId(id)
 }
 
+/// The reason as a person reads it for a case's receiver: the catalogue's own, except that a receiver unreadable because
+/// its site profile entry is still the onboarding's draft (declared with no API) says so, with filling in that entry as
+/// the next action. The stored row is never changed.
+ClassMethod ForReceiver(code As %String, receiver As %String) As Shutter.Store.BlockReason
+{
+    Set r = ..ByCode(code)
+    If '$ISOBJECT(r) || (code '= "RECEIVER_UNREADABLE") Quit r
+    Set detail = ##class(Shutter.Store.SiteProfile).DraftDetail(receiver)
+    If detail = "" Quit r
+    Set r.Text = detail _ ". Until then nothing about it can be judged, so nothing is eligible."
+    Set r.NextAction = ##class(Shutter.Store.SiteProfile).DraftNextAction(receiver)
+    Set r.Owner = "Integration team", r.ReevaluateWhen = "A person saves the receiver's entry without draft"
+    Quit r
+}
+
 /// Load the catalogue from a JSON file: an array of objects with code, title, prerequisite,
 /// next_action, owner, reevaluate_when and text. Existing codes are replaced. Returns the count.
 ClassMethod SeedFromFile(path As %String, Output count As %Integer) As %Status

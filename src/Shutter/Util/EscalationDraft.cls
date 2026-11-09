@@ -242,7 +242,7 @@ ClassMethod Reason(case As Shutter.Store.Case, Output failing As %DynamicArray) 
         }
     }
     If code = "" Set code = $SELECT(case.State = "failed": "", 1: ##class(Shutter.API.Dispatch).ReasonFromEvent(text, case.State))
-    Quit $SELECT(code = "": "", 1: ##class(Shutter.Store.BlockReason).ByCode(code))
+    Quit $SELECT(code = "": "", 1: ##class(Shutter.Store.BlockReason).ForReceiver(code, case.Receiver))
 }
 
 /// An HTTP status in words: the connectors store a request nobody answered as 0, which is no status a person should read.

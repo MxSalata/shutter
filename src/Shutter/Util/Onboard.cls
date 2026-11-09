@@ -649,7 +649,7 @@ ClassMethod DraftReceivers(ns As %String, plan As %DynamicObject, Output count A
     While ai.%GetNext(, .a) {
         Continue:a.do'="draft_receiver"
         Continue:$ISOBJECT(##class(Shutter.Store.SiteProfile).Receiver(a.name))
-        Set entry = {"name": (a.name), "system": (a.item _ " in " _ ns _ ": draft, a person fills this in"), "tier": 3, "applies": "arrival_order", "resend_timestamp": "original", "cancels": false, "merges": false, "features": {"conditional_writes": false, "receipts": false, "history": false, "dry_run": false}, "draft": true, "namespace": (ns), "item": (a.item)}
+        Set entry = {"name": (a.name), "system": (a.item _ " in " _ ns _ ##class(Shutter.Store.SiteProfile).#DRAFTSYSTEM), "tier": 3, "applies": "arrival_order", "resend_timestamp": "original", "cancels": false, "merges": false, "features": {"conditional_writes": false, "receipts": false, "history": false, "dry_run": false}, "draft": true, "namespace": (ns), "item": (a.item)}
         Do list.%Push(entry)
         Set count = count + 1
         Set ^Shutter.Config("onboard", ns, "drafted", a.name) = a.item
