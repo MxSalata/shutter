@@ -1,0 +1,1 @@
+const n="shutter:replay-done",t="shutter:show-next-action";function o(){window.dispatchEvent(new CustomEvent(t))}const s="shutter:show-approval";function e(){window.dispatchEvent(new CustomEvent(s))}export{n as R,t as S,e as a,s as b,o as s};

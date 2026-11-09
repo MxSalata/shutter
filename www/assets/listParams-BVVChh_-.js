@@ -1,1 +1,0 @@
-import{l as c,r as a}from"./react-Be1dNEbh.js";let e=null;function o(){const[t,s]=c();return a.useEffect(()=>{e?.toString()===t.toString()&&(e=null)},[t]),a.useEffect(()=>()=>{e=null},[]),[t,n=>{const r=new URLSearchParams(e??t);n(r),e=r,s(r,{replace:!0,preventScrollReset:!0})}]}export{o as u};

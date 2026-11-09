@@ -1,0 +1,1 @@
+import{e as c,r as a}from"./react-CKnXDwRU.js";let e=null;function l(){const[t,s]=c();return a.useEffect(()=>{e?.toString()===t.toString()&&(e=null)},[t]),a.useEffect(()=>()=>{e=null},[]),[t,n=>{const r=new URLSearchParams(e??t);n(r),e=r,s(r,{replace:!0,preventScrollReset:!0})}]}export{l as u};
