@@ -134,6 +134,15 @@ shown on the plan on a new install, while an upgrade keeps a site's stop; and fi
     written as a name and a version is shown as it is, not masked.
   - The production review withholds an error signature without blanking the same word elsewhere in its text, and the
     judges' address is set once.
+- **The public demo's IRIS page no longer stays locked.** Signing out of the web app ends its IRIS session, and the
+  public demo's API sessions end after 120 seconds without a request, so eight sign-ins no longer hold every Community
+  licence connection; `docs/readme/troubleshooting.md` says what can still lock the Shutter in IRIS page, and for how long.
+- **An incident's page names an approval task that could not be raised,** the shared one or a chain's own, with a banner
+  for each until its task is there, and a chain with no first receiver version says none is on record.
+- **The tracing walk-through shows the Visual Trace of S2 and S3** in replay on the board, a member's tool calls as
+  steps, and S3's receipt read with no write after the gate.
+- **Sonnet 5.5's cache reads are priced at its list price,** 0.20 USD per million tokens (0.10 before); an upgrade updates
+  the stored price unless a person edited it, and the costs already recorded stay as they were.
 
 ## 1.1.1 (8 November 2026)
 
