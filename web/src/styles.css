@@ -2070,23 +2070,162 @@ body {
 }
 
 /*
- * The hospital feed's banner (the public demo's live hospital): a neutral band, never an information tone, with a
- * 3 px edge in the text colour, a broadcast mark and a dot that pulses three times when a new story has played.
+ * The hospital feed's banner (the public demo's live hospital), a bar in two parts: on the left the label and the
+ * hospital's name with its cadence; in the centre a timeline of the last story and the next; on the right "Break the
+ * feed"; under the bar the notes (budget, reset, board) in one line with a rule between each. A neutral band, never an
+ * information tone: live, the card surface with a 4 px edge and a solid mark in the text colour; replayed (the trial), a
+ * calmer band on the page tone with a dashed edge and an outlined mark. The layout follows the banner's own width
+ * (a container), since the navbar takes a part of the window from 768 px: stacked under 34rem, the label beside the
+ * button from 34rem, the three columns from 52rem.
  */
 .live-banner {
+  --live-surface: var(--mantine-color-body);
+  --live-edge: var(--mantine-color-text);
+  --live-ink: var(--mantine-color-text);
+  --live-quiet: var(--shutter-muted);
+  --live-track: var(--mantine-color-default-border);
+  --live-rule: var(--mantine-color-default-border);
+  container: live-banner / inline-size;
   margin-bottom: var(--mantine-spacing-md);
-  padding: 6px var(--mantine-spacing-sm);
-  border-radius: var(--mantine-radius-sm);
-  background: var(--mantine-color-default-hover);
-  box-shadow: inset 3px 0 0 var(--mantine-color-text);
+  /* On a phone the band keeps its sides at `sm`, so the budget's note stays on one line at 360 px (e2e checks it) */
+  padding: var(--mantine-spacing-sm);
+  padding-inline-start: calc(var(--mantine-spacing-sm) + 4px);
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-md);
+  background: var(--live-surface);
+  color: var(--live-ink);
+  box-shadow: inset 4px 0 0 var(--live-edge);
 }
-.live-dot {
+@media (min-width: 48em) {
+  .live-banner {
+    padding-inline: calc(var(--mantine-spacing-md) + 4px) var(--mantine-spacing-md);
+  }
+}
+.live-banner[data-feed='replayed'] {
+  --live-surface: var(--shutter-page);
+  --live-edge: var(--shutter-muted-soft);
+  border-style: dashed;
+}
+.live-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: 'kicker' 'ident' 'timeline' 'action';
+  column-gap: var(--mantine-spacing-xl);
+  align-items: center;
+}
+/* The line has no box of its own: its parts are the bar's grid items, and its text stays one sentence */
+.live-line {
+  display: contents;
+}
+.live-kicker {
+  grid-area: kicker;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: var(--mantine-font-size-lg);
+  line-height: 1.3;
+  font-weight: 700;
+}
+.live-banner[data-feed='replayed'] .live-kicker {
+  font-weight: 600;
+  color: var(--live-quiet);
+}
+.live-mark {
   flex: none;
-  width: 8px;
-  height: 8px;
-  margin-top: 7px;
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--mantine-radius-sm);
+  background: var(--live-edge);
+  color: var(--live-surface);
+}
+.live-banner[data-feed='replayed'] .live-mark {
+  background: none;
+  color: var(--live-quiet);
+  box-shadow: inset 0 0 0 1px var(--live-edge);
+}
+/* The name and the cadence, in small type under the label's words (past the mark) */
+.live-ident {
+  grid-area: ident;
+  display: block;
+  min-width: 0;
+  margin-top: 2px;
+  padding-inline-start: 30px;
+  font-size: var(--mantine-font-size-xs);
+  line-height: 1.4;
+  color: var(--live-quiet);
+}
+.live-cadence::before {
+  content: '\00b7';
+  content: '\00b7' / '';
+  margin-inline: 6px;
+}
+/*
+ * The timeline: a track from the last story to the next, filled in the edge colour as far as the feed has gone, with a
+ * filled dot on the last and a ring on the next; each point's label, then its story and time, under its end. With one
+ * end alone (no time promised for the next, or nothing played yet) the track is dashed: the feed is between stories.
+ */
+.live-timeline {
+  grid-area: timeline;
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  gap: var(--mantine-spacing-md);
+  min-width: 0;
+  margin-top: var(--mantine-spacing-sm);
+  padding-top: 20px;
+}
+.live-timeline[data-ends='next'] {
+  justify-content: flex-end;
+}
+.live-track {
+  position: absolute;
+  top: 5px;
+  inset-inline: 6px;
+  border-top: 3px solid var(--live-track);
+  border-radius: 2px;
+}
+.live-timeline:not([data-ends='both']) .live-track {
+  border-top-style: dashed;
+}
+.live-track-done {
+  position: absolute;
+  top: -3px;
+  inset-inline-start: 0;
+  border-top: 3px solid var(--live-edge);
+  border-radius: 2px;
+  transition: inline-size var(--motion-slow) linear;
+}
+.live-point {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.live-point[data-point='next'] {
+  align-items: flex-end;
+  text-align: end;
+}
+.live-dot,
+.live-node {
+  position: absolute;
+  top: -20px;
+  width: 13px;
+  height: 13px;
   border-radius: 50%;
-  background: currentColor;
+  box-sizing: border-box;
+}
+/* Borders rather than fills, so forced colours keep them */
+.live-dot {
+  inset-inline-start: 0;
+  border: 6.5px solid var(--live-edge);
+}
+.live-node {
+  inset-inline-end: 0;
+  border: 2px solid var(--live-edge);
+  background: var(--live-surface);
 }
 .live-dot[data-pulse] {
   animation: live-pulse var(--motion-slow) var(--motion-ease-inout) 3;
@@ -2102,21 +2241,99 @@ body {
     transform: scale(1.5);
   }
 }
+.live-point-label {
+  font-size: var(--mantine-font-size-xs);
+  line-height: 1.3;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--live-quiet);
+}
+.live-point-line {
+  font-size: var(--mantine-font-size-sm);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.live-point-value {
+  font-weight: 700;
+}
+.live-point-meta {
+  margin-inline-start: 6px;
+  color: var(--live-quiet);
+}
 .live-story {
   text-decoration: underline dotted;
   text-underline-offset: 3px;
   cursor: help;
 }
-/* The line on what the author pays, under the feed's line: on a phone it starts at the band's edge, under the mark and
-   the dot (the feed's line above is taller than they are), so it keeps to one line at 360 px */
-@media (max-width: 47.99em) {
-  .live-budget-line {
-    margin-inline-start: calc(-26px - 2 * var(--mantine-spacing-xs));
+.live-action {
+  grid-area: action;
+  justify-self: start;
+  margin-top: var(--mantine-spacing-sm);
+}
+.live-action-words {
+  max-width: 12rem;
+  color: var(--live-quiet);
+}
+/* The notes under the bar: a hairline, then each note in turn; from 34rem in one line, a rule between each, the rule
+   of a note that starts a line clipped (the row is pulled back by the rule and its space) */
+.live-notes {
+  margin-top: var(--mantine-spacing-sm);
+  padding-top: 8px;
+  border-top: 1px solid var(--live-rule);
+  color: var(--live-quiet);
+}
+.live-notes-row {
+  display: grid;
+  gap: 4px;
+}
+.live-notes-row > * {
+  color: inherit;
+}
+/* The notice under the bar while the live agents cannot run: calm, in the band */
+.live-unavailable {
+  margin-top: var(--mantine-spacing-sm);
+}
+@container live-banner (min-width: 34rem) {
+  .live-bar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: 'kicker action' 'ident action' 'timeline timeline';
+  }
+  .live-action {
+    grid-row: 1 / span 2;
+    justify-self: end;
+    margin-top: 0;
+  }
+  .live-action-words {
+    text-align: end;
+  }
+  .live-notes {
+    overflow-x: clip;
+  }
+  .live-notes-row {
+    display: flex;
+    flex-wrap: wrap;
+    row-gap: 2px;
+    margin-inline-start: -13px;
+  }
+  .live-notes-row > * {
+    padding-inline-start: 12px;
+    margin-inline-end: 12px;
+    border-inline-start: 1px solid var(--live-rule);
   }
 }
-/* The notice under the banner's line while the live agents cannot run: calm, in the band */
-.live-unavailable {
-  margin-top: var(--mantine-spacing-xs);
+/* Three columns: the two outer ones never go below their words (the label and the cadence on one line each, the button
+   whole), and share what the timeline (at most 34rem) leaves, so it sits in the middle */
+@container live-banner (min-width: 56rem) {
+  .live-bar {
+    grid-template-columns: minmax(max-content, 1fr) minmax(18rem, 34rem) minmax(max-content, 1fr);
+    grid-template-areas: 'kicker timeline action' 'ident timeline action';
+    column-gap: var(--mantine-spacing-lg);
+  }
+  .live-timeline {
+    grid-row: 1 / span 2;
+    margin-top: 0;
+  }
 }
 
 /* The count beside Cases: an attention badge, its accessible name the full sentence. Its tint is laid over the page's
