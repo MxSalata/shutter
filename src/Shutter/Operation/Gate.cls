@@ -41,7 +41,7 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
     } ElseIf wardStatus = 404 {
         Do ..Check(checks, "identity", "block", "UNKNOWN_ENCOUNTER", "The receiver does not know encounter " _ case.EncounterId)
     } Else {
-        Do ..Check(checks, "identity", "unknown", "RECEIVER_UNREADABLE", "The receiver's state could not be read (" _ $SELECT(wardStatus: "HTTP " _ wardStatus, 1: "no answer") _ ")")
+        Do ..Check(checks, "identity", "unknown", "RECEIVER_UNREADABLE", ..Unreadable(case, "The receiver's state could not be read (" _ $SELECT(wardStatus: "HTTP " _ wardStatus, 1: "no answer") _ ")"))
     }
 
     // Conformance: the message parsed against its schema.
@@ -173,7 +173,7 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
         } ElseIf case.EncounterId = "-" {
             Do ..Check(checks, "state_transition", "block", "PATIENT_LEVEL_WRITE", "The operation names no encounter whose state could be checked (a patient-level message); a person decides")
         } Else {
-            Do ..Check(checks, "state_transition", "unknown", "RECEIVER_UNREADABLE", "The receiver's state could not be read")
+            Do ..Check(checks, "state_transition", "unknown", "RECEIVER_UNREADABLE", ..Unreadable(case, "The receiver's state could not be read"))
         }
     } Else {
         Do ..Check(checks, "state_transition", "pass", "NOT_APPLICABLE", "No write proposed")
@@ -287,7 +287,7 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
         } ElseIf case.EncounterId = "-" {
             Do ..Check(checks, "concurrency", "block", "PATIENT_LEVEL_WRITE", "The operation names no encounter version to condition the write on (a patient-level message); a person decides")
         } Else {
-            Do ..Check(checks, "concurrency", "unknown", "RECEIVER_UNREADABLE", "The receiver's version could not be read")
+            Do ..Check(checks, "concurrency", "unknown", "RECEIVER_UNREADABLE", ..Unreadable(case, "The receiver's version could not be read"))
         }
     } Else {
         Do ..Check(checks, "concurrency", "pass", "NOT_APPLICABLE", "No write proposed")
@@ -507,6 +507,14 @@ ClassMethod Reversed(event As %String) As %String
 {
     Set base = $SELECT($EXTRACT(event, 1, 7) = "cancel_": $EXTRACT(event, 8, *), 1: event)
     Quit $CASE(base, "admit": "admission", "": "event", : base)
+}
+
+/// The detail of a RECEIVER_UNREADABLE check: the words given, or, for a receiver whose site profile entry is still the
+/// onboarding's draft, that it was declared with no API and a person fills in its details.
+ClassMethod Unreadable(case As Shutter.Store.Case, detail As %String) As %String
+{
+    Set draft = ##class(Shutter.Store.SiteProfile).DraftDetail(case.Receiver)
+    Quit $SELECT(draft '= "": draft, 1: detail)
 }
 
 Method Check(checks As %DynamicArray, name As %String, result As %String, code As %String, detail As %String) [ Private ]
