@@ -20,7 +20,7 @@ R4 receiver is in development: some of its parts are in the release and tested, 
 - **Known issue: what Shutter found on an order or result case.** The parts that read who holds the message, the
   receiver's own words (MSA and each ERR), the OBX those words name and where a character above plain ASCII stands are in
   the release and pass their unit tests, but on the pathology test rig these findings did not reach the case end to end
-  (the characters' fields, the count of shared failures and the OBX named). The fix comes in 1.3.2. The outage lists,
+  (the characters' fields, the count of shared failures and the OBX named). The fix comes in 1.4.0. The outage lists,
   their patient checks and the outage email passed on the rig. The escalation draft never takes a result's value, units
   or comment.
 - **The outage email.** Outage Mailer, an item a site adds and switches on per receiver, sends one email per outage
