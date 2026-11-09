@@ -388,7 +388,8 @@ Method TestNoRetryClosesWithOpenCases()
     Set j = o.ToJSON()
     Do $$$AssertEquals(j.state, "closed", "closed, whatever Status and AdapterState read")
     Do $$$AssertEquals(j.set.status, "not_computed", "set.status")
-    Do $$$AssertEquals(j.set.reason, "no set gate in this build", "set.reason")
+    // The set gate is in the build: the unit test's item is in no running production, so the set says why it was not computed.
+    Do $$$AssertTrue(j.set.reason '= "", "set.reason says why: " _ j.set.reason)
     Do $$$AssertEquals(j.openCases.%Size(), 3, "three exceptions still open")
     Do $$$AssertEquals(j.linkedCases.%Size(), 3, "three linked")
     Do $$$AssertEquals(j.openCases.%Get(0).owner, "a person", "with their owner")
@@ -414,7 +415,8 @@ Method TestRowLeftInClosingClosesOnTheNextPoll()
     Set j = o.ToJSON()
     Do $$$AssertEquals(j.state, "closed", "closed from closing by the next poll")
     Do $$$AssertEquals(j.openCases.%Size(), 1, "the case judged")
-    Do $$$AssertEquals(j.set.reason, "no set gate in this build", "set.reason")
+    // The set gate is in the build: the unit test's item is in no running production, so the set says why it was not computed.
+    Do $$$AssertTrue(j.set.reason '= "", "set.reason says why: " _ j.set.reason)
     Set kinds = ""
     Set events = ##class(Shutter.Store.OutageEvent).Of(o.%Id()), iter = events.%GetIterator()
     While iter.%GetNext(.i, .e) { Set kinds = kinds _ $SELECT(kinds = "": "", 1: ",") _ e.kind }
@@ -438,6 +440,53 @@ Method TestQueuedAtTheCloseJudgesNoCase()
     Do $$$AssertEquals(j.state, "open", "back to open: " _ j.state _ " " _ j.outcome)
     Do $$$AssertEquals(j.linkedCases.%Size(), 0, "no case judged")
     Do $$$AssertEquals(j.openCases.%Size(), 0, "and none listed")
+}
+
+/// With the set gate, messages that never reached the receiver are listed for a person and the row reads offered; without a
+/// listed message the verdicts are as before.
+Method TestOfferedWords()
+{
+    Set c = ..Close()
+    Set w = ..Words(3), w.offered = 2
+    Set r = $CLASSMETHOD(c, "CloseWords", w)
+    Do $$$AssertEquals(r.to, "offered", "offered")
+    Do $$$AssertEquals($PIECE(r.outcome, ".", 1), "3 messages failed; 2 never reached the receiver and are listed for a person", r.outcome)
+    Do $$$AssertTrue(r.outcome [ "Shutter will not send these messages.", "Shutter sends nothing")
+    Set w = ..Words(1), w.offered = 1
+    Do $$$AssertTrue($CLASSMETHOD(c, "CloseWords", w).outcome [ "1 message failed; 1 never reached the receiver and is listed", "one")
+    Set w = ..Words(3, 0, "a busy feed: messages keep failing and the queue is never empty"), w.offered = 2
+    Do $$$AssertEquals($CLASSMETHOD(c, "CloseWords", w).to, "needs_person", "a busy feed still goes to a person")
+    Set w = ..Words(0), w.offered = 0
+    Do $$$AssertEquals($CLASSMETHOD(c, "CloseWords", w).to, "closed", "nothing failed: closed")
+    Do $$$AssertTrue($CLASSMETHOD(c, "Disposition", "Error", "never_opened", "the production is not running").reason [ "not offered: the production is not running", "the set's own reason in the list")
+}
+
+/// An offered row: a message tried again sends it back to open with the set withdrawn; a person's row with read_again is
+/// closed again by the poll, which clears the mark.
+Method TestOfferedOnThePoll()
+{
+    Do $$$AssertStatusOK(##class(Shutter.Store.Outage).Open(..Entry(), "cant_tell", "a test", "unit", .o), "opened")
+    Do $$$AssertStatusOK(o.Advance("offered", "listed", "unit", {"SetStatus": "computed", "SetComputedAt": (##class(Shutter.Util.Time).NowUTC())}, , .moved), "offered")
+    Set h = ##class(Ens.MessageHeader).%New()
+    Set h.SourceConfigName = "Unit Close In", h.TargetConfigName = "Unit Close Out", h.Status = ##class(Ens.DataType.MessageStatus).DisplayToLogical("Queued")
+    Set h.TimeCreated = $ZDATETIME($ZTIMESTAMP, 3, 1, 3)
+    Do $$$AssertStatusOK(h.%Save(), "a header queued at the item")
+    Set facts = {"answer": "ok", "productionState": "running", "enabled": 1, "queue": 1, "head": "", "retry": "none", "stayConnected": "-1", "status": "OK", "adapterState": "1 job connected"}
+    Set sc = ##class(Shutter.Operation.OutageClose).Step(o, ..Entry(), facts, "cant_tell", ##class(Shutter.Util.Time).NowUTC())
+    Do ##class(Ens.MessageHeader).%DeleteId(h.%Id())
+    Do $$$AssertStatusOK(sc, "the poll")
+    Set j = o.ToJSON()
+    Do $$$AssertEquals(j.state, "open", "back to open")
+    Do $$$AssertEquals(j.set.status _ "/" _ j.set.reason, "not_computed/the engine is trying a message of the window again", "the set withdrawn")
+    Do $$$AssertStatusOK(o.Advance("needs_person", "a person", "unit", , , .moved), "to a person")
+    Do $$$AssertStatusOK(o.ReadAgain("unit"), "read_again")
+    Do $$$AssertTrue(o.ReadAgainAt '= "", "marked")
+    Set facts = {"answer": "ok", "productionState": "running", "enabled": 1, "queue": 0, "head": "", "retry": "none", "stayConnected": "-1", "status": "OK", "adapterState": "1 job connected"}
+    Do $$$AssertStatusOK(##class(Shutter.Operation.OutageClose).Step(o, ..Entry(), facts, "cant_tell", ##class(Shutter.Util.Time).NowUTC()), "the next poll")
+    Do $$$AssertStatusOK(o.%Reload(), "read")
+    Do $$$AssertEquals(o.ReadAgainAt, "", "the mark cleared")
+    Do $$$AssertTrue(o.SetComputedAt '= "", "the set computed again")
+    Do $$$AssertEquals(o.State, "closed", "nothing failed in the window: closed")
 }
 
 Method AddCase(kind As %String, code As %String, state As %String) [ Private ]

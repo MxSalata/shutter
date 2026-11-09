@@ -354,6 +354,10 @@ ClassMethod Act(row As Shutter.Store.Outage, body As %DynamicObject, by As %Stri
         If $ZSTRIP(reason, "<>W") = "" Set reply = {"error": "bad_request", "detail": "A close needs a reason"} Quit "400 Bad Request"
         If $LENGTH(reason) > 1000 Set reply = {"error": "bad_request", "detail": "reason is longer than 1000 characters"} Quit "400 Bad Request"
         Set sc = row.Close(reason, by)
+    } ElseIf act = "read_again" {
+        // The REST process never switches to the watched namespace: the row is marked, and the next poll of Receiver Watch
+        // (every 5 s), a production job, computes the set again there.
+        Set sc = row.ReadAgain(by)
     } Else {
         Set reply = {"error": "bad_request", "detail": ("The act " _ act _ " is not handled in this build")}
         Quit "400 Bad Request"

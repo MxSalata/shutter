@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.50, 9 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.51, 9 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -2325,7 +2325,7 @@ read. Durations are elapsed time, never a number of polls. This table is the one
 | --- | --- | --- | --- |
 | `open` | Down, Refusing, Not answering or Can't tell; the engine owns everything queued | every poll across 30 s reading `Status` Error or Retry with the adapter disconnected; the Refusing or Not answering reading (the head unchanged across two polls with the rows below); at a no-retry item, one new Error header whose every attempt says the connection never opened | the retry path: connected and `Status` OK (`draining`); the no-retry path: queue 0, no head message, no header of the window Queued or Delivered, on two polls 5 s apart (`closing`), whatever `Status` and the adapter read; on the same path, `settle_minutes` (10) since the open with the two quiet polls never seen (`needs_person`, a busy feed); a person marks it down on purpose (`paused`) |
 | `draining` | The engine is making progress through the backlog | connected and `Status` OK, with no Refusing or Not answering reading | queue 0 and no header of the window Queued or Delivered, twice (`closing`); `Status` Error or Retry or disconnected (`open`, the quiet clock reset); `settle_minutes` with the queue never at 0 (`needs_person`) |
-| `closing` | Every header of the window settled and read; the set computed where the build has a set gate | the drain rule, the no-retry path, or Read again | with a set gate: set empty, `closed`; set non-empty, `offered`. With no set gate: no Error header of the window, `closed`; any, `needs_person` ("N messages failed and were not offered; a person reads the trace", `set.status` `not_computed`, `set.reason` "no set gate in this build") |
+| `closing` | Every header of the window settled and read; the set computed where the build has a set gate | the drain rule, the no-retry path, or Read again | with a set gate: `offered` when the set lists a message that never reached the receiver, otherwise as with none, `set.reason` naming the condition when the set was not computed. With no set gate: no Error header of the window, `closed`; any, `needs_person` ("N messages failed and were not offered; a person reads the trace", `set.status` `not_computed`, `set.reason` "no set gate in this build") |
 | `offered` | The never-opened list is on the card; at a receiver with `engine_resend` an approval is offered | `closing` | approval given (`sending`); the set's digest moved (recomputed, stays `offered`); a person closes with a reason (`closed`); a dirty read (`open`) |
 | `sending` | One at a time, each row of the ledger written before the call | approval | run done (`closed`); a send not Completed, a stop or a restart mid-run (`needs_person`) |
 | `needs_person` | Something a person must do: a stopped run, a busy feed, an unreadable check, an expired approval | as above | read again and offer again (`closing`); a person closes (`closed`) |
@@ -2367,8 +2367,13 @@ All under `/api/shutter`, JSON in and out.
   the route adds `words`.
 - `set.status` and `set.reason` are the one name for the set's state on every surface: `not_computed` with its reason ("no
   set gate in this build", or the condition that failed), `withheld` with "down on purpose", `computed` with its digest.
-- `acts` holds `pause` and `close` while the row is not closed, and nothing once it is; a build with Read again appends
-  `read_again`. A page shows only the acts the row lists. `approvable` is true only when the build has the send and the
+- `acts` holds `pause` and `close` while the row is not closed, and nothing once it is; a build with the set gate
+  (`Shutter.Util.ResendSet`) lists `["pause", "read_again", "close"]`. `read_again` marks the row (`ReadAgainAt`, an event
+  `read_again` naming the person) and answers the row at once: the REST process never switches to the watched namespace, so
+  the next poll of `Receiver Watch` (every 5 s), a production job, computes the set there and clears the mark. An `offered`
+  row is computed again by the poll every minute, so a member resent by hand moves the digest; a message of the window
+  tried again sends the row back to `open` with the set withdrawn (`set.reason` "the engine is trying a message of the
+  window again"). A page shows only the acts the row lists. `approvable` is true only when the build has the send and the
   receiver has `engine_resend`; `approval`, when present, is `{ "id", "by", "givenAt", "goodUntil", "digest", "note" }`. A
   list of what to send again is `lists.offered[].controlId` in order.
 - `POST /outages/:id/acts` (`Shutter_Approve`, the CSRF header) with `{ "act": "pause", "until": "<UTC time>" }` or `{
@@ -2551,6 +2556,13 @@ No message content is copied: the rows hold ids, codes, the body's class and the
 
 ## Changes
 
+- v1.51, 9 Nov 2026 (for 1.3.0: Pathology's set gate and findings): `Shutter.Util.ResendSet` computes an outage's four
+  lists at the close (17), so a row can read `offered`, and `acts` gains `read_again`, served by the next poll rather than by
+  a reader item; `Outage.ReadAgainAt` is new, its storage slot appended after the 1.2.0 ones, with the storage now in the
+  source. An order or result case's evidence carries a `findings` item and `summary.findings` (the custody, the receiver's
+  words by field, characters above ASCII and the OBX the words name); ModelView's allowlists leave both out, and the
+  escalation draft takes only the parts with no free text. An ADT, SIU or MDM case's evidence is unchanged. The ledger
+  `Shutter.Store.ResendRecord` and the messages `EngineResendRequest` and `EngineResendResult` exist with no writer or sender.
 - v1.50, 9 Nov 2026 (the features of the 1.2.0 work, built as v1.48 on the features branch on 8 Nov, joined onto 1.47 and release 1.1.1; they reach the release here, after 1.2.0's own v1.48 and v1.49): shadow mode and the recovery stop, section 18, with
   `Shutter_StopRecovery` (5) and `recovery` and `notifications` in the site profile; the failure coverage census, section 19,
   with `failure_census` (6.4) and Failure Census in INSTALLITEMS (12); the case bundle and the unredacted bundle with a typed

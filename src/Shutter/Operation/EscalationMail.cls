@@ -94,6 +94,52 @@ Method OnReminderSend(request As Shutter.Msg.ReminderSend, Output response As En
 
 /// The sender: the site profile's mail.from when the site set one and it is a bare address, else this operation's From
 /// setting (a profile stored before the address rules is warned about in the event log).
+/// An outage email (Shutter.Operation.OutageMail): sent through the mail server when one is set, else written as an .eml
+/// file to OutputFolder, as an escalation is. A failed send is logged; the outage's own record is unchanged by it.
+Method OnOutageMailSend(request As Shutter.Msg.OutageMailSend, Output response As Ens.Response) As %Status
+{
+    Set response = ##class(Ens.Response).%New()
+    Try {
+        If ..Adapter.SMTPServer = "" {
+            Set path = ..WriteNamed("outage-" _ request.OutageId _ "-" _ request.State _ "-" _ $TRANSLATE($ZDATETIME($ZTIMESTAMP, 8, 1), " :", "-") _ ".eml", request.ToAddr, request.Subject, request.Body)
+            $$$LOGINFO("Outage " _ request.OutageId _ " (" _ request.State _ "): no mail server is set, so the email was written to " _ path)
+        } Else {
+            Set mail = ##class(%Net.MailMessage).%New()
+            Set mail.From = ..Sender(), mail.Subject = ##class(Shutter.Util.Mail).HeaderValue(request.Subject), mail.Charset = "UTF-8"
+            For i = 1:1:$LENGTH(request.ToAddr, ",") { Set a = ##class(Shutter.Util.Mail).HeaderValue($ZSTRIP($PIECE(request.ToAddr, ",", i), "<>W")) Do:a'="" mail.To.Insert(a) }
+            Do mail.TextData.Write(request.Body)
+            Set sc = ..Adapter.SendMail(mail, .failed)
+            If $$$ISERR(sc) $$$LOGWARNING("Outage " _ request.OutageId _ ": the mail server refused the email: " _ $SYSTEM.Status.GetErrorText(sc))
+        }
+    } Catch err {
+        $$$LOGWARNING("Outage " _ request.OutageId _ ": the email was not sent: " _ err.DisplayString())
+    }
+    Quit $$$OK
+}
+
+/// An .eml file named name in OutputFolder, with the same headers an escalation's file has.
+Method WriteNamed(name As %String, to As %String, subject As %String, body As %String) As %String
+{
+    Set dir = ..OutputFolder
+    If dir = "" Set dir = ##class(%File).NormalizeDirectory(##class(%File).SubDirectoryName($SYSTEM.Util.ManagerDirectory(), "shutter/out/mail"))
+    Do ##class(%File).CreateDirectoryChain(dir)
+    Set path = ##class(%File).NormalizeFilename(name, dir)
+    Set f = ##class(%Stream.FileCharacter).%New()
+    Set f.TranslateTable = "UTF8", f.LineTerminator = $CHAR(13, 10)
+    $$$ThrowOnError(f.LinkToFile(path))
+    Do ..Header(f, "From", ..Sender())
+    Do ..Header(f, "To", to)
+    Do ..Header(f, "Subject", subject)
+    Set ts = $ZTIMESTAMP
+    Do ..Header(f, "Date", $ZDATE(ts, 11) _ ", " _ $ZDATE(ts, 2) _ " " _ $ZTIME($PIECE(ts, ",", 2) \ 1, 1) _ " +0000")
+    Do ..Header(f, "MIME-Version", "1.0")
+    Do ..Header(f, "Content-Type", "text/plain; charset=UTF-8")
+    Do f.WriteLine("")
+    Do f.Write(body)
+    $$$ThrowOnError(f.%Save())
+    Quit path
+}
+
 Method Sender() As %String
 {
     Set from = $ZSTRIP(##class(Shutter.Util.Json).Str(##class(Shutter.Store.SiteProfile).Mail(), "from"), "<>W")
@@ -175,6 +221,9 @@ XData MessageMap
   </MapItem>
   <MapItem MessageType="Shutter.Msg.ReminderSend">
     <Method>OnReminderSend</Method>
+  </MapItem>
+  <MapItem MessageType="Shutter.Msg.OutageMailSend">
+    <Method>OnOutageMailSend</Method>
   </MapItem>
 </MapItems>
 }

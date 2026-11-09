@@ -29,6 +29,7 @@ import { useNow } from '@/lib/useNow';
 import { useTechnical } from '@/stores/appearance';
 import { describeEntry, describeItem, kindLabel } from './derive';
 import { EncounterTimeline } from './EncounterTimeline';
+import { FindingsLines } from './FindingsLines';
 import { investigationRuns } from './runClock';
 import { NotYet, Section } from './Section';
 import { encounterTimeline } from './timeline';
@@ -253,6 +254,8 @@ function PlainLine({ item, receiver, event }: { item: SnapshotItem; receiver?: s
       return <MessageSummary d={d} event={event} />;
     case 'validation':
       return <ValidationLine d={d} />;
+    case 'findings':
+      return <FindingsLines d={d} />;
     case 'operation':
       return (
         <Text size="md">
