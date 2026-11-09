@@ -40,7 +40,17 @@ export interface Diagram {
   end: DiagramEnd;
   /** The same in words, for a screen reader. */
   label: string;
+  /** A line of the rule the story turns on, said under the diagram: a merge is never resent by itself (S15). */
+  note?: string;
 }
+
+/** The modes by the names the Scenarios page gives them. */
+const MODE_NAMES: Record<Mode, string> = {
+  board: 'Board',
+  single: 'Single investigator',
+  rules: 'Rules only',
+  policy: 'Site policy',
+};
 
 /** More messages than this are counted, not drawn: S11 plays seventeen, and the picture would say less. */
 const MOST_DRAWN = 6;
@@ -179,12 +189,21 @@ function nodesOf(s: Pick<Scenario, 'summary' | 'steps' | 'expected'>): DiagramNo
 const humanWord = (disposition: string | undefined) =>
   disposition === 'superseded' || disposition === 'reconcile' ? disposition : undefined;
 
-const writesEnd = (n: number, inAll: boolean, oneCase = false): DiagramEnd => ({
+/**
+ * A write waits for the gate's checks and a release. A plan of the board, a single investigator or the rules path is
+ * always released by a person; in Site policy the site's table may release it, so there the word is only "release".
+ */
+const releasedBy = (mode: Mode) =>
+  mode === 'policy'
+    ? { caption: 'after gate checks and release', words: "after the gate's checks and a release" }
+    : { caption: 'after gate checks and approval', words: "after the gate's checks and a person's approval" };
+
+const writesEnd = (n: number, inAll: boolean, mode: Mode, oneCase = false): DiagramEnd => ({
   kind: n === 1 ? 'write' : 'writes',
   writes: n,
-  label: `${n} write${n === 1 ? '' : 's'}`,
-  caption: oneCase ? 'this case' : 'conditional',
-  words: `${n === 1 ? 'one conditional write' : `${n} conditional writes`}${inAll ? ' in all' : ''}${oneCase ? ' in this case' : ''}`,
+  label: `${n} conditional write${n === 1 ? '' : 's'}`,
+  caption: oneCase ? 'this case only' : releasedBy(mode).caption,
+  words: `${n === 1 ? 'one conditional write' : `${n} conditional writes`}${inAll ? ' in all' : ''}${oneCase ? ' for this case' : ''}, ${releasedBy(mode).words}`,
 });
 
 /** The end the scenario expects in the mode, by the same fields the row's "What should happen" reads. */
@@ -199,12 +218,12 @@ export function endOf(s: Pick<Scenario, 'expected'>, mode: Mode): DiagramEnd {
   });
   if (e.incident && e.encounters?.length) {
     const n = e.encounters.reduce((sum, x) => sum + (x.writes || 0), 0);
-    return n ? writesEnd(n, true) : none(undefined, 'nothing written');
+    return n ? writesEnd(n, true, mode) : none(undefined, 'nothing written');
   }
   if (e.by_receiver) {
     const receivers = Object.values(e.by_receiver);
     const n = receivers.filter((x) => x.write).length;
-    if (n) return writesEnd(n, true);
+    if (n) return writesEnd(n, true, mode);
     const people = receivers.filter((x) => x.disposition === 'escalate').length;
     if (people === receivers.length)
       return {
@@ -221,7 +240,7 @@ export function endOf(s: Pick<Scenario, 'expected'>, mode: Mode): DiagramEnd {
   }
   const stopped = !!e.blocked_by;
   // A scenario whose expected names one failure's case has other cases too: the count is that case's, not the story's
-  if (e.write) return writesEnd(1, false, !!e.case_by_key);
+  if (e.write) return writesEnd(1, false, mode, !!e.case_by_key);
   // S23c proposes a resend, and the gate hands it to a person when the bed's occupant can't leave
   if (e.disposition === 'escalate' || e.final_reason === 'OCCUPANT_CASE_FAILED')
     return {
@@ -280,9 +299,13 @@ export function scenarioDiagram(
   const nodes = nodesOf(s);
   if (!nodes.length) return null;
   const end = endOf(s, mode);
+  // A merge (A40) is never resent: the gate withholds it for the PAS team whatever the mode (S15)
+  const mergeWithheld = nodes.some((n) => n.kind === 'message' && n.event === 'A40' && n.mark === 'withheld');
+  const note = mergeWithheld ? 'Merges are never resent automatically.' : undefined;
   return {
     nodes,
     end,
-    label: `${s.id} in a diagram: ${nodes.map((n) => wordsOf(n, technical)).join('; ')}. It should end: ${end.words}.`,
+    label: `${s.id}, ${MODE_NAMES[mode]} mode, in a diagram: ${nodes.map((n) => wordsOf(n, technical)).join('; ')}. Expected: ${end.words}.${note ? ` ${note}` : ''}`,
+    ...(note ? { note } : {}),
   };
 }

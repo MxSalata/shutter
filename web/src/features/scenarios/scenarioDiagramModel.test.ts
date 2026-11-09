@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Mode, Scenario, ScenarioExpected } from '@/api/types';
-import { endOf, scenarioDiagram, type DiagramNode } from './scenarioDiagram';
+import { endOf, scenarioDiagram, type DiagramNode } from './scenarioDiagramModel';
 import definitions from '../../../../fixtures/scenarios.json';
 
 const scenarios = definitions as unknown as Scenario[];
@@ -69,9 +69,13 @@ describe('scenarioDiagram', () => {
           expect(end.kind, at).toBe('person');
         else expect(end.kind, at).toBe('none');
         if (writes) {
-          expect(end.label, at).toBe(`${writes} write${writes === 1 ? '' : 's'}`);
-          expect(end.caption, at).toBe(e.case_by_key && !e.incident ? 'this case' : 'conditional');
+          expect(end.label, at).toBe(`${writes} conditional write${writes === 1 ? '' : 's'}`);
+          // A write waits for the gate's checks and a release; only Site policy's table may release it with no person
+          const release =
+            mode === 'policy' ? 'after gate checks and release' : 'after gate checks and approval';
+          expect(end.caption, at).toBe(e.case_by_key && !e.incident ? 'this case only' : release);
           expect(end.words, at).toMatch(/conditional/);
+          expect(end.words, at).toMatch(mode === 'policy' ? /a release$/ : /a person's approval$/);
         } else expect(end.words, at).toMatch(/nothing written/);
       }
   });
@@ -84,7 +88,21 @@ describe('scenarioDiagram', () => {
   });
 
   it('says the end is what should happen, never what a run did', () => {
-    for (const s of scenarios) expect(diagram(s.id).label, s.id).toMatch(/It should end: /);
+    for (const s of scenarios)
+      expect(diagram(s.id).label, s.id).toMatch(/ mode, in a diagram: .*\. Expected: /);
+    expect(diagram('S2', 'board').label).toMatch(
+      /^S2, Board mode, in a diagram: .*Expected: one conditional write, after the gate's checks and a person's approval\.$/,
+    );
+    expect(diagram('S2', 'policy').label).toMatch(/^S2, Site policy mode,/);
+  });
+
+  it('says under S15 that a merge is never resent, and only where a merge is withheld', () => {
+    expect(diagram('S15').note).toBe('Merges are never resent automatically.');
+    expect(diagram('S15').label).toMatch(/Merges are never resent automatically\.$/);
+    for (const s of scenarios) if (s.id !== 'S15') expect(diagram(s.id).note, s.id).toBeUndefined();
+  });
+
+  it('ends S8 in Rules only with a person, though its recording wrote', () => {
     // S8 in Rules only wrote when it was recorded, and still should not have
     expect(endOf(byId('S8'), 'rules').kind).toBe('person');
   });
@@ -177,8 +195,16 @@ describe('scenarioDiagram', () => {
   it('counts a long story rather than drawing it, with the writes of its chains in all', () => {
     expect(diagram('S11').nodes.at(-1)).toMatchObject({ kind: 'messages', total: 17, failed: 8 });
     expect(diagram('S12').nodes.at(-1)).toMatchObject({ kind: 'messages', total: 8, failed: 5 });
-    expect(endOf(byId('S11'), 'policy')).toMatchObject({ kind: 'writes', writes: 5, label: '5 writes' });
-    expect(endOf(byId('S12'), 'policy')).toMatchObject({ kind: 'writes', writes: 5, label: '5 writes' });
+    expect(endOf(byId('S11'), 'policy')).toMatchObject({
+      kind: 'writes',
+      writes: 5,
+      label: '5 conditional writes',
+    });
+    expect(endOf(byId('S12'), 'policy')).toMatchObject({
+      kind: 'writes',
+      writes: 5,
+      label: '5 conditional writes',
+    });
     for (const s of scenarios) expect(diagram(s.id).nodes.length, s.id).toBeLessThanOrEqual(7);
   });
 
@@ -219,7 +245,7 @@ describe('scenarioDiagram', () => {
     expect(diagram('S23c').label).toMatch(/move fails; move is refused by the receiver/);
     for (const mode of ['board', 'policy'] as Mode[])
       expect(endOf(byId('S23c'), mode)).toMatchObject({ kind: 'person', label: 'Person decides', writes: 0 });
-    expect(diagram('S23c').label).toMatch(/It should end: a person decides, nothing written\./);
+    expect(diagram('S23c').label).toMatch(/Expected: a person decides, nothing written\./);
   });
 
   it('merges no two messages across the receiver coming back', () => {
@@ -235,9 +261,14 @@ describe('scenarioDiagram', () => {
   });
 
   it("captions a write that counts one failure's case as this case's, not the story's", () => {
-    expect(endOf(byId('S23a'), 'policy')).toMatchObject({ label: '1 write', caption: 'this case' });
-    expect(endOf(byId('S23a'), 'policy').words).toBe('one conditional write in this case');
-    expect(endOf(byId('S2'), 'board').caption).toBe('conditional');
+    expect(endOf(byId('S23a'), 'policy')).toMatchObject({
+      label: '1 conditional write',
+      caption: 'this case only',
+    });
+    expect(endOf(byId('S23a'), 'policy').words).toBe(
+      "one conditional write for this case, after the gate's checks and a release",
+    );
+    expect(endOf(byId('S2'), 'board').caption).toBe('after gate checks and approval');
   });
 
   it('says why a case ends with nothing written, a superseded or a reconcile one by that word', () => {

@@ -722,11 +722,11 @@ describe('ScenariosPage, its rows and its proof', () => {
 
   it('draws a diagram in each row and on each card, in the mode the row is showing, with the same in words', async () => {
     renderScenarios();
-    const s20 = within(await card('S20')).getByRole('img', { name: /^S20 in a diagram/ });
+    const s20 = within(await card('S20')).getByRole('img', { name: /^S20, .* mode, in a diagram/ });
     expect(s20).toHaveAccessibleName(
       expect.stringContaining('a person changes the record at the receiver by hand'),
     );
-    expect(s20).toHaveAccessibleName(expect.stringContaining('It should end: nothing written, superseded'));
+    expect(s20).toHaveAccessibleName(expect.stringContaining('Expected: nothing written, superseded'));
     const list = screen.getByRole('region', { name: 'Every scenario' });
     expect(within(list).getAllByRole('img', { name: /in a diagram/ })).toHaveLength(listed.length);
     const first = screen.getByRole('region', { name: 'Try these three first' });

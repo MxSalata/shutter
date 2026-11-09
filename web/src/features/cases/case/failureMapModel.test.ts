@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { CaseDetail, Snapshot } from '@/api/types';
 import fixtures from '@/mocks/fixtures.json';
 import { caseOutcome } from '@/lib/status';
-import { failureMapOf, receiverWords } from './failureMap';
+import { failureMapOf, receiverWords } from './failureMapModel';
 
 type Id = keyof typeof fixtures.cases;
 const detail = (id: Id) => fixtures.cases[id].detail as unknown as CaseDetail;
