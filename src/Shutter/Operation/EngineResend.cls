@@ -165,12 +165,19 @@ ClassMethod Recheck(ns As %String, item As %String, headerId As %String, receive
     Quit {"verdict": "stop", "why": ("header " _ headerId _ " no longer qualifies: " _ $SELECT(row.reason '= "": row.reason, 1: "its status is " _ row.status))}
 }
 
-/// The run's own cases, which the patient check leaves out: the cases of every row of the run.
+/// The run's own cases, which the patient check leaves out: the case each row of the run names, and every case on each
+/// row's origin header in its namespace (a message can have more than one).
 ClassMethod RunCases(runId As %String) As %List
 {
     Set ids = ""
-    Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT CaseId FROM Shutter_Store.ResendRecord WHERE RunId = ? AND CaseId IS NOT NULL AND CaseId <> ''", runId)
-    While rs.%Next() { Set:'$LISTFIND(ids, rs.%Get("CaseId")) ids = ids _ $LISTBUILD(rs.%Get("CaseId")) }
+    Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT CaseId, Namespace, OriginHeaderId FROM Shutter_Store.ResendRecord WHERE RunId = ?", runId)
+    While rs.%Next() {
+        Set id = rs.%Get("CaseId")
+        Set:(id'="")&&'$LISTFIND(ids, id) ids = ids _ $LISTBUILD(id)
+        Set cases = ##class(Shutter.Util.ResendSet).CaseRows(rs.%Get("Namespace"), rs.%Get("OriginHeaderId"))
+        Set iter = cases.%GetIterator()
+        While iter.%GetNext(, .one) { Set:'$LISTFIND(ids, one.caseId) ids = ids _ $LISTBUILD(one.caseId) }
+    }
     Quit ids
 }
 
@@ -282,9 +289,11 @@ ClassMethod Header(ns As %String, headerId As %String) As %DynamicObject
 /// The message's case, resolved with what was sent, when it has one that is not resolved yet.
 ClassMethod Resolve(ns As %String, headerId As %String, words As %String, outage As Shutter.Store.Outage)
 {
-    Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT ID FROM Shutter_Store.""Case"" WHERE (OriginHeaderId = ? OR SourceHeaderId = ?) AND (SourceNamespace = ? OR SourceNamespace IS NULL OR SourceNamespace = '') AND State <> 'resolved'", headerId, headerId, ns)
-    While rs.%Next() {
-        Set case = ##class(Shutter.Store.Case).%OpenId(rs.%Get("ID"))
+    Set rows = ##class(Shutter.Util.ResendSet).CaseRows(ns, headerId)
+    Set iter = rows.%GetIterator()
+    While iter.%GetNext(, .one) {
+        Continue:one.state="resolved"
+        Set case = ##class(Shutter.Store.Case).%OpenId(one.id)
         Continue:'$ISOBJECT(case)
         Set case.Outcome = words, case.Headline = $EXTRACT(words, 1, 500)
         Do case.Transition("resolved", words, ..#ACTOR, "outage:" _ outage.%Id())

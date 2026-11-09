@@ -120,6 +120,36 @@ Method TestPatientCheck()
     Do $$$AssertTrue(out.lists.refused.%Get(0).reason [ "held by the patient check", out.lists.refused.%Get(0).reason)
 }
 
+/// A case from another production names its header there by SourceNamespace and OriginHeaderId; its SourceHeaderId is
+/// Shutter's own copy, whose id can equal a header id of the watched namespace, and must never match one (found on the
+/// Pathology rig, O7.b: the run took another receiver's case for a message's own, so the patient check held the message).
+Method TestCaseRowsByNamespace()
+{
+    Set rs = "Shutter.Util.ResendSet", here = $NAMESPACE
+    Set own = ..Case("RS-T-OWN", "LABSITE-T", 990000156, 990000223)
+    Set other = ..Case("RS-T-OTHER", "OTHERNS-T", 990000107, 990000156)
+    Set local = ..Case("RS-T-LOCAL", "", "", 990000156)
+    Set got = $CLASSMETHOD(rs, "CaseRows", "LABSITE-T", 990000156)
+    Do $$$AssertEquals(got.%Size(), 1, "one case on LABSITE-T's header 990000156: " _ got.%ToJSON())
+    Do $$$AssertEquals(got.%Get(0).caseId, "RS-T-OWN", "the case whose origin is that header, not the one whose stored copy has that id")
+    Do $$$AssertEquals($LISTTOSTRING($CLASSMETHOD(rs, "CasesOf", "LABSITE-T", [{"headerId": 990000156}])), "RS-T-OWN", "CasesOf likewise")
+    Set got = $CLASSMETHOD(rs, "CaseRows", here, 990000156)
+    Do $$$AssertEquals(got.%Size(), 1, "in Shutter's own namespace, its own feed's case on header 990000156: " _ got.%ToJSON())
+    Do $$$AssertEquals(got.%Get(0).caseId, "RS-T-LOCAL", "and only that one")
+    Do $$$AssertEquals($CLASSMETHOD(rs, "CaseRows", "OTHERNS-T", 990000156).%Size(), 0, "OTHERNS-T's header 990000156 has no case")
+}
+
+Method Case(caseId As %String, ns As %String, origin As %String, source As %String) As %String
+{
+    Set c = ##class(Shutter.Store.Case).%New()
+    Set c.CaseId = caseId, c.OperationKey = "LAB^NHS^999000^^result^2026-11-09T08:00:00Z", c.Receiver = "ResendSet Test Out"
+    Set c.FailureKind = "delivery_failed", c.State = "escalated", c.OpenedAt = "2026-11-09T08:00:00Z"
+    Set c.SourceNamespace = ns, c.OriginHeaderId = origin, c.SourceHeaderId = source
+    Do c.%Save()
+    Set ..Made("Shutter.Store.Case", c.%Id()) = ""
+    Quit c.%Id()
+}
+
 /// The digest moves with the set and stands still without a change.
 Method TestDigest()
 {

@@ -196,11 +196,27 @@ ClassMethod CasesOf(ns As %String, rows As %DynamicArray) As %List
     Set ids = ""
     Set iter = rows.%GetIterator()
     While iter.%GetNext(, .row) {
-        Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT CaseId FROM Shutter_Store.""Case"" WHERE (OriginHeaderId = ? OR SourceHeaderId = ?) AND (SourceNamespace = ? OR SourceNamespace IS NULL OR SourceNamespace = '')", row.headerId, row.headerId, ns)
-        Continue:rs.%SQLCODE<0
-        While rs.%Next() { Set:'$LISTFIND(ids, rs.%Get("CaseId")) ids = ids _ $LISTBUILD(rs.%Get("CaseId")) }
+        Set cases = ..CaseRows(ns, row.headerId)
+        Set c = cases.%GetIterator()
+        While c.%GetNext(, .one) { Set:'$LISTFIND(ids, one.caseId) ids = ids _ $LISTBUILD(one.caseId) }
     }
     Quit ids
+}
+
+/// Shutter's cases on one header of ns, oldest first: [{"id", "caseId", "state"}]. A case from another production names
+/// its header there by SourceNamespace and OriginHeaderId; its SourceHeaderId is Shutter's own stored copy, a header of
+/// Shutter's namespace, whose id can equal any header id of another namespace, so it is never matched against ns. A case
+/// of Shutter's own feed (no SourceNamespace) names a header of Shutter's namespace, so it counts only when ns is the one
+/// this runs in. Called in Shutter's namespace.
+ClassMethod CaseRows(ns As %String, headerId As %String) As %DynamicArray
+{
+    Set out = []
+    Quit:(ns="")||(headerId="") out
+    Set local = ($ZCONVERT(ns, "U") = $ZCONVERT($NAMESPACE, "U"))
+    Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT ID, CaseId, State FROM Shutter_Store.""Case"" WHERE (SourceNamespace = ? AND OriginHeaderId = ?) OR (? = 1 AND (SourceNamespace IS NULL OR SourceNamespace = '') AND (OriginHeaderId = ? OR SourceHeaderId = ?)) ORDER BY ID", ns, headerId, local, headerId, headerId)
+    Quit:rs.%SQLCODE<0 out
+    While rs.%Next() { Do out.%Push({"id": (rs.%Get("ID")), "caseId": (rs.%Get("CaseId")), "state": (rs.%Get("State"))}) }
+    Quit out
 }
 
 /// SHA-256, hex, of the rules' version and the offered header ids in order.
