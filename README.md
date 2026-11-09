@@ -55,7 +55,7 @@ cd shutter
 
 | Where | Sign in as | Allows |
 | --- | --- | --- |
-| The [trial](https://mxsalata.github.io/shutter/) | No sign-in | Everything, on recorded runs; nothing leaves the browser |
+| The [trial](https://mxsalata.github.io/shutter/) | No sign-in | The scenarios and their cases, on recorded runs, apart from what needs a live instance (the single investigator, receiver outages); nothing leaves the browser |
 | Your machine's web app | `approver` / `shutter`, or `operator` / `shutter` | `approver` approves; `operator` runs and reads, and can't approve |
 | The [online demo](https://shutter.mxsalata.com) | `demo` / `shutter` | Reads, asks, approves a case that waits; runs no scenario |
 
@@ -268,7 +268,7 @@ Figures from [CI's run at the 1.1.0 release commit](https://github.com/MxSalata/
 - **A resend needs a receiver API** the site profile describes; a plain MLLP receiver gets a case and a drafted email, never a resend.
 - **Every resend waits for a person** under the shipped site profile (a demo install keeps its own labelled table), and a new install with no demo starts in shadow mode, which writes nothing until the site enables recovery. With no provider configured the agents replay recordings; **if the model fails** or there is none, no agent or rules plan is released without a person ([how](https://github.com/MxSalata/shutter/blob/main/docs/readme/model-fails.md)).
 - **A large incident is approved once, and its task lists only the first chains:** the Workflow message holds 2,000 characters, so above about four chains it names how many it leaves out and points to the incident page; one approval binds every chain. 40 and 200 failures were released whole at about 3 s an item; at 1,000 only the first 50 items were measured ([the measurements](https://github.com/MxSalata/shutter/blob/main/docs/readme/storm-at-scale.md#after-the-fix)).
-- **Nothing tells anyone** that an outage opened or an approval went undecided for 24 hours: the site's own alert, or a person watching, must. A reminder mail for cases left open is a site profile setting, off unless the site turns it on.
+- **No notification by default:** nothing tells anyone that an outage opened or an approval went undecided for 24 hours unless the site sets it up. The outage email (since 1.3.0) is an item the site adds and switches on per receiver; otherwise the site's own alert, or a person watching, must. A reminder mail for cases left open is a site profile setting, off unless the site turns it on.
 - **FHIR R4 is in development, not supported:** a FHIR receiver's plan builder, verifier and a test FHIR server are in the release and tested, and no case uses them yet ([fhir.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/fhir.md)).
 - **Onboarding edits the watched production.** **Stop Shutter recovery** on the Settings page refuses Shutter's own recovery calls, but not the hospital's feed; IRIS's own stop holds everything: a disabled connector item holds its writes in its queue (tested on build 109).
 
