@@ -1,0 +1,18 @@
+/// One outage email for Escalation Mail to send, or to write as an .eml file when no mail server is set. It names the
+/// receiver, its reading, the counts, the Do and Call lines and the page, and never a patient, a control id or a result.
+Class Shutter.Msg.OutageMailSend Extends Ens.Request
+{
+
+Property OutageId As %String(MAXLEN = 20);
+
+/// The outage state the email is about: open, needs_person or closed.
+Property State As %String(MAXLEN = 16);
+
+/// The receiver's mail.to, comma-separated, each address checked by the site profile.
+Property ToAddr As %String(MAXLEN = 2000);
+
+Property Subject As %String(MAXLEN = 300);
+
+Property Body As %String(MAXLEN = 20000);
+
+}
