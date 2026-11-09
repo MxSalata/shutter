@@ -102,6 +102,32 @@ Method TestAStormRaisesOneTaskThatFits()
     Do $$$AssertTrue($LENGTH(msg, $CHAR(10) _ "  ") - 1 = (2 * shown), "whole chains only: " _ shown _ " chains, each with its two items")
 }
 
+/// A chain's line reads whole with and without a first version, at 1, 40 and 200 chains: a chain whose receiver
+/// version is on record names it, and one with none (a new encounter, or a version not read) says so, never a clause
+/// that stops short.
+Method TestAChainWithNoFirstVersionReadsWhole()
+{
+    For size = 1, 40, 200 {
+        Set inc = ..NewIncident(size, 1)
+        For seq = 1:2:size {
+            Set ch = inc.ChainAt(seq)
+            Set ch.FirstExpectedVersion = ""
+            Do $$$AssertStatusOK(ch.%Save(), "chain " _ seq _ " has no first version")
+        }
+        Set wf = ..Workflow(inc)
+        Do $$$AssertStatusOK(wf.AskApproval(inc, inc.ChainList(), ""), "the task is raised at " _ size)
+        Set task = wf.LastTask
+        Do $$$AssertTrue($ISOBJECT(task), "the engine's checks took it at " _ size)
+        Continue:'$ISOBJECT(task)
+        Set msg = task.%Message, nl = $CHAR(10)
+        Do $$$AssertTrue(msg [ (nl _ "Chain 1 (ordered, E4): encounter ENC-1, patient MRN1, no receiver version on record" _ nl), "at " _ size _ ", chain 1 says it has no version")
+        Do $$$AssertNotTrue(msg [ ("receiver version " _ nl), "and no line stops after the word version at " _ size)
+        If size > 1 Do $$$AssertTrue(msg [ (nl _ "Chain 2 (ordered, E4): encounter ENC-2, patient MRN2, first at receiver version 1" _ nl), "at " _ size _ ", chain 2 names its version")
+        Do $$$AssertTrue($LENGTH(msg) <= 2000, "it fits at " _ size _ ": " _ $LENGTH(msg))
+        Do $$$AssertTrue(msg [ ("Plan digest: " _ inc.PlanDigest), "with the digest whole at " _ size)
+    }
+}
+
 /// Every field as long as the store allows: the task still fits, with the digest whole. A chain's line too long to list
 /// is left to the incident page. The task names the chain's own subject too.
 Method TestTheLongestFieldsStillFit()
