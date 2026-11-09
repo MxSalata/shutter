@@ -310,16 +310,24 @@ ClassMethod TakesClass(className As %String, ownNamespace As %Boolean, ByRef mod
 }
 
 /// Adds to found the items in one namespace that use Shutter's classes, outside what the uninstall takes out itself. Returns
-/// "" once the namespace is read (or has no Interoperability), or why it could not be read: a namespace that cannot be
-/// entered, a query that fails or any error on the way.
-ClassMethod ForeignItems(ns As %String, here As %String, ownProduction As %String, ByRef own, ByRef found As %String) As %String [ Private ]
+/// "" once the namespace is read (or has no Interoperability), or cannot be entered by design (Unenterable, EntrySkipped):
+/// no production runs there. Otherwise why it could not be read: a namespace that is not configured or that refuses this
+/// user, a query that fails or any error on the way. query replaces the items' query, for the unit test.
+ClassMethod ForeignItems(ns As %String, here As %String, ownProduction As %String, ByRef own, ByRef found As %String, query As %String = "") As %String
 {
     New $NAMESPACE
     Set problem = "", sc = $$$OK
+    Quit:..Unenterable(ns) ""
     Try {
-        Set $NAMESPACE = ns
+        Try {
+            Set $NAMESPACE = ns
+        } Catch entry {
+            If ..EntrySkipped(..Configured(ns), entry.Name) Return ""
+            Throw entry
+        }
         Quit:'##class(%Dictionary.CompiledClass).%ExistsId("Ens.Config.Item")
-        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT Production, Name, ClassName FROM Ens_Config.Item WHERE " _ ..PrefixWhere("ClassName", (ns = here) && (ownProduction = "Shutter.Production")))
+        If query = "" Set query = "SELECT Production, Name, ClassName FROM Ens_Config.Item WHERE " _ ..PrefixWhere("ClassName", (ns = here) && (ownProduction = "Shutter.Production"))
+        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, query)
         If rs.%SQLCODE < 0 Set problem = "SQLCODE " _ rs.%SQLCODE _ ": " _ rs.%Message Quit
         While rs.%Next(.sc) {
             Set production = rs.%GetData(1), name = rs.%GetData(2)
@@ -335,6 +343,44 @@ ClassMethod ForeignItems(ns As %String, here As %String, ownProduction As %Strin
         Set problem = ex.DisplayString()
     }
     Quit problem
+}
+
+/// Whether a namespace cannot be entered by design, so that the refusal does not read it: the configuration's %ALL, which
+/// only maps into the others, and a namespace whose globals or routines database is dismounted.
+ClassMethod Unenterable(ns As %String) As %Boolean
+{
+    Quit:ns="%ALL" 1
+    New $NAMESPACE
+    Set out = 0
+    Try {
+        Set $NAMESPACE = "%SYS"
+        Quit:'##class(Config.Namespaces).Get(ns, .props)
+        For db = $GET(props("Globals")), $GET(props("Routines")) {
+            Continue:db=""
+            Kill dp
+            Continue:'##class(Config.Databases).Get(db, .dp)
+            Set d = ##class(SYS.Database).%OpenId($GET(dp("Directory")))
+            If $ISOBJECT(d) && 'd.Mounted Set out = 1
+        }
+    } Catch ex {
+    }
+    Quit out
+}
+
+/// Whether the configuration lists a namespace.
+ClassMethod Configured(ns As %String) As %Boolean
+{
+    New $NAMESPACE
+    Set $NAMESPACE = "%SYS"
+    Quit ##class(Config.Namespaces).Exists(ns)
+}
+
+/// Whether a failed entry into a namespace is skipped rather than refused: the <NAMESPACE> error on one the configuration
+/// lists, which cannot be entered (its database not there or not mounted), so no production runs in it. A namespace that
+/// is not configured, or an entry this user is refused, still refuses the uninstall.
+ClassMethod EntrySkipped(configured As %Boolean, error As %String) As %Boolean
+{
+    Quit configured && ($PIECE(error, ">", 1) = "<NAMESPACE")
 }
 
 /// Each namespace onboarded here, or still holding a mapping or credential from an earlier removal, taken off.
@@ -656,20 +702,24 @@ ClassMethod TakeMessages(out As %DynamicObject)
 
 /// Deletes the messages of Shutter's body classes in a namespace, with their bodies, the rest of each session staying. When
 /// wholeNamespace is 1 (Shutter's own namespace) the demo's body classes too; elsewhere a Hospital. or Downstream. body is
-/// the site's and stays (ClassPrefixes). Also every message to or from one of items, the names of Shutter's items: its
-/// feed's HL7 messages and its approval tasks have the engine's own body classes. Such a body goes with its last header, as
-/// a site's item may have sent it on too. Returns how many.
+/// the site's and stays (ClassPrefixes). Also the messages to or from one of items, the names of Shutter's items, that are
+/// Shutter's (MessageWhere): its feed's HL7 messages and its approval tasks have the engine's own body classes. Such a body
+/// goes with its last header, as a site's item may have sent it on too. Returns how many.
 ClassMethod DeleteMessages(ns As %String, wholeNamespace As %Boolean = 0, Output problem As %String, items As %List = "") As %Integer
 {
     Set problem = "", n = 0
     New $NAMESPACE
     Try {
         Set $NAMESPACE = ns
-        Set where = ..PrefixWhere("MessageBodyClassName", wholeNamespace) _ ..ItemWhere(items)
-        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID, MessageBodyClassName, MessageBodyId FROM Ens.MessageHeader WHERE " _ where)
-        While rs.%Next() {
-            Set bodyClass = rs.%GetData(2), bodyId = rs.%GetData(3)
-            Do ##class(Ens.MessageHeader).%DeleteId(rs.%GetData(1))
+        // The rows are read whole before any goes, as the session test reads the table being deleted from.
+        Kill ^||Shutter.Uninstall
+        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID, MessageBodyClassName, MessageBodyId FROM Ens.MessageHeader WHERE " _ ..MessageWhere(wholeNamespace, items))
+        While rs.%Next() { Set ^||Shutter.Uninstall(rs.%GetData(1)) = $LISTBUILD(rs.%GetData(2), rs.%GetData(3)) }
+        Set id = ""
+        For {
+            Set id = $ORDER(^||Shutter.Uninstall(id), 1, row) Quit:id=""
+            Set bodyClass = $LIST(row, 1), bodyId = $LIST(row, 2)
+            Do ##class(Ens.MessageHeader).%DeleteId(id)
             Set n = n + 1
             Continue:(bodyClass = "")||(bodyId = "")
             If '..OwnClass(bodyClass, wholeNamespace) {
@@ -681,7 +731,21 @@ ClassMethod DeleteMessages(ns As %String, wholeNamespace As %Boolean = 0, Output
     } Catch ex {
         Set problem = ex.DisplayString()
     }
+    Kill ^||Shutter.Uninstall
     Quit n
+}
+
+/// The WHERE clause on Ens.MessageHeader for the messages DeleteMessages takes: a body of Shutter's classes (ClassPrefixes),
+/// or a message to or from one of items, the names of Shutter's items. In Shutter's own namespace (wholeNamespace) its
+/// production is the one that ran there, and such a message goes by the name alone. In a site's production a name like
+/// Gate or Verifier may be an item of another production of the site's, so such a message goes only in one of Shutter's
+/// sessions: a session holding a message of Shutter's own body classes, as every run through its items does.
+ClassMethod MessageWhere(wholeNamespace As %Boolean, items As %List) As %String
+{
+    Set bodies = ..PrefixWhere("MessageBodyClassName", wholeNamespace), names = ..ItemWhere(items)
+    Quit:names="" bodies
+    Quit:wholeNamespace bodies _ names
+    Quit bodies _ " OR ((" _ $EXTRACT(names, 5, *) _ ") AND SessionId IN (SELECT SessionId FROM Ens.MessageHeader WHERE " _ ..PrefixWhere("MessageBodyClassName", 0) _ "))"
 }
 
 /// The part of a WHERE clause on Ens.MessageHeader matching a message to or from one of items, the names of Shutter's
@@ -699,16 +763,29 @@ ClassMethod ItemWhere(items As %List) As %String
 ClassMethod DeleteProcesses(ownNamespace As %Boolean) As %Integer
 {
     Set n = 0
-    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Ens.BusinessProcess")
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, ..ProcessQuery(ownNamespace))
     While rs.%Next() {
-        Set id = rs.%GetData(1), class = ""
-        Try { Set run = ##class(Ens.BusinessProcess).%OpenId(id, 0) Set:$ISOBJECT(run) class = $CLASSNAME(run) } Catch ex { }
-        Kill run
+        Set id = rs.%GetData(1), class = ..RowClass(rs.%GetData(2))
         Continue:(class = "")||'..OwnClass(class, ownNamespace)
         Set sc = $CLASSMETHOD(class, "%DeleteId", id)
         Set:$$$ISOK(sc) n = n + 1
     }
     Quit n
+}
+
+/// The query for the rows of Ens.BusinessProcess whose class has one of ClassPrefixes in its chain, read from the extent's
+/// x__classname column ("~Shutter.Process.CaseWorkflow~"), so no row is opened to learn its class.
+ClassMethod ProcessQuery(ownNamespace As %Boolean) As %String
+{
+    Set prefixes = ..ClassPrefixes(ownNamespace), where = ""
+    For i = 1:1:$LENGTH(prefixes, ",") Set where = where _ $SELECT(where = "": "", 1: " OR ") _ "x__classname [ '~" _ $PIECE(prefixes, ",", i) _ "'"
+    Quit "SELECT ID, x__classname FROM Ens.BusinessProcess WHERE " _ where
+}
+
+/// A row's own class from its x__classname, the last class of the chain.
+ClassMethod RowClass(chain As %String) As %String
+{
+    Quit $PIECE(chain, "~", $LENGTH(chain, "~") - 1)
 }
 
 /// The default settings the installers wrote, the credentials, the imported HL7 schema categories, the queues.

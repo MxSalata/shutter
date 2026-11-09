@@ -56,6 +56,24 @@ Method TestAnUnreadNamespaceRefuses()
     Do $$$AssertTrue(refused [ "SHUTTERNOSUCHNS (", "the namespace named with the reason")
 }
 
+/// A namespace that cannot be entered by design is skipped, while a query that fails in one that was entered still refuses.
+Method TestAnUnenterableNamespaceIsSkipped()
+{
+    Set u = "Shutter.Util.Uninstall"
+    Do $$$AssertEquals($CLASSMETHOD(u, "Unenterable", "%ALL"), 1, "the configuration's %ALL")
+    Do $$$AssertEquals($CLASSMETHOD(u, "Unenterable", "%SYS"), 0, "a mounted namespace is read")
+    Do $$$AssertEquals($CLASSMETHOD(u, "EntrySkipped", 1, "<NAMESPACE>"), 1, "a configured one that cannot be entered")
+    Do $$$AssertEquals($CLASSMETHOD(u, "EntrySkipped", 0, "<NAMESPACE>"), 0, "one that is not configured")
+    Do $$$AssertEquals($CLASSMETHOD(u, "EntrySkipped", 1, "<PROTECT>"), 0, "an entry this user is refused")
+    Do $$$AssertEquals(##class(Shutter.Util.Uninstall).Refusal($LISTBUILD("%ALL")), "", "%ALL is not read, and nothing is refused")
+    Kill own
+    Set found = ""
+    Set problem = $CLASSMETHOD(u, "ForeignItems", $NAMESPACE, $NAMESPACE, "Shutter.Production", .own, .found, "SELECT Production, Name, ClassName FROM Shutter_Test.NoSuchTable")
+    Do $$$AssertTrue(problem [ "SQLCODE", "a failed query in an entered namespace refuses: " _ problem)
+    Set found = ""
+    Do $$$AssertEquals($CLASSMETHOD(u, "ForeignItems", "%ALL", $NAMESPACE, "Shutter.Production", .own, .found), "", "and %ALL gives no reason")
+}
+
 /// The demo's global prefixes go only where the demo was installed, in Shutter's own production.
 Method TestGlobalPrefixes()
 {
@@ -157,6 +175,48 @@ Method TestItemWhere()
     Do $$$AssertEquals($CLASSMETHOD(u, "ItemWhere", ""), "", "no items, nothing more")
     Do $$$AssertEquals($CLASSMETHOD(u, "ItemWhere", $LISTBUILD("Case Workflow", "Shutter Approvers")), " OR SourceConfigName IN ('Case Workflow','Shutter Approvers') OR TargetConfigName IN ('Case Workflow','Shutter Approvers')", "both ends of a message")
     Do $$$AssertEquals($CLASSMETHOD(u, "ItemWhere", $LISTBUILD("It's")), " OR SourceConfigName IN ('It''s') OR TargetConfigName IN ('It''s')", "a quote doubled")
+}
+
+/// In a site's production a message to an item named like Shutter's goes only in one of Shutter's sessions: a header of
+/// another production with the same item name stays. Rows of the test's own, in two sessions of their own.
+Method TestMessagesOfAnotherProductionStay()
+{
+    Set u = "Shutter.Util.Uninstall", base = 2000000000 + $RANDOM(100000000)
+    Set ids = ""
+    For row = $LISTBUILD(base, "Shutter.Msg.GateRequest", "Shutter API", "Gate"), $LISTBUILD(base, "EnsLib.HL7.Message", "Case Intake", "Gate"), $LISTBUILD(base + 1, "EnsLib.HL7.Message", "Site Router", "Gate") {
+        Set h = ##class(Ens.MessageHeader).%New()
+        Set h.SessionId = $LIST(row, 1), h.MessageBodyClassName = $LIST(row, 2), h.SourceConfigName = $LIST(row, 3), h.TargetConfigName = $LIST(row, 4)
+        Do $$$AssertStatusOK(h.%Save(), "a header of the test's")
+        Set ids = ids _ $LISTBUILD(h.%Id())
+    }
+    Set selected = ""
+    Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT ID FROM Ens.MessageHeader WHERE ID IN (" _ $LISTTOSTRING(ids) _ ") AND (" _ $CLASSMETHOD(u, "MessageWhere", 0, $LISTBUILD("Gate")) _ ") ORDER BY ID")
+    Do $$$AssertTrue(rs.%SQLCODE >= 0, "the clause runs: " _ rs.%SQLCODE _ " " _ rs.%Message)
+    While rs.%Next() { Set selected = selected _ $LISTBUILD(rs.%GetData(1)) }
+    Do $$$AssertEquals($LISTTOSTRING(selected), $LISTTOSTRING($LIST(ids, 1, 2)), "Shutter's session only, not another production's Gate")
+    Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT COUNT(*) FROM Ens.MessageHeader WHERE ID IN (" _ $LISTTOSTRING(ids) _ ") AND (" _ $CLASSMETHOD(u, "MessageWhere", 1, $LISTBUILD("Gate")) _ ")")
+    Do rs.%Next()
+    Do $$$AssertEquals(rs.%GetData(1), 3, "in Shutter's own namespace, by the name alone")
+    For i = 1:1:$LISTLENGTH(ids) Do ##class(Ens.MessageHeader).%DeleteId($LIST(ids, i))
+}
+
+/// The rows of Shutter's business processes are chosen by class in SQL, none opened: a run of Shutter's and a router's,
+/// rows of the test's own, and only the first is selected.
+Method TestProcessesSelectedByClass()
+{
+    Set u = "Shutter.Util.Uninstall"
+    Do $$$AssertEquals($CLASSMETHOD(u, "RowClass", "~Shutter.Process.CaseWorkflow~"), "Shutter.Process.CaseWorkflow", "the row's class")
+    Do $$$AssertEquals($CLASSMETHOD(u, "RowClass", "~Ens.BusinessProcessBPL~Site.Process~"), "Site.Process", "the last of a chain")
+    Set ours = ##class(Shutter.Process.CaseWorkflow).%New("Case Workflow"), router = ##class(EnsLib.MsgRouter.RoutingEngine).%New("Site Router")
+    Do $$$AssertStatusOK(ours.%Save(), "a run of Shutter's")
+    Do $$$AssertStatusOK(router.%Save(), "a router's")
+    Set selected = "", t0 = $ZHOROLOG
+    Set rs = ##class(%SQL.Statement).%ExecDirect(, $CLASSMETHOD(u, "ProcessQuery", 0))
+    Do $$$AssertTrue(rs.%SQLCODE >= 0, "the query runs: " _ rs.%SQLCODE _ " " _ rs.%Message)
+    While rs.%Next() { Set:$LISTFIND($LISTBUILD(ours.%Id(), router.%Id()), rs.%GetData(1)) selected = selected _ $LISTBUILD(rs.%GetData(1)) }
+    Do $$$LogMessage("ProcessQuery read the table in " _ ($ZHOROLOG - t0) _ " s")
+    Do $$$AssertEquals($LISTTOSTRING(selected), ours.%Id(), "Shutter's run only")
+    Do ##class(Ens.BusinessProcess).%DeleteId(ours.%Id()), ##class(Ens.BusinessProcess).%DeleteId(router.%Id())
 }
 
 /// A plan changes nothing and answers.
