@@ -100,24 +100,64 @@ ClassMethod Store(json As %String, source As %String = "", user As %String = "",
             Set sc = $$$ERROR($$$GeneralError, "stale_version")
             Quit
         }
-        TSTART
-        Set row.Version = row.Version + 1
-        Set row.Json = p.%ToJSON(), row.Source = source, row.UpdatedBy = $EXTRACT(user, 1, 160)
-        Set row.UpdatedAt = ##class(Shutter.Util.Time).NowUTC()
-        Set sc = row.%Save()
-        If $$$ISOK(sc) {
-            // Every change is kept, with who made it and from where (CONTRACTS 6.4).
-            Set v = ##class(Shutter.Store.SiteProfileVersion).%New()
-            Set v.Version = row.Version, v.Json = row.Json, v.Source = source, v.UpdatedAt = row.UpdatedAt, v.UpdatedBy = row.UpdatedBy
-            Set sc = v.%Save()
-        }
-        If $$$ISOK(sc) { TCOMMIT  Kill ^Shutter.Config("feedZone"), ^Shutter.Config("preventFailures")  Do ..SyncWatchedFeed() } Else { TROLLBACK }
+        Set sc = ..WriteRow(row, p.%ToJSON(), source, user, row.Version + 1)
         Set currentVersion = +row.Version
     } Catch ex {
         Set sc = ex.AsStatus()
         If $TLEVEL > 0 TROLLBACK
     }
     LOCK -^Shutter.SiteProfile
+    Quit sc
+}
+
+/// The row and its history entry saved together at the given version, then the cached readings cleared. Called under the lock.
+ClassMethod WriteRow(row As Shutter.Store.SiteProfile, json As %String, source As %String, user As %String, version As %Integer) As %Status [ Private ]
+{
+    TSTART
+    Set row.Version = version
+    Set row.Json = json, row.Source = source, row.UpdatedBy = $EXTRACT(user, 1, 160)
+    Set row.UpdatedAt = ##class(Shutter.Util.Time).NowUTC()
+    Set sc = row.%Save()
+    If $$$ISOK(sc) {
+        // Every change is kept, with who made it and from where (CONTRACTS 6.4).
+        Set v = ##class(Shutter.Store.SiteProfileVersion).%New()
+        Set v.Version = row.Version, v.Json = row.Json, v.Source = source, v.UpdatedAt = row.UpdatedAt, v.UpdatedBy = row.UpdatedBy
+        Set sc = v.%Save()
+    }
+    If $$$ISOK(sc) { TCOMMIT  Kill ^Shutter.Config("feedZone"), ^Shutter.Config("preventFailures")  Do ..SyncWatchedFeed() } Else { TROLLBACK }
+    Quit sc
+}
+
+/// The stop an upgrade to 1.2.0 keeps, written without Validate (Shutter.Setup.KeepStopOnUpgrade, when Store refuses a profile
+/// stored before today's checks): the stored profile with further_messages.in_patient_movement: stop and nothing else changed,
+/// as a new version, after both the row's and the history's last, whose source is the row's with KEPTSTOP. A profile that
+/// names the setting is left alone. It takes the lock when it can and writes when it cannot, so an upgraded site never ends
+/// on show. Returns a status; currentVersion is the row's version afterwards.
+ClassMethod StoreKeptStop(user As %String = "", Output currentVersion As %Integer) As %Status
+{
+    Set currentVersion = 0, sc = $$$OK
+    LOCK +^Shutter.SiteProfile:5
+    Set locked = $TEST
+    Try {
+        Set row = ..Row()
+        Quit:('$ISOBJECT(row) || (row.Json = ""))
+        Set currentVersion = +row.Version
+        Set p = ##class(Shutter.Util.Json).Parse(row.Json, .sc)
+        If '$ISOBJECT(p) || $$$ISERR(sc) Set sc = $$$ERROR($$$GeneralError, "The stored profile is not a JSON object") Quit
+        Set fm = p.%Get("further_messages")
+        Quit:($ISOBJECT(fm) && 'fm.%IsA("%Library.DynamicArray") && fm.%IsDefined("in_patient_movement"))
+        If '$ISOBJECT(fm) || fm.%IsA("%Library.DynamicArray") Set fm = {} Do p.%Set("further_messages", fm)
+        Set fm."in_patient_movement" = "stop"
+        Set last = 0
+        &sql(SELECT MAX(Version) INTO :last FROM Shutter_Store.SiteProfileVersion)
+        Set next = $SELECT(+last > +row.Version: +last, 1: +row.Version) + 1
+        Set sc = ..WriteRow(row, p.%ToJSON(), $EXTRACT(row.Source _ ..#KEPTSTOP, 1, 500), user, next)
+        Set currentVersion = +row.Version
+    } Catch ex {
+        Set sc = ex.AsStatus()
+        If $TLEVEL > 0 TROLLBACK
+    }
+    LOCK:locked -^Shutter.SiteProfile
     Quit sc
 }
 
