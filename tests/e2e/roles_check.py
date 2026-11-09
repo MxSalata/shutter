@@ -406,7 +406,7 @@ def main():
         event = last_state_event(second)
         check("its state event names the approver, the reason and the escalation it followed",
               event.get("actor") == "approver" and event.get("text", "").startswith(f"Handled by hand: {reason}; after escalation {seq}")
-              and "(sent)" in event.get("text", "") and event.get("ref") == f"escalation:{seq}", event)
+              and "(saved)" in event.get("text", "") and event.get("ref") == f"escalation:{seq}", event)
     finally:
         if profile_changed:
             status, body = put_profile(saved)
