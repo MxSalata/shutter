@@ -469,7 +469,8 @@ Haiku 5.5's F08 includes the run the restart cut off. Each case's tokens, and ea
 
 Notes on the cost figures:
 
-- **`ModelPrice` prices Sonnet 5.5's cache reads at 0.10 USD per million tokens; the list price is 0.20.** At the list
+- **`ModelPrice` priced Sonnet 5.5's cache reads at 0.10 USD per million tokens when these runs were costed; the list
+  price is 0.20, and since 1.2.0 the stored price is 0.20.** At the list
   price its 36 runs would cost about 0.09 USD more (904,936 cache-read tokens). It still costs half as much as Opus 5.5.
 - **Haiku 5.5's list price is higher for a request over 100K input tokens** (0.50 and 2.50 instead of 0.10 and 0.50),
   and `ModelPrice` has no tier. The largest Haiku 5.5 agent run read 101,975 input tokens summed over all its

@@ -281,7 +281,12 @@ ClassMethod Login() As %Status
 
 ClassMethod Logout() As %Status
 {
+    // Signing out ends the IRIS session as well (1.2.0). Logout alone left the session alive, and with it the licence
+    // connection the sign-in took, until the application's timeout: on the Community licence 8 connections for the whole
+    // instance, so a few sign-ins and sign-outs refused every new Management Portal session and terminal for 15 minutes.
+    // The next request from this browser starts a new, unauthenticated session.
     Do %session.Logout()
+    Set %session.EndSession = 1
     Quit ..Json({"signedOut": true})
 }
 

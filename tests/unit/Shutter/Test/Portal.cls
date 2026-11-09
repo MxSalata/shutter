@@ -1,6 +1,7 @@
 /// The demo's portal made read only (v1.38): the portal applications lose their MatchRoles and require Shutter_Portal,
 /// which Shutter_Trace alone holds, and the trace role reads the databases the pages need and writes none. The test
-/// applies it on this instance and puts the applications and the role back as they were.
+/// applies it on this instance and puts the applications and the role back as they were. Since 1.2.0 it also makes the
+/// API's sessions last DEMOAPISESSIONSECONDS, put back as well.
 Class Shutter.Test.Portal Extends %UnitTest.TestCase
 {
 
@@ -32,8 +33,12 @@ Method TestHardenPortalAndRestore()
     Do $$$AssertTrue(after."trace_role" [ "%Ens_MessageTrace:U", "and keeps its Interoperability resources")
     Do $$$AssertTrue(after."trace_role" [ (##class(Shutter.Setup).DatabaseResource($NAMESPACE) _ ":R"), "and reads the data database")
     Do $$$AssertEquals($FIND(after."trace_role", ":RW"), 0, "and writes no database: " _ after."trace_role")
+    // The API's sessions (1.2.0): DEMOAPISESSIONSECONDS without a request, in place of IRIS's 900.
+    Set t = ##class(Shutter.Setup).#DEMOAPISESSIONSECONDS
+    Do $$$AssertTrue($ISOBJECT(out.api) && (out.api.timeout = t), "the API's session timeout is set: " _ out.%ToJSON())
+    Do $$$AssertEquals(after."api_session_timeout", t, "and the state reads it")
     Do $$$AssertEquals(##class(Shutter.Setup).HardenPortal(), ##class(Shutter.Setup).HardenPortal(), "hardening twice is the same")
-    // Put it back: the applications' MatchRoles and resource, and the role's resources.
+    // Put it back: the applications' MatchRoles and resource, the API's session timeout, and the role's resources.
     New $NAMESPACE
     Set $NAMESPACE = "%SYS"
     Set it = out.apps.%GetIterator()
@@ -41,6 +46,11 @@ Method TestHardenPortalAndRestore()
         Kill props
         Set props("MatchRoles") = a."match_roles_were", props("Resource") = a."resource_was"
         Do $$$AssertStatusOK(##class(Security.Applications).Modify(a.name, .props), a.name _ " put back")
+    }
+    If $ISOBJECT(out.api) {
+        Kill props
+        Set props("Timeout") = out.api."timeout_was"
+        Do $$$AssertStatusOK(##class(Security.Applications).Modify("/api/shutter", .props), "the API's session timeout put back")
     }
     Kill props
     Set props("Resources") = roleWas
@@ -52,6 +62,7 @@ Method TestHardenPortalAndRestore()
     Do $$$AssertEquals(gone."select_tables", 0, "no SELECT grant left: " _ gone.%ToJSON())
     Set restored = ##class(Shutter.Util.Json).Parse(##class(Shutter.Setup).PortalState(), .sc)
     Do $$$AssertEquals(restored."trace_role", roleWas, "the role's resources as before")
+    Do $$$AssertEquals(restored."api_session_timeout", before."api_session_timeout", "the API's session timeout as before")
     Do $$$AssertEquals(restored.hardened, before.hardened, "and the state as before")
 }
 
@@ -80,6 +91,7 @@ Method TestApplyRuntimeHardens()
     Do $$$AssertTrue($ISOBJECT(applied.portal) && applied.portal.hardened, "and says so: " _ applied.%ToJSON())
     Set after = ##class(Shutter.Util.Json).Parse(##class(Shutter.Setup).PortalState(), .sc)
     Do $$$AssertEquals(after.hardened, 1, "the portal is hardened: " _ after.%ToJSON())
+    Do $$$AssertEquals(after."api_session_timeout", ##class(Shutter.Setup).#DEMOAPISESSIONSECONDS, "with the API's short sessions")
     Set at = $GET(^Shutter.Config("portalHardened"))
     Do $$$AssertTrue(at ?4N1"-"2N1"-"2N1"T"2N1":"2N1":"2N1"Z", "the time is recorded: " _ at)
     Do $$$AssertEquals(applied.portal.at, at, "and returned")
@@ -99,6 +111,11 @@ Method TestApplyRuntimeHardens()
         Set props("MatchRoles") = a."match_roles", props("Resource") = a.resource
         Do $$$AssertStatusOK(##class(Security.Applications).Modify(a.name, .props), a.name _ " put back")
     }
+    If before.%IsDefined("api_session_timeout") {
+        Kill props
+        Set props("Timeout") = before."api_session_timeout"
+        Do $$$AssertStatusOK(##class(Security.Applications).Modify("/api/shutter", .props), "the API's session timeout put back")
+    }
     Kill props
     Set props("Resources") = roleWas
     Do $$$AssertStatusOK(##class(Security.Roles).Modify("Shutter_Trace", .props), "the role put back")
@@ -109,6 +126,7 @@ Method TestApplyRuntimeHardens()
     If errorsWere = "" { Kill ^Shutter.Config("portalHardeningErrors") } Else { Set ^Shutter.Config("portalHardeningErrors") = errorsWere }
     Set restored = ##class(Shutter.Util.Json).Parse(##class(Shutter.Setup).PortalState(), .sc)
     Do $$$AssertEquals(restored."trace_role", roleWas, "the role's resources as before")
+    Do $$$AssertEquals(restored."api_session_timeout", before."api_session_timeout", "the API's session timeout as before")
     Do $$$AssertEquals(restored.hardened, before.hardened, "and the state as before")
     Set doctor = ##class(Shutter.Util.Json).Parse(##class(Shutter.Setup).Doctor(), .sc)
     Do $$$AssertEquals(doctor."portal_hardened", recordWas '= "", "and the Doctor's record as before")

@@ -13,25 +13,27 @@ import { IncidentHeader } from './incident/IncidentHeader';
 import { IncidentHero } from './incident/IncidentHero';
 import { IncidentPlanPanel } from './incident/IncidentPlanPanel';
 import { IncidentTimeline } from './incident/IncidentTimeline';
+import { notRaisedTitle, QUOTED, tasksNotRaised } from './incident/tasksNotRaised';
 import './incidents.css';
-
-/** The words the workflow's error starts with when it could not raise an approval task and waits for a person. */
-const NO_TASK = 'No approval task could be raised';
 
 function Incident({ inc, me }: { inc: IncidentDetail; me: Me | null | undefined }) {
   const events = useIncidentEvents(inc.incidentId, inc.state !== 'closed');
   const dialog = useDecideDialog(inc);
-  const noTask =
-    inc.state !== 'closed' && !inc.tasks.length
-      ? events.data?.find((e) => e.kind === 'error' && e.text.startsWith(NO_TASK))
-      : undefined;
+  const missing = tasksNotRaised(inc, events.data ?? []);
   return (
     <>
       <IncidentHeader inc={inc} />
       <Stack gap="md">
-        {noTask ? (
-          <Alert color="red" title="This incident is waiting for a person">
-            {noTask.text}
+        {missing.length ? (
+          <Alert color="red" title={notRaisedTitle(missing)}>
+            <Stack gap={4}>
+              {missing.slice(0, QUOTED).map((m) => (
+                <div key={m.seq ?? 'shared'}>{m.text}</div>
+              ))}
+              {missing.length > QUOTED ? (
+                <div>The timeline has the error for each of the other {missing.length - QUOTED}.</div>
+              ) : null}
+            </Stack>
           </Alert>
         ) : null}
         <IncidentHero inc={inc} />

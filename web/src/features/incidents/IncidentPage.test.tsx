@@ -668,4 +668,46 @@ describe('an incident with no approval task', () => {
     await screen.findByText('Timeline');
     expect(screen.queryByText('This incident is waiting for a person')).not.toBeInTheDocument();
   });
+
+  /** The shared task raised, chain 3's own one not: chain 3 under per_chain, waiting, with its error on the timeline. */
+  const chainWords =
+    'No approval task could be raised for chain 3 of incident I-000001: nothing was released and no case failed, and the chains wait for a person.';
+  function perChain(): IncidentDetail {
+    const inc = waiting();
+    const chain = inc.chains.find((c) => c.seq === 3)!;
+    chain.policy = 'per_chain';
+    chain.state = 'awaiting_approval';
+    return inc;
+  }
+  const chainEvents = (recorded.events as IncidentEvent[]).concat({
+    at: '2026-11-06T09:00:00Z',
+    kind: 'error',
+    text: chainWords,
+    actor: 'system',
+  });
+
+  it('names the chain whose own task failed while the shared task is there', async () => {
+    served = perChain();
+    expect(served.tasks).toHaveLength(1);
+    server.use(http.get(`${BASE}/incidents/:id/events`, () => HttpResponse.json(chainEvents)));
+    renderAt(`/incidents/${closed.incidentId}`);
+    expect(await screen.findByRole('alert')).toHaveTextContent(chainWords);
+    expect(screen.getByText('Chain 3 of this incident is waiting for a person')).toBeInTheDocument();
+    expect(screen.queryByText('This incident is waiting for a person')).not.toBeInTheDocument();
+  });
+
+  it("says nothing once the chain's own task is there too", async () => {
+    const inc = perChain();
+    inc.tasks = inc.tasks.concat({
+      ...inc.tasks[0],
+      taskId: '149',
+      subject: 'Shutter I-000001/3: approve the release of 1 chain(s) to Downstream Out',
+    });
+    served = inc;
+    server.use(http.get(`${BASE}/incidents/:id/events`, () => HttpResponse.json(chainEvents)));
+    renderAt(`/incidents/${closed.incidentId}`);
+    await screen.findByText('Timeline');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByText(/waiting for a person$/)).not.toBeInTheDocument();
+  });
 });
