@@ -1,5 +1,6 @@
 import { Alert, Badge, Tooltip, type BadgeProps } from '@mantine/core';
 import type { Icon } from '@tabler/icons-react';
+import type { CSSProperties } from 'react';
 import { TONE_COLOURS, TONE_ICONS, type Status, type Tone } from '@/lib/tone';
 import { HINT_EVENTS } from '@/theme';
 
@@ -20,12 +21,20 @@ export function StatusBadge({
   variant,
   w,
   focusable = true,
+  className,
+  style,
+  attributes,
 }: Omit<Status, 'icon'> & {
   size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
   variant?: BadgeProps['variant'];
   w?: BadgeProps['w'];
   icon?: Icon | null;
   focusable?: boolean;
+  className?: string;
+  /** Custom properties a stylesheet rule reads (the disposition palette's), beside the badge's own. */
+  style?: CSSProperties;
+  /** Data attributes that say what the badge stands for, for stylesheet rules and tests. */
+  attributes?: Record<`data-${string}`, string | undefined>;
 }) {
   const I = icon === null ? null : (icon ?? TONE_ICONS[tone]);
   const badge = (
@@ -34,10 +43,12 @@ export function StatusBadge({
       variant={variant}
       size={size}
       w={w}
+      className={className}
       data-tone={tone}
+      {...attributes}
       leftSection={I ? <I size={ICON_SIZES[size]} stroke={2} aria-hidden /> : undefined}
       tabIndex={hint && focusable ? 0 : undefined}
-      style={{ textTransform: 'none' }}
+      style={{ textTransform: 'none', ...style }}
     >
       {label}
     </Badge>

@@ -22,6 +22,24 @@
 }
 
 /*
+ * The table's toolbar: the count sits on the controls' baseline (the selects are 30 px high with a 21 px line of text
+ * at their foot). On a phone each select takes a share of the width, two to a line, and the chips wrap under their
+ * label.
+ */
+.eval-filter-count {
+  padding-bottom: 4px;
+}
+@media (max-width: 35.99em) {
+  .eval-filters .eval-filter {
+    flex: 1 1 9rem;
+  }
+  .eval-filters .eval-filter-count {
+    flex: 1 1 100%;
+    padding-bottom: 0;
+  }
+}
+
+/*
  * On a phone each pass is a compact card (stack-cards): the pass and its title on the first line, then each value
  * after its column's name on the same line, the expected outcome's name shown too.
  */
@@ -43,4 +61,16 @@
     flex-wrap: wrap;
     align-items: center;
   }
+}
+
+/*
+ * The Played marks are the table's longest badges: at a laptop's width the column is at its narrowest and a mark wraps
+ * onto two to four lines, where a pill's full rounding reads as a blob. Here they keep the small radius of a tag and
+ * start their lines at the left, so a wrapped mark still reads as one label.
+ */
+.eval-passes td[data-label='Played'] .mantine-Badge-root {
+  border-radius: var(--mantine-radius-sm);
+}
+.eval-passes td[data-label='Played'] .mantine-Badge-label {
+  text-align: start;
 }

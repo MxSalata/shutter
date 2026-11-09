@@ -1617,6 +1617,19 @@ body {
 }
 
 /*
+ * A disposition's badge (DispositionBadge) takes its colour from the disposition palette, not from a tone: one colour
+ * per action, the same on every page, as a tinted pill, an outline or a solid pill (theme.ts, DESIGN.md 2.8). The badge
+ * carries the three custom properties inline, pointing at the `--shutter-disposition-<slug>-*` variables that
+ * MantineProvider sets per colour scheme and contrast, so one rule draws them all over Mantine's outline variant. The
+ * icon and the word are always there; this is the third cue.
+ */
+.mantine-Badge-root.disposition-badge {
+  background: var(--disposition-bg);
+  color: var(--disposition-fg);
+  border-color: var(--disposition-bd);
+}
+
+/*
  * Hero bands and stat tiles: the surface is the hovered surface every badge is already tuned against, and the tone
  * sits in a 4 px edge (on top of a band, on the left of a tile), the tone's icon and its word; the figure stays in the
  * text colour. They name their own background, so Pastel's card rotation skips them.
