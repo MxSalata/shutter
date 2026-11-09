@@ -45,6 +45,26 @@ Method TestDraftLinesHoldNoFreeText()
     Do $$$AssertEquals(##class(Shutter.Util.CaseFindings).DraftLines(""), "", "no findings, no lines")
 }
 
+/// CONTRACTS 10: the real finders on a result whose OBX-5 holds a value, units, a comment and an accented character; the
+/// draft's lines name the segment, field and code, and carry none of the result's content.
+Method TestDraftCarriesNoResultContent()
+{
+    Set cr = $CHAR(13), eg = $CHAR(232)
+    Set text = "MSH|^~&|FAKESEND|SITE|FAKELIMS|LAB|20261105100000||ORU^R01|C77|P|2.5.1" _ cr _ "PID|1||9990000177^^^NHS^NH||Testpatient^Alpha||19800101|U" _ cr _ "OBR|1|ORD77|FIL77|PANEL1^Made-up panel^MADELAB" _ cr _ "OBX|1|ST|TST01^Made-up test 01^MADELAB||RESULT-SECRET-41|mmol/L|1-5|H|||F" _ cr _ "OBX|2|ST|ZZUNK^Made-up test NK^MADELAB||VALUE-SECRET-77 caf" _ eg _ "|g/L|||||F" _ cr _ "NTE|1||COMMENT-SECRET-55"
+    Set msg = ##class(EnsLib.HL7.Message).ImportFromString(text, .sc)
+    Set msg.DocType = "2.5.1:ORU_R01"
+    Set reply = ##class(Shutter.Util.ReplyWords).FromLog("MSA|AE|C77|Test code ZZUNK not recognised for VALUE-SECRET-77")
+    Set findings = {"custody": {"words": (##class(Shutter.Util.CaseFindings).CustodyWords("reached_receiver", "settled"))}, "reply": (reply)}
+    Set findings.obx = ##class(Shutter.Util.ObxFinding).Find(msg, ##class(Shutter.Util.CaseFindings).WordsToMatch(reply))
+    Set findings.character = ##class(Shutter.Util.CharacterFinding).Of(msg, "latin1")
+    Set lines = ##class(Shutter.Util.CaseFindings).DraftLines(findings)
+    Do $$$AssertTrue(lines [ "set id OBX-1 = 2, code 'ZZUNK'", "the OBX named by set id and code: " _ lines)
+    Do $$$AssertTrue(lines [ "OBX-5 holds e with a grave accent, U+00E8", "the field and the character")
+    For secret = "VALUE-SECRET-77", "RESULT-SECRET-41", "COMMENT-SECRET-55", "mmol/L", "g/L", "caf", "Testpatient", "not recognised" {
+        Do $$$AssertNotTrue(lines [ secret, "no result content in the draft: " _ secret)
+    }
+}
+
 /// A structure finding says so without quoting the validator's words.
 Method TestSchemaLine()
 {
