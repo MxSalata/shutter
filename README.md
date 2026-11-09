@@ -15,7 +15,7 @@
 </p>
 <p align="center">
   <a href="https://mxsalata.github.io/shutter/"><b>Trial</b> (no IRIS)</a> ·
-  <a href="https://shutter.mxsalata.com">Online demo</a> (real IRIS) ·
+  <a href="https://shutter.mxsalata.com">Online demo (real IRIS)</a> ·
   <a href="https://github.com/MxSalata/shutter#try-it">Install</a> ·
   <a href="https://github.com/MxSalata/shutter#how-it-works">How it works</a> ·
   <a href="https://github.com/MxSalata/shutter#where-the-agents-sit">The agents</a> ·
