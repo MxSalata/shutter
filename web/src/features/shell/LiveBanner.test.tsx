@@ -1,6 +1,7 @@
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -16,6 +17,7 @@ import { layer1Words } from '@/test/words';
 import { theme } from '@/theme';
 import { LIVE_WELCOME_KEY } from '@/trial/LiveWelcome';
 import { AppLayout } from './AppLayout';
+import { BANNER_CLOSED_KEY } from './LiveBanner';
 
 const BASE = '/api/shutter';
 
@@ -231,6 +233,91 @@ describe('the live hospital banner', () => {
     renderFrame();
     await noBanner();
     await waitFor(() => expect(screen.queryByLabelText("Mikolaj's Fictional Hospital, live")).toBeNull());
+  });
+});
+
+/** The incidents list as the server answers it, with the incidents a test gives. */
+function incidentsWith(items: Array<Record<string, unknown>>) {
+  server.use(http.get(`${BASE}/incidents`, () => HttpResponse.json({ items, total: items.length })));
+}
+
+const openIncident = {
+  incidentId: 'I-000007',
+  receiver: 'Downstream Out',
+  mode: 'policy',
+  state: 'awaiting_approval',
+  openedAt: minutesAgo(2),
+};
+
+describe('closing the live hospital banner, and an incident bringing it back', () => {
+  beforeEach(() => {
+    resetMock('approver');
+    localStorage.setItem(LIVE_WELCOME_KEY, 'seen');
+    sessionStorage.clear();
+    settingsWith({
+      enabled: true,
+      every_minutes: 7,
+      last_played: { scenario: 'S23a', title: 'the bed is occupied', at: minutesAgo(4) },
+    });
+  });
+
+  it('closes for the browser session and leaves a small button that opens it again', async () => {
+    incidentsWith([]);
+    const user = userEvent.setup();
+    const { router } = renderFrame('/cases');
+    await user.click(
+      within(await banner()).getByRole('button', { name: 'Hide the live hospital banner for this session' }),
+    );
+    expect(screen.queryByLabelText("Mikolaj's Fictional Hospital, live")).not.toBeInTheDocument();
+    expect(sessionStorage.getItem(BANNER_CLOSED_KEY)).toBe('1');
+    // Another page in the same session: still closed, and the way back is there
+    await router.navigate('/library');
+    expect(await screen.findByRole('heading', { name: 'Library page' })).toBeInTheDocument();
+    const reopen = screen.getByRole('button', { name: 'Live hospital' });
+    expect(screen.queryByLabelText("Mikolaj's Fictional Hospital, live")).not.toBeInTheDocument();
+    await user.click(reopen);
+    expect(await banner()).toHaveTextContent('a new failure every 7 minutes');
+    expect(sessionStorage.getItem(BANNER_CLOSED_KEY)).toBeNull();
+  });
+
+  it('comes back by itself while an incident is open, says so plainly, links to it and cannot be closed', async () => {
+    sessionStorage.setItem(BANNER_CLOSED_KEY, '1');
+    incidentsWith([openIncident]);
+    renderFrame('/cases');
+    const region = await screen.findByRole('region', {
+      name: "Mikolaj's Fictional Hospital: an incident is open",
+    });
+    expect(within(region).getByTestId('live-incident')).toHaveTextContent(
+      'An incident is open at Downstream Out: waiting for a person to approve its release. Open I-000007',
+    );
+    expect(within(region).getByRole('link', { name: 'Open I-000007' })).toHaveAttribute(
+      'href',
+      '/incidents/I-000007',
+    );
+    // Its normal line gives way, and nothing hides it while the incident lasts
+    expect(within(region).queryByTestId('live-line')).not.toBeInTheDocument();
+    expect(within(region).queryByRole('button', { name: /^Hide the/ })).not.toBeInTheDocument();
+  });
+
+  it('goes back to its normal line once every incident is closed', async () => {
+    incidentsWith([{ ...openIncident, state: 'closed', closedAt: minutesAgo(1) }]);
+    renderFrame('/cases');
+    expect(await line()).toHaveTextContent('a new failure every 7 minutes');
+    expect(within(await banner()).queryByTestId('live-incident')).not.toBeInTheDocument();
+  });
+
+  it('opens normally when the browser refuses its storage', async () => {
+    incidentsWith([]);
+    const original = Storage.prototype.getItem;
+    Storage.prototype.getItem = () => {
+      throw new Error('refused');
+    };
+    try {
+      renderFrame('/cases');
+      expect(await line()).toHaveTextContent('a new failure every 7 minutes');
+    } finally {
+      Storage.prototype.getItem = original;
+    }
   });
 });
 

@@ -1,9 +1,9 @@
-import { Anchor, Text, Tooltip, VisuallyHidden } from '@mantine/core';
-import { IconBroadcast } from '@tabler/icons-react';
+import { Anchor, Button, CloseButton, Text, Tooltip, VisuallyHidden } from '@mantine/core';
+import { IconAlertTriangle, IconBroadcast } from '@tabler/icons-react';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router';
-import { useCan, useCasesOnce, useLiveStatus, useSettings } from '@/api/hooks';
-import type { LiveStatus } from '@/api/types';
+import { useCan, useCasesOnce, useIncidents, useLiveStatus, useSettings } from '@/api/hooks';
+import type { IncidentState, IncidentSummary, LiveStatus } from '@/api/types';
 import { TRIAL, trialHref } from '@/env/mode';
 import type { StormRefusal } from '@/features/storm/view';
 import { budgetNoteLine, resetsHourly } from '@/lib/budget';
@@ -57,6 +57,34 @@ function progress(lastAt: string | undefined, nextAt: number | undefined, now: n
 
 /** Words a screen reader and the line's tests read, which the bar shows by its layout instead (a colon, a comma). */
 const said = (words: string) => <VisuallyHidden component="span">{words}</VisuallyHidden>;
+
+/** The tab's memory that its user closed the banner: `sessionStorage`, so it lasts for the browser session only. */
+export const BANNER_CLOSED_KEY = 'shutter:live-banner:closed';
+
+function readClosed(): boolean {
+  try {
+    return window.sessionStorage.getItem(BANNER_CLOSED_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeClosed(closed: boolean): void {
+  try {
+    if (closed) window.sessionStorage.setItem(BANNER_CLOSED_KEY, '1');
+    else window.sessionStorage.removeItem(BANNER_CLOSED_KEY);
+  } catch {
+    // Storage refused (a private window): the banner still closes for this page
+  }
+}
+
+/** An incident's state in a few plain words, said in the banner while it is open (the Incidents page has the rest). */
+const INCIDENT_WORDS: Record<Exclude<IncidentState, 'closed'>, string> = {
+  open: 'taking in failures',
+  classified: 'being planned',
+  awaiting_approval: 'waiting for a person to approve its release',
+  releasing: 'releasing its chains in order',
+};
 
 /** A soft pulse of the dot, three times, whenever a new story has played (none under reduced motion). */
 function usePulse(at: string | undefined): number {
@@ -112,7 +140,29 @@ export function LiveBanner() {
   const noBoard = !!live && !TRIAL && !can.liveAgents;
   const s8Cases = useCasesOnce({ scenario: 'S8', limit: 100 }, noBoard).data?.items;
   const boardCase = s8Cases?.find((c) => c.scenario === 'S8');
+  const [closed, setClosed] = useState(readClosed);
+  // An incident that is not closed brings the banner back, closed or not, and takes over its line
+  const incidents = useIncidents({ limit: 20 }, !!live).data?.items;
+  const incident: IncidentSummary | undefined = incidents?.find((i) => i.state !== 'closed');
   if (!live) return null;
+  const close = (to: boolean) => {
+    writeClosed(to);
+    setClosed(to);
+  };
+  const stormNow = !TRIAL && !!live.storm && isStormShown(live.storm, now);
+  if (closed && !incident && !stormNow)
+    return (
+      <div className="live-reopen" data-testid="live-reopen">
+        <Button
+          size="compact-sm"
+          variant="default"
+          leftSection={<IconBroadcast size={14} stroke={2} aria-hidden />}
+          onClick={() => close(false)}
+        >
+          {TRIAL ? 'Hospital feed' : 'Live hospital'}
+        </Button>
+      </div>
+    );
   const note = TRIAL ? null : budgetNoteLine(settings);
   const unavailable = TRIAL ? null : liveUnavailable(settings);
   const feed = TRIAL ? 'replayed' : 'live';
@@ -120,7 +170,7 @@ export function LiveBanner() {
   const last = live.last_played?.scenario ? live.last_played : null;
   const next = nextDue(live, now);
   const done = last ? progress(last.at ?? undefined, next?.at, now) : null;
-  const storm = !TRIAL && live.storm && isStormShown(live.storm, now) ? live.storm : null;
+  const storm = stormNow ? live.storm : null;
   const action = TRIAL ? (
     <Text size="sm" className="live-action-words" data-testid="storm-in-trial">
       {STORM_IN_TRIAL}
@@ -162,77 +212,105 @@ export function LiveBanner() {
     <div
       // A region, not a status: the age changes every few seconds and a screen reader should not announce each change
       role="region"
-      aria-label={name}
+      aria-label={incident ? `${HOSPITAL_NAME}: an incident is open` : name}
       className="live-banner"
       data-feed={feed}
+      data-incident={incident ? incident.state : undefined}
       data-testid="live-banner"
     >
       <div className="live-bar">
         {/* What the bar is, said again by the line's own words, so hidden from assistive technology */}
         <div className="live-kicker" aria-hidden>
           <span className="live-mark">
-            <IconBroadcast size={14} stroke={2} />
+            {incident ? <IconAlertTriangle size={14} stroke={2} /> : <IconBroadcast size={14} stroke={2} />}
           </span>
-          <span>{TRIAL ? 'Hospital feed, replayed' : 'Live demo hospital'}</span>
+          <span>{incident ? 'Incident open' : TRIAL ? 'Hospital feed, replayed' : 'Live demo hospital'}</span>
         </div>
-        {/* No box of its own: its parts sit in the bar's grid, and its text is still the one sentence */}
-        <div className="live-line" data-testid="live-line">
-          <span className="live-ident">
-            <span className="live-name">{HOSPITAL_NAME}</span>
-            {said(`, ${feed}: `)}
-            <span className="live-cadence">{cadence(live.every_minutes)}</span>
-            {said('.')}
-          </span>
-          {last || next ? (
-            <span className="live-timeline" data-ends={last && next ? 'both' : last ? 'last' : 'next'}>
-              <span className="live-track" aria-hidden>
-                {done !== null ? (
-                  <span className="live-track-done" style={{ inlineSize: `${Math.round(done * 100)}%` }} />
+        {incident ? (
+          // While an incident is open the banner says that alone, plainly, with the way to it
+          <div className="live-line live-incident" data-testid="live-incident">
+            <Text size="sm" fw={600} component="span">
+              An incident is open at {incident.receiver}:{' '}
+              {INCIDENT_WORDS[incident.state as keyof typeof INCIDENT_WORDS]}.
+            </Text>{' '}
+            <Anchor
+              component={Link}
+              to={`/incidents/${encodeURIComponent(incident.incidentId)}`}
+              size="sm"
+              underline="always"
+            >
+              Open {incident.incidentId}
+            </Anchor>
+          </div>
+        ) : (
+          <div className="live-line" data-testid="live-line">
+            <span className="live-ident">
+              <span className="live-name">{HOSPITAL_NAME}</span>
+              {said(`, ${feed}: `)}
+              <span className="live-cadence">{cadence(live.every_minutes)}</span>
+              {said('.')}
+            </span>
+            {last || next ? (
+              <span className="live-timeline" data-ends={last && next ? 'both' : last ? 'last' : 'next'}>
+                <span className="live-track" aria-hidden>
+                  {done !== null ? (
+                    <span className="live-track-done" style={{ inlineSize: `${Math.round(done * 100)}%` }} />
+                  ) : null}
+                </span>
+                {last ? (
+                  <span className="live-point" data-point="last">
+                    <span className="live-dot" aria-hidden key={pulse} data-pulse={pulse > 0 || undefined} />{' '}
+                    <span className="live-point-label">Last</span>
+                    {said(': ')}
+                    <span className="live-point-line">
+                      <span className="live-point-value">
+                        {last.title ? (
+                          <Tooltip label={last.title} withArrow events={HINT_EVENTS}>
+                            <span className="live-story" tabIndex={0}>
+                              {last.scenario}
+                            </span>
+                          </Tooltip>
+                        ) : (
+                          last.scenario
+                        )}
+                      </span>
+                      {last.at ? (
+                        <>
+                          {said(', ')}
+                          <span className="live-point-meta">{formatAge(last.at, now)}</span>
+                        </>
+                      ) : null}
+                      {said('.')}
+                    </span>
+                  </span>
+                ) : null}
+                {next ? (
+                  <span className="live-point" data-point="next">
+                    <span className="live-node" aria-hidden /> <span className="live-point-label">Next</span>
+                    {said(': ')}
+                    <span className="live-point-line">
+                      <span className="live-point-value">{next.scenario}</span>
+                      {said(' ')}
+                      <span className="live-point-meta">at {next.clock}</span>
+                      {said('.')}
+                    </span>
+                  </span>
                 ) : null}
               </span>
-              {last ? (
-                <span className="live-point" data-point="last">
-                  <span className="live-dot" aria-hidden key={pulse} data-pulse={pulse > 0 || undefined} />{' '}
-                  <span className="live-point-label">Last</span>
-                  {said(': ')}
-                  <span className="live-point-line">
-                    <span className="live-point-value">
-                      {last.title ? (
-                        <Tooltip label={last.title} withArrow events={HINT_EVENTS}>
-                          <span className="live-story" tabIndex={0}>
-                            {last.scenario}
-                          </span>
-                        </Tooltip>
-                      ) : (
-                        last.scenario
-                      )}
-                    </span>
-                    {last.at ? (
-                      <>
-                        {said(', ')}
-                        <span className="live-point-meta">{formatAge(last.at, now)}</span>
-                      </>
-                    ) : null}
-                    {said('.')}
-                  </span>
-                </span>
-              ) : null}
-              {next ? (
-                <span className="live-point" data-point="next">
-                  <span className="live-node" aria-hidden /> <span className="live-point-label">Next</span>
-                  {said(': ')}
-                  <span className="live-point-line">
-                    <span className="live-point-value">{next.scenario}</span>
-                    {said(' ')}
-                    <span className="live-point-meta">at {next.clock}</span>
-                    {said('.')}
-                  </span>
-                </span>
-              ) : null}
-            </span>
-          ) : null}
-        </div>
+            ) : null}
+          </div>
+        )}
         {action ? <div className="live-action">{action}</div> : null}
+        {incident ? null : (
+          // Closed for the browser session; a small "Live hospital" button takes its place and opens it again, and an
+          // incident brings it back by itself
+          <CloseButton
+            className="live-close"
+            size="sm"
+            aria-label={`Hide the ${TRIAL ? 'hospital feed' : 'live hospital'} banner for this session`}
+            onClick={() => close(true)}
+          />
+        )}
       </div>
       {note || resets || boardNote ? (
         <div className="live-notes">

@@ -2294,6 +2294,29 @@ body {
 .live-unavailable {
   margin-top: var(--mantine-spacing-sm);
 }
+/* Closing: a small button in the band's corner, clear of the bar's own contents; closed, a small button opens it again */
+.live-banner {
+  position: relative;
+  padding-inline-end: calc(var(--mantine-spacing-sm) + 28px);
+}
+.live-close {
+  position: absolute;
+  inset-block-start: 6px;
+  inset-inline-end: 6px;
+  color: var(--live-quiet);
+}
+.live-reopen {
+  margin-bottom: var(--mantine-spacing-md);
+}
+/* An incident takes the line: across the bar, under its label, with the band's edge in the attention colour */
+.live-banner[data-incident] {
+  --live-edge: var(--mantine-color-yellow-text);
+}
+.live-incident {
+  display: block;
+  grid-column: 1 / -1;
+  margin-top: 4px;
+}
 @container live-banner (min-width: 34rem) {
   .live-bar {
     grid-template-columns: minmax(0, 1fr) auto;
