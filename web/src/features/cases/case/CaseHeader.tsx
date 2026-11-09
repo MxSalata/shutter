@@ -1,4 +1,4 @@
-import { Anchor, Button, Group, Stack, Text } from '@mantine/core';
+import { Anchor, Button, Group, Stack, Text, Tooltip } from '@mantine/core';
 import {
   IconChevronDown,
   IconHandStop,
@@ -15,12 +15,14 @@ import { caseIrisLinks, IrisLinks } from '@/components/IrisLinks';
 import { Meta } from '@/components/Meta';
 import { OutcomeBadge } from '@/components/OutcomeBadge';
 import { PageHeader } from '@/components/PageHeader';
+import { PortalLink } from '@/components/PortalLink';
 import { DispositionBadge } from '@/components/StateBadge';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Term } from '@/components/Term';
 import { Timestamp } from '@/components/Timestamp';
 import { displayZone, humanize } from '@/lib/format';
 import { asObject } from '@/lib/json';
+import { HINT_EVENTS } from '@/theme';
 import { caseOutcome, caseState, type ExpectedScenario, type OutcomeCase } from '@/lib/status';
 import { toneText, type Status, type Tone } from '@/lib/tone';
 import { useDetail } from '@/stores/appearance';
@@ -28,6 +30,8 @@ import { forwardedFrom } from './derive';
 import { receiverWords } from './failureMap';
 import { evidenceOf, messageTypeLabel, messageTypeOf } from './message';
 import { actionHead, headerSentence } from './outcome';
+import { FailedAt } from './TechFacts';
+import { catalogueEntryOf, digestPrefix, failureCode, messageContentsLink } from './technical';
 
 /** Where the case sits in its incident: the chain, its place in it and how the chain is released. */
 function incidentPlace(c: CaseDetail): string {
@@ -105,6 +109,17 @@ export interface HeaderNext {
   tone: Tone;
 }
 
+/** A code with what it is, or its whole value, in its tooltip: the header's Technical facts carry no label of their own. */
+function Hinted({ hint, children }: { hint: string; children: string }) {
+  return (
+    <Tooltip label={hint} multiline maw={360} events={HINT_EVENTS}>
+      <CodeChip fz="xs" tabIndex={0}>
+        {children}
+      </CodeChip>
+    </Tooltip>
+  );
+}
+
 /** How the case was investigated, as the cases list names it. */
 const MODES: Record<string, string> = {
   rules: 'Rules only',
@@ -112,13 +127,6 @@ const MODES: Record<string, string> = {
   board: 'Board',
   policy: 'Site policy',
 };
-
-/** The failure as the receiver answered it, "503 ward_unavailable", for the expert's line in Technical. */
-function failureCode(c: CaseDetail): string {
-  return [c.failureHttpStatus ? String(c.failureHttpStatus) : '', c.failureReasonCode ?? '']
-    .filter(Boolean)
-    .join(' ');
-}
 
 /**
  * The case's header, read the way a busy reader on a ward or an integration engineer at 2 a.m. reads it: the case id
@@ -129,7 +137,10 @@ function failureCode(c: CaseDetail): string {
  * facts (its HL7 type, the receiver by name and production item, the event time); the IRIS row, always visible, with
  * the case's message trace, workflow trace and source message; and the rest of the record, the scenario included,
  * behind Details. In Technical the status adds how the case compares with its scenario's expectation, and the facts
- * MSH-9 and the failure's HTTP status and reason code.
+ * the message's type and trigger (MSH-9) and control id, the item and the production it came in by, the receiver's
+ * class, the failure's kind, code and time, the source message's header id (opening it in the Management Portal; the
+ * IRIS row links the session) and the plan's version, digest and catalogue entry: each only when the server sent it,
+ * and nothing of the patient beyond the number Plain shows.
  */
 export function CaseHeader({
   c,
@@ -182,6 +193,9 @@ export function CaseHeader({
   const nextHead = next ? actionHead(next.action).head : '';
   const nextKnown = !!next && !['Unknown', 'Not read yet'].includes(next.action);
   const roleKnown = !!next?.role && !['Unknown', 'Not read yet'].includes(next.role);
+  // MSH-9 as the server read it from the message, else as the evidence recorded it
+  const msh9 = c.messageType || message?.messageType || '';
+  const entry = catalogueEntryOf(c);
   return (
     <PageHeader
       title={`Case ${c.caseId}`}
@@ -282,42 +296,70 @@ export function CaseHeader({
           </Group>
           {/* Then the message: its HL7 type, the receiver, when it happened, and the rest */}
           <Group gap="lg" wrap="wrap" align="flex-start" style={{ rowGap: 'var(--mantine-spacing-sm)' }}>
-            {/* The message's HL7 type as IRIS parsed it ("2.5.1:ADT_A02"), from the evidence; in Technical, MSH-9 and the
-                version the message declares when the route parsed it as another */}
-            {message ? (
+            {/* The message's HL7 type as IRIS parsed it ("2.5.1:ADT_A02"), from the evidence; in Technical, the version
+                the message declares when the route parsed it as another, and MSH-9 and MSH-10 below */}
+            {message || (technical && (msh9 || c.sourceMessageId)) ? (
               <Meta label={<Term term="adt">Message</Term>}>
                 <Stack gap={0}>
-                  <Text size="sm" className="mono-wrap" data-testid="case-message-type">
-                    {messageTypeLabel(message)}
-                  </Text>
-                  {technical && message.docType && message.messageType ? (
-                    <Text size="xs" c="dimmed" className="mono-wrap">
-                      {`MSH-9 ${message.messageType}`}
+                  {message ? (
+                    <Text size="sm" className="mono-wrap" data-testid="case-message-type">
+                      {messageTypeLabel(message)}
                     </Text>
                   ) : null}
-                  {technical && message.declaredOther ? (
+                  {technical && message?.declaredOther ? (
                     <Text size="xs" c="dimmed">
                       {`The message says HL7 ${message.declaredOther}`}
                     </Text>
+                  ) : null}
+                  {/* In Technical, MSH-9's type and trigger and MSH-10's control id, each named in its tooltip */}
+                  {technical && (msh9 || c.sourceMessageId) ? (
+                    <Group gap={4} wrap="wrap" data-testid="case-tech-message">
+                      {msh9 ? <Hinted hint="The message's type and trigger (MSH-9)">{msh9}</Hinted> : null}
+                      {c.sourceMessageId ? (
+                        <Hinted hint="The message control id (MSH-10)">{c.sourceMessageId}</Hinted>
+                      ) : null}
+                    </Group>
                   ) : null}
                 </Stack>
               </Meta>
             ) : null}
             {/* A case is one failed delivery to one receiver; one recorded before the server named it went to the bed
-                manager. Named as the failure map names it, with its production item under it */}
+                manager. Named as the failure map names it, with its production item under it; in Technical, the
+                receiver's class too */}
             <Meta label={<Term term="receiver">Receiver</Term>}>
-              {receiverName ? (
+              {receiverName || (technical && c.receiverClass) ? (
                 <Stack gap={0}>
-                  <Text size="sm">{receiverName}</Text>
-                  <Text size="xs" c="dimmed" className="mono-wrap">
-                    {item}
-                  </Text>
+                  {receiverName ? <Text size="sm">{receiverName}</Text> : null}
+                  {receiverName ? (
+                    <Text size="xs" c="dimmed" className="mono-wrap">
+                      {item}
+                    </Text>
+                  ) : (
+                    <Text size="sm">{item}</Text>
+                  )}
+                  {technical && c.receiverClass ? (
+                    <CodeChip fz="xs" data-testid="case-receiver-class">
+                      {c.receiverClass}
+                    </CodeChip>
+                  ) : null}
                 </Stack>
               ) : (
                 item
               )}
             </Meta>
             {source ? <Meta label="Source">{source}</Meta> : null}
+            {/* In Technical, the item and the production the feed's own message came in by; a forwarded case's source says
+                both above */}
+            {technical && !source && (c.sourceItem || c.production) ? (
+              <Meta label="Source">
+                <Group gap={4} wrap="wrap" data-testid="case-tech-source">
+                  {c.sourceItem ? (
+                    <Hinted hint="The item the message came in by">{c.sourceItem}</Hinted>
+                  ) : null}
+                  {c.production ? <Hinted hint="The production it came in by">{c.production}</Hinted> : null}
+                </Group>
+              </Meta>
+            ) : null}
             {c.event === 'merge' ? (
               <Meta label="Merge">
                 {`${c.priorPatientId || 'a prior record'}${c.priorPatientIdAuthority ? ` (${c.priorPatientIdAuthority})` : ''}${c.priorEncounterId ? `, visit ${c.priorEncounterId}` : ''} into ${c.patientId}${(c.mergeGroups ?? 1) > 1 ? `, and ${(c.mergeGroups ?? 1) - 1} more` : ''}`}
@@ -340,9 +382,40 @@ export function CaseHeader({
             <Meta label="Event time">
               <Timestamp iso={c.eventTime} />
             </Meta>
-            {technical && failure ? (
+            {technical && (failure || c.failedAt) ? (
               <Meta label="Failure">
-                <CodeChip>{failure}</CodeChip>
+                <Stack gap={2} align="flex-start" data-testid="case-tech-failure">
+                  <Group gap={4} wrap="wrap">
+                    {failure ? <CodeChip>{failure}</CodeChip> : null}
+                    {c.failureKind ? <CodeChip fz="xs">{c.failureKind}</CodeChip> : null}
+                  </Group>
+                  <FailedAt iso={c.failedAt} withDate />
+                </Stack>
+              </Meta>
+            ) : null}
+            {/* In Technical, the source message's header id, opening the message in the Management Portal (the trial's
+                note there); the IRIS row below links the session's Visual Trace */}
+            {technical && c.sourceHeaderId ? (
+              <Meta label="Header">
+                <Text size="sm" span data-testid="case-tech-header">
+                  <PortalLink
+                    href={messageContentsLink(portalBase, c.sourceHeaderId)}
+                    what={`message ${c.sourceHeaderId}, the HL7 message whose delivery failed`}
+                    quiet
+                  >
+                    {c.sourceHeaderId}
+                  </PortalLink>
+                </Text>
+              </Meta>
+            ) : null}
+            {/* In Technical, the current plan: its version, the start of its digest and its catalogue entry */}
+            {technical && (c.planVersion || c.planDigest || entry) ? (
+              <Meta label="Plan">
+                <Group gap={4} wrap="wrap" data-testid="case-tech-plan">
+                  {c.planVersion ? <CodeChip fz="xs">{`v${c.planVersion}`}</CodeChip> : null}
+                  {c.planDigest ? <Hinted hint={c.planDigest}>{digestPrefix(c.planDigest)}</Hinted> : null}
+                  {entry ? <CodeChip fz="xs">{`catalogue ${entry}`}</CodeChip> : null}
+                </Group>
               </Meta>
             ) : null}
             <Button
