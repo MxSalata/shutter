@@ -214,6 +214,10 @@ interface PageAccess {
 function usePageAccess(): PageAccess {
   const me = useMe().data;
   const s = useSettings().data;
+  // The trial's demo role is the live demo's public user, who has no live agents: as on the live demo, where a page has no
+  // recorded answers and the server answers 403, its suggested questions are not offered
+  if (TRIAL && me?.can?.liveAgents === false)
+    return { open: false, free: false, why: PAGE_JUDGES_ONLY, badge: 'Judges only' };
   if (TRIAL) return { open: true, free: false, trial: true, why: 'Needs a real model: not in the trial.' };
   if (!me?.operator) return { open: false, free: false, why: 'Asking needs the operator role.' };
   if (me.can?.liveAgents === false)

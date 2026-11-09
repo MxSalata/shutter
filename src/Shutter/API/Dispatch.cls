@@ -443,22 +443,32 @@ ClassMethod Cases() As %Status
     Set total = 0
     Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT COUNT(*) AS N FROM Shutter_Store.""Case"" c WHERE 1=1" _ where, args...)
     If rs.%Next() Set total = rs.%Get("N")
-    // One page: only the first offset + limit ids are read, newest first, and the offset is skipped (E8)
-    Set rs = ..CaseRows(offset + limit, where, .args)
-    Set items = [], n = 0
-    While rs.%Next() {
-        Set n = n + 1
-        If n <= offset Continue
-        Set c = ##class(Shutter.Store.Case).%OpenId(rs.%Get("ID"))
+    // One page: only the first offset + limit ids are read, newest first, and the offset is skipped (E8); then the
+    // page's own rows are read with every column they show, in one query, so nothing is computed for a skipped row
+    Set ids = ..PageIds(offset + limit, where, .args), page = ""
+    For i = offset + 1:1:$LISTLENGTH(ids) Set page = page _ $LISTBUILD($LIST(ids, i))
+    If page '= "" {
+        Set rs = ..CaseRows(page)
+        While rs.%Next() {
+            Set id = rs.%Get("ID")
+            Set rows(id) = $LISTBUILD(rs.%Get("PlanCreatedBy"), rs.%Get("Writes"), rs.%Get("Verification")), rows(id, "technical") = ..RowOf(rs)
+        }
+    }
+    Set items = []
+    For i = 1:1:$LISTLENGTH(page) {
+        Set id = $LIST(page, i)
+        Continue:'$DATA(rows(id))
+        Set c = ##class(Shutter.Store.Case).%OpenId(id)
         Continue:'$ISOBJECT(c)
         Set o = ..Project(c)
         If $ISOBJECT(c.Incident) Set o.incidentId = c.Incident.IncidentId
         // Who made the current plan (the board's or the investigator's run, the site's policy, rules alone)
-        If rs.%Get("PlanCreatedBy") '= "" Set o.planCreatedBy = rs.%Get("PlanCreatedBy")
-        Set o.writes = +rs.%Get("Writes"), o.verification = rs.%Get("Verification")
+        Set planCreatedBy = $LIST(rows(id), 1)
+        If planCreatedBy '= "" Set o.planCreatedBy = planCreatedBy
+        Set o.writes = +$LIST(rows(id), 2), o.verification = $LIST(rows(id), 3)
         // The facts Technical shows on the row: the message's type, where it came in, the receiver's class, when the
         // failure was reported, the plan's version and digest, and the trace links (read only; no patient field)
-        Do ..Technical(c, o, .seen, ..RowOf(rs))
+        Do ..Technical(c, o, .seen, rows(id, "technical"))
         Do items.%Push(o)
     }
     Set out = {}
@@ -466,17 +476,25 @@ ClassMethod Cases() As %Status
     Quit ..Json(out)
 }
 
-/// The cases list's rows, newest first: each case's id with the columns its row shows, read in this one query (a test runs
-/// it too). where is the list's filter on the case (alias c), with its arguments.
-/// The current plan's origin, the writes and the latest verification come with the ids, so the list opens no plan,
-/// attempt or verification row for its columns. A write is an attempt that reached the receiver and may have landed
-/// (applied, already committed or uncertain), as the case page's receipt counts them.
-/// The Technical columns come with them too (the plan's version, digest and entry, the source header's sender and body,
-/// and when the feed reported the failure), so a row costs no header open and no query of its own: only an HL7
-/// source message is opened, for its MSH-9.
-ClassMethod CaseRows(top As %Integer, where As %String, ByRef args) As %SQL.StatementResult
+/// The ids of the cases list, newest first, as many as top asks: where is the list's filter on the case (alias c), with
+/// its arguments. Nothing else is read here, so a deep page skips its earlier rows cheaply.
+ClassMethod PageIds(top As %Integer, where As %String, ByRef args) As %List
 {
-    Quit ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT TOP " _ top _ " c.ID, p.CreatedBy AS PlanCreatedBy,"
+    Set ids = "", rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT TOP " _ top _ " c.ID FROM Shutter_Store.""Case"" c WHERE 1=1" _ where _ " ORDER BY c.ID DESC", args...)
+    While rs.%Next() { Set ids = ids _ $LISTBUILD(rs.%Get("ID")) }
+    Quit ids
+}
+
+/// The rows of the cases with these ids, in no particular order, with every column the list shows, read in this one
+/// query (a test runs it too). The current plan's origin, the writes and the latest verification come with them, so the
+/// list opens no plan, attempt or verification row for its columns. A write is an attempt that reached the receiver and
+/// may have landed (applied, already committed or uncertain), as the case page's receipt counts them. The Technical
+/// columns come with them too (the plan's version, digest and entry, the source header's sender and body, and when the
+/// feed reported the failure), so a row costs no header open and no query of its own: only an HL7 source message is
+/// opened, for its MSH-9.
+ClassMethod CaseRows(ids As %List) As %SQL.StatementResult
+{
+    Quit ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT c.ID, p.CreatedBy AS PlanCreatedBy,"
         _ " (SELECT COUNT(*) FROM Shutter_Store.ExecutionAttempt a WHERE a.""Case"" = c.ID AND a.Outcome IN ('applied', 'already_committed', 'uncertain')) AS Writes,"
         _ " (SELECT TOP 1 v.Outcome FROM Shutter_Store.Verification v WHERE v.""Case"" = c.ID ORDER BY v.ID DESC) AS Verification,"
         _ " p.Version AS PlanVersion, p.Digest AS PlanDigest, p.CatalogueEntry AS PlanEntry,"
@@ -485,7 +503,7 @@ ClassMethod CaseRows(top As %Integer, where As %String, ByRef args) As %SQL.Stat
         _ " AND fh.MessageBodyClassName = 'Shutter.Msg.CaseIntake' AND fi.ID = fh.MessageBodyId"
         _ " AND (c.Receiver IS NULL OR fi.Receiver = c.Receiver) ORDER BY fh.ID) AS FailedAt"
         _ " FROM Shutter_Store.""Case"" c LEFT JOIN Shutter_Store.Plan p ON c.CurrentPlan = p.ID"
-        _ " LEFT JOIN Ens.MessageHeader h ON h.ID = c.SourceHeaderId WHERE 1=1" _ where _ " ORDER BY c.ID DESC", args...)
+        _ " LEFT JOIN Ens.MessageHeader h ON h.ID = c.SourceHeaderId WHERE c.ID %INLIST ?", ids)
 }
 
 /// A list row's Technical columns, as Technical takes them.

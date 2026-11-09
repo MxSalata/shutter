@@ -98,7 +98,7 @@ ClassMethod Added(c As Shutter.Store.Case) As %DynamicObject
 ClassMethod ListAdded(c As Shutter.Store.Case) As %DynamicObject
 {
     Set o = {}, args = 1, args(1) = c.CaseId
-    Set rs = ##class(Shutter.API.Dispatch).CaseRows(1, " AND c.CaseId = ?", .args)
+    Set rs = ##class(Shutter.API.Dispatch).CaseRows(##class(Shutter.API.Dispatch).PageIds(1, " AND c.CaseId = ?", .args))
     If rs.%Next() Do ##class(Shutter.API.Dispatch).Technical(c, o, .seen, ##class(Shutter.API.Dispatch).RowOf(rs))
     Quit o
 }

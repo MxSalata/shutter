@@ -8,8 +8,17 @@ import type { ScreenContext } from '@/api/types';
  * in all), so these caps keep every summary inside them.
  */
 
-/** The longest summary, in characters of its JSON, under the server's 4000. */
+/** The longest summary, in characters of its JSON as the server measures it (summarySize), under the server's 4000. */
 export const CONTEXT_MAX_CHARS = 3600;
+
+/**
+ * A summary's size as the server counts it (Shutter.Util.PageQuestion.AsData): its JSON, with each &, < and > written as
+ * a six-character \u escape, so a page full of "A&E" labels is measured as the server will measure it.
+ */
+export function summarySize(summary: object): number {
+  const json = JSON.stringify(summary);
+  return json.length + 5 * (json.match(/[&<>]/g)?.length ?? 0);
+}
 /** The most items in one list, the server's limit. */
 export const MAX_ITEMS = 40;
 /** The longest text, the server's limit. */
@@ -110,7 +119,7 @@ export function summariseScreen(root: ParentNode | null | undefined, page: strin
 /** The summary cut to its length: items from the end, then headings, then the lead. */
 export function fitted(summary: ScreenSummary): ScreenSummary {
   const out: ScreenSummary = { ...summary, headings: [...summary.headings], items: [...summary.items] };
-  const size = () => JSON.stringify(out).length;
+  const size = () => summarySize(out);
   while (size() > CONTEXT_MAX_CHARS && out.items.length) out.items.pop();
   while (size() > CONTEXT_MAX_CHARS && out.headings.length) out.headings.pop();
   if (size() > CONTEXT_MAX_CHARS) delete out.lead;

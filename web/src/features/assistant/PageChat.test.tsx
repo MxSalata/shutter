@@ -197,6 +197,16 @@ describe('Ask Shutter about a page', () => {
     expect(posts).toHaveLength(0);
   });
 
+  it("offers the trial's demo role no suggested question, as on the live demo, where its user has no live agents", async () => {
+    resetMock('demo');
+    renderPage();
+    await userEvent.click(screen.getByRole('button', { name: 'Ask Shutter' }));
+    const p = await panel();
+    expect(await within(p).findByText(PAGE_JUDGES_ONLY)).toBeInTheDocument();
+    expect(within(p).getByRole('button', { name: 'What is a scenario?' })).toBeDisabled();
+    expect(posts).toHaveLength(0);
+  });
+
   it('locks asking on an instance with no model key, and opens it with a key, the guide one click away', async () => {
     env.trial = false;
     server.use(
