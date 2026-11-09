@@ -118,11 +118,13 @@ test.describe('Ask Shutter, from the header', () => {
     await signIn(page, AS_DEMO);
     await page.getByRole('button', { name: 'Ask Shutter' }).click();
     const panel = page.getByRole('region', { name: 'Ask Shutter' });
-    // The trial has no model: the public role, like every trial role, has the suggested questions and the guide
-    await expect(panel.getByRole('button', { name: 'What is a scenario?' })).toBeEnabled();
-    await expect(panel.getByRole('textbox', { name: 'Your own question' })).toHaveAccessibleDescription(
-      'Needs a real model: not in the trial.',
+    // The public role has no live agents: as on the live demo, its suggested questions are not offered and the guide stays
+    await expect(panel.getByRole('button', { name: 'What is a scenario?' })).toBeDisabled();
+    await expect(panel).toContainText(
+      "Questions about a page are answered live only, and that needs the judges' account. The guide below says what this page is and what to try.",
     );
+    await expect(panel).toContainText('Judges only');
+    await expect(panel.getByRole('textbox', { name: 'Your own question' })).toHaveCount(0);
   });
 });
 
