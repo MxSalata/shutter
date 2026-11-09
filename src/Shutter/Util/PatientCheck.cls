@@ -126,8 +126,7 @@ ClassMethod Shares(a As %DynamicArray, b As %DynamicArray, Output key As %Dynami
 /// run's own clones. why is set, and the list empty, when the read failed or passed CAP.
 ClassMethod Newer(ns As %String, item As %String, originHeaderId As %String, Output why As %String) As %List
 {
-    Set why = "", list = "", count = 0
-    New $NAMESPACE
+    Set why = "", list = "", count = 0, here = $NAMESPACE
     Try {
         Set $NAMESPACE = ns
         Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT TOP " _ (..#CAP + 1) _ " ID FROM Ens.MessageHeader WHERE TargetConfigName = ? AND ID > ? AND Status IN (2, 3, 9) ORDER BY ID", item, +originHeaderId)
@@ -142,6 +141,8 @@ ClassMethod Newer(ns As %String, item As %String, originHeaderId As %String, Out
     } Catch err {
         Set why = "the engine's headers could not be read (" _ err.DisplayString() _ ")"
     }
+    // Back in Shutter's namespace, where the ledger is.
+    Set $NAMESPACE = here
     If (why = "") && (count > ..#CAP) Set why = "more than " _ ..#CAP _ " newer messages went to this receiver, more than Shutter reads, so this patient is held", list = ""
     Quit:why'="" ""
     // This run's own clones: the ledger lives in Shutter's namespace, the headers in ns.
@@ -194,21 +195,10 @@ ClassMethod OpenCases(keys As %DynamicArray, receiver As %String, exclude As %Li
     Quit cases
 }
 
-/// The stored body of a header in ns, with its creation time (UTC), or "".
+/// The stored body of a header in ns, copied here (Shutter.Util.MessageCopy), with its creation time (UTC), or "".
 ClassMethod Body(ns As %String, headerId As %String, Output time As %String) [ Private ]
 {
-    New $NAMESPACE
-    Set msg = "", time = ""
-    Try {
-        Set $NAMESPACE = ns
-        Set header = ##class(Ens.MessageHeader).%OpenId(headerId)
-        If $ISOBJECT(header) && (header.MessageBodyClassName = "EnsLib.HL7.Message") {
-            Set msg = ##class(EnsLib.HL7.Message).%OpenId(header.MessageBodyId), time = header.TimeCreated
-        }
-    } Catch {
-        Set msg = ""
-    }
-    Quit msg
+    Quit ##class(Shutter.Util.MessageCopy).Of(ns, headerId, .time)
 }
 
 ClassMethod KeyWords(key As %DynamicObject) As %String [ Private ]

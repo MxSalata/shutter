@@ -173,16 +173,12 @@ ClassMethod Origins(ns As %String, item As %String, from As %String, to As %Stri
 ClassMethod Row(ns As %String, h As %DynamicObject) As %DynamicObject
 {
     Set row = {"headerId": (h.id), "controlId": "", "timeCreated": (h.timeCreated), "status": (##class(Shutter.Util.EngineRead).StatusWord(h.status)), "attempts": "", "reason": "", "patient": {"id": "", "authority": ""}, "sibling": null}
-    New $NAMESPACE
-    Try {
-        Set $NAMESPACE = ns
-        Set msg = ##class(EnsLib.HL7.Message).%OpenId(h.bodyId)
-        If $ISOBJECT(msg) {
-            Set row.controlId = msg.GetValueAt("MSH:10")
-            Set p = ##class(Shutter.Util.PatientCheck).Patients(msg)
-            If p.%Size() && p.%Get(0).keys.%Size() Set row.patient = {"id": (p.%Get(0).keys.%Get(0).identifier), "authority": (p.%Get(0).keys.%Get(0).authority)}
-        }
-    } Catch {
+    // The body copied here (Shutter.Util.MessageCopy): read in the watched namespace, judged in Shutter's.
+    Set msg = ##class(Shutter.Util.MessageCopy).Of(ns, h.id)
+    If $ISOBJECT(msg) {
+        Set row.controlId = msg.GetValueAt("MSH:10")
+        Set p = ##class(Shutter.Util.PatientCheck).Patients(msg)
+        If p.%Size() && p.%Get(0).keys.%Size() Set row.patient = {"id": (p.%Get(0).keys.%Get(0).identifier), "authority": (p.%Get(0).keys.%Get(0).authority)}
     }
     Quit row
 }

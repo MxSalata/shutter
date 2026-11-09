@@ -112,19 +112,10 @@ ClassMethod ObxLine(obx As %DynamicObject) As %String [ Private ]
     Quit obx.sentence
 }
 
-/// The stored body of a header in ns, or "".
+/// The stored body of a header in ns, copied here (Shutter.Util.MessageCopy), or "".
 ClassMethod Body(ns As %String, headerId As %String) [ Private ]
 {
-    New $NAMESPACE
-    Set msg = ""
-    Try {
-        Set $NAMESPACE = ns
-        Set header = ##class(Ens.MessageHeader).%OpenId(headerId)
-        If $ISOBJECT(header) && (header.MessageBodyClassName = "EnsLib.HL7.Message") Set msg = ##class(EnsLib.HL7.Message).%OpenId(header.MessageBodyId)
-    } Catch {
-        Set msg = ""
-    }
-    Quit msg
+    Quit ##class(Shutter.Util.MessageCopy).Of(ns, headerId)
 }
 
 }
