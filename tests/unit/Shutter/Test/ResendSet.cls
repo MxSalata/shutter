@@ -14,6 +14,12 @@ Property Item As %String;
 
 Property Made As %String [ MultiDimensional ];
 
+/// The stored profile's text before a test added its receiver, put back after it.
+Property ProfileBefore As %String(MAXLEN = "");
+
+/// An orders and results receiver, for the order rule's shape (O5).
+Parameter LAB = "ResendSet Lab Out";
+
 Method OnBeforeOneTest(testname As %String) As %Status
 {
     Set ..Item = "ResendSet Test Out " _ $JOB _ "-" _ $INCREMENT(^||ResendSetTest)
@@ -33,6 +39,11 @@ Method OnAfterOneTest(testname As %String) As %Status
         Set id = "" For { Set id = $ORDER(..Made(class, id)) Quit:id=""  Do $CLASSMETHOD(class, "%DeleteId", id) }
     }
     Kill ..Made
+    If ..ProfileBefore '= "" {
+        Set row = ##class(Shutter.Store.SiteProfile).Row()
+        If $ISOBJECT(row) Set row.Json = ..ProfileBefore Do row.%Save()
+        Set ..ProfileBefore = ""
+    }
     Quit $$$OK
 }
 
@@ -173,6 +184,114 @@ Method TestMessages()
     Set rs.NewHeaderId = "13", rs.Status = "Completed", rs.Words = "sent once"
     Do $$$AssertStatusOK(rs.%Save(), "the result saves")
     Set ..Made("Shutter.Msg.EngineResendResult", rs.%Id()) = ""
+}
+
+/// O5 in process (v1.53): five never-opened results on their own orders, a newer Completed result of another order for the
+/// same NHS number, and an open case on a third: all five are offered, and their rows say they are older than a result of
+/// another order.
+Method TestOtherOrdersOffered()
+{
+    Do ..OrdersReceiver()
+    Set five = ""
+    For i = 1:1:5 { Do ..FailedOrder("9997001101^^^NHS^NH", 8, ..#NEVER, "N5" _ i, "N5" _ i) Set five = five _ $SELECT(five = "": "", 1: ",") _ "N5" _ i }
+    Set timed = ..FailedOrder("9997001101^^^NHS^NH", 8, ..#READTIMEOUT, "T5", "T5")
+    Do ..FailedOrder("9997001101^^^NHS^NH", 9, "", "C5", "C5")
+    // The read timeout's case, on its own order, with Shutter's stored copy.
+    Set copy = ..Header(##class(EnsLib.HL7.Message).%OpenId(##class(Ens.MessageHeader).%OpenId(timed).MessageBodyId).%Id(), 9, "", 0, "")
+    Set h = ##class(Ens.MessageHeader).%OpenId(copy)
+    Set h.TargetConfigName = "ResendSet Case Intake Store"
+    Do h.%Save()
+    Set c = ..Case("RS-T-O5", "", "", copy)
+    Set case = ##class(Shutter.Store.Case).%OpenId(c)
+    Set case.Receiver = ..#LAB, case.PatientId = "9997001101", case.PatientIdAuthority = "NHS", case.SourceNamespace = ""
+    Do case.%Save()
+    Set out = ##class(Shutter.Util.ResendSet).Lists($NAMESPACE, ..Item, "2000-01-01 00:00:00", "2999-12-31 23:59:59", ..#LAB)
+    Do $$$AssertEquals(..Controls(out.lists.offered), five, "the five never-opened results are offered: " _ out.lists.refused.%ToJSON())
+    Do $$$AssertEquals(..Controls(out.lists.reached), "T5", "the read timeout reached the receiver")
+    Do $$$AssertTrue(out.lists.offered.%Get(0).reason [ ##class(Shutter.Util.ResendSet).#OLDER, "the row says it is older: " _ out.lists.offered.%Get(0).reason)
+    Do $$$AssertEquals(out.set.setPolicyVersion, "2026-11-09.3", "the rules' version moved")
+}
+
+/// A resend of Shutter's that failed (its clone Suspended): read again, the message is refused and never offered again.
+Method TestFailedCloneNotOfferedAgain()
+{
+    Set a = ..Failed("9990000351^^^NHS^NH", 8, ..#NEVER, "FA")
+    Do ..Copy(a, 5, 1, ..#SUSPENDING)
+    Set out = ..Run()
+    Do $$$AssertEquals(..Controls(out.lists.offered), "", "not offered")
+    Do $$$AssertTrue((..Controls(out.lists.refused) = "FA") && (out.lists.refused.%Get(0).reason [ "and that copy reads Suspended"), out.lists.refused.%ToJSON())
+}
+
+/// A message the receiver reported it already held (closed_as_present) is in the closed list, read before its refused
+/// clone, with its closure; the digest is over what is offered alone.
+Method TestClosedList()
+{
+    Set a = ..Failed("9990000361^^^NHS^NH", 8, ..#NEVER, "KA")
+    Do ..Failed("9990000362^^^NHS^NH", 8, ..#NEVER, "KB")
+    Set before = ..Run().set.digest
+    Do ..Copy(a, 5, 1, ..#SUSPENDING)
+    Do ..Ledger(a, "closed_as_present", "appr1", "", "The receiver reported it already holds this message.")
+    Set out = ..Run()
+    Do $$$AssertEquals(..Controls(out.lists.closed), "KA", "closed: " _ out.lists.%ToJSON())
+    Set row = out.lists.closed.%Get(0)
+    Do $$$AssertEquals(row.closure, "already_delivered", "its closure")
+    Do $$$AssertEquals(row.closedBy, "appr1", "closedBy")
+    Do $$$AssertTrue(row.closedAt '= "", "closedAt")
+    Do $$$AssertEquals(..Controls(out.lists.offered), "KB", "the other is offered")
+    Do $$$AssertNotEquals(out.set.digest, before, "the digest is over what is offered")
+}
+
+/// A message a person recorded as handled by hand is closed, never offered.
+Method TestHandledByHandPlacesClosed()
+{
+    Set a = ..Failed("9990000371^^^NHS^NH", 8, ..#NEVER, "BA")
+    Do ..Ledger(a, "handled_by_hand", "", "appr2", "Handled by hand, recorded by appr2 at 03:20: entered in the lab system. Shutter sent nothing for it.")
+    Set out = ..Run()
+    Do $$$AssertEquals(..Controls(out.lists.offered), "", "not offered")
+    Do $$$AssertEquals(..Controls(out.lists.closed), "BA", "closed")
+    Do $$$AssertEquals(out.lists.closed.%Get(0).closure _ "/" _ out.lists.closed.%Get(0).closedBy, "handled_by_hand/appr2", "handled by hand, by whom")
+    Do $$$AssertTrue(out.lists.closed.%Get(0).reason [ "Shutter sent nothing for it", "its words")
+}
+
+/// A ledger row on header <var>of</var> in state with who approved or recorded it.
+Method Ledger(of As %String, state As %String, approvedBy As %String, recordedBy As %String, words As %String) As %String
+{
+    Set r = ##class(Shutter.Store.ResendRecord).%New()
+    Set r.RunId = $SELECT(state = "handled_by_hand": "H-TEST", 1: "RUN-TEST"), r.Namespace = $NAMESPACE, r.Item = ..Item, r.OriginHeaderId = of, r.State = state
+    Set r.ApprovedBy = approvedBy, r.RecordedBy = recordedBy, r.Words = words, r.EndedAt = ##class(Shutter.Util.Time).NowUTC()
+    Do r.%Save()
+    Set ..Made("Shutter.Store.ResendRecord", r.%Id()) = ""
+    Quit r.%Id()
+}
+
+/// Adds the orders and results receiver to the stored profile for this test (put back after it).
+Method OrdersReceiver()
+{
+    Set sp = "Shutter.Store.SiteProfile"
+    Set row = $CLASSMETHOD(sp, "Row")
+    If '$ISOBJECT(row) {
+        Do $CLASSMETHOD(sp, "Store", $CLASSMETHOD(sp, "Default").%ToJSON(), "test", "test", "", .v)
+        Set row = $CLASSMETHOD(sp, "Row")
+    }
+    Set:..ProfileBefore="" ..ProfileBefore = row.Json
+    Set p = {}.%FromJSON(row.Json)
+    If '$ISOBJECT(p.receivers) Set p.receivers = []
+    Do p.receivers.%Push({"name": (..#LAB), "category": "orders_results", "duplicates": {"behaviour": "refuses", "phrase": "ALREADY HELD"}})
+    Set row.Json = p.%ToJSON()
+    Do $$$AssertStatusOK(row.%Save(), "the receiver is in the stored profile")
+}
+
+/// As Failed, with its own placer order number.
+Method FailedOrder(pid As %String, status As %Integer, words As %String, control As %String, placer As %String) As %String
+{
+    Set cr = $CHAR(13)
+    Set msg = ##class(EnsLib.HL7.Message).ImportFromString("MSH|^~\&|FAKESEND|SITE|FAKELIMS|LAB|20261105100000||ORU^R01|" _ control _ "|P|2.5.1" _ cr _ "PID|1||" _ pid _ "||Testpatient^Alpha" _ cr _ "ORC|RE|" _ placer _ cr _ "OBR|1|" _ placer _ "||PANEL1" _ cr _ "OBX|1|ST|TST01||VAL10|||||F", .sc)
+    Set msg.DocType = "2.5.1:ORU_R01"
+    Do msg.%Save()
+    Set ..Made("EnsLib.HL7.Message", msg.%Id()) = ""
+    Set id = ..Header(msg.%Id(), status, "", 0, "")
+    Do:words'="" ..Log(id, words)
+    Quit id
 }
 
 /// The lists for the test's item over every time.

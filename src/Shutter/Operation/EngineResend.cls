@@ -6,8 +6,9 @@
 /// attempts, its copies, the log reaching back, the patient check); the ledger row is written as sending before the call;
 /// the stock Ens.MessageHeader.ResendDuplicatedMessage sends the stored body unchanged; the new header is read until it
 /// settles, within the item's FailureTimeout and ConnectTimeout and PADSECONDS. Completed: the row is completed and the
-/// message's case resolved with what happened. Anything else stops the run, except a refusal the receiver's profile
-/// declares as its duplicate answer, which closes that message as already held. A patient the check holds is skipped and
+/// message's case resolved with what happened. Anything else stops the run, with an event of kind resend on the message's
+/// case, except a refusal the receiver's profile declares as its duplicate answer, which closes that message as already
+/// held and resolves its own cases as already delivered. A patient the check holds is skipped and
 /// the rest go; a copy resent by someone else stops the run. A row found sending (a restart mid-run) goes to a person with
 /// nothing more sent. The operation's DefCharEncoding, IPAddress and Port are read before the first send and bound to the
 /// approval: a change stops the run.
@@ -71,6 +72,8 @@ ClassMethod Run(outage As Shutter.Store.Outage)
     }
     Set moved = ..Moved(approval.settings, current)
     If moved '= "" Do ..Stop(outage, moved _ " after the approval: the same stored message would go out differently, so nothing more is sent") Quit
+    // One pass of the patient check: its merge read is made once for the run, then only for what arrived since.
+    Do ##class(Shutter.Util.PatientCheck).Pass(1)
     For {
         Set rowId = ""
         &sql(SELECT TOP 1 ID INTO :rowId FROM Shutter_Store.ResendRecord WHERE RunId = :runId AND State = 'approved' ORDER BY Position)
@@ -79,6 +82,7 @@ ClassMethod Run(outage As Shutter.Store.Outage)
         Set verdict = ..One(outage, row, approval)
         If verdict = "stop" Quit
     }
+    Do ##class(Shutter.Util.PatientCheck).Pass(0)
     Do outage.%Reload()
     If outage.State = "sending" Do ..Finish(outage, runId)
 }
@@ -94,7 +98,7 @@ ClassMethod One(outage As Shutter.Store.Outage, row As Shutter.Store.ResendRecor
     Set moved = ..Moved(approval.settings, ..Settings(ns, item))
     If moved '= "" Do ..Stop(outage, moved _ " after the approval: the same stored message would go out differently, so nothing more is sent") Quit "stop"
     // The message: every rule of the set read again, this run's own unsent rows aside.
-    Set check = ..Recheck(ns, item, row.OriginHeaderId, outage.Receiver, ..RunCases(row.RunId))
+    Set check = ..Recheck(ns, item, row.OriginHeaderId, outage.Receiver, ..RunCases(row.RunId), ..RunHeaders(row.RunId))
     If check.verdict = "skip" {
         Set row.State = "stopped", row.Words = $EXTRACT("not sent: " _ check.why, 1, 1000), row.EndedAt = ##class(Shutter.Util.Time).NowUTC()
         Do row.%Save()
@@ -120,6 +124,14 @@ ClassMethod One(outage As Shutter.Store.Outage, row As Shutter.Store.ResendRecor
     // The new header to its end, within the item's own timeouts.
     Set wait = ..WaitSeconds(ns, item, isStock)
     Set status = ..Settle(ns, newId, wait)
+    Quit ..Outcome(outage, row, approval, headerId, newId, status, wait)
+}
+
+/// What one send came to, once its new header settled (status the word, or "" when it had not in wait seconds): the row,
+/// the message's cases and the outage moved on. "go" or "stop", as One answers.
+ClassMethod Outcome(outage As Shutter.Store.Outage, row As Shutter.Store.ResendRecord, approval As %DynamicObject, headerId As %String, newId As %String, status As %String, wait As %Integer) As %String
+{
+    Set ns = outage.Namespace
     Set at = ##class(Shutter.Util.Time).NowUTC()
     If status = "Completed" {
         Set row.State = "completed", row.EndedAt = at
@@ -127,18 +139,21 @@ ClassMethod One(outage As Shutter.Store.Outage, row As Shutter.Store.ResendRecor
         Do row.%Save()
         Do outage.%Reload()
         Do outage.Advance("sending", "", ..#ACTOR, {"SentByShutter": (outage.SentByShutter + 1)})
-        Do ..Resolve(ns, headerId, row.Words, outage)
+        Do ..Resolve(ns, headerId, row.Words, outage, row)
         Quit "go"
     }
     If (status = "Error") || (status = "Suspended") {
-        If ..Duplicate(ns, newId, outage.Receiver) {
+        If ..Duplicate(ns, newId, outage.Receiver, .said) {
             Set row.State = "closed_as_present", row.EndedAt = at
-            Set row.Words = "The receiver reports it already holds this; the engine never delivered it by this route, and a hand entry would explain it. Shutter has not compared the stored result or amendment."
+            Set row.Words = "Already delivered: the receiver reported it already holds this message (MSA-3: " _ said _ "); the engine never delivered it by this route, and a hand entry would explain it. Shutter has not compared the stored result or amendment."
             Do row.%Save()
+            Do ..AlreadyDelivered(ns, row, outage)
             Quit "go"
         }
-        Set row.State = "failed", row.EndedAt = at, row.Words = "new header " _ newId _ " ended " _ status
+        Set replied = ..ReplyText(ns, newId)
+        Set row.State = "failed", row.EndedAt = at, row.Words = $EXTRACT("new header " _ newId _ " ended " _ status _ $SELECT(replied '= "": " (" _ replied _ ")", 1: ""), 1, 1000)
         Do row.%Save()
+        Do ..FailedOnCase(ns, row, "Shutter's resend of this message failed at " _ ..Clock(at) _ ": new header " _ newId _ " ended " _ status _ $SELECT(replied '= "": " (" _ replied _ ")", 1: "") _ ". Nothing more was sent; the outage waits for a person.")
         Do ..Stop(outage, "the resend of header " _ headerId _ " (new header " _ newId _ ") ended " _ status _ ": the rest were not sent")
         Quit "stop"
     }
@@ -150,14 +165,17 @@ ClassMethod One(outage As Shutter.Store.Outage, row As Shutter.Store.ResendRecor
 
 /// The set's rules for one message again: {"verdict": "go", "headerId"} (the header to send: the origin, or Shutter's
 /// never-opened clone in its place), {"verdict": "skip", "why"} (the patient check holds it) or {"verdict": "stop", "why"}.
-ClassMethod Recheck(ns As %String, item As %String, headerId As %String, receiver As %String, exclude As %List) As %DynamicObject
+/// members are the run's origin header ids, which the order rule leaves out of its newer read.
+ClassMethod Recheck(ns As %String, item As %String, headerId As %String, receiver As %String, exclude As %List, members As %List = "") As %DynamicObject
 {
     Set h = ..Header(ns, headerId)
     If '$ISOBJECT(h) Quit {"verdict": "stop", "why": ("header " _ headerId _ " could not be read")}
     Set row = ##class(Shutter.Util.ResendSet).Row(ns, h)
     Set place = ##class(Shutter.Util.ResendSet).Place(ns, h, row)
+    // Closed without a send of its own since the approval (already handled by hand, or held already): nothing goes.
+    If place = "closed" Quit {"verdict": "stop", "why": ("header " _ headerId _ " no longer qualifies: " _ $SELECT(row.closure = "handled_by_hand": "handled by hand, recorded by " _ row.closedBy _ $SELECT(row.closedAt '= "": " at " _ ..Clock(row.closedAt), 1: ""), 1: "the receiver reported it already holds it"))}
     If place = "candidate" {
-        Set check = ##class(Shutter.Util.PatientCheck).Check(ns, item, row.headerId, receiver, exclude)
+        Set check = ##class(Shutter.Util.PatientCheck).Check(ns, item, row.headerId, receiver, exclude, members)
         If check.hold Quit {"verdict": "skip", "why": (check.why)}
         Quit {"verdict": "go", "headerId": (row.headerId)}
     }
@@ -178,6 +196,15 @@ ClassMethod RunCases(runId As %String) As %List
         Set iter = cases.%GetIterator()
         While iter.%GetNext(, .one) { Set:'$LISTFIND(ids, one.caseId) ids = ids _ $LISTBUILD(one.caseId) }
     }
+    Quit ids
+}
+
+/// The run's origin header ids, in position order.
+ClassMethod RunHeaders(runId As %String) As %List
+{
+    Set ids = ""
+    Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT OriginHeaderId FROM Shutter_Store.ResendRecord WHERE RunId = ? ORDER BY Position", runId)
+    While rs.%Next() { Set ids = ids _ $LISTBUILD(rs.%Get("OriginHeaderId")) }
     Quit ids
 }
 
@@ -208,27 +235,54 @@ ClassMethod Moved(bound As %DynamicObject, now As %DynamicObject) As %String
 }
 
 /// Whether the new header's refusal is the receiver's declared duplicate answer: duplicates.behaviour refuses, with the
-/// code in an ERR-3 or the exact MSA-3 phrase. Matched by field, never as a substring of the whole reply.
-ClassMethod Duplicate(ns As %String, newId As %String, receiver As %String) As %Boolean
+/// code in an ERR-3 or the MSA-3 phrase (Declared). Matched by field, never as a substring of the whole reply. said is the
+/// receiver's MSA-3, or its ERR-3 code.
+ClassMethod Duplicate(ns As %String, newId As %String, receiver As %String, Output said As %String) As %Boolean
 {
+    Set said = ""
     Set entry = ##class(Shutter.Store.SiteProfile).Receiver(receiver)
     Quit:'$ISOBJECT(entry) 0
     Set d = entry.%Get("duplicates")
     Quit:'$ISOBJECT(d) 0
     Quit:d.%Get("behaviour")'="refuses" 0
+    Set reply = ##class(Shutter.Util.ReplyWords).Read(..ReplyLog(ns, newId))
+    Set said = $SELECT(reply.msa3 '= "": reply.msa3, 1: "code " _ d.%Get("code"))
+    Quit ..Declared(reply, d)
+}
+
+/// The log row of the new header that carries the receiver's MSA, or "".
+ClassMethod ReplyLog(ns As %String, newId As %String) As %String [ Private ]
+{
     Set rows = ##class(Shutter.Util.EngineRead).LogRows(ns, newId), text = ""
     If rows.answer = "ok" {
         Set iter = rows.rows.%GetIterator()
         While iter.%GetNext(, .r) { Set:r.text["MSA|" text = r.text }
     }
-    Quit ..Declared(##class(Shutter.Util.ReplyWords).Read(text), d)
+    Quit text
 }
 
-/// The match itself, pure: the reply's words against the declaration {"code", "phrase"}.
+/// The receiver's words for a new header that did not end Completed, for the case's event: "the receiver answered AE:
+/// Refused by the application", or "".
+ClassMethod ReplyText(ns As %String, newId As %String) As %String [ Private ]
+{
+    Set reply = ##class(Shutter.Util.ReplyWords).Read(..ReplyLog(ns, newId))
+    Quit:reply.msa1="" ""
+    Quit $EXTRACT("the receiver answered " _ reply.msa1 _ $SELECT(reply.msa3 '= "": ": " _ reply.msa3, 1: ""), 1, 300)
+}
+
+/// The match itself, pure: the reply's words against the declaration {"code", "phrase"}. MSA-1 must be AE or AR; then
+/// an ERR-3 equal to the code, or MSA-3 (trimmed) equal to the phrase, or starting with it where the next character is
+/// neither a letter nor a digit ("ALREADY HELD, entered by hand"). Case is kept.
 ClassMethod Declared(reply As %DynamicObject, d As %DynamicObject) As %Boolean
 {
     Set code = d.%Get("code"), phrase = d.%Get("phrase")
-    If (phrase '= "") && (reply.msa3 = phrase) Quit 1
+    Set ack = $ZCONVERT($ZSTRIP(reply.msa1, "<>W"), "U")
+    Quit:(ack'="AE")&&(ack'="AR") 0
+    Set said = $ZSTRIP(reply.msa3, "<>W")
+    If phrase '= "" {
+        If said = phrase Quit 1
+        If ($EXTRACT(said, 1, $LENGTH(phrase)) = phrase) && '$MATCH($EXTRACT(said, $LENGTH(phrase) + 1), "[\p{L}\p{N}]") Quit 1
+    }
     Quit:code="" 0
     Set iter = reply.errors.%GetIterator()
     While iter.%GetNext(, .e) { Return:e.code=code 1 }
@@ -286,10 +340,58 @@ ClassMethod Header(ns As %String, headerId As %String) As %DynamicObject
     Quit out
 }
 
-/// The message's case, resolved with what was sent, when it has one that is not resolved yet.
-ClassMethod Resolve(ns As %String, headerId As %String, words As %String, outage As Shutter.Store.Outage)
+/// The receiver reported it already holds the message: the message's own cases (its origin's, by CaseRows; never a case
+/// linked by receiver and time) are resolved with disposition already_delivered and the row's words.
+ClassMethod AlreadyDelivered(ns As %String, row As Shutter.Store.ResendRecord, outage As Shutter.Store.Outage)
 {
-    Set rows = ##class(Shutter.Util.ResendSet).CaseRows(ns, headerId)
+    Set rows = ..OwnCases(ns, row)
+    Set iter = rows.%GetIterator()
+    While iter.%GetNext(, .one) {
+        Continue:one.state="resolved"
+        Set case = ##class(Shutter.Store.Case).%OpenId(one.id)
+        Continue:'$ISOBJECT(case)
+        Set case.Disposition = "already_delivered", case.Outcome = row.Words, case.Headline = $EXTRACT(row.Words, 1, 500)
+        Do case.Transition("resolved", row.Words, ..#ACTOR, "outage:" _ outage.%Id())
+    }
+}
+
+/// A failed resend: an event of kind resend on the message's own cases, their state left as it is.
+ClassMethod FailedOnCase(ns As %String, row As Shutter.Store.ResendRecord, words As %String)
+{
+    Set rows = ..OwnCases(ns, row)
+    Set iter = rows.%GetIterator()
+    While iter.%GetNext(, .one) {
+        Set case = ##class(Shutter.Store.Case).%OpenId(one.id)
+        Continue:'$ISOBJECT(case)
+        Do case.Note("resend", words, ..#ACTOR, "resend:" _ row.RunId _ ":" _ row.Position)
+    }
+}
+
+/// The cases of a row's message: on the header it sent and, when that was Shutter's clone standing in, on its origin.
+ClassMethod OwnCases(ns As %String, row As Shutter.Store.ResendRecord) As %DynamicArray
+{
+    Set out = ##class(Shutter.Util.ResendSet).CaseRows(ns, row.OriginHeaderId), seen = ""
+    Set iter = out.%GetIterator()
+    While iter.%GetNext(, .one) { Set seen = seen _ $LISTBUILD(one.id) }
+    // A clone of an earlier run sent in the origin's place: the origin's cases are the message's.
+    Set origin = "", sent = row.OriginHeaderId
+    &sql(SELECT TOP 1 OriginHeaderId INTO :origin FROM Shutter_Store.ResendRecord WHERE Namespace = :ns AND NewHeaderId = :sent)
+    If (SQLCODE = 0) && (origin '= "") {
+        Set more = ##class(Shutter.Util.ResendSet).CaseRows(ns, origin)
+        Set iter = more.%GetIterator()
+        While iter.%GetNext(, .one) { Continue:$LISTFIND(seen, one.id)  Set seen = seen _ $LISTBUILD(one.id) Do out.%Push(one) }
+    }
+    If row.CaseId '= "" {
+        Set c = ##class(Shutter.Store.Case).ByCaseId(row.CaseId)
+        If $ISOBJECT(c) && '$LISTFIND(seen, c.%Id()) Do out.%Push({"id": (c.%Id()), "caseId": (c.CaseId), "state": (c.State)})
+    }
+    Quit out
+}
+
+/// The message's case, resolved with what was sent, when it has one that is not resolved yet.
+ClassMethod Resolve(ns As %String, headerId As %String, words As %String, outage As Shutter.Store.Outage, row As Shutter.Store.ResendRecord = "")
+{
+    Set rows = $SELECT($ISOBJECT(row): ..OwnCases(ns, row), 1: ##class(Shutter.Util.ResendSet).CaseRows(ns, headerId))
     Set iter = rows.%GetIterator()
     While iter.%GetNext(, .one) {
         Continue:one.state="resolved"

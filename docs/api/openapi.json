@@ -8342,8 +8342,8 @@
         "tags": [
           "outages"
         ],
-        "summary": "Pause or close an outage",
-        "description": "A pause moves the row to paused, sets pausedUntil and withholds any set; a close records the reason and the person, the signed-in user. An operator reads every outage route and is refused here with 403.\n\nNeeds Shutter_Approve. A change: send X-Requested-With: Shutter. An Idempotency-Key replays the first reply.\n\nCONTRACTS 17.3.",
+        "summary": "Pause or close an outage, read its set again, or close a message as already handled by hand",
+        "description": "A pause moves the row to paused, sets pausedUntil and withholds any set; a close records the reason and the person, the signed-in user; handled_by_hand (v1.53) closes one offered message without a send of its own, writes a ledger row and closes the message's own cases by hand. An operator reads every outage route and is refused here with 403.\n\nNeeds Shutter_Approve. A change: send X-Requested-With: Shutter. An Idempotency-Key replays the first reply.\n\nCONTRACTS 17.3.",
         "x-contract": "docs/CONTRACTS.md section 17.3",
         "x-required-resource": "Shutter_Approve",
         "x-writes": true,
@@ -8587,6 +8587,10 @@
                   "note": {
                     "type": "string",
                     "maxLength": 1000
+                  },
+                  "receiverChecked": {
+                    "type": "boolean",
+                    "description": "v1.53: the approver says the receiver was checked for these messages; required (true) at a receiver whose duplicates are not refused, else 409 receiver_check_needed."
                   }
                 }
               }
@@ -8696,11 +8700,12 @@
             }
           },
           "409": {
-            "description": "Conflict. wrong_state: The outage is closed.; version_changed: A stale version (with currentVersion).; idempotency_key_reused: The key was used with another body.",
+            "description": "Conflict. wrong_state: The outage is closed.; version_changed: A stale version (with currentVersion).; idempotency_key_reused: The key was used with another body. receiver_check_needed: At this receiver a duplicate is unknown: check the receiver for these messages first, and say so with the approval.",
             "x-error-codes": [
               "wrong_state",
               "version_changed",
-              "idempotency_key_reused"
+              "idempotency_key_reused",
+              "receiver_check_needed"
             ],
             "content": {
               "application/json": {
@@ -8724,6 +8729,12 @@
                     "value": {
                       "error": "idempotency_key_reused",
                       "detail": "The key was used with another body"
+                    }
+                  },
+                  "receiver_check_needed": {
+                    "value": {
+                      "error": "receiver_check_needed",
+                      "detail": "At this receiver a duplicate is unknown: check the receiver for these messages first, and say so with the approval."
                     }
                   }
                 }
@@ -10800,6 +10811,13 @@
                   }
                 ],
                 "description": "The case's place in its incident, when one holds it."
+              },
+              "resends": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/OutageResend"
+                },
+                "description": "v1.53: Shutter's ledger rows on the case's origin header (CONTRACTS 17.8)."
               }
             },
             "required": [
@@ -10833,7 +10851,9 @@
               "artifact",
               "error",
               "approval",
-              "execution"
+              "execution",
+              "escalation",
+              "resend"
             ]
           },
           "fromState": {
@@ -12046,7 +12066,15 @@
           },
           "state": {
             "type": "string",
-            "description": "draft, queued, sent, failed, cancelled."
+            "description": "draft, queued, sent (the mail server accepted it), saved (v1.53: written as an .eml file with no mail server set; nobody was emailed), failed, cancelled.",
+            "enum": [
+              "draft",
+              "queued",
+              "sent",
+              "saved",
+              "failed",
+              "cancelled"
+            ]
           },
           "teamId": {
             "type": "string"
@@ -12090,7 +12118,12 @@
             "type": "string"
           },
           "sentAt": {
-            "type": "string"
+            "type": "string",
+            "description": "When the mail server accepted it; empty for a saved one."
+          },
+          "savedAt": {
+            "type": "string",
+            "description": "v1.53: when it was saved as an .eml file (state saved); a row stored before 1.4.0 as a file reads saved with savedAt from its sentAt."
           },
           "transport": {
             "type": "string",
@@ -12960,6 +12993,10 @@
           "opened": {
             "type": "boolean",
             "description": "False when a case for the same operation key is already open."
+          },
+          "ownResend": {
+            "type": "boolean",
+            "description": "v1.53: present and true when the forward was Shutter's own resend; no case was opened, and caseId names the message's earlier case or is empty."
           }
         },
         "required": [
@@ -13513,6 +13550,13 @@
                 "items": {
                   "$ref": "#/components/schemas/OutageRow"
                 }
+              },
+              "closed": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/OutageRow"
+                },
+                "description": "Messages of the window closed without a send of their own (v1.53)."
               }
             }
           },
@@ -13626,9 +13670,17 @@
               "enum": [
                 "pause",
                 "close",
-                "read_again"
+                "read_again",
+                "handled_by_hand"
               ]
             }
+          },
+          "resends": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OutageResend"
+            },
+            "description": "Every ledger row of the outage, in order (v1.53)."
           },
           "words": {
             "type": "object",
@@ -13687,6 +13739,44 @@
             "required": [
               "act",
               "reason"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "act": {
+                "const": "read_again"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "act"
+            ]
+          },
+          {
+            "type": "object",
+            "description": "Already handled by hand (v1.53): a Row of lists.offered whose acts list it; Shutter sends nothing for it.",
+            "properties": {
+              "act": {
+                "const": "handled_by_hand"
+              },
+              "headerId": {
+                "type": "string"
+              },
+              "note": {
+                "type": "string",
+                "maxLength": 1000
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": [
+              "act",
+              "headerId",
+              "note"
             ]
           }
         ],
@@ -13835,6 +13925,40 @@
                 "type": "string"
               }
             }
+          },
+          "acts": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "handled_by_hand"
+              ]
+            },
+            "description": "Composed on read (v1.53): [\"handled_by_hand\"] on a row of lists.offered while the outage is offered at a receiver whose duplicates are unknown, filed twice or not declared; [] otherwise."
+          },
+          "closure": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "already_delivered",
+              "handled_by_hand",
+              null
+            ],
+            "description": "For a row of lists.closed (v1.53): already_delivered (the receiver reported it already held it) or handled_by_hand; null elsewhere."
+          },
+          "closedBy": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "closedAt": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -16809,6 +16933,92 @@
           "timeCreated",
           "timeCompleted"
         ]
+      },
+      "OutageResend": {
+        "type": "object",
+        "description": "One ledger row of Shutter's resends (CONTRACTS 17.8, v1.53).",
+        "properties": {
+          "runId": {
+            "type": "string",
+            "description": "The run (R<outage>-<version>), or H<outage> for a message recorded as handled by hand."
+          },
+          "position": {
+            "type": "integer"
+          },
+          "headerId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The header sent: the origin, or Shutter's never-opened clone in its place."
+          },
+          "controlId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "newHeaderId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "approved",
+              "sending",
+              "completed",
+              "failed",
+              "closed_as_present",
+              "handled_by_hand",
+              "stopped",
+              "unknown"
+            ]
+          },
+          "closure": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "sent",
+              "already_delivered",
+              "handled_by_hand",
+              "failed",
+              "unknown",
+              null
+            ],
+            "description": "Null while approved, sending or stopped."
+          },
+          "words": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "by": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The approver, or the person who recorded a hand closure."
+          },
+          "at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The row's end, or its start while sending."
+          },
+          "caseId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
       }
     }
   },

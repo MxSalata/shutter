@@ -1,7 +1,8 @@
 /// The ledger of Shutter's own resends of a receiver's failed messages through the engine: one row per message of an
-/// approved set, written by the sender before and after each call. This release has the table and its readers and no
-/// writer: the sender is a later tier's. PatientCheck reads NewHeaderId so that a run never counts its own clones as newer
-/// messages; a hand resend's clone has no row, and counts.
+/// approved set, written by the approval and by Engine Resend before and after each call, and one row per message a person
+/// recorded as handled by hand (RunId "H" and the outage id). PatientCheck reads NewHeaderId so that a run never counts its
+/// own clones as newer messages; a hand resend's clone has no row, and counts. ResendSet.Place reads a closed_as_present or
+/// handled_by_hand row first, so such a message is never offered again.
 Class Shutter.Store.ResendRecord Extends %Persistent
 {
 
@@ -67,12 +68,140 @@ Property EndedAt As %String(MAXLEN = 30);
 /// What happened, in words, for the case and the outage.
 Property Words As %String(MAXLEN = 1000);
 
+/// The message's control id (MSH-10), as the set's Row named it.
+Property ControlId As %String(MAXLEN = 200);
+
+/// Who recorded a hand closure (handled_by_hand), the signed-in user.
+Property RecordedBy As %String(MAXLEN = 128);
+
 /// Whether <var>headerId</var> in <var>ns</var> is a clone one of Shutter's runs made.
 ClassMethod IsOwnClone(ns As %String, headerId As %String) As %Boolean
 {
     Quit:headerId="" 0
     &sql(SELECT COUNT(*) INTO :n FROM Shutter_Store.ResendRecord WHERE Namespace = :ns AND NewHeaderId = :headerId)
     Quit (SQLCODE = 0) && (n > 0)
+}
+
+/// The ledger row of Shutter's own resend that <var>headerId</var> in <var>ns</var> is: the row whose clone it is, or the
+/// latest started row on it as an origin; "" for a header no run of Shutter's has touched.
+ClassMethod OwnResendRow(ns As %String, headerId As %String) As Shutter.Store.ResendRecord
+{
+    Quit:headerId="" ""
+    Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT TOP 1 ID FROM Shutter_Store.ResendRecord WHERE Namespace = ? AND (NewHeaderId = ? OR (OriginHeaderId = ? AND StartedAt IS NOT NULL AND StartedAt <> '')) ORDER BY ID DESC", ns, headerId, headerId)
+    Quit:rs.%SQLCODE<0 ""
+    Quit:'rs.%Next() ""
+    Quit ..%OpenId(rs.%Get("ID"))
+}
+
+/// The origin a header stands for: the origin of the run whose clone it is, else the header itself.
+ClassMethod OriginOf(ns As %String, headerId As %String) As %String
+{
+    Set origin = ""
+    &sql(SELECT TOP 1 OriginHeaderId INTO :origin FROM Shutter_Store.ResendRecord WHERE Namespace = :ns AND NewHeaderId = :headerId)
+    Quit $SELECT((SQLCODE = 0) && (origin '= ""): origin, 1: headerId)
+}
+
+/// Whether <var>headerId</var> in <var>ns</var> is an origin a run of Shutter's has started to send (a row with StartedAt).
+ClassMethod Started(ns As %String, headerId As %String) As %Boolean
+{
+    Quit:headerId="" 0
+    &sql(SELECT COUNT(*) INTO :n FROM Shutter_Store.ResendRecord WHERE Namespace = :ns AND OriginHeaderId = :headerId AND StartedAt IS NOT NULL AND StartedAt <> '')
+    Quit (SQLCODE = 0) && (n > 0)
+}
+
+/// The row that closed <var>headerId</var> in <var>ns</var> without a send of its own, closed_as_present or
+/// handled_by_hand, the latest: {"id", "state", "closure", "by", "at", "words", "caseId"}, or "". A row that names the header
+/// as the clone it sent counts for the clone's origin too: <var>also</var> is a $LIST of more header ids (the origin's
+/// clones).
+ClassMethod ClosedFor(ns As %String, headerId As %String, also As %List = "") As %DynamicObject
+{
+    Set ids = $LISTBUILD(headerId) _ also, out = ""
+    For i = 1:1:$LISTLENGTH(ids) {
+        Set h = $LIST(ids, i)
+        Continue:h=""
+        Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT TOP 1 ID FROM Shutter_Store.ResendRecord WHERE Namespace = ? AND OriginHeaderId = ? AND State IN ('closed_as_present', 'handled_by_hand') ORDER BY ID DESC", ns, h)
+        Continue:rs.%SQLCODE<0
+        If rs.%Next() {
+            Set row = ..%OpenId(rs.%Get("ID"))
+            If $ISOBJECT(row) Set out = row.ToObject() Quit
+        }
+    }
+    Quit out
+}
+
+/// closure as the routes give it: sent (completed), already_delivered (closed_as_present), handled_by_hand, failed,
+/// unknown, or "" (null) while approved, sending or stopped.
+ClassMethod Closure(state As %String) As %String
+{
+    Quit $CASE(state, "completed": "sent", "closed_as_present": "already_delivered", "handled_by_hand": "handled_by_hand", "failed": "failed", "unknown": "unknown", : "")
+}
+
+/// One row as the routes give it (CONTRACTS 17.8): {"runId", "position", "headerId", "controlId", "newHeaderId", "state",
+/// "closure", "words", "by", "at", "caseId"}, null where nothing has filled it.
+Method ToObject() As %DynamicObject
+{
+    Set o = {"runId": (..RunId)}
+    Do o.%Set("position", +..Position, "number")
+    Do ..Put(o, "headerId", ..OriginHeaderId), ..Put(o, "controlId", ..ControlId), ..Put(o, "newHeaderId", ..NewHeaderId)
+    Set o.state = ..State
+    Do ..Put(o, "closure", ..Closure(..State)), ..Put(o, "words", ..Words)
+    Do ..Put(o, "by", $SELECT(..RecordedBy '= "": ..RecordedBy, 1: ..ApprovedBy))
+    Do ..Put(o, "at", $SELECT(..EndedAt '= "": ..EndedAt, 1: ..StartedAt))
+    Do ..Put(o, "caseId", ..CaseId)
+    Quit o
+}
+
+/// Every row of an outage, its runs in order and each in position order.
+ClassMethod OfOutage(outageId As %String) As %DynamicArray
+{
+    Set out = []
+    Quit:outageId="" out
+    Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT ID FROM Shutter_Store.ResendRecord WHERE OutageId = ? ORDER BY ID", outageId)
+    Quit:rs.%SQLCODE<0 out
+    Kill rows
+    While rs.%Next() {
+        Set row = ..%OpenId(rs.%Get("ID"))
+        Continue:'$ISOBJECT(row)
+        // Ordered by the run's first row, then position: a run's rows are written together, a hand closure on its own.
+        Set run = row.RunId
+        Set:'$DATA(first(run)) first(run) = rs.%Get("ID")
+        Set rows(first(run), +row.Position, rs.%Get("ID")) = ""
+        Set objs(rs.%Get("ID")) = row
+    }
+    Set a = ""
+    For {
+        Set a = $ORDER(rows(a)) Quit:a=""
+        Set b = ""
+        For {
+            Set b = $ORDER(rows(a, b)) Quit:b=""
+            Set c = ""
+            For {
+                Set c = $ORDER(rows(a, b, c)) Quit:c=""
+                Do out.%Push(objs(c).ToObject())
+            }
+        }
+    }
+    Quit out
+}
+
+/// Every row on one origin header of ns (or on Shutter's clone sent in its place), oldest first, as the routes give it.
+ClassMethod OfHeader(ns As %String, headerId As %String) As %DynamicArray
+{
+    Set out = []
+    Quit:(ns="")||(headerId="") out
+    Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT ID FROM Shutter_Store.ResendRecord WHERE Namespace = ? AND OriginHeaderId = ? ORDER BY ID", ns, headerId)
+    Quit:rs.%SQLCODE<0 out
+    While rs.%Next() {
+        Set row = ..%OpenId(rs.%Get("ID"))
+        Do:$ISOBJECT(row) out.%Push(row.ToObject())
+    }
+    Quit out
+}
+
+ClassMethod Put(o As %DynamicObject, key As %String, value As %String) [ Private ]
+{
+    If value = "" Do o.%Set(key, "", "null") Quit
+    Do o.%Set(key, value)
 }
 
 Storage Default
@@ -140,6 +269,12 @@ Storage Default
 </Value>
 <Value name="21">
 <Value>Words</Value>
+</Value>
+<Value name="22">
+<Value>ControlId</Value>
+</Value>
+<Value name="23">
+<Value>RecordedBy</Value>
 </Value>
 </Data>
 <DataLocation>^Shutter.Store.ResendRecordD</DataLocation>

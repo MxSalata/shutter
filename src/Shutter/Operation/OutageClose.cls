@@ -239,7 +239,8 @@ ClassMethod Close(outage As Shutter.Store.Outage, entry As %DynamicObject, facts
     Set lists = $SELECT(computed: set.lists, 1: sorted.lists)
     Set fields.ListQueued = lists.queued, fields.ListOffered = lists.offered
     Set fields.ListReached = lists.reached, fields.ListRefused = lists.refused
-    Set w = {"why": (why), "unread": (read.answer '= "ok"), "unreadWhy": (read.why), "truncated": (sorted.truncated), "errors": (sorted.settled.error), "openCases": 0, "completed": (sorted.settled.completed), "suspended": (sorted.settled.suspended), "other": (sorted.settled.other), "queued": (sorted.lists.queued.%Size()), "moreThanOnce": (sorted.moreThanOnce), "drainedAt": ($SELECT(why = "": ..Clock(now), 1: "")), "recoveredAt": ($SELECT((why = "") && (outage.DrainStartedAt '= ""): ..Clock(outage.DrainStartedAt), 1: "")), "offered": ($SELECT(computed: lists.offered.%Size(), 1: 0))}
+    Set fields.ListClosed = $SELECT($ISOBJECT(lists.%Get("closed")): lists.closed, 1: [])
+    Set w = {"closed": (fields.ListClosed.%Size()), "why": (why), "unread": (read.answer '= "ok"), "unreadWhy": (read.why), "truncated": (sorted.truncated), "errors": (sorted.settled.error), "openCases": 0, "completed": (sorted.settled.completed), "suspended": (sorted.settled.suspended), "other": (sorted.settled.other), "queued": (sorted.lists.queued.%Size()), "moreThanOnce": (sorted.moreThanOnce), "drainedAt": ($SELECT(why = "": ..Clock(now), 1: "")), "recoveredAt": ($SELECT((why = "") && (outage.DrainStartedAt '= ""): ..Clock(outage.DrainStartedAt), 1: "")), "offered": ($SELECT(computed: lists.offered.%Size(), 1: 0))}
     // Whether the close goes back to open does not depend on the cases, so that is known before any case is judged.
     Set first = ..CloseWords(w)
     If first.to = "open" {
@@ -264,7 +265,10 @@ ClassMethod Close(outage As Shutter.Store.Outage, entry As %DynamicObject, facts
 /// must do.
 ClassMethod CloseWords(w As %DynamicObject) As %DynamicObject
 {
-    Set errors = +w.errors, open = +w.openCases
+    // A message closed without a send of its own (already held at the receiver, or handled by hand) stays Error in the
+    // engine, and needs nobody now.
+    Set closed = +w.%Get("closed"), errors = +w.errors - closed, open = +w.openCases
+    Set:errors<0 errors = 0
     Set exceptions = $SELECT(open = 0: "", 1: " " _ open _ " delivery exception" _ $SELECT(open = 1: " still needs", 1: "s still need") _ " review.")
     Set twice = ""
     Set iter = w.moreThanOnce.%GetIterator()
@@ -286,6 +290,7 @@ ClassMethod CloseWords(w As %DynamicObject) As %DynamicObject
     If +w.suspended Set words = words _ "; " _ +w.suspended _ $SELECT(+w.suspended = 1: " was Suspended and still needs", 1: " were Suspended and still need") _ " action"
     If +w.other Set words = words _ "; " _ +w.other _ " set aside in the engine"
     Set words = words _ "." _ twice
+    If closed Set words = words _ " Every message of the window was sent or closed: " _ closed _ " closed without a send of " _ $SELECT(closed = 1: "its", 1: "their") _ " own."
     If open Set words = "Transport outage closed." _ exceptions _ " " _ words
     Quit {"to": "closed", "outcome": (words)}
 }

@@ -62,7 +62,7 @@ Property SettledError As %Integer [ InitialExpression = 0 ];
 
 Property SettledOther As %Integer [ InitialExpression = 0 ];
 
-/// JSON arrays, each [ { "at", "kind", "text" } ] for Alerts, [ Row ] for the four lists, [ { "caseId", "reason", "owner" } ]
+/// JSON arrays, each [ { "at", "kind", "text" } ] for Alerts, [ Row ] for the five lists, [ { "caseId", "reason", "owner" } ]
 /// for OpenCases. PutList writes them and ToJSON reads them.
 Property Alerts As %Stream.GlobalCharacter;
 
@@ -123,6 +123,10 @@ Property LinkedCases As %Stream.GlobalCharacter;
 
 /// What the close found, in a person's words: the drain and its dispositions, or what a person must do.
 Property Outcome As %String(MAXLEN = 4000);
+
+/// [ Row ]: the messages of the window closed without a send of their own (v1.53): the receiver reported it already held
+/// one, or a person recorded it as handled by hand.
+Property ListClosed As %Stream.GlobalCharacter;
 
 /// The row of a receiver that is not closed, or "".
 ClassMethod ActiveFor(receiver As %String) As Shutter.Store.Outage
@@ -269,7 +273,7 @@ Method Change(state As %String, detail As %String, by As %String, fields As %Dyn
         If $ISOBJECT(fields) {
             Set iter = fields.%GetIterator()
             While iter.%GetNext(.name, .value) {
-                If $LISTFIND($LISTBUILD("Alerts", "ListQueued", "ListOffered", "ListReached", "ListRefused", "OpenCases", "LinkedCases"), name) {
+                If $LISTFIND($LISTBUILD("Alerts", "ListQueued", "ListOffered", "ListReached", "ListRefused", "ListClosed", "OpenCases", "LinkedCases"), name) {
                     Set sc = ..PutList(name, value)
                     If $$$ISERR(sc) Quit
                 } Else {
@@ -295,8 +299,8 @@ Method Change(state As %String, detail As %String, by As %String, fields As %Dyn
     Quit sc
 }
 
-/// Replaces a JSON list: name is Alerts, ListQueued, ListOffered, ListReached, ListRefused, OpenCases or LinkedCases. The
-/// caller saves.
+/// Replaces a JSON list: name is Alerts, ListQueued, ListOffered, ListReached, ListRefused, ListClosed, OpenCases or
+/// LinkedCases. The caller saves.
 Method PutList(name As %String, list As %DynamicArray) As %Status
 {
     Set stream = $PROPERTY($THIS, name)
@@ -330,7 +334,7 @@ Method ToJSON() As %DynamicObject
     Set o.window = window
     Set o.settled = {"completed": (+..SettledCompleted), "suspended": (+..SettledSuspended), "error": (+..SettledError), "other": (+..SettledOther)}
     Set o.alerts = ..GetList("Alerts")
-    Set o.lists = {"queued": (..GetList("ListQueued")), "offered": (..GetList("ListOffered")), "reached": (..GetList("ListReached")), "refused": (..GetList("ListRefused"))}
+    Set o.lists = {"queued": (..GetList("ListQueued")), "offered": (..GetList("ListOffered")), "reached": (..GetList("ListReached")), "refused": (..GetList("ListRefused")), "closed": (..GetList("ListClosed"))}
     Set o.openCases = ..GetList("OpenCases")
     Set o.linkedCases = ..GetList("LinkedCases")
     Do ..Put(o, "outcome", ..Outcome)
@@ -345,6 +349,8 @@ Method ToJSON() As %DynamicObject
         Do o.%Set("approval", "", "null")
     }
     Do o.%Set("sentByShutter", +..SentByShutter, "number")
+    // Every ledger row of the outage, in order (v1.53): each resend, each message closed as already delivered or by hand.
+    Set o.resends = ##class(Shutter.Store.ResendRecord).OfOutage(..%Id())
     // read_again only where the build has the set gate to compute.
     Set o.acts = $SELECT(..State = "closed": [], ##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Util.ResendSet"): ["pause", "read_again", "close"], 1: ["pause", "close"])
     Set words = {}
@@ -509,6 +515,9 @@ Storage Default
 </Value>
 <Value name="49">
 <Value>ReadAgainAt</Value>
+</Value>
+<Value name="50">
+<Value>ListClosed</Value>
 </Value>
 </Data>
 <DataLocation>^Shutter.Store.OutageD</DataLocation>

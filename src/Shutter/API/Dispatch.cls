@@ -532,6 +532,8 @@ ClassMethod CaseGet(caseId As %String) As %Status
     &sql(SELECT COUNT(*) INTO :n FROM Shutter_Store.ExecutionAttempt WHERE "Case" = :id)
     Set counts.attempts = +n
     Set o.counts = counts
+    // Shutter's resends of the case's message (v1.53, CONTRACTS 17.8): the ledger rows on its origin header.
+    Set o.resends = $SELECT(case.SourceNamespace '= "": ##class(Shutter.Store.ResendRecord).OfHeader(case.SourceNamespace, case.OriginHeaderId), 1: [])
     Do ..Technical(case, o)
     Quit ..Json(o)
 }
@@ -1481,6 +1483,8 @@ ClassMethod Intake() As %Status
     Set reply = {}
     Set reply.caseId = started.CaseId, reply.state = started.State
     Do reply.%Set("opened", ''started.Opened, "boolean")
+    // Shutter's own resend (v1.53): no case opened, the earlier case named when there is one.
+    If started.OwnResend Do reply.%Set("ownResend", 1, "boolean")
     Set text = reply.%ToJSON()
     Do ..Remember(bodyText, "202 Accepted", text)
     Set %response.Status = "202 Accepted"

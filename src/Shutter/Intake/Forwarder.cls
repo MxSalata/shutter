@@ -145,7 +145,8 @@ Method Send(request As Shutter.Intake.Forward, msg As EnsLib.HL7.Message, header
     Set parsed = ##class(Shutter.Util.Json).Parse(answer, .psc)
     If '$ISOBJECT(parsed) || $$$ISERR(psc) || 'parsed.%IsA("%DynamicObject") Set parsed = {}
     If status = 202 {
-        If ..CaseIdIn(answer) = "" Quit ..Refused(response, ..NoCaseWords(..IntakePath, answer))
+        // Shutter's own resend (v1.53) is taken with no new case, and names the earlier one only when there is one.
+        If (..CaseIdIn(answer) = "") && '##class(Shutter.Util.Json).Bool(parsed, "ownResend") Quit ..Refused(response, ..NoCaseWords(..IntakePath, answer))
         Set response.CaseId = ##class(Shutter.Util.Json).Str(parsed, "caseId")
         Set response.State = ##class(Shutter.Util.Json).Str(parsed, "state")
         Set response.Opened = ##class(Shutter.Util.Json).Bool(parsed, "opened")

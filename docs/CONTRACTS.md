@@ -1616,7 +1616,7 @@ needs only the packages `Shutter.Intake` and `Shutter.Util` for the forwarder an
   item still reads Created, Queued or Delivered: the engine is still trying it, so nothing failed and no case opens.
   **Shutter's own resend opens no case** (v1.53): a forward whose header in its source namespace is a clone one of
   Shutter's runs made (`Shutter.Store.ResendRecord.NewHeaderId`), or an origin with a ledger row that has started, is
-  answered by Case Intake with 202 and the message's earlier case (`opened` false; `caseId` empty when it has none), so the
+  answered by Case Intake with 202 and the message's earlier case (`opened` false, `ownResend` true; `caseId` empty when it has none, which the forwarder takes only beside `ownResend`), so the
   session is marked seen, and the alert's words go on that case as an event of kind `resend` ("the engine alerted on
   Shutter's resend: ..."), or with no case on the outage as an alert line (17.8). The alert itself was passed on to the
   site's consumer first, as every alert is. No other
