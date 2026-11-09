@@ -8,7 +8,7 @@ Class Shutter.Util.Uninstall
 
 /// The prefixes of the globals, and so of the tables and configuration, that are Shutter's with the demo. Without it, only
 /// the first is (GlobalPrefixes).
-Parameter GLOBALS = "^Shutter.,^Downstream.,^Hospital.,^Wards.";
+Parameter GLOBALS = "^Shutter.,^Downstream.,^Hospital.,^Wards.,^FHIRFacade.";
 
 /// The comments Shutter's installers give the users they make. A user of the same name without one of them is the site's.
 Parameter USERCOMMENTS = "Shutter demo user|Used by the production's HTTP operation|Shutter public demo user|Used by the Shutter Forwarder item of Hospital.Production|Reads the warehouse history tables only";
