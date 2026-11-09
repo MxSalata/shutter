@@ -28,6 +28,7 @@ import { HINT_EVENTS } from '@/theme';
 import { ChainBar } from './ChainBar';
 import { describeHeld, describeKinds, describePolicy, INCIDENT_STATES, statesFromCounts } from './describe';
 import './incidents.css';
+import { OutageSection } from './outage/OutageSection';
 
 /**
  * The interfaces whose messages are held because their HL7 schema is not loaded here (the site prevents failures,
@@ -210,6 +211,7 @@ export default function IncidentsPage() {
       />
       <Stack gap="md">
         {storm ? <StormCard storm={storm} /> : null}
+        <OutageSection />
         {held && held.count > 0 ? <HeldInterfaces held={held} /> : null}
         {incidents.isError ? (
           <ErrorAlert

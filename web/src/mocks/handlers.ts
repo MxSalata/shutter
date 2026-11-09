@@ -1238,6 +1238,14 @@ export const handlers = [
       : error(404, 'not_found', `No question ${String(params.qid)} of yours about a page`);
   }),
 
+  // Receiver outages (CONTRACTS 17) are read off a live engine: the recorded trial has none, and says so as a server with
+  // no such route would, so the incidents page shows as it does without them.
+  http.get(`${BASE}/outages`, () =>
+    HttpResponse.json(
+      { error: 'not_in_trial', detail: 'Receiver outages are read off a live engine, not the trial' },
+      { status: 501 },
+    ),
+  ),
   http.get(`${BASE}/incidents`, ({ request }) => {
     if (!session) return signedOut();
     const state = new URL(request.url).searchParams.get('state');
