@@ -66,6 +66,14 @@ Method OnEvidenceRequest(request As Shutter.Msg.EvidenceRequest, Output response
         Do case.Note("note", "The message's times carry no offset; they are read as " _ read _ $SELECT(+##class(Shutter.Util.Json).Str(msgInfo, "times_with_offset") > 0: ", while others in the same message carry one", 1: ""), "system")
     }
     Do snap.AddItem("message", "message_store", now, msgInfo) Set count = count + 1
+    // 3a. Findings on an order or result case: the custody, the receiver's words by field, characters above ASCII and the
+    // OBX the words name, for a person (Shutter.Util.CaseFindings). The model view's allowlists leave them out. An ADT,
+    // SIU or MDM case's evidence is unchanged.
+    Set findings = ""
+    If ##class(Shutter.Util.CaseFindings).Applies(msgInfo) {
+        Set findings = ##class(Shutter.Util.CaseFindings).Build(case)
+        Do snap.AddItem("findings", "message_store", now, findings) Set count = count + 1
+    }
     // A message IRIS could not read (no parse, or a schema this namespace lacks) gets a second opinion from an independent
     // parser, the Second Parser item (CONTRACTS 6.7, v1.34), when the production has one; without it the evidence says so.
     If (..SecondParserTarget '= "") && '##class(Shutter.Util.Json).Bool(validation, "parsed") Set validation."second_parser" = ..SecondOpinion(case.SourceHeaderId)
@@ -158,6 +166,7 @@ Method OnEvidenceRequest(request As Shutter.Msg.EvidenceRequest, Output response
     Set summary = {}
     Set summary."case_id" = case.CaseId
     Set summary.scenario = case.Scenario
+    Set:$ISOBJECT(findings) summary.findings = findings
     Set summary.operation = op
     Set summary.failure = failure
     Set summary.message = msgInfo

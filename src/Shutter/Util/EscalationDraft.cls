@@ -78,6 +78,10 @@ ClassMethod Build(case As Shutter.Store.Case, team As %DynamicObject, Output sub
     Set b = b _ "WHAT FAILED" _ nl
     Set b = b _ "  " _ $SELECT(case.FailureText '= "": case.FailureText, 1: case.FailureKind) _ nl _ nl
 
+    // An order or a result: what Shutter found, with no free text of the receiver's (Shutter.Util.CaseFindings).
+    Set lines = ##class(Shutter.Util.CaseFindings).DraftLines(summary.%Get("findings"))
+    If lines '= "" Set b = b _ "WHAT SHUTTER FOUND" _ nl _ lines _ nl
+
     Set b = b _ "WHY SHUTTER STOPPED" _ nl
     Set reason = ..Reason(case, .failing)
     If $ISOBJECT(reason) {
