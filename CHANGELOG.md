@@ -124,6 +124,11 @@ shown on the plan on a new install, while an upgrade keeps a site's stop; and fi
     namespaces nobody can enter, and selects processes by class; the upgrade keeps the stop even when an older profile
     fails today's checks; an approval counts as decided only when it was; a policy release that meets a new movement is
     planned again; and the cases list reads each row's technical facts in its own query.
+  - Ask Shutter follows the Agent Board item's own Mode and is never recorded or replayed; a page answer may cite a
+    listed id with a path, as its tool accepts; its questions are cleared at sign-out, measured as the server measures
+    them, and purged on the cases' retention days, and the uninstall takes them.
+  - A timed-out approval's task is cancelled only under the decision lock; until then the case keeps waiting, and it
+    escalates only after the cancel.
   - The scenario runner plays on a demo instance only, over SQL and the terminal as over REST.
   - A key shown anywhere (agent start lines, refusals, settings, stored runs) is masked by one rule, and a model id
     written as a name and a version is shown as it is, not masked.

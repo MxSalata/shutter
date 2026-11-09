@@ -2239,6 +2239,7 @@ with the other stores.
 - 8 Nov 2026 (the Technical detail on the cases): `GET /cases` items and `GET /cases/{id}` carry `messageType`,
   `production`, `sourceItem`, `receiverClass`, `failedAt`, `planVersion`, `planDigest` and `catalogueEntry`, and the list's
   items `links`, read only and never a patient field (5).
+- 9 Nov 2026, release 1.2.0 (v1.48): a page question (14.6) follows the Agent Board item's own Mode and is never recorded or replayed; its cites name a listed id, with any path after it kept out of the core; page questions are purged on the cases' retention days. An approval timeout cancels the task only under the decision lock, and the case keeps waiting until then.
 - 8 Nov 2026, release 1.2.0 (v1.48): a policy release that meets another visit's new movement at dispatch is refreshed and planned again like a person's approval (6.5), and the policy is asked again on the fresh snapshot, which shows the movement and so asks a person. An approval task counts as decided only when its claim says so; a busy or failed claim reads the task again and cancels it, recorded on the case.
 - 8 Nov 2026, release 1.2.0 (v1.48): a receiver declared with no API (a draft entry) keeps the code `RECEIVER_UNREADABLE`; the gate's detail, the blocked reason's text and next action, the escalation email and the case page say it was declared with no API and name it by its item and namespace.
 - 8 Nov 2026, release 1.2.0 (v1.48): two release behaviours stated as built (7.4): any error in an incident's workflow
