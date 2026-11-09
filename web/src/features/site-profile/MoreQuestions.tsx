@@ -478,7 +478,7 @@ function Recovery({
     <Section
       id="site-recovery"
       title="Recovery"
-      note="Off is shadow mode: Shutter investigates and sends no recovery write, rehearsal or resend preview. The hospital's ordinary feed goes on either way."
+      note="Off is shadow mode: Shutter investigates, sending no recovery write, rehearsal, resend preview or outage resend. The hospital's feed goes on either way."
     >
       <Question n={14} text="May Shutter attempt recovery here, within its gate and the policy above?" acts />
       <Switch

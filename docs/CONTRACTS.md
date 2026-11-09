@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.53, 9 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.54, 9 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -2480,7 +2480,7 @@ The demo's `PurgeStore` empties `Shutter.Store.OutageEvent`, `Shutter.Store.Outa
 with the other stores, and since v1.53 `Shutter.Store.ResendRecord`: the purge resets the case counters, so a ledger row's
 `CaseId` left behind would name a new case of the same id.
 
-### 17.8 The send (v1.51 to v1.53)
+### 17.8 The send (v1.51 to v1.54)
 
 At a receiver whose profile entry says `engine_resend`, in a build with `Shutter.Operation.EngineResend`, a person's one
 approval of an offered set has the engine send each message again, in order, from Shutter's production. Design and rule
@@ -2545,14 +2545,20 @@ PID, or a key with a blank authority holds it. Its answer: `{ "hold", "scope": "
 `computed` and something offered; 409 `not_approvable`; 409 `set_changed` with `currentDigest`; 409 `version_changed`
 with `currentVersion`; (v1.53) 409 `receiver_check_needed` at a receiver whose `duplicates.behaviour` is not `refuses`
 when `receiverChecked` is not true ("At this receiver a duplicate is unknown: check the receiver for these messages
-first, and say so with the approval."); 400 `bad_request` with no digest or no note, or a note over 1,000 characters. It
-records `approval` (`goodUntil` 15 minutes on), writes the run's ledger rows `approved` in the set's order, and moves the
-row to `sending`.
+first, and say so with the approval."); 400 `bad_request` with no digest or no note, or a note over 1,000 characters;
+(v1.54) 409 `recovery_stopped` while Shutter recovery is stopped, `recovery_shadow` while the site is in shadow mode and
+`control_unreadable` when the recovery control can't be read (18), asked once the row, its version and its digest hold,
+with words a person reads ("Shutter recovery is stopped, so this resend can't be approved, and nothing was recorded. The
+messages stay offered: approve them once an approver has cleared the stop in Settings."; "Shadow mode: recovery is off at
+this site, so Shutter will not resend these messages, and nothing was recorded. ..."): no approval, no ledger row, the
+row still `offered` at its version. Otherwise it records `approval` (`goodUntil` 15 minutes on), writes the run's ledger
+rows `approved` in the set's order, and moves the row to `sending`.
 
 **The ledger** (`Shutter.Store.ResendRecord`): one row per message, `state` `approved`, `sending`, `completed`, `failed`,
 `closed_as_present`, `handled_by_hand`, `stopped` or `unknown`, with `ControlId` and `RecordedBy` (v1.53). `resends` on the
 outage (v1.53) gives its rows in position order: `{ "runId", "position", "headerId", "controlId", "newHeaderId", "state",
-"closure", "words", "by", "at", "caseId" }`, `closure` `sent`, `already_delivered`, `handled_by_hand`, `failed` or
+"closure", "words", "by", "at", "caseId", "halt" }` (`halt` v1.54: `recovery_stopped`, `recovery_shadow`,
+`control_unavailable` or `control_unreadable` on a row the recovery control halted, else null), `closure` `sent`, `already_delivered`, `handled_by_hand`, `failed` or
 `unknown`, and null while approved, sending or stopped; `by` the approver, or the person who recorded a hand closure.
 `GET /cases/{id}` carries `resends` too (v1.53): the rows on the case's origin header.
 
@@ -2561,6 +2567,22 @@ reads the item's gate, the settings the approval bound (`DefCharEncoding`, `IPAd
 it writes the row `sending`, calls the stock `Ens.MessageHeader.ResendDuplicatedMessage` (the stored body, unchanged),
 and reads the new header until it settles, within the item's `FailureTimeout` and `ConnectTimeout` and 10 s. A row found
 `sending` (a restart mid-call) stops the run with nothing more sent.
+
+- (v1.54) **The recovery control, last before every message** (18): after the gate, the settings and the set's rules, and
+  before the row is written `sending`, Engine Resend takes the control's lock (`RecoveryControl.HoldForResend`) and reads
+  the stop and the mode; it keeps the lock until `ResendDuplicatedMessage` has returned, a write to the engine's own
+  queue, never a network call, so a stop commits either before the check or after the hand-over. Stopped, in shadow mode,
+  or a control that is busy for 5 s or can't be read: the run halts. That message and every row not sent read `stopped`
+  with `halt` the code and words such as "not sent: Shutter recovery was stopped by appr1 at <time>, so the run halted
+  before this message", nothing is handed to the engine, and the outage goes to `needs_person` with an event ("...,
+  so the resend halted before header N: 2 sent before it, 3 not sent. Nothing more goes on this approval: once an approver
+  has cleared the stop in Settings, read the set again and approve it again."). While `needs_person`, `words.first` leads
+  with "The resend halted because Shutter recovery was stopped: 2 of 5 messages were sent and 3 not sent. The rest go
+  only by a new approval once an approver has cleared the stop in Settings: read the set again, then approve it."
+  (shadow mode: "because the site is in shadow mode, with recovery off", "once the site enables recovery in its site
+  profile"). The run never resumes by itself: `read_again` offers the set again, and a new approval goes once the stop is
+  cleared and recovery enabled. A message handed over before the stop committed may still reach the receiver; the card
+  reads it as sending, then as it settled. It holds no permit, so it is not in the stop's `outstanding`.
 
 - Completed: the row `completed`, the message's case resolved with what was sent.
 - Error or Suspended with the receiver's declared duplicate answer: the row `closed_as_present`; since v1.53 the
@@ -2585,12 +2607,13 @@ a row that doesn't list the act, or a note empty or over 1,000 characters; 409 `
 nothing for it."), moves the Row from `offered` to `closed` with `closure`, `closedBy` and `closedAt`, computes the digest
 over what stays offered, writes an event `handled_by_hand`, marks the row to read again, and closes the message's own
 cases by hand (`Shutter.Store.Case.CloseByHand`) with the same words. Nothing is sent: an approval given before it stops at
-that message's recheck. The card's `do` line at such a receiver says to check the receiver before approving, and that
+that message's recheck. Since it sends nothing, neither the stop nor shadow mode refuses it (18, v1.54): a person can
+record a message entered by hand while recovery is stopped. The card's `do` line at such a receiver says to check the receiver before approving, and that
 Already handled by hand sends nothing for a message.
 
 ## 18. Shadow mode and the recovery stop (v1.50)
 
-Two different things. **Shadow mode** is a setting: the site profile's `recovery.mode`, `shadow` or `enabled`. Shutter investigates and records what it would propose, and sends no rehearsal, recovery write or blind-resend preview. **The stop** is a latch a person sets, named "Stop Shutter recovery": no new recovery call is admitted until a person clears it. It is kept in the data database, so a restart, a reinstall or a reseed leaves it as it is.
+Two different things. **Shadow mode** is a setting: the site profile's `recovery.mode`, `shadow` or `enabled`. Shutter investigates and records what it would propose, and sends no rehearsal, recovery write, blind-resend preview or outage resend (17.8, v1.54). **The stop** is a latch a person sets, named "Stop Shutter recovery": no new recovery call is admitted until a person clears it. It is kept in the data database, so a restart, a reinstall or a reseed leaves it as it is.
 
 **The mode.**
 - Only an explicit `enabled` enables. A profile with no `recovery`, with no `mode`, or with a value that isn't one of the two reads as shadow, and `PUT /site-profile` refuses such a value, naming it (400).
@@ -2605,13 +2628,19 @@ Two different things. **Shadow mode** is a setting: the site profile's `recovery
 | Rehearsal | `CaseWorkflow.OnGateProposal` | Not sent. The workflow checks first, and the case is escalated |
 | Recovery write | `CaseWorkflow.OnGateDispatch` | Refused at the connector, and the case blocks |
 | Blind-resend preview | `POST /cases/{id}/preview-blind-resend` | 409, and refused at the connector if it gets that far |
+| Outage resend (v1.54) | `POST /outages/:id/approvals`, then `Shutter.Operation.EngineResend` | The approval 409, nothing recorded; a run under way halts before its next message (17.8) |
 | Any other kind | | Refused always: `unknown_action` |
+
+The outage resend doesn't pass through `Shutter.Operation.Ward`: the engine sends the stored message itself. Its check is
+the same control under the same lock (`HoldForResend`), held from the read until the engine has the message, and its
+record is the outage's ledger (`Shutter.Store.ResendRecord`, 17.8) rather than a permit. "Already handled by hand" sends
+nothing and stays allowed.
 
 The refusal is `Outcome` `refused` with `ReasonCode` `recovery_shadow`, `recovery_stopped`, `plan_predates_control`, `plan_unbound`, `control_unavailable` (no lock within 5 s), `control_unreadable` or `unknown_action`. `POST /cases/{id}/approvals` answers 409 with that code to an approve, or `plan_predates_control` when the plan is at or below the floor, once its own state, digest and version checks have passed, so nothing goes on the record. Such a plan stays void, so the words say to reject it and reinvestigate: a case waiting for approval can't be reinvestigated until it is rejected. The incident approvals answer the same codes while shadow or stopped, and say only that it waits: an incident holds no plan row, and each item gathers fresh evidence and makes its plan when released. A reject still goes.
 
 **What it does not cover.** The hospital's ordinary feed and its retries, other systems or people writing to a receiver, Shutter's own records, and reads: preflight, evidence and verification go on, so an earlier attempt's outcome can still be read back. A feed message passes only when it is purpose `normal` with a source header and no case, from an item whose class is `Shutter.Process.ADTToWard` or extends it; the purpose alone isn't enough (`not_original_feed`), and a site's own process that calls the connector directly must extend that class. This pass reads nothing of the control, so nothing that happens to it reaches the feed. A connector other than `Shutter.Operation.Ward` isn't covered: none ships.
 
-**What it promises.** No recovery call is admitted after a stop commits. `Stop` and `Admit` take one short lock, never held across a network call. A call admitted before the stop may still reach the receiver and may still complete; stopping doesn't cancel it. It is listed as outstanding, in the stop's event too.
+**What it promises.** No recovery call is admitted after a stop commits, and no outage message is handed to the engine after it (17.8). `Stop` and `Admit` take one short lock, never held across a network call. A call admitted before the stop may still reach the receiver and may still complete; stopping doesn't cancel it. It is listed as outstanding, in the stop's event too.
 
 **A record of every call.** Each admitted call has a `Shutter.Store.DispatchPermit`, committed before the POST, with the SHA-256 of the whole body, bed included. The sender holds a lock on it until the call ends.
 - A call that gets no answer that settles it (`uncertain`, 1.3) has a permit of state `uncertain`. The case reads it back as before, and recovery isn't stopped.
@@ -2622,7 +2651,7 @@ The refusal is `Outcome` `refused` with `ReasonCode` `recovery_shadow`, `recover
 A demo reset (`Runner.Reset`, demo only) clears a stop too, with the event `demo_reset`, since it starts the receivers afresh. A site has no such route.
 
 **Routes.**
-- `GET /recovery-control`: `{mode, generation, stopped, stoppedAt, stoppedBy, stopReason, outstanding, outstandingCount, readable, covers, doesNotCover}`. A control that can't be read answers `stopped` true and `readable` false.
+- `GET /recovery-control`: `{mode, generation, stopped, stoppedAt, stoppedBy, stopReason, outstanding, outstandingCount, readable, covers, doesNotCover}`. `covers` reads "Rehearsals, recovery writes, blind-resend previews and outage resends that Shutter itself starts; a resend under way halts before its next message." (v1.54). A control that can't be read answers `stopped` true and `readable` false.
 - `POST /recovery-control/stop`: `{reason}`, required. A second stop changes nothing. The actor is the signed-in user; a name in the body is ignored.
 - `GET /shadow-observations?from=&to=&receiver=` and `GET /shadow-observations.csv`: the report. `Shutter_Operate`.
 - `Shutter.Store.RecoveryControlEvent` keeps every stop, clear and mode change, with who, why and what was outstanding.
@@ -2689,6 +2718,13 @@ No message content is copied: the rows hold ids, codes, the body's class and the
 
 ## Changes
 
+- v1.54, 9 Nov 2026 (for 1.4.0, the hands-on test's finding): shadow mode and the recovery stop hold the outage resend
+  (17.8, 18). `POST /outages/:id/approvals` answers 409 `recovery_stopped`, `recovery_shadow` or `control_unreadable` once
+  its own checks hold, recording nothing; Engine Resend reads the control under its lock last before every message and
+  halts the run, its unsent rows `stopped` with `halt` and the reason, the outage `needs_person`, and `words.first` saying
+  so; a new approval resumes it once the stop is cleared. `resends[].halt`. Already handled by hand stays allowed. Shadow
+  mode's words and `covers` name the outage resend. Proof: `Shutter.Test.EngineResend`, `Shutter.Test.RecoveryControl`
+  and `tests/e2e/outage_stop_check.py` on build 154.
 - v1.53, 9 Nov 2026 (for 1.4.0, measured on build 154): the set gate refuses a message whose life crosses a stop or a
   crash (`set_policy_version` 2026-11-09.2). Inside one job's handling of a message the engine logs every change of an
   attempt's words, so an attempt that reached the receiver always leaves an Error row; an attempt cut off by a forced stop or

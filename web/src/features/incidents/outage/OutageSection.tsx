@@ -1,14 +1,14 @@
 import { Button, Card, Group, List, Stack, Text, TextInput, Textarea, Title } from '@mantine/core';
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
-import { useCan } from '@/api/hooks';
+import { useCan, useRecoveryControl } from '@/api/hooks';
 import { StatusBadge, StatusNotice } from '@/components/StatusBadge';
 import type { Tone } from '@/lib/tone';
 import { useNow } from '@/lib/useNow';
 import { Timestamp } from '@/components/Timestamp';
 import { useOutageAct, useOutages } from './hooks';
 import { ApproveResend, ClosedList, FailedResend, HandledByHand, ResendList } from './OutageSend';
-import { approvedLine, canApprove, sendingLine, tallyLine } from './outageWords';
+import { approvalHeld, approvedLine, canApprove, sendingLine, tallyLine } from './outageWords';
 import type { Outage, OutageReading, OutageRow } from './types';
 
 /** A reading older than this, or one that reads unknown, is stale and said loudly. */
@@ -103,6 +103,7 @@ export function ReadingLine({ reading, now }: { reading: OutageReading; now: num
  */
 export function OutageCard({ outage: o }: { outage: Outage }) {
   const can = useCan();
+  const held = approvalHeld(useRecoveryControl().data);
   const closed = o.state === 'closed';
   const computed = o.set.status === 'computed';
   const resends = o.resends ?? [];
@@ -180,7 +181,17 @@ export function OutageCard({ outage: o }: { outage: Outage }) {
             </Stack>
           )
         ) : null}
-        {can.approve && canApprove(o) ? <ApproveResend outage={o} /> : null}
+        {can.approve && canApprove(o) ? (
+          held ? (
+            <StatusNotice tone="attention" title="The resend can't be approved now">
+              <Text size="sm" data-testid="outage-approval-held">
+                {held}
+              </Text>
+            </StatusNotice>
+          ) : (
+            <ApproveResend outage={o} />
+          )
+        ) : null}
         {progress || (approved && !closed) ? (
           <Stack gap={2} role="status" data-testid="outage-sending">
             {progress ? (

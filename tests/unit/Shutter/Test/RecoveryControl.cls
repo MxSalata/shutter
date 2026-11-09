@@ -184,6 +184,14 @@ ClassMethod JobHammer(flag As %String)
     If $INCREMENT(^Shutter.TestWire("hammer", "done"))
 }
 
+/// Stop recovery from a process of its own, and report when it returned.
+ClassMethod JobStop(flag As %String)
+{
+    Set ^Shutter.TestWire("job", flag, "started") = 1
+    Set sc = ##class(Shutter.Util.RecoveryControl).Stop("a stop racing a resend", "tester")
+    Set ^Shutter.TestWire("job", flag) = $SELECT($$$ISOK(sc): "stopped", 1: $SYSTEM.Status.GetErrorText(sc))
+}
+
 /// Hold the control's lock for a moment, as a stop in progress would.
 ClassMethod JobHoldLock(flag As %String, seconds As %Integer)
 {
@@ -381,6 +389,36 @@ Method TestAdmittedThenStoppedIsOutstanding()
     Set result.Outcome = "applied"
     Do ##class(Shutter.Util.RecoveryControl).Finish(permit, result)
     Do $$$AssertEquals(##class(Shutter.Util.RecoveryControl).Read().outstandingCount, 0, "and once answered it's no longer outstanding")
+}
+
+/// Engine Resend's check before each message (17.8): held, it keeps a stop waiting until the engine has the message, so the
+/// stop commits after the hand-over and the next check is refused; refused, it holds no lock. Shadow mode refuses it too.
+Method TestAResendHoldsTheStopUntilItsHandOver()
+{
+    Do ..SetMode("enabled")
+    Set rc = "Shutter.Util.RecoveryControl"
+    Do $$$AssertTrue($CLASSMETHOD(rc, "HoldForResend", .code, .text), "held, enabled and not stopped: " _ code)
+    Job ##class(Shutter.Test.RecoveryControl).JobStop("resend")
+    Do $$$AssertTrue(..WaitFor("^Shutter.TestWire(""job"",""resend"",""started"")"), "the stop has started")
+    Hang 1
+    Do $$$AssertEquals($GET(^Shutter.TestWire("job", "resend")), "", "and waits while the resend is handed over")
+    Do $$$AssertNotTrue(##class(Shutter.Store.RecoveryControl).%OpenId(##class(Shutter.Util.RecoveryControl).Control().%Id(), 0).StopLatched, "nothing stopped yet")
+    Do $CLASSMETHOD(rc, "ResendHandedOver")
+    For i = 1:1:100 { Quit:$GET(^Shutter.TestWire("job", "resend"))'=""  Hang 0.1 }
+    Do $$$AssertEquals($GET(^Shutter.TestWire("job", "resend")), "stopped", "and commits after the hand-over")
+    Do $$$AssertNotTrue($CLASSMETHOD(rc, "HoldForResend", .code, .text), "the next message is refused")
+    Do $$$AssertEquals(code, "recovery_stopped", "recovery_stopped")
+    Do $$$AssertTrue(text [ "Shutter recovery was stopped by tester", text)
+    Kill ^Shutter.TestWire("job", "free")
+    Job ##class(Shutter.Test.RecoveryControl).JobHoldLock("free", 0)
+    Do $$$AssertTrue(..WaitFor("^Shutter.TestWire(""job"",""free"")", 5), "a refused check holds no lock")
+    Set c = ##class(Shutter.Util.RecoveryControl).Control()
+    Do $$$AssertStatusOK($CLASSMETHOD(rc, "ClearStop", "a test", c.Generation, "tester"), "cleared")
+    Do ..SetMode("shadow")
+    Do $$$AssertNotTrue($CLASSMETHOD(rc, "HoldForResend", .code, .text), "refused in shadow mode")
+    Do $$$AssertEquals(code, "recovery_shadow", "recovery_shadow")
+    Do $$$AssertEquals($CLASSMETHOD(rc, "OutageApprovalRefusal", .code) '= "", 1, "and the outage approval with it")
+    Do $$$AssertEquals(code, "recovery_shadow", "the same code")
 }
 
 /// Another process reads the stop from the database, and an install's and a start's refresh leave it alone.

@@ -11,7 +11,8 @@
 /// held and resolves its own cases as already delivered. A patient the check holds is skipped and
 /// the rest go; a copy resent by someone else stops the run. A row found sending (a restart mid-run) goes to a person with
 /// nothing more sent. The operation's DefCharEncoding, IPAddress and Port are read before the first send and bound to the
-/// approval: a change stops the run.
+/// approval: a change stops the run. Last before each send, under the recovery control's lock until the engine has the
+/// message, the stop and shadow mode are read (CONTRACTS 18): either halts the run, and the rest are not sent.
 ///
 /// Built on its own branch: the design keeps an automated resend off the release until a proof shows when the engine's
 /// records establish every attempt (an age purge, suppressed rows, a restart, a crash, an incomplete read).
@@ -105,14 +106,11 @@ ClassMethod One(outage As Shutter.Store.Outage, row As Shutter.Store.ResendRecor
         Quit "go"
     }
     If check.verdict = "stop" Do ..Stop(outage, check.why) Quit "stop"
-    // The intent first, then the call: EnQueue commits a transaction of its own, so the two cannot be one.
     Set headerId = check.headerId
     Set body = ##class(Shutter.Util.MessageCopy).Of(ns, headerId)
-    Set row.OriginHeaderId = headerId, row.State = "sending", row.StartedAt = ##class(Shutter.Util.Time).NowUTC()
-    Set row.DigestBefore = $SELECT($ISOBJECT(body): ..Hex($SYSTEM.Encryption.SHAHash(256, $ZCONVERT(body.OutputToString(), "O", "UTF8"))), 1: "")
-    Set row.DefCharEncoding = approval.settings.DefCharEncoding, row.IPAddress = approval.settings.IPAddress, row.Port = approval.settings.Port
-    $$$ThrowOnError(row.%Save())
-    Set newId = ..Enqueue(ns, headerId, .sc)
+    Set digest = $SELECT($ISOBJECT(body): ..Hex($SYSTEM.Encryption.SHAHash(256, $ZCONVERT(body.OutputToString(), "O", "UTF8"))), 1: "")
+    Set newId = ..Send(outage, row, approval, headerId, digest, .sc, .halted)
+    If halted Quit "stop"
     If $$$ISERR(sc) || (newId = "") {
         Set row.State = "failed", row.Words = $EXTRACT("the engine refused the resend: " _ $SYSTEM.Status.GetErrorText(sc), 1, 1000), row.EndedAt = ##class(Shutter.Util.Time).NowUTC()
         Do row.%Save()
@@ -125,6 +123,32 @@ ClassMethod One(outage As Shutter.Store.Outage, row As Shutter.Store.ResendRecor
     Set wait = ..WaitSeconds(ns, item, isStock)
     Set status = ..Settle(ns, newId, wait)
     Quit ..Outcome(outage, row, approval, headerId, newId, status, wait)
+}
+
+/// The send of one message, the recovery control last (CONTRACTS 18): under the control's lock until the engine has the
+/// message, so a stop commits either before this check, and this message and the rest are not sent (halted 1, the run
+/// halted), or after the hand-over. Otherwise the ledger row is written sending, then the stock resend: the new header's id,
+/// or "" with sc.
+ClassMethod Send(outage As Shutter.Store.Outage, row As Shutter.Store.ResendRecord, approval As %DynamicObject, headerId As %String, digest As %String, Output sc As %Status, Output halted As %Boolean) As %String
+{
+    Set sc = $$$OK, halted = 0, newId = ""
+    If '##class(Shutter.Util.RecoveryControl).HoldForResend(.code, .text) {
+        Do ..Halt(outage, row, code, text)
+        Set halted = 1
+        Quit ""
+    }
+    Try {
+        // The intent first, then the call: EnQueue commits a transaction of its own, so the two cannot be one.
+        Set row.OriginHeaderId = headerId, row.State = "sending", row.StartedAt = ##class(Shutter.Util.Time).NowUTC(), row.DigestBefore = digest
+        Set row.DefCharEncoding = approval.settings.DefCharEncoding, row.IPAddress = approval.settings.IPAddress, row.Port = approval.settings.Port
+        $$$ThrowOnError(row.%Save())
+        Set newId = ..Enqueue(outage.Namespace, headerId, .sc)
+    } Catch err {
+        Do ##class(Shutter.Util.RecoveryControl).ResendHandedOver()
+        Throw err
+    }
+    Do ##class(Shutter.Util.RecoveryControl).ResendHandedOver()
+    Quit newId
 }
 
 /// What one send came to, once its new header settled (status the word, or "" when it had not in wait seconds): the row,
@@ -417,8 +441,30 @@ ClassMethod Finish(outage As Shutter.Store.Outage, runId As %String)
     Do outage.Advance("needs_person", words _ " Not sent: " _ $LISTTOSTRING(skipped, "; ") _ ".", ..#ACTOR)
 }
 
-/// The run stops: every row not yet sent reads stopped, and the outage goes to a person with the reason.
-ClassMethod Stop(outage As Shutter.Store.Outage, why As %String)
+/// The recovery control refused the next message (CONTRACTS 18: a stop, shadow mode, or a control that is busy or can't be
+/// read). That message and every row not yet sent read stopped, with the words and halt the control's code, and the outage
+/// goes to a person. Nothing more goes on this approval: once the stop is cleared or recovery enabled, a person reads the set
+/// again and approves it again.
+ClassMethod Halt(outage As Shutter.Store.Outage, row As Shutter.Store.ResendRecord, code As %String, text As %String)
+{
+    Set runId = row.RunId, sent = 0, left = 0
+    &sql(SELECT COUNT(*) INTO :sent FROM Shutter_Store.ResendRecord WHERE RunId = :runId AND State = 'completed')
+    &sql(SELECT COUNT(*) INTO :left FROM Shutter_Store.ResendRecord WHERE RunId = :runId AND State = 'approved')
+    If code = "recovery_stopped" {
+        Set cause = text, after = "once an approver has cleared the stop in Settings, read the set again and approve it again"
+    } ElseIf code = "recovery_shadow" {
+        Set cause = "The site is in shadow mode, with recovery off", after = "once the site enables recovery in its site profile, read the set again and approve it again"
+    } Else {
+        Set cause = $SELECT(text '= "": text, 1: "The recovery control refused it"), after = "read the set again and approve it again"
+    }
+    Set rowWords = "not sent: " _ $SELECT(code = "recovery_stopped": cause, 1: $ZCONVERT($EXTRACT(cause), "L") _ $EXTRACT(cause, 2, *)) _ ", so the run halted before this message"
+    Set why = cause _ ", so the resend halted before header " _ row.OriginHeaderId _ ": " _ (+sent) _ " sent before it, " _ (+left) _ " not sent. Nothing more goes on this approval: " _ after _ "."
+    Do ..Stop(outage, why, rowWords, code)
+}
+
+/// The run stops: every row not yet sent reads stopped (with rowWords, and halt when the recovery control stopped it), and the
+/// outage goes to a person with the reason.
+ClassMethod Stop(outage As Shutter.Store.Outage, why As %String, rowWords As %String = "not sent: the run stopped", halt As %String = "")
 {
     Set approval = $SELECT(outage.Approval '= "": {}.%FromJSON(outage.Approval), 1: {})
     Set runId = ##class(Shutter.Util.Json).Str(approval, "id")
@@ -427,7 +473,7 @@ ClassMethod Stop(outage As Shutter.Store.Outage, why As %String)
         While rs.%Next() {
             Set row = ##class(Shutter.Store.ResendRecord).%OpenId(rs.%Get("ID"))
             Continue:'$ISOBJECT(row)
-            Set row.State = "stopped", row.Words = "not sent: the run stopped", row.EndedAt = ##class(Shutter.Util.Time).NowUTC()
+            Set row.State = "stopped", row.Words = $EXTRACT(rowWords, 1, 1000), row.Halt = halt, row.EndedAt = ##class(Shutter.Util.Time).NowUTC()
             Do row.%Save()
         }
     }

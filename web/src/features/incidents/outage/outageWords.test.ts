@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ApiError } from '@/lib/errors';
 import {
+  approvalHeld,
   asSentence,
   canApprove,
   closureLabel,
@@ -130,6 +131,19 @@ describe("the send's words", () => {
     ).toBe('Nothing was sent: at this receiver a duplicate is unknown: check the receiver first.');
     expect(refused('version_changed')).toMatch(/^Nothing was sent: the outage moved on/);
     expect(refusalWords(new Error('offline'))).toBe('Nothing was sent: the server could not be reached.');
+    // The recovery control's words keep their capital: "Shutter" and "Shadow" start a sentence of their own
+    expect(
+      refused('recovery_stopped', "Shutter recovery is stopped, so this resend can't be approved."),
+    ).toBe("Nothing was sent. Shutter recovery is stopped, so this resend can't be approved.");
+    expect(refused('recovery_shadow')).toMatch(/^Nothing was sent\. Shadow mode: recovery is off/);
+  });
+
+  it('holds the approval while recovery is stopped or in shadow mode, and only then', () => {
+    expect(approvalHeld({ mode: 'enabled', stopped: false })).toBe('');
+    expect(approvalHeld(undefined)).toBe('');
+    expect(approvalHeld({ mode: 'enabled', stopped: true })).toMatch(/^Shutter recovery is stopped/);
+    expect(approvalHeld({ mode: 'shadow', stopped: true })).toMatch(/^Shutter recovery is stopped/);
+    expect(approvalHeld({ mode: 'shadow', stopped: false })).toMatch(/^Shadow mode: recovery is off/);
   });
 
   it("reads the server's words as a sentence", () => {

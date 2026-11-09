@@ -236,6 +236,10 @@ Method TestHandledByHandAct()
 Method TestApproveNeedsReceiverCheck()
 {
     Set api = "Shutter.API.Outages"
+    // Recovery enabled and not stopped, as a site that resends has it (CONTRACTS 18), put back at the end.
+    Set kept = ##class(Shutter.Test.RecoveryState).Keep()
+    Do ##class(Shutter.Test.RecoveryState).Unstopped()
+    Do ##class(Shutter.Test.RecoveryState).Mode("enabled")
     Do $$$AssertStatusOK(..NewOutage(.row), "an outage opened")
     Set offered = [{"headerId": "71", "controlId": "CT1"}]
     Do row.Advance("offered", "listed", "unit", {"SetStatus": "computed", "SetDigest": "d1", "Approvable": 1, "ListOffered": (offered)})
@@ -248,6 +252,7 @@ Method TestApproveNeedsReceiverCheck()
     &sql(SELECT ControlId INTO :ctl FROM Shutter_Store.ResendRecord WHERE OutageId = :id AND Position = 1)
     Do $$$AssertEquals(ctl, "CT1", "the run's row keeps the control id")
     &sql(DELETE FROM Shutter_Store.ResendRecord WHERE OutageId = :id)
+    Do ##class(Shutter.Test.RecoveryState).Put(kept)
 }
 
 /// The acts: what is refused, a pause that withholds the set and swaps the Do line, a close with a reason, nothing after it.
