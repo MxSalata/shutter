@@ -165,6 +165,8 @@ export function actionHeadline(f: CaseFacts): string {
   const sentAgain = `Sent the ${event} again, ${times(sent)}${rehearsed(f) ? ', after a test run' : ''}`;
   if (c.disposition === 'handled_by_hand') return 'Handed it to the team, who corrected it by hand';
   if (c.disposition === 'abandoned') return 'Gave the case up when its workflow stopped moving';
+  if (c.disposition === 'already_delivered')
+    return 'Already delivered: resent with the outage, and the receiver reported it already holds it';
   switch (c.state) {
     case 'resolved':
       if (unknown) return 'Closed the case; what it sent is not read yet';
@@ -298,10 +300,14 @@ export interface NextAction {
 function handoff(f: CaseFacts): string {
   if (f.escalations === undefined) return 'Unknown';
   const list = f.escalations ?? [];
-  const sent = list.filter((e) => e.state === 'sent' || e.state === 'queued').at(-1);
+  const sent = list.filter((e) => ['sent', 'saved', 'queued'].includes(e.state)).at(-1);
   // Shown beside the label Escalation, so the text does not repeat the word
-  if (sent)
-    return `${sent.state === 'sent' ? 'Sent' : 'Queued'} to ${sent.teamName || sent.to || "the downstream system's team"}`;
+  if (sent) {
+    const team = sent.teamName || sent.to || "the downstream system's team";
+    // Saved as an .eml file with no mail server: nobody was emailed, and the line says so
+    if (sent.state === 'saved') return `Saved as an email file for ${team}, not delivered`;
+    return `${sent.state === 'sent' ? 'Sent' : 'Queued'} to ${team}`;
+  }
   if (list.some((e) => e.state === 'draft' || e.state === 'failed')) return 'Drafted, not sent';
   return 'Not sent';
 }

@@ -1329,6 +1329,9 @@ export const handlers = [
     const standing = standsWithTeam(String(params.id), 'sent');
     if (standing) return standing;
     if (e.purgedAt) return error(409, 'wrong_state', 'The escalation is purged');
+    // A draft, a failed one or a saved one goes (v1.53): a saved one again once a mail server is set
+    if (!['draft', 'failed', 'saved'].includes(e.state))
+      return error(409, 'wrong_state', `Escalation ${e.seq} is ${e.state}`);
     const { bodyDigest } = (await request.json()) as { bodyDigest?: string };
     if (bodyDigest !== e.bodyDigest)
       return error(409, 'body_changed', "bodyDigest is not the digest of the escalation's current text");
@@ -1336,23 +1339,26 @@ export const handlers = [
     // Again at the send: the allowed domains may have changed since the edit
     const refused = escalationRefused(e);
     if (refused) return refused;
+    // As on an instance with no mail server (v1.53): the email is saved as an .eml file, not delivered, so it reads
+    // saved with savedAt and no sentAt
     Object.assign(e, {
-      state: 'sent',
+      state: 'saved',
       sentBy: session!.username,
-      sentAt: new Date().toISOString().replace(/\.\d+Z$/, 'Z'),
+      sentAt: '',
+      savedAt: new Date().toISOString().replace(/\.\d+Z$/, 'Z'),
       transport: 'file',
-      result: `Written as ${String(params.id)}-escalation-${e.seq}.eml (the demo sends no email)`,
+      result: `${String(params.id)}-escalation-${e.seq}.eml (the demo sends no email)`,
     });
     record(String(params.id), {
       kind: 'escalation',
-      text: `Escalation ${e.seq} sent by ${session!.username} to ${e.to}; digest of the text sent ${e.bodyDigest}`,
+      text: `Escalation ${e.seq} queued by ${session!.username} for ${e.to}; digest of the text queued ${e.bodyDigest}`,
       actor: session!.username,
       ref: `escalation:${e.seq}`,
     });
-    // The server's mail operation then records the delivery, as the system
+    // The server's mail operation then records what it did, as the system
     record(String(params.id), {
       kind: 'escalation',
-      text: `Escalation ${e.seq} delivered (file): ${e.result}`,
+      text: `Escalation ${e.seq} saved as an email file, not delivered: ${e.result}. No mail server is set, so nobody was emailed.`,
       actor: 'system',
       ref: `escalation:${e.seq}`,
     });

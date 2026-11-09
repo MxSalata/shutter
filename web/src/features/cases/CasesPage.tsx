@@ -417,7 +417,7 @@ export const CLOSED_GROUPS: {
     label: 'Nothing to send',
     tone: 'neutral',
     icon: IconCircleMinus,
-    keys: ['nothing-to-send-verified', 'nothing-to-send'],
+    keys: ['nothing-to-send-verified', 'nothing-to-send', 'already-delivered'],
   },
   {
     id: 'by-hand',

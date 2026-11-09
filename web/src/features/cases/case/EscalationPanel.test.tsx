@@ -54,9 +54,10 @@ describe('EscalationPanel', () => {
     const panel = await screen.findByRole('region', { name: 'Escalations' });
     await userEvent.click(await within(panel).findByRole('button', { name: /^Escalate to /i }));
     const dialog = await screen.findByRole('dialog', { name: /^Escalate to / });
-    // The confirm says first that sending is real, with the live chip beside its title
+    // The confirm says first that sending is real, and that with no mail server it is only saved, with the live chip
+    // beside its title
     expect(within(dialog).getByTestId('confirm-consequence')).toHaveTextContent(
-      /^This emails the .+ team\.$/,
+      /^This emails the .+ team through the site's mail server\. With no mail server set, it is saved as an email file and nobody is emailed\.$/,
     );
     expect(within(dialog).getByText('Live system')).toBeInTheDocument();
     const message = within(dialog).getByRole('textbox', { name: 'Message' }) as HTMLTextAreaElement;
@@ -69,12 +70,24 @@ describe('EscalationPanel', () => {
     await userEvent.clear(to);
     await userEvent.type(to, 'bed.management@example.nhs.uk');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Send' }));
-    expect(await screen.findByText('Escalation 1 sent')).toBeInTheDocument();
+    expect(await screen.findByText('Escalation 1 queued')).toBeInTheDocument();
+    expect(
+      screen.getByText(/Its line shows whether the mail server took it or it was saved as an email file\./),
+    ).toBeInTheDocument();
     // The edited draft is stored first, then sent bound to the stored text's digest
     expect(sent.map((s) => s.path.replace(/.*\/escalations/, ''))).toEqual(['', '/1', '/1/send']);
     expect(sent[1].body.to).toBe('bed.management@example.nhs.uk');
     expect(sent[2].body.bodyDigest).toEqual(expect.any(String));
-    expect(await within(panel).findByText('Sent')).toBeInTheDocument();
+    // The mock saves it as an instance with no mail server does: saved, not delivered, and never Sent
+    expect(await within(panel).findByText('Saved, not delivered')).toBeInTheDocument();
+    expect(within(panel).queryByText('Sent')).toBeNull();
+    await userEvent.click(within(panel).getByRole('button', { name: /Escalation 1/ }));
+    expect(await within(panel).findByTestId('escalation-saved')).toHaveTextContent(
+      'Saved as an email file, not delivered: no mail server is set, so nobody was emailed. Pass the file on, or set the mail server and send it again.',
+    );
+    expect(within(panel).getByText('Queued by approver; saved as an email file')).toBeInTheDocument();
+    expect(within(panel).getByText(/^Digest of the text saved: demo:/)).toBeInTheDocument();
+    expect(within(panel).queryByText(/Sent by /)).toBeNull();
   });
 
   it("asks about a failed order to check the source's Message Viewer, not to correct the systems by hand", async () => {
@@ -98,7 +111,7 @@ describe('EscalationPanel', () => {
     expect(within(dialog).queryByText(/correct them by hand\.$/)).not.toBeInTheDocument();
     expect(panel).not.toHaveTextContent('corrects the systems by hand');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Send' }));
-    await screen.findByText('Escalation 1 sent');
+    await screen.findByText('Escalation 1 queued');
     expect(
       await within(panel).findByText(/When the team has checked the source's Message Viewer/),
     ).toBeInTheDocument();
@@ -203,17 +216,24 @@ describe('EscalationPanel', () => {
     const record = await screen.findByRole('region', { name: 'Escalations' });
     expect(within(record).queryByRole('button', { name: /^Escalate to /i })).toBeNull();
     expect(within(record).queryByRole('button', { name: /Mark as handled/ })).not.toBeInTheDocument();
-    expect(within(record).getByText('Sent')).toBeInTheDocument();
-    expect(within(record).getByText(/^Digest of the text sent: demo:/)).toBeInTheDocument();
+    expect(within(record).getByText('Saved, not delivered')).toBeInTheDocument();
+    expect(within(record).queryByText('Sent')).toBeNull();
+    await userEvent.click(within(record).getByRole('button', { name: /Escalation 1/ }));
+    expect(await within(record).findByText(/^Digest of the text saved: demo:/)).toBeInTheDocument();
     // The timeline names who closed it, the reason and the email it followed
     const timeline = screen.getByRole('region', { name: 'Timeline' });
     expect(
       await within(timeline).findByText(
-        'Handled by hand: The bed manager placed the patient in WARD-C by hand; after escalation 1 to Integration team (sent)',
+        'Handled by hand: The bed manager placed the patient in WARD-C by hand; after escalation 1 to Integration team (saved)',
       ),
     ).toBeInTheDocument();
     expect(
-      within(timeline).getByText(/^Escalation 1 sent by approver to .*; digest of the text sent demo:/),
+      within(timeline).getByText(/^Escalation 1 queued by approver for .*; digest of the text queued demo:/),
+    ).toBeInTheDocument();
+    expect(
+      within(timeline).getByText(
+        /^Escalation 1 saved as an email file, not delivered: .*\. No mail server is set, so nobody was emailed\.$/,
+      ),
     ).toBeInTheDocument();
   });
 
@@ -249,6 +269,82 @@ describe('EscalationPanel', () => {
     await waitFor(() =>
       expect(screen.getByTestId('case-action')).toHaveAccessibleName('Needs you: mark as handled'),
     );
+  });
+
+  it('shows an email the mail server took as Sent, with what that does and does not show', async () => {
+    const smtp: Escalation = {
+      caseId: 'C-000008',
+      seq: 1,
+      state: 'sent',
+      teamName: 'Integration team',
+      to: 'integration@example.nhs.uk',
+      subject: 'Correct encounter by hand',
+      body: 'Please correct the encounter by hand.',
+      bodyDigest: 'sha256:abc123',
+      sentBy: 'approver',
+      sentAt: '2026-11-09T10:00:00Z',
+      transport: 'smtp',
+      result: '250 2.0.0 Ok: queued as 4F1C2',
+    };
+    server.use(http.get('/api/shutter/cases/:id/escalations', () => HttpResponse.json([smtp])));
+    renderCase('C-000008');
+    const panel = await screen.findByRole('region', { name: 'Escalations' });
+    expect(await within(panel).findByText('Sent')).toBeInTheDocument();
+    expect(within(panel).queryByText('Saved, not delivered')).toBeNull();
+    await userEvent.click(within(panel).getByRole('button', { name: /Escalation 1/ }));
+    expect(
+      await within(panel).findByText(
+        'Sent through the mail server, which accepted it; that does not show anyone has read it',
+      ),
+    ).toBeInTheDocument();
+    expect(within(panel).getByText('Sent by approver')).toBeInTheDocument();
+    expect(within(panel).getByText('Digest of the text sent: sha256:abc123')).toBeInTheDocument();
+    expect(within(panel).queryByTestId('escalation-saved')).toBeNull();
+    expect(within(panel).queryByRole('button', { name: 'Send it again…' })).toBeNull();
+  });
+
+  it('shows a saved email as not delivered, offers the closing after it, and sends the same text again', async () => {
+    const saved: Escalation = {
+      caseId: 'C-000008',
+      seq: 1,
+      state: 'saved',
+      teamName: 'Integration team',
+      to: 'integration@example.nhs.uk',
+      subject: 'Correct encounter by hand',
+      body: 'Please correct the encounter by hand.',
+      bodyDigest: 'sha256:abc123',
+      sentBy: 'approver',
+      sentAt: '',
+      savedAt: '2026-11-09T10:00:00Z',
+      transport: 'file',
+      result: '/usr/irissys/mgr/Shutter/mail/C-000008-1.eml',
+    };
+    let sends = 0;
+    server.use(
+      http.get('/api/shutter/cases/:id/escalations', () => HttpResponse.json([saved])),
+      http.post('/api/shutter/cases/:id/escalations/:seq/send', () => {
+        sends += 1;
+        return HttpResponse.json({ ...saved, state: 'queued' }, { status: 202 });
+      }),
+    );
+    renderCase('C-000008');
+    const panel = await screen.findByRole('region', { name: 'Escalations' });
+    const badge = await within(panel).findByText('Saved, not delivered');
+    expect(badge.closest('[data-tone]')).toHaveAttribute('data-tone', 'attention');
+    expect(within(panel).queryByText('Sent')).toBeNull();
+    expect(
+      await within(panel).findByRole('button', { name: /Mark as handled by the team/ }),
+    ).toBeInTheDocument();
+    await userEvent.click(within(panel).getByRole('button', { name: /Escalation 1/ }));
+    await userEvent.click(await within(panel).findByRole('button', { name: 'Send it again…' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Send escalation 1 again' });
+    expect(within(dialog).getByTestId('confirm-consequence')).toHaveTextContent(
+      "This sends the same text to integration@example.nhs.uk through the site's mail server. With no mail server set, it is saved as an email file again and nobody is emailed.",
+    );
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Send again' }));
+    expect(await screen.findByText('Escalation 1 queued again')).toBeInTheDocument();
+    expect(sends).toBe(1);
+    expect(sent.at(-1)?.body).toEqual({ bodyDigest: 'sha256:abc123' });
   });
 
   it('names the closing at the top of a withheld case, where the panel offers it at once', async () => {

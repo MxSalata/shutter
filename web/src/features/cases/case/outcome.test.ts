@@ -133,6 +133,15 @@ describe('the outcome sentence', () => {
     const sent = { seq: 1, state: 'sent', teamName: 'Integration team' } as Escalation;
     expect(nextAction(factsOf('C-000008', { escalations: [sent] })).handoff).toBe('Sent to Integration team');
     expect(nextAction(factsOf('C-000008', { escalations: undefined })).handoff).toBe('Unknown');
+    // Saved as an email file with no mail server: nobody was emailed, and the line never reads Sent
+    const saved = { seq: 1, state: 'saved', teamName: 'Integration team' } as Escalation;
+    expect(nextAction(factsOf('C-000008', { escalations: [saved] })).handoff).toBe(
+      'Saved as an email file for Integration team, not delivered',
+    );
+    const queued = { ...saved, state: 'queued' } as Escalation;
+    expect(nextAction(factsOf('C-000008', { escalations: [queued] })).handoff).toBe(
+      'Queued to Integration team',
+    );
   });
 
   it('says in words that the gate blocked a rules case, leaving its reason code to the details', () => {

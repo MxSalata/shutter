@@ -75,12 +75,13 @@ const notYours = (label: string, why = ''): CaseAction => ({
 });
 
 /**
- * Whether a stopped case can be marked handled by the team: once an escalation email went out, or at once for a
+ * Whether a stopped case can be marked handled by the team: once an escalation email was sent or saved as an email file
+ * (a saved file may have been passed on by hand, and the close is a person's statement), or at once for a
  * withheld case (a merge or a cancel Shutter never sends), where reinvestigating could find nothing new. The
  * Escalations panel offers the button and the action button names it on this one rule.
  */
 export const closableByHand = (c: Pick<CaseDetail, 'failureKind'>, escalations: Escalation[]): boolean =>
-  c.failureKind === 'withheld' || escalations.some((e) => e.state === 'sent');
+  c.failureKind === 'withheld' || escalations.some((e) => e.state === 'sent' || e.state === 'saved');
 
 export interface ActionContext {
   /** The signed-in user, once read; undefined while not read. */
@@ -125,7 +126,7 @@ export function caseActionOf(f: CaseFacts, ctx: ActionContext): CaseAction {
     );
   }
   if (!can.operate) return notYours('Waiting for an operator');
-  // Once the email to the team went out (or at once for a withheld case) the team corrects the systems and the case
+  // Once the email to the team was sent or saved as a file (or at once for a withheld case) the team corrects the systems and the case
   // is marked handled, as the escalations' panel offers it; a site with the two-person rule leaves that to an approver
   if (closableByHand(c, f.escalations ?? [])) {
     const mayClose = !!ctx.me?.approver || ctx.closeNeedsApprover === false;
