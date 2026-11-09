@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.51, 9 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.52, 9 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -1602,7 +1602,10 @@ needs only the packages `Shutter.Intake` and `Shutter.Util` for the forwarder an
   `FailureOutcome` to match (`uncertain`, `rejected`, `error`), `FailureHttpStatus` when the text names one ("HTTP 503"),
   `FailureReasonCode` `alert`, or `alert_unread` for words it does not know and a connection lost after the frame went (the matcher reads that as `receiver_answer: unread`, 6.1, so no entry that resends matches), `FailureText` "Alert from <item> at <time> UTC: <text>". One forward per session and alerting item (v1.39; the item since onboarding, so a message routed to two receivers that both fail gives two): the pair is pending while the forward is out (`^Shutter.AlertIntake("pending", session, item)`, ten minutes at most) and seen (`^Shutter.AlertIntake("seen", session, item)`, kept a day) only once Shutter has taken the message, so a connector's retries alert the site each time but reach Shutter once, while a forward Shutter refused or that failed is built again from that item's next alert.
   An alert does not name its message, so a session that sent the item several different HL7 messages, or, for an item that takes no HL7, whose messages name more than one patient, opens no case: a warning and an alert to `PassTo` name the messages by control id and header, once per session and item (`^Shutter.AlertIntake("several", session, item)`, kept a day).
-  An alert whose session has no HL7 message, from an item outside `Receivers`, or from the forwarder itself is passed on only; both sends are
+  An alert whose session has no HL7 message, from an item outside `Receivers`, or from the forwarder itself is passed on only,
+  as is (v1.52) a queue alert (`QueueWaitAlert` or `QueueCountAlert` leading its words) on a message whose header to the alerting
+  item still reads Created, Queued or Delivered: the engine is still trying it, so nothing failed and no case opens. No other
+  alert is judged by the header's status, since the engine can raise one before it marks the header; both sends are
   asynchronous, so the feed never waits. The forwarder's refusal is a warning in the event log, as for the sending
   process, and an `Ens.AlertRequest` to the production's `Ens.Alert`, so the site's own consumer hears of a failure that has no case. The demo hospital's production carries the item with `Receivers` `Downstream Out`, and its connector raises an alert
   for a delivery the ward system could not take or did not answer (`unavailable`, `uncertain`), as a real connector's
@@ -2556,6 +2559,13 @@ No message content is copied: the rows hold ids, codes, the body's class and the
 
 ## Changes
 
+- v1.52, 9 Nov 2026 (for 1.4.0, found on the Pathology rig): `findings` is a snapshot item kind, so an order or result
+  case's evidence no longer fails when it adds the item (before, every such case ended `failed` with no snapshot). The
+  character finding adds `shared` (`failures`, `of_failures`, `characters`, or `why`): how many of the receiver's failures in
+  the last 7 days hold one of the message's characters in any field, a run stored as UTF-8 bytes counted as the character it
+  encodes, and its sentence leads with that count. The receiver's words are read from the engine's log row: its
+  "response N@EnsLib.HL7.Message" is an object reference in the operation's process, not a stored id, and is no longer
+  opened. The alert intake passes on a queue alert on a message the engine still holds (11). No route or field is removed.
 - v1.51, 9 Nov 2026 (for 1.3.0: Pathology's set gate and findings): `Shutter.Util.ResendSet` computes an outage's four
   lists at the close (17), so a row can read `offered`, and `acts` gains `read_again`, served by the next poll rather than by
   a reader item; `Outage.ReadAgainAt` is new, its storage slot appended after the 1.2.0 ones, with the storage now in the
