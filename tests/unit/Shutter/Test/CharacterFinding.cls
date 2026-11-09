@@ -94,6 +94,28 @@ Method TestCountWords()
     Do $$$AssertTrue(s [ "Stored MSH-18: empty; the operation's DefCharEncoding: latin1.", "the settings beside it")
 }
 
+/// The shared count: a character stored as its UTF-8 bytes is the same character as one stored as itself, and the count of
+/// failures holding it leads the sentence, before the counts per field.
+Method TestSharedCharacter()
+{
+    Set one = ##class(Shutter.Util.CharacterFinding).Of(..Result($CHAR(232), ""), "latin1")
+    Set two = ##class(Shutter.Util.CharacterFinding).Of(..Result($CHAR(195, 168), ""), "latin1")
+    Set other = ##class(Shutter.Util.CharacterFinding).Of(..Result($CHAR(233), ""), "latin1")
+    Do $$$AssertEquals($LISTTOSTRING(##class(Shutter.Util.CharacterFinding).Characters(one.fields)), "232", "e grave once, though four fields hold it")
+    Do $$$AssertEquals($LISTTOSTRING(##class(Shutter.Util.CharacterFinding).Characters(two.fields)), "232", "its UTF-8 bytes are the same character")
+    Do $$$AssertEquals($LISTTOSTRING(##class(Shutter.Util.CharacterFinding).Characters(other.fields)), "233", "e acute is another")
+    Do $$$AssertEquals(##class(Shutter.Util.CharacterFinding).Characters([]), "", "no fields, no characters")
+    Set odd = [{"codes": [200, 201, 202]}]
+    Do $$$AssertEquals($LISTTOSTRING(##class(Shutter.Util.CharacterFinding).Characters(odd)), "200+201+202", "a run that is no one character, by its codes")
+    Do one.count.%Set("PID-5", {"failures": 4, "of_failures": 7, "delivered": 0, "of_delivered": 2})
+    Set one.shared = {"failures": 7, "of_failures": 7, "characters": "e with a grave accent, U+00E8"}
+    Set s = ##class(Shutter.Util.CharacterFinding).Sentence(one)
+    Do $$$AssertEquals($PIECE(s, ".", 1), "7 of the last 7 failures to this receiver in 7 days hold e with a grave accent, U+00E8, in any field", s)
+    Do $$$AssertTrue(s [ "4 of the last 7 failures to this receiver in 7 days carry a character above ASCII in PID-5", "the field's count stays")
+    Set one.shared = {"failures": "", "of_failures": "", "characters": "e with a grave accent, U+00E8", "why": "SQL"}
+    Do $$$AssertTrue(##class(Shutter.Util.CharacterFinding).Sentence(one) [ "Its failures could not be compared for e with a grave accent", "an unread count says so")
+}
+
 /// The words for characters: Latin-1 letters by name, others by code point.
 Method TestNames()
 {
