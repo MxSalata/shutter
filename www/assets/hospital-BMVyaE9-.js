@@ -1,0 +1,1 @@
+const a="Mikolaj's Fictional Hospital",n="GitHub or an emailed code",i="C-000008";function t(e){return!e||e<1?"a new failure every few minutes":e===1?"a new failure every minute":`a new failure every ${e} minutes`}export{a as H,n as P,i as T,t as f};
