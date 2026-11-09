@@ -7,6 +7,7 @@ import {
   fitted,
   pageNameOf,
   summariseScreen,
+  summarySize,
 } from './screen';
 
 /** A page as the main region holds it. */
@@ -107,6 +108,25 @@ describe('the summary of the screen', () => {
     expect(s.items.length).toBe(0);
     expect(s.headings.length).toBeLessThan(20);
     expect(s.title).toBe('Cases');
+  });
+
+  it('measures the summary as the server does, with &, < and > as six-character escapes', () => {
+    expect(summarySize({ label: 'A&E <ward>' })).toBe(JSON.stringify({ label: 'A&E <ward>' }).length + 15);
+    // A page full of A&E labels: by plain length it fits, by the server's measure it has to lose items
+    const labels = {
+      page: 'cases',
+      title: 'Cases',
+      headings: [],
+      items: Array.from({ length: 40 }, (_, i) => ({
+        id: `C-${i}`,
+        kind: 'case',
+        label: `A&E ${'&'.repeat(40)} ${i}`,
+      })),
+    };
+    expect(JSON.stringify(labels).length).toBeLessThanOrEqual(CONTEXT_MAX_CHARS);
+    const s = fitted(labels);
+    expect(summarySize(s)).toBeLessThanOrEqual(CONTEXT_MAX_CHARS);
+    expect(s.items.length).toBeLessThan(40);
   });
 
   it('is empty, but for the page, with no page to read', () => {
