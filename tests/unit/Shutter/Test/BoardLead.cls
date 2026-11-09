@@ -277,19 +277,51 @@ Method TestAFollowerOfAPartialBoardCarriesWhoWasMissing()
     Do ##class(Shutter.Store.Case).PurgeCase(c.%Id())
 }
 
-/// A lost admission released by an incident's automatic policy is asked of a person (the gate would refuse it otherwise), and
-/// one released under the approval a person gave the incident's plan goes on under that approval.
+/// A lost admission released by an incident's automatic policy is asked of a person when the site's profile leaves it to
+/// one (further_messages.admission_not_found person, the default; the gate would refuse it otherwise), and goes through
+/// when the profile lets policy release it; one released under the approval a person gave the incident's plan goes on
+/// under that approval.
 Method TestAReleasedLostAdmissionAsksAPerson()
 {
-    Set c = ..NoAnswerCase("C-TEST-LEAD-A", "policy", ..E2())
-    Set c.Event = "admit"
-    Do $$$AssertStatusOK(c.%Save(), "an admission")
+    Set sp = "Shutter.Store.SiteProfile"
+    Set row = $CLASSMETHOD(sp, "Row"), had = $ISOBJECT(row), saved = $SELECT(had: row.Json, 1: "")
     Set summary = {"ward_state_http_status": 404, "operation": {"payload_digest": "sha256:ut"}}
-    Set wf = ..QuietInstance()
-    Set wf.CaseId = "C-TEST-LEAD-A", wf.Mode = "policy", wf.Release = 1, wf.ReleasePolicy = "automatic", wf.ChainKind = "single"
-    Do $$$AssertStatusOK(wf.PolicyPath(c, summary, ..E2()), "the chain's automatic release")
-    Do $$$AssertEquals(wf.Policy, "approval", "a person approves")
-    Do ##class(Shutter.Store.Case).PurgeCase(c.%Id())
+    Try {
+        For choice = "person", "policy" {
+            Set p = $CLASSMETHOD(sp, "Current"), version = +p.version
+            Do p.%Remove("version")
+            If p.%GetTypeOf("further_messages") '= "object" Set p."further_messages" = {}
+            If choice = "person" {
+                // What the test assumes: neither the seed nor the code's default lets policy release a lost admission.
+                Do p."further_messages".%Remove("admission_not_found")
+            } Else {
+                Set p."further_messages"."admission_not_found" = choice
+            }
+            Set row = $CLASSMETHOD(sp, "Row")
+            If '$ISOBJECT(row) Set row = $CLASSMETHOD(sp, "%New"), row.Version = version
+            Set row.Json = p.%ToJSON()
+            Do $$$AssertStatusOK(row.%Save(), "the site profile for admission_not_found " _ choice)
+            Do $$$AssertEquals($CLASSMETHOD(sp, "AdmissionNotFound"), choice, $SELECT(choice = "person": "the default leaves a lost admission to a person", 1: "a site lets policy release it"))
+            Set c = ..NoAnswerCase("C-TEST-LEAD-A", "policy", ..E2())
+            Set c.Event = "admit"
+            Do $$$AssertStatusOK(c.%Save(), "an admission")
+            Set wf = ..QuietInstance()
+            Set wf.CaseId = "C-TEST-LEAD-A", wf.Mode = "policy", wf.Release = 1, wf.ReleasePolicy = "automatic", wf.ChainKind = "single"
+            Do $$$AssertStatusOK(wf.PolicyPath(c, summary, ..E2()), "the chain's automatic release")
+            Do $$$AssertEquals(wf.Policy, $SELECT(choice = "person": "approval", 1: "automatic"), $SELECT(choice = "person": "a person approves", 1: "the automatic release goes through"))
+            Do ##class(Shutter.Store.Case).PurgeCase(c.%Id())
+        }
+    } Catch ex {
+        Do $$$AssertTrue(0, "the profile's two choices: " _ ex.DisplayString())
+    }
+    Set row = $CLASSMETHOD(sp, "Row")
+    If had {
+        If '$ISOBJECT(row) Set row = $CLASSMETHOD(sp, "%New")
+        Set row.Json = saved
+        Do $$$AssertStatusOK(row.%Save(), "the site profile is put back")
+    } ElseIf $ISOBJECT(row) {
+        Do $$$AssertStatusOK($CLASSMETHOD(sp, "%DeleteId", row.%Id()), "the site profile row is removed again")
+    }
     Set c = ..NoAnswerCase("C-TEST-LEAD-A", "policy", ..E2())
     Set c.Event = "admit"
     Do $$$AssertStatusOK(c.%Save(), "an admission")

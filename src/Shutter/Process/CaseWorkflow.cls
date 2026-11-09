@@ -1082,8 +1082,6 @@ Method PolicyPath(case As Shutter.Store.Case, summary As %DynamicObject, cat As 
         Set ..Policy = "approval", heldBack = 1
         Do case.Note("note", "A lost admission on the receiver's 404: a person approves, as the site's profile asks (further_messages.admission_not_found)", "system")
     }
-    // A released item is authorised by its incident (7.3): by site policy, or under the incident's approval.
-    If ..Release Set ..Policy = $SELECT(..ReleasePolicy = "incident": "incident", ..ReleasePolicy = "automatic": "automatic", 1: ..Policy)
     // Another visit's movement the profile shows goes on the plan for a person to read (Shutter.Util.ShownVisit), so no
     // write carries it with nobody reading: an automatic release waits for a person, and an item released by its incident
     // that shows one on fresh evidence stops, since the incident's approval never listed it.
