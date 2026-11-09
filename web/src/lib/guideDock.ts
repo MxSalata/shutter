@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 
 /**
- * Where the guide's step card stands while Ask about this case is open over the page (below 1440 px). The guide runs
+ * Where the guide's step card stands while Ask about this case is open over the page (below 1200 px). The guide runs
  * only in trial pages; while one of its step cards is on the page it says so here, and Ask then opens as a sheet with no
  * overlay and no focus trap, with a dock just before it that the card moves into: left of the sheet on a laptop, at the
  * foot of the screen on a phone, and just before the sheet in the reading and tab order, so Shift+Tab from Ask's

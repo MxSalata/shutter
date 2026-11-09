@@ -37,9 +37,12 @@ import {
   type ReviewTarget,
   type RunStarted,
   type AgentRun,
+  type AskPageQuestion,
   type AskQuestion,
   type CaseQuestionDetail,
   type CaseQuestions,
+  type PageQuestion,
+  type PageQuestionAsked,
   type QuestionAsked,
   type QuestionState,
   type SuggestedQuestions,
@@ -83,6 +86,7 @@ export const keys = {
   questions: (id: string) => ['case', id, 'questions'] as const,
   question: (id: string, qid: string) => ['case', id, 'questions', qid] as const,
   suggested: (id: string) => ['case', id, 'suggested-questions'] as const,
+  pageQuestion: (qid: string) => ['page-question', qid] as const,
   whatif: (id: string) => ['case', id, 'whatif'] as const,
 };
 
@@ -856,6 +860,28 @@ export function useAskQuestion(caseId: string) {
       await client.invalidateQueries({ queryKey: keys.questions(caseId) });
       await client.invalidateQueries({ queryKey: keys.suggested(caseId) });
     },
+  });
+}
+
+// ---- asking about a page (CONTRACTS 14.6; read only: the one route spends only as a live case question does) ----
+
+/** Asks about the page on the screen: 202 with the question's id, then usePageQuestion reads the answer. */
+export function useAskPageQuestion() {
+  return useMutation({
+    mutationFn: ({ ask, idempotencyKey }: { ask: AskPageQuestion; idempotencyKey?: string }) =>
+      api.post<PageQuestionAsked>('/page-questions', ask, {
+        idempotencyKey: idempotencyKey ?? newIdempotencyKey(),
+      }),
+  });
+}
+
+/** One question about a page, read every 2 s until it is answered or refused. */
+export function usePageQuestion(questionId: string | undefined) {
+  return useQuery({
+    queryKey: keys.pageQuestion(questionId ?? ''),
+    enabled: !!questionId,
+    queryFn: () => api.get<PageQuestion>(`/page-questions/${seg(questionId!)}`),
+    refetchInterval: (q) => (isAnswering(q.state.data?.state) ? 2_000 : false),
   });
 }
 

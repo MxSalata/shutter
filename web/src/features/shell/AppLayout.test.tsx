@@ -6,6 +6,7 @@ import { http, HttpResponse } from 'msw';
 import { isValidElement, useEffect, useRef, type ReactElement } from 'react';
 import { createMemoryRouter, RouterProvider, useLocation } from 'react-router';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { resetAssistantForTests } from '@/features/assistant/store';
 import { resetMock } from '@/mocks/handlers';
 import { server } from '@/mocks/node';
 import { useAppearance } from '@/stores/appearance';
@@ -41,11 +42,13 @@ function renderFrame(path = '/cases/C-000002', page: ReactElement = <h1>A page</
       </QueryClientProvider>
     </MantineProvider>,
   );
+  return router;
 }
 
 describe('the shell', () => {
   beforeEach(() => {
     resetMock('approver');
+    resetAssistantForTests();
     localStorage.setItem(LIVE_WELCOME_KEY, 'seen');
   });
 
@@ -102,6 +105,19 @@ describe('the shell', () => {
       .focus();
     await userEvent.keyboard('{Enter}');
     await waitFor(() => expect(screen.getByRole('textbox', { name: 'Own field' })).toHaveFocus());
+  });
+
+  it('leaves focus in the Ask Shutter panel when the page changes behind it', async () => {
+    const router = renderFrame('/home');
+    const main = document.getElementById('main-content')!;
+    await userEvent.click(await screen.findByRole('button', { name: 'Ask Shutter' }));
+    const panel = await screen.findByRole('dialog', { name: 'Ask Shutter' });
+    const heading = within(panel).getByRole('heading', { name: 'Ask Shutter' });
+    await waitFor(() => expect(heading).toHaveFocus());
+    await act(() => router.navigate('/scenarios'));
+    await waitFor(() => expect(router.state.location.pathname).toBe('/scenarios'));
+    expect(main).not.toHaveFocus();
+    expect(panel).toContainElement(document.activeElement as HTMLElement);
   });
 
   it('groups the navigation as Operate, Results and Configure, each icon in its section hue', async () => {

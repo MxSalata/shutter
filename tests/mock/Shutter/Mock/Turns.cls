@@ -45,6 +45,8 @@ ClassMethod Answer(ctx As %DynamicObject, request As %DynamicObject, size As %In
     // The self test's call: no case and no tools.
     If ctx.m = "selftest" Set log.source = "selftest" Quit ..Reply(request, size, n, "pong")
     Set first = conv.users.%Get(0)
+    // A question about a page (CONTRACTS 14.6): the Explain agent in the tier page, with no case and no recording.
+    If ##class(Shutter.Util.Json).Str(..Context(first), "tier") = "page" Quit ..PageTurn(ctx, conv, n, offered, ..Context(first), request, size, log)
     Set case = ..TagCase(first)
     If (case = "") || (case '= ctx.c) Quit ..Refuse("The evidence names case " _ case _ " and the run is for " _ ctx.c, "context_mismatch")
     Set heading = ..Heading(ctx.m)
@@ -96,6 +98,57 @@ ClassMethod Answer(ctx As %DynamicObject, request As %DynamicObject, size As %In
         If calls.%Size() > 0 Quit ..Reply(request, size, n, "", calls)
     }
     Quit ..Reply(request, size, n, "", ..TerminalCall(ctx, context))
+}
+
+/// One turn of a question about a page: the run's id in the evidence tag, the page agent's instructions and the terminal
+/// tool offered, and no evidence tool (the tier offers its knowledge search and SubmitAnswer only), or the call is refused.
+/// Then the knowledge search once with the question, then SubmitAnswer naming what the summary of the screen holds, then
+/// the closing sentence. Never a recording: a page question has none.
+ClassMethod PageTurn(ctx As %DynamicObject, conv As %DynamicObject, n As %Integer, offered As %DynamicObject, context As %DynamicObject, request As %DynamicObject, size As %Integer, log As %DynamicObject) As %DynamicObject
+{
+    Set j = "Shutter.Util.Json"
+    Set log.source = "page"
+    Set id = ..TagCase(conv.users.%Get(0))
+    If (id = "") || (id '= ctx.c) Quit ..Refuse("The evidence names " _ id _ " and the run is for " _ ctx.c, "context_mismatch")
+    If conv.system '[ "# Explain this page" Quit ..Refuse("The instructions are not the page agent's", "context_mismatch")
+    If ..Offer(offered, ctx.t) = "" Quit ..Refuse("The terminal tool " _ ctx.t _ " is not offered", "context_mismatch")
+    Set iter = offered.%GetIterator()
+    While iter.%GetNext(.k) {
+        Set bare = ..Bare(k)
+        If (bare '= ctx.t) && ($EXTRACT(bare, 1, 7) '= "search_") Return ..Refuse("The tier page offers a tool it must not: " _ bare, "context_mismatch")
+    }
+    Set term = ..Terminal(conv, ctx.t)
+    If term.accepted Quit ..Reply(request, size, n, ..#PREFIX _ "Answered the question about the " _ $CLASSMETHOD(j, "Str", context, "page") _ " page.")
+    If term.refusals > 1 Quit ..Reply(request, size, n, ..#PREFIX _ ctx.t _ " refused: " _ $EXTRACT(term.problems, 1, 1500))
+    Set question = $CLASSMETHOD(j, "Str", context.%Get("question"), "text")
+    If (n = 0) && (conv.users.%Size() = 1) {
+        Set name = ..Offer(offered, "search_explain")
+        If name '= "" {
+            Set args = {"query": ($EXTRACT(question, 1, 200))}
+            If ..Takes(offered.%Get(name), "top_k") Set args."top_k" = 3
+            Quit ..Reply(request, size, n, "", [{"name": (name), "arguments": (args.%ToJSON())}])
+        }
+    }
+    // What the summary holds: its title and the first ids and labels of its lists.
+    Set screen = context.%Get("on_screen")
+    If '$ISOBJECT(screen) Set screen = {}
+    Set title = $CLASSMETHOD(j, "Str", screen, "title"), named = "", cites = [], count = 0
+    Set it = screen.%GetIterator()
+    While it.%GetNext(.key, .list) {
+        Continue:'$ISOBJECT(list)||'list.%IsA("%Library.DynamicArray")
+        Set li = list.%GetIterator()
+        While li.%GetNext(, .item) && (count < 3) {
+            Continue:'$ISOBJECT(item)
+            Set itemId = $CLASSMETHOD(j, "Str", item, "id")
+            Continue:itemId=""
+            Set named = named _ $SELECT(named = "": "", 1: ", ") _ itemId _ $SELECT($CLASSMETHOD(j, "Str", item, "label") '= "": " (" _ $CLASSMETHOD(j, "Str", item, "label") _ ")", 1: "")
+            Do cites.%Push(itemId)
+            Set count = count + 1
+        }
+    }
+    Set text = ..#PREFIX _ "The " _ $CLASSMETHOD(j, "Str", context, "page") _ " page" _ $SELECT(title '= "": ", " _ title, 1: "") _ ", as its summary shows it" _ $SELECT(named '= "": ": " _ named, 1: ", with no lists") _ ". Deterministic, from the API mimic; no model answered the question."
+    Set answer = {"answer": ($EXTRACT(text, 1, 1100)), "cites": (cites), "confidence": "low"}
+    Quit ..Reply(request, size, n, "", [{"name": (..Offer(offered, ctx.t)), "arguments": ({"caseId": (ctx.c), "answer": (answer)}.%ToJSON())}])
 }
 
 /// The member's recording as turns to replay, when replay is on and the material facts of the recorded case are

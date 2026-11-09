@@ -70,6 +70,8 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
   <Route Url="/cases/:caseId/questions" Method="POST" Call="CaseQuestionAsk"/>
   <Route Url="/cases/:caseId/questions/suggested" Method="GET" Call="CaseQuestionsSuggested"/>
   <Route Url="/cases/:caseId/questions/:qid" Method="GET" Call="CaseQuestionGet"/>
+  <Route Url="/page-questions" Method="POST" Call="PageQuestionAsk"/>
+  <Route Url="/page-questions/:qid" Method="GET" Call="PageQuestionGet"/>
   <Route Url="/production-reviews" Method="GET" Call="ProductionReviews"/>
   <Route Url="/production-reviews" Method="POST" Call="ProductionReviewStart"/>
   <Route Url="/production-reviews/annotations/:annotationId" Method="DELETE" Call="ProductionReviewAnnotationDelete"/>
@@ -1780,12 +1782,14 @@ ClassMethod Costs() As %Status
     Set totals.reviewRuns = reviewRuns
     Set totals.spentUsd = +totals.spentUsd + reviewSpent
     // The questions' runs (CONTRACTS 14.2) are AgentRun rows naming their question: already in the totals above, and
-    // listed by question here, with questionRuns counting them.
+    // listed by question here, with questionRuns counting them. A question about a page (P-nnnnnn, 14.6) has no case, so
+    // the join is outer and its caseId is null.
     Set byQuestion = [], questionRuns = 0
-    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT %EXACT(a.QuestionId) AS QuestionId, %EXACT(c.CaseId) AS CaseId, COUNT(*) AS Runs, SUM(CASE WHEN a.Mode = 'replay' THEN 1 ELSE 0 END) AS Replays, SUM(CASE WHEN a.Mode = 'replay' OR a.Model = 'mock' THEN 0 ELSE a.CostUSD END) AS Cost FROM Shutter_Store.AgentRun a JOIN Shutter_Store.""Case"" c ON a.""Case"" = c.ID WHERE a.QuestionId IS NOT NULL" _ where _ " GROUP BY %EXACT(a.QuestionId), %EXACT(c.CaseId) ORDER BY %EXACT(a.QuestionId)", args...)
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT %EXACT(a.QuestionId) AS QuestionId, %EXACT(c.CaseId) AS CaseId, COUNT(*) AS Runs, SUM(CASE WHEN a.Mode = 'replay' THEN 1 ELSE 0 END) AS Replays, SUM(CASE WHEN a.Mode = 'replay' OR a.Model = 'mock' THEN 0 ELSE a.CostUSD END) AS Cost FROM Shutter_Store.AgentRun a LEFT JOIN Shutter_Store.""Case"" c ON a.""Case"" = c.ID WHERE a.QuestionId IS NOT NULL" _ where _ " GROUP BY %EXACT(a.QuestionId), %EXACT(c.CaseId) ORDER BY %EXACT(a.QuestionId)", args...)
     While rs.%Next() {
         Set r = {}
-        Set r.questionId = rs.%Get("QuestionId"), r.caseId = rs.%Get("CaseId"), r.runs = +rs.%Get("Runs"), r.replayedRuns = +rs.%Get("Replays"), r.costUsd = +rs.%Get("Cost")
+        Set r.questionId = rs.%Get("QuestionId"), r.runs = +rs.%Get("Runs"), r.replayedRuns = +rs.%Get("Replays"), r.costUsd = +rs.%Get("Cost")
+        If rs.%Get("CaseId") = "" { Do r.%Set("caseId", "", "null") } Else { Set r.caseId = rs.%Get("CaseId") }
         Do byQuestion.%Push(r)
         Set questionRuns = questionRuns + r.runs
     }
@@ -1904,6 +1908,75 @@ ClassMethod CaseQuestionAsk(caseId As %String) As %Status
     Set %response.Status = "202 Accepted"
     Write replyText
     Quit $$$OK
+}
+
+// ---- questions about a page of the web app (CONTRACTS 14.6) ----
+
+/// Ask about what is on the screen (the Ask Shutter panel): {page, question, context}. page is the page's name (a lower-case
+/// word with hyphens); question 1 to 500 characters; context the web app's summary of what is in view, ids and labels only,
+/// at most 4000 characters as the agent reads it (Shutter.Util.PageQuestion.CleanContext; 400 bad_request otherwise). Live
+/// only, by the case questions' rule for a live answer: 403 live_agents_only without Shutter_LiveAgents, 409
+/// live_unavailable while the day's budget or the caller's share is spent or the provider refuses the key (with live as GET
+/// /settings gives it), 409 no_model when no model answers here. The request goes through the API service to the Case
+/// Question item, which opens the question and answers at once while the Explain agent runs in the tier page (its knowledge
+/// search and SubmitAnswer, nothing that reads a case or writes): 202 {questionId, page, state, askedBy}. Nothing is written
+/// by a question but its own row and its run, and nothing is recorded.
+ClassMethod PageQuestionAsk() As %Status
+{
+    If '..Allow("Shutter_Operate", 1) Quit $$$OK
+    Set shape = "The body must be a JSON object: {page, question, context}"
+    Set bodyText = $SELECT($ISOBJECT(%request.Content): %request.Content.Read($$$MaxStringLength), 1: $GET(%request.Content))
+    If $LENGTH(bodyText) > 16000 Quit ..Fail("400 Bad Request", "bad_request", "The body is longer than 16000 characters")
+    Set body = ##class(Shutter.Util.Json).Parse(bodyText, .psc)
+    If '$ISOBJECT(body) || $$$ISERR(psc) || ($CLASSNAME(body) '= "%Library.DynamicObject") Quit ..Fail("400 Bad Request", "bad_request", shape)
+    Set pq = "Shutter.Util.PageQuestion"
+    Set page = ##class(Shutter.Util.Json).Str(body, "page")
+    If $ISOBJECT(page) || '$CLASSMETHOD(pq, "IsPage", page) Quit ..Fail("400 Bad Request", "bad_request", "page must be the page's name: a lower-case word with hyphens, at most 40 characters")
+    Set raw = body.%Get("question")
+    If $ISOBJECT(raw) Quit ..Fail("400 Bad Request", "bad_request", "question must be text")
+    Set text = $CLASSMETHOD(pq, "CleanQuestion", raw, .problem)
+    If problem '= "" Quit ..Fail("400 Bad Request", "bad_request", problem)
+    Set context = $CLASSMETHOD(pq, "CleanContext", body.%Get("context"), .problem)
+    If problem '= "" Quit ..Fail("400 Bad Request", "bad_request", problem)
+    // Who may spend the model budget, as a live case question: the live agents' resource, the day's budget and the caller's
+    // share, the provider's answer to the key, and a model to answer at all. A page has no recorded answers.
+    Set avail = ##class(Shutter.Util.LiveAgents).Availability(..User())
+    Set mode = ##class(Shutter.Bridge.Operation.Agent).ResolveMode("auto")
+    If '$CLASSMETHOD(pq, "Admit", $SYSTEM.Security.Check("Shutter_LiveAgents", "USE"), avail, mode, .status, .code, .detail) {
+        Set extra = ""
+        If code = "live_unavailable" Set extra = {} Set extra.live = avail
+        Quit ..Fail(status, code, detail, extra)
+    }
+    Set r = ..Idempotent(bodyText, .replayed)
+    If replayed Quit $$$OK
+    Set msg = ##class(Shutter.Msg.PageQuestionRequest).%New()
+    Set msg.Page = page, msg.Text = text, msg.ContextJSON = context.%ToJSON(), msg.AskedBy = ..User()
+    Set sc = ##class(Ens.Director).CreateBusinessService("Shutter API", .service)
+    If $$$ISERR(sc) || '$ISOBJECT(service) Quit ..Fail("503 Service Unavailable", "no_service", "The API service is not running: " _ $SYSTEM.Status.GetErrorText(sc))
+    // Synchronous: the Case Question item answers with the question's id at once and goes on with the agent.
+    Set service.Target = "Case Question"
+    Set sc = service.ProcessInput(msg, .started)
+    If $$$ISERR(sc) Quit ..Fail("503 Service Unavailable", "not_queued", "The question could not be sent: " _ $SYSTEM.Status.GetErrorText(sc))
+    If '$ISOBJECT(started) || 'started.%IsA("Shutter.Msg.QuestionStarted") Quit ..Fail("502 Bad Gateway", "no_answer", "The Case Question item did not answer")
+    If started.QuestionId = "" Quit ..Fail("500 Internal Server Error", "question_failed", $SELECT(started.Error '= "": started.Error, 1: "No question was opened"))
+    Set reply = {}
+    Set reply.questionId = started.QuestionId, reply.page = page, reply.state = started.State, reply.askedBy = ..User()
+    Set replyText = reply.%ToJSON()
+    Do ..Remember(bodyText, "202 Accepted", replyText)
+    Set %response.Status = "202 Accepted"
+    Write replyText
+    Quit $$$OK
+}
+
+/// One question about a page with its answer, for the one who asked it (404 for anyone else, as for an id that is not
+/// there). A question left waiting past its time is marked failed on the way.
+ClassMethod PageQuestionGet(qid As %String) As %Status
+{
+    If '..Allow() Quit $$$OK
+    Set q = ##class(Shutter.Store.PageQuestion).ByQuestionId(qid)
+    If '$ISOBJECT(q) || (q.AskedBy '= ..User()) Quit ..Fail("404 Not Found", "not_found", "No question " _ qid _ " of yours about a page")
+    Do q.CloseIfStale()
+    Quit ..Json(q.ToObject())
 }
 
 // ---- HL7 schemas (CONTRACTS 12, v1.32) ----

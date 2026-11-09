@@ -94,7 +94,7 @@ for (const { colorScheme, contrast, palette } of MODES) {
       expect(await audit(page)).toEqual([]);
     });
 
-    // Ask beside the tour on a laptop: the sheet with no overlay, and the guide's card in its dock
+    // Ask beside the tour on a laptop: the panel beside the case, and the guide's card where it was
     test(`Ask about this case beside the tour ${caseEvidence.tag}`, async ({ page }) => {
       await page.addInitScript((key) => {
         localStorage.setItem(
@@ -114,14 +114,30 @@ for (const { colorScheme, contrast, palette } of MODES) {
       await expect(
         panel.getByRole('region', { name: 'What if: the setting behind this outcome' }),
       ).toBeVisible();
-      await expect(page.locator('[data-guide-dock] [data-guide-card]')).toBeVisible();
+      // Beside the case nothing is covered: the card stays at its step, with no dock
+      await expect(page.locator('[data-guide-card]')).toBeVisible();
+      await expect(page.locator('[data-guide-dock]')).toHaveCount(0);
       await expect(page.getByRole('status')).toHaveCount(0);
       expect(await audit(page)).toEqual([]);
     });
 
-    // Ask on a laptop without the tour: the drawer over the case
+    // Ask on a laptop without the tour: the panel beside the case, in the shell's aside
     test(`Ask about this case on a laptop ${caseEvidence.tag}`, async ({ page }) => {
       await page.setViewportSize({ width: 1280, height: 800 });
+      await signIn(page);
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      await go(page, '/cases/C-000008?ask=1');
+      const panel = page.getByRole('region', { name: 'Ask about this case' });
+      await expect(
+        panel.getByRole('region', { name: 'What if: the setting behind this outcome' }),
+      ).toBeVisible();
+      await expect(page.getByRole('status')).toHaveCount(0);
+      expect(await audit(page)).toEqual([]);
+    });
+
+    // Ask on a narrow laptop without the tour: the drawer over the case
+    test(`Ask about this case in a drawer ${caseEvidence.tag}`, async ({ page }) => {
+      await page.setViewportSize({ width: 1100, height: 800 });
       await signIn(page);
       await page.emulateMedia({ reducedMotion: 'reduce' });
       await go(page, '/cases/C-000008?ask=1');
@@ -130,6 +146,22 @@ for (const { colorScheme, contrast, palette } of MODES) {
         drawer.getByRole('region', { name: 'What if: the setting behind this outcome' }),
       ).toBeVisible();
       await expect(page.getByRole('status')).toHaveCount(0);
+      expect(await audit(page)).toEqual([]);
+    });
+
+    // Ask Shutter on Scenarios: the panel about the page, with its suggested questions and the written guide
+    test(`Ask Shutter about a page ${shell.tag}`, async ({ page }) => {
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await signIn(page);
+      await page.emulateMedia({ reducedMotion: 'reduce' });
+      await page.getByRole('button', { name: 'Ask Shutter' }).click();
+      const panel = page.getByRole('region', { name: 'Ask Shutter' });
+      await panel.getByRole('button', { name: 'What is a scenario?' }).click();
+      await expect(panel.getByRole('heading', { name: 'What is a scenario?', level: 4 })).toBeVisible();
+      await expect(panel).toContainText('Example (sample data)');
+      expect(await audit(page)).toEqual([]);
+      await page.setViewportSize({ width: 390, height: 844 });
+      await expect(page.getByRole('dialog', { name: 'Ask Shutter' })).toBeVisible();
       expect(await audit(page)).toEqual([]);
     });
 

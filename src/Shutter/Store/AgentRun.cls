@@ -3,7 +3,9 @@
 Class Shutter.Store.AgentRun Extends (%Persistent, %JSON.Adaptor)
 {
 
-Property Case As Shutter.Store.Case(%JSONFIELDNAME = "caseId", %JSONREFERENCE = "ID") [ Required ];
+/// The case the run was for; empty only for the run that answered a question about a page (QuestionId P-nnnnnn, CONTRACTS
+/// 14.6), which has no case and is still counted by the day's budget and the costs page.
+Property Case As Shutter.Store.Case(%JSONFIELDNAME = "caseId", %JSONREFERENCE = "ID");
 
 Index CaseIdx On Case;
 
@@ -98,9 +100,11 @@ ClassMethod FromResponse(case As Shutter.Store.Case, snapshot As Shutter.Store.S
 {
     Set run = ..%New()
     Set run.QuestionId = questionId
-    // By id, not the caller's copy, as Snapshot.Begin does: a save of the run never writes the case whole.
-    Do run.CaseSetObjectId(case.%Id())
-    Set run.Snapshot = snapshot, run.Role = role, run.MemberCode = memberCode
+    // By id, not the caller's copy, as Snapshot.Begin does: a save of the run never writes the case whole. A page
+    // question's run has no case (CONTRACTS 14.6).
+    If $ISOBJECT(case) Do run.CaseSetObjectId(case.%Id())
+    If $ISOBJECT(snapshot) Set run.Snapshot = snapshot
+    Set run.Role = role, run.MemberCode = memberCode
     Set run.AgentClass = response.AgentClass, run.ConfigVersion = response.ConfigVersion
     // A key typed into the item's Model or ProviderConfig is stored as "hidden" (Shutter.Util.Secret).
     Set run.Mode = response.Mode, run.Model = ##class(Shutter.Util.Secret).CleanModel(response.Model), run.ProviderConfig = ##class(Shutter.Util.Secret).Clean(response.ProviderConfig)
@@ -112,9 +116,14 @@ ClassMethod FromResponse(case As Shutter.Store.Case, snapshot As Shutter.Store.S
     Set run.RequestedBy = response.RequestedBy
     Set run.StartedAtMs = response.StartedAtMs, run.LlmMs = response.LlmMs, run.ToolMs = response.ToolMs, run.ReasoningTokens = response.ReasoningTokens
     // The run is read by people inside IRIS: the case's tokens become the identifiers again (T27).
-    Set run.ResultJSON = ##class(Shutter.Util.ModelView).Restore(case, response.ResultJSON)
-    Set run.Content = ##class(Shutter.Util.ModelView).Restore(case, response.Content)
-    Set run.Error = ##class(Shutter.Util.ModelView).Restore(case, response.Error)
+    // A page question's run saw no case and no tokens: its texts are kept as they came.
+    If $ISOBJECT(case) {
+        Set run.ResultJSON = ##class(Shutter.Util.ModelView).Restore(case, response.ResultJSON)
+        Set run.Content = ##class(Shutter.Util.ModelView).Restore(case, response.Content)
+        Set run.Error = ##class(Shutter.Util.ModelView).Restore(case, response.Error)
+    } Else {
+        Set run.ResultJSON = response.ResultJSON, run.Content = response.Content, run.Error = $EXTRACT(response.Error, 1, 2000)
+    }
     // A replayed run spends nothing: its tokens are the recording's, kept for the record, and cost 0. Nor does a run
     // the API mimic answered (model mock): its tokens are estimates and no model was called.
     Set run.CostUSD = $SELECT(response.Mode = "replay": 0, response.Model = "mock": 0, 1: ##class(Shutter.Store.ModelPrice).Cost(response.Model, response.PromptTokens, response.CompletionTokens, response.CacheReadTokens, response.CacheCreationTokens))

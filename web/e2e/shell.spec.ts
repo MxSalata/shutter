@@ -38,6 +38,91 @@ test.describe('the live hospital, as the public role sees it', () => {
   });
 });
 
+test.describe('Ask Shutter, from the header', () => {
+  test('opens beside the page from 1200 px, answers a suggested question about it, and closes with Escape', async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await signIn(page);
+    const button = page.getByRole('button', { name: 'Ask Shutter', exact: true });
+    await expect(button).toHaveAttribute('aria-expanded', 'false');
+    await button.click();
+    const panel = page.getByRole('region', { name: 'Ask Shutter' });
+    await expect(panel.getByRole('heading', { name: 'Ask Shutter', level: 2 })).toBeFocused();
+    await expect(button).toHaveAttribute('aria-expanded', 'true');
+    // Beside the page, not over it: the page's heading stays left of the panel, and there is no dialog
+    const side = (await panel.boundingBox())!;
+    const title = (await page.getByRole('heading', { name: 'Scenarios', exact: true }).boundingBox())!;
+    expect(side.x).toBeGreaterThan(title.x + 200);
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(panel).toContainText('Read-only.');
+    // The suggested questions are the page's own; the trial answers them with sample answers, labelled so
+    await panel.getByRole('button', { name: 'What is a scenario?' }).click();
+    const thread = panel.getByRole('region', { name: 'Conversation' });
+    await expect(thread.getByRole('heading', { name: 'What is a scenario?', level: 4 })).toBeFocused();
+    await expect(thread).toContainText('one known failure of a hospital message');
+    await expect(thread).toContainText('Example (sample data)');
+    // No question of one's own in the trial, and the written guide to the page
+    await expect(panel.getByRole('textbox', { name: 'Your own question' })).toBeDisabled();
+    await expect(panel.getByRole('region', { name: 'About this page: Scenarios' })).toContainText(
+      'Known failures replayed',
+    );
+    // Open or closed is remembered in this tab: the panel is still open on the next page, about that page
+    await page
+      .getByRole('navigation', { name: 'Main' })
+      .getByRole('link', { name: /^Cases/ })
+      .click();
+    await expect(page.getByRole('heading', { name: 'Cases', exact: true, level: 1 })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Ask Shutter' })).toContainText(
+      'Suggested questions about Cases',
+    );
+    await expect(
+      page.getByRole('region', { name: 'Ask Shutter' }).getByRole('button', { name: 'Which cases need me?' }),
+    ).toBeVisible();
+    // Escape inside the panel closes it (beside the page it is no dialog, so Escape elsewhere is the page's own)
+    await page
+      .getByRole('region', { name: 'Ask Shutter' })
+      .getByRole('button', { name: 'Which cases need me?' })
+      .focus();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('region', { name: 'Ask Shutter' })).toHaveCount(0);
+    await expect(button).toBeFocused();
+    await expect(button).toHaveAttribute('aria-expanded', 'false');
+    // Closed is remembered too
+    await page.reload();
+    await expect(page.getByRole('heading', { name: 'Cases', exact: true, level: 1 })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Ask Shutter' })).toHaveCount(0);
+  });
+
+  test('is a full-screen sheet on a phone, and comes back open after a reload', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await signIn(page);
+    await page.getByRole('button', { name: 'Ask Shutter', exact: true }).click();
+    const sheet = page.getByRole('dialog', { name: 'Ask Shutter' });
+    await expect(sheet.getByRole('heading', { name: 'Ask Shutter' })).toBeFocused();
+    await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running'));
+    expect(Math.round((await sheet.boundingBox())!.width)).toBe(390);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+    await page.reload();
+    await expect(page.getByRole('dialog', { name: 'Ask Shutter' })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog', { name: 'Ask Shutter' })).toBeHidden();
+    await expect(page.getByRole('button', { name: 'Ask Shutter' })).toBeFocused();
+  });
+
+  test("says what the public demo's role can and cannot ask, in the trial's words", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await signIn(page, AS_DEMO);
+    await page.getByRole('button', { name: 'Ask Shutter' }).click();
+    const panel = page.getByRole('region', { name: 'Ask Shutter' });
+    // The trial has no model: the public role, like every trial role, has the suggested questions and the guide
+    await expect(panel.getByRole('button', { name: 'What is a scenario?' })).toBeEnabled();
+    await expect(panel.getByRole('textbox', { name: 'Your own question' })).toHaveAccessibleDescription(
+      'Needs a real model: not in the trial.',
+    );
+  });
+});
+
 test.describe('the shell', () => {
   test('opens on Home, whose links reach every section', async ({ page }) => {
     await page.goto('./?trial#/');

@@ -12,6 +12,8 @@ import { useAppearance } from '@/stores/appearance';
 import { theme } from '@/theme';
 import { bannerForm } from '@/trial/visit';
 import CasePage from '@/features/cases/CasePage';
+import { AssistantOverlay, AssistantRouteSync } from '@/features/assistant/AssistantSurface';
+import { resetAssistantForTests } from '@/features/assistant/store';
 import EvaluationPage from '@/features/evaluation/EvaluationPage';
 import ScenariosPage from '@/features/scenarios/ScenariosPage';
 import { INITIAL, type GuideProgress } from './controller';
@@ -45,6 +47,8 @@ function renderApp(path = '/start') {
             <main>
               <Outlet />
             </main>
+            <AssistantOverlay />
+            <AssistantRouteSync />
             <Guide />
           </>
         ),
@@ -105,6 +109,7 @@ function preferReducedMotion() {
 describe('the guide', () => {
   beforeEach(() => {
     resetMock('approver');
+    resetAssistantForTests();
     localStorage.clear();
     forgetProgress();
     useGuide.setState({
