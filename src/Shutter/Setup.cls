@@ -1342,9 +1342,13 @@ ClassMethod DemoProfilePolicy(seedPath As %String, demo As %Integer = -1) As %St
 /// with the profile's source and Shutter.Store.SiteProfile.#KEPTSTOP, so the running site behaves as it did. A new
 /// install (no stored profile) gets the shipped show, a profile that names the setting is left alone, and a demo install
 /// changes nothing here (DemoProfilePolicy keeps the demo's stop). Called by Install and InstallInto before the seed and
-/// before the version moves on, so a reinstall of 1.2.0 or later never runs it. Returns a status.
-ClassMethod KeepStopOnUpgrade(before As %String, demo As %Boolean = 0) As %Status
+/// before the version moves on, so a reinstall of 1.2.0 or later never runs it. A stored profile that today's checks refuse
+/// (a key or a value older versions took) still keeps its stop: the one setting is written without them
+/// (Shutter.Store.SiteProfile.StoreKeptStop), and warning, also written to the install's output, says why. Returns a status;
+/// an error only when the stop could not be written at all.
+ClassMethod KeepStopOnUpgrade(before As %String, demo As %Boolean = 0, Output warning As %String) As %Status
 {
+    Set warning = ""
     Quit:demo $$$OK
     Quit:'..VersionBefore(before, "1.2.0") $$$OK
     Set row = ##class(Shutter.Store.SiteProfile).Row()
@@ -1357,7 +1361,13 @@ ClassMethod KeepStopOnUpgrade(before As %String, demo As %Boolean = 0) As %Statu
     Set fm."in_patient_movement" = "stop"
     Set source = $EXTRACT(row.Source _ ##class(Shutter.Store.SiteProfile).#KEPTSTOP, 1, 500)
     Set sc = ##class(Shutter.Store.SiteProfile).Store(p.%ToJSON(), source, "install", row.Version, .version)
-    If $$$ISERR(sc) Quit $$$ERROR($$$GeneralError, "Could not keep the site profile's stop for another visit's in-patient movement on the upgrade to 1.2.0: " _ $SYSTEM.Status.GetErrorText(sc))
+    Quit:$$$ISOK(sc) $$$OK
+    // Store refused the profile (today's checks, the lock or a write between): the one setting goes in without the checks.
+    Set why = $SYSTEM.Status.GetErrorText(sc)
+    Set sc = ##class(Shutter.Store.SiteProfile).StoreKeptStop("install", .version)
+    If $$$ISERR(sc) Quit $$$ERROR($$$GeneralError, "Could not keep the site profile's stop for another visit's in-patient movement on the upgrade to 1.2.0: " _ why _ "; " _ $SYSTEM.Status.GetErrorText(sc))
+    Set warning = "Warning: the stored site profile does not pass today's checks (" _ why _ "), so only further_messages.in_patient_movement: stop was written, as version " _ version _ ", to keep the site's stop on the upgrade to 1.2.0. Correct the profile and save it again."
+    Write !, warning, !
     Quit $$$OK
 }
 

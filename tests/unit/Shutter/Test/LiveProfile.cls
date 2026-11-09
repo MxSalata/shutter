@@ -174,4 +174,56 @@ Method TestKeepStopOnUpgrade()
     Do ##class(%File).Delete(seed)
 }
 
+/// Existing sites keep stop even when today's checks refuse the stored profile: a profile stored before 1.2.0 with a key or
+/// a value that Store now refuses still reads stop after the install step, which returns OK with a warning; only the one
+/// setting and the source change, as a new version.
+Method TestKeepStopOnUpgradeOldProfile()
+{
+    Set sp = "Shutter.Store.SiteProfile", setup = "Shutter.Setup"
+    Set kept = $PARAMETER(sp, "KEPTSTOP")
+    Set row = $CLASSMETHOD(sp, "Row")
+    Set savedVersion = $SELECT($ISOBJECT(row): row.Version, 1: 0), savedJson = $SELECT($ISOBJECT(row): row.Json, 1: ""), savedSource = $SELECT($ISOBJECT(row): row.Source, 1: "")
+    Set demo = $GET(^Shutter.Config("demo")), ^Shutter.Config("demo") = 0
+    Set old = ##class(Shutter.Store.SiteProfile).Default()
+    Do old.%Remove("further_messages")
+    // An unknown key, and a bad value elsewhere in the profile.
+    Set cases = $LISTBUILD("legacy_field", "scan_seconds")
+    For i = 1:1:$LISTLENGTH(cases) {
+        Set case = $LIST(cases, i)
+        Do $$$AssertStatusOK($CLASSMETHOD(sp, "Store", old.%ToJSON(), "api", "approver", "", .v), case _ ": a 1.1.1 profile stored")
+        Set bad = ##class(Shutter.Store.SiteProfile).Default()
+        Do bad.%Remove("further_messages")
+        If case = "legacy_field" { Do bad.%Set("legacy_field", 1) } Else { Do bad.%Set("further_messages", {"scan_seconds": 0}) }
+        Do $$$AssertNotEquals($CLASSMETHOD(sp, "ValidateJSON", bad.%ToJSON()), "ok", case _ ": today's checks refuse it")
+        Set row = $CLASSMETHOD(sp, "Row"), row.Json = bad.%ToJSON()
+        Do $$$AssertStatusOK(row.%Save(), case _ ": stored as an older version took it")
+        Set before = row.Version
+        Do $$$AssertEquals($CLASSMETHOD(sp, "FurtherMovement"), "show", case _ ": read by 1.2.0 before the install step it would show")
+        Set warning = ""
+        Do $$$AssertStatusOK($CLASSMETHOD(setup, "KeepStopOnUpgrade", "1.1.1", 0, .warning), case _ ": the install step over 1.1.1")
+        Do $$$AssertNotEquals(warning, "", case _ ": with a warning: " _ warning)
+        Do $$$AssertEquals($CLASSMETHOD(sp, "FurtherMovement"), "stop", case _ ": the upgraded site keeps its stop")
+        Set row = $CLASSMETHOD(sp, "Row")
+        Do $$$AssertEquals(row.Source, "api" _ kept, case _ ": the source says why")
+        Do $$$AssertTrue(row.Version > before, case _ ": a new version")
+        Set hist = ##class(Shutter.Store.SiteProfileVersion).VersionIdxOpen(row.Version)
+        Do $$$AssertEquals($SELECT($ISOBJECT(hist): hist.Source, 1: ""), "api" _ kept, case _ ": kept in the history with its source")
+        Set now = ##class(Shutter.Util.Json).Parse(row.Json)
+        Do now.%Get("further_messages").%Remove("in_patient_movement")
+        If now.%Get("further_messages").%Size() = 0 Do now.%Remove("further_messages")
+        Do $$$AssertEquals(now.%ToJSON(), bad.%ToJSON(), case _ ": nothing else changed")
+        Set version = row.Version
+        Do $$$AssertStatusOK($CLASSMETHOD(setup, "KeepStopOnUpgrade", "1.1.1", 0, .warning), case _ ": again")
+        Do $$$AssertEquals($CLASSMETHOD(sp, "Row").Version, version, case _ ": the setting is named now, so nothing moves")
+    }
+    // Put the profile back as it was, at the history's last version, so the next store is a new version.
+    Set row = $CLASSMETHOD(sp, "Row")
+    If '$ISOBJECT(row) Set row = ##class(Shutter.Store.SiteProfile).%New()
+    Set last = 0
+    &sql(SELECT MAX(Version) INTO :last FROM Shutter_Store.SiteProfileVersion)
+    Set row.Version = $SELECT(+last > savedVersion: +last, 1: savedVersion), row.Json = savedJson, row.Source = savedSource
+    If savedJson '= "" Do $$$AssertStatusOK(row.%Save(), "the profile put back")
+    If demo = "" { Kill ^Shutter.Config("demo") } Else { Set ^Shutter.Config("demo") = demo }
+}
+
 }
