@@ -380,7 +380,9 @@ export function failedSummary(
   // A withheld message was never sent, so its reason code ("merge") is no error, and a code that only repeats the event
   // reads as a slip: the words already say what happened
   const reason =
-    failureKindInWords(c) === 'withheld' || str(c.failureReasonCode) === str(c.event) ? '' : str(c.failureReasonCode);
+    failureKindInWords(c) === 'withheld' || str(c.failureReasonCode) === str(c.event)
+      ? ''
+      : str(c.failureReasonCode);
   const detail = [c.failureHttpStatus ? `HTTP ${str(c.failureHttpStatus)}` : '', reason]
     .filter(Boolean)
     .join(', ');
