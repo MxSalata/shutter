@@ -8537,6 +8537,223 @@
         }
       }
     },
+    "/api/shutter/outages/{id}/approvals": {
+      "post": {
+        "operationId": "approveOutage",
+        "tags": [
+          "outages"
+        ],
+        "summary": "Approve an offered set; Engine Resend sends it in order (tier C)",
+        "description": "One approval of the set the outage offers, naming its digest and the row version, with a note. Only where the build has the sender and the receiver profile entry says engine_resend.",
+        "x-contract": "docs/CONTRACTS.md section 17.3",
+        "x-required-resource": "Shutter_Approve",
+        "x-writes": true,
+        "x-idempotent": true,
+        "x-dispatch": "Shutter.API.Dispatch.OutageAct",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "The outage's row id."
+          },
+          {
+            "$ref": "#/components/parameters/XRequestedWith"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "digest",
+                  "note"
+                ],
+                "properties": {
+                  "digest": {
+                    "type": "string"
+                  },
+                  "version": {
+                    "type": "integer"
+                  },
+                  "note": {
+                    "type": "string",
+                    "maxLength": 1000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The outage as GET /outages/{id} gives it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Outage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request. bad_request: An act the row does not list or this build does not handle, a pause with no time or one not in the future, a close with no reason or one over 1,000 characters, or a body that is not a JSON object. Or: Idempotency-Key is longer than 128 characters.",
+            "x-error-codes": [
+              "bad_request"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "bad_request": {
+                    "value": {
+                      "error": "bad_request",
+                      "detail": "An act the row does not list or this build does not handle, a pause with no time or one not in the future, a close with no reason or one over 1,000 characters, or a body that is not a JSON object. Or: Idempotency-Key is longer than 128 characters"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in. unauthenticated: Sign in first.",
+            "x-error-codes": [
+              "unauthenticated"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "unauthenticated": {
+                    "value": {
+                      "error": "unauthenticated",
+                      "detail": "Sign in first"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden. forbidden: This needs Shutter_Approve.; csrf: Changes need the header X-Requested-With: Shutter.",
+            "x-error-codes": [
+              "forbidden",
+              "csrf"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "forbidden": {
+                    "value": {
+                      "error": "forbidden",
+                      "detail": "This needs Shutter_Approve"
+                    }
+                  },
+                  "csrf": {
+                    "value": {
+                      "error": "csrf",
+                      "detail": "Changes need the header X-Requested-With: Shutter"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found. not_found: No such outage.",
+            "x-error-codes": [
+              "not_found"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "not_found": {
+                    "value": {
+                      "error": "not_found",
+                      "detail": "No such outage"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict. wrong_state: The outage is closed.; version_changed: A stale version (with currentVersion).; idempotency_key_reused: The key was used with another body.",
+            "x-error-codes": [
+              "wrong_state",
+              "version_changed",
+              "idempotency_key_reused"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "wrong_state": {
+                    "value": {
+                      "error": "wrong_state",
+                      "detail": "The outage is closed"
+                    }
+                  },
+                  "version_changed": {
+                    "value": {
+                      "error": "version_changed",
+                      "detail": "A stale version (with currentVersion)"
+                    }
+                  },
+                  "idempotency_key_reused": {
+                    "value": {
+                      "error": "idempotency_key_reused",
+                      "detail": "The key was used with another body"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Payload too large. too_large: The body is over 8,192 characters.",
+            "x-error-codes": [
+              "too_large"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "too_large": {
+                    "value": {
+                      "error": "too_large",
+                      "detail": "The body is over 8,192 characters"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/shutter/cases/{caseId}/correction-draft": {
       "get": {
         "tags": [

@@ -97,6 +97,16 @@ ClassMethod Save(outage As Shutter.Store.Outage, fields As %DynamicObject) As %S
     Quit outage.Advance(outage.State, "", ..#ACTOR, fields)
 }
 
+/// Whether an offered set at this receiver can be approved: the build has the sender (Shutter.Operation.EngineResend) and
+/// the receiver's site profile entry has engine_resend true.
+ClassMethod Approvable(receiver As %String) As %Boolean
+{
+    Quit:'##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Operation.EngineResend") 0
+    Set entry = ##class(Shutter.Store.SiteProfile).Receiver(receiver)
+    Quit:'$ISOBJECT(entry) 0
+    Quit (entry.%GetTypeOf("engine_resend") = "boolean") && entry.%Get("engine_resend")
+}
+
 /// How often the poll computes an offered set again, in milliseconds.
 Parameter RECOMPUTEMILLIS = 60000;
 
@@ -220,6 +230,8 @@ ClassMethod Close(outage As Shutter.Store.Outage, entry As %DynamicObject, facts
         Set setReason = set.set.reason
     }
     Set computed = $ISOBJECT(set) && (set.set.status = "computed")
+    // Approvable only where the build has the sender and the receiver's profile entry says engine_resend.
+    Do fields.%Set("Approvable", ..Approvable(outage.Receiver), "boolean")
     Set read = ..WindowHeaders(outage.Namespace, outage.Item, outage.WindowFrom, now)
     Set sorted = ..Sort(read, $SELECT(setReason '= "": setReason, 1: ..#NOSETGATE))
     Set fields.SettledCompleted = sorted.settled.completed, fields.SettledSuspended = sorted.settled.suspended

@@ -323,6 +323,52 @@ ClassMethod S(obj As %DynamicObject, key As %String) As %String
     Quit obj.%Get(key)
 }
 
+/// A person's one approval of an offered set (tier C): answers the HTTP status, and in reply the outage as the routes give
+/// it or the error. by is the signed-in user. The approval names the set's digest and the row's version, carries a note,
+/// stands APPROVALMINUTES before the first send, and copies the set into the ledger as the run's rows (Shutter.Store.ResendRecord,
+/// state approved), one run per outage; Engine Resend sends them. A replayed Idempotency-Key answers the first reply.
+ClassMethod Approve(row As Shutter.Store.Outage, body As %DynamicObject, by As %String, Output reply As %DynamicObject) As %String
+{
+    Set reply = ""
+    If row.State '= "offered" Set reply = {"error": "wrong_state", "detail": ("Outage " _ row.%Id() _ " reads " _ row.State _ ": only an offered set can be approved")} Quit "409 Conflict"
+    If 'row.Approvable Set reply = {"error": "not_approvable", "detail": "This receiver's profile entry does not say engine_resend, or this build has no sender: Shutter will not send these messages"} Quit "409 Conflict"
+    If row.SetStatus '= "computed" Set reply = {"error": "wrong_state", "detail": ("The set is " _ row.SetStatus _ ": read it again")} Quit "409 Conflict"
+    Set digest = ..S(body, "digest"), note = $ZSTRIP(..S(body, "note"), "<>W")
+    If digest = "" Set reply = {"error": "bad_request", "detail": "An approval names the set's digest"} Quit "400 Bad Request"
+    If note = "" Set reply = {"error": "bad_request", "detail": "An approval needs a note: what was checked, and with whom"} Quit "400 Bad Request"
+    If $LENGTH(note) > 1000 Set reply = {"error": "bad_request", "detail": "note is longer than 1000 characters"} Quit "400 Bad Request"
+    If body.%IsDefined("version") && (+body.%Get("version") '= +row.Version) Set reply = {"error": "version_changed", "detail": "The outage has moved on: read it again", "currentVersion": (+row.Version)} Quit "409 Conflict"
+    If digest '= row.SetDigest Set reply = {"error": "set_changed", "detail": "The set has changed since it was read: read it again and approve what it lists now", "currentDigest": (row.SetDigest)} Quit "409 Conflict"
+    Set offered = row.GetList("ListOffered")
+    If offered.%Size() = 0 Set reply = {"error": "wrong_state", "detail": "The set lists nothing to send"} Quit "409 Conflict"
+    Set now = ##class(Shutter.Util.Time).NowUTC(), runId = "R" _ row.%Id() _ "-" _ (+row.Version)
+    Set approval = {"id": (runId), "by": (by), "givenAt": (now), "goodUntil": (##class(Shutter.Util.Time).PlusMillis(now, ..#APPROVALMINUTES * 60000)), "digest": (digest), "note": (note)}
+    // The run's rows first, in the set's order: if the move below is refused, they are taken away again.
+    Set made = "", sc = $$$OK
+    Set iter = offered.%GetIterator()
+    While iter.%GetNext(.i, .r) {
+        Set rec = ##class(Shutter.Store.ResendRecord).%New()
+        Set rec.RunId = runId, rec.Position = i + 1, rec.OutageId = row.%Id(), rec.Namespace = row.Namespace, rec.Item = row.Item
+        Set rec.OriginHeaderId = r.headerId, rec.State = "approved", rec.SetDigest = digest, rec.ApprovalId = runId, rec.ApprovedBy = by
+        Set cases = ##class(Shutter.Util.ResendSet).CasesOf(row.Namespace, [(r)])
+        Set:cases'="" rec.CaseId = $LIST(cases, 1)
+        Set sc = rec.%Save()
+        If $$$ISERR(sc) Quit
+        Set made = made _ $LISTBUILD(rec.%Id())
+    }
+    If $$$ISOK(sc) Set sc = row.Advance("sending", "approved by " _ by _ ": " _ offered.%Size() _ " message" _ $SELECT(offered.%Size() = 1: "", 1: "s") _ " to send in order. " _ note, by, {"Approval": (approval.%ToJSON())}, "approved", .moved)
+    If $$$ISERR(sc) || 'moved {
+        For j = 1:1:$LISTLENGTH(made) { Do ##class(Shutter.Store.ResendRecord).%DeleteId($LIST(made, j)) }
+        Set reply = {"error": "version_changed", "detail": ("The outage moved on while it was approved: read it again" _ $SELECT($$$ISERR(sc): " (" _ $SYSTEM.Status.GetErrorText(sc) _ ")", 1: ""))}
+        Quit "409 Conflict"
+    }
+    Set reply = ..One(row)
+    Quit "200 OK"
+}
+
+/// How long an approval stands before its first send, in minutes.
+Parameter APPROVALMINUTES = 15;
+
 /// A person's act on an outage: pause until a time, or close with a reason. Answers the HTTP status, and in reply the outage
 /// as the routes give it or the error object. by is the signed-in user, never a name from the body.
 /// acts, when given, stands in for the row's own list (a later build's row may list an act this method doesn't handle).
