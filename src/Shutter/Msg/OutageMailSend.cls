@@ -15,4 +15,28 @@ Property Subject As %String(MAXLEN = 300);
 
 Property Body As %String(MAXLEN = 20000);
 
+Storage Default
+{
+<Data name="OutageMailSendDefaultData">
+<Subscript>"OutageMailSend"</Subscript>
+<Value name="1">
+<Value>OutageId</Value>
+</Value>
+<Value name="2">
+<Value>State</Value>
+</Value>
+<Value name="3">
+<Value>ToAddr</Value>
+</Value>
+<Value name="4">
+<Value>Subject</Value>
+</Value>
+<Value name="5">
+<Value>Body</Value>
+</Value>
+</Data>
+<DefaultData>OutageMailSendDefaultData</DefaultData>
+<Type>%Storage.Persistent</Type>
+}
+
 }
