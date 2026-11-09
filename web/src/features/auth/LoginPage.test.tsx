@@ -335,8 +335,10 @@ describe('LoginPage, the proof on a demo install', () => {
     expect(container.querySelector('.stat-tile')).toBeNull();
     expect(container).not.toHaveTextContent(/24 of 24/);
     expect(container).not.toHaveTextContent(/recorded with the real agents/);
-    // The way into the trial is for every install
-    expect(screen.getByRole('link', { name: 'Open the trial' })).toBeInTheDocument();
+    // The trial is the demo hospital's: a hospital's own install invites nobody into it
+    expect(screen.queryByRole('region', { name: 'New to Shutter?' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Open the trial' })).toBeNull();
+    expect(container).not.toHaveTextContent(/Fictional Hospital/);
   });
 });
 
@@ -436,7 +438,7 @@ describe('LoginPage, the way into the trial', () => {
   beforeEach(() => resetMock(null));
 
   it('is a card of its own with two real links that name the trial, and no password field', async () => {
-    renderLogin(false);
+    renderLogin(true);
     const card = await screen.findByRole('region', { name: 'New to Shutter?' });
     expect(card).toHaveTextContent(
       "Try it in the trial environment: Mikolaj's Fictional Hospital, with made-up patients, where each action replays a recording. Nothing reaches IRIS.",

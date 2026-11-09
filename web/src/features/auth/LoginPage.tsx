@@ -25,7 +25,8 @@ import { TrialCard } from './TrialCard';
 
 /**
  * The live sign-in page, in two halves: what Shutter is for and the proof for it (`ProofPanel`), and the password form
- * with the way into the trial under it (`TrialCard`). Trial pages never show it: the trial opens signed in, and its own
+ * with, on a demo install, the way into the trial under it (`TrialCard`); a hospital's own install shows no trial card,
+ * since the trial is the demo hospital's. Trial pages never show it: the trial opens signed in, and its own
  * sign-in page (src/trial/TrialSignIn.tsx) offers roles with no password. So nothing here names a trial user.
  *
  * Under the heading, a demo install says it is a real IRIS for Health instance, and the public demo (its live hospital
@@ -145,7 +146,9 @@ export default function LoginPage() {
                 </Stack>
               </form>
             </Paper>
-            <TrialCard />
+            {/* The trial is the demo hospital's: a hospital's own install never invites its staff into it, by the same
+                signal as the line under the heading (the server's demo flag) */}
+            {demo ? <TrialCard /> : null}
           </Stack>
         </Grid.Col>
         <Grid.Col span={{ base: 12, md: 7 }} order={1}>
