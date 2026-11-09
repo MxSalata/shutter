@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.52, 9 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.53, 9 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -2559,6 +2559,18 @@ No message content is copied: the rows hold ids, codes, the body's class and the
 
 ## Changes
 
+- v1.53, 9 Nov 2026 (for 1.4.0, measured on build 154): the set gate refuses a message whose life crosses a stop or a
+  crash (`set_policy_version` 2026-11-09.2). Inside one job's handling of a message the engine logs every change of an
+  attempt's words, so an attempt that reached the receiver always leaves an Error row; an attempt cut off by a forced stop or
+  a crash leaves none, and the engine puts the message back on its queue unmarked, so its later attempts can all say the
+  connection never opened while the receiver holds the frame. `Shutter.Util.EngineRead.Interrupted` reads the namespace's
+  event log, from the header's creation on, for a row of `Ens.Job` `RecoverActiveMessage` or `MarkDeadJobs` or of
+  `Ens.Director` `StartProduction`, by the engine's class and method columns since the words are translated; such a message
+  goes to `refused` with the reason, at the list and at Engine Resend's check before each send. A clean restart during an
+  outage refuses its messages too: a person sends them. Proof: `tests/e2e/attempt_history_check.py`. A message's cases in
+  a watched namespace are those with that `sourceNamespace` and `originHeaderId` (a case's `sourceHeaderId` is Shutter's own
+  copy and is never matched against another namespace's header), for the patient check's own cases and for what a send
+  resolves.
 - v1.52, 9 Nov 2026 (for 1.4.0, found on the Pathology rig): `findings` is a snapshot item kind, so an order or result
   case's evidence no longer fails when it adds the item (before, every such case ended `failed` with no snapshot). The
   character finding adds `shared` (`failures`, `of_failures`, `characters`, or `why`): how many of the receiver's failures in

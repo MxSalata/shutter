@@ -984,7 +984,8 @@ listeners on the loopback address of a test instance:
   reads connected until a read times out.
 - **Counts of attempts are undercounts.** The engine logs a row only when the words change, so the attempts are read from
   the header's own description where it says so, and otherwise as "at least once". A namespace's surviving log rows do not
-  prove a complete attempt history.
+  prove a complete attempt history: an attempt cut off by a forced stop or a crash leaves no row, so a message whose life
+  crosses a production start or an active message put back on a queue is never offered again, and a person sends it.
 - **Failures the intake never hears** (a router's validation refusal with `AlertOnError` off, a batch, a message over 2 MB,
   a FHIR or document body) get no case. The outage does not depend on the intake, so it can still open at the operation; a
   router's refusal never reaches the operation and gets neither. A target with no header to it is invisible: nothing reaches

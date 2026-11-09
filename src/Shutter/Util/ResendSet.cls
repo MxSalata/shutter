@@ -9,7 +9,8 @@
 ///
 /// Then each origin header to the item created in the window, in header id order (the engine's own arrival order), into
 /// one of four lists: queued (the engine, or a copy of it, is still trying: wait), offered (status Error; every retained
-/// log row a connection that never opened; the log reaching back past it; no copy resent by hand; no resend of Shutter's
+/// log row a connection that never opened; the log reaching back past it; no production start or active message put back on
+/// a queue since it was created, which is when an attempt can go unlogged; no copy resent by hand; no resend of Shutter's
 /// but a never-opened clone, which then stands in the origin's place; and the patient check passed), reached (the receiver
 /// took it on an attempt: a reply, a lost read, a read timeout) or refused (anything else, with its reason, Suspended and
 /// the other set-aside statuses included).
@@ -17,7 +18,7 @@ Class Shutter.Util.ResendSet [ Abstract ]
 {
 
 /// The version of these rules, which the set's digest and an approval bind.
-Parameter SETPOLICYVERSION = "2026-11-09.1";
+Parameter SETPOLICYVERSION = "2026-11-09.2";
 
 /// The words every surface shows with the set.
 Parameter NOTSENT = "Shutter will not send these messages. Review them in the Message Viewer using the site's recovery procedure.";
@@ -143,6 +144,16 @@ ClassMethod Place(ns As %String, h As %DynamicObject, row As %DynamicObject) As 
     If back.answer '= "yes" {
         Set row.reason = "the engine's log does not reach back to it, so its attempts may have been purged"
         Quit "refused"
+    }
+    // Rule 8: no stop or crash since it was created, for it or the origin it stands for. Inside one job's uninterrupted
+    // handling the engine logs every change of an attempt's words, so a reached attempt always leaves a row; an attempt cut
+    // off by a stop or a crash leaves none.
+    Set ids = $LISTBUILD(candidate) _ $SELECT(candidate '= row.headerId: $LISTBUILD(row.headerId), 1: "")
+    For i = 1:1:$LISTLENGTH(ids) {
+        Set cut = ##class(Shutter.Util.EngineRead).Interrupted(ns, $LIST(ids, i))
+        Continue:cut.answer="no"
+        Set row.reason = $SELECT(cut.answer = "yes": "the production started or the engine put a message back on its queue at " _ ..Clock(cut.at) _ ", after this message was created: an attempt cut off by a stop or a crash leaves no row in the log, so it may have reached the receiver", 1: "whether a stop or a crash came during its attempts could not be read: " _ cut.why)
+        Return "refused"
     }
     If candidate '= row.headerId Set row.headerId = candidate, row.reason = note
     Quit "candidate"
