@@ -11,7 +11,7 @@ import { useAppearance } from '@/stores/appearance';
 import { layer1Words } from '@/test/words';
 import { theme } from '@/theme';
 import type { DetailLevel } from '@/env/mode';
-import { outweighedIn, passName, type Evaluation } from './evaluation';
+import { BOUNDARY_DISPLAY, outweighedIn, passName, type BoundaryChecks, type Evaluation } from './evaluation';
 import EvaluationPage from './EvaluationPage';
 import { HELD_OUT } from './heldOut';
 
@@ -26,7 +26,11 @@ beforeEach(() => resetMock('approver'));
  */
 function renderPage(
   data?: Evaluation,
-  { path = '/evaluation', detail = 'plain' }: { path?: string; detail?: DetailLevel } = {},
+  {
+    path = '/evaluation',
+    detail = 'plain',
+    refusals,
+  }: { path?: string; detail?: DetailLevel; refusals?: BoundaryChecks } = {},
 ) {
   useAppearance.setState({ detail });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -34,7 +38,7 @@ function renderPage(
     <MantineProvider theme={theme}>
       <QueryClientProvider client={client}>
         <MemoryRouter initialEntries={[path]}>
-          <EvaluationPage data={data} />
+          <EvaluationPage data={data} refusals={refusals} />
         </MemoryRouter>
       </QueryClientProvider>
     </MantineProvider>,
@@ -534,35 +538,116 @@ describe('EvaluationPage', () => {
     ).toBeInTheDocument();
   });
 
-  it('lists what the boundary refuses, each attempt with its scenario, its answer and what it proves', () => {
+  const safeguards = () => screen.getByRole('region', { name: 'Approval safeguards' });
+  /** The register's checks, each a list item named by its h3, in the order the page shows them. */
+  const register = () => within(within(safeguards()).getByRole('list')).getAllByRole('listitem');
+
+  it("lists the boundary's checks as a register, in the document's order, each headline and outcome in words", () => {
     renderPage();
-    const section = screen.getByRole('region', { name: 'What the boundary refuses' });
+    const section = safeguards();
     expect(
-      within(section).getByText(/^What tests\/e2e\/boundary_check\.py tries over HTTP/),
+      within(section).getByText(`${boundary.checks.length} HTTP checks, run in CI on real IRIS for Health.`),
     ).toBeInTheDocument();
-    const rows = within(section).getAllByRole('row').slice(1);
-    expect(rows).toHaveLength(boundary.checks.length);
-    const digest = within(section)
-      .getByText('An approval of a plan that is not the one shown')
-      .closest('tr')!;
-    expect(digest).toHaveTextContent('S2, rules only');
-    expect(digest).toHaveTextContent('409 stale_version');
-    // The answer is the machine's: a code chip
-    expect(within(digest).getByText('409 stale_version').tagName).toBe('CODE');
-    const receiver = within(section)
-      .getByText('The receiving system changed after the approval')
-      .closest('tr')!;
-    expect(receiver).toHaveTextContent('S20, rules only');
-    expect(receiver).toHaveTextContent('APPROVAL_RECEIVER_CHANGED, no write');
+    // Every check runs in Rules only, so the label above them says so once
+    expect(within(section).getByText('Expected outcomes · Rules only')).toBeInTheDocument();
+    // A list, never a table: no table roles are left
+    expect(within(section).queryByRole('table')).toBeNull();
+    expect(within(section).queryByRole('row')).toBeNull();
+    const items = register();
+    expect(items).toHaveLength(boundary.checks.length);
+    expect(items.map((li) => within(li).getByRole('heading', { level: 3 }).textContent)).toEqual(
+      boundary.checks.map((c) => BOUNDARY_DISPLAY[c.id].headline),
+    );
+    const digest = items[0];
+    expect(digest).toHaveTextContent('Approval refused; nothing stored or written.');
+    expect(within(digest).getByRole('button', { name: 'Inspect plan mismatch' })).toHaveAttribute(
+      'aria-expanded',
+      'false',
+    );
+    // No pass or fail marks: these are the outcomes each check requires, not a run's results
+    expect(section).not.toHaveTextContent(/passed\b.*\d+\/\d+|\d+\/\d+ passed/);
   });
 
-  it("lets a keyboard scroll the boundary's table where it is wider than the page: its scroll area takes the focus, named", () => {
+  it('has words for every check the document lists, and a disclosure name for each, all different', () => {
+    for (const c of boundary.checks) expect(BOUNDARY_DISPLAY[c.id], c.id).toBeDefined();
+    const names = boundary.checks.map((c) => BOUNDARY_DISPLAY[c.id].inspect);
+    expect(new Set(names).size).toBe(names.length);
+  });
+
+  it('keeps every field of each check one click away in Plain: its title, scenario, exact answer and proof', () => {
     renderPage();
-    const section = screen.getByRole('region', { name: 'What the boundary refuses' });
-    // Nothing in the table can take the focus, so its scroll area must (axe: scrollable-region-focusable)
-    const area = within(section).getByRole('region', { name: 'What the boundary refuses, scrolls sideways' });
-    expect(area).toHaveAttribute('tabindex', '0');
-    expect(within(area).getAllByRole('row')).toHaveLength(boundary.checks.length + 1);
+    const items = register();
+    boundary.checks.forEach((c, i) => {
+      const li = items[i];
+      const button = within(li).getByRole('button', { name: BOUNDARY_DISPLAY[c.id].inspect });
+      fireEvent.click(button);
+      expect(button).toHaveAttribute('aria-expanded', 'true');
+      const panel = document.getElementById(button.getAttribute('aria-controls')!)!;
+      expect(panel).toHaveAttribute('data-tech-detail', 'open');
+      expect(panel).toHaveTextContent(c.title);
+      expect(panel).toHaveTextContent(c.scenario);
+      expect(panel).toHaveTextContent(c.proves);
+      // The answer is the machine's: a code chip
+      expect(within(panel).getByText(c.answer).tagName).toBe('CODE');
+    });
+    // Several stay open at once: no accordion
+    expect(
+      within(safeguards())
+        .getAllByRole('button', { name: /^Inspect / })
+        .every((b) => b.getAttribute('aria-expanded') === 'true'),
+    ).toBe(true);
+  });
+
+  it('shows the scenario and the exact answer inline in Technical, the proof still behind its disclosure', () => {
+    renderPage(undefined, { detail: 'technical' });
+    const items = register();
+    boundary.checks.forEach((c, i) => {
+      const li = items[i];
+      const button = within(li).getByRole('button', { name: BOUNDARY_DISPLAY[c.id].inspect });
+      // An explanation: closed in Technical too
+      expect(button).toHaveAttribute('aria-expanded', 'false');
+      const panel = document.getElementById(button.getAttribute('aria-controls')!)!;
+      const inline = li.querySelector('.boundary-check-body > .boundary-facts')!;
+      expect(inline).toHaveTextContent(`Scenario${c.scenario}`);
+      expect(within(inline as HTMLElement).getByText(c.answer).tagName).toBe('CODE');
+      // Once on the row: the disclosure does not repeat them
+      expect(panel.querySelector('.boundary-facts')).toBeNull();
+      expect(panel).toHaveTextContent(c.proves);
+    });
+  });
+
+  it('gives a check it has no words for its own title and answer, so a new check never goes missing', () => {
+    const extra = {
+      id: 'new_check',
+      title: 'An approval by a stranger',
+      scenario: 'S9, board',
+      answer: '401 unauthorised',
+      proves: 'Nobody else approves.',
+    };
+    renderPage(undefined, { refusals: { ...boundary, checks: [...boundary.checks, extra] } });
+    const items = register();
+    expect(items).toHaveLength(boundary.checks.length + 1);
+    const last = items[items.length - 1];
+    expect(within(last).getByRole('heading', { level: 3 })).toHaveTextContent('An approval by a stranger');
+    expect(last).toHaveTextContent('401 unauthorised');
+    expect(
+      within(last).getByRole('button', { name: 'Inspect an approval by a stranger' }),
+    ).toBeInTheDocument();
+    // The checks no longer share one mode, so the label names none
+    expect(within(safeguards()).getByText('Expected outcomes')).toBeInTheDocument();
+  });
+
+  it("says at its foot where the checks come from, where they run, and that they are not a run's results", () => {
+    renderPage();
+    const section = safeguards();
+    const button = within(section).getByRole('button', { name: 'Test source and CI' });
+    expect(button).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(button);
+    const panel = document.getElementById(button.getAttribute('aria-controls')!)!;
+    expect(within(panel).getByText(boundary.script).tagName).toBe('CODE');
+    expect(panel).toHaveTextContent(`It runs in ${boundary.runs}.`);
+    expect(panel).toHaveTextContent('an instance of your own that nobody else is using');
+    expect(panel).toHaveTextContent('not the status of the latest CI run');
   });
 
   it('gives the document as the page reads it, with Copy as JSON, opened in Technical', () => {

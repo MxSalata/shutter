@@ -5,7 +5,8 @@ import { audit } from './axe';
  * The judges' path, each test in a fresh browser at 1280 and 390 px, as a judge arrives: from the S8 card in Rules only
  * to the write over the bed manager's ward, then the same card in Board to C-000008 escalated; `?trial=judge` landing on
  * S8 in Rules only with no welcome, before and after a reload; and the held-out card on the Evaluation. With E2E_SHOTS
- * set, each step is saved there. The Evaluation is also audited at the widths where its boundary table scrolls sideways.
+ * set, each step is saved there. The Evaluation is also audited at the widths where its boundary table used to scroll
+ * sideways.
  */
 
 /** Waits until the page has stopped scrolling (a landing scrolls smoothly), then saves the screen when asked to. */
@@ -134,8 +135,8 @@ for (const width of [1280, 390])
     });
   });
 
-// From 768 to about 1000 px the boundary's table is wider than its column and scrolls sideways: its scroll area must take
-// the focus (axe: scrollable-region-focusable), in light and in dark
+// From 768 to about 1000 px the boundary's checks were a table wider than its column, which scrolled sideways; as a
+// register they fit the column there, with nothing to scroll, and the page passes axe, in light and in dark
 for (const width of [768, 992])
   for (const colorScheme of ['light', 'dark'] as const)
     test(`the Evaluation passes axe at ${width} px in ${colorScheme} @scenarios`, async ({ page }) => {
@@ -145,11 +146,10 @@ for (const width of [768, 992])
       await expect(runS8(page, 'Rules only')).toBeFocused();
       await page.goto('./?trial#/evaluation');
       await expect(page.getByRole('heading', { name: 'Evaluation', exact: true })).toBeVisible();
-      const area = page.getByRole('region', { name: 'What the boundary refuses, scrolls sideways' });
-      await area.scrollIntoViewIfNeeded();
-      // It does scroll sideways here, so the check is of the case axe flagged
-      expect(await area.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
-      await expect(area).toHaveAttribute('tabindex', '0');
+      const section = page.getByRole('region', { name: 'Approval safeguards' });
+      await section.scrollIntoViewIfNeeded();
+      await expect(section.getByRole('table')).toHaveCount(0);
+      expect(await section.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
       expect(await audit(page)).toEqual([]);
     });
