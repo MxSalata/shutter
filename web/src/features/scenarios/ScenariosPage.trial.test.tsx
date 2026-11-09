@@ -151,8 +151,8 @@ describe('ScenariosPage in the trial', () => {
     expect(within(card).getByRole('heading', { name: 'Rules only writes over a ward' })).toBeInTheDocument();
     expect(card).toHaveTextContent(S8_RULES_SEE);
     // The diagram draws how S8 should end (a person decides); the card says so where Rules only writes instead
-    const diagram = within(card).getByRole('img', { name: /^S8 in a diagram:/ });
-    expect(diagram).toHaveAccessibleName(/It should end: a person decides, nothing written\.$/);
+    const diagram = within(card).getByRole('img', { name: /^S8, Rules only mode, in a diagram:/ });
+    expect(diagram).toHaveAccessibleName(/Expected: a person decides, nothing written\.$/);
     const note = within(card).getByText(S8_RULES_DIAGRAM_NOTE);
     expect(note.compareDocumentPosition(diagram) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(S8_RULES_DIAGRAM_NOTE).toBe('Should end: a person decides. Rules only writes instead.');

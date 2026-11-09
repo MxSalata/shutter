@@ -52,7 +52,7 @@ for (const { colorScheme, contrast, palette } of MODES)
     });
   });
 
-for (const width of [360, 1280, 1920])
+for (const width of [360, 390, 1280, 1920])
   test.describe(`the small diagrams at ${width} px @scenarios`, () => {
     test.use({ viewport: { width, height: 900 } });
 
@@ -67,9 +67,16 @@ for (const width of [360, 1280, 1920])
           [...document.querySelectorAll<SVGSVGElement>('.scenario-diagram')].flatMap((svg) => {
             const bad: string[] = [];
             const box = svg.getBoundingClientRect();
-            if (box.height > 44 || box.width > 305) bad.push(`${box.width}x${box.height}`);
+            // Two rows: the story, then the expected end on a row of its own (a first card adds 6 px above)
+            if (box.height > 90 || box.width > 305) bad.push(`${box.width}x${box.height}`);
             if (box.right > window.innerWidth) bad.push('past the window');
-            if (!svg.getAttribute('aria-label')?.includes('It should end: ')) bad.push('no label');
+            if (!svg.getAttribute('aria-label')?.includes('. Expected: ')) bad.push('no label');
+            // No text drawn below 12 px: the drawing's own sizes, times how much the page has scaled it down
+            const scale = box.width / Number(svg.getAttribute('width'));
+            for (const t of svg.querySelectorAll('text')) {
+              const size = parseFloat(getComputedStyle(t).fontSize) * scale;
+              if (size < 11.95) bad.push(`${t.textContent} at ${size.toFixed(1)} px`);
+            }
             for (const g of svg.querySelectorAll('g')) {
               const [rect, text] = [g.querySelector(':scope > rect'), g.querySelector(':scope > text')] as [
                 SVGGraphicsElement | null,
@@ -82,13 +89,17 @@ for (const width of [360, 1280, 1920])
                 bad.push(`${text.textContent} overflows`);
             }
             const limit = Number(svg.getAttribute('width'));
-            const captions = [...svg.querySelectorAll<SVGGraphicsElement>('.diagram-caption')].map((c) =>
-              c.getBBox(),
-            );
-            captions.forEach((c, i) => {
-              if (c.x < 0 || c.x + c.width > limit) bad.push('caption out');
-              if (i && c.x < captions[i - 1].x + captions[i - 1].width) bad.push('captions overlap');
-            });
+            // Captions in the order drawn, row by row: stacked, the end's caption is on a row of its own
+            for (const row of [false, true]) {
+              const captions = [...svg.querySelectorAll<SVGGraphicsElement>('.diagram-caption')]
+                .filter((c) => !!c.closest('[data-row="end"]') === row)
+                .map((c) => ({ box: c.getBBox(), words: c.textContent }));
+              captions.forEach(({ box: c, words }, i) => {
+                if (c.x < 0 || c.x + c.width > limit) bad.push(`caption ${words} out`);
+                if (i && c.x < captions[i - 1].box.x + captions[i - 1].box.width)
+                  bad.push(`${words} overlaps`);
+              });
+            }
             return bad.length ? [`${svg.getAttribute('aria-label')?.slice(0, 12)}: ${bad.join(', ')}`] : [];
           }),
         );

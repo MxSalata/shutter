@@ -5,6 +5,11 @@ import { scenarioDiagram, type DiagramEnd, type DiagramNode } from './scenarioDi
 
 /** The drawing's measures, in px: one row of marks, a row of captions under them, and the join between marks. */
 const HEIGHT = 38;
+/** Stacked, the expected end has a row of its own under the story, this far below the first row's top. */
+const SECOND_ROW = HEIGHT + 4;
+/** The word before the end, so the end reads as what should happen, never as what a run did. */
+const EXPECTED = 'Expected';
+const EXPECTED_GAP = 5;
 const MARK_TOP = 1;
 const MARK_HEIGHT = 20;
 const MARK_MIDDLE = MARK_TOP + MARK_HEIGHT / 2;
@@ -12,12 +17,14 @@ const CAPTION_BASE = 34;
 const JOIN = 4;
 /** Two boxes side by side need more of a line than a box beside a bolt, or they read as one. */
 const MESSAGES_JOIN = 7;
-const ARROW = 10;
 
 /** The width words take, a little over the system font's, since an SVG can't lay out text by itself; a browser test measures it. */
 const wordsWidth = (text: string, perChar: number) => Math.ceil(text.length * perChar);
 const markWidth = (text: string) => wordsWidth(text, 6) + 11;
-const captionWidth = (text: string | undefined) => (text ? wordsWidth(text, 5.2) : 0);
+/** Captions are 12 px, the smallest text the app uses, so a phone never shows them smaller (the drawing isn't scaled down there). */
+const captionWidth = (text: string | undefined, bold = false) =>
+  text ? wordsWidth(text, bold ? 7 : 6.7) : 0;
+const EXPECTED_WIDTH = captionWidth(EXPECTED, true);
 
 interface Placed {
   key: string;
@@ -134,7 +141,7 @@ function placeNode(node: DiagramNode, technical: boolean, i: number): Placed {
       // Not a failed mark: most of a long story arrives, and the caption says how many did not
       const text = `${node.total} sent`;
       const caption = `${node.failed} fail`;
-      const width = Math.max(markWidth(text), captionWidth(caption));
+      const width = Math.max(markWidth(text), captionWidth(caption, true));
       return {
         key,
         width,
@@ -152,7 +159,7 @@ function placeNode(node: DiagramNode, technical: boolean, i: number): Placed {
       const failed = node.mark === 'fails' || node.mark === 'refused';
       const caption =
         node.aside === 'source' ? 'bed manager' : node.aside === 'encounter' ? 'other visit' : node.mark;
-      const width = Math.max(markWidth(text) + (failed ? 14 : 0), captionWidth(caption));
+      const width = Math.max(markWidth(text) + (failed ? 14 : 0), captionWidth(caption, failed));
       const style = failed
         ? 'diagram-failed'
         : node.mark === 'withheld'
@@ -236,27 +243,40 @@ export function ScenarioDiagram({ scenario, mode }: { scenario: Scenario; mode: 
       x += join;
     }
   });
+  // "Expected", then the end, on a row of its own under the story with no arrow into it: the end is what should happen,
+  // not one more thing that does. On its own row the drawing fits a phone and the wide screen's 296 px column at its
+  // own size, so its text is never scaled below 12 px.
+  const width = Math.max(x, EXPECTED_WIDTH + EXPECTED_GAP + end.width);
+  const height = SECOND_ROW + HEIGHT;
   drawn.push(
-    <path
-      key="arrow"
-      className="diagram-arrow"
-      d={`M${x + 2} ${MARK_MIDDLE}h${ARROW - 5}m-3.5-3.5l3.5 3.5l-3.5 3.5`}
-    />,
+    <g key="end-row" data-row="end" transform={`translate(0 ${SECOND_ROW})`}>
+      <text className="diagram-expected" x={0} y={MARK_MIDDLE + 4}>
+        {EXPECTED}
+      </text>
+      <g>{end.draw(EXPECTED_WIDTH + EXPECTED_GAP)}</g>
+    </g>,
   );
-  x += ARROW;
-  drawn.push(<g key={end.key}>{end.draw(x)}</g>);
-  x += end.width;
-  return (
+  const svg = (
     <svg
       className="scenario-diagram"
       role="img"
       aria-label={diagram.label}
       data-end={diagram.end.kind}
-      width={x}
-      height={HEIGHT}
-      viewBox={`0 0 ${x} ${HEIGHT}`}
+      width={width}
+      height={height}
+      viewBox={`0 0 ${width} ${height}`}
     >
       {drawn}
     </svg>
+  );
+  if (!diagram.note) return svg;
+  // The rule under the drawing is in its label too, so a screen reader doesn't hear it twice
+  return (
+    <>
+      {svg}
+      <p className="diagram-note" aria-hidden>
+        {diagram.note}
+      </p>
+    </>
   );
 }

@@ -19,8 +19,14 @@
   fill: var(--mantine-color-text);
 }
 .scenario-diagram .diagram-caption {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 400;
+  fill: var(--shutter-muted);
+}
+/* The word before the end: what should happen, never what a run did */
+.scenario-diagram .diagram-expected {
+  font-size: 12px;
+  font-weight: 600;
   fill: var(--shutter-muted);
 }
 .scenario-diagram .diagram-caption-failed {
@@ -91,6 +97,17 @@
   .diagram-cross {
     stroke: CanvasText;
   }
+  /* The boxes too: a failure, a write or a person keeps its outline and its words, on the system background */
+  .diagram-mark rect,
+  .diagram-end rect {
+    fill: Canvas;
+  }
+}
+/* A line of the rule the story turns on, under its drawing (S15: a merge is never resent) */
+.diagram-note {
+  margin: 4px 0 0;
+  font-size: var(--mantine-font-size-xs);
+  color: var(--shutter-muted);
 }
 .first-card .scenario-diagram {
   margin-top: auto;
@@ -111,7 +128,8 @@
   .scenario-cell > .scenario-summary {
     grid-column: 1;
   }
-  .scenario-cell > .scenario-diagram {
+  .scenario-cell > .scenario-diagram,
+  .scenario-cell > .diagram-note {
     grid-column: 2;
     margin-top: 0;
   }

@@ -697,6 +697,9 @@ function AllScenarios({
             ))}
           </Group>
         </Chip.Group>
+        <Text size="sm" className="diagrams-say">
+          Diagrams show the scenario and the expected response, not the latest run.
+        </Text>
         {/* What the badges say in short, written out once: none of them is a tab stop in this list */}
         <TechDetail label="How to read this list" kind="explain">
           <Text size="sm" maw="68ch">
