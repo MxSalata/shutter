@@ -84,14 +84,17 @@ test.describe('a case on a phone', () => {
   test('opens from a tap on its badges and time, which only a pointer or the keyboard needs the tooltips of', async ({
     page,
   }) => {
-    await go(page, '/cases');
-    const row = page.locator('.case-row').filter({ hasText: 'C-000064' });
-    const badge = row.locator("td[data-label='Outcome'] [tabindex='0']").first();
-    await badge.scrollIntoViewIfNeeded();
-    // A finger, not a locator's tap: that refuses an element something else covers, and here the card's link does
-    const box = (await badge.boundingBox())!;
-    await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
-    await expect(page).toHaveURL(/#\/cases\/C-000064/);
+    // The badge by its tone and the time by its element: neither is a tab stop, the case link is the row's one stop
+    for (const part of ["td[data-label='Outcome'] [data-tone]", 'time']) {
+      await go(page, '/cases');
+      const row = page.locator('.case-row').filter({ hasText: 'C-000064' });
+      const target = row.locator(part).first();
+      await target.scrollIntoViewIfNeeded();
+      // A finger, not a locator's tap: that refuses an element something else covers, and here the card's link does
+      const box = (await target.boundingBox())!;
+      await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+      await expect(page, part).toHaveURL(/#\/cases\/C-000064/);
+    }
   });
 
   test('stays on the list when the text More about opened is tapped, so the reader keeps their place', async ({

@@ -218,6 +218,43 @@ describe('CasesTable tab stops', () => {
     const stops = [...row.querySelectorAll<HTMLElement>('a[href], button, [tabindex="0"]')];
     expect(stops.map((e) => e.textContent)).toEqual([base.caseId]);
   });
+
+  it("leaves the row's time and badges no control of their own, so on a phone a tap on them reaches the card's link", () => {
+    render(
+      <MantineProvider theme={theme}>
+        <MemoryRouter>
+          <CasesTable
+            items={[
+              {
+                ...base,
+                encounterId: 'ENC-1',
+                disposition: 'resend',
+                scenario: 'S2',
+                mode: 'board',
+                openedAt: '2026-10-25T08:00:00Z',
+                writes: 1,
+                verification: 'verified',
+              } as CaseSummary,
+            ]}
+          />
+        </MemoryRouter>
+      </MantineProvider>,
+    );
+    const row = screen.getAllByRole('row')[1];
+    expect(row.querySelector('a.case-open')).toHaveTextContent(base.caseId);
+    // What cases-list.css raises above the card's link on a phone: anything else lies under it
+    const raised = "a:not(.case-open), button, [data-tech-detail='open']";
+    const parts = [
+      row.querySelector("td[data-label='Outcome'] [data-tone]"),
+      row.querySelector("td[data-label='Proposed action'] [data-tone]"),
+      row.querySelector('time'),
+    ];
+    for (const part of parts) {
+      expect(part).not.toBeNull();
+      expect(part!.closest(raised)).toBeNull();
+      expect(part).not.toHaveAttribute('tabindex');
+    }
+  });
 });
 
 describe('proposalNote', () => {
