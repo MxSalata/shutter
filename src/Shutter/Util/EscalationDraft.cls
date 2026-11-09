@@ -56,7 +56,7 @@ ClassMethod Build(case As Shutter.Store.Case, team As %DynamicObject, Output sub
         Set b = b _ "Shutter withheld a message to " _ label _ " that it never sends by itself (" _ case.FailureText _ "). Please apply or decline it by hand in the systems concerned; Shutter has sent nothing for this message." _ nl _ nl
     } ElseIf case.NotModelled() {
         // An order, a result or a document (v1.45): "correct them by hand" is the wrong request while the queue may still deliver it.
-        Set b = b _ "A message to " _ label _ " failed. Shutter resends only ADT, so it has sent nothing for this message, and the message itself may be sound. Before anyone re-enters it, check the source's Message Viewer: an operation that retries delivers it by itself once the receiver is back." _ nl _ nl
+        Set b = b _ "A message to " _ label _ " failed. Shutter has not resent it, and the message itself may be sound. Before anyone re-enters it, check the source's Message Viewer: an operation that retries delivers it by itself once the receiver is back." _ nl _ nl
     } ElseIf ..LatestAttemptOutcome(case) = "uncertain" {
         // A write nobody answered may have been applied, and a conditional write can still land while the version stands.
         Set b = b _ "Shutter sent a write to " _ label _ " and got no answer, so it may have been applied, and it can still land while the receiver stays at the version below, since a slower receiver can commit it late. Before anyone corrects this by hand, check " _ label _ " for the operation key below; Shutter has sent nothing more for this message." _ nl _ nl
@@ -249,7 +249,7 @@ ClassMethod Reason(case As Shutter.Store.Case, Output failing As %DynamicArray) 
         }
     }
     If code = "" Set code = $SELECT(case.State = "failed": "", 1: ##class(Shutter.API.Dispatch).ReasonFromEvent(text, case.State))
-    Quit $SELECT(code = "": "", 1: ##class(Shutter.Store.BlockReason).ForReceiver(code, case.Receiver))
+    Quit $SELECT(code = "": "", 1: ##class(Shutter.Store.BlockReason).ForCase(code, case))
 }
 
 /// An HTTP status in words: the connectors store a request nobody answered as 0, which is no status a person should read.

@@ -40,6 +40,9 @@ Method OnGateRequest(request As Shutter.Msg.GateRequest, Output response As Shut
         Do ..Check(checks, "identity", "pass", "NEW_ENCOUNTER", "The receiver answers no encounter under this number, as an admission expects. That does not prove it holds no record for this patient")
     } ElseIf wardStatus = 404 {
         Do ..Check(checks, "identity", "block", "UNKNOWN_ENCOUNTER", "The receiver does not know encounter " _ case.EncounterId)
+    } ElseIf ..NoRecordToRead(case.Receiver) {
+        // An orders and results receiver with no API: there is no encounter record of it to read, so nothing is unreadable.
+        Do ..Check(checks, "identity", "pass", "NOT_APPLICABLE", "The receiver keeps orders and results and has no API Shutter reads: there is no record of it to compare")
     } Else {
         Do ..Check(checks, "identity", "unknown", "RECEIVER_UNREADABLE", ..Unreadable(case, "The receiver's state could not be read (" _ $SELECT(wardStatus: "HTTP " _ wardStatus, 1: "no answer") _ ")"))
     }
@@ -527,6 +530,13 @@ ClassMethod Reversed(event As %String) As %String
 {
     Set base = $SELECT($EXTRACT(event, 1, 7) = "cancel_": $EXTRACT(event, 8, *), 1: event)
     Quit $CASE(base, "admit": "admission", "": "event", : base)
+}
+
+/// Whether a receiver has no record Shutter could read: an orders and results receiver with no state endpoint.
+ClassMethod NoRecordToRead(receiver As %String) As %Boolean
+{
+    If ##class(Shutter.Store.SiteProfile).ReceiverCategory(receiver) '= "orders_results" Quit 0
+    Quit ##class(Shutter.Store.SiteProfile).ReceiverPath(receiver, "state", "E") = ""
 }
 
 /// The detail of a RECEIVER_UNREADABLE check: the words given, or, for a receiver whose site profile entry is still the
