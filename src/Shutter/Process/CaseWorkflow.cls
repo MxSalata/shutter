@@ -241,6 +241,8 @@ Method OnResponse(request As %Library.Persistent, ByRef response As %Library.Per
     Try {
         Set case = ##class(Shutter.Store.Case).ByCaseId(..CaseId)
         If '$ISOBJECT(case) Quit
+        // A cancel that waits for its task's decision lock is tried again, on a closed case too (OnCancelRetry).
+        If $PIECE(completionkey, ":", 1, 2) = "cancel:retry" { Set sc = ..OnCancelRetry(case, +$PIECE(completionkey, ":", 3), +$PIECE(completionkey, ":", 4)) Quit }
         If case.IsClosed() {
             // A late agent answer still has a cost: record the run, then ignore it.
             If $ISOBJECT(callresponse) && (($EXTRACT(completionkey, 1, 7) = "member:") || (completionkey = "coordinator")) {
@@ -1525,13 +1527,17 @@ ClassMethod RehearsalFailureWords(outcome As %String, httpStatus As %String) As 
 
 /// The approval task got no answer within the wait (v1.35): if the case still waits for this round's plan, the task is
 /// cancelled and the case escalates, so a person sees it as work left undone rather than a request nobody noticed; a
-/// decision taken meanwhile, or a later round, leaves the alarm with nothing to do.
-Method OnApprovalTimeout(case As Shutter.Store.Case, round As %Integer) As %Status
+/// decision taken meanwhile, or a later round, leaves the alarm with nothing to do. A task whose decision lock stays
+/// refused is left open and the case keeps waiting: the wait is tried again a minute later (CancelLater), tries counting
+/// the earlier ones.
+Method OnApprovalTimeout(case As Shutter.Store.Case, round As %Integer, tries As %Integer = 0) As %Status
 {
     If round '= ..Round { $$$TRACE("An approval wait from round " _ round _ " ended; the case is in round " _ ..Round) Quit $$$OK }
     If case.State '= "awaiting_approval" { $$$TRACE("The approval wait ended; the case is " _ case.State _ ", so nothing is due") Quit $$$OK }
     Set wait = ..WaitWords(..ApprovalWaitSeconds)
-    Do ..CancelOpenTask(case, "system", "no decision within " _ wait, .decided)
+    Do ..CancelOpenTask(case, "system", "no decision within " _ wait, .decided, .waits)
+    // Only one decision stands on a task: one under way keeps the task, and the case waits for its answer or the next try.
+    If waits Quit ..CancelLater(case, tries)
     // A decision that reached the task first stands, and its answer is on its way to this instance.
     If decided { $$$TRACE("The approval wait ended as a decision reached the task; its answer decides the case") Quit $$$OK }
     Set case.Headline = "No approval within " _ wait _ "; a person must decide"
@@ -1725,7 +1731,9 @@ Method OnClose(request As Shutter.Msg.CaseClose, Output response As %Library.Per
     Set started.State = case.State
     $$$TRACE("Case " _ case.CaseId _ " handled by hand, closed by " _ who)
     Do ..LeadLeftBehind(case, "the leader was handled by hand")
-    Quit ..CancelOpenTask(case, request.Actor, "the case was handled by hand")
+    Set sc = ..CancelOpenTask(case, request.Actor, "the case was handled by hand", .decided, .waits)
+    If waits Quit ..CancelLater(case, 0)
+    Quit sc
 }
 
 /// A working case an approver gave up (CONTRACTS 5): a fresh instance fails it with disposition abandoned
@@ -1752,7 +1760,9 @@ Method OnAbandon(request As Shutter.Msg.CaseAbandon, Output response As %Library
     Set started.State = case.State
     $$$TRACE("Case " _ case.CaseId _ " abandoned by " _ who)
     Do ..LeadLeftBehind(case, "the leader was abandoned")
-    Quit ..CancelOpenTask(case, request.Actor, "the case was abandoned")
+    Set sc = ..CancelOpenTask(case, request.Actor, "the case was abandoned", .decided, .waits)
+    If waits Quit ..CancelLater(case, 0)
+    Quit sc
 }
 
 /// An approval task still open for a case just closed (it was closed by hand or abandoned while it waited for an
@@ -1761,13 +1771,13 @@ Method OnAbandon(request As Shutter.Msg.CaseAbandon, Output response As %Library
 /// case. The engine records the actor as the person who closed it when the Workflow role lets it; the actor "system" (the
 /// approval wait ran out) is nobody's name, so no task is assigned to it, and the event says system. The task's comment
 /// and the case's approval event say why ("Cancelled: <why>"). Nothing here fails the caller: a refusal is logged and
-/// noted on the case. Only a task decided meanwhile is left as it is, with decided set. A lock another decision keeps
-/// past the wait (busy) is tried once more after a moment; still busy, or a read the engine refused, the task is
-/// cancelled without the lock unless it is complete by then, and the refusal is noted on the case, so an approval wait
-/// still escalates and a closed case leaves no task open.
-Method CancelOpenTask(case As Shutter.Store.Case, actor As %String, why As %String, Output decided As %Boolean) As %Status
+/// noted on the case. Only one decision ever stands on a task, so it is cancelled only under its decision lock: a task
+/// decided meanwhile is left as it is, with decided set; a lock another decision keeps past the wait (busy) is tried once
+/// more after a moment, and a lock still busy, or a read the engine refused, leaves the task open with waits set and a
+/// note on the case that the cancel waits, for the caller to try again later (CancelLater).
+Method CancelOpenTask(case As Shutter.Store.Case, actor As %String, why As %String, Output decided As %Boolean, Output waits As %Boolean) As %Status
 {
-    Set decided = 0
+    Set decided = 0, waits = 0
     Set task = ##class(Shutter.Util.Workflow).OpenTaskFor(case.CaseId)
     If '$ISOBJECT(task) Quit $$$OK
     Set who = $SELECT(actor = "": "a person", 1: actor)
@@ -1775,13 +1785,14 @@ Method CancelOpenTask(case As Shutter.Store.Case, actor As %String, why As %Stri
     // A decision taken meanwhile stands: the task is cancelled only while it is still open, under the decision lock.
     Set refused = ##class(Shutter.Util.Workflow).Claim(task)
     If ..ClaimCode(refused) = "busy" { Hang 0.5 Set refused = ##class(Shutter.Util.Workflow).Claim(task) }
-    Set code = ..ClaimCode(refused), held = (refused = "")
+    Set code = ..ClaimCode(refused)
     If code = "decided" { Set decided = 1 $$$TRACE("Approval task " _ taskId _ " was not cancelled: " _ refused) Quit $$$OK }
-    If 'held {
-        Do task.%Reload()
-        If $ISOBJECT(task.%TaskStatus) && task.%TaskStatus.IsComplete { Set decided = 1 $$$TRACE("Approval task " _ taskId _ " was decided while its lock was refused: " _ refused) Quit $$$OK }
-        $$$LOGWARNING("The approval task " _ taskId _ " of case " _ case.CaseId _ " is cancelled without its decision lock: " _ refused)
-        Do case.Note("error", "The approval task " _ taskId _ " is cancelled without its decision lock (" _ code _ "): " _ $EXTRACT(refused, 1, 400), "system", "task:" _ taskId)
+    If refused '= "" {
+        // Without the lock a decision may be completing the task this moment, so it is left open and the cancel waits.
+        Set waits = 1
+        $$$LOGWARNING("The approval task " _ taskId _ " of case " _ case.CaseId _ " is left open, as its decision lock was refused; the cancel waits: " _ refused)
+        Do case.Note("note", "The approval task " _ taskId _ " is left open and the cancel waits, as its decision lock was refused (" _ code _ "): " _ $EXTRACT(refused, 1, 400), "system", "task:" _ taskId)
+        Quit $$$OK
     }
     // The lock is given back whatever happens, or this long-lived job would hold it and every later decision be busy.
     Try {
@@ -1804,8 +1815,54 @@ Method CancelOpenTask(case As Shutter.Store.Case, actor As %String, why As %Stri
     } Catch ex {
         $$$LOGWARNING("The approval task " _ taskId _ " of case " _ case.CaseId _ " could not be cancelled: " _ ex.DisplayString())
     }
-    If held Do ##class(Shutter.Util.Workflow).Release(task)
+    Do ##class(Shutter.Util.Workflow).Release(task)
     Quit $$$OK
+}
+
+/// How many times a cancel that waits for its task's decision lock is tried again, and how long apart, in seconds.
+Parameter CANCELTRIES = 10;
+
+Parameter CANCELRETRYSECONDS = 60;
+
+/// A cancel that waits for its task's decision lock is tried again: an alarm keyed by the try and the round
+/// (cancel:retry:<try>:<round>) brings it back to OnCancelRetry. After the last try the task stays open for a person, and
+/// the case says so. An alarm that cannot be sent is noted on the case, and the task stays open.
+Method CancelLater(case As Shutter.Store.Case, tries As %Integer) As %Status
+{
+    If tries >= ..#CANCELTRIES {
+        $$$LOGWARNING("The approval task of case " _ case.CaseId _ " is still open after " _ tries _ " tries to cancel it under its decision lock")
+        Do case.Note("error", "The approval task is still open after " _ tries _ " tries to cancel it under its decision lock; a person decides it or cancels it in the Workflow inbox", "system")
+        Quit $$$OK
+    }
+    Try {
+        Set alarm = ##class(Ens.AlarmRequest).%New()
+        Set alarm.Timeout = ..#CANCELRETRYSECONDS
+        Set sc = ..SendRequestAsync("Ens.Alarm", alarm, 1, "cancel:retry:" _ (tries + 1) _ ":" _ ..Round, "The cancel of an approval task waiting for its decision lock")
+    } Catch ex {
+        Set sc = ex.AsStatus()
+    }
+    If $$$ISERR(sc) {
+        $$$LOGWARNING("The cancel of the approval task of case " _ case.CaseId _ " could not be set to try again: " _ $SYSTEM.Status.GetErrorText(sc))
+        Do case.Note("error", "The cancel of the approval task could not be set to try again, so the task stays open: " _ $EXTRACT($SYSTEM.Status.GetErrorText(sc), 1, 400), "system")
+    }
+    Quit $$$OK
+}
+
+/// A cancel that waited for its task's decision lock, tried again. A closed case (handled by hand or abandoned) has its
+/// open task cancelled; a case still awaiting approval in the same round, driven by this instance, runs its approval wait
+/// again (OnApprovalTimeout); anything else has moved on, and the alarm has nothing to do.
+Method OnCancelRetry(case As Shutter.Store.Case, tries As %Integer, round As %Integer) As %Status
+{
+    If case.IsClosed() {
+        Do ..CancelOpenTask(case, "system", "the case was closed", .decided, .waits)
+        If waits Quit ..CancelLater(case, tries)
+        Quit $$$OK
+    }
+    If (round '= ..Round) || (case.State '= "awaiting_approval") || ((case.WorkflowSessionId '= "") && (case.WorkflowSessionId '= ..%SessionId)) {
+        $$$TRACE("A cancel retry from round " _ round _ " arrived; the case is " _ case.State _ " in round " _ ..Round _ ", so nothing is due")
+        Quit $$$OK
+    }
+    Quit ..OnApprovalTimeout(case, round, tries)
 }
 
 /// The code of a refusal from Shutter.Util.Workflow.Claim (busy, engine or decided), "" when the claim was granted, and
