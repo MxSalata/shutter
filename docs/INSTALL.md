@@ -17,7 +17,8 @@ the productions a hospital already runs; the README's `docker compose up` is the
 | Any receiver, a message over 2 MB | A warning in the event log and no case |
 | Any receiver, a transport ACK and then lost downstream | Nothing: Shutter doesn't hear of it (section 10) |
 
-A production review needs none of this configured.
+A production review needs none of this configured. The drafted email is made when a person presses **Escalate to** its team on
+the case page (`POST /api/shutter/cases/{id}/escalations` through the API); until then the case has no draft.
 
 - **The demo install is not a hospital install.** The image loads the `iris-shutter` module with `demo=1`: demo
   users, the demo bed-management system (`Downstream.*`), the scenario player, a namespace-wide message purge, and
@@ -68,7 +69,14 @@ A production review needs none of this configured.
 - **`zpm "uninstall iris-shutter"` takes off everything the install and the onboarding added** (from 1.1.2), in every namespace, and
   stops no production of the site's: a site production Shutter went into is updated in place, keeps running, and its own
   alert item gets its name back. Every case, approval, incident and setting goes with it, so export what you must keep
-  first. `SELECT Shutter_Util.Uninstall_Plan()` says what would go and changes nothing.
+  first. `SELECT Shutter_Util.Uninstall_Plan()` says what would go and changes nothing. It gives each watched namespace
+  one line, its onboarding: under it go that namespace's forwarder and alert items, its two mappings and its credential; the user
+  `shutter-fwd` and the Workflow role `Shutter Approvers` go too.
+- **What the uninstall leaves:** the global `^Shutter.AlertIntake` in each watched namespace (the control ids and sessions
+  its alert intake has seen) and the folder `<mgr>/shutter/.fastembed_cache` (the embedding model, about 87 MB): kill the
+  one and delete the other. Users you made yourself, such as an approver, stay with Shutter's roles taken off: disable or
+  delete them. The package manager stays in the namespace. A line that says it kept a receiver a person edited is about
+  that namespace's onboarding; after the whole uninstall the site profile is gone with every other setting.
 - **The uninstall refuses, changing nothing,** while a production it did not wire still names one of Shutter's classes (an
   item added by hand), since that production would not start once the classes are gone.
 - **In a hospital's namespace the uninstall takes only Shutter's own** messages, log lines and productions. The
@@ -475,6 +483,9 @@ SELECT Shutter.Setup_OnboardApply('PATHOLOGY')
 SELECT Shutter.Setup_OnboardApply('DOCUMENTS', '{"alert_on_error": true}')
 ```
 
+On a stock HL7 operation `AlertOnError` is off, so pass `{"alert_on_error": true}` to the apply (or turn it on yourself),
+or no real failure on that operation opens a case; the plan's `todo` names the items it concerns.
+
 It does what the plan listed and nothing else, answers `changed`, and run again answers "Nothing to do". It never stops a
 production: a running one is updated, and only the items it changes restart. In order:
 
@@ -523,7 +534,8 @@ SELECT Shutter.Setup_OnboardTest('PATHOLOGY')
 
 It posts a made-up ORU, with no patient, using that namespace's forwarder settings and its stored credential, and answers the
 case id. The case says it could not be mapped, `onboarding_test`, its draft says `ONBOARDING TEST`, and its receiver is `Onboarding test`, which no profile names. An ORU has no recovery,
-so it escalates with no model called and nothing sent. Mark it handled. A failed test says what to check:
+so it escalates with no model called and nothing sent, and closes as escalated by itself; mark it handled only to take it
+out of the open list. A failed test says what to check:
 
 | Answer | Meaning |
 | --- | --- |
