@@ -7,10 +7,12 @@ rule were hashed on 6 November 2026, before any run, and are published with thos
 that folder checks them. They were not edited, and the manifest checked OK before and after the live runs. Every run
 is in [fair-test/results.json](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test/results.json).
 
-Every figure on this page is on release 1.0.0's code, except the section
-[Release 1.1.x](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#release-11x) near the end: on
-1.1.1's code the board proposes the same, and the gate stops two right plans; with release 1.2.0's receipt check
-loaded over it, F03 closes right in all three runs.
+Every figure on this page is on release 1.0.0's code, except the sections
+[Release 1.1.x](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#release-11x) and
+[Release 1.3.2: F03 and F07 live](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#release-132-f03-and-f07-live)
+near the end: on 1.1.1's code the board proposes the same, and the gate stops two right plans; with release 1.2.0's
+receipt check loaded over it, F03 closes right in all three runs; on release 1.3.2's whole code, F03 and F07 close right
+in every run of the board and the single investigator.
 
 ## Headline
 
@@ -602,6 +604,47 @@ that table, not played as one set. F07 stays N- on 1.1.1's code; on 1.2.0's ship
 Not yet measured on its own code: the single investigator on all twelve cases and Site policy with no model. No figure
 on this page is from release 1.2.0's whole code; F03 above ran with only its receipt check.
 
+## Release 1.3.2: F03 and F07 live
+
+The two cases the 1.1.0 gate stopped were played again on release 1.3.2's whole code: its `src/` loaded and compiled
+over the 1.1.x build on the same AI Hub 109 instance, its `knowledge/` copied into the module root, the install run again
+over the kept data and the production restarted, after which the instance reported version 1.3.2 and gate policy
+2026-11-07.1. Three runs a case in three modes, under one site profile for every run, with no exemption: the stored
+profile with `recovery.mode` set to `enabled` (1.3.2 reads a profile that doesn't name it as shadow, which writes
+nothing) and `further_messages.in_patient_movement` set to `show`, the value 1.3.2 ships. Same harness, seed, `--day`,
+600 s timeout and approval by the rig, every agent on `claude-opus-5-5`, 9 November 2026; the manifest checked OK before
+and after, and no run was unscorable, retried or stopped early. Every run is in
+[fair-test/results-r132-f03-f07.json](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test/results-r132-f03-f07.json).
+
+| Case and mode, release 1.3.2 | Categories | Proposal, end state | Gate at proposal | Writes | USD for the three runs | Seconds a run |
+| --- | --- | --- | --- | ---: | ---: | ---: |
+| F03, Rules only | Wp Wp Wp | resend, blocked | `SUPERSEDED_BY_LATER_EVENT`, `ALREADY_COMMITTED` | 0 | 0 | 20.9 |
+| F03, single investigator | R R R | `reconcile` (E3), resolved | pass | 0 | 0.406 | 39.5 |
+| F03, board | R R R | `reconcile` (E3), resolved | pass | 0 | 1.384 | 52.2 |
+| F07, Rules only | R R R | resend, resolved | pass | 3 | 0 | 30.2 |
+| F07, single investigator | R R R | resend (E2), resolved | pass | 3 | 0.155 | 37.5 |
+| F07, board | R R R | resend (E2), resolved | pass | 3 | 1.105 | 51.0 |
+
+- **F03:** both agent modes closed it on the committed receipt with nothing written, and the receiver stayed at CCU,
+  version 3, in every run, where the 1.1.1 build's board ended blocked for a person. The board's three runs cost what
+  the null-bed fix's three did on 1.1.1's code (1.384 USD). Rules only proposed a resend, which the gate stopped, as on
+  1.0.0.
+- **F07:** in every run of every mode the resend went under the failed key at version 1, applied and verified, and the
+  receiver ended at ORTH2, version 2, as on 1.0.0. With `show`, the plan names the discharge on the other visit
+  (V26-00388) as a precondition and waits for a person's approval, which the rig gave; on 1.1.1's code the gate held it
+  (`FURTHER_MOVEMENT`, N- in all three runs).
+- **Loss on these two cases:** 0 for the board and the single investigator (strict and lenient), 4.0 for Rules only
+  (F03's three proposed wrong writes). Rules only has no model; the 1.0.0 run above graded the same two cases the same
+  way (Wp Wp Wp and R R R).
+- **Spend:** 3.050 USD on the Costs page for all 18 runs, 0.37 to 0.48 USD a board run and 0.05 to 0.15 USD a single
+  investigator's.
+
+**What it does not show.** Two of the twelve cases, three runs each, so no figure here is a mean over the sealed set,
+and the other ten cases have not been played on 1.3.2's code. Site policy was not played. The board and the single
+investigator ran one after the other on one instance, not interleaved. F07 goes through only because the profile says
+`show`: the demo install keeps `stop`, and an install over a site from before 1.2.0 whose profile doesn't name the
+setting keeps the stop it had, so there F07 is held for a person as on 1.1.1.
+
 ## The files
 
 In [docs/readme/fair-test](https://github.com/MxSalata/shutter/tree/main/docs/readme/fair-test):
@@ -628,6 +671,9 @@ In [docs/readme/fair-test](https://github.com/MxSalata/shutter/tree/main/docs/re
 - [results-f03-null-bed.json](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test/results-f03-null-bed.json):
   release 1.2.0's receipt check over the 1.1.1 build: each run of F03 (three) and of the F01 and F12 check, with its
   proposal, gate, receiver at the end, category and seconds, and each case's cost.
+- [results-r132-f03-f07.json](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test/results-r132-f03-f07.json):
+  release 1.3.2's whole code on F03 and F07: per mode (Rules only, single investigator, board), each run with its
+  proposal, gate, attempts, receiver at the end, category, seconds and Costs page figure, and each case's cost.
 
 **To repeat it:** [tests/fair_test](https://github.com/MxSalata/shutter/tree/main/tests/fair_test) holds the fixtures
 built from `cases.md`, the player and the grader; its README says how to run them.
