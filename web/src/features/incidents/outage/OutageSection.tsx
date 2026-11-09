@@ -3,12 +3,21 @@ import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { useCan } from '@/api/hooks';
 import { StatusBadge, StatusNotice } from '@/components/StatusBadge';
+import { TechDetail } from '@/components/TechDetail';
 import type { Tone } from '@/lib/tone';
 import { useNow } from '@/lib/useNow';
 import { Timestamp } from '@/components/Timestamp';
 import { useOutageAct, useOutages } from './hooks';
 import { ApproveResend, ClosedList, FailedResend, HandledByHand, ResendList } from './OutageSend';
-import { approvedLine, canApprove, sendingLine, tallyLine } from './outageWords';
+import {
+  approvedLine,
+  canApprove,
+  closedRowsToShow,
+  offeredRowsToShow,
+  readingLabel,
+  sendingLine,
+  tallyLine,
+} from './outageWords';
 import type { Outage, OutageReading, OutageRow } from './types';
 
 /** A reading older than this, or one that reads unknown, is stale and said loudly. */
@@ -85,7 +94,7 @@ export function ReadingLine({ reading, now }: { reading: OutageReading; now: num
     <Group gap="xs" wrap="wrap" data-stale={stale ? 'true' : 'false'}>
       <StatusBadge
         tone={stale ? 'attention' : reading.reading === 'healthy' ? 'positive' : 'blocking'}
-        label={reading.reading.replace(/_/g, ' ')}
+        label={readingLabel(reading.reading)}
       />
       <Text size="sm">
         {reading.receiver}
@@ -110,7 +119,10 @@ export function OutageCard({ outage: o }: { outage: Outage }) {
   const progress = sendingLine(o);
   const approved = approvedLine(o);
   const tally = tallyLine(resends);
-  const closedRows = o.lists.closed ?? [];
+  // A message the ledger shows (sent, already held, handled by hand, not sent) is listed there alone: the set's own lists
+  // were read before the run and say nothing of it since
+  const closedRows = closedRowsToShow(o);
+  const offeredRows = offeredRowsToShow(o);
   const offeredActs = (r: OutageRow) =>
     can.approve && o.state === 'offered' && r.acts?.includes('handled_by_hand') ? (
       <HandledByHand outage={o} row={r} />
@@ -142,33 +154,32 @@ export function OutageCard({ outage: o }: { outage: Outage }) {
         ) : closed && o.outcome ? (
           <Text size="sm">{o.outcome}</Text>
         ) : null}
+        {/* The engine's own alert lines are its raw words (segments and all): folded, so a card stays one card tall */}
         {o.alerts.length ? (
-          <Stack gap={2}>
-            <Text size="sm" fw={600}>
-              The engine&apos;s alerts for this item
-            </Text>
-            <List size="sm" spacing={2}>
+          <TechDetail kind="data" label={`The engine's alerts for this item (${o.alerts.length})`}>
+            <List size="sm" spacing={2} className="mono-wrap" data-testid="outage-alerts">
               {o.alerts.map((a, i) => (
                 <List.Item key={i}>
                   {a.at} {a.kind}: {a.text}
                 </List.Item>
               ))}
             </List>
-          </Stack>
+          </TechDetail>
         ) : null}
         {!closed ? (
           computed ? (
             <Stack gap="xs" data-testid="outage-lists">
-              {LISTS.map(({ key, title }) =>
-                o.lists[key]?.length ? (
+              {LISTS.map(({ key, title }) => {
+                const rows = key === 'offered' ? offeredRows : (o.lists[key] ?? []);
+                return rows.length ? (
                   <RowList
                     key={key}
                     title={title}
-                    rows={o.lists[key] ?? []}
+                    rows={rows}
                     actions={key === 'offered' ? offeredActs : undefined}
                   />
-                ) : null,
-              )}
+                ) : null;
+              })}
               {closedRows.length ? <ClosedList rows={closedRows} /> : null}
             </Stack>
           ) : (
@@ -214,7 +225,7 @@ export function OutageCard({ outage: o }: { outage: Outage }) {
         {o.openCases.length ? (
           <Stack gap={2} data-testid="outage-open-cases">
             <Text size="sm" fw={600}>
-              Delivery exceptions still needing review
+              Cases still needing a person ({o.openCases.length})
             </Text>
             <List size="sm" spacing={2}>
               {o.openCases.map((c) => (
@@ -226,7 +237,10 @@ export function OutageCard({ outage: o }: { outage: Outage }) {
             </List>
           </Stack>
         ) : null}
-        {can.approve && o.acts.some((a) => a !== 'handled_by_hand') ? <Acts outage={o} /> : null}
+        {/* Nothing while a run is sending: a pause or a close would not stop the send */}
+        {can.approve && o.state !== 'sending' && o.acts.some((a) => a !== 'handled_by_hand') ? (
+          <Acts outage={o} />
+        ) : null}
       </Stack>
     </Card>
   );

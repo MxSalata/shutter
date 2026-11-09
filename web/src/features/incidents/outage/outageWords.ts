@@ -12,7 +12,7 @@ import {
 } from '@tabler/icons-react';
 import { isApiError } from '@/lib/errors';
 import type { Tone } from '@/lib/tone';
-import type { Outage, Resend } from './types';
+import type { Outage, OutageRow, Resend } from './types';
 
 /*
  * The outage card's words for the send (CONTRACTS 17.8): pure, so a table test holds them. Sending is an action taken,
@@ -170,4 +170,41 @@ export function asSentence(words: string | null | undefined): string {
   const t = (words ?? '').trim();
   if (!t) return '';
   return `${t[0].toUpperCase()}${t.slice(1)}${/[.!?]$/.test(t) ? '' : '.'}`;
+}
+
+/** The always-on reading in words, as a badge says it: "Can't tell", "Not answering". */
+export function readingLabel(reading: string): string {
+  const words: Record<string, string> = {
+    healthy: 'Healthy',
+    slow: 'Slow',
+    down: 'Down',
+    refusing: 'Refusing',
+    not_answering: 'Not answering',
+    cant_tell: "Can't tell",
+    unknown: 'Unknown',
+  };
+  return words[reading] ?? asSentence(reading.replace(/_/g, ' ')).replace(/\.$/, '');
+}
+
+/** The header ids the ledger holds a row for: a message sent, already held, handled by hand or left unsent. */
+function ledgerHeaders(o: Pick<Outage, 'resends'>): Set<string> {
+  return new Set((o.resends ?? []).map((r) => r.headerId ?? '').filter(Boolean));
+}
+
+/**
+ * The offered list as the card shows it. While offered it is the set just computed, whole. While a run is sending it is
+ * not shown (the ledger shows the run); after a run the list was read before it, so a message the ledger holds a row for
+ * is left out, and a sent message is never still listed as evidence to review before any resend.
+ */
+export function offeredRowsToShow(o: Pick<Outage, 'state' | 'lists' | 'resends'>): OutageRow[] {
+  if (o.state === 'offered') return o.lists.offered;
+  if (o.state === 'sending') return [];
+  const done = ledgerHeaders(o);
+  return o.lists.offered.filter((r) => !done.has(r.headerId));
+}
+
+/** The messages closed with no send of their own that the ledger does not already list (it lists each hand closure). */
+export function closedRowsToShow(o: Pick<Outage, 'lists' | 'resends'>): OutageRow[] {
+  const done = ledgerHeaders(o);
+  return (o.lists.closed ?? []).filter((r) => !done.has(r.headerId));
 }

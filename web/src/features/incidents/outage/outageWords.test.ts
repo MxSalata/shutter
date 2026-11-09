@@ -3,8 +3,11 @@ import { ApiError } from '@/lib/errors';
 import {
   asSentence,
   canApprove,
+  closedRowsToShow,
   closureLabel,
   needsReceiverCheck,
+  offeredRowsToShow,
+  readingLabel,
   refusalWords,
   resendStatus,
   runRows,
@@ -136,5 +139,34 @@ describe("the send's words", () => {
     expect(asSentence('not sent: the run stopped')).toBe('Not sent: the run stopped.');
     expect(asSentence('Already delivered: it holds it.')).toBe('Already delivered: it holds it.');
     expect(asSentence(null)).toBe('');
+  });
+});
+
+describe('what the card lists', () => {
+  const offered = (id: string) =>
+    ({ headerId: id, controlId: `C${id}` }) as Outage['lists']['offered'][number];
+  const set = { ...lists([offered('41'), offered('42'), offered('43')]) };
+
+  it('lists the offered set whole while it is offered, nothing while it sends, and after a run only what the ledger lacks', () => {
+    const resends = [row(1, 'completed', 'sent'), row(2, 'stopped', null)];
+    const ids = (state: string) => offeredRowsToShow({ state, lists: set, resends }).map((r) => r.headerId);
+    expect(ids('offered')).toEqual(['41', '42', '43']);
+    expect(ids('sending')).toEqual([]);
+    expect(ids('needs_person')).toEqual(['43']);
+    expect(ids('closed')).toEqual(['43']);
+  });
+
+  it('leaves a closed message out where the ledger lists it', () => {
+    const closed = { ...set, closed: [offered('41'), offered('49')] };
+    expect(
+      closedRowsToShow({ lists: closed, resends: [row(1, 'handled_by_hand', 'handled_by_hand', 'H7')] }),
+    ).toEqual([offered('49')]);
+  });
+
+  it("says a reading in words: Can't tell, Not answering", () => {
+    expect(readingLabel('cant_tell')).toBe("Can't tell");
+    expect(readingLabel('not_answering')).toBe('Not answering');
+    expect(readingLabel('healthy')).toBe('Healthy');
+    expect(readingLabel('something_new')).toBe('Something new');
   });
 });
