@@ -983,6 +983,10 @@ ClassMethod EnsureUser(user As %String, role As %String, password As %String, fu
 /// every other read worked (CI, 25 October 2026); with these grants the regeneration passes whoever triggers it. The
 /// public demo's roles (Shutter_Demo, Shutter_Judge) read the same routes and hold neither of the others, so they are
 /// granted too; the trace role never calls the API. A schema grant covers the tables made later in the schema too.
+/// The tables of ApiSelectTables, outside Shutter's schemas, are granted one by one: the cases list and the case page read
+/// the production's message headers (the source header and when the failure was reported), and on IRIS for Health
+/// 2026.2 a fresh instance's cases list came back empty beside its total, the row query refused with SQLCODE -99 "User
+/// operator is not privileged for the operation", until these grants (CI, 9 November 2026).
 /// Runs in the namespace; the installer has the privileges.
 ClassMethod GrantSqlPrivileges(ns As %String) As %Status
 {
@@ -990,10 +994,16 @@ ClassMethod GrantSqlPrivileges(ns As %String) As %Status
     Try {
         New $NAMESPACE
         Set $NAMESPACE = ns
+        Set tables = ..ApiSelectTables()
         For role = "Shutter_Operator", "Shutter_Approver", "Shutter_Demo", "Shutter_Judge" {
             For schema = "Shutter_Store", "Shutter_Index", "Shutter_Msg", "Shutter_Bridge", "Ens_Config" {
                 Set rs = ##class(%SQL.Statement).%ExecDirect(, "GRANT SELECT ON SCHEMA " _ schema _ " TO " _ role)
                 If rs.%SQLCODE < 0 Set sc = $$$ERROR($$$GeneralError, "GRANT SELECT ON SCHEMA " _ schema _ " TO " _ role _ " failed: SQLCODE " _ rs.%SQLCODE _ ": " _ rs.%Message) Quit
+            }
+            Quit:$$$ISERR(sc)
+            For i = 1:1:$LISTLENGTH(tables) {
+                Set rs = ##class(%SQL.Statement).%ExecDirect(, "GRANT SELECT ON " _ $LIST(tables, i) _ " TO " _ role)
+                If rs.%SQLCODE < 0 Set sc = $$$ERROR($$$GeneralError, "GRANT SELECT ON " _ $LIST(tables, i) _ " TO " _ role _ " failed: SQLCODE " _ rs.%SQLCODE _ ": " _ rs.%Message) Quit
             }
             Quit:$$$ISERR(sc)
         }
@@ -1005,6 +1015,14 @@ ClassMethod GrantSqlPrivileges(ns As %String) As %Status
         Set sc = ex.AsStatus()
     }
     Quit sc
+}
+
+/// The tables outside Shutter's schemas that the API reads in SQL as its caller, each granted SELECT to the roles that call
+/// the API (GrantSqlPrivileges) and revoked by the uninstall: the production's message headers, which the cases list's
+/// row query and the case page's Technical facts read.
+ClassMethod ApiSelectTables() As %List
+{
+    Quit $LISTBUILD("Ens.MessageHeader")
 }
 
 /// The roles brought to their definition again and the SQL grants renewed, for a change that widens them after the

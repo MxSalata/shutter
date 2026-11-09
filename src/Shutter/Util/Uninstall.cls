@@ -860,6 +860,11 @@ ClassMethod TakeGrants(out As %DynamicObject)
         For schema = "Shutter_Store", "Shutter_Index", "Shutter_Msg", "Shutter_Bridge", "Ens_Config" {
             Try { Do ##class(%SQL.Statement).%ExecDirect(, "REVOKE SELECT ON SCHEMA " _ schema _ " FROM " _ role) } Catch ex { }
         }
+        Continue:role="Shutter_Forwarder"
+        Set tables = ##class(Shutter.Setup).ApiSelectTables()
+        For i = 1:1:$LISTLENGTH(tables) {
+            Try { Do ##class(%SQL.Statement).%ExecDirect(, "REVOKE SELECT ON " _ $LIST(tables, i) _ " FROM " _ role) } Catch ex { }
+        }
     }
     Try { Do ##class(Shutter.Setup).TraceSelectGrant($NAMESPACE, 0, .count, .problem) } Catch ex { }
 }
