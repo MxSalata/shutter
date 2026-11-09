@@ -75,6 +75,20 @@ export const GLOSSARY = {
     term: 'Write (a fix)',
     definition: 'An update Shutter sends to that system to put it right.',
   },
+  encounter: {
+    term: 'Encounter',
+    definition:
+      "One patient's hospital stay or visit, with its own number. Admits, transfers and discharges move it.",
+  },
+  'patient-number': {
+    term: 'Patient number',
+    definition: 'The hospital number the message carries (PID-3). Shutter shows no name or date of birth.',
+  },
+  bedmgr: {
+    term: 'BEDMGR',
+    definition:
+      'The bed manager: the system that allocates beds. It can send its own ward moves, as the PAS does.',
+  },
   pas: {
     term: 'PAS',
     definition: 'The patient administration system, where admissions and transfers start.',

@@ -22,6 +22,7 @@ import { isApiError } from '@/lib/errors';
 import { REPLAY_DONE, SHOW_APPROVAL } from '@/lib/events';
 import { usePrefersReducedMotion, useStagedReveal } from '@/lib/motion';
 import { caseOutcome } from '@/lib/status';
+import type { Tone } from '@/lib/tone';
 import { CaseHeader } from './case/CaseHeader';
 import { Lifecycle, REPLAYED_STAGES, type StageKey } from './case/Lifecycle';
 import { FailureMap } from './case/FailureMap';
@@ -291,6 +292,17 @@ function CaseBody({ c }: { c: CaseDetail }) {
     notAsExpected: verdict.key === 'not-as-expected',
     comparable,
   });
+  // A person's next step for the header, as "What needs you now" says it; not where the outcome is not as expected,
+  // which the outcome and the action button already say
+  const next = nextAction(facts);
+  const headerNext =
+    next.kind === 'person' && verdict.key !== 'not-as-expected'
+      ? {
+          action: next.action,
+          role: next.role,
+          tone: (c.state === 'blocked' || c.state === 'failed' ? 'blocking' : 'attention') as Tone,
+        }
+      : undefined;
   const showCompare = () => openStep('compare', 's8-compare');
   const goToAction = (place: ActionPlace) => {
     if (place === 'compare') showCompare();
@@ -309,6 +321,7 @@ function CaseBody({ c }: { c: CaseDetail }) {
         scenario={scenario}
         portalBase={base}
         snapshot={facts.snapshot}
+        next={headerNext}
         actions={
           <>
             <ConveneBoard c={c} />

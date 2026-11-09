@@ -14,6 +14,7 @@ import { KeyValueList } from '@/components/KeyValueList';
 import { StackTable } from '@/components/StackTable';
 import { NotYet, Section } from './Section';
 import { capitalReceiverNoun, receiverNoun } from './receiver';
+import { useDetail } from '@/stores/appearance';
 
 const STAGES: Record<string, string> = {
   proposal: 'At proposal, before the rehearsal',
@@ -203,7 +204,7 @@ export function PlanPanel({
 }
 
 /**
- * The gate's decisions on the plan, the latest open. The gate checks the plan mechanically against the evidence, before
+ * The gate's decisions on the plan, the latest open when it stopped the write or in Technical. The gate checks the plan mechanically against the evidence, before
  * the rehearsal and again before dispatch.
  */
 export function GatePanel({
@@ -219,6 +220,11 @@ export function GatePanel({
   onRetry?: () => void;
 }) {
   const decisions = view?.gateDecisions ?? [];
+  const technical = useDetail() === 'technical';
+  // The latest decision opens by itself when it stopped the write, or for the engineer in Technical; a clean pass
+  // stays closed under its badge ("Passed 10 of 10 applicable checks"), its rows a click away
+  const latest = decisions.at(-1);
+  const openLatest = technical || (!!latest && latest.outcome !== 'pass');
   return (
     <Section
       id="gate"
@@ -229,7 +235,7 @@ export function GatePanel({
         <Accordion
           variant="separated"
           multiple
-          defaultValue={[String(decisions.length - 1)]}
+          defaultValue={openLatest ? [String(decisions.length - 1)] : []}
           chevronPosition="left"
         >
           {decisions.map((d, i) => (

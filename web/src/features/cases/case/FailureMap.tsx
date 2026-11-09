@@ -6,7 +6,11 @@ import { TONE_ICONS } from '@/lib/tone';
 import { useDetail } from '@/stores/appearance';
 import type { FailureMap as Map } from './failureMap';
 
-/** One system on the path: its name, what it is, and the engineer's names for it in Technical. */
+/**
+ * One system on the path: its name, what it is where neither the name nor the header's sentence says, and the
+ * engineer's names for it in Technical. The picture is one image to assistive technology, so it holds no terms to
+ * open: the header defines them.
+ */
 function Node({
   role,
   title,
@@ -114,15 +118,8 @@ export function FailureMap({ map }: { map: Map }) {
         <div className="fm-flow">
           {sender ? (
             <>
-              <Node
-                role="sender"
-                title={sender.name}
-                sub={
-                  sender.gloss
-                    ? sender.gloss.charAt(0).toUpperCase() + sender.gloss.slice(1)
-                    : 'The sending system'
-                }
-              />
+              {/* The header's sentence defines a known system's short name a click away, so the box does not spell it out */}
+              <Node role="sender" title={sender.name} sub={sender.gloss ? '' : 'The sending system'} />
               <Link label={message.plain} answer={technical ? message.code : ''} />
             </>
           ) : null}
@@ -140,10 +137,11 @@ export function FailureMap({ map }: { map: Map }) {
             label={hop.label}
             answer={hop.answer || (technical ? hop.code : '')}
           />
+          {/* A receiver named in words needs no caption; one known only by its production item keeps it */}
           <Node
             role="receiver"
             title={receiver.name}
-            sub="The receiving system"
+            sub={receiver.item ? '' : 'The receiving system'}
             technical={technical ? receiverTechnical : ''}
           >
             {receiver.now ? (

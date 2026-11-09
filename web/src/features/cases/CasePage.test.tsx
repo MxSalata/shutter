@@ -56,6 +56,12 @@ async function openStep(title: string) {
   return step;
 }
 
+/** Opens a gate decision by its badge: a clean pass stays closed in Plain. */
+async function openGateDecision(badge: HTMLElement) {
+  const control = badge.closest('button')!;
+  if (control.getAttribute('aria-expanded') !== 'true') await userEvent.click(control);
+}
+
 async function openTab(name: string) {
   await userEvent.click(await screen.findByRole('tab', { name }));
 }
@@ -128,10 +134,12 @@ describe('CasePage', () => {
     expect(within(verification).queryByText(/Not verified yet/)).not.toBeInTheDocument();
     await openStep('Gate and decision');
     const gate = await screen.findByRole('region', { name: 'The gate' });
-    expect(await within(gate).findByText(/^Passed \d+ of \d+ applicable checks$/)).toBeInTheDocument();
+    const passed = await within(gate).findByText(/^Passed \d+ of \d+ applicable checks$/);
+    // A clean pass stays closed under its badge in Plain, its checks a click away
+    await openGateDecision(passed);
     expect((await within(gate).findAllByText('Not applicable')).length).toBeGreaterThan(0);
     // Each check's row keeps its cells announced as cells, each named for the stacked layout on a phone
-    const check = within(gate).getAllByRole('columnheader', { name: 'Check' })[0].closest('table')!;
+    const check = (await within(gate).findAllByRole('columnheader', { name: 'Check' }))[0].closest('table')!;
     expect(check).toHaveAttribute('role', 'table');
     const rows = within(check).getAllByRole('row').slice(1);
     expect(rows.length).toBeGreaterThan(0);
@@ -941,6 +949,7 @@ describe('CasePage', () => {
     renderCase('C-000002');
     await openStep('Gate and decision');
     const gate = await screen.findByRole('region', { name: 'The gate' });
+    await openGateDecision(await within(gate).findByText(/^Passed \d+ of \d+ applicable checks$/));
     expect((await within(gate).findAllByText('Checked later')).length).toBeGreaterThan(0);
     expect(within(gate).getAllByText(/\b2 checked later/).length).toBeGreaterThan(0);
   });
@@ -1229,11 +1238,17 @@ describe('CasePage', () => {
 
   it('says in one whole sentence what failed, leaving what Shutter did to the outcome', async () => {
     renderCase('C-000053');
-    expect(
-      await screen.findByText(
-        'The PAS (patient administration system) transfer to WARD-B was not delivered: HTTP 503, ward_unavailable.',
-      ),
-    ).toBeInTheDocument();
+    // The sending system is named by its short name and defined a click away (a Term), not spelt out in brackets
+    const pas = await screen.findByText('PAS', { selector: '.term' });
+    const lead = pas.closest('p')!;
+    const shown = lead.cloneNode(true) as HTMLElement;
+    shown.querySelectorAll('[hidden]').forEach((n) => n.remove());
+    expect(shown.textContent).toBe(
+      'The PAS transfer to WARD-B was not delivered: HTTP 503, ward_unavailable.',
+    );
+    expect(pas).toHaveAccessibleDescription(
+      'The patient administration system, where admissions and transfers start.',
+    );
     // Its reason code is the API's (in the case as the API sends it), not the page's words
     expect(
       screen.queryByText(/SUPERSEDED_BY_LATER_EVENT \(policy/, { ignore: '.json-block, script, style' }),
@@ -1482,15 +1497,18 @@ describe('the case page for both audiences', () => {
   // The spec's budget (cases-list-and-case-page.md 3): at most 600 words; Technical at most 1.5 times. The review
   // of 2 Nov (evening) added "Where it failed" (31 words on C-000008 in Plain), the patient and the message type in the
   // header (4) and the case's action at the top and in the tab bar (6): 630 measured, held near it as the other pages
-  // over their spec budgets are (DESIGN.md 1.4); Technical 909, within 1.5 times
-  it('keeps the Summary tab, steps closed, within 640 words in Plain', async () => {
+  // over their spec budgets are (DESIGN.md 1.4); Technical 909, within 1.5 times. The clarity review of 8 Nov put the
+  // reader's facts in the header (the next step and who takes it, what Shutter wrote, the encounter, the bed asked for,
+  // where the receiver had the patient, the receiver by name) and took out the inline expansion and the scenario:
+  // 653 measured, Technical 939
+  it('keeps the Summary tab, steps closed, within 660 words in Plain', async () => {
     const plain = await summaryWords('plain');
-    expect(plain).toBeLessThanOrEqual(640);
+    expect(plain).toBeLessThanOrEqual(660);
   });
 
-  it('keeps it within 920 words in Technical, every data detail open', async () => {
+  it('keeps it within 945 words in Technical, every data detail open', async () => {
     const technical = await summaryWords('technical');
-    expect(technical).toBeLessThanOrEqual(920);
+    expect(technical).toBeLessThanOrEqual(945);
   });
 });
 

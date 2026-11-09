@@ -377,8 +377,10 @@ export function failedSummary(
   what = `${c.sourceSystem ? `${c.sourceSystem} ` : ''}${humanize(c.event).toLowerCase()}${c.ward ? ` to ${c.ward}` : ''}`,
 ): string {
   const how = failedHow(c);
-  // A withheld message was never sent, so its reason code ("merge") is no error: the words already say what happened
-  const reason = failureKindInWords(c) === 'withheld' ? '' : str(c.failureReasonCode);
+  // A withheld message was never sent, so its reason code ("merge") is no error, and a code that only repeats the event
+  // reads as a slip: the words already say what happened
+  const reason =
+    failureKindInWords(c) === 'withheld' || str(c.failureReasonCode) === str(c.event) ? '' : str(c.failureReasonCode);
   const detail = [c.failureHttpStatus ? `HTTP ${str(c.failureHttpStatus)}` : '', reason]
     .filter(Boolean)
     .join(', ');
@@ -391,7 +393,7 @@ export function failedTitle(c: CaseDetail): string {
   return `${humanize(c.event) || 'The operation'} ${how}`;
 }
 
-/** The sending systems a header names, glossed at first use. */
+/** The sending systems in words, for the failure map's list and a screen reader's sentence. */
 export const SYSTEMS: Record<string, string> = {
   PAS: 'patient administration system',
   BEDMGR: 'bed manager',
@@ -399,12 +401,11 @@ export const SYSTEMS: Record<string, string> = {
 
 /**
  * The header's one sentence: what failed, put together from the case's facts and never cut. What Shutter did about it
- * is the Outcome card's.
+ * is the Outcome card's. The sending system is named by its short name ("The PAS transfer..."): the header defines it
+ * in a `Term`, a click away, rather than spelling it out in the sentence.
  */
 export function headerSentence(c: CaseDetail): string {
-  const system = c.sourceSystem
-    ? `${c.sourceSystem}${SYSTEMS[c.sourceSystem] ? ` (${SYSTEMS[c.sourceSystem]})` : ''} `
-    : '';
+  const system = c.sourceSystem ? `${c.sourceSystem} ` : '';
   const what = `${system}${humanize(c.event).toLowerCase()}${c.ward ? ` to ${c.ward}` : ''}`;
   const summary = failedSummary(c, what);
   // A system's name keeps its capitals; an event's first letter is lowered after "The"
