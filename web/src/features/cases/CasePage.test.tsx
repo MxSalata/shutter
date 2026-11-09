@@ -1500,15 +1500,17 @@ describe('the case page for both audiences', () => {
   // over their spec budgets are (DESIGN.md 1.4); Technical 909, within 1.5 times. The clarity review of 8 Nov put the
   // reader's facts in the header (the next step and who takes it, what Shutter wrote, the encounter, the bed asked for,
   // where the receiver had the patient, the receiver by name) and took out the inline expansion and the scenario:
-  // 653 measured, Technical 939
+  // 653 measured, Technical 939. The header's Technical facts of 8 Nov (MSH-9 and the control id, the receiver's class,
+  // the source item and production, the failure's kind and time, the header id, the plan's version, digest and
+  // catalogue entry) take Technical to 954, within the spec's own 1.5 times the 653 measured in Plain
   it('keeps the Summary tab, steps closed, within 660 words in Plain', async () => {
     const plain = await summaryWords('plain');
     expect(plain).toBeLessThanOrEqual(660);
   });
 
-  it('keeps it within 945 words in Technical, every data detail open', async () => {
+  it('keeps it within 960 words in Technical, every data detail open', async () => {
     const technical = await summaryWords('technical');
-    expect(technical).toBeLessThanOrEqual(945);
+    expect(technical).toBeLessThanOrEqual(960);
   });
 });
 

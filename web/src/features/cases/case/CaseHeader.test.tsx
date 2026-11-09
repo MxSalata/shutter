@@ -321,6 +321,111 @@ describe('the case header for a busy reader (8 Nov)', () => {
     renderUi(<CaseHeader c={recorded('C-000002')} snapshot={snapshot('C-000002')} />, {
       detail: 'technical',
     });
-    expect(screen.getByText('MSH-9 ADT^A02')).toBeInTheDocument();
+    expect(screen.getByTestId('case-tech-message')).toHaveTextContent(/^ADT\^A02/);
+  });
+});
+
+describe("the case header's Technical facts", () => {
+  const recorded = (id: keyof typeof fixtures.cases) => fixtures.cases[id].detail as unknown as CaseDetail;
+  const snapshot = (id: keyof typeof fixtures.cases) => fixtures.cases[id].snapshot as never;
+  const portalBase = '/csp/healthshare/shutter/';
+
+  it('adds none of them in Plain, which keeps its own facts', () => {
+    const { container } = renderUi(
+      <CaseHeader c={recorded('C-000058')} snapshot={snapshot('C-000058')} portalBase={portalBase} />,
+    );
+    for (const id of [
+      'case-tech-message',
+      'case-receiver-class',
+      'case-tech-source',
+      'case-tech-failure',
+      'case-tech-header',
+      'case-tech-plan',
+    ])
+      expect(screen.queryByTestId(id)).not.toBeInTheDocument();
+    for (const w of [
+      'ADT^A02',
+      'Shutter.Operation.Ward',
+      'Shutter.Production',
+      'f1171ecfa9a8',
+      '14:34:44.605Z',
+    ])
+      expect(container).not.toHaveTextContent(w);
+    expect(screen.getByTestId('case-message-type')).toHaveTextContent(/^2\.5\.1:ADT_A02$/);
+    // The receiver by name and production item, as Plain names it, with no class
+    const receiver = screen.getByText('Receiver').closest('.mantine-Stack-root') as HTMLElement;
+    expect(shownText(receiver)).toMatch(/^Receiver.*Downstream Out$/);
+  });
+
+  it("shows the message's type and control id, the receiver's class, where it came in, the failure, the header and the plan", () => {
+    renderUi(
+      <CaseHeader c={recorded('C-000058')} snapshot={snapshot('C-000058')} portalBase={portalBase} />,
+      {
+        detail: 'technical',
+      },
+    );
+    expect(screen.getByTestId('case-tech-message')).toHaveTextContent(/^ADT\^A02MSG02304$/);
+    expect(screen.getByTestId('case-receiver-class')).toHaveTextContent(/^Shutter\.Operation\.Ward$/);
+    expect(screen.getByTestId('case-tech-source')).toHaveTextContent(/^ADT InShutter\.Production$/);
+    expect(screen.getByTestId('case-tech-failure')).toHaveTextContent(
+      /^409 bed_occupiedrejected2026-11-02 14:34:44\.605Z$/,
+    );
+    expect(
+      within(screen.getByTestId('case-tech-header')).getByRole('link', { name: /^9625/ }),
+    ).toHaveAttribute('href', '/csp/healthshare/shutter/EnsPortal.MessageContents.zen?HeaderId=9625');
+    expect(screen.getByTestId('case-tech-plan')).toHaveTextContent(/^v1f1171ecfa9a8catalogue E16$/);
+    // The session's Visual Trace stays where it was, on the IRIS row
+    const row = document.querySelector('[data-tour="case-iris"]') as HTMLElement;
+    expect(within(row).getByRole('link', { name: /^Message trace/ })).toHaveAttribute(
+      'href',
+      '/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9625',
+    );
+  });
+
+  it('reads MSH-9 from the evidence when the server sent none, and leaves out a fact it does not have', () => {
+    const c = {
+      ...recorded('C-000058'),
+      messageType: undefined,
+      production: undefined,
+      sourceItem: undefined,
+      receiverClass: undefined,
+      failedAt: undefined,
+      planVersion: undefined,
+      planDigest: undefined,
+      catalogueEntry: undefined,
+      planCreatedBy: 'rules',
+    };
+    renderUi(<CaseHeader c={c} snapshot={snapshot('C-000058')} portalBase={portalBase} />, {
+      detail: 'technical',
+    });
+    expect(screen.getByTestId('case-tech-message')).toHaveTextContent(/^ADT\^A02MSG02304$/);
+    expect(screen.getByTestId('case-tech-failure')).toHaveTextContent(/^409 bed_occupiedrejected$/);
+    for (const id of ['case-receiver-class', 'case-tech-source', 'case-tech-plan'])
+      expect(screen.queryByTestId(id)).not.toBeInTheDocument();
+  });
+
+  it("keeps a forwarded case's source in its own words, with no class guessed for another production's receiver", () => {
+    renderUi(
+      <CaseHeader c={recorded('C-000052')} snapshot={snapshot('C-000052')} portalBase={portalBase} />,
+      {
+        detail: 'technical',
+      },
+    );
+    expect(screen.getByText('Source').parentElement!).toHaveTextContent(/Hospital\.Production/);
+    expect(screen.queryByTestId('case-tech-source')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('case-receiver-class')).not.toBeInTheDocument();
+    expect(screen.getByTestId('case-tech-plan')).toHaveTextContent(/^v148b744c990dbcatalogue E2$/);
+  });
+
+  it('adds nothing of the patient beyond the number Plain shows', () => {
+    renderUi(
+      <CaseHeader c={recorded('C-000058')} snapshot={snapshot('C-000058')} portalBase={portalBase} />,
+      {
+        detail: 'technical',
+      },
+    );
+    expect(document.body).not.toHaveTextContent('SYNTH');
+    for (const id of ['case-tech-message', 'case-tech-source', 'case-tech-failure', 'case-tech-plan'])
+      expect(screen.getByTestId(id)).not.toHaveTextContent('MRN1232');
   });
 });

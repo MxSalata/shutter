@@ -1217,7 +1217,19 @@
     "id": "1176",
     "planCreatedBy": "policy:E2",
     "writes": 0,
-    "verification": ""
+    "verification": "",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:36:12.707Z",
+    "planVersion": 1,
+    "planDigest": "sha256:c32d519e968bb1ceca8b4666aed317c64f58f197b9771e8b4958b464b241793e",
+    "catalogueEntry": "E2",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9798",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9798"
+    }
    },
    "detail": {
     "caseId": "C-000064",
@@ -1267,7 +1279,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9798",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9798"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:36:12.707Z",
+    "planVersion": 1,
+    "planDigest": "sha256:c32d519e968bb1ceca8b4666aed317c64f58f197b9771e8b4958b464b241793e",
+    "catalogueEntry": "E2"
    },
    "events": [
     {
@@ -2121,7 +2141,19 @@
     "id": "1175",
     "planCreatedBy": "policy:E1",
     "writes": 0,
-    "verification": "verified"
+    "verification": "verified",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:35:50.683Z",
+    "planVersion": 2,
+    "planDigest": "sha256:eb4fedef991386549b4c31722ee11f545242f6bff9e5b0d1fe770ad2dc1682f4",
+    "catalogueEntry": "E1",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9764",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9783"
+    }
    },
    "detail": {
     "caseId": "C-000063",
@@ -2172,7 +2204,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9764",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9783"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:35:50.683Z",
+    "planVersion": 2,
+    "planDigest": "sha256:eb4fedef991386549b4c31722ee11f545242f6bff9e5b0d1fe770ad2dc1682f4",
+    "catalogueEntry": "E1"
    },
    "events": [
     {
@@ -3224,7 +3264,19 @@
     "id": "1174",
     "planCreatedBy": "policy:E16",
     "writes": 0,
-    "verification": ""
+    "verification": "",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:35:27.668Z",
+    "planVersion": 2,
+    "planDigest": "sha256:07a74c78526c5bffeef9e072899beaa552bb78b77380fa17ba310170a750f72c",
+    "catalogueEntry": "E16",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9723",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9752"
+    }
    },
    "detail": {
     "caseId": "C-000062",
@@ -3274,7 +3326,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9723",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9752"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:35:27.668Z",
+    "planVersion": 2,
+    "planDigest": "sha256:07a74c78526c5bffeef9e072899beaa552bb78b77380fa17ba310170a750f72c",
+    "catalogueEntry": "E16"
    },
    "events": [
     {
@@ -4172,7 +4232,19 @@
     "id": "1173",
     "planCreatedBy": "policy:E2",
     "writes": 0,
-    "verification": ""
+    "verification": "",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:35:25.650Z",
+    "planVersion": 1,
+    "planDigest": "sha256:c4ebd9f9388b903b500a7586f1639fb91a55840e91c47015bc5394a82eab76c4",
+    "catalogueEntry": "E2",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9714",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9714"
+    }
    },
    "detail": {
     "caseId": "C-000061",
@@ -4224,7 +4296,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9714",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9714"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:35:25.650Z",
+    "planVersion": 1,
+    "planDigest": "sha256:c4ebd9f9388b903b500a7586f1639fb91a55840e91c47015bc5394a82eab76c4",
+    "catalogueEntry": "E2"
    },
    "events": [
     {
@@ -5230,7 +5310,19 @@
     "id": "1172",
     "planCreatedBy": "policy:E17",
     "writes": 0,
-    "verification": ""
+    "verification": "",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:35:05.635Z",
+    "planVersion": 1,
+    "planDigest": "sha256:a23e8eeb11a8c823ce581e261cdc963b80465ae1e8a8c4f58f035425cbeddf37",
+    "catalogueEntry": "E17",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9679",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9679"
+    }
    },
    "detail": {
     "caseId": "C-000060",
@@ -5279,7 +5371,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9679",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9679"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:35:05.635Z",
+    "planVersion": 1,
+    "planDigest": "sha256:a23e8eeb11a8c823ce581e261cdc963b80465ae1e8a8c4f58f035425cbeddf37",
+    "catalogueEntry": "E17"
    },
    "events": [
     {
@@ -6034,7 +6134,19 @@
     "id": "1171",
     "planCreatedBy": "policy:E17",
     "writes": 0,
-    "verification": ""
+    "verification": "",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:35:05.629Z",
+    "planVersion": 1,
+    "planDigest": "sha256:a65afdba82418d396f1772d99114a6cfc92b99694d315ed2c2c0c0d7ab6e313a",
+    "catalogueEntry": "E17",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9679",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9679"
+    }
    },
    "detail": {
     "caseId": "C-000059",
@@ -6083,7 +6195,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9679",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9679"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:35:05.629Z",
+    "planVersion": 1,
+    "planDigest": "sha256:a65afdba82418d396f1772d99114a6cfc92b99694d315ed2c2c0c0d7ab6e313a",
+    "catalogueEntry": "E17"
    },
    "events": [
     {
@@ -6840,7 +6960,19 @@
     "id": "1170",
     "planCreatedBy": "policy:E16",
     "writes": 1,
-    "verification": "verified"
+    "verification": "verified",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:34:44.605Z",
+    "planVersion": 1,
+    "planDigest": "sha256:f1171ecfa9a8a771256271592a50c730879d4730ad3cd2a02b64210e63667527",
+    "catalogueEntry": "E16",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9625",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9625"
+    }
    },
    "detail": {
     "caseId": "C-000058",
@@ -6891,7 +7023,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9625",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9625"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:34:44.605Z",
+    "planVersion": 1,
+    "planDigest": "sha256:f1171ecfa9a8a771256271592a50c730879d4730ad3cd2a02b64210e63667527",
+    "catalogueEntry": "E16"
    },
    "events": [
     {
@@ -8179,7 +8319,19 @@
     "id": "1169",
     "planCreatedBy": "policy:E2",
     "writes": 1,
-    "verification": "verified"
+    "verification": "verified",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:34:37.594Z",
+    "planVersion": 1,
+    "planDigest": "sha256:da0f715686a6eb458b47ff16428636a0989a62011507a140afcceafd31345571",
+    "catalogueEntry": "E2",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9616",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9616"
+    }
    },
    "detail": {
     "caseId": "C-000057",
@@ -8230,7 +8382,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9616",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9616"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:34:37.594Z",
+    "planVersion": 1,
+    "planDigest": "sha256:da0f715686a6eb458b47ff16428636a0989a62011507a140afcceafd31345571",
+    "catalogueEntry": "E2"
    },
    "events": [
     {
@@ -9457,7 +9617,19 @@
     "id": "1168",
     "planCreatedBy": "policy:E13",
     "writes": 0,
-    "verification": ""
+    "verification": "",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:34:16.577Z",
+    "planVersion": 1,
+    "planDigest": "sha256:456b5ffecf814605b8211c8fc943112aca078fe064449b2733ba32a710e19b3c",
+    "catalogueEntry": "E13",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9589",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9589"
+    }
    },
    "detail": {
     "caseId": "C-000056",
@@ -9507,7 +9679,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9589",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9589"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:34:16.577Z",
+    "planVersion": 1,
+    "planDigest": "sha256:456b5ffecf814605b8211c8fc943112aca078fe064449b2733ba32a710e19b3c",
+    "catalogueEntry": "E13"
    },
    "events": [
     {
@@ -10224,7 +10404,19 @@
     "id": "1167",
     "planCreatedBy": "policy:E1",
     "writes": 0,
-    "verification": "verified"
+    "verification": "verified",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:33:58.558Z",
+    "planVersion": 1,
+    "planDigest": "sha256:b91422cbdc182d9e0c3adbd536d4cbb2808905b421704d0dd5e0b3bcea73b311",
+    "catalogueEntry": "E1",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9552",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9552"
+    }
    },
    "detail": {
     "caseId": "C-000054",
@@ -10275,7 +10467,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9552",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9552"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:33:58.558Z",
+    "planVersion": 1,
+    "planDigest": "sha256:b91422cbdc182d9e0c3adbd536d4cbb2808905b421704d0dd5e0b3bcea73b311",
+    "catalogueEntry": "E1"
    },
    "events": [
     {
@@ -11238,7 +11438,19 @@
     "id": "1166",
     "planCreatedBy": "policy:E1",
     "writes": 0,
-    "verification": ""
+    "verification": "",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:33:58.552Z",
+    "planVersion": 1,
+    "planDigest": "sha256:c890648b9e15429b83be6614e7c4daa95351659adea6b50af01b9a91af54aaf4",
+    "catalogueEntry": "E1",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9552",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9552"
+    }
    },
    "detail": {
     "caseId": "C-000055",
@@ -11288,7 +11500,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9552",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9552"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:33:58.552Z",
+    "planVersion": 1,
+    "planDigest": "sha256:c890648b9e15429b83be6614e7c4daa95351659adea6b50af01b9a91af54aaf4",
+    "catalogueEntry": "E1"
    },
    "events": [
     {
@@ -12123,7 +12343,18 @@
     "id": "1165",
     "planCreatedBy": "rules",
     "writes": 0,
-    "verification": ""
+    "verification": "",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:33:33.530Z",
+    "planVersion": 2,
+    "planDigest": "sha256:cb91e4a4a9f66ef52228248855a6ef36a067b927c16da3f8eaa1b67f7fa84369",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9516",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9516"
+    }
    },
    "detail": {
     "caseId": "C-000053",
@@ -12173,7 +12404,14 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9516",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9516"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:33:33.530Z",
+    "planVersion": 2,
+    "planDigest": "sha256:cb91e4a4a9f66ef52228248855a6ef36a067b927c16da3f8eaa1b67f7fa84369"
    },
    "events": [
     {
@@ -13104,7 +13342,18 @@
     "id": "1164",
     "planCreatedBy": "policy:E2",
     "writes": 1,
-    "verification": "verified"
+    "verification": "verified",
+    "messageType": "ADT^A02",
+    "production": "Hospital.Production",
+    "sourceItem": "PAS In",
+    "failedAt": "2026-11-02T14:33:13.573Z",
+    "planVersion": 1,
+    "planDigest": "sha256:48b744c990db95a20325fae33303e91b3f530388a90a90ceef01e6f71513c88f",
+    "catalogueEntry": "E2",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9487",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9487"
+    }
    },
    "detail": {
     "caseId": "C-000052",
@@ -13159,7 +13408,14 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9487",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9487"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Hospital.Production",
+    "sourceItem": "PAS In",
+    "failedAt": "2026-11-02T14:33:13.573Z",
+    "planVersion": 1,
+    "planDigest": "sha256:48b744c990db95a20325fae33303e91b3f530388a90a90ceef01e6f71513c88f",
+    "catalogueEntry": "E2"
    },
    "events": [
     {
@@ -14399,7 +14655,19 @@
     "id": "1163",
     "planCreatedBy": "policy:E2",
     "writes": 1,
-    "verification": "verified"
+    "verification": "verified",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:32:49.500Z",
+    "planVersion": 1,
+    "planDigest": "sha256:f26936efaa1d1159a8b3909e1efc66972cfce53be7e5fd1352b94cac61714f5f",
+    "catalogueEntry": "E2",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9460",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9460"
+    }
    },
    "detail": {
     "caseId": "C-000051",
@@ -14450,7 +14718,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9460",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9460"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:32:49.500Z",
+    "planVersion": 1,
+    "planDigest": "sha256:f26936efaa1d1159a8b3909e1efc66972cfce53be7e5fd1352b94cac61714f5f",
+    "catalogueEntry": "E2"
    },
    "events": [
     {
@@ -15680,7 +15956,19 @@
     "id": "1162",
     "planCreatedBy": "policy:E2",
     "writes": 1,
-    "verification": "verified"
+    "verification": "verified",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:32:24.484Z",
+    "planVersion": 1,
+    "planDigest": "sha256:3ee542bc5e2f1b00ded8ec926cd294d33977d1fb9807312f66c16258663c67be",
+    "catalogueEntry": "E2",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9427",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9427"
+    }
    },
    "detail": {
     "caseId": "C-000050",
@@ -15731,7 +16019,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9427",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9427"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:32:24.484Z",
+    "planVersion": 1,
+    "planDigest": "sha256:3ee542bc5e2f1b00ded8ec926cd294d33977d1fb9807312f66c16258663c67be",
+    "catalogueEntry": "E2"
    },
    "events": [
     {
@@ -16963,7 +17259,19 @@
     "incidentId": "I-000002",
     "planCreatedBy": "policy:E2",
     "writes": 1,
-    "verification": "verified"
+    "verification": "verified",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:31:05.437Z",
+    "planVersion": 1,
+    "planDigest": "sha256:56c7664003b47eca418ea906386ea5199e1acef76cd9a65b4061e8dedaaf683d",
+    "catalogueEntry": "E2",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9306",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9306"
+    }
    },
    "detail": {
     "caseId": "C-000049",
@@ -17026,7 +17334,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9306",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9306"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:31:05.437Z",
+    "planVersion": 1,
+    "planDigest": "sha256:56c7664003b47eca418ea906386ea5199e1acef76cd9a65b4061e8dedaaf683d",
+    "catalogueEntry": "E2"
    },
    "events": [
     {
@@ -18316,7 +18632,19 @@
     "incidentId": "I-000002",
     "planCreatedBy": "policy:E2",
     "writes": 1,
-    "verification": "verified"
+    "verification": "verified",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:31:03.425Z",
+    "planVersion": 1,
+    "planDigest": "sha256:c0d7e032fe603071325d47d49601d2fdcfb3498d4ef7fe0d9d687cac99dcad7f",
+    "catalogueEntry": "E2",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9297",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9306"
+    }
    },
    "detail": {
     "caseId": "C-000048",
@@ -18379,7 +18707,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9297",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9306"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:31:03.425Z",
+    "planVersion": 1,
+    "planDigest": "sha256:c0d7e032fe603071325d47d49601d2fdcfb3498d4ef7fe0d9d687cac99dcad7f",
+    "catalogueEntry": "E2"
    },
    "events": [
     {
@@ -19669,7 +20005,19 @@
     "incidentId": "I-000002",
     "planCreatedBy": "policy:E2",
     "writes": 1,
-    "verification": "verified"
+    "verification": "verified",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:31:01.416Z",
+    "planVersion": 1,
+    "planDigest": "sha256:65adee5f7b1c02cd083b04faafde2dba75cd64612e586a86d46da60afe15e338",
+    "catalogueEntry": "E2",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9288",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9306"
+    }
    },
    "detail": {
     "caseId": "C-000047",
@@ -19732,7 +20080,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9288",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9306"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:31:01.416Z",
+    "planVersion": 1,
+    "planDigest": "sha256:65adee5f7b1c02cd083b04faafde2dba75cd64612e586a86d46da60afe15e338",
+    "catalogueEntry": "E2"
    },
    "events": [
     {
@@ -21022,7 +21378,19 @@
     "incidentId": "I-000002",
     "planCreatedBy": "policy:E4",
     "writes": 1,
-    "verification": "verified"
+    "verification": "verified",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:30:59.407Z",
+    "planVersion": 1,
+    "planDigest": "sha256:15eca1ba1ed6ecda9c5b3d106af4dbdc0155da810cf94cc9e1f26c9c2cd587ba",
+    "catalogueEntry": "E4",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9279",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9306"
+    }
    },
    "detail": {
     "caseId": "C-000046",
@@ -21086,7 +21454,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9279",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9306"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:30:59.407Z",
+    "planVersion": 1,
+    "planDigest": "sha256:15eca1ba1ed6ecda9c5b3d106af4dbdc0155da810cf94cc9e1f26c9c2cd587ba",
+    "catalogueEntry": "E4"
    },
    "events": [
     {
@@ -22397,7 +22773,19 @@
     "incidentId": "I-000002",
     "planCreatedBy": "policy:E4",
     "writes": 1,
-    "verification": "verified"
+    "verification": "verified",
+    "messageType": "ADT^A01",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:30:57.412Z",
+    "planVersion": 1,
+    "planDigest": "sha256:4c91cd69ce7f204dd1d53dae09244b10d8d4710d43105a49ccfd13c63895d167",
+    "catalogueEntry": "E4",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9270",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9306"
+    }
    },
    "detail": {
     "caseId": "C-000045",
@@ -22460,7 +22848,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9270",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9306"
-    }
+    },
+    "messageType": "ADT^A01",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:30:57.412Z",
+    "planVersion": 1,
+    "planDigest": "sha256:4c91cd69ce7f204dd1d53dae09244b10d8d4710d43105a49ccfd13c63895d167",
+    "catalogueEntry": "E4"
    },
    "events": [
     {
@@ -23688,7 +24084,19 @@
     "incidentId": "I-000001",
     "planCreatedBy": "run:653",
     "writes": 1,
-    "verification": "verified"
+    "verification": "verified",
+    "messageType": "ADT^A03",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:29:24.306Z",
+    "planVersion": 1,
+    "planDigest": "sha256:6d1e1ac973d1bcfad1d820162a7e8c681bb29abbd6eef6f7d59a0d6cdd2135a3",
+    "catalogueEntry": "E5",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9084",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9017"
+    }
    },
    "detail": {
     "caseId": "C-000044",
@@ -23750,7 +24158,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9084",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9017"
-    }
+    },
+    "messageType": "ADT^A03",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:29:24.306Z",
+    "planVersion": 1,
+    "planDigest": "sha256:6d1e1ac973d1bcfad1d820162a7e8c681bb29abbd6eef6f7d59a0d6cdd2135a3",
+    "catalogueEntry": "E5"
    },
    "events": [
     {
@@ -25803,7 +26219,19 @@
     "incidentId": "I-000001",
     "planCreatedBy": "policy:E4",
     "writes": 1,
-    "verification": "verified"
+    "verification": "verified",
+    "messageType": "ADT^A03",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:29:22.297Z",
+    "planVersion": 1,
+    "planDigest": "sha256:3dbd5fccce2e5d2b78187c6ef86d494a40f4cce023cd0dc42f829d930e716a5c",
+    "catalogueEntry": "E4",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9072",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9017"
+    }
    },
    "detail": {
     "caseId": "C-000043",
@@ -25865,7 +26293,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9072",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9017"
-    }
+    },
+    "messageType": "ADT^A03",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:29:22.297Z",
+    "planVersion": 1,
+    "planDigest": "sha256:3dbd5fccce2e5d2b78187c6ef86d494a40f4cce023cd0dc42f829d930e716a5c",
+    "catalogueEntry": "E4"
    },
    "events": [
     {
@@ -27256,7 +27692,19 @@
     "incidentId": "I-000001",
     "planCreatedBy": "policy:E6",
     "writes": 0,
-    "verification": "verified"
+    "verification": "verified",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:29:09.304Z",
+    "planVersion": 1,
+    "planDigest": "sha256:63716d3e5f9bb5cce109563194478d3c3f47aedb0ba306a867d591454ace394b",
+    "catalogueEntry": "E6",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9028",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9017"
+    }
    },
    "detail": {
     "caseId": "C-000042",
@@ -27318,7 +27766,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9028",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9017"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:29:09.304Z",
+    "planVersion": 1,
+    "planDigest": "sha256:63716d3e5f9bb5cce109563194478d3c3f47aedb0ba306a867d591454ace394b",
+    "catalogueEntry": "E6"
    },
    "events": [
     {
@@ -28352,7 +28808,19 @@
     "incidentId": "I-000001",
     "planCreatedBy": "policy:E2",
     "writes": 1,
-    "verification": "verified"
+    "verification": "verified",
+    "messageType": "ADT^A01",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:29:07.274Z",
+    "planVersion": 1,
+    "planDigest": "sha256:79822f7178c8751b31bf23140580cb03bdd406cc2466c93f05322e50518bdb0e",
+    "catalogueEntry": "E2",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9017",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9017"
+    }
    },
    "detail": {
     "caseId": "C-000041",
@@ -28415,7 +28883,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9017",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9017"
-    }
+    },
+    "messageType": "ADT^A01",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:29:07.274Z",
+    "planVersion": 1,
+    "planDigest": "sha256:79822f7178c8751b31bf23140580cb03bdd406cc2466c93f05322e50518bdb0e",
+    "catalogueEntry": "E2"
    },
    "events": [
     {
@@ -29591,7 +30067,19 @@
     "incidentId": "I-000001",
     "planCreatedBy": "policy:E1",
     "writes": 0,
-    "verification": "verified"
+    "verification": "verified",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:29:05.275Z",
+    "planVersion": 1,
+    "planDigest": "sha256:2c9cec7dd1e517690daea980b4d28c3a55bad0272c7be38b5055eb527d5b63ae",
+    "catalogueEntry": "E1",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9008",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9017"
+    }
    },
    "detail": {
     "caseId": "C-000040",
@@ -29653,7 +30141,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9008",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9017"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:29:05.275Z",
+    "planVersion": 1,
+    "planDigest": "sha256:2c9cec7dd1e517690daea980b4d28c3a55bad0272c7be38b5055eb527d5b63ae",
+    "catalogueEntry": "E1"
    },
    "events": [
     {
@@ -30686,7 +31182,19 @@
     "incidentId": "I-000001",
     "planCreatedBy": "run:649",
     "writes": 0,
-    "verification": "verified"
+    "verification": "verified",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:29:03.259Z",
+    "planVersion": 1,
+    "planDigest": "sha256:c1430bfe85ce2b24c55fd91d3e0efda0a127b2364ce07f2119be1cb5943435cc",
+    "catalogueEntry": "E1",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8999",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9017"
+    }
    },
    "detail": {
     "caseId": "C-000039",
@@ -30748,7 +31256,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8999",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9017"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:29:03.259Z",
+    "planVersion": 1,
+    "planDigest": "sha256:c1430bfe85ce2b24c55fd91d3e0efda0a127b2364ce07f2119be1cb5943435cc",
+    "catalogueEntry": "E1"
    },
    "events": [
     {
@@ -32476,7 +32992,19 @@
     "incidentId": "I-000001",
     "planCreatedBy": "policy:E4",
     "writes": 1,
-    "verification": "verified"
+    "verification": "verified",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:29:01.244Z",
+    "planVersion": 1,
+    "planDigest": "sha256:21341e3ca76cf0ce8474df0febd13599617f0fbf19f38e09ed40d003363dd874",
+    "catalogueEntry": "E4",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8990",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9017"
+    }
    },
    "detail": {
     "caseId": "C-000038",
@@ -32540,7 +33068,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8990",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9017"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:29:01.244Z",
+    "planVersion": 1,
+    "planDigest": "sha256:21341e3ca76cf0ce8474df0febd13599617f0fbf19f38e09ed40d003363dd874",
+    "catalogueEntry": "E4"
    },
    "events": [
     {
@@ -33892,7 +34428,19 @@
     "incidentId": "I-000001",
     "planCreatedBy": "policy:E2",
     "writes": 1,
-    "verification": "verified"
+    "verification": "verified",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:28:59.242Z",
+    "planVersion": 1,
+    "planDigest": "sha256:9b1b480ec03ae4b72f405c2192db696d82f7373891e7dc634afa4b7c9ef1dc0d",
+    "catalogueEntry": "E2",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8981",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9017"
+    }
    },
    "detail": {
     "caseId": "C-000037",
@@ -33955,7 +34503,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8981",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=9017"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:28:59.242Z",
+    "planVersion": 1,
+    "planDigest": "sha256:9b1b480ec03ae4b72f405c2192db696d82f7373891e7dc634afa4b7c9ef1dc0d",
+    "catalogueEntry": "E2"
    },
    "events": [
     {
@@ -35242,7 +35798,19 @@
     "id": "1147",
     "planCreatedBy": "policy:E13",
     "writes": 0,
-    "verification": ""
+    "verification": "",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:28:29.203Z",
+    "planVersion": 1,
+    "planDigest": "sha256:000f67849e032da31fd41fb9262dcaeaa93d61ab5253509f118fc2badb4ab017",
+    "catalogueEntry": "E13",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8924",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8924"
+    }
    },
    "detail": {
     "caseId": "C-000036",
@@ -35292,7 +35860,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8924",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8924"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:28:29.203Z",
+    "planVersion": 1,
+    "planDigest": "sha256:000f67849e032da31fd41fb9262dcaeaa93d61ab5253509f118fc2badb4ab017",
+    "catalogueEntry": "E13"
    },
    "events": [
     {
@@ -36032,7 +36608,19 @@
     "id": "1146",
     "planCreatedBy": "policy:E8",
     "writes": 0,
-    "verification": ""
+    "verification": "",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:28:10.175Z",
+    "planVersion": 1,
+    "planDigest": "sha256:da5c4080838b8aac287639d25072dd463811c39eaf312775923ffee81a6eb571",
+    "catalogueEntry": "E8",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8901",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8901"
+    }
    },
    "detail": {
     "caseId": "C-000035",
@@ -36082,7 +36670,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8901",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8901"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:28:10.175Z",
+    "planVersion": 1,
+    "planDigest": "sha256:da5c4080838b8aac287639d25072dd463811c39eaf312775923ffee81a6eb571",
+    "catalogueEntry": "E8"
    },
    "events": [
     {
@@ -36805,7 +37401,19 @@
     "id": "1145",
     "planCreatedBy": "policy:E2",
     "writes": 1,
-    "verification": "verified"
+    "verification": "verified",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:27:46.148Z",
+    "planVersion": 1,
+    "planDigest": "sha256:cb43c1e6492f84b6e5b21c123d8c0e1205c2952f87009e769aad60ac6547e46b",
+    "catalogueEntry": "E2",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8864",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8864"
+    }
    },
    "detail": {
     "caseId": "C-000034",
@@ -36856,7 +37464,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8864",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8864"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:27:46.148Z",
+    "planVersion": 1,
+    "planDigest": "sha256:cb43c1e6492f84b6e5b21c123d8c0e1205c2952f87009e769aad60ac6547e46b",
+    "catalogueEntry": "E2"
    },
    "events": [
     {
@@ -38083,7 +38699,19 @@
     "id": "1144",
     "planCreatedBy": "run:645",
     "writes": 0,
-    "verification": ""
+    "verification": "",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:27:27.117Z",
+    "planVersion": 1,
+    "planDigest": "sha256:5cf891ec4b674ede054e51f971540aee527b86e964cb4d30013cfbf3feee10bd",
+    "catalogueEntry": "E7",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8825",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8825"
+    }
    },
    "detail": {
     "caseId": "C-000033",
@@ -38133,7 +38761,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8825",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8825"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:27:27.117Z",
+    "planVersion": 1,
+    "planDigest": "sha256:5cf891ec4b674ede054e51f971540aee527b86e964cb4d30013cfbf3feee10bd",
+    "catalogueEntry": "E7"
    },
    "events": [
     {
@@ -39434,7 +40070,19 @@
     "id": "1143",
     "planCreatedBy": "policy:E6",
     "writes": 0,
-    "verification": "verified"
+    "verification": "verified",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:27:09.100Z",
+    "planVersion": 1,
+    "planDigest": "sha256:c7d86bb0954b51fd44e1dcb5eac2710eca2f2da43730145a13ac9d16b494e072",
+    "catalogueEntry": "E6",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8796",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8796"
+    }
    },
    "detail": {
     "caseId": "C-000032",
@@ -39485,7 +40133,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8796",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8796"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:27:09.100Z",
+    "planVersion": 1,
+    "planDigest": "sha256:c7d86bb0954b51fd44e1dcb5eac2710eca2f2da43730145a13ac9d16b494e072",
+    "catalogueEntry": "E6"
    },
    "events": [
     {
@@ -40449,7 +41105,19 @@
     "id": "1142",
     "planCreatedBy": "policy:E10",
     "writes": 1,
-    "verification": "verified"
+    "verification": "verified",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:26:45.059Z",
+    "planVersion": 1,
+    "planDigest": "sha256:f4cad4516582f0377434f91a4d4a0e7816817d2f7c4ec0176b2811a3365980e1",
+    "catalogueEntry": "E10",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8755",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8755"
+    }
    },
    "detail": {
     "caseId": "C-000031",
@@ -40500,7 +41168,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8755",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8755"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:26:45.059Z",
+    "planVersion": 1,
+    "planDigest": "sha256:f4cad4516582f0377434f91a4d4a0e7816817d2f7c4ec0176b2811a3365980e1",
+    "catalogueEntry": "E10"
    },
    "events": [
     {
@@ -41875,7 +42551,19 @@
     "id": "1141",
     "planCreatedBy": "run:641",
     "writes": 1,
-    "verification": "verified"
+    "verification": "verified",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:26:24.036Z",
+    "planVersion": 1,
+    "planDigest": "sha256:531d85ae64947f6c8373470a5a6f0e9e5316e4093fd544451aa391e736359fc2",
+    "catalogueEntry": "E9",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8709",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8709"
+    }
    },
    "detail": {
     "caseId": "C-000030",
@@ -41926,7 +42614,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8709",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8709"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:26:24.036Z",
+    "planVersion": 1,
+    "planDigest": "sha256:531d85ae64947f6c8373470a5a6f0e9e5316e4093fd544451aa391e736359fc2",
+    "catalogueEntry": "E9"
    },
    "events": [
     {
@@ -43788,7 +44484,19 @@
     "id": "1140",
     "planCreatedBy": "policy:E3",
     "writes": 0,
-    "verification": "verified"
+    "verification": "verified",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:26:04.021Z",
+    "planVersion": 1,
+    "planDigest": "sha256:4ca3a9287b4b6862938077370af3b127f59957e2edc6acf0f914463165ebbf2d",
+    "catalogueEntry": "E3",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8680",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8680"
+    }
    },
    "detail": {
     "caseId": "C-000029",
@@ -43837,7 +44545,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8680",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8680"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:26:04.021Z",
+    "planVersion": 1,
+    "planDigest": "sha256:4ca3a9287b4b6862938077370af3b127f59957e2edc6acf0f914463165ebbf2d",
+    "catalogueEntry": "E3"
    },
    "events": [
     {
@@ -44762,7 +45478,19 @@
     "id": "1139",
     "planCreatedBy": "policy:E2",
     "writes": 1,
-    "verification": "verified"
+    "verification": "verified",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:25:40.998Z",
+    "planVersion": 1,
+    "planDigest": "sha256:59f1a8fae4404670c1b8e3d33d98ccc8bd90cb80f5634fe62c4420e259f8ea73",
+    "catalogueEntry": "E2",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8647",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8647"
+    }
    },
    "detail": {
     "caseId": "C-000028",
@@ -44813,7 +45541,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8647",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8647"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:25:40.998Z",
+    "planVersion": 1,
+    "planDigest": "sha256:59f1a8fae4404670c1b8e3d33d98ccc8bd90cb80f5634fe62c4420e259f8ea73",
+    "catalogueEntry": "E2"
    },
    "events": [
     {
@@ -46041,7 +46777,19 @@
     "id": "1138",
     "planCreatedBy": "policy:E1",
     "writes": 0,
-    "verification": "verified"
+    "verification": "verified",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:25:22.992Z",
+    "planVersion": 1,
+    "planDigest": "sha256:9ae26e2dc2da81fc020d4d58bb75a37a22b467b591271688a47ad69f508d67b0",
+    "catalogueEntry": "E1",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8618",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8618"
+    }
    },
    "detail": {
     "caseId": "C-000027",
@@ -46092,7 +46840,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8618",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8618"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:25:22.992Z",
+    "planVersion": 1,
+    "planDigest": "sha256:9ae26e2dc2da81fc020d4d58bb75a37a22b467b591271688a47ad69f508d67b0",
+    "catalogueEntry": "E1"
    },
    "events": [
     {
@@ -47050,7 +47806,19 @@
     "id": "1136",
     "planCreatedBy": "policy:E15",
     "writes": 0,
-    "verification": ""
+    "verification": "",
+    "messageType": "ADT^A12",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:25:04.942Z",
+    "planVersion": 1,
+    "planDigest": "sha256:2ac57e32133bea93eaeae067ce5b6ada1fe36ce00911710cc2b2a9e16654e1d6",
+    "catalogueEntry": "E15",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8591",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8591"
+    }
    },
    "detail": {
     "caseId": "C-000026",
@@ -47095,7 +47863,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8591",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8591"
-    }
+    },
+    "messageType": "ADT^A12",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:25:04.942Z",
+    "planVersion": 1,
+    "planDigest": "sha256:2ac57e32133bea93eaeae067ce5b6ada1fe36ce00911710cc2b2a9e16654e1d6",
+    "catalogueEntry": "E15"
    },
    "events": [
     {
@@ -47838,7 +48614,19 @@
     "id": "1135",
     "planCreatedBy": "policy:E14",
     "writes": 0,
-    "verification": ""
+    "verification": "",
+    "messageType": "ADT^A40",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:24:43.917Z",
+    "planVersion": 1,
+    "planDigest": "sha256:0c42d2ef616acbc600f552fe59a829e6d4c93f432e73215efd584c15d952fbfb",
+    "catalogueEntry": "E14",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8560",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8560"
+    }
    },
    "detail": {
     "caseId": "C-000025",
@@ -47887,7 +48675,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8560",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8560"
-    }
+    },
+    "messageType": "ADT^A40",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:24:43.917Z",
+    "planVersion": 1,
+    "planDigest": "sha256:0c42d2ef616acbc600f552fe59a829e6d4c93f432e73215efd584c15d952fbfb",
+    "catalogueEntry": "E14"
    },
    "events": [
     {
@@ -48659,7 +49455,18 @@
     "id": "1133",
     "planCreatedBy": "rules",
     "writes": 0,
-    "verification": ""
+    "verification": "",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:24:23.905Z",
+    "planVersion": 1,
+    "planDigest": "sha256:c986098371ea251a791e4755e594e8f2719556453f007a7248c32dfa723d005d",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8533",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8533"
+    }
    },
    "detail": {
     "caseId": "C-000024",
@@ -48709,7 +49516,14 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8533",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8533"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:24:23.905Z",
+    "planVersion": 1,
+    "planDigest": "sha256:c986098371ea251a791e4755e594e8f2719556453f007a7248c32dfa723d005d"
    },
    "events": [
     {
@@ -49452,7 +50266,18 @@
     "id": "1132",
     "planCreatedBy": "rules",
     "writes": 0,
-    "verification": ""
+    "verification": "",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:24:03.889Z",
+    "planVersion": 1,
+    "planDigest": "sha256:737304b3aa6835332e8fbca7caacffc2c3f5e044902084fd149dd7f696bdd04f",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8512",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8512"
+    }
    },
    "detail": {
     "caseId": "C-000023",
@@ -49502,7 +50327,14 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8512",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8512"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:24:03.889Z",
+    "planVersion": 1,
+    "planDigest": "sha256:737304b3aa6835332e8fbca7caacffc2c3f5e044902084fd149dd7f696bdd04f"
    },
    "events": [
     {
@@ -50228,7 +51060,18 @@
     "id": "1131",
     "planCreatedBy": "rules",
     "writes": 1,
-    "verification": "verified"
+    "verification": "verified",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:23:38.844Z",
+    "planVersion": 1,
+    "planDigest": "sha256:18c86154b01e1ae62b7b34cd3ce9076f4bd0d79a240507debaa96b9323525658",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8474",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8474"
+    }
    },
    "detail": {
     "caseId": "C-000022",
@@ -50279,7 +51122,14 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8474",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8474"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:23:38.844Z",
+    "planVersion": 1,
+    "planDigest": "sha256:18c86154b01e1ae62b7b34cd3ce9076f4bd0d79a240507debaa96b9323525658"
    },
    "events": [
     {
@@ -51519,7 +52369,18 @@
     "id": "1130",
     "planCreatedBy": "rules",
     "writes": 1,
-    "verification": "verified"
+    "verification": "verified",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:23:14.823Z",
+    "planVersion": 1,
+    "planDigest": "sha256:4850893f807864091384f53a4f5b769775e856f2e382aa64e465a94b643dbee4",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8432",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8432"
+    }
    },
    "detail": {
     "caseId": "C-000021",
@@ -51570,7 +52431,14 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8432",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8432"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:23:14.823Z",
+    "planVersion": 1,
+    "planDigest": "sha256:4850893f807864091384f53a4f5b769775e856f2e382aa64e465a94b643dbee4"
    },
    "events": [
     {
@@ -52896,7 +53764,18 @@
     "id": "1129",
     "planCreatedBy": "rules",
     "writes": 0,
-    "verification": ""
+    "verification": "",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:22:49.795Z",
+    "planVersion": 2,
+    "planDigest": "sha256:092d48c68b6606ea9cbbbb0035e068c23082bfaa8de05dcb1f1551f0c80a9a2e",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8390",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8390"
+    }
    },
    "detail": {
     "caseId": "C-000020",
@@ -52946,7 +53825,14 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8390",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8390"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:22:49.795Z",
+    "planVersion": 2,
+    "planDigest": "sha256:092d48c68b6606ea9cbbbb0035e068c23082bfaa8de05dcb1f1551f0c80a9a2e"
    },
    "events": [
     {
@@ -53914,7 +54800,18 @@
     "id": "1128",
     "planCreatedBy": "rules",
     "writes": 0,
-    "verification": ""
+    "verification": "",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:22:29.749Z",
+    "planVersion": 1,
+    "planDigest": "sha256:0db4e72b9f9c2f9579a1c71d5ad9ea965e895dc061b2ae97ef2299715690e038",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8363",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8363"
+    }
    },
    "detail": {
     "caseId": "C-000019",
@@ -53964,7 +54861,14 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8363",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8363"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:22:29.749Z",
+    "planVersion": 1,
+    "planDigest": "sha256:0db4e72b9f9c2f9579a1c71d5ad9ea965e895dc061b2ae97ef2299715690e038"
    },
    "events": [
     {
@@ -54756,7 +55660,18 @@
     "id": "1127",
     "planCreatedBy": "rules",
     "writes": 1,
-    "verification": "verified"
+    "verification": "verified",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:22:04.729Z",
+    "planVersion": 1,
+    "planDigest": "sha256:bce8842bd15f37b20c79c8c54669d313f630fdb07b53753be0446bd44d07ef7e",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8321",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8321"
+    }
    },
    "detail": {
     "caseId": "C-000018",
@@ -54807,7 +55722,14 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8321",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8321"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:22:04.729Z",
+    "planVersion": 1,
+    "planDigest": "sha256:bce8842bd15f37b20c79c8c54669d313f630fdb07b53753be0446bd44d07ef7e"
    },
    "events": [
     {
@@ -56194,7 +57116,18 @@
     "id": "1126",
     "planCreatedBy": "rules",
     "writes": 1,
-    "verification": "verified"
+    "verification": "verified",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:21:43.678Z",
+    "planVersion": 1,
+    "planDigest": "sha256:1d047612ff56637fa0017fa0c028c59c4f1446e79f61d4fb9d0793ed2a8f645e",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8287",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8287"
+    }
    },
    "detail": {
     "caseId": "C-000017",
@@ -56245,7 +57178,14 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8287",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8287"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:21:43.678Z",
+    "planVersion": 1,
+    "planDigest": "sha256:1d047612ff56637fa0017fa0c028c59c4f1446e79f61d4fb9d0793ed2a8f645e"
    },
    "events": [
     {
@@ -57577,7 +58517,18 @@
     "id": "1125",
     "planCreatedBy": "rules",
     "writes": 0,
-    "verification": ""
+    "verification": "",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:21:23.631Z",
+    "planVersion": 1,
+    "planDigest": "sha256:3f1255b5be8e1fffd034b033f1c251abd034a9bb5abe02ae729af5fd78b93996",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8260",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8260"
+    }
    },
    "detail": {
     "caseId": "C-000016",
@@ -57625,7 +58576,14 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8260",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8260"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:21:23.631Z",
+    "planVersion": 1,
+    "planDigest": "sha256:3f1255b5be8e1fffd034b033f1c251abd034a9bb5abe02ae729af5fd78b93996"
    },
    "events": [
     {
@@ -58389,7 +59347,18 @@
     "id": "1124",
     "planCreatedBy": "rules",
     "writes": 1,
-    "verification": "verified"
+    "verification": "verified",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:20:58.594Z",
+    "planVersion": 1,
+    "planDigest": "sha256:bb2d0f3a2ab975a9f4a4c0532e27e1a459d50729b1b9db7cb8ace2d38d2fba01",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8224",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8224"
+    }
    },
    "detail": {
     "caseId": "C-000015",
@@ -58440,7 +59409,14 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8224",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8224"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:20:58.594Z",
+    "planVersion": 1,
+    "planDigest": "sha256:bb2d0f3a2ab975a9f4a4c0532e27e1a459d50729b1b9db7cb8ace2d38d2fba01"
    },
    "events": [
     {
@@ -59679,7 +60655,18 @@
     "id": "1123",
     "planCreatedBy": "rules",
     "writes": 0,
-    "verification": ""
+    "verification": "",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:20:39.546Z",
+    "planVersion": 1,
+    "planDigest": "sha256:ad8810a54d321379dec7e67efab051e40b520124cdd6bc294c3a67d1514aff28",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8197",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8197"
+    }
    },
    "detail": {
     "caseId": "C-000014",
@@ -59729,7 +60716,14 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8197",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8197"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:20:39.546Z",
+    "planVersion": 1,
+    "planDigest": "sha256:ad8810a54d321379dec7e67efab051e40b520124cdd6bc294c3a67d1514aff28"
    },
    "events": [
     {
@@ -60509,7 +61503,19 @@
     "id": "1121",
     "planCreatedBy": "policy:E15",
     "writes": 0,
-    "verification": ""
+    "verification": "",
+    "messageType": "ADT^A12",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:20:21.496Z",
+    "planVersion": 1,
+    "planDigest": "sha256:a0a4146a301f3113e3fe39dc934f49afc736b6055a4dfc3ed0d77632bc324c8c",
+    "catalogueEntry": "E15",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8172",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8172"
+    }
    },
    "detail": {
     "caseId": "C-000013",
@@ -60554,7 +61560,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8172",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8172"
-    }
+    },
+    "messageType": "ADT^A12",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:20:21.496Z",
+    "planVersion": 1,
+    "planDigest": "sha256:a0a4146a301f3113e3fe39dc934f49afc736b6055a4dfc3ed0d77632bc324c8c",
+    "catalogueEntry": "E15"
    },
    "events": [
     {
@@ -61297,7 +62311,19 @@
     "id": "1120",
     "planCreatedBy": "policy:E14",
     "writes": 0,
-    "verification": ""
+    "verification": "",
+    "messageType": "ADT^A40",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:20:01.473Z",
+    "planVersion": 1,
+    "planDigest": "sha256:12a95a91ac36c9f001eb8d40e216fd244c3192b03be56f7dc123c045b5bf6fe7",
+    "catalogueEntry": "E14",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8141",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8141"
+    }
    },
    "detail": {
     "caseId": "C-000012",
@@ -61346,7 +62372,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8141",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8141"
-    }
+    },
+    "messageType": "ADT^A40",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:20:01.473Z",
+    "planVersion": 1,
+    "planDigest": "sha256:12a95a91ac36c9f001eb8d40e216fd244c3192b03be56f7dc123c045b5bf6fe7",
+    "catalogueEntry": "E14"
    },
    "events": [
     {
@@ -62118,7 +63152,19 @@
     "id": "1118",
     "planCreatedBy": "run:637",
     "writes": 0,
-    "verification": ""
+    "verification": "",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:19:40.463Z",
+    "planVersion": 1,
+    "planDigest": "sha256:1ccf9b066efbf725752db88b253ea4b3e75ed10ff99aac37a692256287fa0415",
+    "catalogueEntry": "E13",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8104",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8104"
+    }
    },
    "detail": {
     "caseId": "C-000011",
@@ -62168,7 +63214,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8104",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8104"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:19:40.463Z",
+    "planVersion": 1,
+    "planDigest": "sha256:1ccf9b066efbf725752db88b253ea4b3e75ed10ff99aac37a692256287fa0415",
+    "catalogueEntry": "E13"
    },
    "events": [
     {
@@ -63454,7 +64508,19 @@
     "id": "1117",
     "planCreatedBy": "run:633",
     "writes": 0,
-    "verification": ""
+    "verification": "",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:19:22.427Z",
+    "planVersion": 1,
+    "planDigest": "sha256:7f1ea9d45601716b1eff41f188ed5c6ee1030acdbd41d8bf93cf9bd3c22d20c1",
+    "catalogueEntry": "E8",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8073",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8073"
+    }
    },
    "detail": {
     "caseId": "C-000010",
@@ -63504,7 +64570,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8073",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8073"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:19:22.427Z",
+    "planVersion": 1,
+    "planDigest": "sha256:7f1ea9d45601716b1eff41f188ed5c6ee1030acdbd41d8bf93cf9bd3c22d20c1",
+    "catalogueEntry": "E8"
    },
    "events": [
     {
@@ -64773,7 +65847,19 @@
     "id": "1116",
     "planCreatedBy": "run:629",
     "writes": 1,
-    "verification": "verified"
+    "verification": "verified",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:18:57.376Z",
+    "planVersion": 1,
+    "planDigest": "sha256:2fad5a8c912a4d060c3f001046e1bdf96bfc9af2f005fff90ba37d591f9097a6",
+    "catalogueEntry": "E2",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8025",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8025"
+    }
    },
    "detail": {
     "caseId": "C-000009",
@@ -64824,7 +65910,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8025",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=8025"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:18:57.376Z",
+    "planVersion": 1,
+    "planDigest": "sha256:2fad5a8c912a4d060c3f001046e1bdf96bfc9af2f005fff90ba37d591f9097a6",
+    "catalogueEntry": "E2"
    },
    "events": [
     {
@@ -66605,7 +67699,19 @@
     "id": "1115",
     "planCreatedBy": "run:625",
     "writes": 0,
-    "verification": ""
+    "verification": "",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:18:39.346Z",
+    "planVersion": 1,
+    "planDigest": "sha256:a1ab04a25e414e0cbf0f8b0d33d08d6d0a022129b7b3c5b9708973a56ea52e99",
+    "catalogueEntry": "E7",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=7988",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=7988"
+    }
    },
    "detail": {
     "caseId": "C-000008",
@@ -66655,7 +67761,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=7988",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=7988"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:18:39.346Z",
+    "planVersion": 1,
+    "planDigest": "sha256:a1ab04a25e414e0cbf0f8b0d33d08d6d0a022129b7b3c5b9708973a56ea52e99",
+    "catalogueEntry": "E7"
    },
    "events": [
     {
@@ -67948,7 +69062,19 @@
     "id": "1114",
     "planCreatedBy": "run:621",
     "writes": 0,
-    "verification": "verified"
+    "verification": "verified",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:18:15.318Z",
+    "planVersion": 2,
+    "planDigest": "sha256:39a1b788f7eb4deeb534f3bef049a3ce17f2f3301807ec3055ded33041586c30",
+    "catalogueEntry": "E1",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=7924",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=7924"
+    }
    },
    "detail": {
     "caseId": "C-000007",
@@ -67999,7 +69125,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=7924",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=7924"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:18:15.318Z",
+    "planVersion": 2,
+    "planDigest": "sha256:39a1b788f7eb4deeb534f3bef049a3ce17f2f3301807ec3055ded33041586c30",
+    "catalogueEntry": "E1"
    },
    "events": [
     {
@@ -70180,7 +71314,19 @@
     "id": "1113",
     "planCreatedBy": "run:613",
     "writes": 0,
-    "verification": "verified"
+    "verification": "verified",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:17:56.301Z",
+    "planVersion": 1,
+    "planDigest": "sha256:e843fb0c71a8f28db40b2b5646270c48d2dab75c273bd6bc9b845ed6a836c190",
+    "catalogueEntry": "E6",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=7885",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=7885"
+    }
    },
    "detail": {
     "caseId": "C-000006",
@@ -70231,7 +71377,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=7885",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=7885"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:17:56.301Z",
+    "planVersion": 1,
+    "planDigest": "sha256:e843fb0c71a8f28db40b2b5646270c48d2dab75c273bd6bc9b845ed6a836c190",
+    "catalogueEntry": "E6"
    },
    "events": [
     {
@@ -71722,7 +72876,19 @@
     "id": "1112",
     "planCreatedBy": "run:609",
     "writes": 1,
-    "verification": "verified"
+    "verification": "verified",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:17:32.263Z",
+    "planVersion": 1,
+    "planDigest": "sha256:4c180fc0c60f8abd0b3547be9f7c22361ad0e1d8ada6155dcbc39cb6084786b6",
+    "catalogueEntry": "E10",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=7833",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=7833"
+    }
    },
    "detail": {
     "caseId": "C-000005",
@@ -71773,7 +72939,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=7833",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=7833"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:17:32.263Z",
+    "planVersion": 1,
+    "planDigest": "sha256:4c180fc0c60f8abd0b3547be9f7c22361ad0e1d8ada6155dcbc39cb6084786b6",
+    "catalogueEntry": "E10"
    },
    "events": [
     {
@@ -73710,7 +74884,19 @@
     "id": "1111",
     "planCreatedBy": "run:605",
     "writes": 1,
-    "verification": "verified"
+    "verification": "verified",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:17:12.254Z",
+    "planVersion": 1,
+    "planDigest": "sha256:f69df864c41579cdd411019d6626dfa1668a8db5df1f33daec933b3af836e831",
+    "catalogueEntry": "E9",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=7789",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=7789"
+    }
    },
    "detail": {
     "caseId": "C-000004",
@@ -73761,7 +74947,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=7789",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=7789"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:17:12.254Z",
+    "planVersion": 1,
+    "planDigest": "sha256:f69df864c41579cdd411019d6626dfa1668a8db5df1f33daec933b3af836e831",
+    "catalogueEntry": "E9"
    },
    "events": [
     {
@@ -75615,7 +76809,19 @@
     "id": "1110",
     "planCreatedBy": "run:601",
     "writes": 0,
-    "verification": "verified"
+    "verification": "verified",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:16:50.236Z",
+    "planVersion": 1,
+    "planDigest": "sha256:e9341fb152a1708bb15b38073d1eddd19c5b677dc2ad744635617d88d646f11f",
+    "catalogueEntry": "E3",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=7750",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=7750"
+    }
    },
    "detail": {
     "caseId": "C-000003",
@@ -75664,7 +76870,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=7750",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=7750"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:16:50.236Z",
+    "planVersion": 1,
+    "planDigest": "sha256:e9341fb152a1708bb15b38073d1eddd19c5b677dc2ad744635617d88d646f11f",
+    "catalogueEntry": "E3"
    },
    "events": [
     {
@@ -77073,7 +78287,19 @@
     "id": "1109",
     "planCreatedBy": "run:597",
     "writes": 1,
-    "verification": "verified"
+    "verification": "verified",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:16:25.230Z",
+    "planVersion": 1,
+    "planDigest": "sha256:8466d98e72107b8fea9f45e9d3a99fe701d99fa78505a5b10923ba4bff9dc2ae",
+    "catalogueEntry": "E2",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=7704",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=7704"
+    }
    },
    "detail": {
     "caseId": "C-000002",
@@ -77124,7 +78350,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=7704",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=7704"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:16:25.230Z",
+    "planVersion": 1,
+    "planDigest": "sha256:8466d98e72107b8fea9f45e9d3a99fe701d99fa78505a5b10923ba4bff9dc2ae",
+    "catalogueEntry": "E2"
    },
    "events": [
     {
@@ -78898,7 +80132,19 @@
     "id": "1108",
     "planCreatedBy": "run:593",
     "writes": 0,
-    "verification": "verified"
+    "verification": "verified",
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:14:53.185Z",
+    "planVersion": 1,
+    "planDigest": "sha256:d74a86f0955045554bcf1ec03c843d283c37d27985168122ad833bbc2578ca28",
+    "catalogueEntry": "E1",
+    "links": {
+     "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=7665",
+     "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=7665"
+    }
    },
    "detail": {
     "caseId": "C-000001",
@@ -78949,7 +80195,15 @@
     "links": {
      "visualTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=7665",
      "workflowTrace": "/csp/healthshare/shutter/EnsPortal.VisualTrace.zen?SESSIONID=7665"
-    }
+    },
+    "messageType": "ADT^A02",
+    "production": "Shutter.Production",
+    "sourceItem": "ADT In",
+    "receiverClass": "Shutter.Operation.Ward",
+    "failedAt": "2026-11-02T14:14:53.185Z",
+    "planVersion": 1,
+    "planDigest": "sha256:d74a86f0955045554bcf1ec03c843d283c37d27985168122ad833bbc2578ca28",
+    "catalogueEntry": "E1"
    },
    "events": [
     {
