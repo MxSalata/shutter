@@ -100,6 +100,21 @@ describe('ApiPage', () => {
     expect(within(panel).getByRole('button', { name: 'Copy the command' })).toBeInTheDocument();
   });
 
+  it('says a route with no resource still needs a sign-in, unless it answers before one', async () => {
+    const user = userEvent.setup();
+    renderUi(<ApiPage />, { detail: 'technical' });
+    const list = within(screen.getByRole('region', { name: 'Routes' }));
+    const access = list.getByRole('button', { name: /^GET \/api\/shutter\/access / });
+    await user.click(access);
+    const panel = document.getElementById(access.getAttribute('aria-controls')!)!;
+    expect(panel).toHaveTextContent('No resource: any signed-in user');
+    expect(panel).not.toHaveTextContent('before anyone signs in');
+    const health = list.getByRole('button', { name: /^GET \/api\/shutter\/health / });
+    await user.click(health);
+    const open = document.getElementById(health.getAttribute('aria-controls')!)!;
+    expect(open).toHaveTextContent('No resource: it answers before anyone signs in');
+  });
+
   it('opens the route the address names, and a type in its tables reaches the shape below', async () => {
     const user = userEvent.setup();
     renderUi(<ApiPage />, { detail: 'technical', path: '/api?op=caseApprove' });

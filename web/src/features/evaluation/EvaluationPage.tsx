@@ -5,6 +5,7 @@ import {
   Card,
   Chip,
   Group,
+  Input,
   List,
   NativeSelect,
   Paper,
@@ -103,15 +104,41 @@ function confidenceGroup(c: EvaluationConfidence): string {
   return `${c.n}, from ${c.min.toFixed(2)} to ${c.max.toFixed(2)} (mean ${c.mean.toFixed(2)})`;
 }
 
-/** What the scenario expects, or why the pass is not scored against it. */
-function expected(p: EvaluationPass): string {
-  if (!p.scored) return 'Not scored: planned again after the change';
+/**
+ * What the scenario expects, as the disposition's badge, with the other dispositions it accepts and, for an incident's
+ * case, the entry the matcher found in its evidence (`from`) on a line under it; or why the pass is not scored.
+ */
+function ExpectedCell({ p }: { p: EvaluationPass }) {
+  if (!p.scored)
+    return (
+      <Text size="xs" c="dimmed">
+        Not scored: planned again after the change
+      </Text>
+    );
   const others = (p.expected.acceptable ?? [])
     .filter((a) => a !== p.expected.disposition)
     .map((a) => humanize(a).toLowerCase());
-  // An incident's case is scored against the entry the matcher found in its evidence, which `from` names
-  const from = p.incident && p.expected.from ? ` (${p.expected.from})` : '';
-  return `${humanize(p.expected.disposition)}${others.length ? ` (or ${others.join(', ')})` : ''}${from}`;
+  const note = [
+    others.length ? `(or ${others.join(', ')})` : '',
+    p.incident && p.expected.from ? `(${p.expected.from})` : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+  return (
+    <Stack gap={2} align="flex-start">
+      {/* No tab stop per row, as for the members' and the plan's badges: the action's definition is the same in each */}
+      <DispositionBadge disposition={p.expected.disposition} focusable={false} />
+      {/* The space keeps the cell's text "Escalate (or more evidence)", as the stacked layout reads it out */}
+      {note ? (
+        <>
+          {' '}
+          <Text size="xs" c="dimmed">
+            {note}
+          </Text>
+        </>
+      ) : null}
+    </Stack>
+  );
 }
 
 /** The pass's tokens as the provider bills them: uncached input, cache reads and writes, output. */
@@ -736,7 +763,12 @@ function WhyABoard({
   );
 }
 
-/** The per-scenario table's filters: Show, who the entry says decides, who was outweighed, the order, and the count. */
+/**
+ * The per-scenario table's filters, one toolbar: Show, who the entry says decides, who was outweighed, the order, and
+ * the count, each control under a label of the same size, bottom-aligned in one row that wraps as the width runs out
+ * (on a phone the selects take the width in turn). Nothing is pushed to the far edge: on a wide screen the controls stay
+ * together at the left, where the eye starts.
+ */
 function Filters({
   filters,
   total,
@@ -751,11 +783,11 @@ function Filters({
   const id = useId();
   const standard = ['all', 'rules-differs', 'not-unanimous'];
   return (
-    <Group gap="sm" align="flex-end" wrap="wrap" justify="space-between">
-      <Group gap="xs" wrap="wrap" align="center">
-        <Text size="sm" fw={600} id={id}>
+    <Group gap="md" align="flex-end" wrap="wrap" className="eval-filters">
+      <Stack gap={4} className="eval-filter">
+        <Input.Label size="xs" labelElement="div" id={id}>
           Show
-        </Text>
+        </Input.Label>
         <Chip.Group
           multiple={false}
           value={filters.show}
@@ -779,45 +811,46 @@ function Filters({
             )}
           </Group>
         </Chip.Group>
-      </Group>
-      <Group gap="sm" align="flex-end" wrap="wrap">
-        <NativeSelect
-          size="xs"
-          label="Entry decides"
-          value={filters.decides}
-          onChange={(e) => set({ decides: e.currentTarget.value || null })}
-          data={[
-            { value: '', label: 'Any' },
-            { value: 'policy', label: 'Policy' },
-            { value: 'board', label: 'Board' },
-            { value: 'person', label: 'Person' },
-          ]}
-        />
-        <NativeSelect
-          size="xs"
-          label="Outweighed"
-          value={filters.outweighed}
-          onChange={(e) => set({ outweighed: e.currentTarget.value || null })}
-          data={[
-            { value: '', label: 'Any' },
-            ...SPECIALISTS.map((s) => ({ value: s, label: MEMBERS[s].name })),
-          ]}
-        />
-        <NativeSelect
-          size="xs"
-          label="Sort"
-          value={filters.sort}
-          onChange={(e) => set({ sort: e.currentTarget.value === 'scenario' ? null : e.currentTarget.value })}
-          data={[
-            { value: 'scenario', label: 'Scenario' },
-            { value: 'cost', label: 'Cost, highest first' },
-            { value: 'elapsed', label: 'Time, longest first' },
-          ]}
-        />
-        <Text size="sm" aria-live="polite" aria-atomic="true" pb={4}>
-          {`${plural(shown, 'pass', 'passes')} shown`}
-        </Text>
-      </Group>
+      </Stack>
+      <NativeSelect
+        size="xs"
+        label="Entry decides"
+        className="eval-filter"
+        value={filters.decides}
+        onChange={(e) => set({ decides: e.currentTarget.value || null })}
+        data={[
+          { value: '', label: 'Any' },
+          { value: 'policy', label: 'Policy' },
+          { value: 'board', label: 'Board' },
+          { value: 'person', label: 'Person' },
+        ]}
+      />
+      <NativeSelect
+        size="xs"
+        label="Outweighed"
+        className="eval-filter"
+        value={filters.outweighed}
+        onChange={(e) => set({ outweighed: e.currentTarget.value || null })}
+        data={[
+          { value: '', label: 'Any' },
+          ...SPECIALISTS.map((s) => ({ value: s, label: MEMBERS[s].name })),
+        ]}
+      />
+      <NativeSelect
+        size="xs"
+        label="Sort"
+        className="eval-filter"
+        value={filters.sort}
+        onChange={(e) => set({ sort: e.currentTarget.value === 'scenario' ? null : e.currentTarget.value })}
+        data={[
+          { value: 'scenario', label: 'Scenario' },
+          { value: 'cost', label: 'Cost, highest first' },
+          { value: 'elapsed', label: 'Time, longest first' },
+        ]}
+      />
+      <Text size="sm" aria-live="polite" aria-atomic="true" className="eval-filter-count">
+        {`${plural(shown, 'pass', 'passes')} shown`}
+      </Text>
     </Group>
   );
 }
@@ -840,7 +873,21 @@ function MemberHeader({ code }: { code: Specialist }) {
  * The passes one row each, in 8 columns that fit a laptop: the pass (it stays in view when a narrow window scrolls the
  * table), what was expected, each specialist's view, the plan (its action, entry and agreement), how it ended played
  * end to end, and its cost and time. On a phone each pass is a compact card.
+ *
+ * Each column's share of the width (COLUMNS) is a hint to the browser's table layout, which otherwise gives a wide
+ * screen's surplus to the columns with the longest single line (a long title, a played mark) and leaves the badge
+ * columns gaping; a column never shrinks below its content, so a laptop's 940 px is laid out as before. On a wide screen
+ * Played gets room for its longest mark ("Rules only: stopped by the gate") on one line, and no column more than its
+ * content needs.
  */
+const COLUMNS = {
+  pass: '18%',
+  expected: '12%',
+  member: '10%',
+  plan: '14%',
+  played: '16%',
+  cost: '10%',
+};
 function PassesTable({
   data,
   passes,
@@ -895,18 +942,24 @@ function PassesTable({
         <StackTable verticalSpacing="xs" className="stack-table stack-cards eval-passes">
           <StackTable.Thead>
             <StackTable.Tr>
-              <StackTable.Th aria-sort={filters.sort === 'scenario' ? 'ascending' : undefined}>
+              <StackTable.Th
+                w={COLUMNS.pass}
+                aria-sort={filters.sort === 'scenario' ? 'ascending' : undefined}
+              >
                 Pass
               </StackTable.Th>
-              <StackTable.Th>Expected</StackTable.Th>
+              <StackTable.Th w={COLUMNS.expected}>Expected</StackTable.Th>
               {SPECIALISTS.map((s) => (
-                <StackTable.Th key={s}>
+                <StackTable.Th key={s} w={COLUMNS.member}>
                   <MemberHeader code={s} />
                 </StackTable.Th>
               ))}
-              <StackTable.Th>Plan</StackTable.Th>
-              <StackTable.Th>Played</StackTable.Th>
-              <StackTable.Th aria-sort={filters.sort === 'scenario' ? undefined : 'descending'}>
+              <StackTable.Th w={COLUMNS.plan}>Plan</StackTable.Th>
+              <StackTable.Th w={COLUMNS.played}>Played</StackTable.Th>
+              <StackTable.Th
+                w={COLUMNS.cost}
+                aria-sort={filters.sort === 'scenario' ? undefined : 'descending'}
+              >
                 Cost · time
               </StackTable.Th>
             </StackTable.Tr>
@@ -933,7 +986,7 @@ function PassesTable({
                     ) : null}
                   </StackTable.Td>
                   <StackTable.Td data-label="Expected">
-                    <Text size="sm">{expected(p)}</Text>
+                    <ExpectedCell p={p} />
                   </StackTable.Td>
                   {SPECIALISTS.map((s) => (
                     <StackTable.Td key={s} data-label={MEMBERS[s].name}>

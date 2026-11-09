@@ -1,4 +1,11 @@
-import { createTheme, rem, type MantineColorsTuple, type MantineThemeOverride } from '@mantine/core';
+import {
+  createTheme,
+  rem,
+  type CSSVariablesResolver,
+  type MantineColorsTuple,
+  type MantineThemeOverride,
+} from '@mantine/core';
+import type { Disposition } from '@/api/types';
 
 export const APP_NAME = 'Shutter';
 export const APP_TAGLINE = 'Failed messages, investigated, gated, released and verified';
@@ -104,4 +111,113 @@ export function themeFor(contrast: 'normal' | 'high') {
       Tooltip: { defaultProps: { withArrow: true, openDelay: 300 } },
     },
   });
+}
+
+/**
+ * The disposition palette: one colour per action a plan can take, so the action reads at a glance wherever it appears
+ * (Evaluation's Expected, member, plan and Played columns, the case page, the Cases list, Scenarios). It is a family
+ * of its own beside the five status tones and the identity hues: a disposition is a decision, not a result, so its
+ * colour says which action, never whether it went well. Every badge keeps its icon and its word; the colour is a third
+ * cue, never the only one. DESIGN.md section 2.8 has the table and the checks.
+ *
+ * Each disposition has a look, which survives without colour: a tinted pill (resend, reconcile, superseded, handled by
+ * hand), an outline on the surface (more evidence, abandoned) or a solid pill (escalate, the one a person must act on).
+ * The two that need a person, more evidence and escalate, share the vermilion and differ in look.
+ *
+ * Contrast (WCAG 1.4.3): the text and icon on the pill's own fill reach 5.3:1 or more in light and 7.1:1 in dark; an
+ * outline's text reaches 5.3:1 on every surface it sits on (the cards, the page, striped and hovered rows, the Pastel
+ * fills; dark-5 to dark-8 in dark). The fills are opaque, so a hovered or Pastel row cannot lower them. Under high
+ * contrast every tinted pill turns solid: white on the light scheme's text colour, 6.4:1 or more in both schemes.
+ *
+ * Colour vision (Machado 2009, full severity; OKLab distance x 100 over the text and the fill together, the card
+ * standing in for an outline's fill): resend and superseded sit at the two ends of the blue-yellow axis that protanopia
+ * and deuteranopia keep. The closest pair is reconcile and abandoned (about 7 for deuteranopia, where one is a tinted
+ * pill and the other an outline); two pills of the same look are 9 apart or more, and the words settle the rest.
+ * theme.test.ts holds the palette to these figures.
+ */
+export interface DispositionSwatch {
+  /** The text and the icon. */
+  fg: string;
+  /** The fill: `transparent` for an outline. */
+  bg: string;
+  /** The edge. */
+  bd: string;
+}
+
+export type DispositionLook = 'tint' | 'outline' | 'solid';
+
+export const DISPOSITION_PALETTE: Record<
+  Disposition,
+  { look: DispositionLook; light: DispositionSwatch; dark: DispositionSwatch }
+> = {
+  resend: {
+    look: 'tint',
+    light: { fg: '#1d5aa0', bg: '#dcecfc', bd: '#7fa9dc' },
+    dark: { fg: '#b8d8ff', bg: '#173c6b', bd: '#4f86c9' },
+  },
+  reconcile: {
+    look: 'tint',
+    light: { fg: '#0f6b5c', bg: '#d3f1e7', bd: '#6fb5a3' },
+    dark: { fg: '#9cf4d6', bg: '#083a2c', bd: '#3a9474' },
+  },
+  superseded: {
+    look: 'tint',
+    light: { fg: '#7a4600', bg: '#fde9c4', bd: '#d2a052' },
+    dark: { fg: '#f7d28f', bg: '#4a340a', bd: '#a57c2c' },
+  },
+  more_evidence: {
+    look: 'outline',
+    light: { fg: '#a63c0e', bg: 'transparent', bd: '#a63c0e' },
+    dark: { fg: '#f5a47e', bg: 'transparent', bd: '#f5a47e' },
+  },
+  escalate: {
+    look: 'solid',
+    light: { fg: '#ffffff', bg: '#a63c0e', bd: '#a63c0e' },
+    dark: { fg: '#2b1103', bg: '#f08a58', bd: '#f08a58' },
+  },
+  handled_by_hand: {
+    look: 'tint',
+    light: { fg: '#373d44', bg: '#e0e4e8', bd: '#9aa2ab' },
+    dark: { fg: '#e6e9ed', bg: '#474c53', bd: '#8a9099' },
+  },
+  abandoned: {
+    look: 'outline',
+    light: { fg: '#495057', bg: 'transparent', bd: '#495057' },
+    dark: { fg: '#ced4da', bg: 'transparent', bd: '#ced4da' },
+  },
+};
+
+/** A disposition's token stem: `--shutter-disposition-more-evidence-fg` and the like. */
+export const dispositionSlug = (d: string) => d.replace(/_/g, '-');
+
+/** Whether the palette has a colour for this disposition (an unknown one stays a neutral outline). */
+export const hasDispositionColour = (d: string): d is Disposition => Object.hasOwn(DISPOSITION_PALETTE, d);
+
+/** Under high contrast a tinted pill turns solid, white on the light scheme's text colour; the other looks stay. */
+function highContrast(
+  p: (typeof DISPOSITION_PALETTE)[Disposition],
+  scheme: 'light' | 'dark',
+): DispositionSwatch {
+  if (p.look !== 'tint') return p[scheme];
+  return { fg: '#ffffff', bg: p.light.fg, bd: p.light.fg };
+}
+
+/**
+ * The palette as CSS variables, per colour scheme, for MantineProvider's `cssVariablesResolver`:
+ * `--shutter-disposition-<slug>-fg`, `-bg` and `-bd`. App.tsx passes the variant for the contrast in use.
+ */
+export function dispositionVariables(contrast: 'normal' | 'high'): CSSVariablesResolver {
+  const tokens = (scheme: 'light' | 'dark') =>
+    Object.fromEntries(
+      Object.entries(DISPOSITION_PALETTE).flatMap(([d, p]) => {
+        const s = contrast === 'high' ? highContrast(p, scheme) : p[scheme];
+        const stem = `--shutter-disposition-${dispositionSlug(d)}`;
+        return [
+          [`${stem}-fg`, s.fg],
+          [`${stem}-bg`, s.bg],
+          [`${stem}-bd`, s.bd],
+        ];
+      }),
+    );
+  return () => ({ variables: {}, light: tokens('light'), dark: tokens('dark') });
 }

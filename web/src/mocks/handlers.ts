@@ -2,6 +2,7 @@ import { delay, http, HttpResponse } from 'msw';
 import fixtures from './fixtures.json';
 import definitions from '../../../fixtures/scenarios.json';
 import type {
+  AccessReport,
   AgentRun,
   ApprovalDecision,
   AskQuestion,
@@ -127,6 +128,25 @@ function liveStatus() {
 
 let session: Me | null = null;
 let run: ScenarioRun | null = null;
+
+/** The role each of the mock's users was installed with, for the user's own column of GET /access. */
+const ROLE_OF_USER: Record<string, string> = {
+  operator: 'Shutter_Operator',
+  approver: 'Shutter_Approver',
+  demo: 'Shutter_Demo',
+  judge: 'Shutter_Judge',
+};
+
+/**
+ * GET /access (CONTRACTS 5) as the recorded demo install answered it: the roles' columns from the recording, and the
+ * signed-in user's own column as the server reads it from the resources they hold, which for the mock's users is their
+ * role's column.
+ */
+function accessReport(me: Me): AccessReport {
+  const recorded = (fixtures as unknown as { access: AccessReport }).access;
+  const role = ROLE_OF_USER[me.username] ?? '';
+  return { ...recorded, rows: recorded.rows.map((row) => ({ ...row, you: !!row.roles[role] })) };
+}
 /** The mode each scenario was last played in here: a real run opens a case in that mode, which its card then shows. */
 let played: Record<string, string> = {};
 /** The cases held at their approval, and what was decided on them here. */
@@ -670,6 +690,7 @@ export const handlers = [
     return new HttpResponse(null, { status: 204 });
   }),
   http.get(`${BASE}/me`, () => (session ? HttpResponse.json(session) : signedOut())),
+  http.get(`${BASE}/access`, () => (session ? HttpResponse.json(accessReport(session)) : signedOut())),
 
   http.get(`${BASE}/scenarios`, () => {
     if (!session) return signedOut();

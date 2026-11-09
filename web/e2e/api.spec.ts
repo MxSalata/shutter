@@ -63,15 +63,20 @@ test.describe('the API reference @api', () => {
     await routes.getByLabel('Show').selectOption('changes');
     await expect(lines).toHaveCount(operations.filter((o) => o.writes).length);
     await routes.getByLabel('Show').selectOption('all');
-    await routes.getByLabel('Find').fill('approvals');
+    // The line's text runs the method badge into the path, so the patterns allow no space between them.
+    const find = routes.getByRole('textbox', { name: 'Find' });
+    await find.fill('access');
+    await expect(lines).toHaveText([/^GET\s*\/api\/shutter\/access(?!\/)/]);
+    await expect(lines).toContainText("What each of Shutter's roles may do");
+    await find.fill('approvals');
     await expect(lines).toHaveText([
-      /^GET \/api\/shutter\/cases\/\{caseId\}\/approvals/,
-      /^POST \/api\/shutter\/cases\/\{caseId\}\/approvals/,
-      /^GET \/api\/shutter\/incidents\/\{id\}\/approvals/,
-      /^POST \/api\/shutter\/incidents\/\{id\}\/approvals/,
-      /^POST \/api\/shutter\/incidents\/\{id\}\/chains\/\{seq\}\/approvals/,
+      /^GET\s*\/api\/shutter\/cases\/\{caseId\}\/approvals/,
+      /^POST\s*\/api\/shutter\/cases\/\{caseId\}\/approvals/,
+      /^GET\s*\/api\/shutter\/incidents\/\{id\}\/approvals/,
+      /^POST\s*\/api\/shutter\/incidents\/\{id\}\/approvals/,
+      /^POST\s*\/api\/shutter\/incidents\/\{id\}\/chains\/\{seq\}\/approvals/,
     ]);
-    const approve = lines.filter({ hasText: /^POST \/api\/shutter\/cases\/\{caseId\}\/approvals/ });
+    const approve = lines.filter({ hasText: /^POST\s*\/api\/shutter\/cases\/\{caseId\}\/approvals/ });
     await approve.click();
     await expect(approve).toHaveAttribute('aria-expanded', 'true');
     const panel = routes.locator(`#${await approve.getAttribute('aria-controls')}`);

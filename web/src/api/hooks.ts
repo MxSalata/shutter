@@ -4,6 +4,7 @@ import { resolveCan } from './can';
 import { isApiError } from '@/lib/errors';
 import {
   CLOSED_STATES,
+  type AccessReport,
   type ApprovalDecision,
   type ApprovalsView,
   type AttemptView,
@@ -73,6 +74,7 @@ export const keys = {
   siteProfileHistory: ['site-profile', 'history'] as const,
   library: ['library'] as const,
   settings: ['settings'] as const,
+  access: ['access'] as const,
   costs: ['costs'] as const,
   health: ['health'] as const,
   reviewTargets: ['production-reviews', 'targets'] as const,
@@ -631,6 +633,11 @@ export function usePatchMember() {
       await client.invalidateQueries({ queryKey: keys.library });
     },
   });
+}
+
+/** What each of Shutter's roles may do beside what the signed-in user may (`GET /access`): read only, for Settings. */
+export function useAccess() {
+  return useQuery({ queryKey: keys.access, queryFn: () => api.get<AccessReport>('/access') });
 }
 
 export function useSettings() {

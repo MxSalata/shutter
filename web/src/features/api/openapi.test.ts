@@ -45,6 +45,15 @@ describe('the API document', () => {
     expect(byId('caseApprove').writes).toBe(true);
     expect(byId('caseApprove').idempotent).toBe(true);
     expect(byId('cases').writes).toBe(false);
+    expect(byId('access').resources).toEqual([]);
+    expect(byId('access').writes).toBe(false);
+    expect(byId('access').tag).toBe('session');
+    // No resource is not the same as open: /me and /access need a sign-in, the session and health routes do not
+    expect(byId('access').open).toBe(false);
+    expect(byId('me').open).toBe(false);
+    expect(byId('login').open).toBe(true);
+    expect(byId('health').open).toBe(true);
+    expect(byId('cases').open).toBe(false);
     expect(allResources(routes)).toEqual([
       'Shutter_Approve',
       'Shutter_Configure',

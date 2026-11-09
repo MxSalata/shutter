@@ -360,8 +360,10 @@ function RouteDetail({ route, origin }: { route: Route; origin: string }) {
                   </Fragment>
                 ))}
               </Text>
-            ) : (
+            ) : route.open ? (
               'No resource: it answers before anyone signs in'
+            ) : (
+              'No resource: any signed-in user'
             ),
           ],
           [
@@ -545,7 +547,7 @@ export default function ApiPage() {
     setOpenShapes((prev) => (prev.includes(name) ? prev : [...prev, name]));
     requestAnimationFrame(() => {
       const item = document.getElementById(`shape-${name}`);
-      item?.scrollIntoView({ block: 'start' });
+      item?.scrollIntoView?.({ block: 'start' });
       item?.querySelector('button')?.focus();
     });
   }, []);
