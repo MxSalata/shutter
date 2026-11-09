@@ -235,9 +235,11 @@ export function useFailedForAPerson(): number | undefined {
 /**
  * The cases list read once, not polled: for a link that only needs one case's id. These sit on every page or on Home for
  * every visitor of the public instance, where polling them would add a request every few seconds to name the same case.
+ * Once means once: never stale, so a remount or a second reader of the same list asks nothing more. A decision on a
+ * held case marks every cases list stale, so Home's link to a held plan is read again when Home is next shown.
  */
 export function useCasesOnce(filters: CaseFilters, enabled = true) {
-  return useQuery({ ...casesQuery(filters), enabled });
+  return useQuery({ ...casesQuery(filters), enabled, staleTime: Infinity });
 }
 
 function casesQuery(filters: CaseFilters) {
@@ -389,6 +391,8 @@ export function useDecideApproval(caseId: string) {
       ),
     onSettled: async () => {
       await client.invalidateQueries({ queryKey: keys.case(caseId) });
+      // The lists read once still name the case as held: stale now, read again by the next page that shows them
+      await client.invalidateQueries({ queryKey: ['cases'], refetchType: 'none' });
     },
   });
 }
