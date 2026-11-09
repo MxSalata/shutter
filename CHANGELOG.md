@@ -123,6 +123,10 @@ AI Hub features measured with no model call and on the publisher from an MCP cli
     Shutter's items left, and nothing of the site's; it stops at the first failed step with Shutter's configuration
     kept, and refuses when a namespace can't be read.
   - The installer refuses a production in the demo's `Hospital`, `Downstream` or `Shutter` packages.
+  - In a site's own production the uninstall takes only messages from sessions that hold one of Shutter's, skips
+    namespaces nobody can enter, and selects processes by class; the upgrade keeps the stop even when an older profile
+    fails today's checks; an approval counts as decided only when it was; a policy release that meets a new movement is
+    planned again; and the cases list reads each row's technical facts in its own query.
   - The scenario runner plays on a demo instance only, over SQL and the terminal as over REST.
   - A key shown anywhere (agent start lines, refusals, settings, stored runs) is masked by one rule, and a model id
     written as a name and a version is shown as it is, not masked.

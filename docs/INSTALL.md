@@ -80,7 +80,9 @@ the case page (`POST /api/shutter/cases/{id}/escalations` through the API); unti
   that namespace's onboarding; after the whole uninstall the site profile is gone with every other setting.
 - **The uninstall refuses, changing nothing,** while a production it did not wire still names one of Shutter's classes (an
   item added by hand), since that production would not start once the classes are gone.
-- **In a hospital's namespace the uninstall takes only Shutter's own** messages, log lines and productions. The
+- **In a hospital's namespace the uninstall takes only Shutter's own** messages, log lines and productions: in a site's
+  own production, a message to or from an item with a name Shutter also uses goes only when its session also holds one
+  of Shutter's own messages, so the site's history stays. The
   package manager removes the module's whole `Hospital` and `Downstream` packages, so while that namespace holds a class of
   its own in either, the uninstall refuses, changes nothing and names the class: move it to a package of your own, then run
   the uninstall again.
@@ -88,7 +90,8 @@ the case page (`POST /api/shutter/cases/{id}/escalations` through the API); unti
   configuration and its data stay in place, so running `zpm "uninstall iris-shutter"` again finishes the job.
   `Shutter.Util.Uninstall.Run()` also returns `stopped`: the step that failed, or empty when every step ran.
 - **The uninstall refuses, changing nothing, when a namespace can't be read** for items that use Shutter's classes, and
-  names each such namespace with the reason: make it readable to the user running the uninstall, then run it again.
+  names each such namespace with the reason (it skips `%ALL`, a namespace whose database is dismounted, and one the
+  configuration doesn't let anyone enter): make it readable to the user running the uninstall, then run it again.
 - **Only `uninstall` and an explicit `zpm "iris-shutter clean"` run the uninstall,** so don't use `clean` on an instance
   whose cases you want. A `zpm "load"` over an installed release is an upgrade (section 8).
 
@@ -427,7 +430,8 @@ long-lived jobs keep the earlier code until then.
   plan instead of stopping the resend (section 10). On a site install over 1.1.1 or earlier, a stored profile that
   doesn't name `further_messages.in_patient_movement` gets `stop` written into it, as a new version with
   "(kept stop on upgrade to 1.2.0)" in its source, so the site behaves as before; a profile that names the setting is
-  left as it is. To take the new default, a person saves `"further_messages": {"in_patient_movement": "show"}`. Even then a
+  left as it is. If an older stored profile fails today's checks, the install still writes the stop, that one setting
+  only, and prints a warning asking for the profile to be corrected and saved again. To take the new default, a person saves `"further_messages": {"in_patient_movement": "show"}`. Even then a
   write that shows such a movement waits for a person at a tier the site releases by policy, and an incident's chain that
   shows one leaves the shared approval for its own case. A demo install keeps the stop.
 - **A large incident's approval.** An incident above about four chains, which 1.1.1 abandoned with every case `failed`,
