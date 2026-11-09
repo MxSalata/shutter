@@ -36,4 +36,33 @@ ClassMethod Of(outageId As %String) As %DynamicArray
     Quit out
 }
 
+Storage Default
+{
+<Data name="OutageEventDefaultData">
+<Value name="1">
+<Value>%%CLASSNAME</Value>
+</Value>
+<Value name="2">
+<Value>OutageId</Value>
+</Value>
+<Value name="3">
+<Value>EventAt</Value>
+</Value>
+<Value name="4">
+<Value>Kind</Value>
+</Value>
+<Value name="5">
+<Value>Detail</Value>
+</Value>
+<Value name="6">
+<Value>Actor</Value>
+</Value>
+</Data>
+<DataLocation>^Shutter.Store.OutageEventD</DataLocation>
+<DefaultData>OutageEventDefaultData</DefaultData>
+<IdLocation>^Shutter.Store.OutageEventD</IdLocation>
+<IndexLocation>^Shutter.Store.OutageEventI</IndexLocation>
+<StreamLocation>^Shutter.Store.OutageEventS</StreamLocation>
+<Type>%Storage.Persistent</Type>
+}
 }
