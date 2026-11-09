@@ -168,6 +168,8 @@ rounds of review.
   - Ask Shutter follows the Agent Board item's own Mode and is never recorded or replayed; a page answer may cite a
     listed id with a path, as its tool accepts; its questions are cleared at sign-out, measured as the server measures
     them, and purged on the cases' retention days, and the uninstall takes them.
+  - The cases list could come back empty on IRIS 2026.2: the API roles now hold SQL SELECT on `Ens.MessageHeader`,
+    the one table outside Shutter's schemas the list reads as its caller, and the uninstall revokes it.
   - A timed-out approval's task is cancelled only under the decision lock; until then the case keeps waiting, and it
     escalates only after the cancel.
   - The scenario runner plays on a demo instance only, over SQL and the terminal as over REST.
