@@ -351,8 +351,9 @@ Method ToJSON() As %DynamicObject
     Do o.%Set("sentByShutter", +..SentByShutter, "number")
     // Every ledger row of the outage, in order (v1.53): each resend, each message closed as already delivered or by hand.
     Set o.resends = ##class(Shutter.Store.ResendRecord).OfOutage(..%Id())
-    // read_again only where the build has the set gate to compute.
-    Set o.acts = $SELECT(..State = "closed": [], ##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Util.ResendSet"): ["pause", "read_again", "close"], 1: ["pause", "close"])
+    // read_again only where the build has the set gate to compute. Nothing while a run is sending: a pause or a close
+    // would not stop the send, and the card must not offer what it cannot do.
+    Set o.acts = $SELECT(..State = "closed": [], ..State = "sending": [], ##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Util.ResendSet"): ["pause", "read_again", "close"], 1: ["pause", "close"])
     Set words = {}
     Do ..Put(words, "first", ..WordsFirst), ..Put(words, "do", ..WordsDo), ..Put(words, "call", ..WordsCall), ..Put(words, "critical", ..WordsCritical)
     Set o.words = words

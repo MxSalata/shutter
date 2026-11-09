@@ -1237,11 +1237,11 @@ Method BedWaitOutcome(case As Shutter.Store.Case, result As Shutter.Msg.GateResu
 Method NotModelledToPerson(case As Shutter.Store.Case) As %Status
 {
     Set ..Policy = "person", ..CatalogueEntry = "", ..CatalogueOutcome = ""
-    Do case.Note("note", "The receiver's category is orders_results: order communications and results are not modelled yet, so a person handles the failure", "system")
+    Do case.Note("note", "The receiver keeps orders and results: Shutter does not resend one order or result by itself, so a person handles the failure", "system")
     Set plan = {}
     Set plan.disposition = "escalate", plan.action = {"type": "none"}
-    Set plan.why = "Not modelled yet: the receiver keeps orders and results, which Shutter's ADT catalogue does not cover"
-    Set plan.summary = "Receiver category orders_results: not modelled yet, a person handles the failure"
+    Set plan.why = "The receiver keeps orders and results, and Shutter's catalogue of single-message recoveries covers patient movements only"
+    Set plan.summary = "An order or result: Shutter does not resend one by itself, so a person decides, starting from the source's Message Viewer"
     Set plan.preconditions = [], plan."evidence_refs" = ["route"], plan.disagreements = []
     Quit ..AdoptPlan(case, plan, "policy:not_modelled")
 }
@@ -1276,7 +1276,7 @@ Method PersonByCatalogue(case As Shutter.Store.Case, cat As %DynamicObject) As %
     Set m = cat.%Get("matches").%Get(0)
     Set title = $CLASSMETHOD(json, "Str", m, "title"), why = $CLASSMETHOD(json, "Str", m.%Get("preferred"), "why")
     // An order, a result or a document (v1.45): the entry speaks of a mapping that failed, which isn't what happened here.
-    If case.NotModelled() Set why = "Shutter resends only ADT, so it has no operation to resend. The message itself may be sound." _ $SELECT(case.FailureOutcome = "uncertain": " The receiver did not answer, so it may hold the message already.", 1: "") _ " An operation that retries delivers it by itself once the receiver is back, so check the source's Message Viewer before anyone re-enters it."
+    If case.NotModelled() Set why = "Shutter does not resend this message by itself, and the message itself may be sound." _ $SELECT(case.FailureOutcome = "uncertain": " The receiver did not answer, so it may hold the message already.", 1: "") _ " An operation that retries delivers it by itself once the receiver is back, so check the source's Message Viewer before anyone re-enters it."
     Set ..CatalogueEntry = entry, ..CatalogueOutcome = "preferred", ..Policy = "person"
     Do case.Note("note", "Catalogue " _ entry _ " (" _ title _ ") matched alone and asks for a person", "system")
     Set plan = {}

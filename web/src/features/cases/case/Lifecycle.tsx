@@ -9,7 +9,7 @@ import {
 } from '@tabler/icons-react';
 import type { CaseDetail, CaseEvent } from '@/api/types';
 import { TechDetail } from '@/components/TechDetail';
-import { PHASES, phaseStatuses, type PhaseStatus } from './derive';
+import { outageResend, PHASES, phaseStatuses, type PhaseStatus } from './derive';
 
 /** The stages the trial's replay fills in after a reader's approval: Approval, Dispatch and Verification. */
 export const REPLAYED_STAGES = 3;
@@ -58,7 +58,22 @@ export function Lifecycle({
   /** What the investigation stage shows, when not the investigation itself: "the board". */
   investigation?: string;
 }) {
-  const statuses = phaseStatuses(c.state, events);
+  // A message resent through the engine with its receiver's outage went through an approval, a send and a settled new
+  // header on the outage card, though its own plan wrote nothing: those three stages say so instead of "not needed"
+  const resent = outageResend(c);
+  const statuses = phaseStatuses(c.state, events).map((s, i) =>
+    resent && s === 'skipped' && ['approval', 'dispatch', 'verification'].includes(PHASES[i].key)
+      ? 'done'
+      : s,
+  );
+  const resentWords: Partial<Record<StageKey, string>> = resent
+    ? {
+        // Short, so the strip keeps to one line: the run's id names the approval on the outage card
+        approval: `approved (${resent.runId})`,
+        dispatch: 'resent',
+        verification: resent.closure === 'sent' ? 'header Completed' : 'already held',
+      }
+    : {};
   const firstOpen = statuses.findIndex((s) => s === 'current' || s === 'pending' || s === 'stopped');
   const active = firstOpen < 0 ? PHASES.length : firstOpen;
   // Where the case stopped: an escalation is a person's turn (attention), a block or a failure is red
@@ -102,12 +117,15 @@ export function Lifecycle({
               {...(reveal && replayed >= 0 ? reveal(replayed) : {})}
               allowStepSelect={reached}
               {...(reached
-                ? { 'aria-label': `${p.label}: ${words[s]}, show ${shows}`, 'data-stage': p.key }
+                ? {
+                    'aria-label': `${p.label}: ${resentWords[p.key] ?? words[s]}, show ${shows}`,
+                    'data-stage': p.key,
+                  }
                 : { component: 'div' })}
               label={p.label}
               description={
                 <Text size="xs" c={s === 'stopped' ? stopColour : 'dimmed'}>
-                  {words[s]}
+                  {resentWords[p.key] ?? words[s]}
                 </Text>
               }
               color={

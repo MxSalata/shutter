@@ -490,6 +490,51 @@ Method TestOfferedOnThePoll()
     Do $$$AssertEquals(o.State, "closed", "nothing failed in the window: closed")
 }
 
+/// A person's row where no run was approved is computed again by the poll every minute: while the engine still tries
+/// something of the window it stays with a person, its set and lists read as they are now, and no event is written; once
+/// nothing is tried it moves on as a close does. A row whose approved run stopped waits for a person's Read again.
+Method TestNeedsPersonComputedAgain()
+{
+    Set c = ..Close(), t = "Shutter.Util.Time"
+    Do $$$AssertTrue($CLASSMETHOD(c, "Recomputes", "needs_person", ""), "no approval: computed again")
+    Do $$$AssertNotTrue($CLASSMETHOD(c, "Recomputes", "needs_person", "{""id"":""R1-1""}"), "after an approved run: a person")
+    Do $$$AssertNotTrue($CLASSMETHOD(c, "Recomputes", "offered", ""), "only a person's row")
+    Do $$$AssertStatusOK(##class(Shutter.Store.Outage).Open(..Entry(), "cant_tell", "a test", "unit", .o), "opened")
+    Set now = $CLASSMETHOD(t, "NowUTC"), old = $CLASSMETHOD(t, "PlusMillis", now, -120000)
+    Set stale = {"SetStatus": "not_computed", "SetReason": "the queue holds 4 messages: nothing is listed while anything is being tried", "SetComputedAt": (old), "ListQueued": [{"headerId": "311", "status": "Queued"}]}
+    Do $$$AssertStatusOK(o.Advance("needs_person", "a busy feed", "unit", stale), "with a person, its set read two minutes ago")
+    Set busy = {"answer": "ok", "productionState": "running", "enabled": 1, "queue": 3, "head": "", "retry": "none", "stayConnected": "-1", "status": "Error", "adapterState": "1 job disconnected"}
+    Do $$$AssertStatusOK($CLASSMETHOD(c, "Step", o, ..Entry(), busy, "cant_tell", now), "a busy poll")
+    Do $$$AssertEquals(o.State, "needs_person", "still busy: still with a person")
+    Do $$$AssertTrue(o.SetComputedAt '= old, "its set read again")
+    Do $$$AssertEquals(o.ToJSON().lists.queued.%Size(), 0, "the stale list read again")
+    Set quiet = {"answer": "ok", "productionState": "running", "enabled": 1, "queue": 0, "head": "", "retry": "none", "stayConnected": "-1", "status": "OK", "adapterState": "1 job connected"}
+    Do $$$AssertStatusOK($CLASSMETHOD(c, "Step", o, ..Entry(), quiet, "cant_tell", $CLASSMETHOD(t, "PlusMillis", now, 61000)), "a quiet poll a minute on")
+    Do $$$AssertEquals(o.State, "closed", "nothing being tried and nothing failed: closed by itself")
+    Set kinds = "", iter = ##class(Shutter.Store.OutageEvent).Of(o.%Id()).%GetIterator()
+    While iter.%GetNext(, .e) { Set kinds = kinds _ $SELECT(kinds = "": "", 1: ",") _ e.kind }
+    Do $$$AssertEquals(kinds, "opened,needs_person,closed", "the busy recompute wrote no event")
+    // After an approved run stopped, nothing moves the row but a person.
+    Do $$$AssertStatusOK(##class(Shutter.Store.Outage).Open(..Entry(), "cant_tell", "a test", "unit", .p), "opened again")
+    Set stale.Approval = {"id": "R9-1", "by": "unit"}.%ToJSON()
+    Do $$$AssertStatusOK(p.Advance("needs_person", "the resend failed", "unit", stale), "with a person after a run")
+    Do $$$AssertStatusOK($CLASSMETHOD(c, "Step", p, ..Entry(), quiet, "cant_tell", $CLASSMETHOD(t, "PlusMillis", now, 61000)), "a quiet poll")
+    Do $$$AssertEquals(p.State _ "/" _ p.SetComputedAt, "needs_person/" _ old, "left for a person, its set as it was")
+}
+
+/// The reasons a linked case stays open, in plain words a person acts on.
+Method TestLinkVerdictWords()
+{
+    Set c = ..Close()
+    Do $$$AssertEquals($CLASSMETHOD(c, "LinkVerdict", ..Link("escalated", "unmappable")).reason, "Shutter has no resend of its own for this one message: a person decides on its case", "unmappable")
+    Do $$$AssertEquals($CLASSMETHOD(c, "LinkVerdict", ..Link("blocked", "rejected")).reason, "the receiver refused what it says: a person reads the refusal on its case", "rejected")
+    Do $$$AssertEquals($CLASSMETHOD(c, "LinkVerdict", ..Link("awaiting_approval", "delivery_failed")).reason, "its case waits on a person (awaiting approval)", "under review")
+    For kind = "unmappable", "rejected", "withheld", "unreadable", "", "odd" {
+        Set why = $CLASSMETHOD(c, "LinkVerdict", ..Link("escalated", kind)).reason
+        Do $$$AssertTrue('(why [ "Completed header") && '(why [ "does not settle"), kind _ ": no jargon (" _ why _ ")")
+    }
+}
+
 Method AddCase(kind As %String, code As %String, state As %String) [ Private ]
 {
     Set c = ##class(Shutter.Store.Case).%New()

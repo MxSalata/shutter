@@ -1043,7 +1043,7 @@ ClassMethod CaseBlockedReason(caseId As %String) As %Status
     If code = "" Set code = ..ReasonFromEvent(text, case.State)
     Set o = {}
     Set o.code = code
-    Set r = ##class(Shutter.Store.BlockReason).ForReceiver(code, case.Receiver)
+    Set r = ##class(Shutter.Store.BlockReason).ForCase(code, case)
     If $ISOBJECT(r) { Set o.catalogue = ..Project(r) } Else { Do o.%Set("catalogue", "", "null") }
     Set o.failingChecks = failing
     Set o.state = case.State, o.headline = case.Headline

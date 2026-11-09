@@ -159,7 +159,7 @@ Method OnEvidenceRequest(request As Shutter.Msg.EvidenceRequest, Output response
     // 7. The route, with the receiver's own capability profile (its capabilities endpoint): the gate's capability
     // check reads this, never an assumption. A receiver without such an endpoint is described by the site profile's
     // declared features, and the route says so.
-    Set route = ..Route(receiver)
+    Set route = ..Route(receiver, case)
     Do snap.AddItem("route", "ward_api", now, route) Set count = count + 1
 
     // The summary the agents and the gate read.
@@ -474,7 +474,16 @@ ClassMethod HistoryOffered(caps As %DynamicObject, entry As %DynamicObject) As %
 /// declares no features vouches for nothing: the route then records the capabilities as unread (status 0), so the gate
 /// answers unknown (CAPABILITIES_UNREADABLE) rather than pass on the defaults. The declared features stay on the route
 /// as the record of what the site believes.
-Method Route(receiver As %String) As %DynamicObject
+/// The route a message took to the receiver, pure: for a case another production forwarded, its own inbound route there to
+/// the receiver (the route the original message came in on, as "Where the original message lives" says); for one of
+/// Shutter's own feed, the feed's ADT route.
+ClassMethod Feed(receiver As %String, sourceNamespace As %String = "", sourceRoute As %String = "") As %String
+{
+    If sourceNamespace '= "" Quit $SELECT(sourceRoute '= "": sourceRoute, 1: "the route in " _ sourceNamespace) _ " -> " _ receiver
+    Quit "ADT In -> ADT to Downstream -> " _ receiver
+}
+
+Method Route(receiver As %String, case As Shutter.Store.Case = "") As %DynamicObject
 {
     Set capsPath = ##class(Shutter.Store.SiteProfile).ReceiverPath(receiver, "capabilities")
     Set declared = ##class(Shutter.Store.SiteProfile).ReceiverFeatures(receiver)
@@ -488,7 +497,7 @@ Method Route(receiver As %String) As %DynamicObject
         Set caps = ..WardGet(capsPath, .cstatus)
     }
     Set route = {}
-    Set route.feed = "ADT In -> ADT to Downstream -> " _ receiver
+    Set route.feed = ..Feed(receiver, $SELECT($ISOBJECT(case): case.SourceNamespace, 1: ""), $SELECT($ISOBJECT(case): case.SourceRoute, 1: ""))
     Set route.connector = receiver
     Set route.receiver = ##class(Shutter.Store.SiteProfile).ReceiverLabel(receiver)
     Set route.tier = ##class(Shutter.Store.SiteProfile).TierOf(receiver)

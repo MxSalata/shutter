@@ -2,7 +2,7 @@ import type { CaseDetail, Snapshot } from '@/api/types';
 import { humanize } from '@/lib/format';
 import type { CaseOutcome } from '@/lib/status';
 import type { Tone } from '@/lib/tone';
-import { notModelled } from './derive';
+import { notModelled, orderOrResult } from './derive';
 import { evidenceOf } from './message';
 import { SYSTEMS } from './outcome';
 import { deliveredByEngine, deliveredByEngineWords } from './receiver';
@@ -159,9 +159,11 @@ export function failureMapOf(
   const route = evidenceOf(snapshot, 'route');
   const senderName = str(c.sourceSystem) || str(msg?.sending_application);
   const sender = senderName ? { name: senderName, gloss: SYSTEMS[senderName] ?? '' } : null;
-  const event = humanize(c.event) || 'The message';
+  // An order or a result goes to no ward: "Result", never "R01 to WARD-A"
+  const kind = orderOrResult(c);
+  const event = kind ? `${kind.charAt(0).toUpperCase()}${kind.slice(1)}` : humanize(c.event) || 'The message';
   const message = {
-    plain: `${event}${c.ward ? ` to ${c.ward}` : ''}`,
+    plain: `${event}${c.ward && !kind ? ` to ${c.ward}` : ''}`,
     code: str(msg?.message_type),
   };
   // A forwarded case's message went through the hospital's own production; the route the evidence names is Shutter's
@@ -177,11 +179,18 @@ export function failureMapOf(
     items,
     trouble: troubleOf(c, snapshot),
   };
-  const described = receiverWords(str(route?.receiver));
+  const description = str(route?.receiver);
+  const described = receiverWords(description);
   // A case recorded before the server named its receiver went to the only one there was, as caseReceiver says
   const item = c.receiver || str(route?.connector) || 'Downstream Out';
   // In a sentence: "the bed-management system", or the item's own name, which keeps its capitals
-  const noun = described.name ? `the ${lowerFirst(described.name)}` : item;
+  // "the bed-management system" for a description that is a common noun ("the demo bed-management system"); a product's
+  // own name ("Quillon Lab") keeps its capitals and takes no article
+  const noun = described.name
+    ? /^the\s/i.test(description)
+      ? `the ${lowerFirst(described.name)}`
+      : described.name
+    : item;
   const engineWords = delivered ? '' : deliveredByEngineWords(c, snapshot);
   const receiver = {
     name: described.name || item,

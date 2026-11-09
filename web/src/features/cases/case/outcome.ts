@@ -13,7 +13,7 @@ import { displayZone, humanize } from '@/lib/format';
 import { asArray, asObject } from '@/lib/json';
 import { APPROVALS, caseState, gateOutcome, PROVENANCE, type OutcomeCase } from '@/lib/status';
 import type { Status } from '@/lib/tone';
-import { checksOf, failureKindInWords } from './derive';
+import { checksOf, failureKindInWords, orderOrResult, outageResend } from './derive';
 import { planLeader } from './follows';
 import { approvalsByPlan, WRITE_OUTCOMES, type SafetyReceipt } from './receipt';
 import { NOT_CHECKED, notCheckedAtReceiver } from './receiver';
@@ -167,6 +167,10 @@ export function actionHeadline(f: CaseFacts): string {
   if (c.disposition === 'abandoned') return 'Gave the case up when its workflow stopped moving';
   if (c.disposition === 'already_delivered')
     return 'Already delivered: resent with the outage, and the receiver reported it already holds it';
+  // Resent through the engine with its receiver's outage, under an approver's approval on the outage card
+  const resent = outageResend(c);
+  if (resent?.closure === 'sent')
+    return `Resent it through the engine with the outage, under approval ${resent.runId}`;
   switch (c.state) {
     case 'resolved':
       if (unknown) return 'Closed the case; what it sent is not read yet';
@@ -378,11 +382,19 @@ function failedHow(c: CaseDetail): string {
   return FAILURES[failureKindInWords(c)] ?? (humanize(c.failureKind).toLowerCase() || 'failed');
 }
 
+/**
+ * What was sent, in a few words: "PAS transfer to WARD-B", or for an order or a result "QUILLON result": it goes to no
+ * ward, so the location its PV1 carries is not named as a destination.
+ */
+export function whatWasSent(c: CaseDetail): string {
+  const system = c.sourceSystem ? `${c.sourceSystem} ` : '';
+  const kind = orderOrResult(c);
+  if (kind) return `${system}${kind}`;
+  return `${system}${humanize(c.event).toLowerCase()}${c.ward ? ` to ${c.ward}` : ''}`;
+}
+
 /** "PAS transfer to WARD-B was not delivered: HTTP 503, ward_unavailable." */
-export function failedSummary(
-  c: CaseDetail,
-  what = `${c.sourceSystem ? `${c.sourceSystem} ` : ''}${humanize(c.event).toLowerCase()}${c.ward ? ` to ${c.ward}` : ''}`,
-): string {
+export function failedSummary(c: CaseDetail, what = whatWasSent(c)): string {
   const how = failedHow(c);
   // A withheld message was never sent, so its reason code ("merge") is no error, and a code that only repeats the event
   // reads as a slip: the words already say what happened
@@ -399,7 +411,8 @@ export function failedSummary(
 /** What failed in a few words, the event and how it failed: "Transfer was not delivered". */
 export function failedTitle(c: CaseDetail): string {
   const how = failedHow(c);
-  return `${humanize(c.event) || 'The operation'} ${how}`;
+  const kind = orderOrResult(c);
+  return `${kind ? `${kind.charAt(0).toUpperCase()}${kind.slice(1)}` : humanize(c.event) || 'The operation'} ${how}`;
 }
 
 /** The sending systems in words, for the failure map's list and a screen reader's sentence. */
@@ -415,8 +428,7 @@ export const SYSTEMS: Record<string, string> = {
  */
 export function headerSentence(c: CaseDetail): string {
   const system = c.sourceSystem ? `${c.sourceSystem} ` : '';
-  const what = `${system}${humanize(c.event).toLowerCase()}${c.ward ? ` to ${c.ward}` : ''}`;
-  const summary = failedSummary(c, what);
+  const summary = failedSummary(c, whatWasSent(c));
   // A system's name keeps its capitals; an event's first letter is lowered after "The"
   return `The ${system ? summary : summary.charAt(0).toLowerCase() + summary.slice(1)}`;
 }
@@ -536,6 +548,10 @@ export function decisionSummary(f: CaseFacts): string {
 
 /** The writes Shutter sent, with the receiver's versions when one landed. */
 export function writtenSummary(f: CaseFacts): string {
+  // A resend through the engine with the outage writes no conditional write of the case's own: the ledger's words say it
+  const resent = outageResend(f.c);
+  if (resent?.words)
+    return sentence([resent.words.replace(/\.$/, ''), 'the engine sent the stored message unchanged']);
   if (f.attempts === undefined) return 'Unknown: the attempts are not read yet.';
   const r = f.receipt;
   if (!r.writes) {
@@ -565,6 +581,9 @@ export function verifiedSummary(f: CaseFacts): string {
  * read.
  */
 export function releaseStatus(f: CaseFacts): Status | undefined {
+  // Released on the outage card: an approver approved the outage's list, this message among them
+  const resent = outageResend(f.c);
+  if (resent) return { ...APPROVALS.approved, label: `Approved on the outage (${resent.runId})` };
   const write = f.plan?.plan?.disposition === 'resend';
   if (f.plan?.plan && !write) return APPROVALS.not_required;
   if (f.c.state === 'awaiting_approval') return APPROVALS.awaiting;

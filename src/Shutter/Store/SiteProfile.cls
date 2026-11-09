@@ -860,7 +860,10 @@ ClassMethod SiteInstall() As %Boolean
 /// with neither reads as a profile from before v1.8 does, on the defaults.
 ClassMethod HasNoApi(entry) As %Boolean [ Private ]
 {
-    Quit $ISOBJECT(entry) && '$ISOBJECT(entry.%Get("api")) && $ISOBJECT(entry.%Get("features"))
+    If '$ISOBJECT(entry) || $ISOBJECT(entry.%Get("api")) Quit 0
+    // An orders and results receiver (a LIMS, order communications) has no receiver API Shutter reads: one the site gave no
+    // api is never read at the demo receiver's address, and its label names no address.
+    Quit $ISOBJECT(entry.%Get("features")) || (entry.%Get("category") = "orders_results")
 }
 
 /// One of a receiver's paths (state, receipt, capabilities, operations), with the receiver's base in front and the

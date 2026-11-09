@@ -89,7 +89,15 @@ XData Rows [ MimeType = application/json ]
  {"name": "closed after the send: the set's lines are gone", "category": "orders_results", "duplicates": {"behaviour": "refuses", "phrase": "ALREADY HELD"}, "over": {"state": "closed", "lists": {"queued": [], "offered": [{"headerId": "41", "controlId": "N1", "reason": "older than a result of another order for the same patient that already reached the receiver (control id C5); each files under its own order"}], "reached": [], "refused": [], "closed": []}},
   "not": {"first": ["of these is older", "The patient check reads merges"]}},
  {"name": "an offered set where duplicates are filed twice", "category": "orders_results", "duplicates": {"behaviour": "files_twice"}, "over": {"state": "offered", "kind": "cant_tell", "lists": {"queued": [], "offered": [{"headerId": "41", "controlId": "N1", "reason": ""}], "reached": [], "refused": [], "closed": []}},
-  "has": {"do": ["At this receiver a duplicate is filed twice: before approving, check the receiver for each message."]}}
+  "has": {"do": ["At this receiver a duplicate is filed twice: before approving, check the receiver for each message."]}},
+ {"name": "closed after a clean run: what Shutter did, not the engine's first Errors", "category": "orders_results", "over": {"state": "closed", "drainedAt": "2026-11-08T03:13:20Z", "settled": {"completed": 0, "suspended": 0, "error": 5, "other": 0}, "sentByShutter": 3, "resends": [{"runId": "R1-6", "headerId": "41", "state": "completed"}, {"runId": "R1-6", "headerId": "42", "state": "completed"}, {"runId": "R1-6", "headerId": "43", "state": "completed"}, {"runId": "H1", "headerId": "44", "state": "handled_by_hand"}, {"runId": "H1", "headerId": "45", "state": "handled_by_hand"}]},
+  "has": {"first": ["Nothing remains queued. 0 deliveries Completed; Shutter sent 3 again, each new header Completed; 2 handled by hand.", "Recovery attempts initiated by Shutter: 3."]}, "not": {"first": ["ended in Error", "still need"]}},
+ {"name": "a run that failed: each message by what happened to it, once", "category": "orders_results", "over": {"state": "needs_person", "drainedAt": "2026-11-08T03:13:20Z", "approval": {"id": "R8-3", "by": "appr1"}, "set": {"status": "not_computed", "reason": "the resend of header 43 ended Suspended"}, "settled": {"completed": 0, "suspended": 0, "error": 5, "other": 0}, "resends": [{"runId": "R8-3", "headerId": "41", "state": "completed"}, {"runId": "R8-3", "headerId": "42", "state": "completed"}, {"runId": "R8-3", "headerId": "43", "state": "failed"}, {"runId": "R8-3", "headerId": "44", "state": "stopped"}, {"runId": "R8-3", "headerId": "45", "state": "stopped"}]},
+  "has": {"first": ["Shutter sent 2 again, each new header Completed; 1 failed when Shutter sent it again and still needs action; 2 not sent and still need action.", "A person must act here: the resend of header 43 ended Suspended."], "do": ["The run stopped: read the message that stopped it in the Message Viewer"]}, "not": {"first": ["ended in Error", "Shutter reads the engine again every minute"]}},
+ {"name": "drained while the reading shows a queue: never nothing queued", "category": "orders_results", "over": {"state": "closing", "drainedAt": "2026-11-08T03:13:20Z"}, "reading": {"queue": 4},
+  "has": {"first": ["4 messages are still queued."]}, "not": {"first": ["Nothing remains queued"]}},
+ {"name": "a busy feed with no approval: when the reason was read, and that the poll reads again", "category": "orders_results", "over": {"state": "needs_person", "set": {"status": "not_computed", "reason": "the queue holds 4 messages: nothing is listed while anything is being tried", "computedAt": "2026-11-08T03:18:05Z"}},
+  "has": {"first": ["Nothing is listed yet: the queue holds 4 messages: nothing is listed while anything is being tried (read at 03:18 UTC). Shutter reads the engine again every minute and lists the messages once nothing of the window is being tried; Read again does it now."]}, "not": {"first": ["A person must act here"], "do": ["The run stopped"]}}
 ]
 }
 
@@ -125,7 +133,7 @@ Method TestWordsTable()
             }
         }
     }
-    Do $$$AssertEquals(n, 24, "the table has its rows")
+    Do $$$AssertEquals(n, 28, "the table has its rows")
 }
 
 /// No word on a card names a supplier, a value or "Verified".
@@ -305,6 +313,62 @@ Method TestActs()
     Set again = ##class(Shutter.Store.Outage).%OpenId(row.%Id())
     Do $$$AssertEquals(again.ClosedBy, "unit", "the person who closed it is the caller")
     Do $$$AssertEquals($CLASSMETHOD(api, "Act", again, {"act": "pause", "until": (until)}, "unit", .reply), "409 Conflict", "nothing moves a closed row")
+}
+
+/// The card's open cases are read again on every read (they were written at the close): a case resolved since leaves the
+/// list, so does one whose message the ledger holds, and what stays carries its reason in plain words as it reads now. A
+/// case that can't be read stays as written. sentByShutter counts every message Shutter sent again, whatever came of it.
+Method TestOpenCasesNow()
+{
+    Do $$$AssertStatusOK(..NewOutage(.row), "an outage opened")
+    Set id = row.%Id(), ids = ""
+    For i = 1:1:3 {
+        Set c = ##class(Shutter.Store.Case).%New()
+        Set c.CaseId = "OA-OC-" _ id _ "-" _ i, c.OperationKey = "LAB^NHS^99900" _ i _ "^^result^2026-11-09T08:00:00Z", c.Receiver = row.Receiver
+        Set c.FailureKind = "unmappable", c.State = $CASE(i, 1: "resolved", : "escalated"), c.OpenedAt = "2026-11-09T08:00:00Z", c.SourceNamespace = "USER", c.OriginHeaderId = 80 + i
+        Do $$$AssertStatusOK(c.%Save(), "case " _ i)
+        Set ids = ids _ $LISTBUILD(c.%Id())
+    }
+    Set stored = [{"caseId": ("OA-OC-" _ id _ "-1"), "reason": "its failure is unmappable, not a failed delivery: a Completed header does not settle it", "owner": "unit approver"}, {"caseId": ("OA-OC-" _ id _ "-2"), "reason": "old words", "owner": "unit approver"}, {"caseId": ("OA-OC-" _ id _ "-3"), "reason": "old words", "owner": "unit approver"}, {"caseId": "OA-OC-NONE", "reason": "as written", "owner": "unit approver"}]
+    Do $$$AssertStatusOK(row.Advance("closed", "closed by the test", "unit", {"OpenCases": (stored)}), "closed with four open cases written")
+    // The message of case 2 was sent again by Shutter: the ledger holds it.
+    Set r = ##class(Shutter.Store.ResendRecord).%New()
+    Set r.RunId = "R" _ id _ "-1", r.Position = 1, r.OutageId = id, r.Namespace = "USER", r.Item = "Unit Api Out", r.OriginHeaderId = 82, r.State = "completed", r.StartedAt = "2026-11-09T09:00:00Z", r.EndedAt = "2026-11-09T09:00:02Z"
+    Do $$$AssertStatusOK(r.%Save(), "a ledger row")
+    Set f = ##class(Shutter.Store.ResendRecord).%New()
+    Set f.RunId = "R" _ id _ "-1", f.Position = 2, f.OutageId = id, f.Namespace = "USER", f.Item = "Unit Api Out", f.OriginHeaderId = 90, f.State = "failed", f.StartedAt = "2026-11-09T09:00:03Z"
+    Do $$$AssertStatusOK(f.%Save(), "a failed row")
+    Set j = ##class(Shutter.API.Outages).One(##class(Shutter.Store.Outage).%OpenId(id))
+    Set listed = ""
+    For k = 0:1:j.openCases.%Size() - 1 { Set listed = listed _ j.openCases.%Get(k).caseId _ "," }
+    Do $$$AssertEquals(listed, "OA-OC-" _ id _ "-3,OA-OC-NONE,", "the resolved case and the one the ledger holds leave the list")
+    Do $$$AssertEquals(j.openCases.%Get(0).reason, "Shutter has no resend of its own for this one message: a person decides on its case", "in plain words, as it reads now")
+    Do $$$AssertEquals(j.openCases.%Get(0).owner, "unit approver", "with its owner")
+    Do $$$AssertEquals(j.openCases.%Get(1).reason, "as written", "a case that can't be read stays as written")
+    Do $$$AssertTrue(j.words.first [ "2 delivery exceptions still need review.", "the words count what stays: " _ j.words.first)
+    Do $$$AssertEquals(j.sentByShutter, 2, "two messages sent again, one of them failed")
+    &sql(DELETE FROM Shutter_Store.ResendRecord WHERE OutageId = :id)
+    Set ptr = 0
+    While $LISTNEXT(ids, ptr, cid) { Do ##class(Shutter.Store.Case).%DeleteId(cid) }
+}
+
+/// A row that is sending lists no act: a pause or a close would not stop the send, so the route refuses them.
+Method TestNoActsWhileSending()
+{
+    Do $$$AssertStatusOK(..NewOutage(.row), "an outage opened")
+    Do $$$AssertStatusOK(row.Advance("sending", "approved by the test", "unit"), "sending")
+    Set j = ##class(Shutter.API.Outages).One(row)
+    Do $$$AssertEquals(j.acts.%ToJSON(), "[]", "no acts while sending")
+    Do $$$AssertEquals(##class(Shutter.API.Outages).Act(row, {"act": "close", "reason": "mid-run"}, "unit", .reply), "400 Bad Request", "a close is refused")
+    Do $$$AssertEquals(##class(Shutter.Store.Outage).%OpenId(row.%Id(), 0).State, "sending", "and the row still sends")
+}
+
+/// The ledger by message: the last row on each header decides it, and attempts counts every message sent again.
+Method TestTally()
+{
+    Set o = {"resends": [{"headerId": "41", "state": "failed"}, {"headerId": "41", "state": "completed"}, {"headerId": "42", "state": "closed_as_present"}, {"headerId": "43", "state": "unknown"}, {"headerId": "44", "state": "stopped"}, {"headerId": "45", "state": "handled_by_hand"}, {"headerId": "46", "state": "approved"}], "lists": {"closed": [{"headerId": "45", "closure": "handled_by_hand"}, {"headerId": "47", "closure": "already_delivered"}]}}
+    Set t = ##class(Shutter.API.Outages).Tally(o)
+    Do $$$AssertEquals(t.%ToJSON(), "{""sent"":1,""held"":2,""byHand"":1,""failed"":1,""notSent"":1,""attempts"":3,""counted"":6}", t.%ToJSON())
 }
 
 /// The list route: an open row is listed under open and all, a closed one under all only, with the receivers' readings.

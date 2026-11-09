@@ -688,4 +688,113 @@ describe('OutageSection', () => {
     expect(within(card).queryByText(/Shutter will not send these messages/)).toBeNull();
     expect(within(card).queryByTestId('outage-acts')).toBeNull();
   });
+
+  it('lists a hand closure once, in the ledger, not again among the messages closed with no send', async () => {
+    const hand: Resend = {
+      ...resend(
+        0,
+        'CB',
+        'handled_by_hand',
+        'handled_by_hand',
+        'Handled by hand, recorded by approver at 03:40.',
+      ),
+      runId: 'H7',
+      headerId: '42',
+    };
+    serve({
+      items: [
+        offeredAtUnknown({
+          lists: {
+            offered: [row('44', 'CF', '', { acts: ['handled_by_hand'] })],
+            queued: [],
+            reached: [],
+            refused: [],
+            closed: [
+              row('42', 'CB', 'Handled by hand', { closure: 'handled_by_hand', closedBy: 'approver' }),
+            ],
+          },
+          resends: [hand],
+        }),
+      ],
+      receivers: [],
+    });
+    renderSection();
+    const card = await screen.findByRole('region', { name: 'Outage 7, Results Out' });
+    expect(await within(card).findByText('Closed by hand, nothing sent (1)')).toBeInTheDocument();
+    expect(within(card).queryByTestId('outage-closed')).toBeNull();
+  });
+
+  it('shows a sending card neither the offered list nor Pause and Close, and an outage after a run only what is left', async () => {
+    const sending = offeredAtUnknown({
+      state: 'sending',
+      acts: [],
+      approval: { id: 'R7-4', by: 'approver', givenAt: NOW },
+      resends: [resend(1, 'CA', 'completed', 'sent'), resend(4, 'CF', 'sending', null)],
+    });
+    serve({ items: [sending], receivers: [] });
+    const { unmount } = renderSection();
+    const card = await screen.findByRole('region', { name: 'Outage 7, Results Out' });
+    await within(card).findByTestId('outage-resends');
+    expect(within(card).queryByText(new RegExp(OFFERED_LABEL))).toBeNull();
+    expect(within(card).queryByRole('button', { name: 'Pause' })).toBeNull();
+    expect(within(card).queryByRole('button', { name: 'Close' })).toBeNull();
+    expect(within(card).queryByTestId('outage-acts')).toBeNull();
+    unmount();
+    // After a failed run the set's list was read before it: the sent and unsent messages are the ledger's alone
+    serve({
+      items: [
+        offeredAtUnknown({
+          state: 'needs_person',
+          acts: ['pause', 'read_again', 'close'],
+          resends: [resend(1, 'CA', 'completed', 'sent'), resend(4, 'CF', 'failed', 'failed')],
+        }),
+      ],
+      receivers: [],
+    });
+    renderSection();
+    const after = await screen.findByRole('region', { name: 'Outage 7, Results Out' });
+    await within(after).findByTestId('outage-resends');
+    expect(within(after).queryByText(new RegExp(OFFERED_LABEL))).toBeNull();
+    expect(within(after).getByTestId('outage-acts')).toBeInTheDocument();
+  });
+
+  it("folds the engine's raw alert lines, and names the cases still needing a person", async () => {
+    serve({
+      items: [
+        outage({
+          alerts: [
+            {
+              at: '2026-11-09 03:12:01',
+              kind: 'AlertOnError',
+              text: 'ERROR <Ens>ErrGeneral: MSH|^~\\&|RX|HOSP',
+            },
+            { at: '2026-11-09 03:12:06', kind: 'QueueWaitAlert', text: 'QueueWaitAlert: header 41' },
+          ],
+          openCases: [{ caseId: 'C-000012', reason: 'the receiver refused what it says', owner: 'the lab' }],
+        }),
+      ],
+      receivers: [],
+    });
+    renderSection();
+    const card = await screen.findByRole('region', { name: 'Outage 7, Results Out' });
+    const toggle = within(card).getByRole('button', { name: /The engine's alerts for this item \(2\)/ });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await userEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(within(card).getByTestId('outage-alerts')).toHaveTextContent('QueueWaitAlert: header 41');
+    expect(within(card).getByTestId('outage-open-cases')).toHaveTextContent(
+      'Cases still needing a person (1)',
+    );
+  });
+
+  it("says each receiver's reading in words, with an apostrophe where it has one", async () => {
+    serve({
+      items: [],
+      receivers: [{ receiver: 'Results Out', reading: 'cant_tell', checkedAt: NOW }],
+    });
+    renderSection();
+    const readings = await screen.findByTestId('readings');
+    expect(within(readings).getByText("Can't tell")).toBeInTheDocument();
+    expect(readings).not.toHaveTextContent('cant tell');
+  });
 });

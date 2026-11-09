@@ -28,6 +28,35 @@ ClassMethod ByCode(code As %String) As Shutter.Store.BlockReason
     Quit ..%OpenId(id)
 }
 
+/// The reason as a person reads it for one case: ForReceiver's, and for an order or a result (a message Shutter does not
+/// model, or one to an orders and results receiver) its own words where the catalogue's speak of a mapping that failed, a
+/// category not modelled or a receiver's record that could not be read (one with no API has none to read). The stored row
+/// is never changed.
+ClassMethod ForCase(code As %String, case As Shutter.Store.Case) As Shutter.Store.BlockReason
+{
+    Set r = ..ForReceiver(code, case.Receiver)
+    If '$ISOBJECT(r) Quit r
+    If '..OrderOrResult(case) Quit r
+    If '((code = "UNMAPPABLE") || (code = "RECEIVER_NOT_MODELLED") || ((code = "RECEIVER_UNREADABLE") && ##class(Shutter.Operation.Gate).NoRecordToRead(case.Receiver))) Quit r
+    Set r.Title = "Shutter does not resend one order or result by itself"
+    Set r.Prerequisite = "A person's decision on this order or result"
+    Set r.NextAction = "Check the source's Message Viewer: an operation that retries may still deliver it. If it will not go by itself, send the case to the receiver's team, or mark it handled once it has been sent again or entered at the receiver by hand."
+    Set r.Owner = "Operator"
+    Set r.ReevaluateWhen = "The message is delivered, sent again by hand or entered at the receiver"
+    Set r.Text = "This is an order or a result. Shutter sends nothing for one such message on its own, and the message itself may be sound: a person decides, starting from the source's Message Viewer."
+    Quit r
+}
+
+/// Whether a case is an order or a result: not a document case, and either an order or result message Shutter does not
+/// model ("This message is ORU, not ADT: ...", every such structure starting with O) or one to an orders and results
+/// receiver.
+ClassMethod OrderOrResult(case As Shutter.Store.Case) As %Boolean
+{
+    If case.DocumentJSON '= "" Quit 0
+    If case.NotModelled() && ($EXTRACT($PIECE(case.FailureText, " ", 4)) = "O") Quit 1
+    Quit ##class(Shutter.Store.SiteProfile).ReceiverCategory(case.Receiver) = "orders_results"
+}
+
 /// The reason as a person reads it for a case's receiver: the catalogue's own, except that a receiver unreadable because
 /// its site profile entry is still the onboarding's draft (declared with no API) says so, with filling in that entry as
 /// the next action. The stored row is never changed.

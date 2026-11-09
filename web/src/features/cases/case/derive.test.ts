@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import type { CaseEvent, SnapshotItem } from '@/api/types';
-import { checksOf, describeEntry, describeItem, forwardedFrom, phaseStatuses, rounds } from './derive';
+import {
+  checksOf,
+  describeEntry,
+  describeItem,
+  forwardedFrom,
+  orderOrResult,
+  outageResend,
+  phaseStatuses,
+  rounds,
+} from './derive';
 
 const transition = (seq: number, fromState: string, toState: string): CaseEvent => ({
   seq,
@@ -267,5 +276,58 @@ describe('describeEntry', () => {
         source: 'downstream history',
       }),
     ).toBe('Transfer to WARD-C at 09:45:00, from the downstream history');
+  });
+});
+
+describe('an order or a result, and its evidence', () => {
+  it('knows an order or a result by its event code or the structure its failure names', () => {
+    expect(orderOrResult({ event: 'r01' })).toBe('result');
+    expect(orderOrResult({ event: 'O21' })).toBe('order');
+    expect(orderOrResult({ event: 'transfer', failureText: 'This message is ORU, not ADT: x' })).toBe(
+      'result',
+    );
+    expect(orderOrResult({ event: 'x', failureText: 'This message is OML, not ADT: x' })).toBe('order');
+    expect(orderOrResult({ event: 'x', failureText: 'This message is MDM, not ADT: x' })).toBeNull();
+    expect(orderOrResult({ event: 'transfer' })).toBeNull();
+  });
+
+  const item = (kind: string, data: Record<string, unknown>, source = 'message_store') =>
+    ({ kind, source, data }) as unknown as SnapshotItem;
+
+  it('never shows a raw source name, and says what was not read for a receiver with no API', () => {
+    expect(describeItem(item('pending_messages', { items: [], count: 0 }))).toBe(
+      'None: no later message of the encounter is waiting to be delivered',
+    );
+    expect(describeItem(item('pending_messages', { items: [{}, {}], count: 2 }))).toMatch(
+      /^2 later messages/,
+    );
+    expect(
+      describeItem(item('further_messages', { identifier: 'read', stops: [], shows: [], unread: '' })),
+    ).toBe('None found for the patient after this message');
+    expect(describeItem(item('further_messages', { identifier: 'read', stops: [{}], shows: [{}, {}] }))).toBe(
+      '1 that stops a write; 2 shown on the plan',
+    );
+    expect(describeItem(item('something_new', {}))).toBe('Recorded from the message store');
+    expect(
+      describeItem(
+        item('ward_state', {
+          http_status: 0,
+          body: { error: "no state endpoint in the receiver's description" },
+        }),
+        'Quillon O9 Out',
+      ),
+    ).toBe('Not read: Quillon O9 Out has no record Shutter reads (no state endpoint in its description)');
+    expect(describeItem(item('receipt', { http_status: -1, body: {} }), 'Quillon O9 Out')).toBe(
+      'Not read: Quillon O9 Out keeps no receipts Shutter reads',
+    );
+    expect(describeItem(item('receipt', { http_status: 0, body: {} }), 'X')).toMatch(/\(HTTP none\)/);
+  });
+
+  it("finds the outage resend that settled a case's message, never a hand closure", () => {
+    const r = (runId: string, closure: string | null) => ({ runId, position: 1, state: 's', closure });
+    expect(outageResend({ resends: [r('R8-2', 'failed'), r('R8-3', 'sent')] })?.runId).toBe('R8-3');
+    expect(outageResend({ resends: [r('H8', 'handled_by_hand')] })).toBeUndefined();
+    expect(outageResend({ resends: [r('R8-3', 'already_delivered')] })?.closure).toBe('already_delivered');
+    expect(outageResend({})).toBeUndefined();
   });
 });

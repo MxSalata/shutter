@@ -135,6 +135,43 @@ Method TestReceiverWithNoApi()
     Do $$$AssertEquals(..Found(run.checks, "capability", "CONNECTOR_INCAPABLE"), "block", "the gate blocks a resend (" _ ..Codes(run.checks, "capability") _ ")")
 }
 
+/// An orders and results receiver the site gave no api has no record Shutter reads: no paths (so the evidence asks the demo
+/// receiver's address for nothing), a label with no address, an identity check that is not applicable, and a route that names
+/// the message's own route. An order or result case's blocked reason is its own; an ADT case's stays the catalogue's.
+Method TestOrdersAndResultsReceiverWithNoApi()
+{
+    Set sp = "Shutter.Store.SiteProfile"
+    Set recs = ##class(Shutter.Store.SiteProfile).Current().%Get("receivers")
+    Do recs.%Push({"name": "UT Lab Out", "system": "Unit Lab", "category": "orders_results", "tier": 3})
+    Do ..ChangeProfile({"receivers": (recs)})
+    For kind = "state", "receipt", "capabilities", "operations" {
+        Do $$$AssertEquals($CLASSMETHOD(sp, "ReceiverPath", "UT Lab Out", kind, "ENC-UT", "KEY-UT"), "", "no " _ kind _ " path")
+    }
+    Do $$$AssertEquals($CLASSMETHOD(sp, "ReceiverLabel", "UT Lab Out"), "Unit Lab", "its label names no address")
+    Do $$$AssertTrue(##class(Shutter.Operation.Gate).NoRecordToRead("UT Lab Out"), "no record to read")
+    Do $$$AssertNotTrue(##class(Shutter.Operation.Gate).NoRecordToRead($PARAMETER("Shutter.Production", "RECEIVER")), "the demo receiver has one")
+    Do $$$AssertEquals(##class(Shutter.Operation.Evidence).Feed("UT Lab Out", "LABSITE", "Quillon O9 In"), "Quillon O9 In -> UT Lab Out", "a forwarded message's own route")
+    Do $$$AssertEquals(##class(Shutter.Operation.Evidence).Feed("Downstream Out"), "ADT In -> ADT to Downstream -> Downstream Out", "Shutter's own feed")
+    Set case = ..NewCase({"event": "r01", "failure_kind": "unmappable", "failure_text": "This message is ORU, not ADT: a person decides"})
+    Set case.Receiver = "UT Lab Out"
+    Do $$$AssertStatusOK(case.%Save(), "the result's case")
+    For code = "UNMAPPABLE", "RECEIVER_UNREADABLE", "RECEIVER_NOT_MODELLED" {
+        Set r = ##class(Shutter.Store.BlockReason).ForCase(code, case)
+        Continue:'$ISOBJECT(r)
+        Do $$$AssertTrue(r.NextAction [ "source's Message Viewer", code _ ": the next step is an order or result's own (" _ r.NextAction _ ")")
+        Do $$$AssertTrue('(r.NextAction [ "downstream system") && '(r.NextAction [ "correct it at the source"), code _ ": no ADT words")
+    }
+    Set stored = ##class(Shutter.Store.BlockReason).ByCode("RECEIVER_UNREADABLE")
+    If $ISOBJECT(stored) Do $$$AssertTrue(stored.NextAction [ "downstream system", "the stored row is unchanged")
+    Set adt = ..NewCase({})
+    Set r = ##class(Shutter.Store.BlockReason).ForCase("RECEIVER_UNREADABLE", adt)
+    If $ISOBJECT(r) Do $$$AssertTrue(r.NextAction [ "downstream system", "an ADT case keeps the catalogue's words")
+    // The email to the team names no demo address and makes no ADT claim.
+    Do $$$AssertStatusOK(##class(Shutter.Util.EscalationDraft).Build(case, {"name": "Lab team"}, .subject, .body), "the draft")
+    Do $$$AssertTrue(body [ "A message to Unit Lab failed. Shutter has not resent it", "the draft's first line: " _ $EXTRACT(body, 1, 200))
+    Do $$$AssertTrue('(body [ "/downstream/api") && '(body [ "resends only ADT"), "no demo address and no ADT claim")
+}
+
 /// A receiver entry with no capabilities endpoint that declares no features vouches for nothing: the route the evidence
 /// collector builds records its capabilities as unread, and the gate answers unknown, never CONNECTOR_CAPABLE on the
 /// defaults. An entry that declares its features still passes, and every receiver the stored profile names declares them.

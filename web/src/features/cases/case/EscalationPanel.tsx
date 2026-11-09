@@ -44,6 +44,7 @@ import { addressesProblem, closeNeedsApprover, controlProblem } from '../../site
 import { formatZoned, humanize } from '@/lib/format';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { closableByHand } from './caseAction';
+import { automaticTeam, mailOutcome, sendConsequence, sentNotice } from './escalationWords';
 import { notModelled } from './derive';
 import { ReceiverCheckCard } from './ReceiverCheckCard';
 import { receiverNoun, receiverTeam } from './receiver';
@@ -102,6 +103,8 @@ function EscalateDialog({ c, draft, onClose }: { c: CaseDetail; draft: Escalatio
     !!team &&
     !team.receivers?.includes(c.receiver ?? '') &&
     !(c.event === 'merge' && team.sources?.includes(c.sourceSystem));
+  // What Send will do, said before the press: in shadow mode no email goes and no file is saved (CONTRACTS 18)
+  const outcome = mailOutcome(profile);
   const toProblem = addressesProblem(to, domains);
   const ccProblem = addressesProblem(cc, domains);
   // The subject is one header line: no line break or other control character, as the server checks it
@@ -125,11 +128,12 @@ function EscalateDialog({ c, draft, onClose }: { c: CaseDetail; draft: Escalatio
       ? await edit.mutateAsync({ seq: draft.seq, change: { to, cc, subject, body } })
       : draft;
     await send.mutateAsync({ seq: draft.seq, bodyDigest: stored.bodyDigest, idempotencyKey: key });
+    const notice = sentNotice(outcome, draft.seq);
     notifications.show({
       color: 'blue',
-      title: byEnv({ live: `Escalation ${draft.seq} queued`, trial: 'Saved in the trial, not delivered' }),
+      title: byEnv({ live: notice.title, trial: 'Saved in the trial, not delivered' }),
       message: byEnv({
-        live: `For ${to}. Its line shows whether the mail server took it or it was saved as an email file. Once they have corrected the systems, mark the case as handled${c.failureKind === 'withheld' ? '' : ', or reinvestigate it'}.`,
+        live: `For ${to}. ${notice.line} Once they have corrected the systems, mark the case as handled${c.failureKind === 'withheld' ? '' : ', or reinvestigate it'}.`,
         trial: 'No email leaves this browser.',
       }),
     });
@@ -147,7 +151,7 @@ function EscalateDialog({ c, draft, onClose }: { c: CaseDetail; draft: Escalatio
         {/* What sending does, first: a real email from a live system; nothing at all from the trial */}
         <Text size="sm" fw={600} data-testid="confirm-consequence">
           {byEnv({
-            live: `This emails ${draft.teamName ? `the ${draft.teamName}` : recipient} through the site's mail server. With no mail server set, it is saved as an email file and nobody is emailed.`,
+            live: sendConsequence(outcome, draft.teamName ? `the ${draft.teamName}` : recipient),
             trial:
               'Sending saves it as an email file in the trial, as on an instance with no mail server. No email leaves this browser.',
           })}
@@ -228,6 +232,8 @@ function EscalateDialog({ c, draft, onClose }: { c: CaseDetail; draft: Escalatio
  */
 function SendAgain({ c, e }: { c: CaseDetail; e: Escalation }) {
   const send = useSendEscalation(c.caseId);
+  const outcome = mailOutcome(useSiteProfile().data?.profile);
+  const notice = sentNotice(outcome, e.seq, true);
   const [opened, setOpened] = useState(false);
   const [key, setKey] = useState('');
   const open = () => {
@@ -243,14 +249,8 @@ function SendAgain({ c, e }: { c: CaseDetail; e: Escalation }) {
           setOpened(false);
           notifications.show({
             color: 'blue',
-            title: byEnv({
-              live: `Escalation ${e.seq} queued again`,
-              trial: 'Saved in the trial, not delivered',
-            }),
-            message: byEnv({
-              live: 'Its line shows whether the mail server took it or it was saved as an email file again.',
-              trial: 'No email leaves this browser.',
-            }),
+            title: byEnv({ live: notice.title, trial: 'Saved in the trial, not delivered' }),
+            message: byEnv({ live: notice.line, trial: 'No email leaves this browser.' }),
           });
         },
       },
@@ -266,7 +266,7 @@ function SendAgain({ c, e }: { c: CaseDetail; e: Escalation }) {
         <Stack gap="sm">
           <Text size="sm" fw={600} data-testid="confirm-consequence">
             {byEnv({
-              live: `This sends the same text to ${e.to} through the site's mail server. With no mail server set, it is saved as an email file again and nobody is emailed.`,
+              live: sendConsequence(outcome, e.to ?? 'the same recipients', true),
               trial: 'Sending saves it as an email file again in the trial. No email leaves this browser.',
             })}
           </Text>
@@ -407,7 +407,7 @@ export function EscalationPanel({
       note={
         stopped
           ? notModelled(c)
-            ? "Shutter resends only ADT. Send it to the team, who check the source's Message Viewer before anyone re-enters it."
+            ? "Shutter has not resent this message. Send it to the team, who check the source's Message Viewer before anyone re-enters it."
             : "Shutter can't recover this safely. Send it to the team."
           : 'The emails sent or saved before the team corrected the systems by hand and the case was closed.'
       }
@@ -532,7 +532,8 @@ export function EscalationPanel({
             loading={draft.isPending}
             onClick={start}
           >
-            {`Escalate to ${teams.find((t) => t.id === teamId)?.name ?? recipient}…`}
+            {/* The team the draft will be for: the one chosen, or the one Automatic picks by the server's own rule */}
+            {`Escalate to ${(teamId ? teams.find((t) => t.id === teamId) : automaticTeam(c, teams))?.name ?? recipient}…`}
           </Button>
         </Group>
       ) : (

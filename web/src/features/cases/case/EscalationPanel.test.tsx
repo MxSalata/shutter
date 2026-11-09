@@ -120,6 +120,31 @@ describe('EscalationPanel', () => {
     ).toBeNull();
   });
 
+  it('says before the send that shadow mode emails nobody and saves no file, and the toast says the same', async () => {
+    const view = recordedSiteProfile()!;
+    view.profile.recovery = { mode: 'shadow' };
+    server.use(http.get('/api/shutter/site-profile', () => HttpResponse.json(view)));
+    renderCase('C-000008');
+    const panel = await screen.findByRole('region', { name: 'Escalations' });
+    // The button names the team the draft is made for, as the dialog's title does
+    const button = await within(panel).findByRole('button', { name: 'Escalate to Integration team…' });
+    await userEvent.click(button);
+    const dialog = await screen.findByRole('dialog', { name: 'Escalate to Integration team' });
+    await waitFor(() =>
+      expect(within(dialog).getByTestId('confirm-consequence')).toHaveTextContent(
+        /^Shutter is in shadow mode, so sending emails nobody and saves no email file: the escalation will read Not sent\./,
+      ),
+    );
+    expect(within(dialog).getByTestId('confirm-consequence')).not.toHaveTextContent(
+      /it is saved as an email file/,
+    );
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Send' }));
+    expect(await screen.findByText('Escalation 1 recorded, not sent')).toBeInTheDocument();
+    expect(
+      screen.getByText(/Shadow mode emails nobody and saves no email file, so its line reads Not sent\./),
+    ).toBeInTheDocument();
+  });
+
   it("checks the addresses against the site's allowed domains as they are typed", async () => {
     const view = recordedSiteProfile()!;
     view.profile.mail = { allowed_domains: ['nhs.uk'] };

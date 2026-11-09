@@ -26,7 +26,7 @@ import { HINT_EVENTS } from '@/theme';
 import { caseOutcome, caseState, type ExpectedScenario, type OutcomeCase } from '@/lib/status';
 import { toneText, type Status, type Tone } from '@/lib/tone';
 import { useDetail } from '@/stores/appearance';
-import { forwardedFrom } from './derive';
+import { forwardedFrom, orderOrResult, outageResend } from './derive';
 import { receiverWords } from './failureMapModel';
 import { followedBoard } from './follows';
 import { evidenceOf, messageTypeLabel, messageTypeOf } from './message';
@@ -95,8 +95,14 @@ function receiverHolds(snapshot: Snapshot | null | undefined): string {
   return parts.join(', ');
 }
 
-/** What Shutter wrote to the receiver, as the receipt counts it: "Nothing yet" while the case is still open. */
-function writtenWords(oc: OutcomeCase): string {
+/**
+ * What Shutter wrote to the receiver, as the receipt counts it: "Nothing yet" while the case is still open. A message
+ * resent through the engine with its receiver's outage says so: the receipt counts only the case's own writes.
+ */
+function writtenWords(oc: OutcomeCase, c: CaseDetail): string {
+  const resent = outageResend(c);
+  if (resent)
+    return resent.closure === 'sent' ? 'Resent through the engine' : 'Resent; the receiver already held it';
   if (oc.writes === undefined || oc.writes === null) return '';
   const n = Number(oc.writes);
   if (n > 0) return `${n} write${n === 1 ? '' : 's'}`;
@@ -185,7 +191,7 @@ export function CaseHeader({
   const failure = failureCode(c);
   const iris = caseIrisLinks(c, portalBase);
   const message = messageTypeOf(snapshot);
-  const written = writtenWords(oc);
+  const written = writtenWords(oc, c);
   // Where the receiver had the patient, while Shutter has written nothing: after a write it would be out of date
   const holds = Number(oc.writes ?? 0) > 0 ? '' : receiverHolds(snapshot);
   // The receiver by what it is ("Bed-management system"), with the production item that carries it ("Downstream Out")
@@ -282,7 +288,8 @@ export function CaseHeader({
                 {c.encounterId && c.encounterId !== '-' ? c.encounterId : 'None'}
               </Text>
             </Meta>
-            {c.bed ? <Meta label="Bed asked for">{c.bed}</Meta> : null}
+            {/* An order or a result asks for no bed, whatever its PV1 carries */}
+            {c.bed && !orderOrResult(c) ? <Meta label="Bed asked for">{c.bed}</Meta> : null}
             {holds ? (
               <Meta label="Receiver had">
                 <Stack gap={0}>
