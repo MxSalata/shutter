@@ -42,6 +42,12 @@ function sample(path: string, name: string): string {
   return 'X-1';
 }
 
+/**
+ * Routes the recorded mock answers on purpose with not_in_trial: receiver outages are read off a live engine, and the
+ * incidents page reads that answer as no outages (CONTRACTS 17).
+ */
+const NOT_IN_TRIAL_ON_PURPOSE = new Set(['GET /outages']);
+
 /** Every handler's method and path, with its parameters filled in. */
 const ROUTES = handlers.map((h) => {
   const { method, path } = h.info as { method: string; path: string };
@@ -90,6 +96,7 @@ describe('the trial transport', () => {
     await api.post('/session', { username: 'operator', password: 'shutter' });
     const asOperator = await callEvery();
     for (const a of [...asApprover, ...asOperator]) {
+      if (NOT_IN_TRIAL_ON_PURPOSE.has(a.route)) continue;
       expect(a.code, a.route).not.toBe(NOT_IN_TRIAL_ANSWER.error);
       // No answer is a failure to reach anything: there is nothing to reach
       expect(a.status, a.route).not.toBe(0);
