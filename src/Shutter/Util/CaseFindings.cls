@@ -60,7 +60,7 @@ ClassMethod Build(case As Shutter.Store.Case) As %DynamicObject
 /// The custody in words. The engine holding the message outranks the log: it is still trying.
 ClassMethod CustodyWords(attempts As %String, state As %String) As %String
 {
-    Quit:state="engine" "The engine holds this message and is still trying it: do not resend it and do not re-enter it by hand."
+    Quit:state="engine" "The engine holds it; it is still trying this message: do not resend it and do not re-enter it by hand."
     Quit:state="delivered" "The engine has marked this message Completed: the receiver took it."
     Quit:attempts="reached_receiver" "The receiver took this message on at least one attempt (its answer, or a connection lost on the read, shows the frame reached it): do not resend it and do not re-enter it by hand before checking the receiver."
     Quit:attempts="never_opened" "Every attempt the engine's log keeps found no listener: those attempts never reached the receiver. The log may not keep every attempt."

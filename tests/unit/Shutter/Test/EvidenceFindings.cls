@@ -14,7 +14,7 @@ Method TestApplies()
 /// The custody in words: the engine holding the message outranks the log.
 Method TestCustodyWords()
 {
-    Do $$$AssertTrue(##class(Shutter.Util.CaseFindings).CustodyWords("never_opened", "engine") [ "The engine holds this message and is still trying it", "the engine holds it")
+    Do $$$AssertTrue(##class(Shutter.Util.CaseFindings).CustodyWords("never_opened", "engine") [ "The engine holds it; it is still trying this message", "the engine holds it")
     Do $$$AssertTrue(##class(Shutter.Util.CaseFindings).CustodyWords("reached_receiver", "settled") [ "The receiver took this message on at least one attempt", "reached the receiver")
     Do $$$AssertTrue(##class(Shutter.Util.CaseFindings).CustodyWords("never_opened", "settled") [ "The log may not keep every attempt", "never opened, with its limit")
     Do $$$AssertTrue(##class(Shutter.Util.CaseFindings).CustodyWords("unknown", "unreadable") [ "does not show", "unknown")
@@ -35,9 +35,9 @@ Method TestDraftLinesHoldNoFreeText()
     Set reply = ##class(Shutter.Util.ReplyWords).FromLog("MSA|AE|T-2|No patient Testpatient Alpha born 1980 ERR||PID^1^3|204^Unknown key identifier^HL70357|E|||No patient with identifier MRN-FAKE-1|Patient not found")
     Set obx = {"kind": "obx", "sentence": "The receiver's words name the 4th OBX of 6, set id OBX-1 = 4, code 'ZZUNK'."}
     Set character = {"kind": "characters", "fields": [{"field": "PID-5", "character": "e with a grave accent, U+00E8", "wire": "E8"}]}
-    Set findings = {"custody": {"words": "The engine holds this message and is still trying it: do not resend it and do not re-enter it by hand."}, "reply": (reply), "obx": (obx), "character": (character)}
+    Set findings = {"custody": {"words": "The engine holds it; it is still trying this message: do not resend it and do not re-enter it by hand."}, "reply": (reply), "obx": (obx), "character": (character)}
     Set lines = ##class(Shutter.Util.CaseFindings).DraftLines(findings)
-    Do $$$AssertTrue(lines [ "The engine holds this message", "the custody")
+    Do $$$AssertTrue(lines [ "The engine holds it", "the custody")
     Do $$$AssertTrue(lines [ "The receiver answered AE, error code 204 (HL70357); its words are on the case page.", "the codes only")
     Do $$$AssertTrue(lines [ "set id OBX-1 = 4", "the OBX")
     Do $$$AssertTrue(lines [ "PID-5 holds e with a grave accent, U+00E8; the operation sends E8.", "the character")
