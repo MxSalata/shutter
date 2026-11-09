@@ -144,7 +144,7 @@ ClassMethod Words(o As %DynamicObject, entry As %DynamicObject = "", build As %D
     If (..S(reading, "replyCodeActions") '= "") && (reading.%GetTypeOf("replyCodeActionsStock") = "boolean") && 'reading.replyCodeActionsStock {
         Set first = first _ " This operation's reply actions are the site's own: what an AE, AR or timeout does here follows this string: " _ reading.replyCodeActions _ "."
     }
-    If (category = "orders_results") && $ISOBJECT(o.%Get("lists")) && (o.lists.offered.%Size() > 0) {
+    If (category = "orders_results") && (state = "offered") && $ISOBJECT(o.%Get("lists")) && (o.lists.offered.%Size() > 0) {
         Set older = 0
         Set oi = o.lists.offered.%GetIterator()
         While oi.%GetNext(, .r) { Set:..S(r, "reason")[##class(Shutter.Util.ResendSet).#OLDER older = older + 1 }

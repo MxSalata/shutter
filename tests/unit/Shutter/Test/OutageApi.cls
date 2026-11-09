@@ -86,6 +86,8 @@ XData Rows [ MimeType = application/json ]
  {"name": "an offered set where duplicates are unknown: check the receiver first", "category": "orders_results", "over": {"state": "offered", "kind": "cant_tell", "lists": {"queued": [], "offered": [{"headerId": "41", "controlId": "N1", "reason": ""}], "reached": [], "refused": [], "closed": []}},
   "has": {"do": ["At this receiver a duplicate is unknown: before approving, check the receiver for each message. For one already entered by hand, choose Already handled by hand; Shutter then sends nothing for it."]},
   "not": {"first": ["of these is older"]}},
+ {"name": "closed after the send: the set's lines are gone", "category": "orders_results", "duplicates": {"behaviour": "refuses", "phrase": "ALREADY HELD"}, "over": {"state": "closed", "lists": {"queued": [], "offered": [{"headerId": "41", "controlId": "N1", "reason": "older than a result of another order for the same patient that already reached the receiver (control id C5); each files under its own order"}], "reached": [], "refused": [], "closed": []}},
+  "not": {"first": ["of these is older", "The patient check reads merges"]}},
  {"name": "an offered set where duplicates are filed twice", "category": "orders_results", "duplicates": {"behaviour": "files_twice"}, "over": {"state": "offered", "kind": "cant_tell", "lists": {"queued": [], "offered": [{"headerId": "41", "controlId": "N1", "reason": ""}], "reached": [], "refused": [], "closed": []}},
   "has": {"do": ["At this receiver a duplicate is filed twice: before approving, check the receiver for each message."]}}
 ]
@@ -123,7 +125,7 @@ Method TestWordsTable()
             }
         }
     }
-    Do $$$AssertEquals(n, 23, "the table has its rows")
+    Do $$$AssertEquals(n, 24, "the table has its rows")
 }
 
 /// No word on a card names a supplier, a value or "Verified".
