@@ -57,7 +57,9 @@ ClassMethod Step(outage As Shutter.Store.Outage, entry As %DynamicObject, facts 
     // minute has passed, so a member resent by hand meanwhile moves the digest. A person's row is read again only when asked.
     If (state = "offered") || ((state = "needs_person") && (outage.ReadAgainAt '= "")) {
         If (state = "offered") && '..IsQuiet(outage, facts, now) {
-            Set fields.QuietSince = "", fields.DrainStartedAt = "", fields.SetStatus = "not_computed", fields.SetReason = "the engine is trying a message of the window again"
+            // The set is withdrawn, so nothing reads as offered while the engine tries: a list left offered would be read,
+            // and approved, as the set of now (found on the Pathology rig, O5.c: the approval met a row back at open).
+            Set fields.QuietSince = "", fields.DrainStartedAt = "", fields.SetStatus = "not_computed", fields.SetReason = "the engine is trying a message of the window again", fields.ListOffered = [], fields.SetDigest = ""
             Quit outage.Advance("open", "a message of the window is being tried again: the set is withdrawn and the quiet clock starts again", ..#ACTOR, fields)
         }
         Set since = ##class(Shutter.Util.Time).MillisBetween(outage.SetComputedAt, now)
