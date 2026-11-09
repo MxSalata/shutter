@@ -43,7 +43,7 @@ The judges' account (the organisers pass on its sign-in) runs the board live wit
 | --- | --- |
 | A workflow | [`CaseWorkflow`](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Process/CaseWorkflow.cls), a case per failed delivery |
 | AI agents | [The board](https://github.com/MxSalata/shutter/tree/main/src/Shutter/Agent): three `%AI.Agent` specialists and a coordinator, no write tool |
-| A decision | [The gate](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Operation/Gate.cls)'s deterministic checks |
+| A decision | The board's, with reasons; [the gate](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Operation/Gate.cls) checks it |
 | A person | An `EnsLib.Workflow` approval bound to the plan's digest and the receiver's version |
 | A trace | [The Visual Trace](https://github.com/MxSalata/shutter/blob/main/docs/readme/tracing.md), a step per tool call (DPI-I-689) |
 
