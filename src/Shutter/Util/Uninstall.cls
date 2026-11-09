@@ -34,6 +34,8 @@ ClassMethod Plan() As %String [ SqlProc ]
     Set production = ##class(Shutter.Setup).ProductionName()
     Set ns = ""
     For { Set ns = $ORDER(^Shutter.Config("onboard", ns)) Quit:ns=""  Do out.removes.%Push("The onboarding of " _ ns _ ": its production " _ $GET(^Shutter.Config("onboard", ns)) _ " is updated and not stopped") }
+    Set list = ..WatchedNamespaces()
+    For i = 1:1:$LISTLENGTH(list) { Set line = ..IntakeLine($LIST(list, i)) Do:line'="" out.removes.%Push(line) }
     If production = "Shutter.Production" {
         Do out.removes.%Push("Shutter.Production, stopped, in " _ $NAMESPACE)
     } Else {
@@ -50,6 +52,7 @@ ClassMethod Plan() As %String [ SqlProc ]
     For i = 1:1:$LISTLENGTH(list) Do out.removes.%Push("The resource " _ $LIST(list, i))
     For name = "Shutter retention", "Shutter message purge" { If ..TaskId(name) '= "" Do out.removes.%Push("The task " _ name) }
     Do ..UsersPlan(out)
+    If ##class(%File).DirectoryExists(..CacheFolder()) Do out.removes.%Push("The folder " _ ..CacheFolder())
     Do out.removes.%Push("Every case, approval, incident and setting of Shutter's, and the folders under " _ ..Folder() _ ": cases are not kept, so export what you must keep first")
     Do out.keeps.%Push("The namespace " _ $NAMESPACE _ " itself and its databases: it may hold other things, and removing it is yours to do")
     Do out.%Set("ok", out.refused = "", "boolean")
@@ -343,15 +346,10 @@ ClassMethod TakeWatched(out As %DynamicObject)
         Set ns = $ORDER(^Shutter.Config("onboard", ns)) Quit:ns=""
         Set cat = ""
         For { Set cat = $ORDER(^Shutter.Config("onboard", ns, "schemas", cat), 1, as) Quit:cat=""  Set ^Shutter.Config("uninstall", "schemas", $SELECT(as '= "": as, 1: cat)) = 1 }
-        Set seen(ns) = 1
     }
-    Set ns = ""
-    For { Set ns = $ORDER(^Shutter.Config("onboardKept", ns)) Quit:ns=""  Set seen(ns) = 1 }
-    Set ns = ""
-    For { Set ns = $ORDER(^Shutter.Config("onboardMade", "credential", ns)) Quit:ns=""  Set seen(ns) = 1 }
-    Set ns = ""
-    For {
-        Set ns = $ORDER(seen(ns)) Quit:ns=""
+    Set list = ..WatchedNamespaces()
+    For i = 1:1:$LISTLENGTH(list) {
+        Set ns = $LIST(list, i)
         // First the items, with the mappings kept while messages need their classes; then those messages; then the rest.
         If $DATA(^Shutter.Config("onboard", ns)) {
             Set first = ##class(Shutter.Util.Onboard).Remove(ns, {})
@@ -368,6 +366,7 @@ ClassMethod TakeWatched(out As %DynamicObject)
             Set it = final.kept.%GetIterator()
             While it.%GetNext(, .line) { Do:$EXTRACT(line, 1, 15)'="Shutter's cases" out.kept.%Push(line) }
         }
+        Do ..TakeIntake(ns, out)
         Do ..PurgeQueries(ns)
     }
     // A user a credential step made, once nothing signs in with it.
@@ -380,6 +379,44 @@ ClassMethod TakeWatched(out As %DynamicObject)
             Do out.removed.%Push("The user " _ user)
         }
     }
+}
+
+/// The namespaces the onboarding wired, in order: those it recorded, and those where it kept or made something.
+ClassMethod WatchedNamespaces() As %List
+{
+    For node = "onboard", "onboardKept" {
+        Set ns = ""
+        For { Set ns = $ORDER(^Shutter.Config(node, ns)) Quit:ns=""  Set seen(ns) = 1 }
+    }
+    Set ns = ""
+    For { Set ns = $ORDER(^Shutter.Config("onboardMade", "credential", ns)) Quit:ns=""  Set seen(ns) = 1 }
+    Set list = "", ns = ""
+    For { Set ns = $ORDER(seen(ns)) Quit:ns=""  Set list = list _ $LISTBUILD(ns) }
+    Quit list
+}
+
+/// The plan's line for the global the alert intake keeps in a watched namespace (the alerts it has seen and handed on), or
+/// "" when that namespace holds none or cannot be read.
+ClassMethod IntakeLine(ns As %String) As %String
+{
+    Set line = ""
+    Try {
+        If $DATA(^|ns|Shutter.AlertIntake) Set line = "The global ^Shutter.AlertIntake in " _ ns
+    } Catch ex {
+    }
+    Quit line
+}
+
+/// The alert intake's global in a watched namespace, and nothing else there. The onboarding maps only packages, so the
+/// global is that namespace's own.
+ClassMethod TakeIntake(ns As %String, out As %DynamicObject)
+{
+    Quit:'##class(%SYS.Namespace).Exists(ns)
+    New $NAMESPACE
+    Set $NAMESPACE = ns
+    Quit:'$DATA(^Shutter.AlertIntake)
+    Kill ^Shutter.AlertIntake
+    Do out.removed.%Push("The global ^Shutter.AlertIntake in " _ ns)
 }
 
 /// Shutter.Production stopped and its definition removed; or Shutter's items taken out of the site's own, which is updated
@@ -838,6 +875,11 @@ ClassMethod TakeFolders(out As %DynamicObject)
     For sub = "in", "archive", "work", "out" {
         Do ##class(%File).RemoveDirectoryTree(##class(%File).NormalizeDirectory(base _ sub))
     }
+    Set cache = ..CacheFolder()
+    If ##class(%File).DirectoryExists(cache) {
+        Do ##class(%File).RemoveDirectoryTree(cache)
+        If '##class(%File).DirectoryExists(cache) Do out.removed.%Push("The folder " _ cache)
+    }
     If ..HoldsDatabase(base) {
         Do out.kept.%Push("The folder " _ base _ " holds a database (a namespace named SHUTTER keeps its own there), so it stays with that database")
     } Else {
@@ -916,6 +958,13 @@ ClassMethod PurgeQueries(ns As %String)
 ClassMethod Folder() As %String
 {
     Quit ##class(%File).NormalizeDirectory(##class(%File).ManagerDirectory() _ "shutter")
+}
+
+/// The embedding model's download, which FastEmbed makes in the working folder of a process in Shutter's namespace: the
+/// database's folder, so here when the namespace's database is in Folder(). Anywhere else it is not Shutter's to take.
+ClassMethod CacheFolder() As %String
+{
+    Quit ##class(%File).NormalizeDirectory(..Folder() _ ".fastembed_cache")
 }
 
 /// Shutter's web applications: those the install recorded, and any whose dispatch class is Shutter's or the demo receiver's.

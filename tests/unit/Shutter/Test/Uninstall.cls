@@ -193,6 +193,58 @@ Method TestAFailedStepStopsTheRun()
     Kill ^Shutter.Config("uninstallTest")
 }
 
+/// The plan names the alert intake's global in each watched namespace that holds it, and the embedding model's folder
+/// under Shutter's own, and changes neither. Another namespace (Watched) stands in for a watched one, with a row and a
+/// folder of the test's.
+Method TestThePlanListsTheIntakeAndTheCache()
+{
+    Set u = "Shutter.Util.Uninstall", ns = ..Watched()
+    Set watched = $DATA(^Shutter.Config("onboardKept", ns))
+    Set:'watched ^Shutter.Config("onboardKept", ns) = 1
+    Set ^|ns|Shutter.AlertIntake("seen", 999999981, "Uninstall Test") = 1
+    Set cache = $CLASSMETHOD(u, "CacheFolder"), made = 0
+    If '##class(%File).DirectoryExists(cache) Set made = ##class(%File).CreateDirectoryChain(cache)
+    Set plan = ##class(%DynamicObject).%FromJSON($CLASSMETHOD(u, "Plan"))
+    Set removes = "", it = plan.removes.%GetIterator()
+    While it.%GetNext(, .line) { Set removes = removes _ $LISTBUILD(line) }
+    Do $$$AssertTrue($LISTFIND(removes, "The global ^Shutter.AlertIntake in " _ ns), "the intake's global in the watched namespace")
+    Do $$$AssertTrue($LISTFIND(removes, "The folder " _ cache), "the embedding model's folder")
+    Do $$$AssertEquals($GET(^|ns|Shutter.AlertIntake("seen", 999999981, "Uninstall Test")), 1, "the row is still there")
+    Do $$$AssertTrue(##class(%File).DirectoryExists(cache), "and so is the folder")
+    Kill ^|ns|Shutter.AlertIntake("seen", 999999981, "Uninstall Test")
+    Kill:'watched ^Shutter.Config("onboardKept", ns)
+    Do:made ##class(%File).RemoveDirectory(cache)
+}
+
+/// A run's intake step in a watched namespace takes the alert intake's global and nothing else there: another of
+/// Shutter's names and a site's global stay. Another namespace (Watched) stands in for it, through a stub step.
+Method TestAStubRunTakesTheIntakeOnly()
+{
+    Set ns = ..Watched()
+    Set ^|ns|Shutter.AlertIntake("handed", 999999982, "Uninstall Test|CTL0001") = 1
+    Set ^|ns|Shutter.UninstallTestKeep = 1, ^|ns|UninstallTestKeep = 1
+    Set out = {"removed": [], "kept": [], "errors": [], "stopped": ""}
+    Do ##class(Shutter.Util.Uninstall).RunSteps(out, $LISTBUILD("Intake"), $CLASSNAME())
+    Do $$$AssertEquals(out.stopped, "", "the step ran")
+    Do $$$AssertEquals($DATA(^|ns|Shutter.AlertIntake), 0, "the intake's global is gone")
+    Do $$$AssertEquals(out.removed.%Get(0), "The global ^Shutter.AlertIntake in " _ ns, "and said")
+    Do $$$AssertEquals($GET(^|ns|Shutter.UninstallTestKeep), 1, "another global under Shutter's name stays")
+    Do $$$AssertEquals($GET(^|ns|UninstallTestKeep), 1, "and the site's")
+    Kill ^|ns|Shutter.UninstallTestKeep, ^|ns|UninstallTestKeep
+}
+
+/// A namespace other than the test's own, to stand in for a watched one.
+ClassMethod Watched() As %String
+{
+    Quit $SELECT($NAMESPACE '= "USER": "USER", 1: "%SYS")
+}
+
+/// The stub of the intake step, in that namespace.
+ClassMethod TakeIntake(out As %DynamicObject)
+{
+    Do ##class(Shutter.Util.Uninstall).TakeIntake(..Watched(), out)
+}
+
 ClassMethod TakeFine(out As %DynamicObject)
 {
     Do out.removed.%Push("fine")
