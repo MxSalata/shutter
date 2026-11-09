@@ -69,6 +69,9 @@ import {
   rulesMissed,
   SHOW_LABELS,
   SPECIALISTS,
+  boundaryMode,
+  boundaryWords,
+  type BoundaryCheck,
   type BoundaryChecks,
   type Evaluation,
   type EvaluationConfidence,
@@ -1059,6 +1062,97 @@ function PassesTable({
   );
 }
 
+/**
+ * What the approval boundary refuses, as a register of its HTTP checks in the document's order: each check's short
+ * headline and the outcome it must get, and one click away the check as the document writes it (its scenario, its exact
+ * answer and what it proves). Technical also shows the scenario and the answer inline. Where the checks come from and
+ * where they run sits at the foot, so the section opens on the checks themselves.
+ */
+function BoundaryRegister({ refusals }: { refusals: BoundaryChecks }) {
+  const technical = useTechnical();
+  const mode = boundaryMode(refusals.checks);
+  return (
+    <Section
+      id="boundary"
+      title="Approval safeguards"
+      note={`${plural(refusals.checks.length, 'HTTP check')}, run in CI on real IRIS for Health.`}
+    >
+      <Stack gap="xs" className="boundary-register">
+        <Text size="sm" c="dimmed">
+          {mode ? `Expected outcomes · ${mode}` : 'Expected outcomes'}
+        </Text>
+        <ul className="boundary-checks" role="list">
+          {refusals.checks.map((c) => (
+            <BoundaryCheckRow key={c.id} check={c} technical={technical} />
+          ))}
+        </ul>
+        <TechDetail kind="explain" label="Test source and CI">
+          <Stack gap={6} maw="68ch">
+            <Text size="sm">
+              Script: <CodeChip>{refusals.script}</CodeChip>
+            </Text>
+            <Text size="sm">It runs in {refusals.runs}.</Text>
+            <Text size="sm">
+              Running it plays the scenarios it names, so run it only on an instance of your own that nobody
+              else is using.
+            </Text>
+            <Text size="sm">
+              This list gives the outcomes each check requires, not the status of the latest CI run.
+            </Text>
+          </Stack>
+        </TechDetail>
+      </Stack>
+    </Section>
+  );
+}
+
+/** A check's scenario and exact answer, the machine's words, as label and value. */
+function BoundaryFacts({ check }: { check: BoundaryCheck }) {
+  return (
+    <dl className="boundary-facts">
+      <div>
+        <dt>Scenario</dt>
+        <dd>{check.scenario}</dd>
+      </div>
+      <div>
+        <dt>Answer</dt>
+        <dd>
+          <CodeChip>{check.answer}</CodeChip>
+        </dd>
+      </div>
+    </dl>
+  );
+}
+
+/**
+ * One check of the register: its headline (an h3 under the section's h2) on the left, and on the right the outcome, in
+ * Technical the scenario and answer, then its disclosure. On a phone they stack in that order.
+ */
+function BoundaryCheckRow({ check, technical }: { check: BoundaryCheck; technical: boolean }) {
+  const words = boundaryWords(check);
+  return (
+    <li className="boundary-check" data-check={check.id}>
+      <Title order={3} className="boundary-check-name">
+        {words.headline}
+      </Title>
+      <div className="boundary-check-body">
+        <Text size="sm">{words.outcome}</Text>
+        {technical ? <BoundaryFacts check={check} /> : null}
+        <TechDetail kind="explain" label={words.inspect}>
+          <Stack gap={6} maw="68ch">
+            <Text size="sm" fw={600}>
+              {check.title}
+            </Text>
+            {/* Technical shows these beside the outcome already */}
+            {technical ? null : <BoundaryFacts check={check} />}
+            <Text size="sm">{check.proves}</Text>
+          </Stack>
+        </TechDetail>
+      </div>
+    </li>
+  );
+}
+
 /** "More about repeat runs": the disclosure's name from an item's title. */
 const moreAbout = (title: string) => {
   const words = title.replace(/[.:]\s*$/, '');
@@ -1154,55 +1248,7 @@ export default function EvaluationPage({
           </Section>
         </SimpleGrid>
 
-        <Section
-          id="boundary"
-          title="What the boundary refuses"
-          note={`What ${refusals.script} tries over HTTP against the approval boundary, and the answer each attempt must get. It runs in ${refusals.runs}, and on any instance of your own (it plays the scenarios it names, so not on one someone else is using).`}
-        >
-          {/* Nothing in the table takes the focus, so where it scrolls sideways its scroll area does, named */}
-          <Table.ScrollContainer
-            minWidth={800}
-            className="stack-scroll"
-            scrollAreaProps={{
-              viewportProps: {
-                tabIndex: 0,
-                role: 'region',
-                'aria-label': 'What the boundary refuses, scrolls sideways',
-              },
-            }}
-          >
-            <StackTable verticalSpacing="xs" className="stack-table">
-              <StackTable.Thead>
-                <StackTable.Tr>
-                  <StackTable.Th>Attempt</StackTable.Th>
-                  <StackTable.Th>Scenario</StackTable.Th>
-                  <StackTable.Th>Answer</StackTable.Th>
-                  <StackTable.Th>What it proves</StackTable.Th>
-                </StackTable.Tr>
-              </StackTable.Thead>
-              <StackTable.Tbody>
-                {refusals.checks.map((c) => (
-                  <StackTable.Tr key={c.id}>
-                    <StackTable.Td>
-                      <Text fw={600}>{c.title}</Text>
-                    </StackTable.Td>
-                    <StackTable.Td data-label="Scenario">
-                      <Text size="sm" style={{ whiteSpace: 'nowrap' }}>
-                        {c.scenario}
-                      </Text>
-                    </StackTable.Td>
-                    <StackTable.Td data-label="Answer">
-                      <CodeChip>{c.answer}</CodeChip>
-                    </StackTable.Td>
-                    <StackTable.Td data-label="What it proves">
-                      <Text size="sm">{c.proves}</Text>
-                    </StackTable.Td>
-                  </StackTable.Tr>
-                ))}
-              </StackTable.Tbody>
-            </StackTable>
-          </Table.ScrollContainer>
-        </Section>
+        <BoundaryRegister refusals={refusals} />
 
         <Stack gap={4}>
           <TechDetail kind="explain" label="Where these figures come from: files and prices">

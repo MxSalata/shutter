@@ -107,7 +107,81 @@ export interface Evaluation {
 export interface BoundaryChecks {
   script: string;
   runs: string;
-  checks: { id: string; title: string; scenario: string; answer: string; proves: string }[];
+  checks: BoundaryCheck[];
+}
+export type BoundaryCheck = { id: string; title: string; scenario: string; answer: string; proves: string };
+
+/**
+ * The register's short words for each boundary check, by its id: the headline, the outcome it must get, and the name of
+ * the disclosure that holds the check as the document writes it. The page lists the document's checks, in its order,
+ * never this map's, so a check added there still shows (with its own title and answer) before it has words here.
+ */
+export const BOUNDARY_DISPLAY: Record<string, { headline: string; outcome: string; inspect: string }> = {
+  plan_digest: {
+    headline: 'A different plan',
+    outcome: 'Approval refused; nothing stored or written.',
+    inspect: 'Inspect plan mismatch',
+  },
+  case_version: {
+    headline: 'An out-of-date case',
+    outcome: 'Approval refused; nothing stored or written.',
+    inspect: 'Inspect stale case',
+  },
+  operator_approval: {
+    headline: 'An operator tries to approve',
+    outcome: 'Refused before anything is stored.',
+    inspect: 'Inspect operator approval',
+  },
+  idempotent_replay: {
+    headline: 'Repeated approval or reused key',
+    outcome: 'Repeat: same reply, one write attempt. Same key, changed request: refused.',
+    inspect: 'Inspect repeat handling',
+  },
+  decider: {
+    headline: 'A supplied approver name',
+    outcome: 'Ignored; the signed-in approver is recorded.',
+    inspect: 'Inspect recorded identity',
+  },
+  rehearsed: {
+    headline: 'A dry run of the same plan',
+    outcome: 'Approval and dry-run checks pass for that exact plan.',
+    inspect: 'Inspect dry run',
+  },
+  simultaneous_decisions: {
+    headline: 'Approve and reject at the same instant',
+    outcome: 'One decision stands; the other is refused, naming it.',
+    inspect: 'Inspect simultaneous decisions',
+  },
+  receiver_changed: {
+    headline: 'The receiving record changes after approval',
+    outcome: 'Approval voided; case replanned and blocked, with no write attempted.',
+    inspect: 'Inspect changed receiver',
+  },
+  already_committed: {
+    headline: 'The receiver already has it',
+    outcome: 'Resend blocked; nothing written.',
+    inspect: 'Inspect existing receipt',
+  },
+};
+
+/** A check's register words: its own from the map, or, for a check the map does not know, its title and answer. */
+export function boundaryWords(c: BoundaryCheck): { headline: string; outcome: string; inspect: string } {
+  const known = BOUNDARY_DISPLAY[c.id];
+  if (known) return known;
+  const title = c.title.replace(/[.:]\s*$/, '');
+  return {
+    headline: title,
+    outcome: c.answer,
+    inspect: `Inspect ${title.charAt(0).toLowerCase()}${title.slice(1)}`,
+  };
+}
+
+/** The mode every check runs in, when they share one ("Rules only"), from the scenario's words ("S2, rules only"). */
+export function boundaryMode(checks: BoundaryCheck[]): string | null {
+  const modes = new Set(checks.map((c) => c.scenario.split(',').slice(1).join(',').trim().toLowerCase()));
+  if (modes.size !== 1) return null;
+  const [mode] = [...modes];
+  return mode ? `${mode.charAt(0).toUpperCase()}${mode.slice(1)}` : null;
 }
 
 /** The specialists in the order the board runs them; the coordinator's plan follows. */

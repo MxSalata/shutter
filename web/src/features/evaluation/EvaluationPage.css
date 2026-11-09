@@ -74,3 +74,75 @@
 .eval-passes td[data-label='Played'] .mantine-Badge-label {
   text-align: start;
 }
+
+/*
+ * The approval safeguards: a register of the boundary's checks, one item each, between thin rules. At a laptop's
+ * width the headline takes about a third and the outcome, the facts and the disclosure the rest; below 36em (576 px)
+ * they stack in one column. Both tracks may shrink below their content, so a path or a code wraps rather than widening
+ * the page.
+ */
+.boundary-checks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.boundary-check {
+  display: grid;
+  grid-template-columns: minmax(0, 35fr) minmax(0, 65fr);
+  column-gap: var(--mantine-spacing-md);
+  row-gap: 2px;
+  padding-block: var(--mantine-spacing-sm);
+  border-top: 1px solid var(--mantine-color-default-border);
+}
+.boundary-check:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.boundary-check > * {
+  min-width: 0;
+}
+.boundary-check-name {
+  color: var(--mantine-color-text);
+}
+.boundary-check-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+.boundary-register .code-chip {
+  overflow-wrap: anywhere;
+}
+
+/* The scenario and the exact answer: each label in the dimmed colour before its value, on one line where they fit. */
+.boundary-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px var(--mantine-spacing-md);
+  margin: 0;
+  font-size: var(--mantine-font-size-sm);
+  line-height: var(--mantine-line-height-sm);
+}
+.boundary-facts > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 6px;
+  min-width: 0;
+}
+.boundary-facts dt {
+  color: var(--mantine-color-dimmed);
+}
+.boundary-facts dd {
+  margin: 0;
+  min-width: 0;
+}
+
+@media (max-width: 35.99em) {
+  .boundary-check {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  /* A finger's target for every disclosure in the section */
+  .boundary-register .tech-detail-toggle {
+    min-height: 44px;
+  }
+}
