@@ -6,13 +6,13 @@
 
 On an ordinary day a hospital's integration engine can see hundreds of failed messages. Engineers put right what they can by hand, and the rest can go unactioned. Shutter won't fix them all, but it helps with most: in my experience at the hospitals I have worked with (my background: interoperability with 28 NHS hospitals), most failures are of the kinds it knows. It resends the failed patient movements that pass its checks, and for the rest it stops, writes nothing, and identifies the patient for a person to review.
 
-**For judges: three minutes, nothing to install, no key.** Start in the [trial](https://mxsalata.github.io/shutter/) (**Explore on my own**):
+**For judges: three minutes, nothing to install, no key.** Start in the [trial](https://mxsalata.github.io/shutter/) (**Explore on my own**). In S8 alone, **Rules only** lifts one gate check, on purpose:
 
-1. In **Scenarios**, choose **Rules only** (a plain resend, no agents), then under **Every scenario**, press **Run** on S8's row (not the S8 card at the top). About 20 seconds later open its case (C-000021, already approved; on your machine, approve it): "Wrote WARD-B over the bed manager's WARD-C", every check passed.
+1. In **Scenarios**, choose **Rules only** (a plain resend, no agents), then under **Every scenario**, press **Run** on S8's row (not the S8 card at the top). About 20 seconds later open its case (C-000021, already approved; on your machine, approve it): "Wrote WARD-B over the bed manager's WARD-C".
 2. Choose **Board** (four AI Hub agents), run S8's row again and open its case (C-000008): escalated, **0 writes**, the patient (MRN1008) handed to a person.
 3. Press **Message trace** under **In IRIS:** for the Visual Trace (in the trial a screenshot; on your machine, sign in to IRIS as `approver`). Then **S3** in **Board**: only the receiver's answer was lost, so the case reads the receipt and writes nothing.
 
-**Then the [online demo](https://shutter.mxsalata.com)**, my fictional hospital on AI Hub build `2026.3.0AI.154.0`. **Then your machine:** the replay edition (no key, no Early Access file) needs Docker (5 GB memory, 25 GB disk) and a 6 GB image pull, then is healthy in 2 min 21 s on a 12-thread VM, about 8 min on 8 cores, at http://localhost:52773/shutter/index.html (**Not now** if offered the trial).
+**Then the [online demo](https://shutter.mxsalata.com)**, my fictional hospital on AI Hub build `2026.3.0AI.154.0`. **Then your machine:** the replay edition (no key, no Early Access file) needs Docker (5 GB memory, 25 GB disk) and a 6 GB image pull, then is healthy in about 8 min on 8 cores, at http://localhost:52773/shutter/index.html (**Not now** if offered the trial).
 
 ```sh
 git clone https://github.com/MxSalata/shutter.git
