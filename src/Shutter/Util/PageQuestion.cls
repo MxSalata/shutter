@@ -197,7 +197,9 @@ ClassMethod ToolNames(toolsets As %String = "") As %List
 }
 
 /// Check an answer on its way back: an object with the answer in words (at most 1200 characters), cites that are ids the
-/// summary listed (or "page"), and a confidence of high, medium or low when given. 1, or 0 and the problem.
+/// summary listed (or "page"), and a confidence of high, medium or low when given. A cite is matched as the submit tool
+/// matches it (Shutter.Schema.Answer.CiteListed: trimmed, or by its head, as in C-000001.state) and kept as the id it
+/// names. 1, or 0 and the problem.
 ClassMethod CheckAnswer(answer As %DynamicObject, citeIds As %String, Output problem As %String) As %Boolean
 {
     Set problem = ""
@@ -208,10 +210,11 @@ ClassMethod CheckAnswer(answer As %DynamicObject, citeIds As %String, Output pro
     Set t = answer.%GetTypeOf("cites")
     If (t '= "unassigned") && (t '= "null") {
         If t '= "array" Set problem = "cites must be a list" Quit 0
-        Set ids = $LISTFROMSTRING(citeIds, ",")
         For i = 0:1:answer.cites.%Size() - 1 {
             Set c = answer.cites.%Get(i)
-            If $ISOBJECT(c) || '$LISTFIND(ids, c) Set problem = "cites[" _ i _ "] is not an id the page listed" Quit
+            Set id = $SELECT($ISOBJECT(c): "", 1: ##class(Shutter.Schema.Answer).CiteListed(c, citeIds))
+            If id = "" Set problem = "cites[" _ i _ "] is not an id the page listed" Quit
+            Do answer.cites.%Set(i, id)
         }
         Quit:problem'="" 0
     }

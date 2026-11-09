@@ -191,6 +191,40 @@ Method TestCitesAndCheckAnswer()
     Do $$$AssertTrue($CLASSMETHOD(pq, "CheckAnswer", {"answer": "x"}, ids, .problem), "no cites and no confidence pass")
 }
 
+/// The submit tool and the page check agree on cites: each form the tool accepts (the id, trimmed, or with a path after
+/// it such as C-000008.state, S2[1] or S2:label) passes the check and is kept as the id it names; a cite the check refuses
+/// the tool refuses too, with the problem the agent sees.
+Method TestToolAndCheckAgreeOnCites()
+{
+    Set pq = "Shutter.Util.PageQuestion"
+    Set ids = $CLASSMETHOD(pq, "CiteIds", ..Summary())
+    Set tool = ##class(Shutter.Tools.SubmitAnswer).%New()
+    Set tool.CaseId = "P-000001", tool.CiteIds = ids
+    Set forms = $LISTBUILD("S2", " S2 ", "S2.state", "C-000008.state", "S2[1]", "S2:label", " page ", "page.title")
+    Set named = $LISTBUILD("S2", "S2", "S2", "C-000008", "S2", "S2", "page", "page")
+    For k = 1:1:$LISTLENGTH(forms) {
+        Set form = $LIST(forms, k)
+        Set a = ##class(Shutter.Schema.Answer).%New()
+        Set a.Answer = "S2 is a transfer recovered.", a.Confidence = "high"
+        Do a.Cites.Insert(form)
+        Set r = tool.SubmitAnswer("P-000001", a)
+        Do $$$AssertTrue(r.accepted, "the tool accepts """ _ form _ """: " _ r.%ToJSON())
+        Set answer = ##class(Shutter.Util.Json).Parse(tool.Result, .sc)
+        Do $$$AssertTrue($CLASSMETHOD(pq, "CheckAnswer", answer, ids, .problem), "the check accepts """ _ form _ """ too: " _ problem)
+        Do $$$AssertEquals(answer.cites.%Get(0), $LIST(named, k), """" _ form _ """ is kept as the id it names")
+    }
+    For form = "C-000099", "message", "C-000099.state", ".S2", "  " {
+        Do $$$AssertNotTrue($CLASSMETHOD(pq, "CheckAnswer", {"answer": "x", "cites": [(form)]}, ids, .problem), "the check refuses """ _ form _ """")
+        Set a = ##class(Shutter.Schema.Answer).%New()
+        Set a.Answer = "x"
+        Do a.Cites.Insert(form)
+        Set r = tool.SubmitAnswer("P-000001", a)
+        Do $$$AssertNotTrue(r.accepted, "the tool refuses """ _ form _ """ too")
+        Set seen = $SELECT($ISOBJECT(r.problems): r.problems.%ToJSON(), 1: $GET(r.error))
+        Do $$$AssertTrue(seen [ "cites[0]", "the agent is told which cite: " _ seen)
+    }
+}
+
 /// The row: opened pending with a P id, answering, then answered with its answer or failed with why; the summary kept as
 /// the agent got it; a question left behind marked failed when read; the panel's object with no summary in it.
 Method TestStore()

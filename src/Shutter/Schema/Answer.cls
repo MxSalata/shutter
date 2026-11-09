@@ -41,16 +41,30 @@ ClassMethod CheckCommon(o As %DynamicObject, problems As %DynamicArray, citeIds 
             Do problems.%Push("cites must be an array of evidence ids and fact ids")
         } Else {
             Set cites = o.%Get("cites")
-            Set ids = $LISTFROMSTRING(citeIds, ",")
             For i = 0:1:cites.%Size() - 1 {
                 If (cites.%GetTypeOf(i) '= "string") || (cites.%Get(i) = "") Do problems.%Push("cites[" _ i _ "] must be an evidence id or a fact id (W1, W2, ...)") Continue
-                Set c = $ZSTRIP(cites.%Get(i), "<>W"), head = $PIECE($PIECE($PIECE(c, ".", 1), "[", 1), ":", 1)
-                If (citeIds '= "") && '$LISTFIND(ids, c) && '$LISTFIND(ids, head) Do problems.%Push("cites[" _ i _ "] """ _ c _ """ is not citable: cite an evidence id of the case section (" _ ..Sample(citeIds) _ ", alone or with a path such as history[2]) or a fact id W<n>; the plan, the gate's checks and the findings are not cited")
+                Set c = $ZSTRIP(cites.%Get(i), "<>W")
+                If (citeIds '= "") && (..CiteListed(c, citeIds) = "") Do problems.%Push("cites[" _ i _ "] """ _ c _ """ is not citable: cite an evidence id of the case section (" _ ..Sample(citeIds) _ ", alone or with a path such as history[2]) or a fact id W<n>; the plan, the gate's checks and the findings are not cited")
             }
         }
     }
     Set c = ##class(Shutter.Util.Json).Str(o, "confidence")
     If $ISOBJECT(c) || ((c '= "") && '$LISTFIND($LISTBUILD("high", "medium", "low"), c)) Do problems.%Push("confidence must be high, medium or low")
+}
+
+/// The id of <var>citeIds</var> (comma separated) that a cite names: the cite with its outer spaces trimmed when it is one
+/// of them, otherwise its head (what comes before the first ".", "[" or ":", as in history[2] or C-000001.state) when that
+/// is one; "" when neither. The submit tools and the page question's check (Shutter.Util.PageQuestion.CheckAnswer) both
+/// match cites with it, so a cite a tool accepts is one the check accepts.
+ClassMethod CiteListed(cite As %String, citeIds As %String) As %String
+{
+    Set c = $ZSTRIP(cite, "<>W")
+    Quit:c="" ""
+    Set ids = $LISTFROMSTRING(citeIds, ",")
+    Quit:$LISTFIND(ids, c) c
+    Set head = $PIECE($PIECE($PIECE(c, ".", 1), "[", 1), ":", 1)
+    Quit:(head '= "")&&$LISTFIND(ids, head) head
+    Quit ""
 }
 
 /// A few of the citable ids, for a refusal's message.
