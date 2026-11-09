@@ -628,7 +628,7 @@ ClassMethod LoginJob(user As %String, password As %String, key As %String)
     Set ^Shutter.Health("login", key) = ok _ "|" _ why
 }
 
-/// The public demo's API session timeout in seconds (1.1.2), which HardenPortal sets on /api/shutter in place of IRIS's
+/// The public demo's API session timeout in seconds (1.2.0), which HardenPortal sets on /api/shutter in place of IRIS's
 /// 900. A signed-in session holds one licence connection until it ends, and the Community licence refuses every new login,
 /// Management Portal and terminal included, once the instance holds 8 (the demo of 8 Nov 2026: the portal page answered
 /// 503 after the 8th sign-in, for 15 minutes). A visible tab with the live hospital on keeps its session by the banner's
@@ -645,7 +645,7 @@ Parameter DEMOAPISESSIONSECONDS = 120;
 /// IRIS made it, since an approver following the "In IRIS" links relies on those roles): the applications' MatchRoles are
 /// cleared and each requires the resource Shutter_Portal, which Shutter_Trace alone holds; Shutter_Trace keeps its
 /// Interoperability resources and reads the HealthShare databases and both namespaces' code and data databases, writing
-/// none. The API's sessions last DEMOAPISESSIONSECONDS without a request (1.1.2; below). Needs %Admin_Secure. Returns
+/// none. The API's sessions last DEMOAPISESSIONSECONDS without a request (1.2.0; below). Needs %Admin_Secure. Returns
 /// JSON: the applications changed, the role's resources, the API's session timeout before and after, errors. PortalState
 /// shows it.
 ClassMethod HardenPortal(hospital As %String = "") As %String [ SqlProc ]
@@ -707,7 +707,7 @@ ClassMethod HardenPortal(hospital As %String = "") As %String [ SqlProc ]
             If $$$ISERR(sc) Do errors.%Push(app _ ": " _ $SYSTEM.Status.GetErrorText(sc))
             Do apps.%Push(a)
         }
-        // The API's sessions (1.1.2): each signed-in web session holds a licence connection until it ends, and the Community
+        // The API's sessions (1.2.0): each signed-in web session holds a licence connection until it ends, and the Community
         // licence refuses new logins once the instance holds 8, so the portal page answered 503 after 8 demo sign-ins.
         If ##class(Security.Applications).Exists("/api/shutter") {
             Kill ap
@@ -829,7 +829,7 @@ ClassMethod ResourceExists(name As %String) As %Boolean
 }
 
 /// The portal's state for the demo's checks: each namespace's portal application (exists, MatchRoles, the required
-/// resource), the trace role's resources, the API's session timeout (api_session_timeout, 1.1.2), and hardened (every
+/// resource), the trace role's resources, the API's session timeout (api_session_timeout, 1.2.0), and hardened (every
 /// existing application cleared and gated, the role writing no database, the API's sessions no longer than
 /// DEMOAPISESSIONSECONDS). Needs %Admin_Secure to read the security tables; otherwise it says so.
 ClassMethod PortalState(hospital As %String = "") As %String [ SqlProc ]

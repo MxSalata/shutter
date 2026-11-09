@@ -1,6 +1,6 @@
 /// The demo's portal made read only (v1.38): the portal applications lose their MatchRoles and require Shutter_Portal,
 /// which Shutter_Trace alone holds, and the trace role reads the databases the pages need and writes none. The test
-/// applies it on this instance and puts the applications and the role back as they were. Since 1.1.2 it also makes the
+/// applies it on this instance and puts the applications and the role back as they were. Since 1.2.0 it also makes the
 /// API's sessions last DEMOAPISESSIONSECONDS, put back as well.
 Class Shutter.Test.Portal Extends %UnitTest.TestCase
 {
@@ -33,7 +33,7 @@ Method TestHardenPortalAndRestore()
     Do $$$AssertTrue(after."trace_role" [ "%Ens_MessageTrace:U", "and keeps its Interoperability resources")
     Do $$$AssertTrue(after."trace_role" [ (##class(Shutter.Setup).DatabaseResource($NAMESPACE) _ ":R"), "and reads the data database")
     Do $$$AssertEquals($FIND(after."trace_role", ":RW"), 0, "and writes no database: " _ after."trace_role")
-    // The API's sessions (1.1.2): DEMOAPISESSIONSECONDS without a request, in place of IRIS's 900.
+    // The API's sessions (1.2.0): DEMOAPISESSIONSECONDS without a request, in place of IRIS's 900.
     Set t = ##class(Shutter.Setup).#DEMOAPISESSIONSECONDS
     Do $$$AssertTrue($ISOBJECT(out.api) && (out.api.timeout = t), "the API's session timeout is set: " _ out.%ToJSON())
     Do $$$AssertEquals(after."api_session_timeout", t, "and the state reads it")

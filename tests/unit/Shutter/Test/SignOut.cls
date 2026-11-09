@@ -1,4 +1,4 @@
-/// Signing out of the web application ends the IRIS session (1.1.2), and the public demo's API sessions are short: each
+/// Signing out of the web application ends the IRIS session (1.2.0), and the public demo's API sessions are short: each
 /// signed-in session holds a licence connection until it ends, and the Community licence refuses every new login once the
 /// instance holds 8 (the demo of 8 Nov 2026: the portal page answered 503 after the 8th sign-in).
 Class Shutter.Test.SignOut Extends %UnitTest.TestCase
