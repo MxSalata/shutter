@@ -7,7 +7,7 @@ What the README's "Where the agents sit" and "AI Hub inside Shutter" shorten, in
 The three specialists (conformance, encounter and impact) and the coordinator are business operations in the production. The case workflow calls the specialists in parallel, then the coordinator, who writes the plan.
 
 - **A pass** takes 24 to 47 seconds and costs 0.34 to 0.50 USD across the 25 recorded passes: four agents read the evidence through typed tools on a frontier model, `claude-opus-5-5`, a setting of each board item. In **Site policy** mode the catalogue settles the cases it knows with no model call, so a site pays for a board only on the rest.
-- **Live or Replay:** with `ANTHROPIC_API_KEY` in `.env` they run live; without a key they replay recorded live runs at no cost.
+- **Live or Replay:** with `ANTHROPIC_API_KEY` in `.env` they run live; on an instance never given a key they replay recorded live runs at no cost (a provider once configured stays until `SELECT Shutter.Setup_ClearProvider()`).
 - **No write tool:** their tools read the sealed evidence and submit a finding, a plan or an answer; only the gate's checked, released plan is ever written. Shutter resends a message unchanged or not at all: a guessed value is the wrong write it exists to prevent.
 
 ## The contest's task, in Shutter
