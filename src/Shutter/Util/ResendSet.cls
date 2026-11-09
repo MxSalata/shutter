@@ -8,7 +8,9 @@
 /// gives set.status not_computed with set.reason naming it, never an empty list.
 ///
 /// Then each origin header to the item created in the window, in header id order (the engine's own arrival order), into
-/// one of four lists: queued (the engine, or a copy of it, is still trying: wait), offered (status Error; every retained
+/// one of five lists: queued (the engine, or a copy of it, is still trying: wait), closed (a ledger row closed it without a
+/// send of its own: the receiver reported it already held it, or a person recorded it as handled by hand; read before its
+/// copies, so a refused clone does not read as Shutter's failed resend), offered (status Error; every retained
 /// log row a connection that never opened; the log reaching back past it; no production start or active message put back on
 /// a queue since it was created, which is when an attempt can go unlogged; no copy resent by hand; no resend of Shutter's
 /// but a never-opened clone, which then stands in the origin's place; and the patient check passed), reached (the receiver
@@ -18,7 +20,7 @@ Class Shutter.Util.ResendSet [ Abstract ]
 {
 
 /// The version of these rules, which the set's digest and an approval bind.
-Parameter SETPOLICYVERSION = "2026-11-09.2";
+Parameter SETPOLICYVERSION = "2026-11-09.3";
 
 /// The words every surface shows with the set.
 Parameter NOTSENT = "Shutter will not send these messages. Review them in the Message Viewer using the site's recovery procedure.";
@@ -28,7 +30,7 @@ Parameter NOTCURRENT = "Shutter has not checked whether this order or result is 
 /// The set for <var>item</var> in <var>ns</var> over the window <var>from</var> to <var>to</var> (the engine's
 /// TimeCreated form, UTC), for the receiver name <var>receiver</var> Shutter's cases carry.
 /// {"set": {"digest", "computedAt", "setPolicyVersion", "status", "reason"}, "lists": {"queued", "offered", "reached",
-/// "refused"}, "words": {"first", "critical"}}.
+/// "refused", "closed"}, "words": {"first", "critical"}}.
 ClassMethod Compute(ns As %String, item As %String, from As %String, to As %String, receiver As %String) As %DynamicObject
 {
     Set state = ##class(Shutter.Util.EngineRead).ItemState(ns, item)
@@ -55,40 +57,48 @@ ClassMethod ItemGate(state As %DynamicObject, ft As %DynamicObject) As %String
     Quit ""
 }
 
-/// The four lists, the item's conditions already met.
+/// The five lists, the item's conditions already met.
 ClassMethod Lists(ns As %String, item As %String, from As %String, to As %String, receiver As %String) As %DynamicObject
 {
     Set out = ..Empty()
     Set out.set.status = "computed"
     Set headers = ..Origins(ns, item, from, to, .why)
     If why '= "" Quit ..NotComputed(why)
-    // Rules 1, 3 to 6 per header; the patient check after, on the candidates together, since the set's own cases are
-    // left out of it.
-    Set candidates = []
+    // Rules 1 to 6 per header; the patient check after, on the candidates together, since the set's own cases are left out
+    // of it and its members out of the order rule's newer read.
+    Set candidates = [], members = ""
     Set iter = headers.%GetIterator()
     While iter.%GetNext(, .h) {
         Set row = ..Row(ns, h)
         Set list = ..Place(ns, h, row)
         Continue:list=""
-        If list = "candidate" { Do candidates.%Push(row) } Else { Do out.lists.%Get(list).%Push(row) }
+        If list = "candidate" { Do candidates.%Push(row) Set members = members _ $LISTBUILD(row.headerId) } Else { Do out.lists.%Get(list).%Push(row) }
     }
     Set exclude = ..CasesOf(ns, candidates)
+    // One pass: the merge read is made once for the set, then only for what arrived since.
+    Do ##class(Shutter.Util.PatientCheck).Pass(1)
     Set iter = candidates.%GetIterator()
     While iter.%GetNext(, .row) {
-        Set check = ##class(Shutter.Util.PatientCheck).Check(ns, item, row.headerId, receiver, exclude)
+        Set check = ##class(Shutter.Util.PatientCheck).Check(ns, item, row.headerId, receiver, exclude, members)
         If check.hold {
             Set row.reason = "held by the patient check: " _ check.why
             Do out.lists.refused.%Push(row)
         } Else {
+            If check.older '= "" Set row.reason = row.reason _ $SELECT(row.reason '= "": "; ", 1: "") _ ..#OLDER _ " (control id " _ check.older _ "); each files under its own order"
             Do out.lists.offered.%Push(row)
         }
     }
+    Do ##class(Shutter.Util.PatientCheck).Pass(0)
     Set out.set.digest = ..Digest(out.lists.offered)
     Quit out
 }
 
-/// Where one origin header goes: "queued", "reached", "refused", "candidate" or "" (Completed: none) (rules 1 and 3 to 6 passed). The row's
-/// reason, sibling and headerId (a never-opened clone of Shutter's stands in for the origin) are set here.
+/// The words an offered row's reason carries when a newer result of another order for the same patient reached the
+/// receiver first: the card counts them.
+Parameter OLDER = "older than a result of another order for the same patient that already reached the receiver";
+
+/// Where one origin header goes: "queued", "closed", "reached", "refused", "candidate" or "" (Completed: none) (rules 1 to 6 passed). The row's
+/// reason, sibling, closure and headerId (a never-opened clone of Shutter's stands in for the origin) are set here.
 ClassMethod Place(ns As %String, h As %DynamicObject, row As %DynamicObject) As %String
 {
     Set word = row.status
@@ -102,6 +112,9 @@ ClassMethod Place(ns As %String, h As %DynamicObject, row As %DynamicObject) As 
         Set row.reason = $SELECT(word '= "": word, 1: "no status") _ ": set aside, not a delivery that failed"
         Quit "refused"
     }
+    // Rule 2: a ledger row that closed it without a send of its own, read before its copies (its refused clone would read
+    // as Shutter's failed resend otherwise).
+    If ..Closed(ns, row.headerId, row) Quit "closed"
     // Rules 5 and 6: copies of it in its session.
     Set sib = ##class(Shutter.Util.EngineRead).Siblings(ns, row.headerId)
     If sib.answer '= "ok" {
@@ -114,6 +127,8 @@ ClassMethod Place(ns As %String, h As %DynamicObject, row As %DynamicObject) As 
         Set at = ..Clock(s.at)
         Set row.sibling = {"headerId": (s.headerId), "status": (s.status), "at": (s.at)}
         If ##class(Shutter.Store.ResendRecord).IsOwnClone(ns, s.headerId) {
+            // A never-opened clone of an earlier run, sent in the origin's place, closes the origin as its own row would.
+            If ..Closed(ns, s.headerId, row) Return "closed"
             If (s.status = "Error") && (..AttemptsOf(ns, s.headerId) = "never_opened") {
                 Set candidate = s.headerId, note = "Shutter tried at " _ at _ "; the connection never opened"
                 Continue
@@ -159,6 +174,17 @@ ClassMethod Place(ns As %String, h As %DynamicObject, row As %DynamicObject) As 
     Quit "candidate"
 }
 
+/// Whether a ledger row closed <var>headerId</var> without a send of its own (closed_as_present or handled_by_hand): the
+/// row's closure, closedBy, closedAt and reason are set from it.
+ClassMethod Closed(ns As %String, headerId As %String, row As %DynamicObject) As %Boolean
+{
+    Set c = ##class(Shutter.Store.ResendRecord).ClosedFor(ns, headerId)
+    Quit:'$ISOBJECT(c) 0
+    Set row.closure = c.closure, row.closedBy = c.by, row.closedAt = c.at
+    Set row.reason = ##class(Shutter.Util.Json).Str(c, "words")
+    Quit 1
+}
+
 /// The origin headers to the item created in the window, oldest first: not a copy (Resent 0 or empty, no "Resent "
 /// description), each {"id", "status", "timeCreated", "bodyId"}. why is set when the read failed.
 ClassMethod Origins(ns As %String, item As %String, from As %String, to As %String, Output why As %String) As %DynamicArray
@@ -180,10 +206,11 @@ ClassMethod Origins(ns As %String, item As %String, from As %String, to As %Stri
 }
 
 /// A Row: {"headerId", "controlId", "timeCreated", "status", "attempts", "reason", "patient": {"id", "authority"},
-/// "sibling"}.
+/// "sibling", "acts", "closure", "closedBy", "closedAt"}. acts is composed on read from the receiver's profile
+/// (Shutter.API.Outages), as the words are; closure and the two beside it are set for a row of the closed list.
 ClassMethod Row(ns As %String, h As %DynamicObject) As %DynamicObject
 {
-    Set row = {"headerId": (h.id), "controlId": "", "timeCreated": (h.timeCreated), "status": (##class(Shutter.Util.EngineRead).StatusWord(h.status)), "attempts": "", "reason": "", "patient": {"id": "", "authority": ""}, "sibling": null}
+    Set row = {"headerId": (h.id), "controlId": "", "timeCreated": (h.timeCreated), "status": (##class(Shutter.Util.EngineRead).StatusWord(h.status)), "attempts": "", "reason": "", "patient": {"id": "", "authority": ""}, "sibling": null, "acts": [], "closure": null, "closedBy": null, "closedAt": null}
     // The body copied here (Shutter.Util.MessageCopy): read in the watched namespace, judged in Shutter's.
     Set msg = ##class(Shutter.Util.MessageCopy).Of(ns, h.id)
     If $ISOBJECT(msg) {
@@ -243,7 +270,7 @@ ClassMethod Digest(offered As %DynamicArray) As %String
 
 ClassMethod Empty() As %DynamicObject
 {
-    Quit {"set": {"digest": "", "computedAt": (##class(Shutter.Util.Time).NowUTC()), "setPolicyVersion": (..#SETPOLICYVERSION), "status": "", "reason": ""}, "lists": {"queued": [], "offered": [], "reached": [], "refused": []}, "words": {"first": (..#NOTSENT), "critical": (..#NOTCURRENT)}}
+    Quit {"set": {"digest": "", "computedAt": (##class(Shutter.Util.Time).NowUTC()), "setPolicyVersion": (..#SETPOLICYVERSION), "status": "", "reason": ""}, "lists": {"queued": [], "offered": [], "reached": [], "refused": [], "closed": []}, "words": {"first": (..#NOTSENT), "critical": (..#NOTCURRENT)}}
 }
 
 ClassMethod NotComputed(reason As %String) As %DynamicObject
