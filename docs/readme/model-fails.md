@@ -2,7 +2,7 @@
 
 A model failure can stop a case or hand it to a person. It can't write. No agent holds a tool that changes anything: besides the evidence reads, an agent's only tools are the five `Submit*` answers ([src/Shutter/Tools](https://github.com/MxSalata/shutter/tree/main/src/Shutter/Tools)), and what they return is a proposal that the gate, the rehearsal and a person act on. A plan made by the board, the single investigator or the rules path is never released by the site's policy: only a catalogue match on the policy path, which calls no model, can be (`CaseWorkflow.PolicyPath`). So when the model fails, nothing is written unless a person approves it.
 
-This page is read from release 1.1.2's code (`rel/v1.1.2` at `ab0118e0`). What was run is under [Measured](#measured).
+This page is read from release 1.2.0's code (`rel/v1.2.0` at `ab0118e0`). What was run is under [Measured](#measured).
 
 ## The bounds
 
@@ -61,7 +61,7 @@ In Rules only mode no model is asked, so none of this applies.
 ## Measured
 
 - **Every specialist failing, on release 1.1.1** (commit `4e5ab015`), build `2027.1.0AI.109.0`, 8 November 2026: S2 live on OpenAI's `gpt-5.5`. Impact, conformance and encounter each ended `model_error` with no tokens used, since that model refuses the runner's `max_tokens`; the coordinator never ran, and the case escalated with no plan and no write in 23 s ([another-provider.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/another-provider.md)).
-- **No recording, on release 1.1.2** (`ab0118e0`), the replay edition, 8 November 2026: S1 with the single investigator. Its run ended `no_record`, the case took the rules path, and the gate blocked the resend (`SUPERSEDED_BY_LATER_EVENT`); nothing was written.
+- **No recording, on release 1.2.0** (`ab0118e0`), the replay edition, 8 November 2026: S1 with the single investigator. Its run ended `no_record`, the case took the rules path, and the gate blocked the resend (`SUPERSEDED_BY_LATER_EVENT`); nothing was written.
 - **The unit test** `Shutter.Test.BoardLead`, `TestNoBoardAnswerGoesToAPerson`: in Board, Site policy and single investigator modes, with every run `budget_exhausted`, `provider_auth` or `no_record`, a case the catalogue gives to the board goes to a person with no plan, naming the entry and why nobody answered.
 
 The other statuses are read in the code, not run: no provider fault was injected.

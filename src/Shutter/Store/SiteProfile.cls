@@ -486,11 +486,11 @@ ClassMethod ReceiverHoldMinutes(name As %String) As %Integer
     Quit $SELECT(h.%GetTypeOf("minutes") = "number": +h.%Get("minutes"), 1: 10)
 }
 
-/// What a profile's source gains when an upgrade to 1.1.2 wrote the stop a site had (Shutter.Setup.KeepStopOnUpgrade).
-Parameter KEPTSTOP = " (kept stop on upgrade to 1.1.2)";
+/// What a profile's source gains when an upgrade to 1.2.0 wrote the stop a site had (Shutter.Setup.KeepStopOnUpgrade).
+Parameter KEPTSTOP = " (kept stop on upgrade to 1.2.0)";
 
 /// Seed from knowledge/site/profile.json when the file exists and differs from what is stored. A seed's profile that kept
-/// its stop on the upgrade to 1.1.2 (the seed's path with KEPTSTOP) still follows the seed, with the stop kept.
+/// its stop on the upgrade to 1.2.0 (the seed's path with KEPTSTOP) still follows the seed, with the stop kept.
 ClassMethod SeedFromFile(path As %String) As %Status
 {
     If '##class(%File).Exists(path) Quit $$$OK

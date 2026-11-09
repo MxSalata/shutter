@@ -4,7 +4,7 @@
 Class Shutter.Setup Extends %RegisteredObject
 {
 
-Parameter VERSION = "1.1.2";
+Parameter VERSION = "1.2.0";
 
 /// Create a namespace with its own database and Interoperability enabled. Returns "ok" or the error.
 ClassMethod CreateNamespace(ns As %String = "SHUTTER") As %String [ SqlProc ]
@@ -118,7 +118,7 @@ ClassMethod InstallStatus(root As %String = "", demo As %Boolean = 1, production
         Do ##class(Shutter.Util.Budget).ConfigureShare($SYSTEM.Util.GetEnviron("SHUTTER_JUDGE_BUDGET_USD"))
         Do ##class(Shutter.Util.Budget).ConfigureDemoBudget($SYSTEM.Util.GetEnviron("SHUTTER_DEMO_BUDGET_USD"), $SYSTEM.Util.GetEnviron("SHUTTER_DEMO_BUDGET_PERIOD"))
         Set ^Shutter.Config("installedAt") = ##class(Shutter.Util.Time).NowUTC()
-        // Before the seed can replace a seed's profile and before the version moves on: a site upgraded to 1.1.2 keeps its stop.
+        // Before the seed can replace a seed's profile and before the version moves on: a site upgraded to 1.2.0 keeps its stop.
         Set sc = ..KeepStopOnUpgrade($GET(^Shutter.Config("version")), demo) Quit:$$$ISERR(sc)
         Set ^Shutter.Config("version") = ..#VERSION
         If $GET(^Shutter.Config("mode")) = "" Set ^Shutter.Config("mode") = "board"
@@ -1336,17 +1336,17 @@ ClassMethod DemoProfilePolicy(seedPath As %String, demo As %Integer = -1) As %St
     Quit ##class(Shutter.Store.SiteProfile).Store(p.%ToJSON(), $SELECT(isLive: liveDemo, 1: demoSource), "install", "", .version)
 }
 
-/// Existing sites keep stop (1.1.2): before 1.1.2 a profile that did not name further_messages.in_patient_movement read
-/// stop, and since then it reads show on a site. An install over a site installed before 1.1.2 (before, the version that
+/// Existing sites keep stop (1.2.0): before 1.2.0 a profile that did not name further_messages.in_patient_movement read
+/// stop, and since then it reads show on a site. An install over a site installed before 1.2.0 (before, the version that
 /// install recorded, or none recorded) whose stored profile does not name the setting stores it as stop, a new version
 /// with the profile's source and Shutter.Store.SiteProfile.#KEPTSTOP, so the running site behaves as it did. A new
 /// install (no stored profile) gets the shipped show, a profile that names the setting is left alone, and a demo install
 /// changes nothing here (DemoProfilePolicy keeps the demo's stop). Called by Install and InstallInto before the seed and
-/// before the version moves on, so a reinstall of 1.1.2 or later never runs it. Returns a status.
+/// before the version moves on, so a reinstall of 1.2.0 or later never runs it. Returns a status.
 ClassMethod KeepStopOnUpgrade(before As %String, demo As %Boolean = 0) As %Status
 {
     Quit:demo $$$OK
-    Quit:'..VersionBefore(before, "1.1.2") $$$OK
+    Quit:'..VersionBefore(before, "1.2.0") $$$OK
     Set row = ##class(Shutter.Store.SiteProfile).Row()
     Quit:('$ISOBJECT(row) || (row.Json = "")) $$$OK
     Set p = ##class(Shutter.Util.Json).Parse(row.Json, .sc)
@@ -1357,7 +1357,7 @@ ClassMethod KeepStopOnUpgrade(before As %String, demo As %Boolean = 0) As %Statu
     Set fm."in_patient_movement" = "stop"
     Set source = $EXTRACT(row.Source _ ##class(Shutter.Store.SiteProfile).#KEPTSTOP, 1, 500)
     Set sc = ##class(Shutter.Store.SiteProfile).Store(p.%ToJSON(), source, "install", row.Version, .version)
-    If $$$ISERR(sc) Quit $$$ERROR($$$GeneralError, "Could not keep the site profile's stop for another visit's in-patient movement on the upgrade to 1.1.2: " _ $SYSTEM.Status.GetErrorText(sc))
+    If $$$ISERR(sc) Quit $$$ERROR($$$GeneralError, "Could not keep the site profile's stop for another visit's in-patient movement on the upgrade to 1.2.0: " _ $SYSTEM.Status.GetErrorText(sc))
     Quit $$$OK
 }
 

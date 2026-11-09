@@ -400,7 +400,7 @@ caller's process passes; the operator and the approver read the watched hospital
 | Resource | Routes |
 | --- | --- |
 | none | `POST` and `DELETE /session`; `GET /health` (its summary; the full report needs `Shutter_Operate`) |
-| signed in | `GET /me`, which answers `{username, operator, approver, can: {operate, approve, configure, scenarios, liveAgents}}` from the resources the user holds (`can` since v1.34: the app shows only what the user may do; `liveAgents` is `Shutter_LiveAgents`, below); `GET /access` (v1.1.2), what each role Shutter installs may do beside what the caller may, for the Settings page's Your access table: `{demo, portalHardened, read, recordedAt?, roles: [{role, installed}], rows: [{id, needs, available, roles, you}]}`, read only, naming roles and resources and never a user (`Shutter.API.Access`; the roles' columns from Security.Roles for a caller with `%Admin_Secure`, `read` `now`, otherwise from the record the install, the portal's hardening and each start write, `recorded` with `recordedAt`, or `none` before any) |
+| signed in | `GET /me`, which answers `{username, operator, approver, can: {operate, approve, configure, scenarios, liveAgents}}` from the resources the user holds (`can` since v1.34: the app shows only what the user may do; `liveAgents` is `Shutter_LiveAgents`, below); `GET /access` (v1.2.0), what each role Shutter installs may do beside what the caller may, for the Settings page's Your access table: `{demo, portalHardened, read, recordedAt?, roles: [{role, installed}], rows: [{id, needs, available, roles, you}]}`, read only, naming roles and resources and never a user (`Shutter.API.Access`; the roles' columns from Security.Roles for a caller with `%Admin_Secure`, `read` `now`, otherwise from the record the install, the portal's hardening and each start write, `recorded` with `recordedAt`, or `none` before any) |
 | `Shutter_Operate` | every other `GET`; `POST /cases/{id}/preview-blind-resend`, `/reinvestigate` (v1.39: the reopened case's agent runs count against the requester's share, and without `Shutter_LiveAgents`, or while the provider refuses the key, they answer from recordings only, `ModeOverride` `replay` as a question's do in 14, and a board with no recording leaves the case escalated for a person, with the reason, and plans nothing; the 202 `{caseId, state: "reopening", requestedBy, liveAgents}` says which) and `/close` (unless the site keeps the two-person rule, below); `POST /cases/{id}/escalations`, `PATCH /cases/{id}/escalations/{seq}` and `POST /cases/{id}/escalations/{seq}/send`; `GET /production-reviews`, `GET /production-reviews/targets` and `GET /production-reviews/{id}`; `POST /production-reviews` (section 13: the review reads only; its agent part takes `Shutter_LiveAgents`, below, and is skipped without it); `GET /cases/{id}/whatif`, `GET /cases/{id}/questions`, `GET /cases/{id}/questions/suggested`, `GET /cases/{id}/questions/{qid}` and `POST /cases/{id}/questions` (section 14: a question reads only, and a live run spends model credit); `GET /settings/schemas` (section 12) |
 | `Shutter_Approve` | `POST /cases/{id}/approvals`; `POST /incidents/{id}/approvals` and `/incidents/{id}/chains/{seq}/approvals`; `POST /cases/{id}/close` where the site profile's `approvers.close_needs_approver` is true; `POST /cases/{id}/abandon` (always an approver's) |
 | `Shutter_Scenarios` | `POST /scenarios/{id}/run` and `/scenarios/reset`, and `Shutter.Setup_PurgeStore` (v1.34: the demo controls; the operator and approver roles hold it, the public demo's role does not; on an instance that is not a demo, `^Shutter.Config("demo")` 0, the two routes answer 403 `not_a_demo_instance` and change nothing, as the purge already refused) |
@@ -1096,11 +1096,11 @@ the framework). The Dockerfile runs it, and a site with Java runs it once by han
 - Any error in the incident's workflow during a release, other than one raising an approval task (7.3), abandons the
   whole incident (`IncidentWorkflow.OnResponse`, `OnError`): a released case it can't find again ("Released case ... not
   found"), or a failure moving on to the next item, stops its open chains, fails its cases still `detected`,
-  `collecting`, `investigating` or `grouped` with the reason, and closes it. As built in 1.1.2 (v1.48).
+  `collecting`, `investigating` or `grouped` with the reason, and closes it. As built in 1.2.0 (v1.48).
 - A receiver that goes down again during a release stops each remaining chain in turn: the released item's preflight
   read, tried `MaxRefreshes` + 1 times (4 by default), or its write finds the receiver down, the case stops for a person,
   the chain's later items are escalated ("Not released: ..."), and the next chain is released and stops the same way. No
-  write is retried blindly, so nothing is written twice. As built in 1.1.2 (v1.48).
+  write is retried blindly, so nothing is written twice. As built in 1.2.0 (v1.48).
 
 ### 7.5 The API
 
@@ -1284,7 +1284,7 @@ refused `budget_exhausted` with "Your share of the day's model budget ... is spe
 is spent (`until` = `budget.resetsAt`), `provider_auth` when a live run failed with an authentication error (a 401, a bad or
 deactivated key) within the last 15 minutes (`until` = the next 00:00 UTC, when a key a site deactivates for the day comes
 back; the flag clears on the next live run the provider accepts, and after 15 minutes one run tries again), and null when
-live runs can go; `detail` is the sentence to show. As built in 1.1.2 (v1.48), the flag is set only by a run whose status is `error` with an authentication
+live runs can go; `detail` is the sentence to show. As built in 1.2.0 (v1.48), the flag is set only by a run whose status is `error` with an authentication
 error's words (`LiveAgents.NoteRun`), and the live runner reports a provider's own error as `model_error` (`AIHub.cls`, its
 `Catch`), so a key the provider refuses doesn't set it yet: each run still calls the provider and ends `model_error`. While the provider refuses the key the Agent item refuses runs that would
 call a model with the status `provider_auth` and makes no call (a board whose members were all refused so has no board
@@ -2239,11 +2239,12 @@ with the other stores.
 - 8 Nov 2026 (the Technical detail on the cases): `GET /cases` items and `GET /cases/{id}` carry `messageType`,
   `production`, `sourceItem`, `receiverClass`, `failedAt`, `planVersion`, `planDigest` and `catalogueEntry`, and the list's
   items `links`, read only and never a patient field (5).
-- 8 Nov 2026, release 1.1.2 (v1.48): two release behaviours stated as built (7.4): any error in an incident's workflow
+- 8 Nov 2026, release 1.2.0 (v1.48): a receiver declared with no API (a draft entry) keeps the code `RECEIVER_UNREADABLE`; the gate's detail, the blocked reason's text and next action, the escalation email and the case page say it was declared with no API and name it by its item and namespace.
+- 8 Nov 2026, release 1.2.0 (v1.48): two release behaviours stated as built (7.4): any error in an incident's workflow
   during a release, other than raising an approval task, abandons the incident; a receiver that goes down again during a
   release stops each remaining chain in turn at its next item, with nothing written twice; and `provider_auth` (12) stated
   as built: only a run with status `error` sets it, so a key the provider refuses, which ends `model_error`, doesn't set it yet.
-- 8 Nov 2026, release 1.1.2 (v1.47): the receipt check compares beds only when the receipt and the operation both state
+- 8 Nov 2026, release 1.2.0 (v1.47): the receipt check compares beds only when the receipt and the operation both state
   one: a bed that is JSON null, missing or empty is not stated, so a receipt whose bed is null no longer reads as a
   different bed (`RECEIPT_PAYLOAD_DIFFERS`), and a stated different bed still does. A replayed run writes one trace line per
   recorded tool call (the tool; ok, denied or failed; the milliseconds; the word replay; no argument, result or error text),

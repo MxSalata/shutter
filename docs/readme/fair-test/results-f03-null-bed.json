@@ -1,5 +1,5 @@
 {
- "about": "Release 1.1.2's receipt check (src/Shutter/Operation/Verify.cls, BedStated: a bed that is null, missing or empty says nothing about the bed) loaded over the 1.1.1 build of results-v111.json, on the same instance. F03 played three times on the board, then F01 and F12 once each as a check. Graded by tests/fair_test/grade.py, unchanged. Run records only: no logs, traces or exports.",
+ "about": "Release 1.2.0's receipt check (src/Shutter/Operation/Verify.cls, BedStated: a bed that is null, missing or empty says nothing about the bed) loaded over the 1.1.1 build of results-v111.json, on the same instance. F03 played three times on the board, then F01 and F12 once each as a check. Graded by tests/fair_test/grade.py, unchanged. Run records only: no logs, traces or exports.",
  "played_on": "the AI Hub 109 instance of results-v111.json (IRIS for Health Community 2027.1.0AI.109.0 with AI Hub), 8 November 2026: Verify.cls compiled and Shutter.Production restarted at 14:38 UTC, F03 from 14:39 to 14:41 UTC, the check from 14:41 to 14:43 UTC. The sealed manifest checked OK.",
  "method": "tests/fair_test/play.py and grade.py from release 1.1.0, seed 20261106, --day 2026-11-05, 600 s timeout, approval by the rig, every board member on claude-opus-5-5; no run was unscorable, retried or stopped early.",
  "f03": {

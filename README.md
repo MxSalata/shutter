@@ -34,7 +34,7 @@ The judges' account (the organisers pass on its sign-in) runs the board live wit
 | --- | --- | --- |
 | 11 one-failure scenarios (S1 to S10, S13) | Board: 11 of 11 as expected, live on build 154 and in replay. Rules only: 4 right, 6 wrong resends stopped, S8 overwrites WARD-C | [comparison](https://github.com/MxSalata/shutter/blob/main/docs/readme/comparison.md#what-it-shows) |
 | 12 sealed cases on release 1.0.0's code; loss per case 0 (right) to 20 (wrong write) | Board and single investigator (one agent): 0.167. Site policy and Rules only (no agents) wrote a cancelled transfer | [fair test](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md) |
-| The same on release 1.1.1's code | Same proposals, 36 of 36; the gate held two right plans (loss 0.667; 0.500 with F03 settled): F03, a null bed read as another bed (1.1.2's receipt check: 3 of 3 right), and F07, another visit's discharge (shown by 1.1.2's default; not yet played). Sonnet 5.5 specialists: graded as the all-Opus board, 0.331 USD a run against 0.527 | [release 1.1.x](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#release-11x) |
+| The same on release 1.1.1's code | Same proposals, 36 of 36; the gate held two right plans (loss 0.667; 0.500 with F03 settled): F03, a null bed read as another bed (1.2.0's receipt check: 3 of 3 right), and F07, another visit's discharge (shown by 1.2.0's default; not yet played). Sonnet 5.5 specialists: graded as the all-Opus board, 0.331 USD a run against 0.527 | [release 1.1.x](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#release-11x) |
 | Safety | No wrong write, proposed or made, in rows 2 and 3's 144 agent-mode case runs; an approval sent twice writes once (34 of 34 boundary checks, CI on 1.1.1) | [fair test](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md), [boundary](https://github.com/MxSalata/shutter/blob/main/docs/readme/first-steps.md#the-approval-boundary-attacked-over-http) |
 
 **How Shutter answers the contest task:**
@@ -270,7 +270,7 @@ zpm "install iris-shutter"
 
 For example: `docker run -d --name shutter-ipm -p 52773:52773 irishealth-community:2026.3.0AI.154.0`, `docker cp ./shutter shutter-ipm:/home/irisowner/shutter` (that path is `<module>`), then `docker exec -it shutter-ipm iris session IRIS`. For a hospital's own instance, make the last line `zpm "install iris-shutter -Ddemo=0"`. The last line installs the registry's latest version (`zpm "list"`); for exactly your clone, use `zpm "load <module>"` instead of the last two lines.
 
-**Uninstall and upgrade** (1.1.2 and later): `zpm "uninstall iris-shutter"` takes off everything the install and the onboarding added, cases included, and stops no production of the site's; `SELECT Shutter_Util.Uninstall_Plan()` lists it first. A `zpm "load <folder>"` of a newer tree keeps the production, cases and site profile; then restart `Shutter.Production` ([the install guide, section 8](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md#8-upgrading-in-place)).
+**Uninstall and upgrade** (1.2.0 and later): `zpm "uninstall iris-shutter"` takes off everything the install and the onboarding added, cases included, and stops no production of the site's; `SELECT Shutter_Util.Uninstall_Plan()` lists it first. A `zpm "load <folder>"` of a newer tree keeps the production, cases and site profile; then restart `Shutter.Production` ([the install guide, section 8](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md#8-upgrading-in-place)).
 
 ## About the contest
 

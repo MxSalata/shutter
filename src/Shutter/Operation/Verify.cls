@@ -334,7 +334,7 @@ ClassMethod ReceiptDiffers(receipt As %DynamicObject, op As %DynamicObject) As %
         Set heldWard = $CLASSMETHOD(json, "Str", receipt, "ward"), ourWard = $CLASSMETHOD(json, "Str", op, "ward")
         Set words = $SELECT(heldWard '= ourWard: "ward " _ ..Named(heldWard) _ " against this message's " _ ..Named(ourWard), 1: "its payload digest differs")
     }
-    // A bed that is missing, null or empty on either side says nothing about the bed (v1.1.2: a receipt with "bed": null
+    // A bed that is missing, null or empty on either side says nothing about the bed (v1.2.0: a receipt with "bed": null
     // read as "" and blocked the right reconcile as a different bed).
     If ..BedStated(receipt) && ..BedStated(op) {
         Set held = $CLASSMETHOD(json, "Str", receipt, "bed"), ours = $CLASSMETHOD(json, "Str", op, "bed")

@@ -91,9 +91,9 @@ Method TestLivePolicy()
     Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).Row().Source, "api", "and the source is theirs")
 }
 
-/// Existing sites keep stop (1.1.2, Shutter.Setup.KeepStopOnUpgrade): an install over a site from before 1.1.2 whose stored
+/// Existing sites keep stop (1.2.0, Shutter.Setup.KeepStopOnUpgrade): an install over a site from before 1.2.0 whose stored
 /// profile does not name further_messages.in_patient_movement stores stop, with the source saying why; the seed then keeps
-/// it; a profile that names the setting, a new install, a reinstall of 1.1.2 and a demo install are left as they were.
+/// it; a profile that names the setting, a new install, a reinstall of 1.2.0 and a demo install are left as they were.
 Method TestKeepStopOnUpgrade()
 {
     Set sp = "Shutter.Store.SiteProfile", setup = "Shutter.Setup"
@@ -104,17 +104,17 @@ Method TestKeepStopOnUpgrade()
     Set dir = ##class(%File).NormalizeDirectory(##class(%SYS.System).TempDirectory() _ "shutter-keep-stop")
     Do ##class(%File).CreateDirectoryChain(dir)
     Set seed = dir _ "profile.json"
-    // The 1.1.2 seed: the shipped profile, which says show.
+    // The 1.2.0 seed: the shipped profile, which says show.
     Set file = ##class(%Stream.FileCharacter).%New()
     Do file.LinkToFile(seed)
     Do file.Write(##class(Shutter.Store.SiteProfile).Default().%ToJSON())
-    Do $$$AssertStatusOK(file.%Save(), "the 1.1.2 seed written")
+    Do $$$AssertStatusOK(file.%Save(), "the 1.2.0 seed written")
     Kill file
     // A 1.1.1 site: the seed's profile of then, which did not name the setting and so read stop.
     Set old = ##class(Shutter.Store.SiteProfile).Default()
     Do old.%Remove("further_messages")
     Do $$$AssertStatusOK($CLASSMETHOD(sp, "Store", old.%ToJSON(), seed, "test", "", .v), "a 1.1.1 seed's profile without the setting")
-    Do $$$AssertEquals($CLASSMETHOD(sp, "FurtherMovement"), "show", "read by 1.1.2 before the install step it would show")
+    Do $$$AssertEquals($CLASSMETHOD(sp, "FurtherMovement"), "show", "read by 1.2.0 before the install step it would show")
     Set before = $CLASSMETHOD(sp, "Row").Version
     Do $$$AssertStatusOK($CLASSMETHOD(setup, "KeepStopOnUpgrade", "1.1.1", 0), "the install step over 1.1.1")
     Set row = $CLASSMETHOD(sp, "Row")
@@ -126,20 +126,20 @@ Method TestKeepStopOnUpgrade()
     Do $$$AssertStatusOK($CLASSMETHOD(setup, "KeepStopOnUpgrade", "1.1.1", 0), "again")
     Do $$$AssertEquals($CLASSMETHOD(sp, "Row").Version, row.Version, "the setting is named now, so nothing moves")
     // The seed that follows on the same install still follows its file, and keeps the stop.
-    Do $$$AssertStatusOK($CLASSMETHOD(sp, "SeedFromFile", seed), "the 1.1.2 seed over the kept profile")
+    Do $$$AssertStatusOK($CLASSMETHOD(sp, "SeedFromFile", seed), "the 1.2.0 seed over the kept profile")
     Set row = $CLASSMETHOD(sp, "Row")
     Do $$$AssertEquals($CLASSMETHOD(sp, "FurtherMovement"), "stop", "the seed keeps the stop")
     Do $$$AssertEquals(row.Source, seed _ kept, "and the source")
     Do $$$AssertEquals($CLASSMETHOD(sp, "Current").%Get("further_messages").%Get("admission_not_found"), "person", "and takes the rest of the seed")
-    // A profile a person saved before 1.1.2 without the setting keeps its stop too.
+    // A profile a person saved before 1.2.0 without the setting keeps its stop too.
     Do $$$AssertStatusOK($CLASSMETHOD(sp, "Store", old.%ToJSON(), "api", "approver", "", .v), "a person's 1.1.1 profile without the setting")
     Do $$$AssertStatusOK($CLASSMETHOD(setup, "KeepStopOnUpgrade", "", 0), "the install step over an install that recorded no version")
     Do $$$AssertEquals($CLASSMETHOD(sp, "FurtherMovement"), "stop", "the person's site keeps its stop")
     Do $$$AssertEquals($CLASSMETHOD(sp, "Row").Source, "api" _ kept, "with their source and why")
-    // A reinstall of 1.1.2: nothing to keep.
-    Do $$$AssertStatusOK($CLASSMETHOD(sp, "Store", old.%ToJSON(), "api", "approver", "", .v), "a profile without the setting saved on 1.1.2")
+    // A reinstall of 1.2.0: nothing to keep.
+    Do $$$AssertStatusOK($CLASSMETHOD(sp, "Store", old.%ToJSON(), "api", "approver", "", .v), "a profile without the setting saved on 1.2.0")
     Set before = $CLASSMETHOD(sp, "Row").Version
-    Do $$$AssertStatusOK($CLASSMETHOD(setup, "KeepStopOnUpgrade", "1.1.2", 0), "a reinstall of 1.1.2")
+    Do $$$AssertStatusOK($CLASSMETHOD(setup, "KeepStopOnUpgrade", "1.2.0", 0), "a reinstall of 1.2.0")
     Do $$$AssertEquals($CLASSMETHOD(sp, "Row").Version, before, "left alone")
     Do $$$AssertEquals($CLASSMETHOD(sp, "FurtherMovement"), "show", "and it reads the shipped show")
     // A stored profile that says show keeps show.

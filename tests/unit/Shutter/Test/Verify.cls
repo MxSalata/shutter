@@ -446,7 +446,7 @@ XData Rows [ MimeType = application/json ]
 ]
 }
 
-/// A receipt's bed against the operation's (v1.1.2): a null, missing or empty bed on either side says nothing about the
+/// A receipt's bed against the operation's (v1.2.0): a null, missing or empty bed on either side says nothing about the
 /// bed, so neither counts as a different bed; a bed that is stated and different does, with both named.
 Method TestReceiptBedNullReadsAsNotStated()
 {

@@ -1,6 +1,6 @@
 # A storm of 40, 200 and 1,000 failures
 
-CI plays S11, eight failures to one receiver. This page records what one incident does with many more, measured once, after the v1.0.0 release, with no model call. The tables record a defect and its fix, released in 1.1.2, not a benchmark.
+CI plays S11, eight failures to one receiver. This page records what one incident does with many more, measured once, after the v1.0.0 release, with no model call. The tables record a defect and its fix, released in 1.2.0, not a benchmark.
 
 **When and what:** 6 November 2026, 23:08 to 23:36 UTC, the code of v1.0.0 (`8afd1ab`), on the public image `irishealth-community:2026.2` (the core, no AI Hub), one fresh container per size on a Linux VM with 22 GB of memory, the demo receiver in the same instance on loopback. The site's default mode for a watched production, `policy`, so no agent ran (0 runs before and after at every size). Each size posted failures of one shape to `POST /api/shutter/intake` one at a time, each `delivery_failed` to `Downstream Out`: per patient an admission and a transfer, fresh identifiers, so a chain of two under tier 2's `approval` policy. The run was judged from outside the code under test: the receiver's own receipt and encounter tables, the REST API as a signed-in user, the Event Log and `docker`. The harness was a test on the intake route.
 
@@ -25,7 +25,7 @@ CI plays S11, eight failures to one receiver. This page records what one inciden
 
 ## After the fix
 
-**When and what:** 7 November 2026, the code of the fix that release 1.1.2 carries, the same image, harness and shape of storm, one fresh container per size, on a Linux VM with 19 GB of memory, the demo receiver in the same instance on loopback. The harness is `tests/e2e/storm_scale_check.py`, and `tests/e2e/incident_task_check.py` for the task. The 10-failure control also ran on the AI Hub build 109.
+**When and what:** 7 November 2026, the code of the fix that release 1.2.0 carries, the same image, harness and shape of storm, one fresh container per size, on a Linux VM with 19 GB of memory, the demo receiver in the same instance on loopback. The harness is `tests/e2e/storm_scale_check.py`, and `tests/e2e/incident_task_check.py` for the task. The 10-failure control also ran on the AI Hub build 109.
 
 | | 10 (control) | 40 | 200 | 1,000 |
 | --- | --- | --- | --- | --- |

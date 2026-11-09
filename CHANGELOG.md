@@ -17,9 +17,9 @@ GitHub tag on the same commit; `scripts/check-versions.py` checks every place th
   the panel shows the page's written guide; the trial answers a few suggested questions per page with sample answers,
   labelled so. CONTRACTS 14.6.
 
-## 1.1.2 (8 November 2026)
+## 1.2.0 (8 November 2026)
 
-What 1.1.2 holds: the fix for the null bed that held a settled case for a person, an incident of any size under one
+What 1.2.0 holds: the fix for the null bed that held a settled case for a person, an incident of any size under one
 approval, a supported uninstall and upgrade, a further-movement default that shows another visit on the plan instead of
 stopping the resend, one trace line per tool call in a replay, and pages on running the board on another provider, on
 AI Hub features measured with no model call and on the publisher from an MCP client. The README is restructured.
@@ -92,14 +92,25 @@ AI Hub features measured with no model call and on the publisher from an MCP cli
   and an end-to-end check plays two patients no fixture holds in Board mode with no key: nothing is written.
 - **The MCP page.** The forwarder's `tool_not_found` is credited to the MCP Inspector's own tool-list check, with the
   sidecar's `isError` answer to a `tools/call` sent anyway.
-- **Docs truth for 1.1.2.** The README's first screen gives the trial first, then the online demo, then
+- **Docs truth for 1.2.0.** The README's first screen gives the trial first, then the online demo, then
   `./install.sh --replay`, and a Measured box with each figure's release; `docs/readme/model-fails.md` maps each agent
-  run status to what the case does, with the real bounds; the safety and limits pages say what 1.1.2 does as shipped;
+  run status to what the case does, with the real bounds; the safety and limits pages say what 1.2.0 does as shipped;
   the F03 null-bed runs are published with the fair test; contracts v1.48. `docs/INSTALL.md` shows `InstallInto` with a
   site's own production name.
 - **The health page.** Each group lists its checks first and its facts apart under **Details**.
 - **The API page.** `docs/api/openapi.json` describes every route (an OpenAPI 3.1 file that CI checks against the
   dispatcher), and the Technical view gains an API page listing each route with its parameters, its role and an example.
+- **Ask Shutter.** A panel on the right with the context of the page on screen: on a case it asks the case's read-only
+  questions, elsewhere the page's own questions (`POST /page-questions`), and **About this case** opens it.
+- **The live hospital banner.** A two-part bar with a timeline from the last failure to the next; it closes for the
+  session, a **Live hospital** button reopens it, and an open incident brings it back with a link to the incident.
+- **Clearer screens.** The case page puts the key facts first with a smaller case id and click-to-define terms; the
+  Technical view shows the HL7 message type, the receiver, the source system and message id, and the HTTP status and
+  reason code; each disposition has its own colour and icon; the production review's summary is one compact bar;
+  Settings compares what your account can do with the demo viewer, the operator and the approver; the scenario
+  diagrams name their expected end and stay readable on a phone; and keyboard focus stays where you expect it.
+- **A receiver declared with no API** is named by its item and namespace in the email, the case page and the history,
+  and its stop says it was declared with no API and that a person fills in its entry in the site profile.
 - **Fixes found in review before the release.**
   - The decision lock is given back when cancelling an approval task fails, and a refused second decision names the
     decision that stands.

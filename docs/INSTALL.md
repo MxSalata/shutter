@@ -66,7 +66,7 @@ the case page (`POST /api/shutter/cases/{id}/escalations` through the API); unti
   rest itself: the `RECORDS` and `HOSPITAL` namespaces, the records system's web application and the hospital's production.
   It doesn't build the Second Parser's jar (below), so that item stays disabled and S25 is decided without its second
   opinion. `scripts/stock-install-check.sh` runs this path; CI runs it on 2026.2 with the core.
-- **`zpm "uninstall iris-shutter"` takes off everything the install and the onboarding added** (from 1.1.2), in every namespace, and
+- **`zpm "uninstall iris-shutter"` takes off everything the install and the onboarding added** (from 1.2.0), in every namespace, and
   stops no production of the site's: a site production Shutter went into is updated in place, keeps running, and its own
   alert item gets its name back. Every case, approval, incident and setting goes with it, so export what you must keep
   first. `SELECT Shutter_Util.Uninstall_Plan()` says what would go and changes nothing. It gives each watched namespace
@@ -158,7 +158,7 @@ disabled (the six named in section 1), so it has no feed of its own until the in
 one. **Load only in the namespace made for Shutter.** A load in a namespace running another production is refused and says
 so, since starting `Shutter.Production` there would stop it; name that production (`-Dproduction=...`) for shape B.
 
-**From the registry.** The IPM in `vendor/ipm` starts with no registry, so `zpm "install iris-shutter"` answers "No repositories are configured and enabled in this namespace" until you run `zpm "repo -reset-defaults"`. `zpm "install iris-shutter"` installs the latest version published on the registry, which can be behind this repository: on 8 Nov 2026 the registry served 1.1.1, which has no uninstall and no `Uninstall_Plan` (both are 1.1.2's). `zpm "list"` shows the version installed; for the exact version of a clone, use `zpm "load <module>"` instead. `zpm "load"` from a clone doesn't need the registry. This demo install, from a clone of this repository, took about 2.5 minutes on clean 154 and 109 containers on 7 Nov 2026, and started `Shutter.Production` and `Hospital.Production`:
+**From the registry.** The IPM in `vendor/ipm` starts with no registry, so `zpm "install iris-shutter"` answers "No repositories are configured and enabled in this namespace" until you run `zpm "repo -reset-defaults"`. `zpm "install iris-shutter"` installs the latest version published on the registry, which can be behind this repository: on 8 Nov 2026 the registry served 1.1.1, which has no uninstall and no `Uninstall_Plan` (both are 1.2.0's). `zpm "list"` shows the version installed; for the exact version of a clone, use `zpm "load <module>"` instead. `zpm "load"` from a clone doesn't need the registry. This demo install, from a clone of this repository, took about 2.5 minutes on clean 154 and 109 containers on 7 Nov 2026, and started `Shutter.Production` and `Hospital.Production`:
 
 ```
 Do $SYSTEM.OBJ.Load("<module>/src/Shutter/Setup.cls", "ck")
@@ -421,12 +421,12 @@ production, its cases and the saved site profile, and never runs the uninstall. 
 (stop and start it in the Production Configuration page): the load does not restart a running production, so its
 long-lived jobs keep the earlier code until then.
 
-**Upgrading to 1.1.2.** Run the install once, or load the newer tree, and restart the production as above. Then:
+**Upgrading to 1.2.0.** Run the install once, or load the newer tree, and restart the production as above. Then:
 
 - **An upgrade keeps the further-movement stop.** On a new install another visit's in-patient movement shows on the
   plan instead of stopping the resend (section 10). On a site install over 1.1.1 or earlier, a stored profile that
   doesn't name `further_messages.in_patient_movement` gets `stop` written into it, as a new version with
-  "(kept stop on upgrade to 1.1.2)" in its source, so the site behaves as before; a profile that names the setting is
+  "(kept stop on upgrade to 1.2.0)" in its source, so the site behaves as before; a profile that names the setting is
   left as it is. To take the new default, a person saves `"further_messages": {"in_patient_movement": "show"}`. Even then a
   write that shows such a movement waits for a person at a tier the site releases by policy, and an incident's chain that
   shows one leaves the shared approval for its own case. A demo install keeps the stop.
