@@ -94,6 +94,40 @@ ClassMethod Added(c As Shutter.Store.Case) As %DynamicObject
     Quit o
 }
 
+/// What the cases list adds for one case: its own row of the list's query, then Technical with that row.
+ClassMethod ListAdded(c As Shutter.Store.Case) As %DynamicObject
+{
+    Set o = {}, args = 1, args(1) = c.CaseId
+    Set rs = ##class(Shutter.API.Dispatch).CaseRows(1, " AND c.CaseId = ?", .args)
+    If rs.%Next() Do ##class(Shutter.API.Dispatch).Technical(c, o, .seen, ##class(Shutter.API.Dispatch).RowOf(rs))
+    Quit o
+}
+
+/// The list reads in its own query what the case page reads one by one, to the same facts: for the feed's own receiver,
+/// another receiver of the same session and a receiver with no intake, each with and without a plan, and for a case
+/// whose source header is gone.
+Method TestTheListReadsTheSame()
+{
+    Set session = 999990000 + $RANDOM(9000)
+    Set src = ..Source(session, "ADT In")
+    Do ..Intake(session, "Records Out", "2026-11-08 19:00:01.250")
+    Do ..Intake(session, "Downstream Out", "2026-11-08 19:00:02.500")
+    For receiver = "Downstream Out", "Records Out", "Nobody Out" {
+        For withPlan = 1, 0 {
+            Set c = ..Case(session, receiver, src, withPlan)
+            Set page = ..Added(c), list = ..ListAdded(c)
+            Do $$$AssertEquals(list.%ToJSON(), page.%ToJSON(), receiver _ $SELECT(withPlan: " with", 1: " without") _ " a plan: the list's row says what the case page says")
+        }
+    }
+    Do $$$AssertEquals(..ListAdded(c).failedAt, "", "a receiver with no intake has no time")
+    Set c = ..Case(session, "Downstream Out", src, 1)
+    Do $$$AssertEquals(..ListAdded(c).failedAt, "2026-11-08T19:00:02.500Z", "the list finds the intake for the case's own receiver")
+    Do $$$AssertEquals(..ListAdded(c).messageType, "ADT^A02", "and MSH-9 from the source message")
+    Do ##class(%SQL.Statement).%ExecDirect(, "UPDATE Shutter_Store.""Case"" SET SourceHeaderId = ? WHERE ID = ?", 999999999, c.%Id())
+    Do c.%Reload()
+    Do $$$AssertEquals(..ListAdded(c).%ToJSON(), ..Added(c).%ToJSON(), "a source header that is gone: the same, with no type and no item")
+}
+
 Method TestTheFeedsOwnCase()
 {
     Set session = 999990000 + $RANDOM(9000)
