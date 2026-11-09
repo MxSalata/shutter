@@ -304,6 +304,8 @@ test.describe(`the live budget on the public demo, against a v1.37 server ${area
   test("says it in the board's dialog, where Convene cannot be pressed, and for a refused press", async ({
     page,
   }) => {
+    // Audited with no motion, as a11y.spec.ts does: axe reads colours mid-transition otherwise
+    await page.emulateMedia({ reducedMotion: 'reduce' });
     await stubServer(
       page,
       settings(
