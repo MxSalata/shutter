@@ -1761,7 +1761,10 @@ Method OnAbandon(request As Shutter.Msg.CaseAbandon, Output response As %Library
 /// case. The engine records the actor as the person who closed it when the Workflow role lets it; the actor "system" (the
 /// approval wait ran out) is nobody's name, so no task is assigned to it, and the event says system. The task's comment
 /// and the case's approval event say why ("Cancelled: <why>"). Nothing here fails the caller: a refusal is logged and
-/// noted on the case. A task decided meanwhile, or one a decision holds, is left as it is, with decided set.
+/// noted on the case. Only a task decided meanwhile is left as it is, with decided set. A lock another decision keeps
+/// past the wait (busy) is tried once more after a moment; still busy, or a read the engine refused, the task is
+/// cancelled without the lock unless it is complete by then, and the refusal is noted on the case, so an approval wait
+/// still escalates and a closed case leaves no task open.
 Method CancelOpenTask(case As Shutter.Store.Case, actor As %String, why As %String, Output decided As %Boolean) As %Status
 {
     Set decided = 0
@@ -1771,7 +1774,15 @@ Method CancelOpenTask(case As Shutter.Store.Case, actor As %String, why As %Stri
     Set taskId = task.%Id()
     // A decision taken meanwhile stands: the task is cancelled only while it is still open, under the decision lock.
     Set refused = ##class(Shutter.Util.Workflow).Claim(task)
-    If refused '= "" { Set decided = 1 $$$TRACE("Approval task " _ taskId _ " was not cancelled: " _ refused) Quit $$$OK }
+    If ..ClaimCode(refused) = "busy" { Hang 0.5 Set refused = ##class(Shutter.Util.Workflow).Claim(task) }
+    Set code = ..ClaimCode(refused), held = (refused = "")
+    If code = "decided" { Set decided = 1 $$$TRACE("Approval task " _ taskId _ " was not cancelled: " _ refused) Quit $$$OK }
+    If 'held {
+        Do task.%Reload()
+        If $ISOBJECT(task.%TaskStatus) && task.%TaskStatus.IsComplete { Set decided = 1 $$$TRACE("Approval task " _ taskId _ " was decided while its lock was refused: " _ refused) Quit $$$OK }
+        $$$LOGWARNING("The approval task " _ taskId _ " of case " _ case.CaseId _ " is cancelled without its decision lock: " _ refused)
+        Do case.Note("error", "The approval task " _ taskId _ " is cancelled without its decision lock (" _ code _ "): " _ $EXTRACT(refused, 1, 400), "system", "task:" _ taskId)
+    }
     // The lock is given back whatever happens, or this long-lived job would hold it and every later decision be busy.
     Try {
     If (actor '= "") && (actor '= "system") {
@@ -1793,8 +1804,18 @@ Method CancelOpenTask(case As Shutter.Store.Case, actor As %String, why As %Stri
     } Catch ex {
         $$$LOGWARNING("The approval task " _ taskId _ " of case " _ case.CaseId _ " could not be cancelled: " _ ex.DisplayString())
     }
-    Do ##class(Shutter.Util.Workflow).Release(task)
+    If held Do ##class(Shutter.Util.Workflow).Release(task)
     Quit $$$OK
+}
+
+/// The code of a refusal from Shutter.Util.Workflow.Claim (busy, engine or decided), "" when the claim was granted, and
+/// engine for a refusal that names no code.
+ClassMethod ClaimCode(refused As %String) As %String
+{
+    If refused = "" Quit ""
+    Set e = ##class(Shutter.Util.Json).Parse(refused, .sc)
+    Set code = $SELECT($ISOBJECT(e) && $$$ISOK(sc): e.%Get("code"), 1: "")
+    Quit $SELECT(code = "": "engine", 1: code)
 }
 
 /// A withheld case with no single catalogue entry (E14 and E15 not installed, or several matched): an escalate plan
