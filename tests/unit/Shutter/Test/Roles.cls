@@ -90,11 +90,45 @@ ClassMethod CanSelect(role As %String, table As %String) As %Boolean
 Method TestApiRolesHaveSqlSelect()
 {
     For role = "Shutter_Operator", "Shutter_Approver", "Shutter_Demo", "Shutter_Judge" {
-        For table = "Shutter_Store.Case", "Shutter_Index.Message", "Ens_Config.Item" {
+        For table = "Shutter_Store.Case", "Shutter_Index.Message", "Ens_Config.Item", "Ens.MessageHeader" {
             Do $$$AssertTrue(..CanSelect(role, table), role _ " selects from " _ table)
         }
     }
     Do $$$AssertNotTrue(..CanSelect("Shutter_Trace", "Shutter_Store.Case"), "the trace role has no SELECT on the case store")
+}
+
+/// The tables the cases list's two queries name (Shutter.API.Dispatch PageIds and CaseRows), read from their source.
+ClassMethod ListTables() As %List
+{
+    Set tables = ""
+    For method = "PageIds", "CaseRows" {
+        Set def = ##class(%Dictionary.MethodDefinition).%OpenId("Shutter.API.Dispatch||" _ method)
+        Continue:'$ISOBJECT(def)
+        Do def.Implementation.Rewind()
+        Set text = def.Implementation.Read(1000000), from = 1
+        For {
+            Set at = $LOCATE(text, "(FROM|JOIN|,) +(Ens|Shutter_[A-Za-z]+)\.(""""[A-Za-z]+""""|[A-Za-z]+)", from, from, match)
+            Quit:at=0
+            Set table = $TRANSLATE($PIECE(match, " ", *), """")
+            If '$LISTFIND(tables, table) Set tables = tables _ $LISTBUILD(table)
+        }
+    }
+    Quit tables
+}
+
+/// Every table the cases list reads is one the roles that call the API select from: the list's row query reads the
+/// production's message headers, and on IRIS for Health 2026.2 a fresh instance refused it to the operator (SQLCODE -99)
+/// when its cached query was compiled again in the operator's process, so the list came back empty beside its total.
+Method TestTheCasesListReadsOnlyTablesTheRolesSelect()
+{
+    Set tables = ..ListTables()
+    Do $$$AssertTrue($LISTFIND(tables, "Shutter_Store.Case"), "the case store is among the list's tables: " _ $LISTTOSTRING(tables))
+    Do $$$AssertTrue($LISTFIND(tables, "Ens.MessageHeader"), "and the message headers: " _ $LISTTOSTRING(tables))
+    For role = "Shutter_Operator", "Shutter_Approver", "Shutter_Demo", "Shutter_Judge" {
+        For i = 1:1:$LISTLENGTH(tables) {
+            Do $$$AssertTrue(..CanSelect(role, $LIST(tables, i)), role _ " selects from " _ $LIST(tables, i) _ ", which the cases list reads")
+        }
+    }
 }
 
 }
