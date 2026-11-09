@@ -473,13 +473,19 @@ ClassMethod Newer(ns As %String, item As %String, originHeaderId As %String, Out
 }
 
 /// Each newer header's body read once: info(i, "id"), "status", "time", "control", "unreadable", "keys" (every PID-3 key
-/// of every PID) and "orders" (Orders).
+/// of every PID) and "orders" (Orders). Inside a pass (Pass) what a body gave is kept by header id, since the candidates of
+/// one set share most of their newer headers; the status is read again each time.
 ClassMethod ReadNewer(ns As %String, newer As %List, ByRef info) [ Private ]
 {
-    Set info = $LISTLENGTH(newer)
+    Set info = $LISTLENGTH(newer), pass = $DATA(^||ShutterPatientCheck("pass"))
     For i = 1:1:info {
         Set one = $LIST(newer, i), id = $LIST(one, 1)
         Set info(i, "id") = id, info(i, "status") = $LIST(one, 2)
+        If pass && $DATA(^||ShutterPatientCheck("body", ns, id), kept) {
+            Set info(i, "time") = $LIST(kept, 1), info(i, "unreadable") = $LIST(kept, 2), info(i, "control") = $LIST(kept, 3)
+            Set info(i, "keys") = [].%FromJSON($LIST(kept, 4)), info(i, "orders") = [].%FromJSON($LIST(kept, 5))
+            Continue
+        }
         Set msg = ..Body(ns, id, .time)
         Set info(i, "time") = time, info(i, "unreadable") = '$ISOBJECT(msg)
         Set info(i, "keys") = [], info(i, "orders") = [], info(i, "control") = ""
@@ -491,6 +497,7 @@ ClassMethod ReadNewer(ns As %String, newer As %List, ByRef info) [ Private ]
             While ik.%GetNext(, .k) { Do info(i, "keys").%Push(k) }
         }
         Set info(i, "orders") = ..Orders(msg)
+        Set:pass ^||ShutterPatientCheck("body", ns, id) = $LISTBUILD(info(i, "time"), info(i, "unreadable"), info(i, "control"), info(i, "keys").%ToJSON(), info(i, "orders").%ToJSON())
     }
 }
 

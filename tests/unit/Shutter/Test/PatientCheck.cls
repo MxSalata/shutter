@@ -486,6 +486,24 @@ Method TestAdtKeepsThePatientRule()
     Do $$$AssertTrue(r.hold && (r.patients.%Get(0).rule = "same_patient"), r.why)
 }
 
+/// Inside a pass (a set's computation, an Engine Resend run) each newer body is read once and kept by header id; outside
+/// one, every check reads it again.
+Method TestPassKeepsWhatItRead()
+{
+    Do ..OrdersReceiver()
+    Set origin = ..Header(..Order("ORU^R01", "9990000235^^^NHS^NH", "ORD1", "", {}), 8)
+    Set newer = ..Header(..Order("ORU^R01", "9990000235^^^NHS^NH", "ORD2", "", {}), 9)
+    Do ##class(Shutter.Util.PatientCheck).Pass(1)
+    Do $$$AssertNotTrue(..Check(origin).hold, "another order: not held")
+    Set body = ##class(Ens.MessageHeader).%OpenId(newer).MessageBodyId
+    Do ##class(EnsLib.HL7.Message).%DeleteId(body)
+    Kill ..Bodies(body)
+    Do $$$AssertNotTrue(..Check(origin).hold, "inside the pass the body is not read again")
+    Do ##class(Shutter.Util.PatientCheck).Pass(0)
+    Set r = ..Check(origin)
+    Do $$$AssertTrue(r.hold && (r.patients.%Get(0).rule = "unreadable"), "outside it the body is read again, and can't be: " _ r.why)
+}
+
 /// The check at the orders and results receiver.
 Method Check(origin As %String, exclude As %List = "", members As %List = "") As %DynamicObject
 {
