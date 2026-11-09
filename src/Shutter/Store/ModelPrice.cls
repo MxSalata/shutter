@@ -45,17 +45,18 @@ ClassMethod ByModel(model As %String) As Shutter.Store.ModelPrice
 }
 
 /// Seed the list prices: Anthropic's pricing page, read on 16 October 2026, per million tokens. Cache reads are
-/// a twentieth of the input rate on Opus 5.5 and Sonnet 5.5 (0.20 and 0.10) and a tenth on the others; five-minute
+/// a twentieth of the input rate on Opus 5.5 (0.20) and a tenth on the others (Sonnet 5.5's 0.20 since seed 4, which seed 3
+/// had at 0.10); five-minute
 /// cache writes are a quarter more than input. A row from an earlier seed is brought up to date; a row edited by
 /// hand (another Source) is left alone.
 ClassMethod Seed() As %Status
 {
     Set sc = $$$OK
-    Set asOf = "2026-10-16", source = "Anthropic list prices per million tokens, from the pricing page read on " _ asOf _ " (seed 3)"
+    Set asOf = "2026-10-16", source = "Anthropic list prices per million tokens, from the pricing page read on " _ asOf _ " (seed 4)"
     // model, input, output, cache read, five-minute cache write
     Set rows = [
         ["claude-opus-5-5", 4, 20, 0.2, 5],
-        ["claude-sonnet-5-5", 2, 10, 0.1, 2.5],
+        ["claude-sonnet-5-5", 2, 10, 0.2, 2.5],
         ["claude-haiku-5-5", 0.1, 0.5, 0.01, 0.125],
         ["claude-sonnet-4-6", 3, 15, 0.3, 3.75]
     ]
