@@ -2293,6 +2293,8 @@ main[data-assistant='beside'] .stack-scroll {
   padding-top: 8px;
   border-top: 1px solid var(--live-rule);
   color: var(--live-quiet);
+  /* The close button sits in the band's top corner only: the notes under the bar take back the width kept for it */
+  margin-inline-end: calc(-1 * (var(--mantine-spacing-sm) + 28px));
 }
 .live-notes-row {
   display: grid;
