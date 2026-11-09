@@ -763,16 +763,29 @@ ClassMethod ItemWhere(items As %List) As %String
 ClassMethod DeleteProcesses(ownNamespace As %Boolean) As %Integer
 {
     Set n = 0
-    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Ens.BusinessProcess")
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, ..ProcessQuery(ownNamespace))
     While rs.%Next() {
-        Set id = rs.%GetData(1), class = ""
-        Try { Set run = ##class(Ens.BusinessProcess).%OpenId(id, 0) Set:$ISOBJECT(run) class = $CLASSNAME(run) } Catch ex { }
-        Kill run
+        Set id = rs.%GetData(1), class = ..RowClass(rs.%GetData(2))
         Continue:(class = "")||'..OwnClass(class, ownNamespace)
         Set sc = $CLASSMETHOD(class, "%DeleteId", id)
         Set:$$$ISOK(sc) n = n + 1
     }
     Quit n
+}
+
+/// The query for the rows of Ens.BusinessProcess whose class has one of ClassPrefixes in its chain, read from the extent's
+/// x__classname column ("~Shutter.Process.CaseWorkflow~"), so no row is opened to learn its class.
+ClassMethod ProcessQuery(ownNamespace As %Boolean) As %String
+{
+    Set prefixes = ..ClassPrefixes(ownNamespace), where = ""
+    For i = 1:1:$LENGTH(prefixes, ",") Set where = where _ $SELECT(where = "": "", 1: " OR ") _ "x__classname [ '~" _ $PIECE(prefixes, ",", i) _ "'"
+    Quit "SELECT ID, x__classname FROM Ens.BusinessProcess WHERE " _ where
+}
+
+/// A row's own class from its x__classname, the last class of the chain.
+ClassMethod RowClass(chain As %String) As %String
+{
+    Quit $PIECE(chain, "~", $LENGTH(chain, "~") - 1)
 }
 
 /// The default settings the installers wrote, the credentials, the imported HL7 schema categories, the queues.

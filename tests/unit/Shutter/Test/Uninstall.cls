@@ -200,6 +200,25 @@ Method TestMessagesOfAnotherProductionStay()
     For i = 1:1:$LISTLENGTH(ids) Do ##class(Ens.MessageHeader).%DeleteId($LIST(ids, i))
 }
 
+/// The rows of Shutter's business processes are chosen by class in SQL, none opened: a run of Shutter's and a router's,
+/// rows of the test's own, and only the first is selected.
+Method TestProcessesSelectedByClass()
+{
+    Set u = "Shutter.Util.Uninstall"
+    Do $$$AssertEquals($CLASSMETHOD(u, "RowClass", "~Shutter.Process.CaseWorkflow~"), "Shutter.Process.CaseWorkflow", "the row's class")
+    Do $$$AssertEquals($CLASSMETHOD(u, "RowClass", "~Ens.BusinessProcessBPL~Site.Process~"), "Site.Process", "the last of a chain")
+    Set ours = ##class(Shutter.Process.CaseWorkflow).%New("Case Workflow"), router = ##class(EnsLib.MsgRouter.RoutingEngine).%New("Site Router")
+    Do $$$AssertStatusOK(ours.%Save(), "a run of Shutter's")
+    Do $$$AssertStatusOK(router.%Save(), "a router's")
+    Set selected = "", t0 = $ZHOROLOG
+    Set rs = ##class(%SQL.Statement).%ExecDirect(, $CLASSMETHOD(u, "ProcessQuery", 0))
+    Do $$$AssertTrue(rs.%SQLCODE >= 0, "the query runs: " _ rs.%SQLCODE _ " " _ rs.%Message)
+    While rs.%Next() { Set:$LISTFIND($LISTBUILD(ours.%Id(), router.%Id()), rs.%GetData(1)) selected = selected _ $LISTBUILD(rs.%GetData(1)) }
+    Do $$$LogMessage("ProcessQuery read the table in " _ ($ZHOROLOG - t0) _ " s")
+    Do $$$AssertEquals($LISTTOSTRING(selected), ours.%Id(), "Shutter's run only")
+    Do ##class(Ens.BusinessProcess).%DeleteId(ours.%Id()), ##class(Ens.BusinessProcess).%DeleteId(router.%Id())
+}
+
 /// A plan changes nothing and answers.
 Method TestPlanAnswersAndChangesNothing()
 {
