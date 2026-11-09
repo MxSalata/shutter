@@ -89,6 +89,10 @@ Property SetStatus As %String(MAXLEN = 16, VALUELIST = ",computed,not_computed,w
 
 Property SetReason As %String(MAXLEN = 1000);
 
+/// When a person asked for the set to be read again (the act read_again), UTC; the next Receiver Watch poll computes it in
+/// the production job, which may read the watched namespace, and clears this.
+Property ReadAgainAt As %String(MAXLEN = 30);
+
 Property Approvable As %Boolean [ InitialExpression = 0 ];
 
 /// JSON: { "id", "by", "givenAt", "goodUntil", "digest", "note" }, or empty.
@@ -224,6 +228,12 @@ Method Close(reason As %String, by As %String) As %Status
     Quit ..Move("closed", reason, by)
 }
 
+/// A person's read_again: marks the row for the next poll, under the row's lock, with an event naming who asked.
+Method ReadAgain(by As %String) As %Status
+{
+    Quit ..Change(..State, "the set is read again on the next poll", by, {"ReadAgainAt": (##class(Shutter.Util.Time).NowUTC())}, 0, "read_again")
+}
+
 /// One change of state, under the row's lock, on the version this copy read: a stale copy changes nothing, and a closed row
 /// never changes. On any refusal this copy goes back to what the store holds.
 Method Move(state As %String, detail As %String, by As %String, until As %String = "") As %Status [ Private ]
@@ -335,7 +345,8 @@ Method ToJSON() As %DynamicObject
         Do o.%Set("approval", "", "null")
     }
     Do o.%Set("sentByShutter", +..SentByShutter, "number")
-    Set o.acts = $SELECT(..State = "closed": [], 1: ["pause", "close"])
+    // read_again only where the build has the set gate to compute.
+    Set o.acts = $SELECT(..State = "closed": [], ##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Util.ResendSet"): ["pause", "read_again", "close"], 1: ["pause", "close"])
     Set words = {}
     Do ..Put(words, "first", ..WordsFirst), ..Put(words, "do", ..WordsDo), ..Put(words, "call", ..WordsCall), ..Put(words, "critical", ..WordsCritical)
     Set o.words = words
@@ -347,6 +358,165 @@ ClassMethod Put(o As %DynamicObject, key As %String, value As %String) [ Private
 {
     If value = "" Do o.%Set(key, "", "null") Quit
     Do o.%Set(key, value)
+}
+
+Storage Default
+{
+<Data name="OutageDefaultData">
+<Value name="1">
+<Value>%%CLASSNAME</Value>
+</Value>
+<Value name="2">
+<Value>Receiver</Value>
+</Value>
+<Value name="3">
+<Value>ActiveReceiver</Value>
+</Value>
+<Value name="4">
+<Value>Namespace</Value>
+</Value>
+<Value name="5">
+<Value>Item</Value>
+</Value>
+<Value name="6">
+<Value>State</Value>
+</Value>
+<Value name="7">
+<Value>Kind</Value>
+</Value>
+<Value name="8">
+<Value>OpenedAt</Value>
+</Value>
+<Value name="9">
+<Value>DrainedAt</Value>
+</Value>
+<Value name="10">
+<Value>ClosedAt</Value>
+</Value>
+<Value name="11">
+<Value>CloseReason</Value>
+</Value>
+<Value name="12">
+<Value>ClosedBy</Value>
+</Value>
+<Value name="13">
+<Value>Runbook</Value>
+</Value>
+<Value name="14">
+<Value>CallLine</Value>
+</Value>
+<Value name="15">
+<Value>Approvers</Value>
+</Value>
+<Value name="16">
+<Value>PausedUntil</Value>
+</Value>
+<Value name="17">
+<Value>PausedBy</Value>
+</Value>
+<Value name="18">
+<Value>OverdueAt</Value>
+</Value>
+<Value name="19">
+<Value>WindowFrom</Value>
+</Value>
+<Value name="20">
+<Value>WindowTo</Value>
+</Value>
+<Value name="21">
+<Value>SettledCompleted</Value>
+</Value>
+<Value name="22">
+<Value>SettledSuspended</Value>
+</Value>
+<Value name="23">
+<Value>SettledError</Value>
+</Value>
+<Value name="24">
+<Value>SettledOther</Value>
+</Value>
+<Value name="25">
+<Value>Alerts</Value>
+</Value>
+<Value name="26">
+<Value>ListQueued</Value>
+</Value>
+<Value name="27">
+<Value>ListOffered</Value>
+</Value>
+<Value name="28">
+<Value>ListReached</Value>
+</Value>
+<Value name="29">
+<Value>ListRefused</Value>
+</Value>
+<Value name="30">
+<Value>OpenCases</Value>
+</Value>
+<Value name="31">
+<Value>Version</Value>
+</Value>
+<Value name="32">
+<Value>SetDigest</Value>
+</Value>
+<Value name="33">
+<Value>SetComputedAt</Value>
+</Value>
+<Value name="34">
+<Value>SetPolicyVersion</Value>
+</Value>
+<Value name="35">
+<Value>SetStatus</Value>
+</Value>
+<Value name="36">
+<Value>SetReason</Value>
+</Value>
+<Value name="37">
+<Value>Approvable</Value>
+</Value>
+<Value name="38">
+<Value>Approval</Value>
+</Value>
+<Value name="39">
+<Value>SentByShutter</Value>
+</Value>
+<Value name="40">
+<Value>WordsFirst</Value>
+</Value>
+<Value name="41">
+<Value>WordsDo</Value>
+</Value>
+<Value name="42">
+<Value>WordsCall</Value>
+</Value>
+<Value name="43">
+<Value>WordsCritical</Value>
+</Value>
+<Value name="44">
+<Value>DrainStartedAt</Value>
+</Value>
+<Value name="45">
+<Value>QuietSince</Value>
+</Value>
+<Value name="46">
+<Value>AlertMark</Value>
+</Value>
+<Value name="47">
+<Value>LinkedCases</Value>
+</Value>
+<Value name="48">
+<Value>Outcome</Value>
+</Value>
+<Value name="49">
+<Value>ReadAgainAt</Value>
+</Value>
+</Data>
+<DataLocation>^Shutter.Store.OutageD</DataLocation>
+<DefaultData>OutageDefaultData</DefaultData>
+<IdLocation>^Shutter.Store.OutageD</IdLocation>
+<IndexLocation>^Shutter.Store.OutageI</IndexLocation>
+<StreamLocation>^Shutter.Store.OutageS</StreamLocation>
+<Type>%Storage.Persistent</Type>
 }
 
 }

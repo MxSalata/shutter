@@ -45,15 +45,31 @@ ClassMethod Step(outage As Shutter.Store.Outage, entry As %DynamicObject, facts 
         Quit outage.Advance("open", "the pause ended at " _ outage.PausedUntil, ..#ACTOR, fields)
     }
     Do ..NewAlerts(outage, fields)
-    // With no set gate in the build, closing is a step within one poll: a row left there (the close's save refused by a lock,
-    // the production stopped between the two saves) is closed again on the next poll. The close reads everything again, so
-    // running it twice is safe.
-    If (state = "closing") && (..SetReasonNow() = ..#NOSETGATE) {
+    // Closing is a step within one poll: a row left there (the close's save refused by a lock, the production stopped between
+    // the two saves) is closed again on the next poll. The close reads everything again, so running it twice is safe.
+    If state = "closing" {
         Set sc = ..Save(outage, fields)
         If $$$ISERR(sc) Quit sc
         Quit ..Close(outage, entry, facts, now, "")
     }
-    // Only open and draining are the poll's to move otherwise; closing with a set gate, offered and sending belong to later parts.
+    // An offered set (the set gate in the build) stands only while the engine has nothing of the window: a message tried
+    // again sends the row back to open. Otherwise the poll computes the set again when a person asked (read_again) or a
+    // minute has passed, so a member resent by hand meanwhile moves the digest. A person's row is read again only when asked.
+    If (state = "offered") || ((state = "needs_person") && (outage.ReadAgainAt '= "")) {
+        If (state = "offered") && '..IsQuiet(outage, facts, now) {
+            Set fields.QuietSince = "", fields.DrainStartedAt = "", fields.SetStatus = "not_computed", fields.SetReason = "the engine is trying a message of the window again"
+            Quit outage.Advance("open", "a message of the window is being tried again: the set is withdrawn and the quiet clock starts again", ..#ACTOR, fields)
+        }
+        Set since = ##class(Shutter.Util.Time).MillisBetween(outage.SetComputedAt, now)
+        If (outage.ReadAgainAt '= "") || (since = "") || (since >= ..#RECOMPUTEMILLIS) {
+            Set fields.ReadAgainAt = ""
+            Set sc = ..Save(outage, fields)
+            If $$$ISERR(sc) Quit sc
+            Quit ..Close(outage, entry, facts, now, "")
+        }
+        Quit ..Save(outage, fields)
+    }
+    // Only open and draining are the poll's to move otherwise; sending belongs to a later part.
     If (state '= "open") && (state '= "draining") Quit ..Save(outage, fields)
     Set f = {"state": (state), "reading": (reading), "retry": (facts.retry), "stayConnected": (facts.stayConnected), "status": (facts.status), "word": (##class(Shutter.Operation.ReceiverWatch).AdapterWord(facts.adapterState)), "quietSince": (outage.QuietSince), "openedAt": (outage.OpenedAt), "drainStartedAt": (outage.DrainStartedAt), "settleMinutes": (##class(Shutter.Store.SiteProfile).ReceiverMinutes(outage.Receiver, "settle_minutes"))}
     Do f.%Set("quiet", ..IsQuiet(outage, facts, now), "boolean")
@@ -80,6 +96,9 @@ ClassMethod Save(outage As Shutter.Store.Outage, fields As %DynamicObject) As %S
     If fields.%Size() = 0 Quit $$$OK
     Quit outage.Advance(outage.State, "", ..#ACTOR, fields)
 }
+
+/// How often the poll computes an offered set again, in milliseconds.
+Parameter RECOMPUTEMILLIS = 60000;
 
 /// The set's reason now: with no set gate in the build, that.
 ClassMethod SetReasonNow() As %String
@@ -192,13 +211,23 @@ ClassMethod Close(outage As Shutter.Store.Outage, entry As %DynamicObject, facts
 {
     Set fields = {"SetStatus": "not_computed", "SetReason": (..SetReasonNow())}
     If why = "" Set fields.DrainedAt = now, fields.WindowTo = now
+    // With the set gate in the build: the set, computed here in the production job, which may read the watched namespace.
+    Set set = "", setReason = fields.SetReason
+    If setReason = "" {
+        Set set = ##class(Shutter.Util.ResendSet).Compute(outage.Namespace, outage.Item, ..EngineTime(outage.WindowFrom), ..EngineTime(now), outage.Receiver)
+        Set fields.SetStatus = set.set.status, fields.SetReason = set.set.reason, fields.SetDigest = set.set.digest
+        Set fields.SetComputedAt = set.set.computedAt, fields.SetPolicyVersion = set.set.setPolicyVersion
+        Set setReason = set.set.reason
+    }
+    Set computed = $ISOBJECT(set) && (set.set.status = "computed")
     Set read = ..WindowHeaders(outage.Namespace, outage.Item, outage.WindowFrom, now)
-    Set sorted = ..Sort(read)
+    Set sorted = ..Sort(read, $SELECT(setReason '= "": setReason, 1: ..#NOSETGATE))
     Set fields.SettledCompleted = sorted.settled.completed, fields.SettledSuspended = sorted.settled.suspended
     Set fields.SettledError = sorted.settled.error, fields.SettledOther = sorted.settled.other
-    Set fields.ListQueued = sorted.lists.queued, fields.ListOffered = sorted.lists.offered
-    Set fields.ListReached = sorted.lists.reached, fields.ListRefused = sorted.lists.refused
-    Set w = {"why": (why), "unread": (read.answer '= "ok"), "unreadWhy": (read.why), "truncated": (sorted.truncated), "errors": (sorted.settled.error), "openCases": 0, "completed": (sorted.settled.completed), "suspended": (sorted.settled.suspended), "other": (sorted.settled.other), "queued": (sorted.lists.queued.%Size()), "moreThanOnce": (sorted.moreThanOnce), "drainedAt": ($SELECT(why = "": ..Clock(now), 1: "")), "recoveredAt": ($SELECT((why = "") && (outage.DrainStartedAt '= ""): ..Clock(outage.DrainStartedAt), 1: ""))}
+    Set lists = $SELECT(computed: set.lists, 1: sorted.lists)
+    Set fields.ListQueued = lists.queued, fields.ListOffered = lists.offered
+    Set fields.ListReached = lists.reached, fields.ListRefused = lists.refused
+    Set w = {"why": (why), "unread": (read.answer '= "ok"), "unreadWhy": (read.why), "truncated": (sorted.truncated), "errors": (sorted.settled.error), "openCases": 0, "completed": (sorted.settled.completed), "suspended": (sorted.settled.suspended), "other": (sorted.settled.other), "queued": (sorted.lists.queued.%Size()), "moreThanOnce": (sorted.moreThanOnce), "drainedAt": ($SELECT(why = "": ..Clock(now), 1: "")), "recoveredAt": ($SELECT((why = "") && (outage.DrainStartedAt '= ""): ..Clock(outage.DrainStartedAt), 1: "")), "offered": ($SELECT(computed: lists.offered.%Size(), 1: 0))}
     // Whether the close goes back to open does not depend on the cases, so that is known before any case is judged.
     Set first = ..CloseWords(w)
     If first.to = "open" {
@@ -211,6 +240,8 @@ ClassMethod Close(outage As Shutter.Store.Outage, entry As %DynamicObject, facts
     Set w.openCases = linked.open.%Size()
     Set words = ..CloseWords(w)
     Set fields.Outcome = words.outcome
+    // The same state and the same set: a recompute writes the fields and no event.
+    If (words.to = outage.State) && computed && (set.set.digest = outage.SetDigest) Quit outage.Advance(words.to, "", ..#ACTOR, fields)
     Quit outage.Advance(words.to, words.outcome, ..#ACTOR, fields)
 }
 
@@ -233,6 +264,9 @@ ClassMethod CloseWords(w As %DynamicObject) As %DynamicObject
     Set failed = $SELECT(errors = 0: "", 1: errors _ " message" _ $SELECT(errors = 1: " failed and was", 1: "s failed and were") _ " not offered; a person reads the trace.")
     If w.why '= "" Quit {"to": "needs_person", "outcome": (..Upper(w.why) _ "." _ $SELECT(failed = "": "", 1: " " _ failed) _ exceptions _ twice)}
     If +w.queued Quit {"to": "open", "outcome": (+w.queued _ " of the window queued again at the close: the quiet clock starts again")}
+    // With the set gate, the messages that never reached the receiver are listed for a person: the row stays offered while
+    // the engine has nothing of the window. Shutter sends nothing itself.
+    If +w.offered && errors Quit {"to": "offered", "outcome": (errors _ " message" _ $SELECT(errors = 1: " failed", 1: "s failed") _ "; " _ +w.offered _ " never reached the receiver and " _ $SELECT(+w.offered = 1: "is", 1: "are") _ " listed for a person. Shutter will not send these messages. Review them in the Message Viewer using the site's recovery procedure." _ exceptions _ twice)}
     If errors Quit {"to": "needs_person", "outcome": (failed _ exceptions _ twice)}
     Set words = $SELECT(w.recoveredAt '= "": "The engine's connection recovered at " _ w.recoveredAt _ ". ", 1: "")
     Set words = words _ "Delivery backlog drained" _ $SELECT(w.drainedAt '= "": " at " _ w.drainedAt, 1: "") _ ". Application processing has not been independently checked. Nothing remains queued. "
@@ -253,14 +287,14 @@ ClassMethod Upper(text As %String) As %String [ Private ]
 /// (the word), attempts (for Error), moreThanOnce (for Completed), patient. Answers { "settled": { completed, suspended,
 /// error, other }, "lists": { queued, offered, reached, refused }, "moreThanOnce": [ ids ], "truncated" }. Every header is in
 /// exactly one place: Completed in the count, the others in a list with the count of what settled.
-ClassMethod Sort(read As %DynamicObject) As %DynamicObject
+ClassMethod Sort(read As %DynamicObject, setReason As %String = {..#NOSETGATE}) As %DynamicObject
 {
     Set out = {"settled": {"completed": 0, "suspended": 0, "error": 0, "other": 0}, "lists": {"queued": [], "offered": [], "reached": [], "refused": []}, "moreThanOnce": []}
     Do out.%Set("truncated", ''read.truncated, "boolean")
     If read.answer '= "ok" Quit out
     Set iter = read.rows.%GetIterator()
     While iter.%GetNext(.i, .h) {
-        Set d = ..Disposition(h.status, h.attempts)
+        Set d = ..Disposition(h.status, h.attempts, setReason)
         If d.count '= "" Do out.settled.%Set(d.count, out.settled.%Get(d.count) + 1)
         If h.moreThanOnce Do out.moreThanOnce.%Push(h.headerId)
         If d.list = "" Continue
@@ -274,12 +308,12 @@ ClassMethod Sort(read As %DynamicObject) As %DynamicObject
 /// Where one header goes at the close, pure: { "list", "count", "reason" }. count is the settled count it adds to (empty for
 /// one the engine still has). With no set gate nothing is offered: a header that failed before a connection opened is set
 /// aside for a person, and one that may have reached the receiver is listed for its screen.
-ClassMethod Disposition(status As %String, attempts As %String) As %DynamicObject
+ClassMethod Disposition(status As %String, attempts As %String, setReason As %String = {..#NOSETGATE}) As %DynamicObject
 {
     If status = "Completed" Quit {"list": "", "count": "completed", "reason": ""}
     If (status = "Queued") || (status = "Delivered") Quit {"list": "queued", "count": "", "reason": "the engine is still attempting this"}
     If status = "Error" {
-        If attempts = "never_opened" Quit {"list": "refused", "count": "error", "reason": ("failed before a connection opened; not offered: " _ ..#NOSETGATE _ ", so a person reads the trace")}
+        If attempts = "never_opened" Quit {"list": "refused", "count": "error", "reason": ("failed before a connection opened; not offered: " _ setReason _ ", so a person reads the trace")}
         If attempts = "reached_receiver" Quit {"list": "reached", "count": "error", "reason": "reached the receiver, answer unknown: check its screen; Shutter will not resend this, and if you do, use the Message Viewer"}
         Quit {"list": "reached", "count": "error", "reason": "the engine's log does not show whether it reached the receiver: check its screen; Shutter will not resend this"}
     }

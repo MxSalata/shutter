@@ -148,22 +148,31 @@ Method TestActs()
     Do $$$AssertStatusOK(..NewOutage(.row), "an outage opened")
     Quit:'$ISOBJECT(row)
     Set json = $CLASSMETHOD(api, "One", row)
-    Do $$$AssertEquals(json.acts.%ToJSON(), "[""pause"",""close""]", "acts list pause and close")
+    // The set gate is in the build (Shutter.Util.ResendSet): read_again is listed beside pause and close.
+    Do $$$AssertEquals(json.acts.%ToJSON(), "[""pause"",""read_again"",""close""]", "acts list pause, read_again and close")
     Do $$$AssertEquals(json.%GetTypeOf("approvable"), "boolean", "approvable is a boolean")
     Do $$$AssertTrue('json.approvable, "approvable is false")
     Do $$$AssertEquals(json.set.status, "not_computed", "set.status not_computed")
-    Do $$$AssertEquals(json.set.reason, "no set gate in this build", "set.reason names the missing gate")
+    Do $$$AssertEquals(json.set.reason, "", "set.reason empty: the set is computed when the outage closes")
     For key = "id", "receiver", "namespace", "item", "state", "kind", "openedAt", "drainedAt", "closedAt", "runbook", "call", "approvers", "pausedUntil", "overdueAt", "readings", "window", "settled", "alerts", "lists", "openCases", "version", "set", "approvable", "approval", "sentByShutter", "acts", "words" {
         Do $$$AssertTrue(json.%IsDefined(key), "the outage has " _ key)
     }
     For key = "first", "do", "call", "critical" { Do $$$AssertTrue(json.words.%IsDefined(key), "words has " _ key) }
     Do $$$AssertTrue(json.words.call [ "01632 960998", "the call line as the site wrote it")
-    Do $$$AssertEquals($CLASSMETHOD(api, "Act", row, {"act": "read_again"}, "unit", .reply), "400 Bad Request", "an act the row doesn't list is refused")
+    Do $$$AssertEquals($CLASSMETHOD(api, "Act", row, {"act": "send"}, "unit", .reply), "400 Bad Request", "an act the row doesn't list is refused")
     Set before = row.State _ "/" _ row.Version
-    Do $$$AssertEquals($CLASSMETHOD(api, "Act", row, {"act": "read_again", "reason": "a later act"}, "unit", .reply, ["pause", "close", "read_again"]), "400 Bad Request", "an act the row lists but this build doesn't handle is refused")
+    Do $$$AssertEquals($CLASSMETHOD(api, "Act", row, {"act": "send", "reason": "a later act"}, "unit", .reply, ["pause", "close", "send"]), "400 Bad Request", "an act the row lists but this build doesn't handle is refused")
     Do $$$AssertTrue($ISOBJECT(reply) && (reply.error = "bad_request"), "with bad_request")
     Set still = ##class(Shutter.Store.Outage).%OpenId(row.%Id(), 0)
     Do $$$AssertEquals(still.State _ "/" _ still.Version, before, "and the state is as it was")
+    // read_again marks the row for the next poll, with an event naming who asked; the REST process computes nothing.
+    Do $$$AssertEquals($CLASSMETHOD(api, "Act", row, {"act": "read_again"}, "unit", .reply), "200 OK", "read_again")
+    Set marked = ##class(Shutter.Store.Outage).%OpenId(row.%Id(), 0)
+    Do $$$AssertTrue(marked.ReadAgainAt '= "", "the row marked for the next poll")
+    Do $$$AssertEquals(marked.State, row.State, "and its state unchanged")
+    Set kinds = "", events = ##class(Shutter.Store.OutageEvent).Of(row.%Id()), iter = events.%GetIterator()
+    While iter.%GetNext(.i, .e) { Set kinds = kinds _ "," _ e.kind }
+    Do $$$AssertTrue(kinds [ ",read_again", "an event: " _ kinds)
     Do $$$AssertEquals($CLASSMETHOD(api, "Act", row, {"act": "pause"}, "unit", .reply), "400 Bad Request", "a pause needs until")
     Do $$$AssertEquals($CLASSMETHOD(api, "Act", row, {"act": "pause", "until": "2020-01-01T00:00:00Z"}, "unit", .reply), "400 Bad Request", "a pause in the past is refused")
     Do $$$AssertEquals($CLASSMETHOD(api, "Act", row, {"act": "pause", "until": "tomorrow"}, "unit", .reply), "400 Bad Request", "a pause needs a UTC time")
