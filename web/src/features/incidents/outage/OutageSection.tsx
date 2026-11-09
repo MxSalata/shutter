@@ -1,15 +1,21 @@
 import { Button, Card, Group, List, Stack, Text, TextInput, Textarea, Title } from '@mantine/core';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { useCan } from '@/api/hooks';
 import { StatusBadge, StatusNotice } from '@/components/StatusBadge';
 import type { Tone } from '@/lib/tone';
 import { useNow } from '@/lib/useNow';
+import { Timestamp } from '@/components/Timestamp';
 import { useOutageAct, useOutages } from './hooks';
+import { ApproveResend, ClosedList, FailedResend, HandledByHand, ResendList } from './OutageSend';
+import { approvedLine, canApprove, sendingLine, tallyLine } from './outageWords';
 import type { Outage, OutageReading, OutageRow } from './types';
 
 /** A reading older than this, or one that reads unknown, is stale and said loudly. */
 const STALE_MS = 60_000;
+
+/** How long a closed outage whose messages Shutter resent stays on the page, so the approver sees how the run ended. */
+const RECENT_MS = 24 * 60 * 60_000;
 
 /** The label the design gives the list of messages that never reached the receiver. */
 export const OFFERED_LABEL = 'Connection-failure evidence found: review before any resend';
@@ -42,7 +48,7 @@ export function OutageSection() {
   const now = useNow(5_000);
   const data = outages.data;
   if (!data || (data.items.length === 0 && data.receivers.length === 0)) return null;
-  const shown = data.items.filter((o) => o.state !== 'closed' || o.openCases.length > 0);
+  const shown = data.items.filter((o) => o.state !== 'closed' || o.openCases.length > 0 || recentRun(o, now));
   return (
     <Stack gap="sm" mb="md" data-testid="outages">
       <Title order={2} fz="lg">
@@ -60,6 +66,13 @@ export function OutageSection() {
       ))}
     </Stack>
   );
+}
+
+/** A closed outage with a ledger, closed within the last day. */
+function recentRun(o: Outage, now: number): boolean {
+  if (!o.resends?.length) return false;
+  const at = o.closedAt ? Date.parse(o.closedAt) : NaN;
+  return Number.isFinite(at) && now - at < RECENT_MS;
 }
 
 /** The always-on line for one watched receiver, loud when its watcher has not written for a minute. */
@@ -83,11 +96,25 @@ export function ReadingLine({ reading, now }: { reading: OutageReading; now: num
   );
 }
 
-/** One outage: its state, the row's words, alerts, the lists or why there are none, open cases and the acts it lists. */
+/**
+ * One outage: its state, the row's words, a failed resend first, alerts, the lists or why there are none (with "already
+ * handled by hand" on an offered message that lists it), the approval, the run's progress and the ledger, open cases and
+ * the acts it lists. Every control needs the approver role and the row's own act.
+ */
 export function OutageCard({ outage: o }: { outage: Outage }) {
   const can = useCan();
   const closed = o.state === 'closed';
   const computed = o.set.status === 'computed';
+  const resends = o.resends ?? [];
+  const sentRun = resends.some((r) => !r.runId.startsWith('H'));
+  const progress = sendingLine(o);
+  const approved = approvedLine(o);
+  const tally = tallyLine(resends);
+  const closedRows = o.lists.closed ?? [];
+  const offeredActs = (r: OutageRow) =>
+    can.approve && o.state === 'offered' && r.acts?.includes('handled_by_hand') ? (
+      <HandledByHand outage={o} row={r} />
+    ) : null;
   return (
     <Card padding="md" withBorder component="section" aria-label={`Outage ${o.id}, ${o.receiver}`}>
       <Stack gap="sm">
@@ -98,6 +125,7 @@ export function OutageCard({ outage: o }: { outage: Outage }) {
           </Title>
           <StatusBadge tone={STATE_TONE[o.state] ?? 'neutral'} label={o.state.replace(/_/g, ' ')} />
         </Group>
+        <FailedResend resends={resends} />
         {o.words.first ? <Text size="sm">{o.words.first}</Text> : null}
         {o.words.do ? <Text size="sm">{o.words.do}</Text> : null}
         {o.words.call ? <Text size="sm">{o.words.call}</Text> : null}
@@ -106,7 +134,14 @@ export function OutageCard({ outage: o }: { outage: Outage }) {
             <Text size="sm">{o.words.critical}</Text>
           </StatusNotice>
         ) : null}
-        {closed && o.outcome ? <Text size="sm">{o.outcome}</Text> : null}
+        {/* Once a run went, the ledger's tally says how the outage ended; the close's own words can predate the send */}
+        {closed && sentRun && tally ? (
+          <Text size="sm" data-testid="outage-tally">
+            {tally}
+          </Text>
+        ) : closed && o.outcome ? (
+          <Text size="sm">{o.outcome}</Text>
+        ) : null}
         {o.alerts.length ? (
           <Stack gap={2}>
             <Text size="sm" fw={600}>
@@ -125,15 +160,57 @@ export function OutageCard({ outage: o }: { outage: Outage }) {
           computed ? (
             <Stack gap="xs" data-testid="outage-lists">
               {LISTS.map(({ key, title }) =>
-                o.lists[key].length ? <RowList key={key} title={title} rows={o.lists[key]} /> : null,
+                o.lists[key]?.length ? (
+                  <RowList
+                    key={key}
+                    title={title}
+                    rows={o.lists[key] ?? []}
+                    actions={key === 'offered' ? offeredActs : undefined}
+                  />
+                ) : null,
               )}
+              {closedRows.length ? <ClosedList rows={closedRows} /> : null}
             </Stack>
           ) : (
-            <Text size="sm" c="dimmed" data-testid="outage-no-lists">
-              No list of messages: {o.set.reason || 'the set is not computed yet'}.
-            </Text>
+            <Stack gap="xs">
+              <Text size="sm" c="dimmed" data-testid="outage-no-lists">
+                No list of messages: {o.set.reason || 'the set is not computed yet'}.
+              </Text>
+              {closedRows.length ? <ClosedList rows={closedRows} /> : null}
+            </Stack>
           )
         ) : null}
+        {can.approve && canApprove(o) ? <ApproveResend outage={o} /> : null}
+        {progress || (approved && !closed) ? (
+          <Stack gap={2} role="status" data-testid="outage-sending">
+            {progress ? (
+              <Text size="sm" fw={600}>
+                {progress}
+              </Text>
+            ) : null}
+            {approved && !closed ? (
+              <Group gap={4} wrap="wrap">
+                <Text size="xs" c="dimmed">
+                  {approved}
+                </Text>
+                {o.approval?.givenAt ? (
+                  <Timestamp iso={o.approval.givenAt} size="xs" c="dimmed" short />
+                ) : null}
+              </Group>
+            ) : null}
+            {approved && !closed && o.approval?.note ? (
+              <Text size="xs" c="dimmed">
+                Their note: {o.approval.note}
+              </Text>
+            ) : null}
+          </Stack>
+        ) : null}
+        {!closed && tally && resends.length ? (
+          <Text size="sm" data-testid="outage-tally">
+            {tally}
+          </Text>
+        ) : null}
+        {resends.length ? <ResendList resends={resends} /> : null}
         {o.openCases.length ? (
           <Stack gap={2} data-testid="outage-open-cases">
             <Text size="sm" fw={600}>
@@ -149,25 +226,38 @@ export function OutageCard({ outage: o }: { outage: Outage }) {
             </List>
           </Stack>
         ) : null}
-        {can.approve && o.acts.length ? <Acts outage={o} /> : null}
+        {can.approve && o.acts.some((a) => a !== 'handled_by_hand') ? <Acts outage={o} /> : null}
       </Stack>
     </Card>
   );
 }
 
-function RowList({ title, rows }: { title: string; rows: OutageRow[] }) {
+function RowList({
+  title,
+  rows,
+  actions,
+}: {
+  title: string;
+  rows: OutageRow[];
+  /** A control for one row, where the row lists an act (Already handled by hand on an offered message). */
+  actions?: (r: OutageRow) => ReactNode;
+}) {
   return (
     <Stack gap={2}>
       <Text size="sm" fw={600}>
         {title} ({rows.length})
       </Text>
-      <List size="sm" spacing={2}>
-        {rows.map((r) => (
-          <List.Item key={r.headerId}>
-            Control id {r.controlId || 'not read'} (header {r.headerId}, {r.status})
-            {r.reason ? `: ${r.reason}` : ''}
-          </List.Item>
-        ))}
+      <List size="sm" spacing={4}>
+        {rows.map((r) => {
+          const control = actions?.(r);
+          return (
+            <List.Item key={r.headerId}>
+              Control id {r.controlId || 'not read'} (header {r.headerId}, {r.status})
+              {r.reason ? `: ${r.reason}` : ''}
+              {control ? <Group mt={4}>{control}</Group> : null}
+            </List.Item>
+          );
+        })}
       </List>
     </Stack>
   );
@@ -178,7 +268,7 @@ function Acts({ outage: o }: { outage: Outage }) {
   const act = useOutageAct(o.id);
   const [until, setUntil] = useState('');
   const [reason, setReason] = useState('');
-  const send = (body: { act: string; until?: string; reason?: string }) =>
+  const send = (body: { act: 'pause' | 'read_again' | 'close'; until?: string; reason?: string }) =>
     act.mutate({ ...body, version: o.version });
   return (
     <Stack gap="xs" data-testid="outage-acts">

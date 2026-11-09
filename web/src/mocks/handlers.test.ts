@@ -435,11 +435,16 @@ describe('the roles', () => {
     expect(r.requestedBy).toBe('approver');
   });
 
-  it('record who sent an escalation and the digest of the text sent', async () => {
+  it('record who queued an escalation, the digest of the text queued, and that it was saved, not delivered', async () => {
     const draft = await api.post<Escalation>(`/cases/${WITHHELD}/escalations`, {});
     const sent = await api.post<Escalation>(`/cases/${WITHHELD}/escalations/${draft.seq}/send`, {
       bodyDigest: draft.bodyDigest,
     });
+    // As on an instance with no mail server (v1.53): saved with savedAt, no sentAt
+    expect(sent.state).toBe('saved');
+    expect(sent.savedAt).toMatch(/Z$/);
+    expect(sent.sentAt).toBe('');
+    expect(sent.transport).toBe('file');
     const lines = (await api.get<CaseEvent[]>(`/cases/${WITHHELD}/events`))
       .slice(-3)
       .map((e) => [e.actor, e.ref, e.text]);
@@ -448,10 +453,19 @@ describe('the roles', () => {
       [
         'approver',
         'escalation:1',
-        `Escalation 1 sent by approver to ${draft.to}; digest of the text sent ${draft.bodyDigest}`,
+        `Escalation 1 queued by approver for ${draft.to}; digest of the text queued ${draft.bodyDigest}`,
       ],
-      ['system', 'escalation:1', `Escalation 1 delivered (file): ${sent.result}`],
+      [
+        'system',
+        'escalation:1',
+        `Escalation 1 saved as an email file, not delivered: ${sent.result}. No mail server is set, so nobody was emailed.`,
+      ],
     ]);
+    // A saved one can go again, as the server's Queue takes it; a queued or cancelled one can't
+    const again = await api.post<Escalation>(`/cases/${WITHHELD}/escalations/${draft.seq}/send`, {
+      bodyDigest: draft.bodyDigest,
+    });
+    expect(again.state).toBe('saved');
   });
 
   it('refuse a subject with a control character and a field that is not a string', async () => {

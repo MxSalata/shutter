@@ -1,7 +1,7 @@
 /// A receiver's own words in its negative acknowledgement (AE or AR), read by field: MSA-1 (the code), MSA-2 (the control
 /// id), MSA-3 (the text), and each ERR's location (ERR-2, or ERR-1 in the older style), code and table (ERR-3) and
-/// diagnostic and user message (ERR-7, ERR-8). The saved reply's body is read first, where the engine kept it; otherwise
-/// the engine's own log row, where the reply follows about 300 characters of boilerplate with its carriage returns turned
+/// diagnostic and user message (ERR-7, ERR-8). A saved reply's body is read when a caller holds its id; otherwise the
+/// engine's own log row, where the reply follows about 300 characters of boilerplate with its carriage returns turned
 /// into spaces (measured on 2026.2 and 2027.1.0AI).
 ///
 /// The words are the receiver's: they are quoted, at most QUOTE characters, and never interpreted beyond naming which field
@@ -14,14 +14,16 @@ Class Shutter.Util.ReplyWords [ Abstract ]
 Parameter QUOTE = 300;
 
 /// The words for one failed delivery: <var>logText</var> is the engine's full log row (type 2 or 6) for it, and
-/// <var>replyId</var> the saved reply's body id, or "" to take it from the row's "because response N@EnsLib.HL7.Message".
+/// <var>replyId</var> a saved reply's body id in this namespace, when a caller holds one; "" reads the row alone.
 /// Returns {"source", "msa1", "msa2", "msa3", "errors": [{"location", "code", "code_text", "table", "diagnostic",
 /// "user_message"}], "kind", "quote"}: source is "reply" (the saved body), "log" (the flat text) or "none"; kind is
 /// "words" (the receiver said something), "code_only" (a location and a code with no words, the older ERR style),
 /// "no_words" (an MSA with nothing beside its code) or "unknown" (no MSA found: the text is quoted and nothing named).
 ClassMethod Read(logText As %String, replyId As %String = "") As %DynamicObject
 {
-    Set:replyId="" replyId = ..ReplyId(logText)
+    // No id is taken from the row: its "response N@EnsLib.HL7.Message" is the reply's object reference in the operation's
+    // process, not a stored id, and the engine saves no such reply (found on the pathology rig: the number opened another
+    // message, and the receiver's words were lost).
     Set out = ""
     If replyId '= "" {
         Try {
@@ -33,13 +35,6 @@ ClassMethod Read(logText As %String, replyId As %String = "") As %DynamicObject
     }
     Set:'$ISOBJECT(out) out = ..FromLog(logText)
     Quit out
-}
-
-/// The saved reply's body id named in the log row, or "".
-ClassMethod ReplyId(logText As %String) As %String
-{
-    Set m = ##class(%Regex.Matcher).%New("because response (\d+)@EnsLib\.HL7\.Message", logText)
-    Quit $SELECT(m.Locate(): m.Group(1), 1: "")
 }
 
 /// The words, read by field from the reply's own segments.

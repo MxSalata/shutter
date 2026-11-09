@@ -15,6 +15,7 @@ import {
   IconAlertCircle,
   IconCircleCheck,
   IconClock,
+  IconFileDownload,
   IconMailForward,
   IconMinus,
   IconPencil,
@@ -48,18 +49,29 @@ import { ReceiverCheckCard } from './ReceiverCheckCard';
 import { receiverNoun, receiverTeam } from './receiver';
 import { Section } from './Section';
 
-/** An escalation email's states: sending it is an action taken, not a result verified, so sent is information. */
+/**
+ * An escalation email's states: sending it is an action taken, not a result verified, so sent is information. Saved is
+ * an email file written with no mail server set (v1.53): nobody was emailed, so a person is needed to pass it on.
+ */
 const EMAIL_TONES: Record<string, Tone> = {
   draft: 'neutral',
   queued: 'info',
   sent: 'info',
+  saved: 'attention',
   failed: 'blocking',
   cancelled: 'neutral',
 };
+/** The badge's words: "Saved, not delivered" says what a saved file is not; the others by their state. */
+const emailLabel = (state: string) => (state === 'saved' ? 'Saved, not delivered' : humanize(state));
+
+/** The text's digest, by what was done with it: queued, sent through the mail server, or saved as a file. */
+const digestVerb = (state: string) => (state === 'saved' ? 'saved' : state === 'queued' ? 'queued' : 'sent');
+
 const EMAIL_ICONS: Record<string, Icon> = {
   draft: IconPencil,
   queued: IconClock,
   sent: IconSend,
+  saved: IconFileDownload,
   failed: IconAlertCircle,
   cancelled: IconMinus,
 };
@@ -115,9 +127,9 @@ function EscalateDialog({ c, draft, onClose }: { c: CaseDetail; draft: Escalatio
     await send.mutateAsync({ seq: draft.seq, bodyDigest: stored.bodyDigest, idempotencyKey: key });
     notifications.show({
       color: 'blue',
-      title: byEnv({ live: `Escalation ${draft.seq} sent`, trial: 'Marked as sent in the trial' }),
+      title: byEnv({ live: `Escalation ${draft.seq} queued`, trial: 'Saved in the trial, not delivered' }),
       message: byEnv({
-        live: `To ${to}. Once they have corrected the systems, mark the case as handled${c.failureKind === 'withheld' ? '' : ', or reinvestigate it'}.`,
+        live: `For ${to}. Its line shows whether the mail server took it or it was saved as an email file. Once they have corrected the systems, mark the case as handled${c.failureKind === 'withheld' ? '' : ', or reinvestigate it'}.`,
         trial: 'No email leaves this browser.',
       }),
     });
@@ -135,8 +147,9 @@ function EscalateDialog({ c, draft, onClose }: { c: CaseDetail; draft: Escalatio
         {/* What sending does, first: a real email from a live system; nothing at all from the trial */}
         <Text size="sm" fw={600} data-testid="confirm-consequence">
           {byEnv({
-            live: `This emails ${draft.teamName ? `the ${draft.teamName}` : recipient}.`,
-            trial: 'Sending marks it as sent in the trial. No email leaves this browser.',
+            live: `This emails ${draft.teamName ? `the ${draft.teamName}` : recipient} through the site's mail server. With no mail server set, it is saved as an email file and nobody is emailed.`,
+            trial:
+              'Sending saves it as an email file in the trial, as on an instance with no mail server. No email leaves this browser.',
           })}
         </Text>
         {teamNotListed ? (
@@ -210,7 +223,74 @@ function EscalateDialog({ c, draft, onClose }: { c: CaseDetail; draft: Escalatio
 }
 
 /**
- * Closes a case the team corrected by hand: offered once an escalation is sent, or at once for a withheld case (a merge
+ * Sends a saved escalation again (v1.53): the same text, unchanged, once the site has a mail server. A saved one can't be
+ * edited; with no mail server set it is saved as an email file again.
+ */
+function SendAgain({ c, e }: { c: CaseDetail; e: Escalation }) {
+  const send = useSendEscalation(c.caseId);
+  const [opened, setOpened] = useState(false);
+  const [key, setKey] = useState('');
+  const open = () => {
+    setKey(newIdempotencyKey());
+    send.reset();
+    setOpened(true);
+  };
+  const submit = () =>
+    send.mutate(
+      { seq: e.seq, bodyDigest: e.bodyDigest, idempotencyKey: key },
+      {
+        onSuccess: () => {
+          setOpened(false);
+          notifications.show({
+            color: 'blue',
+            title: byEnv({
+              live: `Escalation ${e.seq} queued again`,
+              trial: 'Saved in the trial, not delivered',
+            }),
+            message: byEnv({
+              live: 'Its line shows whether the mail server took it or it was saved as an email file again.',
+              trial: 'No email leaves this browser.',
+            }),
+          });
+        },
+      },
+    );
+  return (
+    <>
+      <Group>
+        <Button size="xs" variant="light" onClick={open}>
+          Send it again…
+        </Button>
+      </Group>
+      <ConfirmModal opened={opened} onClose={() => setOpened(false)} title={`Send escalation ${e.seq} again`}>
+        <Stack gap="sm">
+          <Text size="sm" fw={600} data-testid="confirm-consequence">
+            {byEnv({
+              live: `This sends the same text to ${e.to} through the site's mail server. With no mail server set, it is saved as an email file again and nobody is emailed.`,
+              trial: 'Sending saves it as an email file again in the trial. No email leaves this browser.',
+            })}
+          </Text>
+          {send.error ? (
+            <Alert color="red" variant="light" role="alert" title="Nothing was sent">
+              {describeError(send.error)}
+            </Alert>
+          ) : null}
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setOpened(false)}>
+              Cancel
+            </Button>
+            <Button leftSection={<IconMailForward size={16} />} onClick={submit} loading={send.isPending}>
+              Send again
+            </Button>
+          </Group>
+        </Stack>
+      </ConfirmModal>
+    </>
+  );
+}
+
+/**
+ * Closes a case the team corrected by hand: offered once an escalation is sent or saved as an email file, or at once for a withheld case (a merge
  * or a cancel Shutter never sends), where reinvestigating could find nothing new. The reason is recorded on the case,
  * and the case's version guards against closing one that changed meanwhile.
  */
@@ -329,7 +409,7 @@ export function EscalationPanel({
           ? notModelled(c)
             ? "Shutter resends only ADT. Send it to the team, who check the source's Message Viewer before anyone re-enters it."
             : "Shutter can't recover this safely. Send it to the team."
-          : 'The emails sent before the team corrected the systems by hand and the case was closed.'
+          : 'The emails sent or saved before the team corrected the systems by hand and the case was closed.'
       }
     >
       {list.isError ? <ErrorAlert error={list.error} title="The escalations could not be read" /> : null}
@@ -343,7 +423,7 @@ export function EscalationPanel({
                 </Text>
                 <StatusBadge
                   tone={EMAIL_TONES[e.state] ?? 'neutral'}
-                  label={humanize(e.state)}
+                  label={emailLabel(e.state)}
                   icon={EMAIL_ICONS[e.state]}
                 />
                 <Text size="xs" c="dimmed">
@@ -355,7 +435,14 @@ export function EscalationPanel({
             <Accordion.Panel>
               <Stack gap="xs">
                 <Group gap="lg" wrap="wrap">
-                  {e.sentAt ? (
+                  {e.state === 'saved' ? (
+                    <Group gap={4}>
+                      <Text size="xs" c="dimmed">
+                        Queued by {e.sentBy}; saved as an email file
+                      </Text>
+                      <Timestamp iso={e.savedAt || e.sentAt} size="xs" />
+                    </Group>
+                  ) : e.sentAt ? (
                     <Group gap={4}>
                       <Text size="xs" c="dimmed">
                         Sent by {e.sentBy}
@@ -370,17 +457,21 @@ export function EscalationPanel({
                       <Timestamp iso={e.draftedAt} size="xs" />
                     </Group>
                   ) : null}
-                  {e.transport ? (
+                  {e.state === 'sent' && e.transport === 'smtp' ? (
                     <Text size="xs" c="dimmed">
-                      {e.transport === 'file'
-                        ? 'Written as an email file: no mail server is configured'
-                        : 'Sent by email'}
+                      Sent through the mail server, which accepted it; that does not show anyone has read it
                     </Text>
                   ) : null}
                 </Group>
-                {(e.state === 'queued' || e.state === 'sent') && e.bodyDigest ? (
+                {e.state === 'saved' ? (
+                  <Text size="sm" data-testid="escalation-saved">
+                    Saved as an email file, not delivered: no mail server is set, so nobody was emailed. Pass
+                    the file on, or set the mail server and send it again.
+                  </Text>
+                ) : null}
+                {['queued', 'sent', 'saved'].includes(e.state) && e.bodyDigest ? (
                   <Text size="xs" c="dimmed" className="mono-wrap">
-                    Digest of the text sent: {e.bodyDigest}
+                    Digest of the text {digestVerb(e.state)}: {e.bodyDigest}
                   </Text>
                 ) : null}
                 {e.state === 'failed' && e.result ? (
@@ -393,11 +484,14 @@ export function EscalationPanel({
                 </Text>
                 {e.purgedAt ? (
                   <Text size="xs" c="dimmed" className="mono-wrap">
-                    Text removed on {formatZoned(e.purgedAt)} by the retention task; digest of the text sent{' '}
-                    {e.bodyDigest}
+                    Text removed on {formatZoned(e.purgedAt)} by the retention task; digest of the text{' '}
+                    {digestVerb(e.state)} {e.bodyDigest}
                   </Text>
                 ) : (
-                  <Code block>{e.body}</Code>
+                  // A long email scrolls: the keyboard reaches it to scroll it, and a screen reader names it
+                  <Code block tabIndex={0} role="region" aria-label={`The text of escalation ${e.seq}`}>
+                    {e.body}
+                  </Code>
                 )}
                 {stopped && (e.state === 'draft' || e.state === 'failed') && !e.purgedAt && me?.operator ? (
                   <Group>
@@ -405,6 +499,9 @@ export function EscalationPanel({
                       {e.state === 'failed' ? 'Check and send again…' : 'Check and send…'}
                     </Button>
                   </Group>
+                ) : null}
+                {stopped && e.state === 'saved' && !e.purgedAt && me?.operator ? (
+                  <SendAgain c={c} e={e} />
                 ) : null}
               </Stack>
             </Accordion.Panel>

@@ -55,11 +55,11 @@ Method Header(session As %Integer, target As %String, body As %String, resent As
 }
 
 /// A row of the event log, saved.
-Method Log(session As %Integer, message As %String, type As %Integer, text As %String, config As %String = "UT Out") As %String
+Method Log(session As %Integer, message As %String, type As %Integer, text As %String, config As %String = "UT Out", class As %String = "UT", method As %String = "UT") As %String
 {
     Set l = ##class(Ens.Util.Log).%New()
     Set l.SessionId = session, l.MessageId = message, l.Type = type, l.Text = text, l.ConfigName = config
-    Set l.TimeLogged = $ZDATETIME($ZTIMESTAMP, 3, 1, 3), l.SourceClass = "UT", l.SourceMethod = "UT"
+    Set l.TimeLogged = $ZDATETIME($ZTIMESTAMP, 3, 1, 3), l.SourceClass = class, l.SourceMethod = method
     Do l.%Save()
     Set ..Logs = ..Logs _ $LISTBUILD(l.%Id())
     Quit l.%Id()
@@ -327,6 +327,52 @@ Method TestLogReachesBackOnRealRows()
     Set got = $CLASSMETHOD(er, "LogReachesBack", ns, h)
     Do $$$AssertEquals(got.answer, "yes", "the namespace's log is older than this header, " _ got.oldestLogged _ " against " _ got.headerCreated)
     Set got = $CLASSMETHOD(er, "LogReachesBack", ns, 999999999999)
+    Do $$$AssertEquals(got.answer, "unknown", "no such header")
+}
+
+Method TestBoundaryTable()
+{
+    Set er = "Shutter.Util.EngineRead"
+    Do $$$AssertEquals($CLASSMETHOD(er, "Boundary", "", ""), "", "no row since and none of its own")
+    Do $$$AssertEquals($CLASSMETHOD(er, "Boundary", "120", ""), "120", "rows since, none of its own")
+    Do $$$AssertEquals($CLASSMETHOD(er, "Boundary", "", "95"), "95", "its own rows only")
+    Do $$$AssertEquals($CLASSMETHOD(er, "Boundary", "120", "95"), "95", "its own first row is older: the clock was set back")
+    Do $$$AssertEquals($CLASSMETHOD(er, "Boundary", "95", "120"), "95", "the first row since is older")
+    Do $$$AssertEquals($CLASSMETHOD(er, "Boundary", "99", "100"), "99", "compared as numbers, not as text")
+}
+
+/// A stop or a crash after the header was created, found by the engine's class and method columns, never by the words: the
+/// translated words of a restore, under a source the rule doesn't name, count for nothing, and each named source counts alone.
+Method TestInterruptedOnRealRows()
+{
+    Set er = "Shutter.Util.EngineRead", ns = $NAMESPACE, s = ..Session()
+    Set h = ..Header(s, "UT Out", ..Body())
+    Do ..Log(s, h, 2, "ERROR <Ens>ErrOutConnectExpired: TCP Connect timeout period (3) expired for 127.0.0.1:7600")
+    // Rows of the same class whose method the rule doesn't name, and the words of a restore under another source.
+    Do ..Log("", "", 4, "ConfigItem 'UT Out' started in job 1", "UT Out", "Ens.Job", "Start")
+    Do ..Log("", "", 4, "Active message '" _ h _ "', processed in job 'UT Out', has been restored to the queue.", "", "UT", "UT")
+    Set got = $CLASSMETHOD(er, "Interrupted", ns, h)
+    Do $$$AssertEquals(got.answer, "no", "nothing the rule names since the header was created: " _ got.%ToJSON())
+    For source = "Ens.Job:RecoverActiveMessage", "Ens.Job:MarkDeadJobs", "Ens.Director:StartProduction" {
+        Set h2 = ..Header(s, "UT Out", ..Body())
+        Set got = $CLASSMETHOD(er, "Interrupted", ns, h2)
+        Do $$$AssertEquals(got.answer, "no", "before the row: " _ source)
+        Set id = ..Log("", "", 4, "translated words", "", $PIECE(source, ":"), $PIECE(source, ":", 2))
+        Set got = $CLASSMETHOD(er, "Interrupted", ns, h2)
+        Do $$$AssertEquals(got.answer, "yes", source _ " after the header was created reads interrupted")
+        Do $$$AssertEquals(got.by, source, "and names it")
+        Do ##class(Ens.Util.Log).%DeleteId(id)
+    }
+    // A clock set back: the restore row is logged with a time before the header's creation, but after its own first row.
+    Set h3 = ..Header(s, "UT Out", ..Body())
+    Do ..Log(s, h3, 2, "ERROR <Ens>ErrOutConnectExpired: TCP Connect timeout period (3) expired for 127.0.0.1:7600")
+    Set id = ..Log("", "", 4, "translated words", "", "Ens.Job", "RecoverActiveMessage")
+    Set l = ##class(Ens.Util.Log).%OpenId(id), l.TimeLogged = "2000-01-01 00:00:00.000"
+    Do l.%Save()
+    Set got = $CLASSMETHOD(er, "Interrupted", ns, h3)
+    Do $$$AssertEquals(got.answer, "yes", "a restore row after the header's own first row counts whatever time it holds")
+    Do ##class(Ens.Util.Log).%DeleteId(id)
+    Set got = $CLASSMETHOD(er, "Interrupted", ns, 999999999999)
     Do $$$AssertEquals(got.answer, "unknown", "no such header")
 }
 

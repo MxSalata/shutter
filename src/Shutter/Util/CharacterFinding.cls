@@ -1,7 +1,8 @@
 /// Where a message a receiver refused holds characters above ASCII, and what the engine sends for them: per field, the
 /// segment, field, component and position, the code points as stored, the character in words, the stored MSH-18, the
 /// operation's DefCharEncoding and the bytes it puts on the wire. A "?" in an identity field is raised as a question.
-/// The count compares the field with the receiver's recent failures and recent deliveries.
+/// The count compares the field with the receiver's recent failures and recent deliveries, and the shared count says how
+/// many of those failures hold the same character in any field.
 ///
 /// A local diagnostic, never a model's input: it names where a character stands and which it is, never the value around
 /// it. It repairs nothing, transliterates nothing and offers no Charset; a message resent unchanged fails the same way.
@@ -36,6 +37,7 @@ ClassMethod Find(ns As %String, item As %String, headerId As %String) As %Dynami
     Set msg = ..Body(ns, headerId)
     Set out = ..Of(msg, $SELECT(setting.source = "unknown": "", 1: setting.value), setting.why)
     Set out.count = ..Count(ns, item, headerId, out)
+    Set out.shared = ..Shared(ns, item, out)
     Set out.sentence = ..Sentence(out)
     Quit out
 }
@@ -216,6 +218,70 @@ ClassMethod Count(ns As %String, item As %String, headerId As %String, out As %D
     Quit count
 }
 
+/// How many of the receiver's failures in the last DAYS days hold one of the characters this message holds, in any field:
+/// {"failures", "of_failures", "characters"}, the characters in words, with "failures" "" and a "why" when they could not
+/// be compared. A character stored as its UTF-8 bytes counts as that character, so a message read as UTF-8 and one read as
+/// Latin-1 share it. Empty when the message holds no character above ASCII.
+ClassMethod Shared(ns As %String, item As %String, out As %DynamicObject) As %DynamicObject
+{
+    Set mine = ..Characters(out.fields)
+    Quit:mine="" {}
+    Set words = ""
+    For i = 1:1:$LISTLENGTH(mine) { Set words = words _ $SELECT(i = 1: "", i = $LISTLENGTH(mine): " or ", 1: ", ") _ ..CharacterWords($LIST(mine, i)) }
+    Set failures = ..Headers(ns, item, "failed", .why)
+    Set shared = {"failures": "", "of_failures": "", "characters": (words)}
+    If why '= "" Set shared.why = why Quit shared
+    Set n = 0
+    For i = 1:1:$LISTLENGTH(failures) {
+        Set msg = ..Body(ns, $LIST(failures, i))
+        Continue:'$ISOBJECT(msg)
+        Set theirs = ..Characters(..Of(msg, "").fields), hit = 0
+        For k = 1:1:$LISTLENGTH(theirs) { If $LISTFIND(mine, $LIST(theirs, k)) Set hit = 1 Quit }
+        Set n = n + hit
+    }
+    Set shared.failures = n, shared."of_failures" = $LISTLENGTH(failures)
+    Quit shared
+}
+
+/// The distinct characters of the finding's fields, each as its code point, a run that is the UTF-8 bytes of one character
+/// as that character's, and any other run as its codes joined by "+".
+ClassMethod Characters(fields As %DynamicArray) As %List
+{
+    Set out = ""
+    Quit:'$ISOBJECT(fields) out
+    Set iter = fields.%GetIterator()
+    While iter.%GetNext(, .f) {
+        Set run = ""
+        Set codes = f.codes.%GetIterator()
+        While codes.%GetNext(, .code) { Set run = run _ $CHAR(code) }
+        Set key = ""
+        If $LENGTH(run) = 1 {
+            Set key = $ASCII(run)
+        } Else {
+            Set decoded = ""
+            Try {
+                Set:'..Over255(run) decoded = $ZCONVERT(run, "I", "UTF8")
+            } Catch {
+                Set decoded = ""
+            }
+            If ($LENGTH(decoded) = 1) && ($ASCII(decoded) > 127) {
+                Set key = $ASCII(decoded)
+            } Else {
+                For k = 1:1:$LENGTH(run) { Set key = key _ $SELECT(k = 1: "", 1: "+") _ $ASCII(run, k) }
+            }
+        }
+        Set:'$LISTFIND(out, key) out = out _ $LISTBUILD(key)
+    }
+    Quit out
+}
+
+/// One of Characters' entries in words.
+ClassMethod CharacterWords(key As %String) As %String [ Private ]
+{
+    Quit:key'["+" ..Name(key)
+    Quit "the characters " _ $TRANSLATE(key, "+", " ")
+}
+
 /// The header ids to the item in ns: "failed" (Error or Suspended, or marked in error, in the last DAYS days) or
 /// "delivered" (Completed, the newest DELIVERED). why is set when the read failed.
 ClassMethod Headers(ns As %String, item As %String, which As %String, Output why As %String) As %List [ Private ]
@@ -276,6 +342,11 @@ ClassMethod Sentence(out As %DynamicObject) As %String
     If out.kind = "unreadable" Quit "The stored message could not be read."
     If out.kind = "none" Quit "The message holds no character above ASCII and no '?' in an identity field."
     Set text = "", seen = ""
+    // The shared count leads: how many recent failures to this receiver hold the same character, in whichever field.
+    Set shared = $SELECT(out.%IsDefined("shared"): out.shared, 1: "")
+    If $ISOBJECT(shared) && (shared.characters '= "") {
+        Set text = $SELECT(shared.failures '= "": shared.failures _ " of the last " _ shared."of_failures" _ " failures to this receiver in " _ ..#DAYS _ " days hold " _ shared.characters _ ", in any field.", 1: "Its failures could not be compared for " _ shared.characters _ ".")
+    }
     Set iter = out.fields.%GetIterator()
     While iter.%GetNext(, .f) {
         Set text = text _ $SELECT(text = "": "", 1: " ") _ f.field _ " holds " _ f.character _ " at position " _ f.position _ $SELECT(f.component > 1: " of component " _ f.component, 1: "") _ "; the operation sends " _ f.wire _ "."

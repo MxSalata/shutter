@@ -12,6 +12,12 @@ Parameter CRITICAL = "Shutter does not assess clinical urgency. If delayed repor
 /// What a card says where nothing can be approved.
 Parameter NOSEND = "Shutter will not send these messages. Review them in the Message Viewer using the site's recovery procedure.";
 
+/// The patient check's stated limit, on the card wherever a set of orders or results is listed.
+Parameter MERGELIMIT = "The patient check reads merges and identity changes only where they pass through this namespace; one made elsewhere is not seen.";
+
+/// What the approval answers at a receiver whose duplicates are not refused, without the approver's word.
+Parameter RECEIVERCHECK = "At this receiver a duplicate is unknown: check the receiver for these messages first, and say so with the approval.";
+
 /// The reason a row gives when the build has no set gate.
 Parameter NOSETGATE = "no set gate in this build";
 
@@ -58,14 +64,45 @@ ClassMethod List(state As %String = "open") As %DynamicObject
     Quit {"items": (items), "receivers": (##class(Shutter.Store.ReceiverReading).All())}
 }
 
-/// One outage as the routes give it: the store's JSON, with the card's words composed for this build.
+/// One outage as the routes give it: the store's JSON, with the card's words and the acts composed for this build and the
+/// receiver's profile entry.
 ClassMethod One(row As Shutter.Store.Outage, now As %String = "") As %DynamicObject
 {
     Set o = row.ToJSON()
     Set entry = ##class(Shutter.Store.SiteProfile).Receiver(row.Receiver)
+    Do ..ComposeActs(o, entry)
     Set recovered = ..RecoveredAt(row.%Id())
     Set o.words = ..Words(o, entry, ..Build(), now, recovered)
     Quit o
+}
+
+/// Whether "already handled by hand" is offered at this receiver: its duplicates.behaviour is unknown or files_twice, or
+/// it declares none. Where a receiver refuses duplicates its own answer closes a message it holds.
+ClassMethod ByHand(entry As %DynamicObject) As %Boolean
+{
+    Set d = $SELECT($ISOBJECT(entry): entry.%Get("duplicates"), 1: "")
+    Quit $SELECT($ISOBJECT(d): ..S(d, "behaviour"), 1: "") '= "refuses"
+}
+
+/// The acts composed on read, as the words are (v1.53): while the row is offered at a receiver where ByHand holds, each Row
+/// of lists.offered carries acts ["handled_by_hand"] and the outage's acts gain it; every other Row carries [].
+ClassMethod ComposeActs(o As %DynamicObject, entry As %DynamicObject)
+{
+    Set byHand = (..S(o, "state") = "offered") && ..ByHand(entry)
+    Set lists = o.%Get("lists")
+    If $ISOBJECT(lists) {
+        Set li = lists.%GetIterator()
+        While li.%GetNext(.name, .list) {
+            Continue:'$ISOBJECT(list)
+            Set ri = list.%GetIterator()
+            While ri.%GetNext(, .r) {
+                Continue:'$ISOBJECT(r)
+                Set r.acts = $SELECT(byHand && (name = "offered"): ["handled_by_hand"], 1: [])
+                For key = "closure", "closedBy", "closedAt" { Do:'r.%IsDefined(key) r.%Set(key, "", "null") }
+            }
+        }
+    }
+    If byHand && $ISOBJECT(o.%Get("acts")) Do o.acts.%Push("handled_by_hand")
 }
 
 /// When the engine's connection came back, from the outage's own events: the first move to draining, or "".
@@ -107,6 +144,13 @@ ClassMethod Words(o As %DynamicObject, entry As %DynamicObject = "", build As %D
     If (..S(reading, "replyCodeActions") '= "") && (reading.%GetTypeOf("replyCodeActionsStock") = "boolean") && 'reading.replyCodeActionsStock {
         Set first = first _ " This operation's reply actions are the site's own: what an AE, AR or timeout does here follows this string: " _ reading.replyCodeActions _ "."
     }
+    If (category = "orders_results") && (state = "offered") && $ISOBJECT(o.%Get("lists")) && (o.lists.offered.%Size() > 0) {
+        Set older = 0
+        Set oi = o.lists.offered.%GetIterator()
+        While oi.%GetNext(, .r) { Set:..S(r, "reason")[##class(Shutter.Util.ResendSet).#OLDER older = older + 1 }
+        If older Set first = first _ " " _ older _ " of these " _ $SELECT(older = 1: "is", 1: "are") _ " older than results of other orders for the same patients that already reached the receiver; each files under its own order."
+        Set first = first _ " " _ ..#MERGELIMIT
+    }
     Set first = first _ " " _ ..RecoveryLine(o, state, retry, queue, head)
 
     // do: the site's runbook line, or what a person decides; swapped while down on purpose.
@@ -120,6 +164,10 @@ ClassMethod Words(o As %DynamicObject, entry As %DynamicObject = "", build As %D
         Set do = "Do: a person decides in the Message Viewer; Shutter does not suspend or discard." _ $SELECT(runbook '= "": " The site's line: " _ ..Stop(runbook), 1: "")
     } Else {
         Set do = "Do: " _ $SELECT(runbook '= "": ..Stop(runbook), 1: "the site has not written what to do for this receiver.")
+    }
+    If (state = "offered") && (o.lists.offered.%Size() > 0) && ..ByHand(entry) {
+        Set behaviour = $SELECT($ISOBJECT(entry) && $ISOBJECT(entry.%Get("duplicates")): ..S(entry.duplicates, "behaviour"), 1: "")
+        Set do = do _ " At this receiver a duplicate is " _ $SELECT(behaviour = "files_twice": "filed twice", 1: "unknown") _ ": before approving, check the receiver for each message. For one already entered by hand, choose Already handled by hand; Shutter then sends nothing for it."
     }
     If (state '= "closed") && (state '= "paused") {
         If $LISTFIND($LISTBUILD("unlimited", "bounded"), retry) Set do = do _ " " _ ..DuplicateLine(entry)
@@ -323,6 +371,135 @@ ClassMethod S(obj As %DynamicObject, key As %String) As %String
     Quit obj.%Get(key)
 }
 
+/// A person's one approval of an offered set (tier C): answers the HTTP status, and in reply the outage as the routes give
+/// it or the error. by is the signed-in user. The approval names the set's digest and the row's version, carries a note,
+/// stands APPROVALMINUTES before the first send, and copies the set into the ledger as the run's rows (Shutter.Store.ResendRecord,
+/// state approved), one run per outage; Engine Resend sends them. A replayed Idempotency-Key answers the first reply.
+ClassMethod Approve(row As Shutter.Store.Outage, body As %DynamicObject, by As %String, Output reply As %DynamicObject) As %String
+{
+    Set reply = ""
+    If row.State '= "offered" Set reply = {"error": "wrong_state", "detail": ("Outage " _ row.%Id() _ " reads " _ row.State _ ": only an offered set can be approved")} Quit "409 Conflict"
+    If 'row.Approvable Set reply = {"error": "not_approvable", "detail": "This receiver's profile entry does not say engine_resend, or this build has no sender: Shutter will not send these messages"} Quit "409 Conflict"
+    If row.SetStatus '= "computed" Set reply = {"error": "wrong_state", "detail": ("The set is " _ row.SetStatus _ ": read it again")} Quit "409 Conflict"
+    Set digest = ..S(body, "digest"), note = $ZSTRIP(..S(body, "note"), "<>W")
+    If digest = "" Set reply = {"error": "bad_request", "detail": "An approval names the set's digest"} Quit "400 Bad Request"
+    If note = "" Set reply = {"error": "bad_request", "detail": "An approval needs a note: what was checked, and with whom"} Quit "400 Bad Request"
+    If $LENGTH(note) > 1000 Set reply = {"error": "bad_request", "detail": "note is longer than 1000 characters"} Quit "400 Bad Request"
+    If body.%IsDefined("version") && (+body.%Get("version") '= +row.Version) Set reply = {"error": "version_changed", "detail": "The outage has moved on: read it again", "currentVersion": (+row.Version)} Quit "409 Conflict"
+    If digest '= row.SetDigest Set reply = {"error": "set_changed", "detail": "The set has changed since it was read: read it again and approve what it lists now", "currentDigest": (row.SetDigest)} Quit "409 Conflict"
+    // Ask first (v1.53): only where a receiver refuses duplicates is a resend safe with no check.
+    If ..ByHand(##class(Shutter.Store.SiteProfile).Receiver(row.Receiver)) && '((body.%GetTypeOf("receiverChecked") = "boolean") && body.receiverChecked) Set reply = {"error": "receiver_check_needed", "detail": (..#RECEIVERCHECK)} Quit "409 Conflict"
+    Set offered = row.GetList("ListOffered")
+    If offered.%Size() = 0 Set reply = {"error": "wrong_state", "detail": "The set lists nothing to send"} Quit "409 Conflict"
+    Set now = ##class(Shutter.Util.Time).NowUTC(), runId = "R" _ row.%Id() _ "-" _ (+row.Version)
+    Set approval = {"id": (runId), "by": (by), "givenAt": (now), "goodUntil": (##class(Shutter.Util.Time).PlusMillis(now, ..#APPROVALMINUTES * 60000)), "digest": (digest), "note": (note)}
+    // The run's rows first, in the set's order: if the move below is refused, they are taken away again.
+    Set made = "", sc = $$$OK
+    Set iter = offered.%GetIterator()
+    While iter.%GetNext(.i, .r) {
+        Set rec = ##class(Shutter.Store.ResendRecord).%New()
+        Set rec.RunId = runId, rec.Position = i + 1, rec.OutageId = row.%Id(), rec.Namespace = row.Namespace, rec.Item = row.Item
+        Set rec.OriginHeaderId = r.headerId, rec.ControlId = ..S(r, "controlId"), rec.State = "approved", rec.SetDigest = digest, rec.ApprovalId = runId, rec.ApprovedBy = by
+        Set cases = ##class(Shutter.Util.ResendSet).CasesOf(row.Namespace, [(r)])
+        Set:cases'="" rec.CaseId = $LIST(cases, 1)
+        Set sc = rec.%Save()
+        If $$$ISERR(sc) Quit
+        Set made = made _ $LISTBUILD(rec.%Id())
+    }
+    If $$$ISOK(sc) Set sc = row.Advance("sending", "approved by " _ by _ ": " _ offered.%Size() _ " message" _ $SELECT(offered.%Size() = 1: "", 1: "s") _ " to send in order. " _ note, by, {"Approval": (approval.%ToJSON())}, "approved", .moved)
+    If $$$ISERR(sc) || 'moved {
+        For j = 1:1:$LISTLENGTH(made) { Do ##class(Shutter.Store.ResendRecord).%DeleteId($LIST(made, j)) }
+        Set reply = {"error": "version_changed", "detail": ("The outage moved on while it was approved: read it again" _ $SELECT($$$ISERR(sc): " (" _ $SYSTEM.Status.GetErrorText(sc) _ ")", 1: ""))}
+        Quit "409 Conflict"
+    }
+    Set reply = ..One(row)
+    Quit "200 OK"
+}
+
+/// How long an approval stands before its first send, in minutes.
+Parameter APPROVALMINUTES = 15;
+
+/// "Already handled by hand" (v1.53, CONTRACTS 17.8): a person says one offered message was entered at the receiver by hand,
+/// so Shutter sends nothing for it. The header must be a Row of lists.offered whose acts list the act, and the note says what
+/// was checked. A ledger row handled_by_hand is written first; then, under the row's lock and version, the Row moves from
+/// offered to closed, the digest is computed over what stays offered, the version moves on, an event names the person and
+/// the control id and the row is marked to read again; if that move is refused the ledger row is taken away again. Then the
+/// message's own cases are closed by hand with the same words. Nothing is sent.
+ClassMethod HandledByHand(row As Shutter.Store.Outage, body As %DynamicObject, by As %String, Output reply As %DynamicObject) As %String
+{
+    Set reply = ""
+    Set headerId = ..S(body, "headerId"), note = $ZSTRIP(..S(body, "note"), "<>W")
+    Set o = ..One(row), offered = o.lists.offered, found = "", keep = []
+    Set iter = offered.%GetIterator()
+    While iter.%GetNext(, .r) {
+        If (headerId '= "") && (..S(r, "headerId") = headerId) { Set found = r } Else { Do keep.%Push(r) }
+    }
+    If '$ISOBJECT(found) Set reply = {"error": "bad_request", "detail": ("headerId must be a message the set offers: " _ $SELECT(headerId '= "": "header " _ headerId _ " is not offered", 1: "none was given"))} Quit "400 Bad Request"
+    Set listed = 0
+    Set ai = found.acts.%GetIterator()
+    While ai.%GetNext(, .a) { Set:a="handled_by_hand" listed = 1 }
+    If 'listed Set reply = {"error": "bad_request", "detail": ("Header " _ headerId _ " does not list handled_by_hand: this receiver refuses duplicates, and its own answer closes a message it holds")} Quit "400 Bad Request"
+    If note = "" Set reply = {"error": "bad_request", "detail": "A note is needed: what was checked at the receiver, and with whom"} Quit "400 Bad Request"
+    If $LENGTH(note) > 1000 Set reply = {"error": "bad_request", "detail": "note is longer than 1000 characters"} Quit "400 Bad Request"
+    Set now = ##class(Shutter.Util.Time).NowUTC()
+    Set words = $EXTRACT("Handled by hand, recorded by " _ by _ " at " _ ..Clock(now) _ ": " _ note _ ". Shutter sent nothing for it.", 1, 1000)
+    Set rec = ##class(Shutter.Store.ResendRecord).%New()
+    Set rec.RunId = "H" _ row.%Id(), rec.Position = 0, rec.OutageId = row.%Id(), rec.Namespace = row.Namespace, rec.Item = row.Item
+    Set rec.OriginHeaderId = headerId, rec.ControlId = ..S(found, "controlId"), rec.State = "handled_by_hand", rec.RecordedBy = by
+    Set rec.EndedAt = now, rec.Words = words
+    Set cases = ##class(Shutter.Util.ResendSet).CasesOf(row.Namespace, [(found)])
+    Set:cases'="" rec.CaseId = $LIST(cases, 1)
+    Set sc = rec.%Save()
+    If $$$ISERR(sc) Set reply = {"error": "wrong_state", "detail": ("The record could not be written: " _ $SYSTEM.Status.GetErrorText(sc))} Quit "409 Conflict"
+    Set closedRow = {}.%FromJSON(found.%ToJSON())
+    Set closedRow.reason = words, closedRow.closure = "handled_by_hand", closedRow.closedBy = by, closedRow.closedAt = now, closedRow.acts = []
+    Set closed = row.GetList("ListClosed")
+    Do closed.%Push(closedRow)
+    // The stored lists carry no acts: they are composed on read.
+    Set stored = []
+    Set ki = keep.%GetIterator()
+    While ki.%GetNext(, .k) {
+        Set copy = {}.%FromJSON(k.%ToJSON())
+        Do copy.%Remove("acts")
+        Do stored.%Push(copy)
+    }
+    Do closedRow.%Remove("acts")
+    Set fields = {"ListOffered": (stored), "ListClosed": (closed), "SetDigest": (##class(Shutter.Util.ResendSet).Digest(stored)), "Version": (row.Version + 1), "ReadAgainAt": (now)}
+    Set sc = row.Advance(row.State, "handled by hand: " _ $SELECT(found.controlId '= "": "control id " _ found.controlId _ ", ", 1: "") _ "header " _ headerId _ ", recorded by " _ by _ ": " _ note, by, fields, "handled_by_hand", .moved)
+    If $$$ISERR(sc) || 'moved {
+        Do ##class(Shutter.Store.ResendRecord).%DeleteId(rec.%Id())
+        Set reply = {"error": "version_changed", "detail": "The outage moved on while it was read: read it again", "currentVersion": (+row.Version)}
+        Quit "409 Conflict"
+    }
+    Do ..CloseCasesByHand(row.Namespace, headerId, words, by)
+    Set reply = ..One(row)
+    Quit "200 OK"
+}
+
+/// The message's own cases (its origin's, by ResendSet.CaseRows) closed by hand with words, as POST /cases/{id}/close does:
+/// through the Case Workflow item when the production runs, so an open approval task is cancelled; else directly.
+ClassMethod CloseCasesByHand(ns As %String, headerId As %String, words As %String, by As %String)
+{
+    Set rows = ##class(Shutter.Util.ResendSet).CaseRows(ns, headerId)
+    Set iter = rows.%GetIterator()
+    While iter.%GetNext(, .one) {
+        Continue:one.state="resolved"
+        Set service = ""
+        Set sc = ##class(Ens.Director).CreateBusinessService("Shutter API", .service)
+        If $$$ISOK(sc) && $ISOBJECT(service) {
+            Set msg = ##class(Shutter.Msg.CaseClose).%New()
+            Set msg.CaseId = one.caseId, msg.Reason = words, msg.Actor = by
+            Set service.Target = "Case Workflow", service.Async = 1
+            Set sc = service.ProcessInput(msg)
+            Continue:$$$ISOK(sc)
+        }
+        Set case = ##class(Shutter.Store.Case).%OpenId(one.id)
+        Continue:'$ISOBJECT(case)
+        Set sc = ##class(Shutter.Store.Case).CloseByHand(case, words, by)
+        If $$$ISERR(sc) Do case.Note("note", words _ " (the case stays " _ case.State _ ": " _ $SYSTEM.Status.GetErrorText(sc) _ ")", by)
+    }
+}
+
 /// A person's act on an outage: pause until a time, or close with a reason. Answers the HTTP status, and in reply the outage
 /// as the routes give it or the error object. by is the signed-in user, never a name from the body.
 /// acts, when given, stands in for the row's own list (a later build's row may list an act this method doesn't handle).
@@ -330,7 +507,8 @@ ClassMethod Act(row As Shutter.Store.Outage, body As %DynamicObject, by As %Stri
 {
     Set reply = ""
     Set act = ..S(body, "act")
-    If '$ISOBJECT(acts) Set acts = row.ToJSON().acts
+    If (act = "handled_by_hand") && (row.State '= "offered") && (row.State '= "closed") Set reply = {"error": "wrong_state", "detail": ("Outage " _ row.%Id() _ " reads " _ row.State _ ": a message is closed by hand only while the set is offered")} Quit "409 Conflict"
+    If '$ISOBJECT(acts) Set acts = ..One(row).acts
     Set allowed = ""
     Set ai = acts.%GetIterator()
     While ai.%GetNext(.i, .a) { Set allowed = allowed _ $SELECT(allowed = "": "", 1: ", ") _ a }
@@ -354,6 +532,8 @@ ClassMethod Act(row As Shutter.Store.Outage, body As %DynamicObject, by As %Stri
         If $ZSTRIP(reason, "<>W") = "" Set reply = {"error": "bad_request", "detail": "A close needs a reason"} Quit "400 Bad Request"
         If $LENGTH(reason) > 1000 Set reply = {"error": "bad_request", "detail": "reason is longer than 1000 characters"} Quit "400 Bad Request"
         Set sc = row.Close(reason, by)
+    } ElseIf act = "handled_by_hand" {
+        Quit ..HandledByHand(row, body, by, .reply)
     } ElseIf act = "read_again" {
         // The REST process never switches to the watched namespace: the row is marked, and the next poll of Receiver Watch
         // (every 5 s), a production job, computes the set again there.

@@ -85,7 +85,8 @@ describe('the trial, walked end to end', () => {
     const sentMail = await api.post<Escalation>(`/cases/${WITHHELD}/escalations/${draft.seq}/send`, {
       bodyDigest: draft.bodyDigest,
     });
-    expect(sentMail.state).toBe('sent');
+    // Saved as an email file, as on an instance with no mail server: nobody is emailed (v1.53)
+    expect(sentMail.state).toBe('saved');
 
     // Start a production review
     expect(

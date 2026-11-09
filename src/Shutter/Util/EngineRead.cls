@@ -301,6 +301,64 @@ ClassMethod LogReachesBack(ns As %String, headerId As %String) As %DynamicObject
     Quit out
 }
 
+/// Whether a stop or a crash came after this header was created, which its own rows would not show. An attempt cut off by a
+/// stop or a crash leaves no Error row: the engine's Ens.Job.RecoverActiveMessage puts the message back on its queue after a
+/// forced stop and after a crash's recovery, unmarked, so the next attempt is an ordinary one, and only that attempt's words
+/// are logged. Measured on build 154: a frame the receiver took, then a forced production stop or a killed instance, then
+/// connects that never opened, leaves a header in Error whose every Error row says never opened. So "yes" when the namespace's
+/// log holds, from the header's creation on, a row of Ens.Job's RecoverActiveMessage or MarkDeadJobs, or of Ens.Director's
+/// StartProduction (a crash's recovery and every restart log there); the rows are found by the engine's own class and method
+/// columns, since their words are translated. From the header's creation means from the first row logged at or after its
+/// TimeCreated, or its session's first row if that is older, so a clock set back does not hide one. "no" when there is none;
+/// "unknown" for a failed read. { "answer", "why", "at", "by" }: at and by the first such row's time and class:method.
+ClassMethod Interrupted(ns As %String, headerId As %String) As %DynamicObject
+{
+    Set out = {"answer": "unknown", "why": "", "at": "", "by": ""}
+    If '..One(ns, "SELECT TimeCreated, SessionId FROM Ens.MessageHeader WHERE ID = ?", "TimeCreated,SessionId", .header, .why, headerId) {
+        Set out.why = why
+        Quit out
+    }
+    If header.TimeCreated = "" {
+        Set out.why = "the header has no creation time"
+        Quit out
+    }
+    If '..Query(ns, "SELECT MIN(ID) AS Lowest FROM Ens_Util.Log WHERE TimeLogged >= ?", "Lowest", .since, .why, header.TimeCreated) {
+        Set out.why = why
+        Quit out
+    }
+    Set own = ""
+    If header.SessionId '= "" {
+        If '..Query(ns, "SELECT MIN(ID) AS Lowest FROM Ens_Util.Log WHERE SessionId = ?", "Lowest", .rows, .why, header.SessionId) {
+            Set out.why = why
+            Quit out
+        }
+        Set own = $SELECT(rows.%Size(): rows.%Get(0).Lowest, 1: "")
+    }
+    Set from = ..Boundary($SELECT(since.%Size(): since.%Get(0).Lowest, 1: ""), own)
+    If from = "" {
+        Set out.answer = "no"
+        Quit out
+    }
+    If '..Query(ns, "SELECT TOP 1 ID, SourceClass, SourceMethod, TimeLogged FROM Ens_Util.Log WHERE ID >= ? AND ((SourceClass = 'Ens.Job' AND SourceMethod IN ('RecoverActiveMessage', 'MarkDeadJobs')) OR (SourceClass = 'Ens.Director' AND SourceMethod = 'StartProduction')) ORDER BY ID", "ID,SourceClass,SourceMethod,TimeLogged", .cut, .why, from) {
+        Set out.why = why
+        Quit out
+    }
+    If 'cut.%Size() {
+        Set out.answer = "no"
+        Quit out
+    }
+    Set out.answer = "yes", out.at = cut.%Get(0).TimeLogged, out.by = cut.%Get(0).SourceClass _ ":" _ cut.%Get(0).SourceMethod
+    Quit out
+}
+
+/// Interrupted's first row to read from: the lower of two row ids, either of which may be empty; "" when both are.
+ClassMethod Boundary(since As %String, own As %String) As %String
+{
+    Quit:since="" own
+    Quit:own="" since
+    Quit $SELECT(+own < +since: own, 1: since)
+}
+
 /// LogReachesBack's comparison of two UTC times in the store's form.
 ClassMethod ReachesBack(oldest As %String, created As %String) As %String
 {

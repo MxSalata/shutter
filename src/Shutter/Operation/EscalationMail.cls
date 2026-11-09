@@ -35,7 +35,7 @@ Method OnEscalationSend(request As Shutter.Msg.EscalationSend, Output response A
     Try {
         If ..Adapter.SMTPServer = "" {
             Set file = ..WriteFile(esc)
-            Do esc.MarkSent("file", file)
+            Do esc.MarkSaved(file)
         } Else {
             Set mail = ..Mail(esc)
             Set sc = ..Adapter.SendMail(mail, .failed)

@@ -943,6 +943,13 @@ listeners on the loopback address of a test instance:
   retry". Shutter sends no order or result. It never edits, re-encodes, transliterates or reorders a message, never passes a
   new body or target to the engine, and never suspends, discards or reorders a message in the engine's hands, even when one
   refused message at the head of a retrying queue blocks everything behind it: it names the message and a person acts.
+- **The patient check before a resend (1.4.0).** At an `orders_results` receiver an order or result with an order
+  number is held by a newer message on the same or a linked order, by a newer message for the same patient that can't be
+  shown to be about other orders, by a merge or an identity change of the patient after it, and by an unresolved case that
+  is not on another order (CONTRACTS 17.8). It reads merges and identity changes only where they pass through the watched
+  namespace; one made elsewhere is not seen. Its cost, measured on build 154: a set of 50 candidates with 2,000 newer
+  headers to the item and 5,000 ADT bodies in the namespace took 3.5 s, each body read once for the set; past 2,000 newer
+  headers or 5,000 ADT bodies every candidate is held.
 - **No probe.** Shutter never opens a connection to a receiver to see whether it is up. Measured: a connect-and-close probe
   reads a busy healthy listener as down and a hung one as up, logs a warning at the receiver each time, and, badly timed,
   caused the very failure it was looking for. The engine's view is of its own connection, so a network, DNS or VPN fault
@@ -984,7 +991,8 @@ listeners on the loopback address of a test instance:
   reads connected until a read times out.
 - **Counts of attempts are undercounts.** The engine logs a row only when the words change, so the attempts are read from
   the header's own description where it says so, and otherwise as "at least once". A namespace's surviving log rows do not
-  prove a complete attempt history.
+  prove a complete attempt history: an attempt cut off by a forced stop or a crash leaves no row, so a message whose life
+  crosses a production start or an active message put back on a queue is never offered again, and a person sends it.
 - **Failures the intake never hears** (a router's validation refusal with `AlertOnError` off, a batch, a message over 2 MB,
   a FHIR or document body) get no case. The outage does not depend on the intake, so it can still open at the operation; a
   router's refusal never reaches the operation and gets neither. A target with no header to it is invisible: nothing reaches

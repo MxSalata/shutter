@@ -36,6 +36,10 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
 {
     Set response = ""
     If 'request.%IsA("Shutter.Msg.ExternalIntake") Quit $$$ERROR($$$GeneralError, "Case Intake expects an external intake, got " _ $CLASSNAME(request))
+    // 0. Shutter's own resend opens no case (v1.53, CONTRACTS 11): the engine's alert on a clone Shutter's run made, or on an
+    // origin a run has started to send, is answered as taken, and its words go on the message's earlier case.
+    Set own = ..OwnResend(request)
+    If $ISOBJECT(own) Set response = own Quit $$$OK
     // 1. Shutter's own copy of the message: parsed under the named category and sent to the store item, so it has a
     // message header in this namespace. The header of that send is the case's source header.
     // A category imported under an alias (two namespaces, one name, different schemas; v1.42) is read under that alias.
@@ -104,6 +108,39 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
     Set response = started
     $$$TRACE("Case " _ started.CaseId _ $SELECT(started.Opened: " opened", 1: " updated") _ ", state " _ started.State)
     Quit $$$OK
+}
+
+/// The answer to an intake of Shutter's own resend, or "" for any other: a forward whose header in its source namespace is
+/// a clone one of Shutter's runs made (Shutter.Store.ResendRecord.NewHeaderId), or an origin with a ledger row that has
+/// started. Its words go on the message's earlier case as an event of kind resend, or, with no case, on the outage as an
+/// alert line. The site's own alert consumer had the engine's alert first, as every alert is passed on.
+ClassMethod OwnResend(request As Shutter.Msg.ExternalIntake) As Shutter.Msg.CaseStarted
+{
+    Set ns = request.SourceNamespace, header = request.OriginHeaderId
+    Quit:(ns="")||(header="") ""
+    Set row = ##class(Shutter.Store.ResendRecord).OwnResendRow(ns, header)
+    Quit:'$ISOBJECT(row) ""
+    Set words = $EXTRACT("the engine alerted on Shutter's resend of this message (header " _ header _ "): " _ $SELECT(request.FailureText '= "": request.FailureText, 1: "no words"), 1, 2000)
+    Set answer = ##class(Shutter.Msg.CaseStarted).%New()
+    Set answer.Opened = 0, answer.OwnResend = 1, answer.CaseId = "", answer.State = ""
+    Set case = ""
+    If row.CaseId '= "" Set case = ##class(Shutter.Store.Case).ByCaseId(row.CaseId)
+    If '$ISOBJECT(case) {
+        Set cases = ##class(Shutter.Util.ResendSet).CaseRows(ns, ##class(Shutter.Store.ResendRecord).OriginOf(ns, row.OriginHeaderId))
+        If cases.%Size() Set case = ##class(Shutter.Store.Case).%OpenId(cases.%Get(0).id)
+    }
+    If $ISOBJECT(case) {
+        Do case.Note("resend", words, "Case Intake", "resend:" _ row.RunId _ ":" _ row.Position)
+        Set answer.CaseId = case.CaseId, answer.State = case.State
+        Quit answer
+    }
+    Set outage = ##class(Shutter.Store.Outage).%OpenId(row.OutageId)
+    If $ISOBJECT(outage) {
+        Set alerts = outage.GetList("Alerts")
+        Do alerts.%Push({"at": (##class(Shutter.Util.Time).NowUTC()), "kind": "resend", "text": (words)})
+        Do outage.Advance(outage.State, "", "Case Intake", {"Alerts": (alerts)})
+    }
+    Quit answer
 }
 
 /// The HL7 message from its text, with its DocType set for the category (2.5.1 when the intake names none; the

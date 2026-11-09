@@ -11,7 +11,7 @@ Index CaseSeqIdx On (Case, Seq) [ Unique ];
 
 Property At As %String(%JSONFIELDNAME = "at", MAXLEN = 30);
 
-Property Kind As %String(%JSONFIELDNAME = "kind", MAXLEN = 16, VALUELIST = ",state,note,artifact,error,approval,execution,escalation");
+Property Kind As %String(%JSONFIELDNAME = "kind", MAXLEN = 16, VALUELIST = ",state,note,artifact,error,approval,execution,escalation,resend");
 
 Property FromState As %String(%JSONFIELDNAME = "fromState", MAXLEN = 32);
 

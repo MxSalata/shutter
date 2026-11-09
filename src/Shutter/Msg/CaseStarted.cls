@@ -8,6 +8,9 @@ Property Opened As %Boolean;
 
 Property State As %String(MAXLEN = 32);
 
+/// The intake was Shutter's own resend (v1.53): no case was opened; CaseId is the message's earlier case, or empty.
+Property OwnResend As %Boolean;
+
 Storage Default
 {
 <Data name="CaseStartedDefaultData">
@@ -20,6 +23,9 @@ Storage Default
 </Value>
 <Value name="3">
 <Value>State</Value>
+</Value>
+<Value name="4">
+<Value>OwnResend</Value>
 </Value>
 </Data>
 <DefaultData>CaseStartedDefaultData</DefaultData>

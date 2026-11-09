@@ -11,6 +11,35 @@ Method TestApplies()
     Do $$$AssertNotTrue(##class(Shutter.Util.CaseFindings).Applies(""), "no message")
 }
 
+/// The evidence stores the findings as a snapshot item of their own kind. A kind outside the item store's list fails the
+/// evidence, and the case with it, before anything is shown (found on the pathology rig: every order and result case
+/// ended failed with no snapshot). Every kind the evidence classes add is held here, read from their source.
+Method TestEveryItemKindIsStored()
+{
+    Do $$$AssertStatusOK(##class(Shutter.Store.SnapshotItem).KindIsValid("findings"), "findings is a snapshot item kind")
+    Do $$$AssertStatusNotOK(##class(Shutter.Store.SnapshotItem).KindIsValid("no_such_kind"), "an unknown kind is refused")
+    Set seen = 0
+    For cls = "Shutter.Operation.Evidence", "Shutter.Util.DocumentCase" {
+        Set def = ##class(%Dictionary.ClassDefinition).%OpenId(cls)
+        Do $$$AssertTrue($ISOBJECT(def), cls _ " has its definition")
+        Continue:'$ISOBJECT(def)
+        For i = 1:1:def.Methods.Count() {
+            Set code = def.Methods.GetAt(i).Implementation
+            Do code.Rewind()
+            While 'code.AtEnd {
+                Set line = code.ReadLine(), at = 1
+                For {
+                    Set found = $LOCATE(line, "AddItem\(""[a-z_]+""", at, at, match)
+                    Quit:'found
+                    Set kind = $PIECE(match, """", 2), seen = seen + 1
+                    Do $$$AssertStatusOK(##class(Shutter.Store.SnapshotItem).KindIsValid(kind), cls _ " adds " _ kind _ ", a stored kind")
+                }
+            }
+        }
+    }
+    Do $$$AssertTrue(seen > 10, "the evidence's kinds were read from its source: " _ seen)
+}
+
 /// The custody in words: the engine holding the message outranks the log.
 Method TestCustodyWords()
 {

@@ -118,6 +118,9 @@ XData ProductionDefinition
   <Item Name="Receiver Watch" Category="Recovery" ClassName="Shutter.Operation.ReceiverWatch" PoolSize="1" Enabled="true" Foreground="false" Comment="Reads what the engine shows about each receiver the site profile watches, and opens one outage per receiver; it opens no connection, sends nothing, and does nothing with no watch block" LogTraceEvents="false" Schedule="">
     <Setting Target="Adapter" Name="CallInterval">5</Setting>
   </Item>
+  <Item Name="Engine Resend" Category="Recovery" ClassName="Shutter.Operation.EngineResend" PoolSize="1" Enabled="true" Foreground="false" Comment="Sends again, one at a time through the engine, the messages of a receiver's outage that a person approved; it does nothing until an approval, and only at a receiver whose profile entry says engine_resend" LogTraceEvents="false" Schedule="">
+    <Setting Target="Adapter" Name="CallInterval">2</Setting>
+  </Item>
   <Item Name="ADT to Downstream" Category="Feed" ClassName="Shutter.Process.ADTToWard" PoolSize="1" Enabled="true" Foreground="false" Comment="Builds the downstream operation, delivers it, opens a case on failure" LogTraceEvents="true" Schedule="">
   </Item>
   <Item Name="Downstream Out" Category="Feed,Recovery" ClassName="Shutter.Operation.Ward" PoolSize="1" Enabled="true" Foreground="false" Comment="The one connector to the downstream system (the demo bed-management system): feed, rehearsals and recovery writes" LogTraceEvents="true" Schedule="">

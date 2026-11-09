@@ -32,7 +32,7 @@ ROOT = os.path.dirname(os.path.dirname(HERE))
 HOME = "/home/irisowner"
 PKG = f"{HOME}/pkg"
 # The names of the items an install into a site's production adds (Setup.cls, INSTALLITEMS, in 1.0.0 and since).
-INSTALL_ITEMS = ["HL7 Index", "Case Releaser", "Receiver Watch", "Escalation Mail", "Case Workflow", "Case Review", "Case Question", "Incident Workflow", "Evidence Collector", "Agent Conformance", "Agent Encounter", "Agent Impact", "Agent Coordinator", "Agent Board", "Gate", "Shutter Approvers", "Shutter API", "Verifier", "Case Intake", "Case Intake Store", "Second Parser"]
+INSTALL_ITEMS = ["HL7 Index", "Case Releaser", "Receiver Watch", "Engine Resend", "Escalation Mail", "Case Workflow", "Case Review", "Case Question", "Incident Workflow", "Evidence Collector", "Agent Conformance", "Agent Encounter", "Agent Impact", "Agent Coordinator", "Agent Board", "Gate", "Shutter Approvers", "Shutter API", "Verifier", "Case Intake", "Case Intake Store", "Second Parser"]
 PW = "Upgrade-2026x"
 
 ap = argparse.ArgumentParser()

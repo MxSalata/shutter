@@ -300,7 +300,7 @@ def acts(r):
             check("an operator reads the outage", op.get(f"/outages/{rid}")[0] == 200)
         got = raw(r, "POST", f"/outages/{rid}/acts", {"act": "close", "reason": "x" * 9000}, {"X-Requested-With": "Shutter"}, client=a)
         check("a body over the bound: 413 before it is parsed", got[0] == 413, got)
-        got = a.post(f"/outages/{rid}/acts", {"act": "read_again"})
+        got = a.post(f"/outages/{rid}/acts", {"act": "send"})
         check("an act the row doesn't list: 400", got[0] == 400, got)
         got = a.post(f"/outages/{rid}/acts", {"act": "close"})
         check("a close with no reason: 400", got[0] == 400, got)

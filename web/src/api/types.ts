@@ -943,7 +943,10 @@ export interface CaseIncident {
 export interface Escalation {
   caseId: string;
   seq: number;
-  /** draft, queued, sent, failed, cancelled. */
+  /**
+   * draft, queued, sent (the mail server accepted it), saved (v1.53: written as an .eml file with no mail server set, so
+   * nobody was emailed), failed, cancelled.
+   */
   state: string;
   teamId?: string;
   teamName?: string;
@@ -959,12 +962,16 @@ export interface Escalation {
   draftedAt?: string;
   editedBy?: string;
   editedAt?: string;
+  /** Who pressed Send, whatever the transport then did. */
   sentBy?: string;
+  /** When the mail server accepted it (state sent); empty for a saved one. */
   sentAt?: string;
+  /** When it was saved as an .eml file (state saved, v1.53). */
+  savedAt?: string;
   /** smtp, or file when no mail server is configured. */
   transport?: string;
   result?: string;
-  /** When the retention task removed the text: body is then empty, and bodyDigest is what was sent. */
+  /** When the retention task removed the text: body is then empty, and bodyDigest is what was sent or saved. */
   purgedAt?: string;
 }
 

@@ -12,7 +12,7 @@ import type {
   Snapshot,
 } from '@/api/types';
 import fixtures from '@/mocks/fixtures.json';
-import { caseActionOf } from './caseAction';
+import { caseActionOf, closableByHand } from './caseAction';
 import type { CaseFacts } from './outcome';
 import { safetyReceipt } from './receipt';
 
@@ -114,6 +114,17 @@ describe("the case's action for its reader", () => {
       name: 'No action for you: waiting for an approver to mark it handled',
     });
     expect(caseActionOf(after, { me: ME.operator, closeNeedsApprover: false }).label).toBe('Mark as handled');
+  });
+
+  it('asks to mark it handled once the email was saved as a file, as after a sent one, and not while only queued', () => {
+    const saved = factsOf('C-000008', { escalations: [{ seq: 1, state: 'saved' } as Escalation] });
+    expect(caseActionOf(saved, { me: ME.approver }).label).toBe('Mark as handled');
+    expect(closableByHand({ failureKind: 'unmodelled' }, [{ seq: 1, state: 'saved' } as Escalation])).toBe(
+      true,
+    );
+    expect(closableByHand({ failureKind: 'unmodelled' }, [{ seq: 1, state: 'queued' } as Escalation])).toBe(
+      false,
+    );
   });
 
   it('asks to mark a withheld case handled at once, and a case with a later draft after the sent email', () => {

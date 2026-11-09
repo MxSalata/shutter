@@ -82,6 +82,10 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
         $$$TRACE("Alert from " _ source _ " for session " _ session _ ": " _ problem _ "; passed on only")
         Quit $$$OK
     }
+    If ..EngineHolds(request.AlertText, header.Status) {
+        $$$TRACE("Alert from " _ source _ " for session " _ session _ ": " _ $PIECE(request.AlertText, ":", 1) _ " on message header " _ header.%Id() _ ", which the engine still holds (" _ ##class(Shutter.Util.EngineRead).StatusWord(header.Status) _ "); no failure to hand to Shutter, passed on only")
+        Quit $$$OK
+    }
     Set forward = ..ForwardFromAlert(request, header, source)
     Set forward.Route = ..RouteOfSession(session, header)
     // The completion key carries the session and the item, so the answer (or the error) finds its pending mark.
@@ -305,6 +309,16 @@ ClassMethod Classify(text As %String, Output unread As %Boolean) As %String
     If status = 503 Quit "delivery_failed"
     Set unread = 1
     Quit "uncertain_outcome"
+}
+
+/// Whether the alert is the engine's own queue alert (QueueWaitAlert or QueueCountAlert, the setting's name leading its
+/// words) on a message whose header to the alerting item is still Created, Queued or Delivered: the engine is still trying
+/// it, nothing failed, so no case is opened. A queue alert on a message that has since ended Error or Suspended goes on as
+/// before. Any other alert is never judged by the header's status, since the engine may raise it before it marks the header.
+ClassMethod EngineHolds(text As %String, status As %String) As %Boolean
+{
+    Quit:'$MATCH($PIECE(text, ":", 1), "Queue(Wait|Count)Alert") 0
+    Quit $LISTFIND($LISTBUILD("Created", "Queued", "Delivered"), ##class(Shutter.Util.EngineRead).StatusWord(status)) > 0
 }
 
 /// The HTTP status the alert's text names ("HTTP 503", "status 503", "HTTP/1.1 503"), else "".

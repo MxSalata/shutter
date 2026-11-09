@@ -1650,7 +1650,7 @@ ClassMethod SeedAll(root As %String) As %Status [ Private ]
 /// the board, never the feed or the demo (ADT In, ADT to Downstream, Downstream Out, ADT to Records, Records Out,
 /// Scenario Player). Case Intake and Case Intake Store are added once Shutter.Production defines them. A new recovery
 /// item is listed here too.
-Parameter INSTALLITEMS = "HL7 Index,Case Releaser,Receiver Watch,Escalation Mail,Case Workflow,Case Review,Failure Census,Case Question,Incident Workflow,Evidence Collector,Agent Conformance,Agent Encounter,Agent Impact,Agent Coordinator,Agent Board,Gate,Shutter Approvers,Shutter API,Verifier,Case Intake,Case Intake Store,Second Parser";
+Parameter INSTALLITEMS = "HL7 Index,Case Releaser,Receiver Watch,Engine Resend,Escalation Mail,Case Workflow,Case Review,Failure Census,Case Question,Incident Workflow,Evidence Collector,Agent Conformance,Agent Encounter,Agent Impact,Agent Coordinator,Agent Board,Gate,Shutter Approvers,Shutter API,Verifier,Case Intake,Case Intake Store,Second Parser";
 
 /// Adds Shutter's items (INSTALLITEMS) to the named production, each as Shutter.Production's compiled definition has
 /// it (class, pool size, enabled, foreground, comment, category, trace flag, schedule and settings), when the
@@ -1869,7 +1869,7 @@ ClassMethod PurgeStore() As %String [ SqlProc ]
     // another instance's files.
     Set emails = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT Seq, Result FROM Shutter_Store.Escalation WHERE Transport = 'file'")
     While emails.%Next() { Do ##class(Shutter.Store.Escalation).RemoveFile(emails.%Get("Result"), emails.%Get("Seq")) }
-    For cls = "Shutter.Store.WarehouseRead", "Shutter.Store.CaseToken", "Shutter.Store.ChainItem", "Shutter.Store.Chain", "Shutter.Store.IncidentEvent", "Shutter.Store.Incident", "Shutter.Store.Verification", "Shutter.Store.ExecutionAttempt", "Shutter.Store.Approval", "Shutter.Store.Rehearsal", "Shutter.Store.GateDecision", "Shutter.Store.Plan", "Shutter.Store.Finding", "Shutter.Store.CaseQuestion", "Shutter.Store.PageQuestion", "Shutter.Store.AgentRun", "Shutter.Store.SnapshotItem", "Shutter.Store.Snapshot", "Shutter.Store.CaseEvent", "Shutter.Store.Escalation", "Shutter.Store.CaseReminder", "Shutter.Store.ReminderDigest", "Shutter.Store.Case", "Shutter.Store.Precedent", "Shutter.Store.BoardLead", "Shutter.Store.ReviewAnnotation", "Shutter.Store.Review", "Shutter.Store.Idempotency", "Shutter.Bridge.ToolCall", "Shutter.Store.OutageEvent", "Shutter.Store.Outage", "Shutter.Store.ReceiverReading" {
+    For cls = "Shutter.Store.WarehouseRead", "Shutter.Store.CaseToken", "Shutter.Store.ChainItem", "Shutter.Store.Chain", "Shutter.Store.IncidentEvent", "Shutter.Store.Incident", "Shutter.Store.Verification", "Shutter.Store.ExecutionAttempt", "Shutter.Store.Approval", "Shutter.Store.Rehearsal", "Shutter.Store.GateDecision", "Shutter.Store.Plan", "Shutter.Store.Finding", "Shutter.Store.CaseQuestion", "Shutter.Store.PageQuestion", "Shutter.Store.AgentRun", "Shutter.Store.SnapshotItem", "Shutter.Store.Snapshot", "Shutter.Store.CaseEvent", "Shutter.Store.Escalation", "Shutter.Store.CaseReminder", "Shutter.Store.ReminderDigest", "Shutter.Store.Case", "Shutter.Store.Precedent", "Shutter.Store.BoardLead", "Shutter.Store.ReviewAnnotation", "Shutter.Store.Review", "Shutter.Store.Idempotency", "Shutter.Bridge.ToolCall", "Shutter.Store.OutageEvent", "Shutter.Store.Outage", "Shutter.Store.ResendRecord", "Shutter.Store.ReceiverReading" {
         Set sc = $CLASSMETHOD(cls, "%KillExtent")
         If $$$ISERR(sc) Quit
         Set n = n + 1

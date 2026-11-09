@@ -7,6 +7,7 @@ import {
   IconCircleX,
   IconClock,
   IconCode,
+  IconCopyCheck,
   IconFileDescription,
   IconHandStop,
   IconListDetails,
@@ -450,6 +451,7 @@ export function expectationOf(c: OutcomeCase, scenario?: ExpectedScenario | null
 export type CaseOutcomeKey =
   | 'handled-by-hand'
   | 'abandoned'
+  | 'already-delivered'
   | 'awaiting-approval'
   | 'escalated'
   | 'blocked'
@@ -487,6 +489,9 @@ export function caseOutcome(c: OutcomeCase, scenario?: ExpectedScenario | null):
     return o('handled-by-hand', 'neutral', 'Handled by hand', 'Handled by hand', IconTool);
   if (c.disposition === 'abandoned')
     return o('abandoned', 'neutral', 'Abandoned', 'Abandoned', IconCircleOff);
+  // An outage's resend the receiver refused as already held (v1.53): its word, not a verification
+  if (c.disposition === 'already_delivered')
+    return o('already-delivered', 'neutral', 'Already delivered', 'Already delivered', IconCopyCheck);
   if (c.state === 'awaiting_approval')
     return o(
       'awaiting-approval',

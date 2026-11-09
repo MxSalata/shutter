@@ -79,7 +79,17 @@ XData Rows [ MimeType = application/json ]
  {"name": "open over an hour: the site's limit", "category": "orders_results", "over": {"openedAt": "2026-11-08T01:00:00Z"},
   "has": {"do": ["Down longer than the site's limit"]}},
  {"name": "an ADT receiver: no laboratory line", "category": "current_state", "critical": null,
-  "has": {"call": ["Call: Made-up duty desk"]}}
+  "has": {"call": ["Call: Made-up duty desk"]}},
+ {"name": "an offered set of results: the older line and the merge limit", "category": "orders_results", "duplicates": {"behaviour": "refuses", "phrase": "ALREADY HELD"}, "over": {"state": "offered", "kind": "cant_tell", "lists": {"queued": [], "offered": [{"headerId": "41", "controlId": "N1", "reason": "older than a result of another order for the same patient that already reached the receiver (control id C5); each files under its own order"}, {"headerId": "42", "controlId": "N2", "reason": ""}], "reached": [], "refused": [], "closed": []}},
+  "has": {"first": ["1 of these is older than results of other orders for the same patients that already reached the receiver; each files under its own order.", "The patient check reads merges and identity changes only where they pass through this namespace; one made elsewhere is not seen."]},
+  "not": {"do": ["Already handled by hand"]}},
+ {"name": "an offered set where duplicates are unknown: check the receiver first", "category": "orders_results", "over": {"state": "offered", "kind": "cant_tell", "lists": {"queued": [], "offered": [{"headerId": "41", "controlId": "N1", "reason": ""}], "reached": [], "refused": [], "closed": []}},
+  "has": {"do": ["At this receiver a duplicate is unknown: before approving, check the receiver for each message. For one already entered by hand, choose Already handled by hand; Shutter then sends nothing for it."]},
+  "not": {"first": ["of these is older"]}},
+ {"name": "closed after the send: the set's lines are gone", "category": "orders_results", "duplicates": {"behaviour": "refuses", "phrase": "ALREADY HELD"}, "over": {"state": "closed", "lists": {"queued": [], "offered": [{"headerId": "41", "controlId": "N1", "reason": "older than a result of another order for the same patient that already reached the receiver (control id C5); each files under its own order"}], "reached": [], "refused": [], "closed": []}},
+  "not": {"first": ["of these is older", "The patient check reads merges"]}},
+ {"name": "an offered set where duplicates are filed twice", "category": "orders_results", "duplicates": {"behaviour": "files_twice"}, "over": {"state": "offered", "kind": "cant_tell", "lists": {"queued": [], "offered": [{"headerId": "41", "controlId": "N1", "reason": ""}], "reached": [], "refused": [], "closed": []}},
+  "has": {"do": ["At this receiver a duplicate is filed twice: before approving, check the receiver for each message."]}}
 ]
 }
 
@@ -115,7 +125,7 @@ Method TestWordsTable()
             }
         }
     }
-    Do $$$AssertEquals(n, 20, "the table has its rows")
+    Do $$$AssertEquals(n, 24, "the table has its rows")
 }
 
 /// No word on a card names a supplier, a value or "Verified".
@@ -139,6 +149,105 @@ Method NewOutage(Output row As Shutter.Store.Outage) As %Status
     Set sc = ##class(Shutter.Store.Outage).Open(entry, "down", "the test", "the test", .row, .opened)
     If $ISOBJECT(row) && (row.%Id() '= "") Set ..Made = ..Made _ $LISTBUILD(row.%Id())
     Quit sc
+}
+
+/// resends on the outage (v1.53): every ledger row of the outage in order, in the route's shape, with its closure.
+Method TestResendsField()
+{
+    Do $$$AssertStatusOK(..NewOutage(.row), "an outage opened")
+    Set id = row.%Id()
+    Do $$$AssertEquals(##class(Shutter.API.Outages).One(row).resends.%ToJSON(), "[]", "none yet, and the field is there")
+    For pos = 1:1:3 {
+        Set r = ##class(Shutter.Store.ResendRecord).%New()
+        Set r.RunId = "R" _ id _ "-1", r.Position = pos, r.OutageId = id, r.Namespace = "USER", r.Item = "Unit Api Out", r.OriginHeaderId = 70 + pos, r.ControlId = "CT" _ pos
+        Set r.State = $CASE(pos, 1: "completed", 2: "failed", : "stopped"), r.ApprovedBy = "appr1", r.StartedAt = "2026-11-09T03:20:00Z", r.EndedAt = $SELECT(pos < 3: "2026-11-09T03:20:05Z", 1: ""), r.NewHeaderId = $SELECT(pos < 3: 90 + pos, 1: "")
+        Do $$$AssertStatusOK(r.%Save(), "row " _ pos)
+    }
+    Set h = ##class(Shutter.Store.ResendRecord).%New()
+    Set h.RunId = "H" _ id, h.OutageId = id, h.Namespace = "USER", h.Item = "Unit Api Out", h.OriginHeaderId = 79, h.ControlId = "CT9", h.State = "handled_by_hand", h.RecordedBy = "appr2", h.EndedAt = "2026-11-09T03:30:00Z", h.Words = "Handled by hand"
+    Do $$$AssertStatusOK(h.%Save(), "a hand closure")
+    Set resends = ##class(Shutter.API.Outages).One(row).resends
+    Do $$$AssertEquals(resends.%Size(), 4, "four rows")
+    Set closures = ""
+    For i = 0:1:3 { Set closures = closures _ resends.%Get(i).controlId _ ":" _ resends.%Get(i).%Get("closure") _ "," }
+    Do $$$AssertEquals(closures, "CT1:sent,CT2:failed,CT3:,CT9:handled_by_hand,", "in order, each closure, null while stopped")
+    Do $$$AssertEquals(resends.%Get(2).%GetTypeOf("closure"), "null", "null, not empty")
+    Do $$$AssertEquals(resends.%Get(0).by _ "/" _ resends.%Get(3).by, "appr1/appr2", "by: the approver, or who recorded the hand closure")
+    Do $$$AssertEquals(resends.%Get(0).at _ "/" _ resends.%Get(2).at, "2026-11-09T03:20:05Z/2026-11-09T03:20:00Z", "at: the row's end, or its start")
+    For key = "runId", "position", "headerId", "controlId", "newHeaderId", "state", "closure", "words", "by", "at", "caseId" { Do $$$AssertTrue(resends.%Get(0).%IsDefined(key), "a resend has " _ key) }
+    &sql(DELETE FROM Shutter_Store.ResendRecord WHERE OutageId = :id)
+}
+
+/// Already handled by hand (v1.53): offered only where duplicates are unknown, filed twice or not declared; the refusals;
+/// the ledger row with who and when; the Row moved to closed and the digest; the message's own case closed by hand.
+Method TestHandledByHandAct()
+{
+    Set api = "Shutter.API.Outages"
+    For behaviour = "unknown", "files_twice", "", "refuses" {
+        Set o = {"state": "offered", "acts": ["pause", "read_again", "close"], "lists": {"queued": [], "offered": [{"headerId": "71"}], "reached": [{"headerId": "72"}], "refused": [], "closed": []}}
+        Set entry = $SELECT(behaviour = "": {}, 1: {"duplicates": {"behaviour": (behaviour)}})
+        Do $CLASSMETHOD(api, "ComposeActs", o, entry)
+        Set want = (behaviour '= "refuses")
+        Do $$$AssertEquals(o.lists.offered.%Get(0).acts.%ToJSON(), $SELECT(want: "[""handled_by_hand""]", 1: "[]"), "an offered row at " _ $SELECT(behaviour = "": "none declared", 1: behaviour))
+        Do $$$AssertEquals(o.lists.reached.%Get(0).acts.%ToJSON(), "[]", "a reached row never")
+        Do $$$AssertEquals(o.acts.%ToJSON() [ "handled_by_hand", want, "the outage's acts at " _ behaviour)
+    }
+    Do $$$AssertStatusOK(..NewOutage(.row), "an outage opened")
+    Set id = row.%Id()
+    Set c = ##class(Shutter.Store.Case).%New()
+    Set c.CaseId = "OA-T-" _ id, c.OperationKey = "LAB^NHS^999000^^result^2026-11-09T08:00:00Z", c.Receiver = row.Receiver, c.FailureKind = "delivery_failed", c.State = "escalated", c.OpenedAt = "2026-11-09T08:00:00Z", c.SourceNamespace = "USER", c.OriginHeaderId = 71
+    Do $$$AssertStatusOK(c.%Save(), "the message's case")
+    Do $$$AssertEquals($CLASSMETHOD(api, "Act", row, {"act": "handled_by_hand", "headerId": "71", "note": "entered by hand"}, "appr2", .reply), "409 Conflict", "not offered yet: wrong_state")
+    Do $$$AssertEquals(reply.error, "wrong_state", "wrong_state")
+    Set offered = [{"headerId": "71", "controlId": "CT1", "reason": ""}, {"headerId": "72", "controlId": "CT2", "reason": ""}]
+    Do row.Advance("offered", "listed", "unit", {"SetStatus": "computed", "SetDigest": (##class(Shutter.Util.ResendSet).Digest(offered)), "ListOffered": (offered)})
+    Do $$$AssertEquals($CLASSMETHOD(api, "Act", row, {"act": "handled_by_hand", "headerId": "73", "note": "entered by hand"}, "appr2", .reply), "400 Bad Request", "a header not offered")
+    Do $$$AssertEquals($CLASSMETHOD(api, "Act", row, {"act": "handled_by_hand", "headerId": "71", "note": " "}, "appr2", .reply), "400 Bad Request", "no note")
+    Do $$$AssertEquals($CLASSMETHOD(api, "Act", row, {"act": "handled_by_hand", "headerId": "71", "note": ($TRANSLATE($JUSTIFY("", 1001), " ", "x"))}, "appr2", .reply), "400 Bad Request", "a note over 1,000 characters")
+    Do $$$AssertEquals($CLASSMETHOD(api, "Act", row, {"act": "handled_by_hand", "headerId": "71", "note": "entered by hand", "version": 99}, "appr2", .reply), "409 Conflict", "a stale version")
+    Do $$$AssertEquals(reply.error, "version_changed", "version_changed")
+    Set version = row.Version
+    Do $$$AssertEquals($CLASSMETHOD(api, "Act", row, {"act": "handled_by_hand", "headerId": "71", "note": "entered in the lab system by the duty desk", "version": (version)}, "appr2", .reply), "200 OK", "the choice")
+    Do $$$AssertEquals(reply.version, version + 1, "the version moves on")
+    Do $$$AssertEquals(reply.lists.offered.%Size() _ "/" _ reply.lists.offered.%Get(0).headerId, "1/72", "the Row left offered")
+    Do $$$AssertEquals(reply.lists.closed.%Size(), 1, "and is in closed")
+    Set closed = reply.lists.closed.%Get(0)
+    Do $$$AssertEquals(closed.closure _ "/" _ closed.closedBy, "handled_by_hand/appr2", "with its closure and who")
+    Do $$$AssertTrue(closed.closedAt '= "", "and when")
+    Do $$$AssertEquals(reply.set.digest, ##class(Shutter.Util.ResendSet).Digest([{"headerId": "72"}]), "the digest over what stays offered")
+    Do $$$AssertTrue(##class(Shutter.Store.Outage).%OpenId(id, 0).ReadAgainAt '= "", "marked to read again")
+    Set resends = reply.resends
+    Do $$$AssertEquals(resends.%Size(), 1, "one ledger row")
+    Do $$$AssertEquals(resends.%Get(0).state _ "/" _ resends.%Get(0).closure _ "/" _ resends.%Get(0).by _ "/" _ resends.%Get(0).controlId _ "/" _ resends.%Get(0).runId, "handled_by_hand/handled_by_hand/appr2/CT1/H" _ id, resends.%ToJSON())
+    Do $$$AssertTrue(resends.%Get(0).words [ "Handled by hand, recorded by appr2 at " && (resends.%Get(0).words [ ": entered in the lab system by the duty desk. Shutter sent nothing for it."), resends.%Get(0).words)
+    Set kinds = "", iter = ##class(Shutter.Store.OutageEvent).Of(id).%GetIterator()
+    While iter.%GetNext(, .e) { Set:e.kind="handled_by_hand" kinds = kinds _ e.detail }
+    Do $$$AssertTrue((kinds [ "control id CT1") && (kinds [ "appr2"), "an event names the person and the control id: " _ kinds)
+    // The case closes by hand through the Case Workflow, a production job: give it a moment.
+    For i = 1:1:40 { Do c.%Reload() Quit:c.State="resolved"  Hang 0.25 }
+    Do $$$AssertEquals(c.State _ "/" _ c.Disposition, "resolved/handled_by_hand", "the message's case closed by hand")
+    Do $$$AssertEquals($CLASSMETHOD(api, "Act", row, {"act": "handled_by_hand", "headerId": "71", "note": "again"}, "appr2", .reply), "400 Bad Request", "no longer offered")
+    &sql(DELETE FROM Shutter_Store.ResendRecord WHERE OutageId = :id)
+    Do ##class(Shutter.Store.Case).%DeleteId(c.%Id())
+}
+
+/// Ask first (v1.53): where duplicates are not refused the approval needs receiverChecked, else 409
+/// receiver_check_needed; where they are refused it does not.
+Method TestApproveNeedsReceiverCheck()
+{
+    Set api = "Shutter.API.Outages"
+    Do $$$AssertStatusOK(..NewOutage(.row), "an outage opened")
+    Set offered = [{"headerId": "71", "controlId": "CT1"}]
+    Do row.Advance("offered", "listed", "unit", {"SetStatus": "computed", "SetDigest": "d1", "Approvable": 1, "ListOffered": (offered)})
+    Do $$$AssertEquals($CLASSMETHOD(api, "Approve", row, {"digest": "d1", "note": "checked"}, "appr1", .reply), "409 Conflict", "no receiver check")
+    Do $$$AssertEquals(reply.error, "receiver_check_needed", "receiver_check_needed")
+    Do $$$AssertEquals(reply.detail, "At this receiver a duplicate is unknown: check the receiver for these messages first, and say so with the approval.", "its words")
+    Do $$$AssertEquals($CLASSMETHOD(api, "Approve", row, {"digest": "d1", "note": "checked", "receiverChecked": "yes"}, "appr1", .reply), "409 Conflict", "only true says it")
+    Do $$$AssertEquals($CLASSMETHOD(api, "Approve", row, {"digest": "d1", "note": "checked at the receiver", "receiverChecked": true}, "appr1", .reply), "200 OK", "with the receiver checked")
+    Set id = row.%Id()
+    &sql(SELECT ControlId INTO :ctl FROM Shutter_Store.ResendRecord WHERE OutageId = :id AND Position = 1)
+    Do $$$AssertEquals(ctl, "CT1", "the run's row keeps the control id")
+    &sql(DELETE FROM Shutter_Store.ResendRecord WHERE OutageId = :id)
 }
 
 /// The acts: what is refused, a pause that withholds the set and swaps the Do line, a close with a reason, nothing after it.
@@ -250,7 +359,8 @@ Method TestInstallItems()
     Do $$$AssertTrue(text [ "Name=""Receiver Watch""", "Shutter.Production defines the item it copies")
 }
 
-/// The reset list names the three outage stores.
+/// The reset list names the three outage stores and the ledger (v1.53: the purge resets the case counters, so a ledger row
+/// left behind would name a new case of the same id, which the patient check would then leave out).
 Method TestResetList()
 {
     Set m = ##class(%Dictionary.MethodDefinition).%OpenId("Shutter.Setup||PurgeStore")
@@ -258,7 +368,7 @@ Method TestResetList()
     Quit:'$ISOBJECT(m)
     Do m.Implementation.Rewind()
     Set code = m.Implementation.Read(1000000)
-    For cls = "Shutter.Store.OutageEvent", "Shutter.Store.Outage", "Shutter.Store.ReceiverReading" {
+    For cls = "Shutter.Store.OutageEvent", "Shutter.Store.Outage", "Shutter.Store.ReceiverReading", "Shutter.Store.ResendRecord" {
         Do $$$AssertTrue(code [ ("""" _ cls _ """"), "the reset empties " _ cls)
     }
 }

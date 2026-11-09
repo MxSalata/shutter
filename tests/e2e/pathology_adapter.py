@@ -12,8 +12,8 @@ decision a person takes on the page. rig.site_setting(method, path, body) is for
 globals, setattr, getattr, __import__ or the check itself (pathology_check.py, adapter_guard).
 
 WHAT IS FILLED IN TODAY. An incident is a receiver outage on /outages, as docs/CONTRACTS.md section 17 sets out. A build with no
-such route reads NOT WIRED, not "nothing open". The functions at the end still raise NotWired because the design names no field
-or route for them yet.
+such route reads NOT WIRED, not "nothing open". The functions at the end read the fields docs/design-1.4.0.md names: an outage's
+resends, a Row's acts, and the act handled_by_hand.
 """
 import re
 
@@ -221,23 +221,62 @@ def named_obx(rig, namespace, receiver, control):
     return out
 
 
-# ---- The design names no field or route for these yet ----
+# ---- Shutter's resends and hand closures (docs/design-1.4.0.md, parts 2 to 4; CONTRACTS 17.3 and 17.8) ----
+
+def _resends(rig, receiver, control):
+    """The ledger rows the outage list gives for this control id at this receiver, every outage's, in the route's order."""
+    out = []
+    for o in _outages(rig):
+        if o.get("receiver") != receiver:
+            continue
+        resends = o.get("resends")
+        if not isinstance(resends, list):
+            raise NotWired("resends: GET /outages gives no resends on an outage")
+        out.extend(r for r in resends if isinstance(r, dict) and r.get("controlId") == control)
+    return out
+
+
+def _offered_row(rig, namespace, receiver, control):
+    """The open outage's lists.offered row for this control id, with the outage, or (None, None)."""
+    for incident in open_incidents(rig, namespace, receiver):
+        o = _outage(rig, incident)
+        for row in ((o.get("lists") or {}).get("offered") or []):
+            if row.get("controlId") == control:
+                return o, row
+    return None, None
+
 
 def offers_handled_by_hand(rig, namespace, receiver, control):
-    """True when the page offers a person the choice "already handled by hand" for this message."""
-    raise NotWired("offers_handled_by_hand")
+    """True when the page offers a person the choice "already handled by hand" for this message: the open outage's
+    lists.offered row for the control id lists handled_by_hand in its acts."""
+    _, row = _offered_row(rig, namespace, receiver, control)
+    return row is not None and "handled_by_hand" in (row.get("acts") or [])
 
 
 def choose_handled_by_hand(rig, namespace, receiver, control):
-    """A person takes that choice. One call of rig.person_decides."""
-    raise NotWired("choose_handled_by_hand")
+    """A person takes that choice. One call of rig.person_decides: the act with that row's headerId, the outage's version
+    and a note."""
+    o, row = _offered_row(rig, namespace, receiver, control)
+    if row is None:
+        raise NotWired("choose_handled_by_hand: no open outage offers this message")
+    body = {"act": "handled_by_hand", "headerId": row.get("headerId"), "note": "entered at the receiver by hand, checked with the duty desk", "version": o.get("version")}
+    rig.person_decides("POST", "/outages/" + str(o.get("id")) + "/acts", body)
 
 
 def closure(rig, namespace, receiver, control):
-    """How this message's case or item stands: None while open, or one of "already_delivered", "handled_by_hand", "other"."""
-    raise NotWired("closure")
+    """How this message's case or item stands: None while open, or one of "already_delivered", "handled_by_hand", "other".
+    From the outage's resends: the closure as written for already_delivered and handled_by_hand, sent, failed or unknown as
+    "other"; no row for the control id, or a null closure, None."""
+    rows = _resends(rig, receiver, control)
+    if not rows:
+        return None
+    got = rows[-1].get("closure")
+    if got is None:
+        return None
+    return got if got in ("already_delivered", "handled_by_hand") else "other"
 
 
 def resend_failed(rig, namespace, receiver, control):
-    """True when the page shows that this message's resend did not succeed, for a message that already had a case."""
-    raise NotWired("resend_failed")
+    """True when the page shows that this message's resend did not succeed, for a message that already had a case: a
+    resends row for the control id reads state failed."""
+    return any(r.get("state") == "failed" for r in _resends(rig, receiver, control))
