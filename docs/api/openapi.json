@@ -8543,7 +8543,7 @@
         "tags": [
           "outages"
         ],
-        "summary": "Approve an offered set; Engine Resend sends it in order (tier C)",
+        "summary": "Approve an offered set; Engine Resend sends it in order",
         "description": "One approval of the set the outage offers, naming its digest and the row version, with a note. Only where the build has the sender and the receiver profile entry says engine_resend.",
         "x-contract": "docs/CONTRACTS.md section 17.3",
         "x-required-resource": "Shutter_Approve",
