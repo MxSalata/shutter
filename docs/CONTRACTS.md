@@ -1879,7 +1879,7 @@ and the evidence's newest `ward_state` items (`from`: `connector` or `evidence`;
 `no_answer`, `server_error` (5xx), `refused` (401 or 403), `failing` (a delivery failed after its newest answer, or in the last hour when
 nothing has read it), `answering`, `not_read` or `no_api`. `receivers_ok` is false when any is in the first four, true when none is
 and one answered, and null when nothing is known; `receivers_state` is `read` or the reading's error; `watched_ok` is false when a
-watched namespace's `ok` is. `GET /health` carries `receivers_ok` and `watched_ok` in its anonymous answer too, and no receiver's name.
+watched namespace's `ok` is. `GET /health` carries `receivers_ok` and `watched_ok` in its anonymous answer too, and no receiver's name. Its anonymous answer also carries `live` with only `enabled` and `every_minutes` (the live hospital's switch and its cadence), so the sign-in page can say what stands behind it; nothing else of the player.
 The Health page keeps Ready out of its hero while either is false ("Needs a look", naming the first two and counting the rest, all of them in its Other group), and adds nothing to its first
 layer otherwise.
 
