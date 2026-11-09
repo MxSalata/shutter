@@ -4,19 +4,6 @@ Versions follow `major.minor.patch`: a minor release for new features, a patch r
 updates. The version in both `module.xml` files (the one the package manager publishes) is always the version of the
 GitHub tag on the same commit; `scripts/check-versions.py` checks every place the version is written.
 
-## Unreleased
-
-- **Ask Shutter: a chat about what is on the screen.** A button in the header opens a panel on every page, beside the page
-  from 1200 px and as a drawer below it (the whole screen on a phone), open or closed remembered per tab. On a case page it
-  is Ask about this case, through the same read-only case questions as before; the "Ask about this case" button opens it
-  and asks the case's first suggested question. On every other page it asks about the page through one new read-only
-  route, `POST /api/shutter/page-questions`: the web app sends the page's name and a short summary of what is in view (ids
-  and labels only), and the Explain agent answers in a new question tier, `page`, with its knowledge search and
-  `SubmitAnswer` alone, the summary as data inside the prompt, a small budget and few turns, under `Shutter_LiveAgents` and
-  the day's budget as a live case question is; nothing is recorded. Without `Shutter_LiveAgents` the route answers 403 and
-  the panel shows the page's written guide; the trial answers a few suggested questions per page with sample answers,
-  labelled so. CONTRACTS 14.6.
-
 ## 1.2.0 (9 November 2026)
 
 What 1.2.0 holds: **Ask Shutter**, a panel that answers questions about the page on screen; a **live hospital banner**
@@ -102,8 +89,16 @@ shown on the plan on a new install, while an upgrade keeps a site's stop; and fi
 - **The health page.** Each group lists its checks first and its facts apart under **Details**.
 - **The API page.** `docs/api/openapi.json` describes every route (an OpenAPI 3.1 file that CI checks against the
   dispatcher), and the Technical view gains an API page listing each route with its parameters, its role and an example.
-- **Ask Shutter.** A panel on the right with the context of the page on screen: on a case it asks the case's read-only
-  questions, elsewhere the page's own questions (`POST /page-questions`), and **About this case** opens it.
+- **Ask Shutter: a chat about what is on the screen.** A button in the header opens a panel on every page, beside the page
+  from 1200 px and as a drawer below it (the whole screen on a phone), open or closed remembered per tab. On a case page it
+  is Ask about this case, through the same read-only case questions as before; the "Ask about this case" button opens it
+  and asks the case's first suggested question. On every other page it asks about the page through one new read-only
+  route, `POST /api/shutter/page-questions`: the web app sends the page's name and a short summary of what is in view (ids
+  and labels only), and the Explain agent answers in a new question tier, `page`, with its knowledge search and
+  `SubmitAnswer` alone, the summary as data inside the prompt, a small budget and few turns, under `Shutter_LiveAgents` and
+  the day's budget as a live case question is; nothing is recorded. Without `Shutter_LiveAgents` the route answers 403 and
+  the panel shows the page's written guide; the trial answers a few suggested questions per page with sample answers,
+  labelled so. CONTRACTS 14.6.
 - **The live hospital banner.** A two-part bar with a timeline from the last failure to the next; it closes for the
   session, a **Live hospital** button reopens it, and an open incident brings it back with a link to the incident.
 - **Clearer screens.** The case page puts the key facts first with a smaller case id and click-to-define terms; the
