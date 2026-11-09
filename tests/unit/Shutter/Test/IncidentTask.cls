@@ -260,9 +260,16 @@ Method TestAFailedTaskBesideAnAutomaticChainRestsForAPerson()
     Set last = "", it = now.Events().%GetIterator()
     While it.%GetNext(.k, .e) { If e.kind = "state" Set last = e.text }
     Do $$$AssertTrue(last [ "no approval task is open", "its transition says why: " _ last)
-    Set listed = 0, rows = ##class(Shutter.Publish.Tools).ListIncidents("awaiting_approval", 200).incidents.%GetIterator()
-    While rows.%GetNext(.k, .row) { If row.incidentId = inc.IncidentId Set listed = 1 }
+    // The app's state filter (Shutter.API.Dispatch, Incidents) is the core's; the publisher's (Shutter.Publish.Tools)
+    // is compiled only where the AI Hub package is, so it is asked there too.
+    Set listed = 0, rows = ##class(%SQL.Statement).%ExecDirect(, "SELECT ID FROM Shutter_Store.Incident WHERE State = ?", "awaiting_approval")
+    While rows.%Next() { If rows.%Get("ID") = inc.%Id() Set listed = 1 }
     Do $$$AssertTrue(listed, "the state filter lists it")
+    If ##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Publish.Tools") {
+        Set listed = 0, rows = $CLASSMETHOD("Shutter.Publish.Tools", "ListIncidents", "awaiting_approval", 200).incidents.%GetIterator()
+        While rows.%GetNext(.k, .row) { If row.incidentId = inc.IncidentId Set listed = 1 }
+        Do $$$AssertTrue(listed, "and so does the publisher's")
+    }
     Set again = 0
     For i = 1:1:wf.Sent.Count() { If wf.Sent.GetAt(i) = "Ens.Alarm|raise:1" Set again = 1 }
     Do $$$AssertTrue(again, "and the task is tried again")
