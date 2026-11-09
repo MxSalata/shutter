@@ -17,12 +17,14 @@ GitHub tag on the same commit; `scripts/check-versions.py` checks every place th
   the panel shows the page's written guide; the trial answers a few suggested questions per page with sample answers,
   labelled so. CONTRACTS 14.6.
 
-## 1.2.0 (8 November 2026)
+## 1.2.0 (9 November 2026)
 
-What 1.2.0 holds: the fix for the null bed that held a settled case for a person, an incident of any size under one
-approval, a supported uninstall and upgrade, a further-movement default that shows another visit on the plan instead of
-stopping the resend, one trace line per tool call in a replay, and pages on running the board on another provider, on
-AI Hub features measured with no model call and on the publisher from an MCP client. The README is restructured.
+What 1.2.0 holds: **Ask Shutter**, a panel that answers questions about the page on screen; a **live hospital banner**
+you can close, which comes back for an open incident; **clearer screens** for an integration engineer and a tired
+clinician (the case page's key facts first, more in the Technical view, a colour and icon per disposition, an API page,
+an access comparison, the scenario diagrams' expected end); the fix for the null bed that held a settled case for a
+person; an incident of any size under one approval; a supported **uninstall and upgrade**; another visit's movement
+shown on the plan on a new install, while an upgrade keeps a site's stop; and fixes found in three rounds of review.
 
 - **A receipt whose bed is null says nothing about the bed.** The receipt check read a JSON null bed as a different bed
   (`RECEIPT_PAYLOAD_DIFFERS`), so a person got a case the receipt had settled (held-out case F03). Beds are now compared
