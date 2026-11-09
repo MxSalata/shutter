@@ -12,7 +12,8 @@ A patch for the phone layout and two tests.
   sits only in the band's top corner, so the budget line stays on one line at 360 px.
 - **Tests.** The trial transport test knows the one route the recorded trial answers `not_in_trial` on purpose
   (receiver outages), and the live budget test audits the Convene dialog with no motion, as the accessibility suite
-  does.
+  does. The case page's retry to reveal a section stops once the page is gone, so a test's torn-down document no longer
+  raises an error after the last test passes.
 - **README.** The "Why I built it" paragraph says production exposes conditions test environments cannot fully reproduce.
 
 ## 1.3.0 (9 November 2026)

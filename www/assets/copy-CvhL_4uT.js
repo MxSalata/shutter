@@ -1,1 +1,0 @@
-import{T as r}from"./index-D_U8TRyo.js";const o=e=>r?e.trial:e.live,i={model:"Needs a real model: not in the trial",recording:"Not in the trial's recording"},n=()=>o({live:"sign in as approver",trial:"switch to Approver in the user menu"});export{i as N,o as b,n as t};

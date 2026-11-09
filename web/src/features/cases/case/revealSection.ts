@@ -11,6 +11,8 @@ const GIVE_UP_MS = 3000;
 export function revealSection(targets: string[], mayFocus: () => boolean = () => true): void {
   const started = Date.now();
   const attempt = () => {
+    // The page can be gone before a retry fires (a closed tab, a test's torn-down document): then there is nothing to reveal
+    if (typeof document === 'undefined') return;
     const timeUp = Date.now() - started >= GIVE_UP_MS;
     const section = targets.map((t) => document.getElementById(t)).find(Boolean);
     if (!section) {
