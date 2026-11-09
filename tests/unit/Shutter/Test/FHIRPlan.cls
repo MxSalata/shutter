@@ -139,6 +139,14 @@ Method TestModifierExtension()
     Set e = ..Seed()
     Do e.%Set("extension", [{"url": "http://example.org/x", "modifierExtension": [{"url": "http://example.org/m", "valueBoolean": true}]}])
     Do ..Expect(e.%ToJSON(), "FHIR_MODIFIER_EXTENSION", "/extension/0/modifierExtension", "inside an extension")
+    // implicitRules is a modifier element of every resource: a body under rules Shutter cannot read is not rewritten
+    Set e = ..Seed()
+    Do e.%Set("implicitRules", "http://example.org/rules")
+    Do ..Expect(e.%ToJSON(), "FHIR_MODIFIER_EXTENSION", "/implicitRules", "implicitRules", "implicit_rules")
+    // An extension on the open entry's own status would come to describe "completed"
+    Set e = ..Seed()
+    Do e.location.%Get(0).%Set("_status", {"extension": [{"url": "http://example.org/why-active", "valueString": "bed held"}]})
+    Do ..Expect(e.%ToJSON(), ..#SHAPE, "/location/0/_status", "an extension on the open entry's status", "status_extension")
 }
 
 /// 6. A subsetted representation, with full meta and in the exact shape IRIS returns for _elements=id,location.
@@ -326,6 +334,9 @@ Method TestBadInputs()
     Do view."location_map".%Get(0).%Set("location", "http://example.org/fhir/Location/ward-a")
     Do ..Expect(..Text("Seed"), ..#SHAPE, "/location_map/0/location", "a map entry that is not a literal reference", "view", view)
     Do ..Expect(..Text("Seed"), ..#SHAPE, "/", "no view", "view", "")
+    // An empty prior or target (PV1-6 or PV1-3 absent) is a bad view, not a receiver whose location differs
+    Do ..Expect(..Text("Seed"), ..#SHAPE, "/prior_location", "an empty prior location", "view", ..View(""))
+    Do ..Expect(..Text("Seed"), ..#SHAPE, "/target_location", "an empty target location", "view", ..View("Location/ward-a", ""))
     Set e = ..Seed()
     Do e.%Set("meta", "x")
     Do ..Expect(e.%ToJSON(), ..#SHAPE, "/meta", "meta that is not an object", "meta")
