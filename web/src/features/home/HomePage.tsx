@@ -47,8 +47,8 @@ export default function HomePage() {
         leadMaw="none"
         lead={
           <>
-            Shutter resends a failed <Term term="hl7">HL7 delivery</Term> only when its checks pass.
-            Otherwise it stops and names the patient.
+            Shutter resends a failed <Term term="hl7">HL7 delivery</Term> only when its checks pass. Otherwise
+            it stops and names the patient.
           </>
         }
       />

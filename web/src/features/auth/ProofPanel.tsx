@@ -75,8 +75,8 @@ export function ProofPanel({ figures, proof = PROOF }: { figures: boolean; proof
           {APP_TAGLINE}
         </Text>
         <Text component="h2" id={headline} className="hero-statement" m={0} maw="26em">
-          Shutter resends a failed <Term term="hl7">HL7 delivery</Term> only when its checks pass.
-          Otherwise it stops and names the patient.
+          Shutter resends a failed <Term term="hl7">HL7 delivery</Term> only when its checks pass. Otherwise
+          it stops and names the patient.
         </Text>
         <Text size="lg" m={0} maw="34em">
           When a patient movement fails to reach another system, Shutter finds out why.
