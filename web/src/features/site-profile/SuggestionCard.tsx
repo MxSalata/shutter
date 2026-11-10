@@ -1,7 +1,7 @@
 import { Anchor, Button, Group, List, Table, Text } from '@mantine/core';
 import { useEffect, useRef } from 'react';
 import { Link } from 'react-router';
-import { DEMO_READ_ONLY } from '@/api/can';
+import { LockedNote } from '@/components/LockedSave';
 import { CodeChip } from '@/components/CodeChip';
 import { HeroBand } from '@/components/HeroBand';
 import { StatusNotice } from '@/components/StatusBadge';
@@ -42,8 +42,7 @@ export function SuggestionCard({
   s,
   result,
   version,
-  editable,
-  reviewOnly = false,
+  locked = null,
   onReview,
   onDiscard,
 }: {
@@ -52,9 +51,8 @@ export function SuggestionCard({
   s?: SuggestedChange;
   result: Applied;
   version: number;
-  editable: boolean;
-  /** The public demo: the change may be reviewed for reading, and nothing can be saved. */
-  reviewOnly?: boolean;
+  /** Why this reader cannot save (`saveLocked`): the change is reviewed as an approver's, and the save is locked. */
+  locked?: string | null;
   onReview: () => void;
   onDiscard: () => void;
 }) {
@@ -119,8 +117,7 @@ export function SuggestionCard({
         </StatusNotice>
       )}
       <Group gap="sm">
-        {result.ok && editable ? <Button onClick={onReview}>Review and save…</Button> : null}
-        {result.ok && !editable && reviewOnly ? <Button onClick={onReview}>Review the change…</Button> : null}
+        {result.ok ? <Button onClick={onReview}>Review and save…</Button> : null}
         <Button variant="default" onClick={onDiscard}>
           {result.ok ? 'Discard the suggestion' : 'Dismiss'}
         </Button>
@@ -128,13 +125,7 @@ export function SuggestionCard({
           Back to case {caseId}
         </Anchor>
       </Group>
-      {result.ok && !editable ? (
-        <Text size="sm" c="dimmed">
-          {reviewOnly
-            ? `${DEMO_READ_ONLY}.`
-            : 'Saving it needs the approver role: an approver reviews and saves it.'}
-        </Text>
-      ) : null}
+      {result.ok && locked ? <LockedNote>{locked}</LockedNote> : null}
     </HeroBand>
   );
 }

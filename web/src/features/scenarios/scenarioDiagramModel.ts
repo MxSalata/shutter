@@ -52,6 +52,9 @@ const MODE_NAMES: Record<Mode, string> = {
   policy: 'Site policy',
 };
 
+/** Every mode, in the order the Scenarios page offers them: a diagram is sized for all four, so a switch changes only words. */
+export const DIAGRAM_MODES = Object.keys(MODE_NAMES) as Mode[];
+
 /** More messages than this are counted, not drawn: S11 plays seventeen, and the picture would say less. */
 const MOST_DRAWN = 6;
 

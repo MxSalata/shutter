@@ -27,6 +27,18 @@ The judges play the scenarios on the online demo, and the words for orders and r
   messages that never arrived are listed and can be resent after one approval through Engine Resend. The receiver cards,
   the release table, the category choice, the gate's reason `RECEIVER_NOT_MODELLED` (its words; the code is unchanged),
   the explain collection, the install guide's outage section and the README's limits say so.
+- **Settings editors that work, with a Save that is locked.** On the site profile, the agents' library and a review's
+  annotations, an account without the right to change the site (the online demo's, a judge's, a site's operator) now
+  presses every button, opens every menu and changes every answer, and the changes build up on the page and in the review
+  dialog as an approver's do. Only Save is locked: it shows a lock, stays reachable from the keyboard and says why, "The
+  online demo's settings are locked: nothing is saved." on the online demo and "Only an approver saves here" on a site.
+  The server refuses such a save as before.
+- **The tour's arrow points at its section without touching it.** The arrow under the tour's card crossed the section's
+  highlight on some steps (the second and fourth of the trial's tour on a desktop): the card now keeps the arrow's reach,
+  its nudge and a gap clear above the section's ring, measured on the page, at every width.
+- **The scenario diagrams hold still across the modes.** The expected end's box was as wide as its caption, so it moved
+  between Board ("after gate checks and approval") and Site policy ("after gate checks and release"). It now fits the
+  longest label of the four modes, with the caption centred under it, so switching the mode changes only the words.
 - **Tested:** the unit suites on build 154 (1,083 passed, none failed) and 2026.2 (1,074 passed, none failed), with new
   tests that the judge runs and doesn't reset or purge, that the operator and the approver do both, and that an upgrade
   over 1.4.2's roles keeps their Reset; `tests/e2e/roles_check.py` on both with the judge's and the demo's passwords set

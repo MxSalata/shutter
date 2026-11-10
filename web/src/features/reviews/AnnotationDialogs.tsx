@@ -1,10 +1,11 @@
 import { Alert, Button, Group, Radio, Stack, Text, Textarea, TextInput } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { newIdempotencyKey } from '@/api/client';
 import { useAnnotateFinding, useRemoveAnnotation } from '@/api/hooks';
 import type { ReviewAnnotation, ReviewDetail, ReviewFinding } from '@/api/types';
 import { ConfirmModal } from '@/components/ConfirmModal';
+import { LockedNote, LockedSaveButton } from '@/components/LockedSave';
 import { TRIAL } from '@/env/mode';
 import { describeError } from '@/lib/errors';
 import { expiryForApi, expiryProblem, findingTitle, STATUS_LABELS, subjectOf } from './review';
@@ -20,9 +21,10 @@ const STATUS_NOTES: Record<Status, string> = {
 /**
  * An approver's annotation of a finding, and its removal. An annotation is a Shutter record bound to the finding's
  * code, item, setting and exact value: it applies to every review of the production and reopens the finding when the
- * value changes, it expires or it is removed. Nothing in the production changes.
+ * value changes, it expires or it is removed. Nothing in the production changes. A reader who may not annotate (`locked`,
+ * from `saveLocked`) fills the same dialogs and finds their save locked, with the reason beside it.
  */
-export function useAnnotationDialogs(review: ReviewDetail) {
+export function useAnnotationDialogs(review: ReviewDetail, locked: string | null = null) {
   const annotate = useAnnotateFinding(review.reviewId);
   const remove = useRemoveAnnotation();
   const [marking, setMarking] = useState<ReviewFinding | null>(null);
@@ -31,6 +33,7 @@ export function useAnnotationDialogs(review: ReviewDetail) {
   const [reason, setReason] = useState('');
   const [expires, setExpires] = useState('');
   const [key, setKey] = useState('');
+  const lockedId = useId();
 
   const mark = (f: ReviewFinding) => {
     setMarking(f);
@@ -46,7 +49,7 @@ export function useAnnotationDialogs(review: ReviewDetail) {
   };
   const problem = expiryProblem(expires);
   const submit = () => {
-    if (!marking || !reason.trim() || problem) return;
+    if (locked || !marking || !reason.trim() || problem) return;
     annotate.mutate(
       {
         annotation: {
@@ -70,7 +73,7 @@ export function useAnnotationDialogs(review: ReviewDetail) {
     );
   };
   const confirmRemove = () => {
-    if (!removing) return;
+    if (locked || !removing) return;
     remove.mutate(removing.annotationId, {
       onSuccess: () => {
         setRemoving(null);
@@ -83,11 +86,12 @@ export function useAnnotationDialogs(review: ReviewDetail) {
     });
   };
 
-  const demoNote = TRIAL ? (
-    <Alert color="blue" variant="light" title="Demo replay" role="note">
-      The online demo keeps no annotations: it answers as an instance would refuse a change it cannot make.
-    </Alert>
-  ) : null;
+  const demoNote =
+    TRIAL && !locked ? (
+      <Alert color="blue" variant="light" title="Demo replay" role="note">
+        The online demo keeps no annotations: it answers as an instance would refuse a change it cannot make.
+      </Alert>
+    ) : null;
 
   const modals = (
     <>
@@ -139,13 +143,25 @@ export function useAnnotationDialogs(review: ReviewDetail) {
                 {describeError(annotate.error)}
               </Text>
             ) : null}
+            {locked ? (
+              <Group justify="flex-end">
+                <LockedNote id={lockedId}>{locked}</LockedNote>
+              </Group>
+            ) : null}
             <Group justify="flex-end">
               <Button variant="default" onClick={() => setMarking(null)}>
                 Cancel
               </Button>
-              <Button onClick={submit} loading={annotate.isPending} disabled={!reason.trim() || !!problem}>
-                Mark as {STATUS_LABELS[status].toLowerCase()}
-              </Button>
+              {locked ? (
+                <LockedSaveButton
+                  label={`Mark as ${STATUS_LABELS[status].toLowerCase()}`}
+                  noteId={lockedId}
+                />
+              ) : (
+                <Button onClick={submit} loading={annotate.isPending} disabled={!reason.trim() || !!problem}>
+                  Mark as {STATUS_LABELS[status].toLowerCase()}
+                </Button>
+              )}
             </Group>
           </Stack>
         ) : null}
@@ -168,13 +184,22 @@ export function useAnnotationDialogs(review: ReviewDetail) {
                 {describeError(remove.error)}
               </Text>
             ) : null}
+            {locked ? (
+              <Group justify="flex-end">
+                <LockedNote id={lockedId}>{locked}</LockedNote>
+              </Group>
+            ) : null}
             <Group justify="flex-end">
               <Button variant="default" onClick={() => setRemoving(null)}>
                 Cancel
               </Button>
-              <Button color="red" onClick={confirmRemove} loading={remove.isPending}>
-                Remove the annotation
-              </Button>
+              {locked ? (
+                <LockedSaveButton label="Remove the annotation" noteId={lockedId} />
+              ) : (
+                <Button color="red" onClick={confirmRemove} loading={remove.isPending}>
+                  Remove the annotation
+                </Button>
+              )}
             </Group>
           </Stack>
         ) : null}

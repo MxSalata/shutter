@@ -716,25 +716,36 @@ describe('ReviewPage', () => {
     );
   });
 
-  it('hides the annotations from an operator', async () => {
+  it('opens the annotation dialog for an operator, and locks its save: only an approver saves', async () => {
     resetMock('operator');
     serveMarked();
     renderAt('/reviews/PR-000001');
     await screen.findByRole('heading', { name: 'Review PR-000001' });
     expect(within(row('F10')).getByText('Intended')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Annotate|Remove the annotation/ })).not.toBeInTheDocument();
+    expect(await screen.findByTestId('save-locked')).toHaveTextContent('Only an approver saves here');
+    await userEvent.click(within(row('F10')).getByRole('button', { name: 'Remove the annotation of F10' }));
+    const dialog = await screen.findByRole('dialog');
+    const remove = within(dialog).getByRole('button', { name: 'Remove the annotation' });
+    expect(remove).toHaveAttribute('aria-disabled', 'true');
+    expect(remove).toHaveAccessibleDescription('Only an approver saves here: sign in as approver.');
   });
 
-  it("hides the annotations from the public demo's role, which reads the review and the notes already made", async () => {
+  it("lets the public demo's role fill in an annotation, with a locked save that says why", async () => {
     resetMock('demo');
     serveMarked();
     renderAt('/reviews/PR-000001');
     await screen.findByRole('heading', { name: 'Review PR-000001' });
-    expect(await screen.findByTestId('demo-read-only')).toHaveTextContent(
-      "On the online demo you can approve or reject plans; a site's approver saves changes here",
-    );
+    const LOCKED = "The online demo's settings are locked: nothing is saved.";
+    expect(await screen.findByTestId('save-locked')).toHaveTextContent(LOCKED);
     expect(within(row('F10')).getByText('Intended')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Annotate|Remove the annotation/ })).not.toBeInTheDocument();
+    await userEvent.click(screen.getAllByRole('button', { name: /^Annotate / })[0]);
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.type(within(dialog).getByRole('textbox', { name: /Reason/ }), 'Tried on the demo');
+    const save = within(dialog).getByRole('button', { name: /^Mark as / });
+    expect(save).toHaveAttribute('aria-disabled', 'true');
+    expect(save).toHaveAccessibleDescription(LOCKED);
+    await userEvent.click(save);
+    expect(within(dialog).queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('derives the right to annotate from the approver flag when the server sends no `can`', async () => {
@@ -748,7 +759,7 @@ describe('ReviewPage', () => {
     expect(
       (await screen.findAllByRole('button', { name: /^(Annotate|Remove the annotation)/ })).length,
     ).toBeGreaterThan(0);
-    expect(screen.queryByTestId('demo-read-only')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('save-locked')).not.toBeInTheDocument();
   });
 
   it('says plainly when there is no such review', async () => {

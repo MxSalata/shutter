@@ -1,9 +1,9 @@
 import { Accordion, Alert, Button, Checkbox, Group, List, Stack, Text } from '@mantine/core';
-import { useState } from 'react';
-import { DEMO_READ_ONLY } from '@/api/can';
+import { useId, useState } from 'react';
 import type { SiteProfile, SiteProfileView } from '@/api/types';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { JsonBlock } from '@/components/JsonBlock';
+import { LockedNote, LockedSaveButton } from '@/components/LockedSave';
 import { byEnv } from '@/env/copy';
 import type { Change } from './profile';
 
@@ -20,7 +20,7 @@ export function ReviewModal({
   changes,
   body,
   saving,
-  readOnly = false,
+  locked = null,
   problem,
   onCancel,
   onSave,
@@ -31,8 +31,11 @@ export function ReviewModal({
   changes: Change[];
   body: SiteProfile & { expectedVersion: number };
   saving: boolean;
-  /** The public demo: the changes are shown for reading, and a note stands where Save would be. */
-  readOnly?: boolean;
+  /**
+   * Why this reader cannot save (`saveLocked`): the review reads as an approver's, and its Save is locked with this
+   * note beside it.
+   */
+  locked?: string | null;
   problem: SaveProblem;
   onCancel: () => void;
   onSave: () => void;
@@ -43,29 +46,24 @@ export function ReviewModal({
   const lessOversight = changes.filter((c) => c.lessOversight);
   const [acknowledged, setAcknowledged] = useState(false);
   const confirmOnly = changes.length === 0;
+  const lockedId = useId();
   return (
     <ConfirmModal
       opened={opened}
       onClose={() => (saving ? undefined : onCancel())}
       title={
-        readOnly
-          ? `The changes for version ${next} of the site profile`
-          : confirmOnly
-            ? `Confirm the answers as version ${next}`
-            : `Save version ${next} of the site profile`
+        confirmOnly ? `Confirm the answers as version ${next}` : `Save version ${next} of the site profile`
       }
-      chip={!readOnly}
+      chip
       size="lg"
     >
       <Stack gap="sm">
-        {readOnly ? null : (
-          <Text size="md" fw={600}>
-            {byEnv({
-              live: 'This changes what Shutter does at this hospital from the next case.',
-              trial: "In the trial, saving changes only this browser's copy, until you reload or leave.",
-            })}
-          </Text>
-        )}
+        <Text size="md" fw={600}>
+          {byEnv({
+            live: 'This changes what Shutter does at this hospital from the next case.',
+            trial: "In the trial, saving changes only this browser's copy, until you reload or leave.",
+          })}
+        </Text>
         {confirmOnly ? (
           <Text size="sm">
             The answers stay as they are, and are recorded as answered by you: the shipped answers stop being
@@ -91,24 +89,22 @@ export function ReviewModal({
             at the first surprise.
           </Alert>
         ) : null}
-        {tier3.length && !readOnly ? (
+        {tier3.length ? (
           <Checkbox
             checked={acknowledged}
             onChange={(e) => setAcknowledged(e.currentTarget.checked)}
             label={`I mean it: some releases at clinical-safety tier 3 (${tier3.map((c) => c.text.replace(/:.*/, '')).join('; ')}) will go with no person's approval`}
           />
         ) : null}
-        {readOnly ? null : (
-          <Alert color="blue" variant="light">
-            Open cases that have not reached their approval use it too. Approvals and incident plans made
-            under version {view.version} are refused at release and come back to a person. Cases and incidents
-            opened from now on use version {next}.
-          </Alert>
-        )}
+        <Alert color="blue" variant="light">
+          Open cases that have not reached their approval use it too. Approvals and incident plans made under
+          version {view.version} are refused at release and come back to a person. Cases and incidents opened
+          from now on use version {next}.
+        </Alert>
         <Accordion variant="contained" chevronPosition="left">
           <Accordion.Item value="body">
-            <Accordion.Control aria-label={readOnly ? 'What would be sent' : 'What is sent'}>
-              <Text size="sm">{readOnly ? 'What would be sent' : 'What is sent'}</Text>
+            <Accordion.Control aria-label="What is sent">
+              <Text size="sm">What is sent</Text>
             </Accordion.Control>
             <Accordion.Panel>
               <JsonBlock value={body} label="the profile that is sent" />
@@ -140,16 +136,21 @@ export function ReviewModal({
             {problem.message}
           </Alert>
         ) : null}
+        {locked ? (
+          <Group justify="flex-end">
+            <LockedNote id={lockedId}>{locked}</LockedNote>
+          </Group>
+        ) : null}
         <Group justify="flex-end" gap="sm">
-          {readOnly ? (
-            <Text size="sm" c="dimmed" data-testid="demo-read-only">
-              {DEMO_READ_ONLY}.
-            </Text>
-          ) : null}
           <Button variant="default" onClick={onCancel} disabled={saving}>
-            {readOnly ? 'Done' : 'Cancel'}
+            Cancel
           </Button>
-          {readOnly ? null : (
+          {locked ? (
+            <LockedSaveButton
+              label={confirmOnly ? `Confirm as version ${next}` : `Save version ${next}`}
+              noteId={lockedId}
+            />
+          ) : (
             <Button
               loading={saving}
               disabled={(tier3.length > 0 && !acknowledged) || problem?.kind === 'stale'}

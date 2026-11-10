@@ -5,7 +5,6 @@ import type { SiteProfile, SiteTeam } from '@/api/types';
 import { Section } from '@/components/Section';
 import { TechDetail } from '@/components/TechDetail';
 import { Checkbox, NativeSelect, NumberInput, Radio, Switch, TextInput } from './controls';
-import { useEditable } from './editable';
 import { IANA_ZONE, ZONE_LABELS, newTeam, parseList } from './profile';
 import { Question, QuestionDetails } from './Question';
 import {
@@ -77,7 +76,6 @@ function TeamFields({
   const err = (key: string) =>
     problem && problem.path.replace(/\[\d+\]$/, '') === `teams[${i}].${key}` ? problem.message : undefined;
   const id = (key: string) => `site-teams-${i}-${key}`;
-  const editable = useEditable();
   const named = t.receivers ?? [];
   const unknown = named.filter((r) => !receivers.includes(r));
   return (
@@ -181,7 +179,6 @@ function TeamFields({
             color="red"
             size="xs"
             leftSection={<IconTrash size={14} />}
-            disabled={!editable}
             onClick={remove}
           >
             Remove {t.name || 'this team'}
@@ -193,7 +190,6 @@ function TeamFields({
 }
 
 function Teams({ draft, setDraft, problem }: { draft: SiteProfile; setDraft: SetDraft; problem: Problem }) {
-  const editable = useEditable();
   const teams = draft.teams ?? [];
   const receivers = draft.receivers.map((r) => r.name);
   const err = (path: string) =>
@@ -235,7 +231,6 @@ function Teams({ draft, setDraft, problem }: { draft: SiteProfile; setDraft: Set
           variant="light"
           size="xs"
           leftSection={<IconPlus size={14} />}
-          disabled={!editable}
           onClick={() =>
             setDraft((d) => {
               d.teams = [...(d.teams ?? []), newTeam()];

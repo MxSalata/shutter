@@ -330,29 +330,31 @@ describe('On this page', () => {
 });
 
 describe('a reader who cannot save', () => {
-  it('can still open the second layer of every question, while the answers stay disabled', async () => {
+  it('opens the second layer of every question and changes the answers, as an approver does', async () => {
     resetMock('operator');
     renderPage();
     const switchEl = await screen.findByRole('switch', { name: /Downstream Out accepts cancels/ });
-    expect(switchEl).toBeDisabled();
+    expect(switchEl).toBeEnabled();
     const keys = screen.getAllByRole('button', { name: 'Keys and values' });
     expect(keys.length).toBeGreaterThan(10);
     for (const b of keys) expect(b).toBeEnabled();
-    // Nor does the page offer the buttons that add or remove answers
-    expect(screen.getByRole('button', { name: 'Add a receiver' })).toBeDisabled();
+    // The buttons that add or remove answers work too
+    expect(screen.getByRole('button', { name: 'Add a receiver' })).toBeEnabled();
     await userEvent.click(keys[0]);
     expect(keys[0]).toHaveAttribute('aria-expanded', 'true');
   });
 
-  it('gives the public role the review of a draft and the read-only note in the bar', async () => {
+  it("gives the public role the approver's bar with the locked note, once", async () => {
     resetMock('demo');
     renderPage('plain', '?suggest=C-000008&fact=W1');
     const bar = await screen.findByRole('region', { name: 'Unsaved changes' });
-    expect(within(bar).getByRole('button', { name: 'Review the changes…' })).toBeInTheDocument();
-    expect(within(bar).getByTestId('demo-read-only')).toBeInTheDocument();
-    expect(within(bar).queryByRole('button', { name: 'Discard changes' })).not.toBeInTheDocument();
-    // One note, not two
-    expect(screen.getAllByTestId('demo-read-only')).toHaveLength(1);
+    expect(within(bar).getByRole('button', { name: 'Review and save…' })).toBeInTheDocument();
+    expect(within(bar).getByRole('button', { name: 'Discard changes' })).toBeInTheDocument();
+    expect(within(bar).getByTestId('save-locked')).toHaveTextContent(
+      "The online demo's settings are locked: nothing is saved.",
+    );
+    // In the bar and on the suggestion, which says it beside its own review button
+    expect(screen.getAllByTestId('save-locked')).toHaveLength(2);
   });
 });
 

@@ -1,3 +1,4 @@
+import { toBecomeApprover } from '@/env/copy';
 import type { Can, Me } from './types';
 
 /**
@@ -32,15 +33,26 @@ export function resolveCan(me: Me | null | undefined): Can {
 }
 
 /**
- * The public demo's role: it approves and rejects, and cannot change the site. The screens keep what it may read (a
- * pre-filled draft, the review of a change) and replace Save with a note saying so. A site's operator, who cannot
- * approve either, keeps the plain "needs the approver role" notes.
+ * The public demo's role: it approves and rejects, and cannot change the site. Its editors work as an approver's do,
+ * and their Save is locked with the demo's note (`saveLocked`); a site's operator, who cannot approve either, reads that
+ * only an approver saves.
  */
 export const readOnlyDemo = (can: Can): boolean => can.approve && !can.configure;
 
-/** The note that stands where Save would be on the online demo. */
-export const DEMO_READ_ONLY =
-  "On the online demo you can approve or reject plans; a site's approver saves changes here";
+/** The note beside a Save that is locked on the online demo: the editors work, and the server refuses the save. */
+export const DEMO_LOCKED = "The online demo's settings are locked: nothing is saved.";
+
+/**
+ * Why this reader's Save is locked, or null when it is not. The editors stay usable for everyone who may read the page,
+ * so a change can be tried and reviewed; only the save needs the configure right, which the server checks too. On the
+ * online demo the note says its settings are locked; on a site, that only an approver saves.
+ */
+export const saveLocked = (can: Can): string | null =>
+  can.configure
+    ? null
+    : readOnlyDemo(can)
+      ? DEMO_LOCKED
+      : `Only an approver saves here: ${toBecomeApprover()}.`;
 
 /**
  * The page is for looking at: the user operates the site but may not run scenarios, as on the public demo, which plays

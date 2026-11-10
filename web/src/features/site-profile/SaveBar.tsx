@@ -6,22 +6,25 @@ import { plural } from '@/lib/format';
  * The foot of the page while the draft differs from the saved version: "2 changes", Discard, and Review and save. It
  * sticks to the bottom of the window and rises 8 px in 220 ms (the page's global rule drops that under reduced motion).
  * It never covers the focused field: while it shows, the window's scroll padding is its height, so the browser keeps a
- * field it focuses clear of the bar. The public demo's role reads the changes and cannot save them, so its bar offers
- * the review and carries the read-only note.
+ * field it focuses clear of the bar. A reader who cannot save (the public demo's role, a site's operator) has the same bar,
+ * with the note that says the save is locked; a page that saves without a review gives its own locked Save (`primary`).
  */
 export function SaveBar({
   count,
   onReview,
   onDiscard,
   reviewLabel,
+  primary,
   alert,
   note,
 }: {
   count: number;
-  onReview: () => void;
+  onReview?: () => void;
   /** Absent when the draft cannot be discarded by this reader. */
   onDiscard?: () => void;
-  reviewLabel: string;
+  reviewLabel?: string;
+  /** In place of the review button: a page's own Save, such as a locked one. */
+  primary?: ReactNode;
   /** What the last review refused, above the buttons. */
   alert?: ReactNode;
   note?: ReactNode;
@@ -67,7 +70,7 @@ export function SaveBar({
               Discard changes
             </Button>
           ) : null}
-          <Button onClick={onReview}>{reviewLabel}</Button>
+          {primary ?? <Button onClick={onReview}>{reviewLabel}</Button>}
         </Group>
       </Group>
     </Paper>
