@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.54, 9 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.55, 10 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -2321,7 +2321,7 @@ board's case in the Visual Trace, the latest cases, and links to the portal's pa
 One incident per watched receiver: an outage, opened and closed by a read-only poll from Shutter's own production job, never
 by a connection to the receiver. It is a store of its own, `Shutter.Store.Outage`, beside `Shutter.Store.OutageEvent` (what
 happened to it, append only: `{at, kind, detail, by}`, `kind` one of `opened`, `kind`, `draining`, `open`, `closing`, `closed`,
-`needs_person`, `paused` and `overdue`) and `Shutter.Store.ReceiverReading` (the last reading per watched receiver, overwritten by each
+`needs_person`, `paused` and `overdue`, and the send's own kinds of 17.8) and `Shutter.Store.ReceiverReading` (the last reading per watched receiver, overwritten by each
 poll). A receiver is watched when its profile entry has a `watch` block (6.4); with none, the item `Receiver Watch` does
 nothing, and every route below answers empty lists.
 
@@ -2435,15 +2435,18 @@ words follow the build (`Shutter.API.Outages.Words`, a pure method with a table 
   "Nothing remains queued." only while the receiver's reading shows its queue at 0, else "N messages are still queued.";
   after a send, what Shutter's ledger did with each message by its last row: "Shutter sent N again, each new header
   Completed", "N the receiver already held", "N handled by hand", "N failed when Shutter sent them again and still need
-  action", "N not sent and still need action", and only the Error headers the ledger does not account for "ended in
-  Error"). Closed:
+  action", (v1.55) "N sent again whose result is not known yet: Shutter reads their new headers again and a person reads
+  the trace", "N not sent and still need action", and only the Error headers the ledger does not account for "ended in
+  Error"; a later run's row on a message, or on Shutter's own clone sent in its place, is that message's last row). Closed:
   "Transport outage closed.", with "N delivery exceptions still need review." while cases stay open. Where the item's
   `ReplyCodeActions` is not the engine's default, the string is printed with "This operation's reply actions are the site's
   own: what an AE, AR or timeout does here follows this string". Always last: "Recovery attempts initiated by Shutter: 0." (v1.54: `sentByShutter` counts every message this outage's
   runs sent again, whatever came of it, from the ledger),
   with "The integration engine may still be delivering or retrying." while messages are queued or a head message is read, and "Nothing
   is sent to the receiver to check this."
-- `do`: "Do: " and the site's runbook line; at Refusing "Do: a person decides in the Message Viewer; Shutter does not
+- `do`: "Do: " and the site's runbook line; closed, "Do: nothing more for this outage." only while no message's last ledger
+  row is `failed` or `unknown` (v1.55: else "Do: read in the Message Viewer the message listed below whose resend failed
+  ...; Shutter sends nothing more for it."); at Refusing "Do: a person decides in the Message Viewer; Shutter does not
   suspend or discard."; while paused, "Down on purpose until ..." in its place. At a retrying receiver (`unlimited` or
   `bounded`): "Entering one by hand first is your downtime procedure's call; at this receiver a duplicate is" refused, with
   its words, filed twice, or unknown, from the profile's `duplicates`. Open an hour or more: "Down longer than the site's
@@ -2606,6 +2609,13 @@ and reads the new header until it settles, within the item's `FailureTimeout` an
   gains an event of kind `resend` ("Shutter's resend of this message failed at HH:MM: new header N ended <status> (<the
   receiver's words>). Nothing more was sent; the outage waits for a person."), its state unchanged. Read again, a failed
   message is `refused` by rule 3, so it is never offered again.
+- Not settled within the wait: the row `unknown` ("new header N had not settled in S s"), every row not sent `stopped`,
+  the outage `needs_person`. (v1.55) The new header is read again by Engine Resend's poll for 7 days: once the engine shows
+  it settled, the row ends as the rules above would have ended it in time (Completed: `completed` with "...; new header N
+  Completed, read at HH:MM after the send's wait had run out." and the message's case resolved; the declared duplicate
+  answer: `closed_as_present`; any other end: `failed` with an event of kind `resend` on its case), and the outage gains
+  an event of kind `resend_settled`; its state is left as it is, and nothing is sent again. A header still Queued or
+  Delivered, or one that can't be read, stays `unknown`. The card and its counts read each message by its last row.
 - A patient the check holds is skipped (`stopped`, "not sent: <why>") and the run goes on; a copy resent by someone else
   stops it.
 
@@ -2667,7 +2677,7 @@ A demo reset (`Runner.Reset`, demo only) clears a stop too, with the event `demo
 - `GET /shadow-observations?from=&to=&receiver=` and `GET /shadow-observations.csv`: the report. `Shutter_Operate`.
 - `Shutter.Store.RecoveryControlEvent` keeps every stop, clear and mode change, with who, why and what was outstanding.
 
-**Email.** In shadow mode, `Escalation Mail` sends nothing and writes no file: the escalation is marked failed, saying why, and enabling recovery doesn't send it. `notifications.shadow_delivery: "enabled"` in the profile lets them go. A reminder for cases left open (6.4) follows the same rule: in shadow mode none is built or sent, the run logs that it was due, its cases count as not reminded, and the first run after enabling or after that setting sends what is due. A stop doesn't touch email.
+**Email.** In shadow mode, `Escalation Mail` sends nothing and writes no file: the escalation is marked failed, saying why ("Not sent: shadow mode sends no email, ..."), its line on the case page reads Not sent (v1.55, the word the escalation dialog promises), and enabling recovery doesn't send it. `notifications.shadow_delivery: "enabled"` in the profile lets them go. A reminder for cases left open (6.4) follows the same rule: in shadow mode none is built or sent, the run logs that it was due, its cases count as not reminded, and the first run after enabling or after that setting sends what is due. A stop doesn't touch email.
 
 **The report.** One row per case that reached Shutter in the period, with its latest observation (`Shutter.Store.ShadowObservation`, one per plan at the proposal gate). The denominator is **cases reaching Shutter**, not all failed deliveries: a failure that never became a case is not in it, and a case not yet investigated stays in it as unobserved. A resend proposal whose proposal gate passed is a **candidate for rehearsal**, and no more: neither a rehearsal nor a dispatch was tested. `recovery_calls_sent`, `rehearsal_performed`, `final_dispatch_tested` and `notification_deliveries` are counted from the permits and the escalations, not assumed from the mode. Patients appear as a reference local to this deployment, a hash keyed by a value the control row keeps and no route returns, since `deployment_id` is printed on every row, so a list of hospital numbers can't re-identify a row; no message text. Shutter keeps no list from a reference back to a patient, so a person who needs the patient behind a row keeps that link, within the run, from the row's `case_id`. Human review of a proposal isn't built, so the report says nothing about whether a proposal was right. **A report authorises nothing:** it enables nothing, releases no plan and closes no uncertain write.
 
@@ -2728,6 +2738,13 @@ then null, never 0, with the reason in `sourceError`. `incomplete` for any of th
 No message content is copied: the rows hold ids, codes, the body's class and the HL7 structure's family (ADT, ORU).
 
 ## Changes
+
+- v1.55, 10 Nov 2026 (for 1.4.1, the 1.4.0 recheck's leftovers): an `unknown` resend is read again by Engine Resend's poll
+  and settles by the send's own rules once its new header settles, with an outage event `resend_settled` (17.8); the
+  card's settled words count an unknown result as its own, each message by its last row (a clone sent in its place
+  included), and a closed card says what still needs a person (17.4). A shadow-mode escalation's line reads Not sent (18).
+  A message Shutter does not model is described as not resent from its case, with the outage resend named where its
+  receiver is set up for one, and words stored before keep their meaning on every read (no stored text is rewritten).
 
 - v1.54, 9 Nov 2026 (for 1.4.0, the hands-on test's finding): shadow mode and the recovery stop hold the outage resend
   (17.8, 18). `POST /outages/:id/approvals` answers 409 `recovery_stopped`, `recovery_shadow` or `control_unreadable` once

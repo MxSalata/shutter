@@ -135,6 +135,49 @@ Method TestFailedResendShown()
     Do $$$AssertEquals(onCase.%Size() _ "/" _ onCase.%Get(0).state, "1/failed", "the case's resends: the rows on its origin")
 }
 
+/// A resend whose result was unknown when the run stopped (the new header had not settled in the wait) is read again
+/// by the poll: once its new header reads Completed the row is a completed send and the message's case is resolved with
+/// what was sent; one that ended Suspended is a failed resend with an event on its case; one still Delivered stays
+/// unknown. The outage's state is left as it is, and its card counts each message by its latest state.
+Method TestUnknownResendSettlesLate()
+{
+    Do ..Receiver()
+    Set a = ..Origin("UA"), b = ..Origin("UB"), c = ..Origin("UC")
+    Set ca = ..CaseOf(a, "ER-T-0011"), cb = ..CaseOf(b, "ER-T-0012")
+    Set o = ..Offered(a, b, c)
+    Do $$$AssertEquals(##class(Shutter.API.Outages).Approve(o, {"digest": "d1", "note": "checked"}, "appr1", .reply), "200 OK", "approved")
+    Set run = reply.approval.id
+    // Each message as a stopped run left it: the new header had not settled in the wait.
+    Set heads = $LISTBUILD(..Clone(a, 9, "MSA|AA|UA|"), ..Clone(b, 5, "MSA|AE|UB|Refused by the application"), ..Clone(c, 3, ""))
+    For pos = 1:1:3 {
+        Set r = ..RunRow(run, pos), newId = $LIST(heads, pos)
+        Set r.State = "unknown", r.NewHeaderId = newId, r.StartedAt = ##class(Shutter.Util.Time).NowUTC(), r.EndedAt = r.StartedAt
+        Set r.Words = "new header " _ newId _ " had not settled in 15 s (unread)"
+        Do $$$AssertStatusOK(r.%Save(), "row " _ pos _ " unknown")
+    }
+    Do o.Advance("needs_person", "new header had not settled", "unit")
+    Do $$$AssertTrue(##class(Shutter.Operation.EngineResend).SettleLate() >= 2, "two rows settled")
+    Set r1 = ..RunRow(run, 1), r2 = ..RunRow(run, 2), r3 = ..RunRow(run, 3)
+    Do $$$AssertEquals(r1.State, "completed", "Completed later: a completed send")
+    Do $$$AssertTrue((r1.Words [ ("new header " _ $LIST(heads, 1) _ " Completed, read at ")) && (r1.Words [ "after the send's wait had run out") && (r1.Words [ ("under approval " _ run _ " by appr1")), r1.Words)
+    Set case = ##class(Shutter.Store.Case).%OpenId(ca)
+    Do $$$AssertEquals(case.State, "resolved", "its case resolved with what was sent")
+    Do $$$AssertEquals(case.Outcome, r1.Words, "in the row's words")
+    Do $$$AssertEquals(r2.State, "failed", "Suspended later: a failed resend")
+    Do $$$AssertTrue(r2.Words [ "ended Suspended (the receiver answered AE: Refused by the application), read at ", r2.Words)
+    Set other = ##class(Shutter.Store.Case).%OpenId(cb)
+    Do $$$AssertEquals(other.State, "escalated", "its case left as it is")
+    Do $$$AssertTrue(other.Events().%ToJSON() [ """kind"":""resend""", "with an event of kind resend")
+    Do $$$AssertEquals(r3.State, "unknown", "still Delivered: unknown")
+    Do o.%Reload()
+    Do $$$AssertEquals(o.State, "needs_person", "the outage's state is left as it is")
+    Set events = ##class(Shutter.Store.OutageEvent).Of(o.%Id()).%ToJSON()
+    Do $$$AssertTrue(events [ "resend_settled" && (events [ "its resend's result was unknown"), events)
+    Set t = ##class(Shutter.API.Outages).Tally(##class(Shutter.API.Outages).One(o))
+    Do $$$AssertEquals(t.sent _ "/" _ t.failed _ "/" _ t.unknown, "1/1/1", "each message by its latest state: " _ t.%ToJSON())
+    Do $$$AssertEquals(##class(Shutter.Operation.EngineResend).SettleLate(), 0, "nothing more to settle")
+}
+
 /// An approval, then the choice "already handled by hand" for one of its messages: the recheck stops on it and nothing is
 /// sent.
 Method TestHandledByHandNotSent()

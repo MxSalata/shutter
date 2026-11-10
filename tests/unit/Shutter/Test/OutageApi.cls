@@ -94,6 +94,10 @@ XData Rows [ MimeType = application/json ]
   "has": {"first": ["Nothing remains queued. 0 deliveries Completed; Shutter sent 3 again, each new header Completed; 2 handled by hand.", "Recovery attempts initiated by Shutter: 3."]}, "not": {"first": ["ended in Error", "still need"]}},
  {"name": "a run that failed: each message by what happened to it, once", "category": "orders_results", "over": {"state": "needs_person", "drainedAt": "2026-11-08T03:13:20Z", "approval": {"id": "R8-3", "by": "appr1"}, "set": {"status": "not_computed", "reason": "the resend of header 43 ended Suspended"}, "settled": {"completed": 0, "suspended": 0, "error": 5, "other": 0}, "resends": [{"runId": "R8-3", "headerId": "41", "state": "completed"}, {"runId": "R8-3", "headerId": "42", "state": "completed"}, {"runId": "R8-3", "headerId": "43", "state": "failed"}, {"runId": "R8-3", "headerId": "44", "state": "stopped"}, {"runId": "R8-3", "headerId": "45", "state": "stopped"}]},
   "has": {"first": ["Shutter sent 2 again, each new header Completed; 1 failed when Shutter sent it again and still needs action; 2 not sent and still need action.", "A person must act here: the resend of header 43 ended Suspended."], "do": ["The run stopped: read the message that stopped it in the Message Viewer"]}, "not": {"first": ["ended in Error", "Shutter reads the engine again every minute"]}},
+ {"name": "closed after a later run, one resend's result still unknown: never nothing more to do", "category": "orders_results", "over": {"state": "closed", "drainedAt": "2026-11-08T03:13:20Z", "settled": {"completed": 0, "suspended": 0, "error": 2, "other": 0}, "resends": [{"runId": "R3-3", "headerId": "41", "state": "unknown"}, {"runId": "R3-3", "headerId": "42", "state": "stopped"}, {"runId": "R3-6", "headerId": "42", "state": "completed"}]},
+  "has": {"first": ["Shutter sent 1 again, each new header Completed; 1 sent again whose result is not known yet: Shutter reads its new header again and a person reads the trace."], "do": ["Do: read in the Message Viewer the message listed below whose resend result is not known yet; Shutter sends nothing more for it."]}, "not": {"first": ["failed when Shutter sent", "not sent and still need"], "do": ["Do: nothing more for this outage"]}},
+ {"name": "closed after a later run settled the earlier unknown: nothing more", "category": "orders_results", "over": {"state": "closed", "drainedAt": "2026-11-08T03:13:20Z", "settled": {"completed": 0, "suspended": 0, "error": 2, "other": 0}, "resends": [{"runId": "R3-3", "headerId": "41", "state": "completed"}, {"runId": "R3-3", "headerId": "42", "state": "stopped"}, {"runId": "R3-6", "headerId": "42", "state": "completed"}]},
+  "has": {"first": ["Shutter sent 2 again, each new header Completed."], "do": ["Do: nothing more for this outage."]}, "not": {"first": ["not known yet", "not sent and still need", "ended in Error"]}},
  {"name": "drained while the reading shows a queue: never nothing queued", "category": "orders_results", "over": {"state": "closing", "drainedAt": "2026-11-08T03:13:20Z"}, "reading": {"queue": 4},
   "has": {"first": ["4 messages are still queued."]}, "not": {"first": ["Nothing remains queued"]}},
  {"name": "a busy feed with no approval: when the reason was read, and that the poll reads again", "category": "orders_results", "over": {"state": "needs_person", "set": {"status": "not_computed", "reason": "the queue holds 4 messages: nothing is listed while anything is being tried", "computedAt": "2026-11-08T03:18:05Z"}},
@@ -133,7 +137,7 @@ Method TestWordsTable()
             }
         }
     }
-    Do $$$AssertEquals(n, 28, "the table has its rows")
+    Do $$$AssertEquals(n, 30, "the table has its rows")
 }
 
 /// No word on a card names a supplier, a value or "Verified".
@@ -368,7 +372,12 @@ Method TestTally()
 {
     Set o = {"resends": [{"headerId": "41", "state": "failed"}, {"headerId": "41", "state": "completed"}, {"headerId": "42", "state": "closed_as_present"}, {"headerId": "43", "state": "unknown"}, {"headerId": "44", "state": "stopped"}, {"headerId": "45", "state": "handled_by_hand"}, {"headerId": "46", "state": "approved"}], "lists": {"closed": [{"headerId": "45", "closure": "handled_by_hand"}, {"headerId": "47", "closure": "already_delivered"}]}}
     Set t = ##class(Shutter.API.Outages).Tally(o)
-    Do $$$AssertEquals(t.%ToJSON(), "{""sent"":1,""held"":2,""byHand"":1,""failed"":1,""notSent"":1,""attempts"":3,""counted"":6}", t.%ToJSON())
+    Do $$$AssertEquals(t.%ToJSON(), "{""sent"":1,""held"":2,""byHand"":1,""failed"":0,""unknown"":1,""notSent"":1,""attempts"":3,""counted"":6}", t.%ToJSON())
+    // Two runs: the first stopped on an unknown and left the rest unsent, a later run sent them; one message's later row
+    // is Shutter's own clone sent in the origin's place. Each message counts once, by its latest row.
+    Set o = {"resends": [{"runId": "R1-2", "headerId": "51", "newHeaderId": "91", "state": "unknown"}, {"runId": "R1-2", "headerId": "52", "state": "stopped"}, {"runId": "R1-2", "headerId": "53", "state": "stopped"}, {"runId": "R1-5", "headerId": "52", "newHeaderId": "92", "state": "completed"}, {"runId": "R1-5", "headerId": "53", "newHeaderId": "93", "state": "completed"}, {"runId": "R1-7", "headerId": "91", "newHeaderId": "94", "state": "completed"}]}
+    Set t = ##class(Shutter.API.Outages).Tally(o)
+    Do $$$AssertEquals(t.sent _ "/" _ t.unknown _ "/" _ t.notSent _ "/" _ t.attempts, "3/0/0/3", t.%ToJSON())
 }
 
 /// The list route: an open row is listed under open and all, a closed one under all only, with the receivers' readings.

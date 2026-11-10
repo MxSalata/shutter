@@ -27,6 +27,9 @@ Parameter APPROVALMINUTES = 15;
 /// Seconds added to FailureTimeout and ConnectTimeout for the wait on a new header.
 Parameter PADSECONDS = 10;
 
+/// How many days after its run stopped an unknown resend is still read again for its result.
+Parameter LATEDAYS = 7;
+
 /// The actor the outage's events and the cases' notes name.
 Parameter ACTOR = "Engine Resend";
 
@@ -35,6 +38,12 @@ Parameter BOUND = "DefCharEncoding,IPAddress,Port";
 
 Method OnProcessInput(pInput As %RegisteredObject, Output pOutput As %RegisteredObject) As %Status
 {
+    // A resend whose result was unknown when the run stopped is read again first: its new header may have settled since.
+    Try {
+        Do ..SettleLate()
+    } Catch err {
+        $$$LOGWARNING("Engine Resend could not read the unknown resends again: " _ err.DisplayString())
+    }
     Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT ID FROM Shutter_Store.Outage WHERE State = 'sending' ORDER BY ID")
     While rs.%Next() {
         Set outage = ##class(Shutter.Store.Outage).%OpenId(rs.%Get("ID"))
@@ -185,6 +194,57 @@ ClassMethod Outcome(outage As Shutter.Store.Outage, row As Shutter.Store.ResendR
     Do row.%Save()
     Do ..Stop(outage, "new header " _ newId _ " had not settled in " _ wait _ " s: read it in the Message Viewer; nothing more was sent")
     Quit "stop"
+}
+
+/// The rows whose result was unknown when their run stopped (the new header had not settled within the wait): each new
+/// header is read again, and once the engine shows it settled the row ends as the send would have ended it in time, by
+/// the same rules (CONTRACTS 17.8): Completed is a send that completed and resolves the message's case; the receiver's
+/// declared duplicate answer closes it as already held; any other end is a failed resend with an event on its case.
+/// The run itself stays stopped, nothing is sent again, and the outage's state is left as it is, with an event saying
+/// what was read. A header still Queued or Delivered, or one that can't be read, stays unknown. Only rows ended in the
+/// last LATEDAYS days are read.
+ClassMethod SettleLate() As %Integer
+{
+    Set n = 0, since = ##class(Shutter.Util.Time).FromNow(-..#LATEDAYS * 86400)
+    Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT ID FROM Shutter_Store.ResendRecord WHERE State = 'unknown' AND NewHeaderId IS NOT NULL AND NewHeaderId <> '' AND (EndedAt IS NULL OR EndedAt = '' OR EndedAt >= ?) ORDER BY ID", since)
+    While rs.%Next() {
+        Set row = ##class(Shutter.Store.ResendRecord).%OpenId(rs.%Get("ID"))
+        Continue:'$ISOBJECT(row)
+        Set h = ..Header(row.Namespace, row.NewHeaderId)
+        Continue:'$ISOBJECT(h)
+        Set word = ##class(Shutter.Util.EngineRead).StatusWord(h.status)
+        Continue:(word="")||(word="Queued")||(word="Delivered")||(word="Created")
+        Set outage = ##class(Shutter.Store.Outage).%OpenId(row.OutageId)
+        Continue:'$ISOBJECT(outage)
+        Do ..Late(outage, row, word)
+        Set n = n + 1
+    }
+    Quit n
+}
+
+/// One unknown row whose new header now reads status: the row, the message's cases and an event on the outage.
+ClassMethod Late(outage As Shutter.Store.Outage, row As Shutter.Store.ResendRecord, status As %String)
+{
+    Set ns = row.Namespace, newId = row.NewHeaderId, at = ##class(Shutter.Util.Time).NowUTC()
+    Set sent = $SELECT(row.StartedAt '= "": ..Clock(row.StartedAt), 1: "")
+    Set late = ", read at " _ ..Clock(at) _ " after the send's wait had run out"
+    If status = "Completed" {
+        Set row.State = "completed", row.EndedAt = at
+        Set row.Words = "Resent by Shutter" _ $SELECT(sent '= "": " at " _ sent, 1: "") _ " under approval " _ row.ApprovalId _ $SELECT(row.ApprovedBy '= "": " by " _ row.ApprovedBy, 1: "") _ "; new header " _ newId _ " Completed" _ late _ "."
+        Do row.%Save()
+        Do ..Resolve(ns, row.OriginHeaderId, row.Words, outage, row)
+    } ElseIf ((status = "Error") || (status = "Suspended")) && ..Duplicate(ns, newId, outage.Receiver, .said) {
+        Set row.State = "closed_as_present", row.EndedAt = at
+        Set row.Words = "Already delivered: the receiver reported it already holds this message (MSA-3: " _ said _ "); the engine never delivered it by this route, and a hand entry would explain it. Shutter has not compared the stored result or amendment."
+        Do row.%Save()
+        Do ..AlreadyDelivered(ns, row, outage)
+    } Else {
+        Set replied = ..ReplyText(ns, newId)
+        Set row.State = "failed", row.EndedAt = at, row.Words = $EXTRACT("new header " _ newId _ " ended " _ status _ $SELECT(replied '= "": " (" _ replied _ ")", 1: "") _ late, 1, 1000)
+        Do row.%Save()
+        Do ..FailedOnCase(ns, row, "Shutter's resend of this message failed: new header " _ newId _ " ended " _ status _ $SELECT(replied '= "": " (" _ replied _ ")", 1: "") _ late _ ". Nothing more was sent for it; a person reads the trace.")
+    }
+    Do ##class(Shutter.Store.OutageEvent).Add(outage.%Id(), "resend_settled", $EXTRACT("Header " _ row.OriginHeaderId _ ": its resend's result was unknown, and new header " _ newId _ " now reads " _ status _ ". " _ row.Words, 1, 2000), ..#ACTOR)
 }
 
 /// The set's rules for one message again: {"verdict": "go", "headerId"} (the header to send: the origin, or Shutter's

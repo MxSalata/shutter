@@ -219,7 +219,13 @@ ClassMethod Words(o As %DynamicObject, entry As %DynamicObject = "", build As %D
     If state = "paused" {
         Set do = "Down on purpose until " _ ..S(o, "pausedUntil") _ ": Shutter offers nothing for this receiver until then, and the engine goes on doing what its settings say."
     } ElseIf state = "closed" {
-        Set do = $SELECT(o.openCases.%Size() > 0: "Do: review the delivery exceptions listed below with their owners.", 1: "Do: nothing more for this outage.")
+        Set t = ..Tally(o)
+        If t.failed || t.unknown {
+            // A message whose resend failed, or whose result is not known yet, still needs a person, closed outage or not.
+            Set do = "Do: read in the Message Viewer the message" _ $SELECT(t.failed + t.unknown = 1: "", 1: "s") _ " listed below whose resend " _ $SELECT(t.failed && t.unknown: "failed or whose result is not known yet", t.failed: "failed", 1: "result is not known yet") _ "; Shutter sends nothing more for " _ $SELECT(t.failed + t.unknown = 1: "it", 1: "them") _ "." _ $SELECT(o.openCases.%Size() > 0: " Then review the delivery exceptions listed below with their owners.", 1: "")
+        } Else {
+            Set do = $SELECT(o.openCases.%Size() > 0: "Do: review the delivery exceptions listed below with their owners.", 1: "Do: nothing more for this outage.")
+        }
     } ElseIf kind = "refusing" {
         Set do = "Do: a person decides in the Message Viewer; Shutter does not suspend or discard." _ $SELECT(runbook '= "": " The site's line: " _ ..Stop(runbook), 1: "")
     } Else {
@@ -389,26 +395,31 @@ ClassMethod Settled(o As %DynamicObject) As %String
     If t.held Set text = text _ "; " _ t.held _ " the receiver already held"
     If t.byHand Set text = text _ "; " _ t.byHand _ " handled by hand"
     If t.failed Set text = text _ "; " _ t.failed _ " failed when Shutter sent " _ $SELECT(t.failed = 1: "it", 1: "them") _ " again and still need" _ $SELECT(t.failed = 1: "s", 1: "") _ " action"
+    If t.unknown Set text = text _ "; " _ t.unknown _ " sent again whose result " _ $SELECT(t.unknown = 1: "is", 1: "are") _ " not known yet: Shutter reads " _ $SELECT(t.unknown = 1: "its new header", 1: "their new headers") _ " again and a person reads the trace"
     If t.notSent Set text = text _ "; " _ t.notSent _ " not sent and still need" _ $SELECT(t.notSent = 1: "s", 1: "") _ " action"
     If u > 0 Set text = text _ "; " _ u _ $SELECT(u = 1: " was", 1: " were") _ " Suspended and still need" _ $SELECT(u = 1: "s", 1: "") _ " action"
     If e > 0 Set text = text _ "; " _ e _ " ended in Error and still need" _ $SELECT(e = 1: "s", 1: "") _ " action"
     Quit text _ "."
 }
 
-/// The ledger by message, pure: the last row on each header decides it. { "sent", "held", "byHand", "failed", "notSent",
-/// "attempts", "counted" }: attempts is every message this outage's runs sent again (whatever came of it), counted every
-/// Error header the ledger or lists.closed accounts for. A row still approved or sending counts in none but attempts while
-/// sending; a lists.closed row is another outage's closure, settled here but never counted as this outage's send.
+/// The ledger by message, pure: the last row on each message decides it. { "sent", "held", "byHand", "failed", "unknown",
+/// "notSent", "attempts", "counted" }: attempts is every message this outage's runs sent again (whatever came of it),
+/// counted every Error header the ledger or lists.closed accounts for. A row still approved or sending counts in none but
+/// attempts while sending; a lists.closed row is another outage's closure, settled here but never counted as this
+/// outage's send. A later run that sent Shutter's own clone in the origin's place (its header is an earlier row's new
+/// header) is the same message, so its row is that message's last.
 ClassMethod Tally(o As %DynamicObject) As %DynamicObject
 {
-    Set t = {"sent": 0, "held": 0, "byHand": 0, "failed": 0, "notSent": 0, "attempts": 0, "counted": 0}
-    Kill last
+    Set t = {"sent": 0, "held": 0, "byHand": 0, "failed": 0, "unknown": 0, "notSent": 0, "attempts": 0, "counted": 0}
+    Kill last, alias
     If $ISOBJECT(o.%Get("resends")) {
         Set ri = o.resends.%GetIterator()
         While ri.%GetNext(, .r) {
             Set h = ..S(r, "headerId")
             Continue:h=""
+            Set:$DATA(alias(h)) h = alias(h)
             Set last(h) = r
+            Set:..S(r, "newHeaderId")'="" alias(..S(r, "newHeaderId")) = h
         }
     }
     If $ISOBJECT(o.%Get("lists")) && $ISOBJECT(o.lists.%Get("closed")) {
@@ -425,7 +436,7 @@ ClassMethod Tally(o As %DynamicObject) As %DynamicObject
         Set h = $ORDER(last(h)) Quit:h=""
         Set state = ..S(last(h), "state")
         If '..S(last(h), "listed") && $LISTFIND($LISTBUILD("completed", "failed", "unknown", "closed_as_present", "sending"), state) Set t.attempts = t.attempts + 1
-        Set key = $CASE(state, "completed": "sent", "closed_as_present": "held", "handled_by_hand": "byHand", "failed": "failed", "unknown": "failed", "stopped": "notSent", : "")
+        Set key = $CASE(state, "completed": "sent", "closed_as_present": "held", "handled_by_hand": "byHand", "failed": "failed", "unknown": "unknown", "stopped": "notSent", : "")
         Continue:key=""
         Do t.%Set(key, t.%Get(key) + 1, "number")
         Set t.counted = t.counted + 1
