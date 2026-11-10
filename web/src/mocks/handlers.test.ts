@@ -528,6 +528,7 @@ describe("the public demo's role", () => {
       approve: true,
       configure: true,
       scenarios: true,
+      reset: true,
       stopRecovery: true,
       liveAgents: true,
     });
@@ -536,22 +537,26 @@ describe("the public demo's role", () => {
       approve: false,
       configure: false,
       scenarios: true,
+      reset: true,
       stopRecovery: true,
       liveAgents: true,
     });
-    // The public demo's own user replays; a judge spends the day's model budget (v1.34)
+    // The public demo's own user replays; a judge spends the day's model budget (v1.34) and runs the scenarios, never
+    // resetting them (1.4.3)
     expect(await can('demo')).toEqual({
       operate: true,
       approve: true,
       configure: false,
       scenarios: false,
+      reset: false,
       liveAgents: false,
     });
     expect(await can('judge')).toEqual({
       operate: true,
       approve: true,
       configure: false,
-      scenarios: false,
+      scenarios: true,
+      reset: false,
       liveAgents: true,
     });
   });
@@ -577,6 +582,14 @@ describe("the public demo's role", () => {
     expect(await code(api.del('/production-reviews/annotations/16'))).toEqual([403, 'forbidden']);
     // It approves, as the approver does
     expect((await decide('approve')).decision).toBe('approve');
+  });
+
+  it('lets a judge run a scenario and refuses the judge the reset (1.4.3)', async () => {
+    resetMock('judge');
+    const started = await api.post<{ scenario: string }>('/scenarios/S2/run', { mode: 'board' });
+    expect(started.scenario).toBe('S2');
+    expect(await code(api.post('/scenarios/reset'))).toEqual([403, 'forbidden']);
+    resetMock('approver');
   });
 
   it("keeps today's demo, the approver with every power, for whoever signs in the usual way", async () => {

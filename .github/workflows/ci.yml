@@ -247,6 +247,9 @@ jobs:
     env:
       # A name of this run's own: runners that share one Docker must never touch another job's container
       CTR: ci-${{ github.run_id }}-${{ github.run_attempt }}-iris-${{ matrix.shard }}
+      # The public demo's viewer and the judges' account, with fixed test passwords, so the routes' check signs in as both
+      SHUTTER_PUBLIC_DEMO_PASSWORD: ci-demo-pw-81
+      SHUTTER_JUDGE_PASSWORD: ci-judge-pw-83
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
@@ -256,7 +259,8 @@ jobs:
       - name: Start IRIS with the repository mounted
         run: |
           docker rm -f "$CTR" > /dev/null 2>&1 || true
-          docker run -d --name "$CTR" -p 127.0.0.1::52773 -v "$GITHUB_WORKSPACE:/home/irisowner/dev:ro" "$IRIS_IMAGE" \
+          docker run -d --name "$CTR" -p 127.0.0.1::52773 -v "$GITHUB_WORKSPACE:/home/irisowner/dev:ro" \
+            -e SHUTTER_PUBLIC_DEMO_PASSWORD -e SHUTTER_JUDGE_PASSWORD "$IRIS_IMAGE" \
             --check-caps false --ISCAgent false
           port=$(docker port "$CTR" 52773/tcp | head -1 | sed 's/.*://')
           echo "IRIS_URL=http://127.0.0.1:$port" >> "$GITHUB_ENV"

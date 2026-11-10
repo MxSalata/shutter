@@ -24,7 +24,7 @@ Method OnRun(request As Shutter.Msg.ScenarioRun, Output response As Shutter.Msg.
     }
     Set error = ""
     Set found = $CLASSMETHOD(runner, "Prepare", request.Scenario, request.Mode, .inbound, .error)
-    If error = "" Set started = $CLASSMETHOD(runner, "Begin", request.Scenario, request.Mode, .error)
+    If error = "" Set started = $CLASSMETHOD(runner, "Begin", request.Scenario, request.Mode, .error, request.RequestedBy)
     If error '= "" {
         Set response.State = "refused", response.Error = error
         Set run = {"scenario": (request.Scenario), "mode": (request.Mode), "state": "failed", "error": (error), "files": [], "timeouts": []}

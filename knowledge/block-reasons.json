@@ -448,12 +448,12 @@
     },
     {
       "code": "RECEIVER_NOT_MODELLED",
-      "title": "The receiver's category is not modelled yet",
+      "title": "An order or result is not resent from its case",
       "prerequisite": "A receiver whose site profile category is current_state or history_of_record (the ADT catalogue covers movements, not orders and results)",
       "next_action": "Handle the failure in the receiving system by hand, then mark the case handled on the case page. Nothing is sent.",
       "owner": "Integration team",
       "reevaluate_when": "Shutter gains a catalogue for order communications and results, or the receiver's category changes",
-      "text": "The receiver keeps orders and results (category orders_results), which Shutter's catalogue does not model yet. Shutter sends it nothing and does not judge the failure; a person handles it in the receiving system."
+      "text": "The receiver keeps orders and results (category orders_results). Shutter's catalogue of single-message recoveries covers patient movements, so nothing is resent from the case and no model judges it: the case carries its findings (who holds the message, the receiver's own words and the result they name) and a person handles it in the receiving system. At a receiver set up for it, an outage's messages that never arrived are listed and can be sent again by the engine after one approval."
     },
     {
       "code": "RECEIVER_NOT_IN_PROFILE",

@@ -80,7 +80,7 @@ describe('ScenariosPage in the trial', () => {
   });
 
   it("describes all four modes to a role that can't choose, and says the trial has no recording of one", async () => {
-    resetMock('judge');
+    resetMock('demo');
     renderTrial();
     const modes = await screen.findByRole('radiogroup', { name: 'Investigation modes' });
     for (const name of ['Board', 'Site policy', 'Single investigator', 'Rules only'])
@@ -92,7 +92,7 @@ describe('ScenariosPage in the trial', () => {
   });
 
   it("says where the online demo's words apply, and how to get a role that can run one", async () => {
-    resetMock('judge');
+    resetMock('demo');
     renderTrial();
     const first = await screen.findByRole('region', { name: 'Three to look at first' });
     expect(

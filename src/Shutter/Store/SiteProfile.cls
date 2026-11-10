@@ -909,8 +909,9 @@ ClassMethod StrictAnswers(name As %String) As %Boolean
 
 /// The receiver's category (CONTRACTS 6.4, v1.23): current_state (a bed manager or whiteboard, where only the present
 /// placement matters), history_of_record (a PAS, EPR or warehouse, whose movement history must be complete) or
-/// orders_results (order communications or a LIMS, not modelled yet). current_state when the entry names none or the
-/// profile does not name the receiver, which is what every profile written before v1.23 meant.
+/// orders_results (order communications or a LIMS, whose cases go to a person with no resend from the case). current_state
+/// when the entry names none or the profile does not name the receiver, which is what every profile written before v1.23
+/// meant.
 ClassMethod ReceiverCategory(name As %String) As %String
 {
     Set r = ..Receiver(name)

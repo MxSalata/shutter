@@ -91,6 +91,7 @@ describe("the trial's sign-in page", () => {
       approve: true,
       configure: false,
       scenarios: false,
+      reset: false,
       liveAgents: false,
     });
     // The tab keeps the role for its reloads

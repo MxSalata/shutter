@@ -94,9 +94,10 @@ const RECOVERY: RecoveryControl = {
 let recovery = RECOVERY;
 
 /**
- * The mock's users, with `can` as the server answers it (CONTRACTS 5, v1.34): the operator runs scenarios and cannot
- * configure, the approver can do everything, and `demo` is the public demo's role, which operates and approves but
- * neither configures the site nor runs scenarios, and sees the live hospital's status in the settings.
+ * The mock's users, with `can` as the server answers it (CONTRACTS 5, v1.34): the operator runs and resets scenarios and
+ * cannot configure, the approver can do everything, and `demo` is the public demo's role, which operates and approves but
+ * neither configures the site nor runs scenarios, and sees the live hospital's status in the settings. A judge (1.4.3)
+ * runs scenarios and spends the model budget, and does not reset the shared demo.
  */
 const USERS: Record<string, Me> = {
   operator: {
@@ -108,6 +109,7 @@ const USERS: Record<string, Me> = {
       approve: false,
       configure: false,
       scenarios: true,
+      reset: true,
       stopRecovery: true,
       liveAgents: true,
     },
@@ -121,6 +123,7 @@ const USERS: Record<string, Me> = {
       approve: true,
       configure: true,
       scenarios: true,
+      reset: true,
       stopRecovery: true,
       liveAgents: true,
     },
@@ -129,14 +132,22 @@ const USERS: Record<string, Me> = {
     username: 'demo',
     operator: true,
     approver: true,
-    can: { operate: true, approve: true, configure: false, scenarios: false, liveAgents: false },
+    can: {
+      operate: true,
+      approve: true,
+      configure: false,
+      scenarios: false,
+      reset: false,
+      liveAgents: false,
+    },
   },
-  // A judge on the public demo: the demo's rights, and the day's model budget to spend (CONTRACTS 5, v1.34)
+  // A judge on the public demo: the demo's rights, the day's model budget to spend (CONTRACTS 5, v1.34), and the
+  // scenarios to run but not to reset (1.4.3)
   judge: {
     username: 'judge',
     operator: true,
     approver: true,
-    can: { operate: true, approve: true, configure: false, scenarios: false, liveAgents: true },
+    can: { operate: true, approve: true, configure: false, scenarios: true, reset: false, liveAgents: true },
   },
 };
 
@@ -444,13 +455,14 @@ const cancelPending = (id: string) => {
   return pending.length;
 };
 /**
- * What a route needs, as the server decides it: the operator and approver roles, and the two resources that split the
- * site's changes (`configure`) and the demo controls (`scenarios`) from them (CONTRACTS 5, v1.34).
+ * What a route needs, as the server decides it: the operator and approver roles, and the resources that split the
+ * site's changes (`configure`) and the demo controls (`scenarios` to run, `reset` to reset, 1.4.3) from them (CONTRACTS 5,
+ * v1.34).
  */
-const guard = (need: 'operator' | 'approver' | 'configure' | 'scenarios' | 'liveAgents') => {
+const guard = (need: 'operator' | 'approver' | 'configure' | 'scenarios' | 'reset' | 'liveAgents') => {
   if (!session) return signedOut();
   const may =
-    need === 'configure' || need === 'scenarios' || need === 'liveAgents'
+    need === 'configure' || need === 'scenarios' || need === 'reset' || need === 'liveAgents'
       ? session.can?.[need]
       : session[need as 'operator' | 'approver'];
   return may
@@ -790,7 +802,7 @@ export const handlers = [
     `${BASE}/scenarios/reset`,
     ({ request }) =>
       csrf(request) ??
-      guard('scenarios') ??
+      guard('reset') ??
       HttpResponse.json({ reset: true, resetAt: new Date().toISOString() }),
   ),
 

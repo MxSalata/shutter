@@ -14,7 +14,7 @@ Class Shutter.API.Access Extends %RegisteredObject
 Parameter ROLES = "Shutter_Demo,Shutter_Judge,Shutter_Operator,Shutter_Approver,Shutter_Trace";
 
 /// The rows, in order: what a person can do in Shutter.
-Parameter ROWS = "view,approve,scenarios,liveAgents,configure,inbox,guide,trace,publisher";
+Parameter ROWS = "view,approve,scenarios,reset,liveAgents,configure,inbox,guide,trace,publisher";
 
 /// The Management Portal's page that holds the Workflow inbox (it names no resource of its own: the portal's pages need
 /// %Ens_Portal, and the tasks reach the members of the Workflow role Shutter Approvers).
@@ -98,6 +98,7 @@ ClassMethod Needs(id As %String, hardened As %Boolean = 0) As %DynamicArray
     If id = "view" Quit [["Shutter_Operate:U"]]
     If id = "approve" Quit [["Shutter_Approve:U"]]
     If id = "scenarios" Quit [["Shutter_Scenarios:U"]]
+    If id = "reset" Quit [["Shutter_ScenarioReset:U"]]
     If id = "liveAgents" Quit [["Shutter_LiveAgents:U"]]
     If id = "configure" Quit [["Shutter_Configure:U"]]
     If id = "publisher" Quit [["Shutter_Publish:U"]]

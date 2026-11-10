@@ -37,8 +37,13 @@ export interface Can {
   approve: boolean;
   /** Saving the site profile or the agent library, importing a schema, annotating a production review. */
   configure: boolean;
-  /** Running and resetting scenarios. */
+  /** Running scenarios (Shutter_Scenarios): the operator, the approver and, since 1.4.3, a judge. */
   scenarios: boolean;
+  /**
+   * Resetting the shared demo (Shutter_ScenarioReset, 1.4.3): the operator and the approver, never a judge. Absent from an
+   * older server, where running and resetting were one right: `resolveCan` takes `scenarios` for it.
+   */
+  reset?: boolean;
   /** Stopping Shutter recovery (CONTRACTS 18). Absent from an older server, which has no such control. */
   stopRecovery?: boolean;
   /**
@@ -57,7 +62,16 @@ export interface AccessRole {
 
 /** What a person can do in Shutter, as one row of the access table. */
 export type AccessRowId =
-  'view' | 'approve' | 'scenarios' | 'liveAgents' | 'configure' | 'inbox' | 'guide' | 'trace' | 'publisher';
+  | 'view'
+  | 'approve'
+  | 'scenarios'
+  | 'reset'
+  | 'liveAgents'
+  | 'configure'
+  | 'inbox'
+  | 'guide'
+  | 'trace'
+  | 'publisher';
 
 export interface AccessRow {
   id: AccessRowId;

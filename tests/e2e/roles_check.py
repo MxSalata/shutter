@@ -23,7 +23,14 @@ liveAgents false, never spending the model budget (a `skip` line says so when th
 back with the answers it had, saved from the API: from then on a change of the seed file no longer replaces it, as for any
 profile a person saved. Last, Reset on the Scenarios page: the operator's and the approver's answer 200 with the mode back
 to board, a new resetAt, every demo receiver reset and the live feed's bed map not left behind, and it is 403 signed in as
-the demo user.
+the demo user, who may not run a scenario either (403).
+
+When SHUTTER_JUDGE_PASSWORD names the user judge's password (1.4.3), the judges' account: GET /me says it runs scenarios
+and does not reset; POST /scenarios/reset is 403 forbidden naming Shutter_ScenarioReset, and the reset time is unchanged;
+GET /me's can.reset, false, is the check Shutter.Setup.PurgeStore makes first, and GET /access says the reset's
+resource is held by the operator and the approver and not by the judge; the judge plays S8 on the board (in replay on an instance without a key: no model is called), a second run while it is queued
+or playing is 409 wrong_state, and the case it opens settles with its agent runs counted against the judge's share
+(requestedBy judge). A `skip` line says so when the variable is unset.
 
 It closes two cases that are escalated, blocked or failed, the newest first, so run it after the scenarios (CI runs it
 after them), and not on an instance someone else is using. Exit status 1 when a check fails. Standard library only.
@@ -421,11 +428,85 @@ def main():
               and (body or {}).get("live") in ("cleared", "none", "playing")
               and not any("error" in (answer or {}) for answer in ((body or {}).get("receivers") or {}).values()), f"{status} {body}")
     if demo_password:
-        status, body = Session(args.url).sign_in("demo", demo_password).call("POST", "/scenarios/reset", {})
+        demo = Session(args.url).sign_in("demo", demo_password)
+        status, body = demo.call("POST", "/scenarios/reset", {})
         check("demo: POST /scenarios/reset is 403 forbidden", status == 403 and error_of(body) == "forbidden", f"{status} {body}")
+        status, body = demo.call("POST", "/scenarios/S8/run", {"mode": "board"}, idempotent=True)
+        check("demo: POST /scenarios/S8/run is 403 forbidden, naming Shutter_Scenarios",
+              status == 403 and error_of(body) == "forbidden" and "Shutter_Scenarios" in (body or {}).get("detail", ""), f"{status} {body}")
+
+    # ---- the judges' account (1.4.3): runs scenarios, never resets the shared demo or purges its store ----
+    judge_password = os.environ.get("SHUTTER_JUDGE_PASSWORD", "")
+    if not judge_password:
+        print("skip judge: SHUTTER_JUDGE_PASSWORD is not set, so the judges' account's checks do not run", flush=True)
+    else:
+        judge_checks(args, operator, Session(args.url).sign_in("judge", judge_password), check, error_of)
 
     print(f"{len(failures)} of {checks[0]} failed" if failures else f"all {checks[0]} checks passed")
     return 1 if failures else 0
+
+
+def judge_checks(args, operator, judge, check, error_of):
+    """The judges' account: Run on and Reset off, the purge refused, and one board run of S8 counted against the judge."""
+    status, me = judge.call("GET", "/me")
+    can = (me or {}).get("can") or {}
+    check("judge: GET /me says it runs scenarios, spends the budget and does not reset",
+          status == 200 and can.get("scenarios") is True and can.get("reset") is False and can.get("liveAgents") is True
+          and can.get("configure") is False, f"{status} {me}")
+    status, me = operator.call("GET", "/me")
+    check("operator: GET /me says it runs and resets", ((me or {}).get("can") or {}).get("reset") is True, f"{status} {me}")
+    _, before = operator.call("GET", "/settings")
+    status, body = judge.call("POST", "/scenarios/reset", {})
+    check("judge: POST /scenarios/reset is 403 forbidden, naming Shutter_ScenarioReset",
+          status == 403 and error_of(body) == "forbidden" and "Shutter_ScenarioReset" in (body or {}).get("detail", ""), f"{status} {body}")
+    _, after = operator.call("GET", "/settings")
+    check("and the reset time is unchanged", (after or {}).get("resetAt") == (before or {}).get("resetAt"),
+          f"{(before or {}).get('resetAt')} then {(after or {}).get('resetAt')}")
+
+    # The purge has no route: it is a stored procedure whose first line is $SYSTEM.Security.Check("Shutter_ScenarioReset",
+    # "USE") (Shutter.Test.Roles reads it there), the very check GET /me's can.reset reports in the caller's own process,
+    # so the judge's can.reset false above is the purge's refusal. GET /access says the same of the roles' definitions.
+    _, access = judge.call("GET", "/access")
+    rows = {r.get("id"): r for r in (access or {}).get("rows") or []}
+    reset_row, run_row = rows.get("reset") or {}, rows.get("scenarios") or {}
+    check("judge: GET /access says the purge's and the reset's resource is Shutter_ScenarioReset, and not the judge's",
+          reset_row.get("needs") == [["Shutter_ScenarioReset:U"]] and reset_row.get("you") is False
+          and (reset_row.get("roles") or {}).get("Shutter_Judge") is False, reset_row)
+    check("operator and approver hold it, so they keep the reset and the purge; the judge runs",
+          all((reset_row.get("roles") or {}).get(r) is True for r in ("Shutter_Operator", "Shutter_Approver"))
+          and run_row.get("you") is True and (run_row.get("roles") or {}).get("Shutter_Judge") is True, {"reset": reset_row, "run": run_row})
+
+    # One board run of S8, as a judge plays it on the demo; one run at a time
+    def idle():
+        _, body = operator.call("GET", "/scenarios")
+        return ((body or {}).get("run") or {}).get("state") not in ("queued", "running")
+
+    wait(idle, args.timeout * 3)
+    floor = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    status, started = judge.call("POST", "/scenarios/S8/run", {"mode": "board"}, idempotent=True)
+    check("judge: POST /scenarios/S8/run in board mode: 202", status == 202, f"{status} {started}")
+    status, body = judge.call("POST", "/scenarios/S3/run", {"mode": "board"}, idempotent=True)
+    check("judge: a second run while S8 is queued or playing is 409 wrong_state",
+          status == 409 and error_of(body) == "wrong_state", f"{status} {body}")
+    floor = max(floor, (started or {}).get("queuedAt") or "", (started or {}).get("startedAt") or "")
+
+    def opened():
+        _, body = operator.call("GET", "/cases?scenario=S8&limit=5")
+        items = [c for c in (body or {}).get("items", []) if c.get("openedAt", "") >= floor]
+        return items[0] if items else None
+
+    found = wait(opened, args.timeout * 3)
+    if not check("judge's run: S8 opens a case", bool(found), floor):
+        return
+    case_id = found["caseId"]
+    final = wait(lambda: (lambda c: c if c.get("state") in ("escalated", "resolved", "blocked", "failed", "awaiting_approval") else None)(
+        operator.call("GET", f"/cases/{urllib.parse.quote(case_id)}")[1] or {}), args.timeout * 3) or {}
+    check(f"judge's run: {case_id} settles", bool(final), final.get("state"))
+    _, runs = operator.call("GET", f"/cases/{urllib.parse.quote(case_id)}/runs")
+    askers = sorted({r.get("requestedBy") for r in runs or []})
+    check(f"judge's run: {case_id}'s agent runs count against the judge's share", bool(runs) and askers == ["judge"],
+          f"{len(runs or [])} run(s), requested by {askers}")
+    wait(idle, args.timeout * 3)
 
 
 if __name__ == "__main__":

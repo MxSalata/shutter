@@ -133,6 +133,11 @@ Property Scenario As %String(%JSONFIELDNAME = "scenario", MAXLEN = 32);
 /// isn't a recorded run. Rules only's exemption at the gate asks this, and a later story can't change it.
 Property ScenarioRecorded As %Boolean(%JSONINCLUDE = "none") [ InitialExpression = 0 ];
 
+/// Who started the scenario run that opened the case (1.4.3), when the runner played it: the case's live agent runs count
+/// against that user's share of the day's model budget (Shutter.Process.CaseWorkflow, Stamp), as a judge's convened board
+/// does. Empty for a live story's case and the feed's own.
+Property ScenarioBy As %String(%JSONINCLUDE = "none", MAXLEN = 100);
+
 Index ScenarioIdx On Scenario;
 
 /// The production session of the failed delivery: the Visual Trace link.
@@ -243,6 +248,7 @@ ClassMethod Open(op As %DynamicObject, failureKind As %String, failureText As %S
     Set case.Mode = $SELECT(mode = "": "board", 1: mode)
     Set case.Scenario = $GET(^Shutter.Config("scenario"))
     Set case.ScenarioRecorded = (case.Scenario '= "") && (case.Scenario = $GET(^Shutter.Config("scenarioRun")))
+    If case.ScenarioRecorded Set case.ScenarioBy = $EXTRACT($GET(^Shutter.Config("scenarioBy")), 1, 100)
     Set now = ##class(Shutter.Util.Time).NowUTC()
     Set case.OpenedAt = now, case.UpdatedAt = now
     // A held message's headline is the hold itself ("Held: the schema X is not loaded here ..."), as the feed wrote it.
@@ -997,6 +1003,9 @@ Storage Default
 </Value>
 <Value name="54">
 <Value>FurtherReleaseJSON</Value>
+</Value>
+<Value name="55">
+<Value>ScenarioBy</Value>
 </Value>
 </Data>
 <DataLocation>^Shutter.Store.CaseD</DataLocation>

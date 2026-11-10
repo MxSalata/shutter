@@ -40,7 +40,7 @@ export const EFFECT_WORDS = {
 export const OVERTAKEN_LINE = {
   current: 'Overtaken failure: closes, no write.',
   correct: 'Overtaken failure: asks a person to correct by hand.',
-  none: 'Every failure goes to a person.',
+  none: 'Cases go to a person.',
 } as const;
 
 /** The category's line for a receiver (or for a category no receiver has), from its history policy. */

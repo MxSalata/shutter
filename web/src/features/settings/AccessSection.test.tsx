@@ -47,7 +47,8 @@ function judgeReport(): AccessReport {
     rows: [
       row('view', [['Shutter_Operate:U']], [true, true, true, true, false], true),
       row('approve', [['Shutter_Approve:U']], [true, true, false, true, false], true),
-      row('scenarios', [['Shutter_Scenarios:U']], [false, false, true, true, false], false),
+      row('scenarios', [['Shutter_Scenarios:U']], [false, true, true, true, false], true),
+      row('reset', [['Shutter_ScenarioReset:U']], [false, false, true, true, false], false),
       row('liveAgents', [['Shutter_LiveAgents:U']], [false, true, true, true, false], true),
       row('configure', [['Shutter_Configure:U']], [false, false, false, true, false], false),
       row('inbox', [['%Ens_Portal:U', 'Shutter_Approve:U']], [true, true, false, true, false], true),
@@ -94,7 +95,8 @@ describe('AccessSection', () => {
     expect(rows.map((r) => within(r).getByRole('rowheader').textContent)).toEqual([
       'View cases, incidents, evidence and plans',
       'Approve or reject a plan',
-      'Run and reset the scenarios',
+      'Run the scenarios',
+      'Reset the shared demo',
       'Convene the board and ask new questions, which spends the model budget',
       "Change the site's settings",
       "The Management Portal's Workflow inbox",
@@ -102,9 +104,11 @@ describe('AccessSection', () => {
       "The Management Portal's Visual Trace",
       'Read cases through the MCP publisher',
     ]);
-    expect(cellsOf(rows[2])).toEqual(['No', 'No', 'Yes', 'Yes', 'No']);
-    expect(cellsOf(rows[3])).toEqual(['No', 'Yes', 'Yes', 'Yes', 'Yes']);
-    expect(cellsOf(rows[8])).toEqual(['No', 'No', 'Yes', 'Yes', 'No']);
+    // A judge runs the scenarios (1.4.3) and does not reset the shared demo
+    expect(cellsOf(rows[2])).toEqual(['No', 'Yes', 'Yes', 'Yes', 'Yes']);
+    expect(cellsOf(rows[3])).toEqual(['No', 'No', 'Yes', 'Yes', 'No']);
+    expect(cellsOf(rows[4])).toEqual(['No', 'Yes', 'Yes', 'Yes', 'Yes']);
+    expect(cellsOf(rows[9])).toEqual(['No', 'No', 'Yes', 'Yes', 'No']);
   });
 
   it("says which installed role the user's column is, and what the judges' account adds while the demo is on", async () => {
@@ -113,7 +117,7 @@ describe('AccessSection', () => {
       "Your column is your sign-in's own. It matches Judge (Shutter_Judge).",
     );
     expect(screen.getByTestId('access-judges')).toHaveTextContent(
-      "What the judges' account adds: the agents run for real, on new questions and a convened board, under the day's budget.",
+      "What the judges' account adds: the agents run for real, on new questions, a convened board and the scenarios it plays, under the day's budget; it does not reset the shared demo.",
     );
   });
 

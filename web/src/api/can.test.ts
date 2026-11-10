@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { envFrom, trialUser } from '@/env/mode';
-import { readOnlyDemo, resolveCan, scenariosHidden } from './can';
+import { readOnlyDemo, resolveCan, scenariosHidden, showsRoleBadges } from './can';
 import type { Me } from './types';
 
 const me = (over: Partial<Me> = {}): Me => ({ username: 'u', operator: false, approver: false, ...over });
@@ -17,6 +17,7 @@ describe('resolveCan', () => {
       approve: true,
       configure: false,
       scenarios: false,
+      reset: false,
       liveAgents: false,
     });
   });
@@ -27,6 +28,7 @@ describe('resolveCan', () => {
       approve: true,
       configure: true,
       scenarios: true,
+      reset: true,
       liveAgents: false,
     });
     expect(resolveCan(me({ operator: true }))).toEqual({
@@ -34,6 +36,7 @@ describe('resolveCan', () => {
       approve: false,
       configure: false,
       scenarios: true,
+      reset: true,
       liveAgents: false,
     });
     expect(resolveCan(me())).toEqual({
@@ -41,6 +44,7 @@ describe('resolveCan', () => {
       approve: false,
       configure: false,
       scenarios: false,
+      reset: false,
       liveAgents: false,
     });
   });
@@ -52,6 +56,7 @@ describe('resolveCan', () => {
       approve: true,
       configure: false,
       scenarios: true,
+      reset: true,
       liveAgents: false,
     });
   });
@@ -73,6 +78,7 @@ describe('resolveCan', () => {
       approve: false,
       configure: false,
       scenarios: false,
+      reset: false,
       liveAgents: false,
     });
     expect(resolveCan(undefined)).toEqual({
@@ -80,8 +86,41 @@ describe('resolveCan', () => {
       approve: false,
       configure: false,
       scenarios: false,
+      reset: false,
       liveAgents: false,
     });
+  });
+
+  it("splits running from resetting (1.4.3): a judge runs and does not reset; an older server's one right is both", () => {
+    const judge = resolveCan(
+      me({
+        operator: true,
+        approver: true,
+        can: {
+          operate: true,
+          approve: true,
+          configure: false,
+          scenarios: true,
+          reset: false,
+          liveAgents: true,
+        },
+      }),
+    );
+    expect([judge.scenarios, judge.reset]).toEqual([true, false]);
+    expect(scenariosHidden(judge)).toBe(false);
+    const older = resolveCan(me({ operator: true, can: { operate: true, scenarios: true } }));
+    expect([older.scenarios, older.reset]).toEqual([true, true]);
+    const olderDemo = resolveCan(me({ operator: true, approver: true, can: { scenarios: false } }));
+    expect([olderDemo.scenarios, olderDemo.reset]).toEqual([false, false]);
+  });
+});
+
+describe('the role badges', () => {
+  it('are shown for the operator and approver flags of GET /me, so a reason never asks for a role the menu shows', () => {
+    expect(showsRoleBadges(me({ operator: true, approver: true }))).toBe(true);
+    expect(showsRoleBadges(me({ operator: true }))).toBe(true);
+    expect(showsRoleBadges(me())).toBe(false);
+    expect(showsRoleBadges(null)).toBe(false);
   });
 });
 

@@ -4,6 +4,36 @@ Versions follow `major.minor.patch`: a minor release for new features, a patch r
 updates. The version in both `module.xml` files (the one the package manager publishes) is always the version of the
 GitHub tag on the same commit; `scripts/check-versions.py` checks every place the version is written.
 
+## 1.4.3 (10 November 2026)
+
+The judges play the scenarios on the online demo, and the words for orders and results say what 1.4.x does.
+
+- **The judges' account runs the scenarios, live.** A judge signed in to the online demo can press **Run** on Scenarios,
+  S8 with the real agents included, one run at a time, under the demo's caps and the judge's own share of the day's model
+  budget: a run's cases now carry who started it, so their live agent runs count against that person's share, as a
+  convened board does. The public demo's own account still only looks.
+- **Running and resetting are two rights.** Reset clears the shared demo for everyone signed in, so it has a resource of
+  its own, `Shutter_ScenarioReset`, which the operator and the approver hold and the judges' role does not; it also guards
+  the store's purge. `Shutter_Scenarios` now guards running only. An install or an upgrade creates the new resource and
+  gives it to the operator and the approver, so an upgraded instance keeps their Reset; the uninstall removes it. `GET
+  /me` says `can.reset`, and the Settings page's access table has a row for it.
+- **Reasons that ask for no role the menu shows.** The user menu shows the demo's viewer and a judge the operator and
+  approver badges, yet greyed-out Run and Reset told them they needed the operator or approver role. The reasons now say
+  what the sign-in lacks: a judge reads "This sign-in runs scenarios but does not reset the shared demo, which would clear
+  it for everyone signed in"; a sign-in with neither badge is still told the role.
+- **Orders and results, in true words.** The site profile no longer calls an orders and results receiver "Not modelled
+  yet" or says every failure goes to a person and the gate blocks any write to it. Since 1.3.0 and 1.4.0 an order or result
+  case gets its findings and goes to a person, with no resend from the case, and at a receiver set up for it an outage's
+  messages that never arrived are listed and can be resent after one approval through Engine Resend. The receiver cards,
+  the release table, the category choice, the gate's reason `RECEIVER_NOT_MODELLED` (its words; the code is unchanged),
+  the explain collection, the install guide's outage section and the README's limits say so.
+- **Tested:** the unit suites on build 154 (1,083 passed, none failed) and 2026.2 (1,074 passed, none failed), with new
+  tests that the judge runs and doesn't reset or purge, that the operator and the approver do both, and that an upgrade
+  over 1.4.2's roles keeps their Reset; `tests/e2e/roles_check.py` on both with the judge's and the demo's passwords set
+  (CI's routes check now sets them), the judge playing S8 on the board in replay with its runs counted against the judge
+  and refused the reset; the web suite and the browser specs for Scenarios, the judges' path, Site profile and Settings,
+  with axe. CONTRACTS 1.57 describes the split.
+
 ## 1.4.2 (10 November 2026)
 
 A fix for the public demo's sign-in page. No new features.

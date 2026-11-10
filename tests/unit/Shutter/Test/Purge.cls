@@ -3,7 +3,7 @@
 /// reset stamp is set. The purge empties every case table of the instance, so the purge itself is tried only when the
 /// case store is empty (as it is in CI, where the suite runs before any scenario); on a demo that has been played the
 /// test is reported as skipped rather than taking its cases, and on an instance that is not a demo, or without
-/// Shutter_Scenarios, only the refusal is checked.
+/// Shutter_ScenarioReset (1.4.3; Shutter_Scenarios before), only the refusal is checked.
 Class Shutter.Test.Purge Extends %UnitTest.TestCase
 {
 
@@ -34,10 +34,10 @@ Method Conditions() As %DynamicObject
 Method TestPurgeTakesThePrecedentsAndTheLeads()
 {
     Set setup = "Shutter.Setup", pre = "Shutter.Store.Precedent", leads = "Shutter.Store.BoardLead"
-    If '$GET(^Shutter.Config("demo")) || '$SYSTEM.Security.Check("Shutter_Scenarios", "USE") {
+    If '$GET(^Shutter.Config("demo")) || '$SYSTEM.Security.Check("Shutter_ScenarioReset", "USE") {
         Set answer = $CLASSMETHOD(setup, "PurgeStore")
-        Do $$$AssertNotTrue(answer ? 1.N, "not a demo instance with Shutter_Scenarios: the purge is refused and nothing is tried: " _ answer)
-        Do $$$LogMessage("not a demo instance with Shutter_Scenarios: the purge itself was not tried here")
+        Do $$$AssertNotTrue(answer ? 1.N, "not a demo instance with Shutter_ScenarioReset: the purge is refused and nothing is tried: " _ answer)
+        Do $$$LogMessage("not a demo instance with Shutter_ScenarioReset: the purge itself was not tried here")
         Quit
     }
     Set cases = 0

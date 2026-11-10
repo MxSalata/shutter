@@ -6,6 +6,8 @@ import {
   hl7Events,
   proofParts,
   recordedLine,
+  resetNeedsWords,
+  runNeedsWords,
   scenarioCount,
   SCENARIOS_DEFINED,
   splitSummary,
@@ -140,5 +142,27 @@ describe('scenarioCount', () => {
     expect(scenarioCount(scenarios.length, true)).toBe(`${scenarios.length} in all.`);
     expect(scenarioCount(scenarios.length, false)).toBe(`${scenarios.length} in all.`);
     expect(scenarioCount(26, false)).toBe('26 in all.');
+  });
+});
+
+describe('why Run and Reset are greyed out', () => {
+  it('never asks a sign-in for a role its menu shows: it says what the sign-in lacks', () => {
+    // The public demo's viewer and a judge show the operator and approver badges
+    expect(runNeedsWords(true)).toBe('This sign-in reads and approves, and does not run scenarios');
+    expect(resetNeedsWords(true, true)).toBe(
+      'This sign-in runs scenarios but does not reset the shared demo, which would clear it for everyone signed in',
+    );
+    expect(resetNeedsWords(true, false)).toBe(
+      'This sign-in reads and approves, and does not reset the shared demo',
+    );
+    for (const words of [runNeedsWords(true), resetNeedsWords(true, true), resetNeedsWords(true, false)])
+      expect(words).not.toMatch(/operator or approver role/);
+  });
+
+  it('names the role to a sign-in that shows neither badge', () => {
+    expect(runNeedsWords(false)).toBe('Running a scenario needs the operator or approver role');
+    expect(resetNeedsWords(false, false)).toBe(
+      'Resetting the shared demo needs the operator or approver role',
+    );
   });
 });

@@ -305,6 +305,9 @@ ClassMethod Me() As %Status
     Do can.%Set("approve", $SYSTEM.Security.Check("Shutter_Approve", "USE"), "boolean")
     Do can.%Set("configure", $SYSTEM.Security.Check("Shutter_Configure", "USE"), "boolean")
     Do can.%Set("scenarios", $SYSTEM.Security.Check("Shutter_Scenarios", "USE"), "boolean")
+    // Resetting the shared demo and purging the store (1.4.3): the operator and the approver; a judge runs scenarios
+    // but never resets, so the app shows Run on and Reset off for the judge.
+    Do can.%Set("reset", $SYSTEM.Security.Check("Shutter_ScenarioReset", "USE"), "boolean")
     Do can.%Set("stopRecovery", $SYSTEM.Security.Check("Shutter_StopRecovery", "USE"), "boolean")
     // May spend the model budget: live questions and convening the board (operators, approvers and judges; not the demo).
     Do can.%Set("liveAgents", $SYSTEM.Security.Check("Shutter_LiveAgents", "USE"), "boolean")
@@ -387,7 +390,7 @@ ClassMethod PlayerEnabled() As %Boolean
 
 /// The scenarios play on a demo instance only (^Shutter.Config("demo"), the flag GET /status reports): a run resets the
 /// receivers first and a reset abandons every open incident and moves resetAt, so on a site install, where the operator
-/// and the approver still hold Shutter_Scenarios, both are refused with 403 not_a_demo_instance and nothing changes, as
+/// and the approver still hold Shutter_Scenarios and Shutter_ScenarioReset, both are refused with 403 not_a_demo_instance and nothing changes, as
 /// the demo receiver refuses its own reset and Shutter.Setup.PurgeStore refuses the purge. Writes the refusal and
 /// returns 0, or returns 1.
 ClassMethod DemoOnly() As %Boolean
@@ -450,9 +453,11 @@ ClassMethod ScenarioRun(id As %String) As %Status
     Quit $$$OK
 }
 
+/// Resetting the shared demo needs Shutter_ScenarioReset (1.4.3), which the operator and the approver hold and a judge
+/// does not: a judge runs scenarios (Shutter_Scenarios) but must not clear what another judge is reading.
 ClassMethod ScenarioReset() As %Status
 {
-    If '..Allow("Shutter_Scenarios", 1) Quit $$$OK
+    If '..Allow("Shutter_ScenarioReset", 1) Quit $$$OK
     If '..DemoOnly() Quit $$$OK
     If '##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Scenarios.Runner") Quit ..Fail("503 Service Unavailable", "no_runner", "The scenario runner is not installed")
     Set result = $CLASSMETHOD("Shutter.Scenarios.Runner", "Reset")

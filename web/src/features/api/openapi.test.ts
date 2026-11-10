@@ -60,6 +60,7 @@ describe('the API document', () => {
       'Shutter_Intake',
       'Shutter_LiveAgents',
       'Shutter_Operate',
+      'Shutter_ScenarioReset',
       'Shutter_Scenarios',
     ]);
   });

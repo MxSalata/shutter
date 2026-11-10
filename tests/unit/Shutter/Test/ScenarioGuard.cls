@@ -1,9 +1,9 @@
 /// The scenario routes on an instance that is not a demo (docs/CONTRACTS.md, the resources table): POST /scenarios/reset
 /// abandons every open incident, moves resetAt (the evidence collector then ignores what came before) and empties the
 /// inbound folders, and POST /scenarios/{id}/run resets first, so on a site install, where the operator and the approver
-/// hold Shutter_Scenarios, both are refused with 403 not_a_demo_instance and nothing changes. Each test calls the route's
-/// class method as the web application's request reaches it, with the CSRF header, as this process's user, and puts the
-/// instance's demo flag and every value it marks back afterwards.
+/// hold Shutter_Scenarios and Shutter_ScenarioReset, both are refused with 403 not_a_demo_instance and nothing changes.
+/// Each test calls the route's class method as the web application's request reaches it, with the CSRF header, as this
+/// process's user, and puts the instance's demo flag and every value it marks back afterwards.
 Class Shutter.Test.ScenarioGuard Extends %UnitTest.TestCase
 {
 
@@ -12,7 +12,7 @@ Property Saved As %String(MAXLEN = "") [ MultiDimensional ];
 
 Method OnBeforeOneTest() As %Status
 {
-    For key = "demo", "mode", "resetAt", "scenario", "scenarioRun" {
+    For key = "demo", "mode", "resetAt", "scenario", "scenarioRun", "scenarioBy" {
         Set ..Saved(key) = $LISTBUILD($DATA(^Shutter.Config(key)) # 10, $GET(^Shutter.Config(key)))
     }
     Set ..Saved("run") = $LISTBUILD($DATA(^Shutter.Scenarios("run")) # 10, $GET(^Shutter.Scenarios("run")))
@@ -21,7 +21,7 @@ Method OnBeforeOneTest() As %Status
 
 Method OnAfterOneTest() As %Status
 {
-    For key = "demo", "mode", "resetAt", "scenario", "scenarioRun" {
+    For key = "demo", "mode", "resetAt", "scenario", "scenarioRun", "scenarioBy" {
         Set saved = $GET(..Saved(key))
         Continue:saved=""
         If $LIST(saved, 1) { Set ^Shutter.Config(key) = $LIST(saved, 2) } Else { Kill ^Shutter.Config(key) }

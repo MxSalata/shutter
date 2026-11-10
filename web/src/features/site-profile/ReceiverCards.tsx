@@ -17,7 +17,7 @@ import {
 import { categoryMark, hueVar } from '@/lib/hues';
 import { TIER_LABELS, overtakenLine } from './profile';
 
-/** The category's mark: its icon in its identity hue on a round surface, dashed for a kind not modelled yet. */
+/** The category's mark: its icon in its identity hue on a round surface, dashed for a kind whose cases go to a person. */
 export function CategoryAvatar({ category }: { category: ReceiverCategory }) {
   const { hue, icon: I, dashed } = categoryMark(category);
   return (
@@ -182,7 +182,7 @@ function ReceiverCard({
               <StatusBadge tone="neutral" label={`Not answered: read as ${text.label.toLowerCase()}`} />
             ) : null}
             {!text.modelled ? (
-              <StatusBadge tone="neutral" icon={IconCircleDashed} label="Not modelled yet" />
+              <StatusBadge tone="neutral" icon={IconCircleDashed} label="No resend from a case" />
             ) : null}
           </Group>
         ) : null}
@@ -253,11 +253,7 @@ function AbsentCategory({ category }: { category: ReceiverCategory }) {
           <Title order={4}>{text.label}</Title>
         </Group>
         <Group gap={6}>
-          <StatusBadge
-            tone="neutral"
-            icon={IconCircleDashed}
-            label={text.modelled ? 'No receiver of this kind' : 'Not modelled yet'}
-          />
+          <StatusBadge tone="neutral" icon={IconCircleDashed} label="No receiver of this kind" />
         </Group>
         <Text size="md">{text.gist}.</Text>
         <Text size="md">{overtakenLine(category, derivedPolicy(category))}</Text>

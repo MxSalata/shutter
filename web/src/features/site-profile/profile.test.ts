@@ -679,7 +679,7 @@ describe('the words the restyled page reads from the model', () => {
     expect(overtakenLine('current_state', 'correct')).toBe(
       'Overtaken failure: asks a person to correct by hand.',
     );
-    expect(overtakenLine('orders_results', 'current')).toBe('Every failure goes to a person.');
+    expect(overtakenLine('orders_results', 'current')).toBe('Cases go to a person.');
   });
 
   it('keeps each icon’s words short enough for a tooltip', () => {

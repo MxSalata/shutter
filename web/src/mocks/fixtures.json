@@ -86806,6 +86806,23 @@
     "available": true,
     "roles": {
      "Shutter_Demo": false,
+     "Shutter_Judge": true,
+     "Shutter_Operator": true,
+     "Shutter_Approver": true,
+     "Shutter_Trace": false
+    },
+    "you": false
+   },
+   {
+    "id": "reset",
+    "needs": [
+     [
+      "Shutter_ScenarioReset:U"
+     ]
+    ],
+    "available": true,
+    "roles": {
+     "Shutter_Demo": false,
      "Shutter_Judge": false,
      "Shutter_Operator": true,
      "Shutter_Approver": true,

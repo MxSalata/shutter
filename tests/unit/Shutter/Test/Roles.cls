@@ -1,6 +1,8 @@
 /// The roles and resources the install makes (Shutter.Setup.CreateSecurity; CONTRACTS 5 and 12, v1.33): the demo controls and
 /// the site's writes are guarded by resources of their own, the operator and the approver hold them, and the public demo's
-/// role holds neither while it approves. Read in %SYS after the install's refresh, which is repeatable.
+/// role holds neither while it approves. Since 1.4.3 running a scenario (Shutter_Scenarios) and resetting the shared demo
+/// (Shutter_ScenarioReset, which the purge needs too) are two resources: the judges' role runs and never resets. Read in
+/// %SYS after the install's refresh, which is repeatable.
 Class Shutter.Test.Roles Extends %UnitTest.TestCase
 {
 
@@ -18,6 +20,18 @@ ClassMethod Resources(role As %String) As %String
     Quit $GET(p("Resources"))
 }
 
+/// Whether a role holds a resource with a permission (name:perm), from its own resources as Security.Roles keeps them.
+ClassMethod Holds(role As %String, resource As %String) As %Boolean
+{
+    Quit ("," _ ..Resources(role) _ ",") [ ("," _ resource _ ",")
+}
+
+/// Whether a role names a resource at all, with any permission.
+ClassMethod Names(role As %String, name As %String) As %Boolean
+{
+    Quit ("," _ ..Resources(role)) [ ("," _ name _ ":")
+}
+
 ClassMethod ResourceExists(name As %String) As %Boolean
 {
     New $NAMESPACE
@@ -27,7 +41,7 @@ ClassMethod ResourceExists(name As %String) As %Boolean
 
 Method TestResourcesAndRoles()
 {
-    For res = "Shutter_Operate", "Shutter_Approve", "Shutter_Intake", "Shutter_Configure", "Shutter_Scenarios", "Shutter_LiveAgents" {
+    For res = "Shutter_Operate", "Shutter_Approve", "Shutter_Intake", "Shutter_Configure", "Shutter_Scenarios", "Shutter_ScenarioReset", "Shutter_LiveAgents" {
         Do $$$AssertTrue(..ResourceExists(res), res _ " exists")
     }
     Set op = ..Resources("Shutter_Operator")
@@ -37,15 +51,124 @@ Method TestResourcesAndRoles()
     Do $$$AssertTrue(ap [ "%Ens_EventLog:U", "the approver reads the trace's events, or its diamonds answer that they are not permitted: " _ ap)
     Set demo = ..Resources("Shutter_Demo")
     Do $$$AssertTrue((demo [ "Shutter_Operate:U") && (demo [ "Shutter_Approve:U"), "the demo role reads and approves: " _ demo)
-    Do $$$AssertTrue('(demo [ "Shutter_Configure") && '(demo [ "Shutter_Scenarios"), "and neither configures nor runs scenarios")
+    Do $$$AssertTrue('(demo [ "Shutter_Configure") && '..Names("Shutter_Demo", "Shutter_Scenarios") && '..Names("Shutter_Demo", "Shutter_ScenarioReset"), "and neither configures, runs scenarios nor resets")
     Do $$$AssertTrue(demo [ "%Ens_MessageTrace:U", "it reads traces as the approver does")
     Do $$$AssertTrue((op [ "Shutter_LiveAgents:U") && (ap [ "Shutter_LiveAgents:U"), "operators and approvers may spend the model budget")
     Do $$$AssertNotTrue(demo [ "Shutter_LiveAgents", "the public demo's role never spends it")
     Set judge = ..Resources("Shutter_Judge")
     Do $$$AssertTrue((judge [ "Shutter_Operate:U") && (judge [ "Shutter_Approve:U") && (judge [ "Shutter_LiveAgents:U"), "a judge reads, approves and spends the budget: " _ judge)
-    Do $$$AssertTrue('(judge [ "Shutter_Configure") && '(judge [ "Shutter_Scenarios"), "and neither configures nor runs scenarios")
+    Do $$$AssertTrue('(judge [ "Shutter_Configure"), "and does not configure")
+    Do $$$AssertTrue(..Holds("Shutter_Judge", "Shutter_Scenarios:U"), "a judge runs the scenarios (1.4.3): " _ judge)
+    Do $$$AssertNotTrue(..Names("Shutter_Judge", "Shutter_ScenarioReset"), "and never resets the shared demo or purges the store: " _ judge)
     Set trace = ..Resources("Shutter_Trace")
     Do $$$AssertTrue((trace [ "%Ens_MessageTrace:U") && (trace [ "%Ens_Portal:U") && '(trace [ "Shutter_"), "the trace role sees traces and nothing of Shutter's: " _ trace)
+}
+
+/// Running and resetting are two resources (1.4.3): the operator and the approver hold both, the judge runs only, and the
+/// demo viewer neither; the routes and the purge check the resource the table says, read from their source.
+Method TestRunAndResetAreSplit()
+{
+    For role = "Shutter_Operator", "Shutter_Approver" {
+        Do $$$AssertTrue(..Holds(role, "Shutter_Scenarios:U") && ..Holds(role, "Shutter_ScenarioReset:U"), role _ " runs and resets: " _ ..Resources(role))
+    }
+    Do $$$AssertTrue(..Holds("Shutter_Judge", "Shutter_Scenarios:U") && '..Names("Shutter_Judge", "Shutter_ScenarioReset"), "the judge runs and does not reset")
+    Do $$$AssertTrue('..Names("Shutter_Demo", "Shutter_Scenarios") && '..Names("Shutter_Demo", "Shutter_ScenarioReset"), "the demo viewer does neither")
+    // The judge's granted roles add neither: %EnsRole_Monitor holds nothing of Shutter's.
+    Do ##class(Shutter.Test.Roles).GrantedOf("Shutter_Judge", .granted)
+    Do $$$AssertEquals(granted, "%EnsRole_Monitor", "the judge is granted %EnsRole_Monitor only")
+    Do $$$AssertNotTrue(..Resources("%EnsRole_Monitor") [ "Shutter_", "which holds nothing of Shutter's")
+    Do $$$AssertTrue(..Source("Shutter.API.Dispatch", "ScenarioRun") [ "Allow(""Shutter_Scenarios"", 1)", "POST /scenarios/{id}/run checks Shutter_Scenarios")
+    Do $$$AssertNotTrue(..Source("Shutter.API.Dispatch", "ScenarioRun") [ "Shutter_ScenarioReset", "and only that")
+    Do $$$AssertTrue(..Source("Shutter.API.Dispatch", "ScenarioReset") [ "Allow(""Shutter_ScenarioReset"", 1)", "POST /scenarios/reset checks Shutter_ScenarioReset")
+    Do $$$AssertTrue(..Source("Shutter.Setup", "PurgeStore") [ "Check(""Shutter_ScenarioReset"", ""USE"")", "and so does the purge")
+    Do $$$AssertNotTrue(..Source("Shutter.Setup", "PurgeStore") [ "Check(""Shutter_Scenarios""", "not the run's resource")
+}
+
+/// The source of a method, as its class definition holds it.
+ClassMethod Source(class As %String, method As %String) As %String
+{
+    Set def = ##class(%Dictionary.MethodDefinition).%OpenId(class _ "||" _ method)
+    If '$ISOBJECT(def) Quit ""
+    Do def.Implementation.Rewind()
+    Quit def.Implementation.Read(1000000)
+}
+
+/// A role's granted roles, as Security.Roles keeps them.
+ClassMethod GrantedOf(role As %String, Output granted As %String)
+{
+    New $NAMESPACE
+    Set $NAMESPACE = "%SYS"
+    Set granted = ""
+    Quit:'##class(Security.Roles).Exists(role)
+    Do ##class(Security.Roles).Get(role, .p)
+    Set granted = $GET(p("GrantedRoles"))
+}
+
+/// An upgrade over 1.4.2 (or any 1.4.x before the split): the resource Shutter_ScenarioReset does not exist yet, the
+/// operator and the approver hold Shutter_Scenarios only and reset with it, the judge holds neither. The install's refresh
+/// creates the resource, gives it to the operator and the approver, so they keep resetting, and gives the judge
+/// Shutter_Scenarios alone. The roles are put back by the same refresh, whatever the asserts found.
+Method TestAnUpgradeFrom142KeepsTheResetWithTheOperatorAndTheApprover()
+{
+    Set sc = ..MakeRoles142()
+    Do $$$AssertStatusOK(sc, "the roles as 1.4.2 left them")
+    Do $$$AssertNotTrue(..ResourceExists("Shutter_ScenarioReset"), "1.4.2 had no Shutter_ScenarioReset")
+    Do $$$AssertTrue(..Holds("Shutter_Operator", "Shutter_Scenarios:U") && '..Names("Shutter_Operator", "Shutter_ScenarioReset"), "1.4.2's operator: " _ ..Resources("Shutter_Operator"))
+    Do $$$AssertNotTrue(..Names("Shutter_Judge", "Shutter_Scenarios"), "1.4.2's judge runs nothing: " _ ..Resources("Shutter_Judge"))
+    Set sc = ##class(Shutter.Setup).RefreshSecurity($NAMESPACE)
+    Do $$$AssertStatusOK(sc, "the install's refresh over 1.4.2's roles")
+    Do $$$AssertTrue(..ResourceExists("Shutter_ScenarioReset"), "the upgrade creates Shutter_ScenarioReset")
+    For role = "Shutter_Operator", "Shutter_Approver" {
+        Do $$$AssertTrue(..Holds(role, "Shutter_ScenarioReset:U") && ..Holds(role, "Shutter_Scenarios:U"), role _ " still resets and runs after the upgrade: " _ ..Resources(role))
+    }
+    Do $$$AssertTrue(..Holds("Shutter_Judge", "Shutter_Scenarios:U") && '..Names("Shutter_Judge", "Shutter_ScenarioReset"), "the judge now runs and still does not reset: " _ ..Resources("Shutter_Judge"))
+    Do $$$AssertTrue('..Names("Shutter_Demo", "Shutter_Scenarios") && '..Names("Shutter_Demo", "Shutter_ScenarioReset"), "the demo viewer gains nothing")
+    Do $$$AssertEquals(..Description("Shutter_Scenarios"), "Shutter: run the demo's scenarios", "Shutter_Scenarios says what it guards now")
+    // The uninstall takes every resource named as Shutter's (Shutter.Util.Uninstall, TakeResources), the new one included
+    Do $$$AssertTrue(##class(Shutter.Util.Uninstall).OwnSecurityName("Shutter_ScenarioReset"), "the uninstall removes Shutter_ScenarioReset")
+    // A second refresh changes nothing: the install is repeatable.
+    Set before = ..Resources("Shutter_Operator") _ "|" _ ..Resources("Shutter_Approver") _ "|" _ ..Resources("Shutter_Judge")
+    Do $$$AssertStatusOK(##class(Shutter.Setup).RefreshSecurity($NAMESPACE), "a second refresh")
+    Do $$$AssertEquals(..Resources("Shutter_Operator") _ "|" _ ..Resources("Shutter_Approver") _ "|" _ ..Resources("Shutter_Judge"), before, "and the roles are the same")
+}
+
+/// 1.4.2's roles on this instance: Shutter_ScenarioReset taken out of every role and deleted, the judge without
+/// Shutter_Scenarios, and Shutter_Scenarios with 1.4.2's description.
+ClassMethod MakeRoles142() As %Status
+{
+    New $NAMESPACE
+    Set $NAMESPACE = "%SYS", sc = $$$OK
+    For role = "Shutter_Operator", "Shutter_Approver", "Shutter_Judge" {
+        Continue:'##class(Security.Roles).Exists(role)
+        Kill p
+        Do ##class(Security.Roles).Get(role, .p)
+        Set kept = "", list = $LISTFROMSTRING($GET(p("Resources")), ",")
+        For i = 1:1:$LISTLENGTH(list) {
+            Set one = $LIST(list, i), name = $PIECE(one, ":")
+            Continue:(name = "Shutter_ScenarioReset")||((role = "Shutter_Judge") && (name = "Shutter_Scenarios"))
+            Set kept = kept _ $SELECT(kept = "": "", 1: ",") _ one
+        }
+        Kill q
+        Set q("Resources") = kept
+        Set sc = ##class(Security.Roles).Modify(role, .q)
+        Quit:$$$ISERR(sc)
+    }
+    Quit:$$$ISERR(sc) sc
+    If ##class(Security.Resources).Exists("Shutter_ScenarioReset") Set sc = ##class(Security.Resources).Delete("Shutter_ScenarioReset")
+    Quit:$$$ISERR(sc) sc
+    Kill r
+    Set r("Description") = "Shutter: run and reset the demo's scenarios and purge the store"
+    Quit ##class(Security.Resources).Modify("Shutter_Scenarios", .r)
+}
+
+/// A resource's description.
+ClassMethod Description(name As %String) As %String
+{
+    New $NAMESPACE
+    Set $NAMESPACE = "%SYS"
+    If '##class(Security.Resources).Exists(name) Quit ""
+    Do ##class(Security.Resources).Get(name, .p)
+    Quit $GET(p("Description"))
 }
 
 /// Reset clears the live feed's bed map in the hospital's data database (Scenarios.Runner.ResetLive), so the two roles

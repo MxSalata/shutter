@@ -423,9 +423,9 @@
           "scenarios"
         ],
         "summary": "Reset the demo",
-        "description": "Resets the receivers and the feed's bed map and clears the demo's state, as every run does before it plays.\n\nNeeds Shutter_Scenarios. A change: send X-Requested-With: Shutter.\n\nCONTRACTS 4.",
+        "description": "Resets the receivers and the feed's bed map and clears the demo's state, as every run does before it plays.\n\nNeeds Shutter_ScenarioReset (since 1.4.3; the operator and the approver hold it, the judges' role does not). A change: send X-Requested-With: Shutter.\n\nCONTRACTS 4.",
         "x-contract": "docs/CONTRACTS.md section 4",
-        "x-required-resource": "Shutter_Scenarios",
+        "x-required-resource": "Shutter_ScenarioReset",
         "x-writes": true,
         "x-idempotent": false,
         "x-dispatch": "Shutter.API.Dispatch.ScenarioReset",
@@ -467,7 +467,7 @@
             }
           },
           "403": {
-            "description": "Forbidden. forbidden: This needs Shutter_Scenarios.; csrf: Changes need the header X-Requested-With: Shutter.",
+            "description": "Forbidden. forbidden: This needs Shutter_ScenarioReset.; csrf: Changes need the header X-Requested-With: Shutter.",
             "x-error-codes": [
               "forbidden",
               "csrf"
@@ -481,7 +481,7 @@
                   "forbidden": {
                     "value": {
                       "error": "forbidden",
-                      "detail": "This needs Shutter_Scenarios"
+                      "detail": "This needs Shutter_ScenarioReset"
                     }
                   },
                   "csrf": {
@@ -9555,6 +9555,23 @@
                 "available": true,
                 "roles": {
                   "Shutter_Demo": false,
+                  "Shutter_Judge": true,
+                  "Shutter_Operator": true,
+                  "Shutter_Approver": true,
+                  "Shutter_Trace": false
+                },
+                "you": false
+              },
+              {
+                "id": "reset",
+                "needs": [
+                  [
+                    "Shutter_ScenarioReset:U"
+                  ]
+                ],
+                "available": true,
+                "roles": {
+                  "Shutter_Demo": false,
                   "Shutter_Judge": false,
                   "Shutter_Operator": true,
                   "Shutter_Approver": true,
@@ -9700,6 +9717,7 @@
               "view",
               "approve",
               "scenarios",
+              "reset",
               "liveAgents",
               "configure",
               "inbox",
@@ -10622,7 +10640,7 @@
         ]
       },
       "Can": {
-        "description": "What the signed-in user may do (CONTRACTS 5, since v1.34): the resources the user holds, so the app shows only what the user may use. The public demo's role approves and operates, and neither configures the site nor runs scenarios.",
+        "description": "What the signed-in user may do (CONTRACTS 5, since v1.34): the resources the user holds, so the app shows only what the user may use. The public demo's role approves and operates, and neither configures the site nor runs scenarios; the judges' role runs scenarios and does not reset the demo (1.4.3).",
         "type": "object",
         "properties": {
           "operate": {
@@ -10637,7 +10655,11 @@
           },
           "scenarios": {
             "type": "boolean",
-            "description": "Running and resetting scenarios."
+            "description": "Running scenarios (Shutter_Scenarios): the operator, the approver and, since 1.4.3, the judges' role."
+          },
+          "reset": {
+            "type": "boolean",
+            "description": "Resetting the shared demo and purging its store (Shutter_ScenarioReset, since 1.4.3): the operator and the approver; a judge runs scenarios and does not reset. Absent from an older server, where running and resetting were one resource."
           },
           "liveAgents": {
             "type": "boolean",

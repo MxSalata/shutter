@@ -38,7 +38,8 @@ const judgeReport = (): Pick<AccessReport, 'rows' | 'read'> => ({
   rows: [
     row('view', cells(true, true, true, true), true),
     row('approve', cells(true, true, false, true), true),
-    row('scenarios', cells(false, false, true, true), false),
+    row('scenarios', cells(false, true, true, true), true),
+    row('reset', cells(false, false, true, true), false),
     row('liveAgents', cells(false, true, true, true), true),
     row('configure', cells(false, false, false, true), false),
   ],
@@ -116,6 +117,7 @@ describe('the words', () => {
       'view',
       'approve',
       'scenarios',
+      'reset',
       'liveAgents',
       'configure',
       'inbox',

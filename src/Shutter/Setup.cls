@@ -245,9 +245,18 @@ ClassMethod CreateSecurity(ns As %String, demo As %Boolean) As %Status
     Set hospital = $GET(^|ns|Shutter.Config("hospitalNamespace"))
     New $NAMESPACE
     Set $NAMESPACE = "%SYS"
-    For res = "Shutter_Operate", "Shutter_Approve", "Shutter_Intake", "Shutter_Configure", "Shutter_Scenarios", "Shutter_LiveAgents", "Shutter_Publish", "Shutter_StopRecovery" {
+    // Running a scenario and resetting the shared demo are two resources (1.4.3): a judge runs scenarios, and only the
+    // operator and the approver reset the demo or purge the store, so one judge never clears what another is reading.
+    For res = "Shutter_Operate", "Shutter_Approve", "Shutter_Intake", "Shutter_Configure", "Shutter_Scenarios", "Shutter_ScenarioReset", "Shutter_LiveAgents", "Shutter_Publish", "Shutter_StopRecovery" {
+        Set description = "Shutter: " _ $CASE(res, "Shutter_StopRecovery": "stop Shutter's recovery", "Shutter_Approve": "approve or reject recovery plans", "Shutter_Intake": "open a case from another production", "Shutter_Publish": "read cases, incidents, evidence and plans through the MCP publisher", "Shutter_LiveAgents": "spend the model budget: live questions and convening the board", "Shutter_Configure": "change the site: the site profile, the agent library, the schemas, the review annotations", "Shutter_Scenarios": "run the demo's scenarios", "Shutter_ScenarioReset": "reset the shared demo's scenarios and purge the store", : "view cases, run scenarios, start investigations")
         If '##class(Security.Resources).Exists(res) {
-            Set sc = ##class(Security.Resources).Create(res, "Shutter: " _ $CASE(res, "Shutter_StopRecovery": "stop Shutter's recovery", "Shutter_Approve": "approve or reject recovery plans", "Shutter_Intake": "open a case from another production", "Shutter_Publish": "read cases, incidents, evidence and plans through the MCP publisher", "Shutter_LiveAgents": "spend the model budget: live questions and convening the board", "Shutter_Configure": "change the site: the site profile, the agent library, the schemas, the review annotations", "Shutter_Scenarios": "run and reset the demo's scenarios and purge the store", : "view cases, run scenarios, start investigations"), "")
+            Set sc = ##class(Security.Resources).Create(res, description, "")
+            Quit:$$$ISERR(sc)
+        } ElseIf res = "Shutter_Scenarios" {
+            // An upgraded instance: the resource no longer covers the reset, so its description says what it guards now.
+            Kill rprops
+            Set rprops("Description") = description
+            Set sc = ##class(Security.Resources).Modify(res, .rprops)
             Quit:$$$ISERR(sc)
         }
     }
@@ -278,20 +287,23 @@ ClassMethod CreateSecurity(ns As %String, demo As %Boolean) As %Status
     // Each role is created, or brought to this definition when it exists, so an upgraded instance is tightened too.
     // The approver monitors (traces, messages, the Workflow inbox) and approves; it never starts, stops or purges:
     // %EnsRole_Monitor with the message trace, header and content viewing resources, not %EnsRole_Operator (E2).
-    Set sc = ..EnsureRole("Shutter_Operator", "Shutter operator: cases, scenarios, investigations", "Shutter_Operate:U,Shutter_Scenarios:U,Shutter_LiveAgents:U,Shutter_Publish:U,Shutter_StopRecovery:U," _ db _ ":RW" _ codeRead _ watchReset _ recordsRW _ ",%Ens_Portal:U", "")
+    Set sc = ..EnsureRole("Shutter_Operator", "Shutter operator: cases, scenarios, investigations", "Shutter_Operate:U,Shutter_Scenarios:U,Shutter_ScenarioReset:U,Shutter_LiveAgents:U,Shutter_Publish:U,Shutter_StopRecovery:U," _ db _ ":RW" _ codeRead _ watchReset _ recordsRW _ ",%Ens_Portal:U", "")
     Quit:$$$ISERR(sc) sc
     // What an approver and the public demo's role share (v1.34): reading, approving, the traces; the approver adds the site's
-    // writes (Shutter_Configure) and the demo controls (Shutter_Scenarios), which the demo role never holds.
+    // writes (Shutter_Configure) and the demo controls (Shutter_Scenarios to run, Shutter_ScenarioReset to reset), which the
+    // demo role never holds.
     Set approverCore = "Shutter_Operate:U,Shutter_Approve:U," _ db _ ":RW" _ codeRead
     Set traces = ",%Ens_MessageTrace:U,%Ens_MessageHeader:U,%Ens_MessageContent:U"
     Set approverRes = approverCore _ watchRead _ traces
-    Set sc = ..EnsureRole("Shutter_Approver", "Shutter approver: everything an operator can, plus approvals, the site's settings and the Workflow inbox", approverCore _ watchReset _ recordsRW _ traces _ ",%Ens_EventLog:U,Shutter_Configure:U,Shutter_Scenarios:U,Shutter_LiveAgents:U,Shutter_StopRecovery:U", "Shutter_Operator,%EnsRole_Monitor")
+    Set sc = ..EnsureRole("Shutter_Approver", "Shutter approver: everything an operator can, plus approvals, the site's settings and the Workflow inbox", approverCore _ watchReset _ recordsRW _ traces _ ",%Ens_EventLog:U,Shutter_Configure:U,Shutter_Scenarios:U,Shutter_ScenarioReset:U,Shutter_LiveAgents:U,Shutter_StopRecovery:U", "Shutter_Operator,%EnsRole_Monitor")
     Quit:$$$ISERR(sc) sc
     Set sc = ..EnsureRole("Shutter_Demo", "Shutter public demo: reads everything, reinvestigates, approves and asks; cannot run or reset scenarios, save the site profile or the library, or import a schema", approverRes _ ",%Ens_Portal:U", "%EnsRole_Monitor")
     Quit:$$$ISERR(sc) sc
     // A judge (v1.34, decided on 1 Nov 2026): the public demo's role plus the live agents, under the model budget and
-    // a share of their own; the demo role never spends.
-    Set sc = ..EnsureRole("Shutter_Judge", "Shutter judge: the public demo's role plus the live agents (live questions, convening the board), under the model budget", approverRes _ ",%Ens_Portal:U,Shutter_LiveAgents:U", "%EnsRole_Monitor")
+    // a share of their own; the demo role never spends. Since 1.4.3 a judge also runs the scenarios (Shutter_Scenarios),
+    // one run at a time and under the same budget and share, but never resets the shared demo (no Shutter_ScenarioReset).
+    // A run's own reset is played by the Scenario Player, as the production, so the judge needs no write on the hospital.
+    Set sc = ..EnsureRole("Shutter_Judge", "Shutter judge: the public demo's role plus the live agents (live questions, convening the board) and running the scenarios, under the model budget; cannot reset the demo", approverRes _ ",%Ens_Portal:U,Shutter_LiveAgents:U,Shutter_Scenarios:U", "%EnsRole_Monitor")
     Quit:$$$ISERR(sc) sc
     // The Management Portal user of the public demo sees the Visual Trace and the messages, nothing of Shutter's and nothing it
     // could change.
@@ -1862,7 +1874,7 @@ ClassMethod EnsureReminderTask(ns As %String) As %Status [ Private ]
 /// number of tables emptied or the error.
 ClassMethod PurgeStore() As %String [ SqlProc ]
 {
-    If '$SYSTEM.Security.Check("Shutter_Scenarios", "USE") Quit "Shutter_Scenarios is required"
+    If '$SYSTEM.Security.Check("Shutter_ScenarioReset", "USE") Quit "Shutter_ScenarioReset is required"
     If '$GET(^Shutter.Config("demo")) Quit "ERROR: not a demo instance"
     Set n = 0
     // The .eml files of the escalations about to go, by the paths their rows hold: never the folder, which may hold

@@ -164,7 +164,8 @@ for (const { width, height } of [
         await expect(line).toHaveAttribute('aria-expanded', 'false');
         await line.click();
         const table = section.getByRole('table', { name: 'Your access' });
-        await expect(table.getByRole('row')).toHaveCount(10);
+        // A head and ten rows: running and resetting the scenarios are two since 1.4.3
+        await expect(table.getByRole('row')).toHaveCount(11);
         // The trial signs in as the approver: its column is the approver's, cell for cell
         const configure = table.getByRole('row', { name: /^Change the site's settings/ });
         await expect(configure.locator('td[data-label="Approver"]')).toHaveText('Yes');

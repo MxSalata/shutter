@@ -205,8 +205,11 @@ ClassMethod Prepare(scenario As %String, mode As %String, Output inbound As %Str
     Quit found
 }
 
-/// The reset before a run, and the mode and scenario recorded (CONTRACTS 4). Returns the time of the reset.
-ClassMethod Begin(scenario As %String, mode As %String, Output error As %String) As %String
+/// The reset before a run, and the mode and scenario recorded (CONTRACTS 4), with who started the run: the cases it opens
+/// carry that user (Shutter.Store.Case's ScenarioBy), so their live agent runs count against that user's share of the day's
+/// model budget, as a convened board does (1.4.3). <var>requestedBy</var> is the user the Scenario Player was sent the run
+/// by; empty, the caller itself. Returns the time of the reset.
+ClassMethod Begin(scenario As %String, mode As %String, Output error As %String, requestedBy As %String = "") As %String
 {
     Set error = ""
     Set reset = {}.%FromJSON(..Reset())
@@ -216,6 +219,8 @@ ClassMethod Begin(scenario As %String, mode As %String, Output error As %String)
     }
     Set ^Shutter.Config("mode") = mode
     Set ^Shutter.Config("scenario") = scenario, ^Shutter.Config("scenarioRun") = scenario
+    If requestedBy = "" Set requestedBy = $SELECT($USERNAME = "UnknownUser": "", 1: $USERNAME)
+    Set ^Shutter.Config("scenarioBy") = requestedBy
     Quit reset."reset_at"
 }
 
@@ -436,7 +441,7 @@ ClassMethod Reset() As %String [ SqlProc ]
         }
     }
     Set ^Shutter.Config("mode") = "board"
-    Kill ^Shutter.Config("scenario"), ^Shutter.Config("scenarioRun")
+    Kill ^Shutter.Config("scenario"), ^Shutter.Config("scenarioRun"), ^Shutter.Config("scenarioBy")
     // S26 turns the hold on for its own run: a run cut off must not leave it on, so the profile's word stands again.
     Do ##class(Shutter.Scenarios.SiteSchema).PreventFailures(0)
     Set ^Shutter.Config("resetAt") = resetAt

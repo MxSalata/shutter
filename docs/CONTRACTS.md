@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.55, 10 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.57, 10 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -304,7 +304,7 @@ Scenario S7 (a later transfer arriving while the plan awaits approval) is writte
 
 ## 4.2 Running a scenario from the API (v1.5)
 
-`POST /api/shutter/scenarios/{id}/run` with `{"mode": "board" | "single" | "rules" | "policy"}` (default `board`; 400 `bad_request` for any other value) answers 202 and the run record; `GET /api/shutter/scenarios` carries the current record as `run`. With the production's **Scenario Player** item enabled, the route writes a record in state `queued` and sends an `Shutter.Msg.ScenarioRun` through the `Shutter API` service to the player, which plays the steps in its own job (the same checks and reset as `Runner.Start`) and moves the record through `running` to `done` or `failed`; a run therefore never needs a new process, and it shows in the trace with the cases it causes. A second POST while a record is `queued` or `running` answers 409 `wrong_state`. Without the player the route calls `Runner.Start`, which uses a background job, or plays inline when none can start.
+`POST /api/shutter/scenarios/{id}/run` with `{"mode": "board" | "single" | "rules" | "policy"}` (default `board`; 400 `bad_request` for any other value) answers 202 and the run record; `GET /api/shutter/scenarios` carries the current record as `run`. With the production's **Scenario Player** item enabled, the route writes a record in state `queued` and sends an `Shutter.Msg.ScenarioRun` through the `Shutter API` service to the player, which plays the steps in its own job (the same checks and reset as `Runner.Start`) and moves the record through `running` to `done` or `failed`; a run therefore never needs a new process, and it shows in the trace with the cases it causes. A second POST while a record is `queued` or `running` answers 409 `wrong_state`, whoever sends it: one run at a time, a judge's included (v1.57). The player is sent the user who asked (`RequestedBy`), and the run records it for the share (9). Without the player the route calls `Runner.Start`, which uses a background job, or plays inline when none can start.
 
 ## 4.3 A change made by hand in the downstream system (v1.17)
 
@@ -401,11 +401,12 @@ caller's process passes; the operator and the approver read the watched hospital
 | Resource | Routes |
 | --- | --- |
 | none | `POST` and `DELETE /session`; `GET /health` (its summary; the full report needs `Shutter_Operate`) |
-| signed in | `GET /me`, which answers `{username, operator, approver, can: {operate, approve, configure, scenarios, liveAgents}}` from the resources the user holds (`can` since v1.34: the app shows only what the user may do; `liveAgents` is `Shutter_LiveAgents`, below); `GET /access` (v1.2.0), what each role Shutter installs may do beside what the caller may, for the Settings page's Your access table: `{demo, portalHardened, read, recordedAt?, roles: [{role, installed}], rows: [{id, needs, available, roles, you}]}`, read only, naming roles and resources and never a user (`Shutter.API.Access`; the roles' columns from Security.Roles for a caller with `%Admin_Secure`, `read` `now`, otherwise from the record the install, the portal's hardening and each start write, `recorded` with `recordedAt`, or `none` before any) |
+| signed in | `GET /me`, which answers `{username, operator, approver, can: {operate, approve, configure, scenarios, reset, liveAgents, stopRecovery}}` from the resources the user holds (`can` since v1.34: the app shows only what the user may do; `scenarios` is `Shutter_Scenarios` and, since v1.57, `reset` is `Shutter_ScenarioReset`, so the app shows a judge Run on and Reset off; `liveAgents` is `Shutter_LiveAgents`, below); `GET /access` (v1.2.0), what each role Shutter installs may do beside what the caller may, for the Settings page's Your access table: `{demo, portalHardened, read, recordedAt?, roles: [{role, installed}], rows: [{id, needs, available, roles, you}]}`, read only, naming roles and resources and never a user (`Shutter.API.Access`; the roles' columns from Security.Roles for a caller with `%Admin_Secure`, `read` `now`, otherwise from the record the install, the portal's hardening and each start write, `recorded` with `recordedAt`, or `none` before any) |
 | `Shutter_Operate` | every other `GET`; `POST /cases/{id}/bundle`; `POST /cases/{id}/preview-blind-resend`, `/reinvestigate` (v1.39: the reopened case's agent runs count against the requester's share, and without `Shutter_LiveAgents`, or while the provider refuses the key, they answer from recordings only, `ModeOverride` `replay` as a question's do in 14, and a board with no recording leaves the case escalated for a person, with the reason, and plans nothing; the 202 `{caseId, state: "reopening", requestedBy, liveAgents}` says which) and `/close` (unless the site keeps the two-person rule, below); `POST /cases/{id}/escalations`, `PATCH /cases/{id}/escalations/{seq}` and `POST /cases/{id}/escalations/{seq}/send`; `GET /production-reviews`, `GET /production-reviews/targets` and `GET /production-reviews/{id}`; `POST /production-reviews` (section 13: the review reads only; its agent part takes `Shutter_LiveAgents`, below, and is skipped without it); `GET /cases/{id}/whatif`, `GET /cases/{id}/questions`, `GET /cases/{id}/questions/suggested`, `GET /cases/{id}/questions/{qid}` and `POST /cases/{id}/questions` (section 14: a question reads only, and a live run spends model credit); `GET /settings/schemas` (section 12) |
 | `Shutter_Approve` | `POST /cases/{id}/approvals`; `POST /incidents/{id}/approvals` and `/incidents/{id}/chains/{seq}/approvals`; `POST /cases/{id}/close` where the site profile's `approvers.close_needs_approver` is true; `POST /cases/{id}/abandon` (always an approver's); `POST /cases/{id}/further-release` (6.5); `POST /cases/{id}/bundle-unredacted` |
-| `Shutter_Scenarios` | `POST /scenarios/{id}/run` and `/scenarios/reset`, and `Shutter.Setup_PurgeStore` (v1.34: the demo controls; the operator and approver roles hold it, the public demo's role does not; on an instance that is not a demo, `^Shutter.Config("demo")` 0, the two routes answer 403 `not_a_demo_instance` and change nothing, as the purge already refused) |
-| `Shutter_LiveAgents` | Spending the model budget (v1.34, the judges): `POST /cases/{id}/board` (the board convenes live on a blocked, escalated or failed case, 14.5), `POST /cases/{id}/questions` running live, the agent part of `POST /production-reviews` (13.5, v1.39: skipped without it, never refused) and a reinvestigation's live runs (v1.39: recordings only without it); without it a question is answered from recordings only, and one with no recording is refused `409 no_recorded_answer` at once. Operators, approvers and the role `Shutter_Judge` (the public demo's role plus this) hold it; `Shutter_Demo` does not. Every live run counts against the day's budget and the caller's share (9) |
+| `Shutter_Scenarios` | `POST /scenarios/{id}/run` (v1.34: the demo controls; the operator and approver roles hold it, and since v1.57 the role `Shutter_Judge` too, the public demo's role does not; on an instance that is not a demo, `^Shutter.Config("demo")` 0, the route answers 403 `not_a_demo_instance` and changes nothing). A run is one at a time (409 `wrong_state` while one is queued or playing, 4.2), and the cases it opens carry who started it, so their live agent runs count against that user's share of the day's budget, as a convened board does (9, v1.57) |
+| `Shutter_ScenarioReset` | `POST /scenarios/reset` and `Shutter.Setup_PurgeStore` (v1.57: resetting the shared demo and emptying its store were `Shutter_Scenarios` before; the operator and approver roles hold it, the roles `Shutter_Judge` and `Shutter_Demo` do not, so one judge never clears the demo under another; on an instance that is not a demo the reset answers 403 `not_a_demo_instance` and the purge refuses, changing nothing). An install or an upgrade creates it and gives it to the operator and the approver, so an upgraded operator keeps resetting; the uninstall removes it with Shutter's other resources |
+| `Shutter_LiveAgents` | Spending the model budget (v1.34, the judges): `POST /cases/{id}/board` (the board convenes live on a blocked, escalated or failed case, 14.5), `POST /cases/{id}/questions` running live, the agent part of `POST /production-reviews` (13.5, v1.39: skipped without it, never refused) and a reinvestigation's live runs (v1.39: recordings only without it); without it a question is answered from recordings only, and one with no recording is refused `409 no_recorded_answer` at once. Operators, approvers and the role `Shutter_Judge` (the public demo's role plus this and, since v1.57, `Shutter_Scenarios`) hold it; `Shutter_Demo` does not. Every live run counts against the day's budget and the caller's share (9) |
 | `Shutter_Configure` | `PUT /site-profile`; `PATCH /library/{code}`; `POST /settings/schemas` (section 12); `GET /settings/namespaces` and the routes under it (11.1; an apply and a removal need `%Admin_Manage` as well); `POST /production-reviews/{id}/annotations` and `DELETE /production-reviews/annotations/{annotationId}` (section 13) (v1.34: what changes the site; the approver role holds it, the public demo's role does not) |
 | `Shutter_StopRecovery` | `POST /recovery-control/stop` (18; operators and approvers hold it, the public demo's roles do not). `POST /recovery-control/clear` needs `Shutter_Configure` and `Shutter_Approve` |
 | `Shutter_Intake` | `POST /intake` (section 11) |
@@ -704,7 +705,10 @@ In `policy` mode the matcher's decision is:
   the workflow adopts an escalate plan naming the feed's reason, and the gate appends `MERGE_WITHHELD` or
   `CANCEL_UNSUPPORTED`. A withheld message costs no model run, however many arrive.
 - **A receiver of category `orders_results` (v1.23), in every mode:** no board and no investigator: the workflow adopts an
-  escalate plan ("not modelled yet"), and the gate appends `RECEIVER_NOT_MODELLED`.
+  escalate plan, and the gate appends `RECEIVER_NOT_MODELLED`, so nothing is resent from the case. Since v1.51 the case
+  carries its findings (who holds the message, the receiver's own words and the result they name) for the person who
+  handles it; at a receiver whose entry says `engine_resend`, an outage's messages that never arrived are offered for one
+  approval and sent again by the engine (17.8).
 - **`correct_history` at a `history_of_record` receiver (v1.23):** the policy path's plan escalates with
   `correction_steps` (section 10, with the drafted sequence's structure from v1.50) and the case carries a note "Correcting the history: ...".
 - The matches, with every condition's observed value, are stored on the case (`catalogue` in the snapshot summary) and
@@ -771,8 +775,9 @@ keeps `further_messages.in_patient_movement: stop`, which a demo install writes 
   system: only the present placement matters, so an overtaken failed movement closes with no write), `history_of_record`
   (a PAS, EPR or clinical data warehouse: the movement history must be complete, so an overtaken failed movement is not
   "no action": the case escalates with the correcting steps on its plan, section 10) or `orders_results` (order
-  communications or a LIMS: each order or result is its own record; declared and validated, its cases escalate before any
-  model runs, "not modelled yet", and the gate blocks every write to it with `RECEIVER_NOT_MODELLED`). An entry without a
+  communications or a LIMS: each order or result is its own record; declared and validated, its cases escalate with their
+  findings before any model runs, and the gate blocks every write from a case with `RECEIVER_NOT_MODELLED`; an outage's
+  messages that never arrived go again only through the outage resend, 17.8). An entry without a
   category is `current_state`, which is what every profile written before v1.23 meant. `receivers[].history_policy`
   (`current` | `correct`) is derived from the category (`history_of_record` -> `correct`, the others -> `current`) and may
   be set on the entry to override it. The site-wide `history_policy` is deprecated: still accepted, read only for an entry
@@ -1344,7 +1349,8 @@ and when it resets. A board whose members all answered so has no board answer (6
 adds the caller's own `spentByMeUsd` and `shareExhausted`. The public demo sets the cap with an API key of its own, so a day of
 visitors spends at most the cap. **Each user's share** (`SHUTTER_JUDGE_BUDGET_USD` into `^Shutter.Config("judgeBudgetUsd")`,
 0 or unset means none): every agent request carries who asked (`RequestedBy`: a question's asker, a judge who convened the
-board, `system` for the feed's own runs), the run keeps it, and a run for a user whose live runs today have reached the share is
+board, since v1.57 the user who started the scenario run that opened the case (`Shutter.Store.Case` `ScenarioBy`, from
+`^Shutter.Config("scenarioBy")`, which the runner's Begin writes and its Reset clears), `system` for the feed's own runs), the run keeps it, and a run for a user whose live runs today have reached the share is
 refused `budget_exhausted` with "Your share of the day's model budget ... is spent", so one judge cannot spend the day.
 **Whether the live agents can run (v1.37).** `GET /settings` carries `live.agents = {available, reason, until, detail}`
 (`Shutter.Util.LiveAgents`), one signal for the web's notice: `reason` is `budget` when the day's cap or the caller's share
@@ -2738,6 +2744,15 @@ then null, never 0, with the reason in `sourceError`. `incomplete` for any of th
 No message content is copied: the rows hold ids, codes, the body's class and the HL7 structure's family (ADT, ORU).
 
 ## Changes
+
+- v1.57, 10 Nov 2026 (for 1.4.3, the owner's decision that judges run the scenarios): running a scenario and resetting the
+  shared demo are two resources. `Shutter_Scenarios` guards `POST /scenarios/{id}/run` only, and the role `Shutter_Judge`
+  holds it; the new `Shutter_ScenarioReset` guards `POST /scenarios/reset` and `Shutter.Setup_PurgeStore`, held by the
+  operator and approver roles and by neither public demo role (5). An install or an upgrade creates it and gives it to the
+  operator and the approver. `GET /me`'s `can` gains `reset`, and `GET /access` a `reset` row. A scenario run's cases carry
+  who started it, and their live agent runs count against that user's share (4.2, 9). The words for an `orders_results`
+  receiver say what 1.4.x does: the case gets its findings and goes to a person with no resend from it, and at a receiver
+  set up for it an outage's undelivered messages can be resent after one approval (6.3, 6.4, 17.8).
 
 - v1.56, 10 Nov 2026 (for 1.4.2, found on the public demo): the anonymous `GET /health` reads the live hospital's switch
   and cadence from a public copy in Shutter's own namespace when it may not read the hospital's database, a copy older

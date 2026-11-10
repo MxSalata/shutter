@@ -794,22 +794,23 @@ ClassMethod BuildAgentRequest(case As Shutter.Store.Case, m As Shutter.Store.Boa
 Method AgentRequestFor(case As Shutter.Store.Case, m As Shutter.Store.BoardMember, summaryJSON As %String, findingsJSON As %String, Output sc As %Status) As Shutter.Bridge.Msg.AgentRequest
 {
     Set req = ..BuildAgentRequest(case, m, summaryJSON, findingsJSON, ..Replans, .sc)
-    If $ISOBJECT(req) Do ..StampRequester(req)
+    If $ISOBJECT(req) Do ..StampRequester(req, case)
     Quit req
 }
 
-/// Who asked, for the budget's share (v1.34, v1.39): a judge who convened the board, else the person who reopened the
-/// case, else the feed itself ("system", no share); and whether the run may go live: a reopener without the live agents
-/// gets recordings only (ModeOverride replay), as a question's runs do (14).
-Method StampRequester(req As Shutter.Bridge.Msg.AgentRequest)
+/// Who asked, for the budget's share (v1.34, v1.39, 1.4.3): a judge who convened the board, else the person who reopened
+/// the case, else the person who started the scenario run that opened it, else the feed itself ("system", no share); and
+/// whether the run may go live: a reopener without the live agents gets recordings only (ModeOverride replay), as a
+/// question's runs do (14).
+Method StampRequester(req As Shutter.Bridge.Msg.AgentRequest, case As Shutter.Store.Case = "")
 {
-    Do ..Stamp(req, ..ForceBoard, ..ConvenedBy, ..ReopenedBy, ..LiveAllowed)
+    Do ..Stamp(req, ..ForceBoard, ..ConvenedBy, ..ReopenedBy, ..LiveAllowed, $SELECT($ISOBJECT(case): case.ScenarioBy, 1: ""))
 }
 
 /// The rule itself, a class method so a test can apply it without a running process.
-ClassMethod Stamp(req As Shutter.Bridge.Msg.AgentRequest, forceBoard As %Boolean = 0, convenedBy As %String = "", reopenedBy As %String = "", liveAllowed As %Boolean = 1)
+ClassMethod Stamp(req As Shutter.Bridge.Msg.AgentRequest, forceBoard As %Boolean = 0, convenedBy As %String = "", reopenedBy As %String = "", liveAllowed As %Boolean = 1, scenarioBy As %String = "")
 {
-    Set req.RequestedBy = $SELECT(forceBoard && (convenedBy '= ""): convenedBy, reopenedBy '= "": reopenedBy, 1: "system")
+    Set req.RequestedBy = $SELECT(forceBoard && (convenedBy '= ""): convenedBy, reopenedBy '= "": reopenedBy, scenarioBy '= "": scenarioBy, 1: "system")
     If 'liveAllowed Set req.ModeOverride = "replay"
 }
 

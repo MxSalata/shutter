@@ -17,7 +17,10 @@ export interface CategoryText {
   examples: string;
   /** What Shutter does with a failure a later event has overtaken. */
   overtaken: string;
-  /** Whether Shutter models this kind of receiver yet. */
+  /**
+   * Whether a single case at this kind of receiver can end in a resend from the case: Shutter's catalogue covers patient
+   * movements. An order or result case gets its findings and goes to a person, with no resend from the case.
+   */
   modelled: boolean;
 }
 
@@ -43,7 +46,7 @@ export const CATEGORY_TEXT: Record<ReceiverCategory, CategoryText> = {
     gist: 'Each order or result is its own record',
     examples: 'Order communications, a laboratory system (LIMS)',
     overtaken:
-      'Not modelled yet: Shutter has no catalogue for orders and results, so every failure goes to a person before any model runs, and the gate blocks any write to it.',
+      "A case goes to a person with its findings (who holds the message, the receiver's own words and the result they name) before any model runs, and nothing is resent from the case. At a receiver set up for it, an outage's messages that never arrived are listed, and after one approval the engine sends them again.",
     modelled: false,
   },
 };

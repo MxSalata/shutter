@@ -31,10 +31,11 @@ import {
   useHealth,
   useResetScenarios,
   useRunScenario,
+  useMe,
   useScenarios,
   useSiteProfile,
 } from '@/api/hooks';
-import { scenariosHidden } from '@/api/can';
+import { scenariosHidden, showsRoleBadges } from '@/api/can';
 import type { CaseSummary, Mode, Scenario, ScenarioRun } from '@/api/types';
 import { ENV, TRIAL } from '@/env/mode';
 import { byEnv } from '@/env/copy';
@@ -62,7 +63,15 @@ import { MoreAbout } from './MoreAbout';
 import { ScenarioDiagram } from './ScenarioDiagram';
 import { StartHere } from './StartHere';
 import { ModeName, ScenariosHero, TryFirst } from './TryFirst';
-import { hl7Events, recordedLine, scenarioCount, SCENARIOS_LEAD, splitSummary } from './scenarioText';
+import {
+  hl7Events,
+  recordedLine,
+  resetNeedsWords,
+  runNeedsWords,
+  scenarioCount,
+  SCENARIOS_LEAD,
+  splitSummary,
+} from './scenarioText';
 
 const ALL_MODES: { value: Mode; label: string; hint: string }[] = [
   {
@@ -105,10 +114,6 @@ const MODES_INTRO =
 
 /** Whether the scenario is defined for the mode: one that names its modes isn't for the others. */
 const definedFor = (s: Scenario, mode: Mode) => !s.expected?.modes || s.expected.modes.includes(mode);
-
-/** Why someone who may not run scenarios finds Run and Reset greyed out: the server gives both roles the resource. */
-const RUN_NEEDS_ROLE = 'Running a scenario needs the operator or approver role';
-const RESET_NEEDS_ROLE = 'Resetting needs the operator or approver role';
 
 /** The element that says once why the public demo's Run and Reset are greyed out; they point to it. */
 const LOOK_ONLY_WHY = 'scenarios-look-only';
@@ -385,6 +390,7 @@ function ScenarioRow({
   mode,
   found,
   canRun,
+  runNeeds,
   playerOff,
   busy,
   onRun,
@@ -396,6 +402,8 @@ function ScenarioRow({
   /** The latest case among the newest cases the page read, when it is there. */
   found: CaseSummary | undefined;
   canRun: boolean;
+  /** Why Run is greyed out for someone who may not run scenarios (runNeedsWords). */
+  runNeeds: string;
   playerOff: boolean;
   busy: string;
   onRun: () => void;
@@ -410,11 +418,11 @@ function ScenarioRow({
   const why = playerOff
     ? PLAYER_OFF
     : lookOnly
-      ? RUN_NEEDS_ROLE
+      ? runNeeds
       : !defined
         ? `${s.id} is not defined for ${modeLabel(mode)} mode: it would not end as its row says. Its modes: ${modes.join(', ')}.`
         : !canRun
-          ? RUN_NEEDS_ROLE
+          ? runNeeds
           : busy;
   const { first, rest } = splitSummary(s.summary);
   const events = technical ? hl7Events(s.steps ?? []) : '';
@@ -763,6 +771,13 @@ export default function ScenariosPage() {
   const run = useRunScenario();
   const reset = useResetScenarios();
   const canRun = can.scenarios;
+  // Resetting the shared demo is a right of its own (1.4.3): a judge runs scenarios and does not reset them. A server
+  // older than that sends no `reset`, and resolveCan takes `scenarios` for it.
+  const canReset = can.reset ?? canRun;
+  // The reasons say what the sign-in lacks, never that it needs a role the user menu shows it has (the demo's viewer and
+  // a judge show the operator and approver badges)
+  const badges = showsRoleBadges(useMe().data);
+  const runNeeds = runNeedsWords(badges);
   // Only a report that says so switches the runs off: an older server, or one not answering yet, keeps them.
   const playerOff = useHealth().data?.demo === false;
   // The public demo's role operates but may not run or reset: Run and Reset greyed out, its own three cards, a line saying
@@ -778,7 +793,7 @@ export default function ScenariosPage() {
   const current = scenarios.data?.run ?? null;
   const busy = isPlaying(current) ? `A run of ${current?.scenario} is still playing` : '';
   /** Why Reset is disabled now, or "". Reset stays on while a case settles: it is the way out of one that never does. */
-  const resetWhy = playerOff ? PLAYER_OFF : !canRun ? RESET_NEEDS_ROLE : busy;
+  const resetWhy = playerOff ? PLAYER_OFF : !canReset ? resetNeedsWords(badges, canRun) : busy;
   const settling = settlingCase(scenarios.data);
   const runBusy =
     busy || (settling ? `${settling.caseId} is still settling: a new run now would abandon it` : '');
@@ -808,13 +823,13 @@ export default function ScenariosPage() {
     playerOff
       ? PLAYER_OFF
       : hidden
-        ? RUN_NEEDS_ROLE
+        ? runNeeds
         : !definedFor(s, m)
           ? `${s.id} is not defined for ${modeLabel(m)} mode`
           : !MODES.some((x) => x.value === m)
             ? `${modeLabel(m)} mode has no recordings here`
             : !canRun
-              ? RUN_NEEDS_ROLE
+              ? runNeeds
               : runBusy || pending;
 
   // The induction prompt leads the page on an instance, as the site profile's questionnaire is designed; the demo, whose
@@ -830,7 +845,11 @@ export default function ScenariosPage() {
         lead={hidden || playerOff ? SCENARIOS_LEAD.lookOnly : byEnv(SCENARIOS_LEAD)}
         actions={
           <Stack gap={4} align="flex-end">
-            <Tooltip label={resetWhy || 'Clear the downstream system, the folders and the running scenario'}>
+            <Tooltip
+              label={resetWhy || 'Clear the downstream system, the folders and the running scenario'}
+              multiline
+              maw={260}
+            >
               <span>
                 <Button
                   variant="default"
@@ -872,7 +891,7 @@ export default function ScenariosPage() {
         {hidden ? (
           <Text size="md" id={LOOK_ONLY_WHY} maw="68ch">
             {byEnv({
-              live: 'This hospital plays its stories by itself, so running one needs the operator or approver role, which the trial and your own instance offer.',
+              live: 'This hospital plays its stories by itself, and this sign-in reads and approves: it does not run or reset a scenario. The trial and your own instance run them.',
               trial:
                 "The online demo's hospital plays its stories by itself, so this role cannot run one. To run one, switch to Operator or Approver in the menu at the top right.",
             })}
@@ -935,6 +954,7 @@ export default function ScenariosPage() {
                 found={s.latestCase ? byId.get(s.latestCase.caseId) : undefined}
                 lookOnly={hidden}
                 canRun={canRun}
+                runNeeds={runNeeds}
                 playerOff={playerOff}
                 busy={runBusy || pending}
                 starting={run.isPending && run.variables?.id === s.id && run.variables?.mode === mode}

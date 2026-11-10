@@ -18,7 +18,8 @@ export const ACCESS_COLUMNS: ReadonlyArray<{ role: string; label: string }> = [
 export const ACCESS_ROW_WORDS: Record<AccessRowId, string> = {
   view: 'View cases, incidents, evidence and plans',
   approve: 'Approve or reject a plan',
-  scenarios: 'Run and reset the scenarios',
+  scenarios: 'Run the scenarios',
+  reset: 'Reset the shared demo',
   liveAgents: 'Convene the board and ask new questions, which spends the model budget',
   configure: "Change the site's settings",
   inbox: "The Management Portal's Workflow inbox",
@@ -72,7 +73,7 @@ export function compareLine(report: Pick<AccessReport, 'rows' | 'read'>): string
 
 /** What the judges' account adds to the public demo's viewer, shown while the demo is on. */
 export const JUDGES_SENTENCE =
-  "What the judges' account adds: the agents run for real, on new questions and a convened board, under the day's budget.";
+  "What the judges' account adds: the agents run for real, on new questions, a convened board and the scenarios it plays, under the day's budget; it does not reset the shared demo.";
 
 /** The needs of a row in words: the alternatives joined with "or", each its resources with "and". */
 export const needsWords = (needs: string[][]): string =>

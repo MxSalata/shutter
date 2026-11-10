@@ -106,16 +106,16 @@ Method TestEachRoleRowMatchesItsResources()
             Set checked = checked + 1
         }
     }
-    Do $$$AssertTrue(checked >= 45, checked _ " cells checked (nine rows for five roles)")
-    For id = "view", "approve", "scenarios", "liveAgents", "configure", "publisher" {
-        Set res = $CASE(id, "view": "Shutter_Operate", "approve": "Shutter_Approve", "scenarios": "Shutter_Scenarios", "liveAgents": "Shutter_LiveAgents", "configure": "Shutter_Configure", : "Shutter_Publish")
+    Do $$$AssertTrue(checked >= 50, checked _ " cells checked (ten rows for five roles)")
+    For id = "view", "approve", "scenarios", "reset", "liveAgents", "configure", "publisher" {
+        Set res = $CASE(id, "view": "Shutter_Operate", "approve": "Shutter_Approve", "scenarios": "Shutter_Scenarios", "reset": "Shutter_ScenarioReset", "liveAgents": "Shutter_LiveAgents", "configure": "Shutter_Configure", : "Shutter_Publish")
         Do $$$AssertEquals(..Row(report, id).needs.%ToJSON(), "[[""" _ res _ ":U""]]", id _ " needs the resource the route checks")
     }
 }
 
 /// The roles as the install makes them (Shutter.Setup.CreateSecurity): the public demo's viewer approves but neither
-/// runs scenarios, spends the model budget nor configures; the judge adds the model budget; the operator runs
-/// scenarios and publishes but neither approves nor configures; the approver does everything; the trace role does nothing
+/// runs scenarios, spends the model budget nor configures; the judge adds the model budget and running the scenarios
+/// (1.4.3), never their reset; the operator runs and resets scenarios and publishes but neither approves nor configures; the approver does everything; the trace role does nothing
 /// of Shutter's.
 Method TestTheInstalledRolesAsSetupMakesThem()
 {
@@ -124,17 +124,17 @@ Method TestTheInstalledRolesAsSetupMakesThem()
     While iter.%GetNext(.k, .r) { Do $$$AssertTrue(r.installed, r.role _ " is installed") }
     Do $$$AssertEquals(report.roles.%Size(), 5, "five roles: the four a person signs in to Shutter with, and the trace role")
     Do $$$AssertTrue(..Cell(report, "view", "Shutter_Demo") && ..Cell(report, "approve", "Shutter_Demo"), "the demo viewer views and approves")
-    Do $$$AssertNotTrue(..Cell(report, "scenarios", "Shutter_Demo") || ..Cell(report, "liveAgents", "Shutter_Demo") || ..Cell(report, "configure", "Shutter_Demo"), "and neither runs scenarios, spends the budget nor configures")
-    Do $$$AssertTrue(..Cell(report, "liveAgents", "Shutter_Judge"), "the judge spends the model budget")
-    Do $$$AssertNotTrue(..Cell(report, "scenarios", "Shutter_Judge") || ..Cell(report, "configure", "Shutter_Judge"), "and, like the demo viewer, neither runs scenarios nor configures")
-    Do $$$AssertTrue(..Cell(report, "scenarios", "Shutter_Operator") && ..Cell(report, "liveAgents", "Shutter_Operator"), "the operator runs scenarios and spends the budget")
+    Do $$$AssertNotTrue(..Cell(report, "scenarios", "Shutter_Demo") || ..Cell(report, "reset", "Shutter_Demo") || ..Cell(report, "liveAgents", "Shutter_Demo") || ..Cell(report, "configure", "Shutter_Demo"), "and neither runs or resets scenarios, spends the budget nor configures")
+    Do $$$AssertTrue(..Cell(report, "liveAgents", "Shutter_Judge") && ..Cell(report, "scenarios", "Shutter_Judge"), "the judge spends the model budget and runs the scenarios")
+    Do $$$AssertNotTrue(..Cell(report, "reset", "Shutter_Judge") || ..Cell(report, "configure", "Shutter_Judge"), "and, like the demo viewer, neither resets the demo nor configures")
+    Do $$$AssertTrue(..Cell(report, "scenarios", "Shutter_Operator") && ..Cell(report, "reset", "Shutter_Operator") && ..Cell(report, "liveAgents", "Shutter_Operator"), "the operator runs and resets scenarios and spends the budget")
     Do $$$AssertNotTrue(..Cell(report, "approve", "Shutter_Operator") || ..Cell(report, "configure", "Shutter_Operator"), "and neither approves nor configures")
-    For id = "view", "approve", "scenarios", "liveAgents", "configure" { Do $$$AssertTrue(..Cell(report, id, "Shutter_Approver"), "the approver: " _ id) }
+    For id = "view", "approve", "scenarios", "reset", "liveAgents", "configure" { Do $$$AssertTrue(..Cell(report, id, "Shutter_Approver"), "the approver: " _ id) }
     If ..Row(report, "publisher").available {
         Do $$$AssertTrue(..Cell(report, "publisher", "Shutter_Operator") && ..Cell(report, "publisher", "Shutter_Approver"), "the operator and the approver (through the operator's role) read the publisher")
         Do $$$AssertNotTrue(..Cell(report, "publisher", "Shutter_Demo") || ..Cell(report, "publisher", "Shutter_Judge"), "the public demo's roles do not")
     }
-    For id = "view", "approve", "scenarios", "liveAgents", "configure", "publisher" { Do $$$AssertNotTrue(..Cell(report, id, "Shutter_Trace"), "the trace role has nothing of Shutter's: " _ id) }
+    For id = "view", "approve", "scenarios", "reset", "liveAgents", "configure", "publisher" { Do $$$AssertNotTrue(..Cell(report, id, "Shutter_Trace"), "the trace role has nothing of Shutter's: " _ id) }
 }
 
 /// The record the install, the portal's hardening and each start of the production write (Record) answers the same
@@ -221,7 +221,7 @@ Method TestNamesNoUser()
     For {
         Set value = $ORDER(values(value))
         Quit:value=""
-        Do $$$AssertTrue(($EXTRACT(value, 1, 8) = "shutter_") || ($EXTRACT(value) = "%") || (value [ ":") || ($LISTFIND($LISTBUILD("now", "recorded", "none", "view", "approve", "scenarios", "liveagents", "configure", "inbox", "guide", "trace", "publisher"), value) > 0) || (value ? 4N1"-"2N1"-"2N1"T".E), "a value is a role, a resource, a row, the read or a time: " _ value)
+        Do $$$AssertTrue(($EXTRACT(value, 1, 8) = "shutter_") || ($EXTRACT(value) = "%") || (value [ ":") || ($LISTFIND($LISTBUILD("now", "recorded", "none", "view", "approve", "scenarios", "reset", "liveagents", "configure", "inbox", "guide", "trace", "publisher"), value) > 0) || (value ? 4N1"-"2N1"-"2N1"T".E), "a value is a role, a resource, a row, the read or a time: " _ value)
     }
     Set keys = "", iter = report.%GetIterator()
     While iter.%GetNext(.key, .v) { Set keys = keys _ "," _ key }

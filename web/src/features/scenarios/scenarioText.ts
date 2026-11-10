@@ -10,6 +10,29 @@ export const SCENARIOS_LEAD = {
 };
 
 /**
+ * Why Run is greyed out for someone who may not run scenarios, in words that fit what the user menu shows them: a sign-in
+ * with the operator or approver badge (the public demo's viewer, which reads and approves) is told what it lacks, never
+ * that it needs a role it seems to have; one with neither badge is told the role that runs them.
+ */
+export function runNeedsWords(badges: boolean): string {
+  return badges
+    ? 'This sign-in reads and approves, and does not run scenarios'
+    : 'Running a scenario needs the operator or approver role';
+}
+
+/**
+ * Why Reset is greyed out for someone who may not reset the shared demo: a judge runs scenarios and does not reset, since a
+ * reset clears the demo for everyone signed in to it. As for Run, a sign-in that shows the operator or approver badge is
+ * told what it lacks.
+ */
+export function resetNeedsWords(badges: boolean, canRun: boolean): string {
+  if (!badges) return 'Resetting the shared demo needs the operator or approver role';
+  return canRun
+    ? 'This sign-in runs scenarios but does not reset the shared demo, which would clear it for everyone signed in'
+    : 'This sign-in reads and approves, and does not reset the shared demo';
+}
+
+/**
  * How many scenarios Shutter defines (fixtures/scenarios.json; scenarioText.test checks the figure against it). The trial
  * lists only the ones with recordings, so it says how many of these it has and where the rest are.
  */

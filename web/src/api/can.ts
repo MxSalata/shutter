@@ -6,14 +6,25 @@ import type { Can, Me } from './types';
  * before, so nothing changes for such a server. Nobody signed in may do nothing.
  */
 export function resolveCan(me: Me | null | undefined): Can {
-  if (!me) return { operate: false, approve: false, configure: false, scenarios: false, liveAgents: false };
+  if (!me)
+    return {
+      operate: false,
+      approve: false,
+      configure: false,
+      scenarios: false,
+      reset: false,
+      liveAgents: false,
+    };
+  // Running and resetting scenarios needed the operator role
+  const scenarios = me.can?.scenarios ?? me.operator;
   return {
     operate: me.can?.operate ?? me.operator,
     approve: me.can?.approve ?? me.approver,
     // Saving the site profile or the library and annotating a review needed the approver role
     configure: me.can?.configure ?? me.approver,
-    // Running and resetting scenarios needed the operator role
-    scenarios: me.can?.scenarios ?? me.operator,
+    scenarios,
+    // A server older than 1.4.3 has one right for running and resetting
+    reset: me.can?.reset ?? scenarios,
     stopRecovery: me.can?.stopRecovery,
     // A server older than the judges' live agents has no route to convene the board, so nothing offers it
     liveAgents: me.can?.liveAgents ?? false,
@@ -37,3 +48,10 @@ export const DEMO_READ_ONLY =
  * a reason under each control, as does a server that sends no `can` (it derives `scenarios` from `operate`, so this stays false).
  */
 export const scenariosHidden = (can: Can): boolean => can.operate && !can.scenarios;
+
+/**
+ * Whether the user menu shows the user a role badge: "operator" and "approver" come from GET /me's two flags
+ * (AppLayout's UserMenu). The public demo's viewer and a judge have both, so a reason never tells them they need the
+ * operator or approver role; it says what their sign-in lacks.
+ */
+export const showsRoleBadges = (me: Me | null | undefined): boolean => !!me && (me.operator || me.approver);

@@ -38,7 +38,9 @@ the case page (`POST /api/shutter/cases/{id}/escalations` through the API); unti
   keeps no receipts is investigated and escalated; the team corrects it by hand and marks the case handled.
 - **A receiver's outage is one incident (v1.1.0).** Give a receiver's profile entry a `watch` block and Shutter reads what the
   engine shows about its HL7 TCP operation, never the receiver, opens one outage for the time it is down, says what to do
-  and whom to call, and closes it when every message has settled. It sends no orders or results (section 11).
+  and whom to call, and closes it when every message has settled. Since 1.4.0, at a receiver whose entry says
+  `engine_resend`, one approval has the engine resend the messages that never arrived, orders and results included
+  (section 11, CONTRACTS 17.8); a case never resends an order or result.
 
 ## Before you install: will it work here?
 
@@ -154,7 +156,7 @@ neither the build log nor the image's history carries it; the build needs BuildK
 | `SHUTTER_DEMO_PASSWORD` | The demo users' password (default `shutter`); demo only. |
 | `SHUTTER_PUBLIC_DEMO_PASSWORD` | When set, the user `demo` exists with the role `Shutter_Demo`: reads, reinvestigates, approves and asks, and can neither run or reset scenarios nor save the site profile, the library or a schema. For a public demo; no default. |
 | `SHUTTER_TRACE_PASSWORD` | When set, the user `demo-trace` exists with the role `Shutter_Trace`: the Visual Trace and the messages in the Management Portal, read only. No default. |
-| `SHUTTER_JUDGE_PASSWORD` | When set, the user `judge` exists with the role `Shutter_Judge`: the public demo's role plus the live agents (live questions, convening the board), under the model budget and the judge's share. No default. |
+| `SHUTTER_JUDGE_PASSWORD` | When set, the user `judge` exists with the role `Shutter_Judge`: the public demo's role plus the live agents (live questions, convening the board) and, since 1.4.3, running the scenarios (`Shutter_Scenarios`, one run at a time), under the model budget and the judge's share. It cannot reset the demo or purge its store (`Shutter_ScenarioReset`, the operator's and the approver's). No default. |
 | `SHUTTER_JUDGE_BUDGET_USD` | Each user's share of the day's model budget in US dollars (CONTRACTS 9): a user whose live runs today reach it is refused `budget_exhausted`. Empty or 0: no share, the day's cap alone. |
 | `SHUTTER_PROVIDER_TIMEOUT_SECONDS` | The bound on one model call (CONTRACTS 6.6): the seconds the provider's HTTP client waits for a reply before the call fails, 10 to 600; default 120. Applied at every start of the production, like the budget. |
 | `SHUTTER_DAILY_BUDGET_USD` | A cap in US dollars on what the agents' live runs may spend per day (00:00 to 00:00 UTC; CONTRACTS 9). At the cap, runs are refused with `budget_exhausted`: a case the catalogue gives to the board or a person goes to a person with no plan, and others take the rules path, where the gate still judges the resend. Empty or 0: no cap. |
@@ -843,7 +845,9 @@ Say these plainly to whoever owns the feed.
 
 Shutter watches configured HL7 TCP operations without contacting their receivers. It groups outages, shows whether the
 engine is retrying or messages have settled, preserves unresolved exceptions, and shows the site's next action and contact.
-It sends no orders or results. At supported stock TCP routes, it also prevents Shutter's ADT API recovery from competing
+It resends an outage's messages that never arrived only at a receiver whose entry says `engine_resend`, after one approval,
+through Engine Resend (1.4.0, CONTRACTS 17.8); a case at an `orders_results` receiver gets its findings and goes to a person,
+with no resend from the case. At supported stock TCP routes, it also prevents Shutter's ADT API recovery from competing
 with the engine's delivery (section 10).
 
 **11.1 The watch block.** A receiver is watched when its site profile entry has a `watch` block naming the production item
@@ -875,8 +879,11 @@ that delivers to it; with none, nothing below happens for it. The keys (CONTRACT
   hand first is your downtime procedure's call".
 - `settle_minutes` (default 10) and `window_minutes` (default 5), whole numbers of 1 or more; `resend_approval_minutes`
   (default 15) validates and has no use in this build.
-- `engine_resend`, `hold` and `mail` validate and do nothing in this build: the Doctor lists each one a profile declares in
-  `outages.declared_not_in_build`, "declared; not in this build", so a block never appears to enable recovery.
+- `engine_resend` (1.4.0): `true` lets an approver approve the outage's offered messages, the ones that never reached the
+  receiver, and the item `Engine Resend` sends them again one at a time, in order (CONTRACTS 17.8). On a
+  `current_state` or `history_of_record` receiver it needs `ack_level` `application`. `hold` and `mail` validate too. The
+  Doctor lists any of the three a profile declares in a build without its item in `outages.declared_not_in_build`,
+  "declared; not in this build", so a block never appears to enable what the build lacks.
 
 Saving the profile voids every approval given and not yet dispatched (`APPROVAL_SITE_PROFILE_CHANGED`), so add a watch
 block when nothing is waiting to be sent.
@@ -902,8 +909,9 @@ The states are CONTRACTS 17.2's:
   5 seconds apart. Every header of the window (from the open less `window_minutes` to the drain) is then read and counted by
   what happened to it, and the engine's own alerts for the item in the window are kept beside the record.
 - `closed` when no header of the window ended in Error. With any, `needs_person`: "N messages failed and were not offered;
-  a person reads the trace". This build offers nothing to send again (`set.status` `not_computed`, "no set gate in this
-  build").
+  a person reads the trace". Since 1.3.0 an outage with failed messages that never reached the receiver reads `offered`
+  instead and lists them, and since 1.4.0, at a receiver whose entry says `engine_resend`, one approval has the engine
+  send them again (CONTRACTS 17.2, 17.8).
 - `needs_person` also when `settle_minutes` pass with the queue never at 0 (a busy feed).
 - An outage open an hour or more says "Down longer than the site's limit: the lab's downtime procedure applies."
 
@@ -940,7 +948,8 @@ listeners on the loopback address of a test instance:
 - **What Shutter sends.** At an operation that retries (`FailureTimeout` -1, the stock default) there is nothing to resend
   and Shutter sends nothing: the engine goes on attempting delivery, in order, when the listener is back; a refusal, a
   stopped production or a changed setting can still stop one. A `FailureTimeout` above 0 is bounded retries, not "no
-  retry". Shutter sends no order or result. It never edits, re-encodes, transliterates or reorders a message, never passes a
+  retry". Shutter resends an order or result only through the outage resend, after one approval, at a receiver set up for
+  it (CONTRACTS 17.8). It never edits, re-encodes, transliterates or reorders a message, never passes a
   new body or target to the engine, and never suspends, discards or reorders a message in the engine's hands, even when one
   refused message at the head of a retrying queue blocks everything behind it: it names the message and a person acts.
 - **The patient check before a resend (1.4.0).** At an `orders_results` receiver an order or result with an order
@@ -1007,11 +1016,13 @@ listeners on the loopback address of a test instance:
 - **Restore, mirror, test copy.** A restored engine, a mirror failover mid-run, or a test copy refreshed from live are not
   guarded: there is no instance identity and no monotonic reference, and the outage watcher is not established as safe
   across a failover or the loss of Shutter's database.
-- **No board on any order or result,** no catalogue entry for orders, no order-level keys (placer or filler), no correction
-  sequence, no probe.
-- **Not in this build:** an offered list of messages that never reached the receiver, a resend of orders or results, named
-  findings on characters, reply words or OBX, an agent's summary of an outage, an assistant for the profile, the outage
-  email, and the hold on a patient's ADT traffic (it was not built for this version, so none of its measurements ran).
+- **No board on any order or result,** no catalogue entry for orders and no correction sequence: an order or result case
+  gets its findings and goes to a person. The patient check reads order numbers (placer and filler) since 1.4.0. No probe.
+- **Since this section was first written:** 1.3.0 added the offered list of messages that never reached the receiver,
+  the outage email (Outage Mailer) and the findings on characters, reply words and OBX (working end to end since 1.4.0),
+  and 1.4.0 the resend of the offered messages, orders and results included, after one approval at a receiver set up for
+  it (CONTRACTS 17.8). **Still not in this build:** an agent's summary of an outage, an assistant for the profile, and the
+  hold on a patient's ADT traffic (it was not built, so none of its measurements ran).
 - **Not measured for this version,** so the words on these points say unknown rather than claim: the engine's `Status`
   through an AR retry loop, after an AE, and after a no-retry receiver returns on an idle feed; the job list's active message
   under retry; whether a header completed after retries keeps its earlier rows.

@@ -88,7 +88,38 @@ describe('SiteProfilePage', () => {
     ).toBeInTheDocument();
     expect(within(records).getByText(/asks for a correction by hand/)).toBeInTheDocument();
     expect(within(cards).getByText('Orders and results')).toBeInTheDocument();
-    expect(within(cards).getByText('Not modelled yet')).toBeInTheDocument();
+    // The kind no receiver has says so, and no longer that it is not modelled (1.4.3: its cases get their findings)
+    const orders = within(cards).getByRole('listitem', { name: 'Orders and results' });
+    expect(within(orders).getByText('No receiver of this kind')).toBeInTheDocument();
+    expect(within(orders).getByText('Cases go to a person.')).toBeInTheDocument();
+    expect(within(cards).queryByText(/Not modelled yet/)).not.toBeInTheDocument();
+  });
+
+  it('says what 1.4.x does at an orders and results receiver: findings, a person, no resend from a case', async () => {
+    const lab = structuredClone(recorded);
+    const records = lab.profile.receivers[1];
+    lab.profile = {
+      ...lab.profile,
+      receivers: [
+        ...lab.profile.receivers,
+        { ...records, name: 'Lab Results Out', category: 'orders_results' },
+      ],
+    };
+    server.use(http.get(`${BASE}/site-profile`, () => HttpResponse.json(lab)));
+    renderPage();
+    const cards = await screen.findByRole('list', { name: 'The receivers and what each needs' });
+    const card = within(cards).getByRole('listitem', { name: 'Lab Results Out' });
+    expect(within(card).getByText('No resend from a case')).toBeInTheDocument();
+    expect(within(card).getByText('Cases go to a person.')).toBeInTheDocument();
+    // The second layer says the whole of it: the findings, and the outage resend where the receiver is set up for it
+    expect(
+      within(card).getByText(
+        /A case goes to a person with its findings .* before any model runs, and nothing is resent from the case\. At a receiver set up for it, an outage's messages that never arrived are listed, and after one approval the engine sends them again\./,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/[Nn]ot modelled yet/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/[Ee]very failure goes to a person/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/gate blocks any write to it/)).not.toBeInTheDocument();
   });
 
   it('says where a receiver with no category answered takes its history policy from', async () => {

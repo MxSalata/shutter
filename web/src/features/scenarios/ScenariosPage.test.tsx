@@ -412,7 +412,7 @@ describe('ScenariosPage, as each role has it', () => {
     renderScenarios();
     const list = await screen.findByRole('region', { name: 'Every scenario' });
     const why = await screen.findByText(
-      'This hospital plays its stories by itself, so running one needs the operator or approver role, which the trial and your own instance offer.',
+      'This hospital plays its stories by itself, and this sign-in reads and approves: it does not run or reset a scenario. The trial and your own instance run them.',
     );
     // Its hospital's stories are the written policy's: the opening names no board there
     expect(
@@ -429,7 +429,21 @@ describe('ScenariosPage, as each role has it', () => {
     expect(screen.getByRole('columnheader', { name: 'Play' })).toBeInTheDocument();
     // The reason is said once, not under 29 buttons
     expect(screen.queryByText(/Running a scenario needs/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/Resetting needs/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Resetting the shared demo needs/)).not.toBeInTheDocument();
+    // The user menu shows this sign-in the operator and approver badges, so no reason asks it for those roles, the
+    // tooltips included: they say what the sign-in lacks
+    expect(screen.queryByText(/needs the operator or approver role/)).not.toBeInTheDocument();
+    await userEvent.hover(screen.getByRole('button', { name: 'Reset' }).parentElement!);
+    expect(
+      await screen.findByText('This sign-in reads and approves, and does not reset the shared demo'),
+    ).toBeInTheDocument();
+    await userEvent.unhover(screen.getByRole('button', { name: 'Reset' }).parentElement!);
+    await userEvent.hover(runs[0].parentElement!);
+    expect(
+      await screen.findByText('This sign-in reads and approves, and does not run scenarios'),
+    ).toBeInTheDocument();
+    await userEvent.unhover(runs[0].parentElement!);
+    expect(screen.queryByText(/needs the operator or approver role/)).not.toBeInTheDocument();
     // The modes read the list, starting where the hospital plays, and the cards still open their cases
     expect(screen.getByRole('radiogroup', { name: 'Investigation modes' })).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: /Site policy/ })).toBeChecked();
@@ -579,6 +593,30 @@ describe('ScenariosPage, as each role has it', () => {
     expect(screen.getByRole('button', { name: 'Reset' })).toBeEnabled();
   });
 
+  it("gives the judges' account Run, and Reset greyed out with its reason, never asking for a role it shows", async () => {
+    resetMock('judge');
+    renderScenarios();
+    const list = await screen.findByRole('region', { name: 'Every scenario' });
+    const runs = await within(list).findAllByRole('button', { name: /^Run S\d+[a-z]?$/ });
+    expect(runs).toHaveLength(listed.length);
+    expect(within(list).getByRole('button', { name: 'Run S2' })).toBeEnabled();
+    const reset = screen.getByRole('button', { name: 'Reset' });
+    expect(reset).toBeDisabled();
+    const why =
+      'This sign-in runs scenarios but does not reset the shared demo, which would clear it for everyone signed in';
+    // Written under the button, where a keyboard and a screen reader reach it
+    expect(screen.getByText(why)).toBeInTheDocument();
+    // Not the public demo's look-only page: no single reason above the list, the board's modes open
+    expect(screen.queryByText(/plays its stories by itself/)).not.toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: /^Board/ })).toBeChecked();
+    expect(screen.getByRole('region', { name: 'Try these three first' })).toBeInTheDocument();
+    expect(screen.queryByText(/needs the operator or approver role/)).not.toBeInTheDocument();
+    // The run goes to the server, which plays it: the page then says it is playing
+    await userEvent.click(within(list).getByRole('button', { name: 'Run S2' }));
+    expect((await screen.findAllByText(/Playing S2/)).length).toBeGreaterThan(0);
+    resetMock('approver');
+  });
+
   it('derives the powers from the flags of a server that sends no `can`, as before', async () => {
     asServer({ operator: true, approver: true });
     renderScenarios();
@@ -597,7 +635,9 @@ describe('ScenariosPage, as each role has it', () => {
     expect(
       screen.getAllByText('Running a scenario needs the operator or approver role').length,
     ).toBeGreaterThan(0);
-    expect(screen.getByText('Resetting needs the operator or approver role')).toBeInTheDocument();
+    expect(
+      screen.getByText('Resetting the shared demo needs the operator or approver role'),
+    ).toBeInTheDocument();
     const first = screen.getByRole('region', { name: 'Try these three first' });
     expect(
       within(first).getAllByText('Running a scenario needs the operator or approver role').length,

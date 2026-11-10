@@ -10,13 +10,13 @@ import { release } from '@/lib/status';
 import { useTechnical } from '@/stores/appearance';
 import { KINDS, KIND_TERMS, TIERS, TIER_NAMES } from './profile';
 
-/** The receivers at a tier, by name; one that is not modelled yet says so, since no write goes to it. */
+/** The receivers at a tier, by name; one whose cases go to a person says so, since no case writes to it. */
 function receiversAtTier(profile: SiteProfile, tier: string): string[] {
   return profile.receivers
     .filter((r) => String(r.tier) === tier)
     .map((r) => {
       const name = r.name || 'unnamed';
-      return categoryOf(r) === 'orders_results' ? `${name} (not modelled yet)` : name;
+      return categoryOf(r) === 'orders_results' ? `${name} (no resend from a case)` : name;
     });
 }
 

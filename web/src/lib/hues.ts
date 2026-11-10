@@ -61,8 +61,8 @@ export const MODE_IDENTITY: Record<string, { label: string; hue: Hue; icon: Icon
 };
 
 /**
- * A receiver category's mark (its words are categories.ts's): current state cyan, history of record indigo, and any
- * category Shutter does not model yet (orders and results) gray, with a dashed edge.
+ * A receiver category's mark (its words are categories.ts's): current state cyan, history of record indigo, and a
+ * category whose cases go to a person with no resend from the case (orders and results) gray, with a dashed edge.
  */
 export const CATEGORY_MARKS: Record<string, { hue: Hue; icon: Icon; dashed?: boolean }> = {
   current_state: { hue: 'cyan', icon: IconMapPin },

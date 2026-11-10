@@ -58,7 +58,8 @@ SPW-3.2. **Closing by hand** is a person's decision, recorded with who closed it
 SPW-4.1. **A receiver's category.** `current_state` (a bed manager or a whiteboard: only where the patient is now
 matters, so an overtaken movement closes as superseded), `history_of_record` (a patient record: every movement must be
 in the history, so an overtaken movement is escalated with the steps that correct the history by hand) and
-`orders_results` (not modelled yet: Shutter escalates before any agent runs and never writes).
+`orders_results` (a case gets its findings and goes to a person before any agent runs, and nothing is resent from it; at a
+receiver set up for it, an outage's messages that never arrived can be sent again by the engine after one approval).
 
 SPW-4.2. **A receiver's history policy** follows its category unless the site overrides it: `current` closes an overtaken
 movement, `correct` asks for the history to be corrected.
@@ -176,7 +177,7 @@ SPW-5.47. **MERGE_WITHHELD: A merge is never sent by Shutter.** An ADT^A40 merge
 
 SPW-5.48. **CANCEL_UNSUPPORTED: The receiver cannot reverse the event.** The message cancels an earlier movement, and the receiver's entry says it takes no cancels. Shutter withholds the cancel and sends nothing; a person corrects the receiver. Next: Correct the receiver by hand, then mark the case handled on the case page.
 
-SPW-5.49. **RECEIVER_NOT_MODELLED: The receiver's category is not modelled yet.** The receiver keeps orders and results (category orders_results), which Shutter's catalogue does not model yet. Shutter sends it nothing and does not judge the failure; a person handles it in the receiving system. Next: Handle the failure in the receiving system by hand, then mark the case handled on the case page. Nothing is sent.
+SPW-5.49. **RECEIVER_NOT_MODELLED: An order or result is not resent from its case.** The receiver keeps orders and results (category orders_results). Shutter's catalogue of single-message recoveries covers patient movements, so nothing is resent from the case and no model judges it: the case carries its findings (who holds the message, the receiver's own words and the result they name) and a person handles it in the receiving system. At a receiver set up for it, an outage's messages that never arrived are listed and can be sent again by the engine after one approval. Next: Handle the failure in the receiving system by hand, then mark the case handled on the case page. Nothing is sent.
 
 SPW-5.50. **RECEIVER_NOT_IN_PROFILE: The site profile does not describe the receiver.** The case's receiver has no entry in the site profile, so Shutter does not know its API or what it guarantees: the evidence was read at the default receiver API, and a resend would go to the production's default receiver rather than this one. Shutter resends only to a receiver the profile describes, so nothing is sent. Next: Add the receiver to the site profile (its name, tier, category, API paths and features), then reinvestigate the case. Nothing is sent meanwhile.
 

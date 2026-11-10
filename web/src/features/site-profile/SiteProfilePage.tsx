@@ -161,7 +161,7 @@ function CategoryFields({
           ...(!r.category ? [{ value: '', label: 'Not answered: current state' }] : []),
           ...CATEGORIES.map((c) => ({
             value: c,
-            label: `${CATEGORY_TEXT[c].label}: ${CATEGORY_TEXT[c].gist.toLowerCase()}${CATEGORY_TEXT[c].modelled ? '' : ' (not modelled yet)'}`,
+            label: `${CATEGORY_TEXT[c].label}: ${CATEGORY_TEXT[c].gist.toLowerCase()}${CATEGORY_TEXT[c].modelled ? '' : ' (a person decides)'}`,
           })),
         ]}
         error={err('category')}
