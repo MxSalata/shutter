@@ -720,7 +720,7 @@ if hit:
     check("a TCP connect timeout is no uncertain outcome: nothing was sent", "uncertain" not in (c.get("failureKind") or ""), c.get("failureKind"))
     check("it escalates: an order has no recovery", c.get("state") == "escalated", c.get("state"))
     check("and says so in words: no talk of a bad ADT trigger", "not ADT" in (c.get("failureText") or "") and "trigger" not in (c.get("failureText") or ""), c.get("failureText"))
-    check("the headline blames no mapping", "resends only ADT" in (c.get("headline") or "") and "map the message" not in (c.get("headline") or ""), c.get("headline"))
+    check("the headline blames no mapping", "does not resend" in (c.get("headline") or "") and "resends only ADT" not in (c.get("headline") or "") and "map the message" not in (c.get("headline") or ""), c.get("headline"))
     plan_view = api("GET", "/cases/" + c["caseId"] + "/plan")[1]
     check("the plan says the message may be sound and to check before re-entering it", "may be sound" in (plan_view.get("plan", {}).get("why") or "") and "re-enters" in (plan_view.get("plan", {}).get("why") or ""), plan_view.get("plan"))
     code_d, draft = api("POST", "/cases/" + c["caseId"] + "/escalations", {})
