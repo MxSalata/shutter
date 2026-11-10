@@ -299,23 +299,23 @@ Per member, over all passes:
 
 ## Scenarios with no board recordings
 
-- S27 A new admission under a new visit number: played in policy and rules modes only.
-- S31 A new admission under a new visit number, in the hospital's own production: played in policy mode only.
-- S33 A failed A08 that moves the patient's bed: played in policy and rules modes only.
+- S27 A second admission under another visit number: played in policy and rules modes only.
+- S31 A second admission under another visit number, in the hospital's own production: played in policy mode only.
+- S33 A bed change in a failed A08 update: played in policy and rules modes only.
 - S34 A failed transfer, then a later A08 that moves the patient's bed: played in policy and rules modes only.
-- S32 A new admission under a new visit number, while the plan awaits approval: played in rules mode only.
+- S32 A second admission under another visit number, while the plan awaits approval: played in rules mode only.
 - S28 A day case's admission and discharge both fail: played in policy and rules modes only.
 - S29 A failed transfer that is then withdrawn: played in policy and rules modes only.
 - S30 A lost admission, with nothing else known: played in policy mode only.
 - S12 A lost admission at the head of a chain: an incident whose chains the catalogue and the site's policy settle; the board decides none.
-- S14 A later movement only the index has seen: played in rules and policy modes only.
+- S14 A later transfer with no known delivery outcome: played in rules and policy modes only.
 - S15 A patient merge Shutter withholds for the PAS team: withheld before any agent runs (MERGE_WITHHELD).
 - S16 A cancellation the downstream system cannot reverse: withheld before any agent runs (CANCEL_UNSUPPORTED).
-- S17 S2 in HL7 2.4: played in policy mode only.
-- S18 S2 in HL7 2.3.1: played in policy mode only.
-- S19 Shape A: a failed transfer in the hospital's own production: played in policy mode only.
+- S17 A failed HL7 2.4 transfer on a 2.5.1 route: played in policy mode only.
+- S18 A failed HL7 2.3.1 transfer on a 2.5.1 route: played in policy mode only.
+- S19 A failed transfer forwarded from the hospital's own production: played in policy mode only.
 - S20 A nurse moves the patient by hand while the plan awaits approval: played in rules mode only.
-- S26 A schema not loaded here: played in rules and policy modes only.
+- S26 A transfer held until its schema is imported: played in rules and policy modes only.
 
 ## What the agents see, and a question that tries to act
 

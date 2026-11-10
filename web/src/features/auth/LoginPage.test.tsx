@@ -23,7 +23,7 @@ afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
 const HEADLINE =
-  'Shutter fixes a failed HL7 transfer only when its checks pass. Otherwise it stops and names the patient.';
+  'Shutter resends a failed HL7 delivery only when its checks pass. Otherwise it stops and names the patient.';
 const PURPOSE = 'When a patient movement fails to reach another system, Shutter finds out why.';
 
 function renderLogin(demo: boolean, detail: DetailLevel = 'plain', health: Record<string, unknown> = {}) {
@@ -185,18 +185,18 @@ describe('LoginPage, the headline and what it is for', () => {
     expect(section).toHaveTextContent('Failed messages, investigated, gated, released and verified');
   });
 
-  it('explains "HL7 transfer" in a term the keyboard reaches', async () => {
+  it('explains "HL7 delivery" in a term the keyboard reaches', async () => {
     renderLogin(false);
-    const term = (await screen.findByText('HL7 transfer')).closest('.term');
+    const term = (await screen.findByText('HL7 delivery')).closest('.term');
     expect(term).not.toBeNull();
     expect(term).toHaveAttribute('tabindex', '0');
     const described = term?.getAttribute('aria-describedby');
     expect(document.getElementById(described ?? '')).toHaveTextContent(
-      'A message telling another hospital system that a patient moved ward.',
+      'The standard format hospital systems use to send each other messages, such as a patient transfer.',
     );
   });
 
-  it('shows HL7 transfer as plain text in Technical, where an engineer knows the term', async () => {
+  it('shows HL7 delivery as plain text in Technical, where an engineer knows the term', async () => {
     const { container } = renderLogin(false, 'technical');
     await screen.findByRole('heading', { level: 2, name: HEADLINE });
     expect(container.querySelector('.term')).toBeNull();

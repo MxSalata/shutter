@@ -357,7 +357,7 @@
   },
   {
    "scenario": "S3",
-   "title": "Lost acknowledgment",
+   "title": "A transfer applied, but its acknowledgement was lost",
    "encounter": "ENC-1003",
    "event": "transfer",
    "receiver": "",
@@ -1397,7 +1397,7 @@
   },
   {
    "scenario": "S8",
-   "title": "Event times that can't be compared",
+   "title": "Two transfers at the same recorded time",
    "encounter": "ENC-1008",
    "event": "transfer",
    "receiver": "",
@@ -1567,7 +1567,7 @@
   },
   {
    "scenario": "S9",
-   "title": "One patient, two encounters",
+   "title": "An outpatient visit does not replace the inpatient transfer",
    "encounter": "ENC-1009",
    "event": "transfer",
    "receiver": "",
@@ -1889,7 +1889,7 @@
   },
   {
    "scenario": "S11",
-   "title": "An outage burst",
+   "title": "Eight failed deliveries during two outages",
    "encounter": "ENC-1103",
    "event": "transfer",
    "receiver": "",
@@ -2041,7 +2041,7 @@
   },
   {
    "scenario": "S11",
-   "title": "An outage burst",
+   "title": "Eight failed deliveries during two outages",
    "encounter": "ENC-1103",
    "event": "discharge",
    "receiver": "",
@@ -3847,7 +3847,7 @@
   },
   {
    "scenario": "S25",
-   "title": "A message with the site's own segment",
+   "title": "A site-specific segment missing from the local schema",
    "encounter": "ENC-1025",
    "event": "transfer",
    "receiver": "",
@@ -4003,17 +4003,17 @@
  "without_board": [
   {
    "scenario": "S27",
-   "title": "A new admission under a new visit number",
+   "title": "A second admission under another visit number",
    "why": "played in policy and rules modes only"
   },
   {
    "scenario": "S31",
-   "title": "A new admission under a new visit number, in the hospital's own production",
+   "title": "A second admission under another visit number, in the hospital's own production",
    "why": "played in policy mode only"
   },
   {
    "scenario": "S33",
-   "title": "A failed A08 that moves the patient's bed",
+   "title": "A bed change in a failed A08 update",
    "why": "played in policy and rules modes only"
   },
   {
@@ -4023,7 +4023,7 @@
   },
   {
    "scenario": "S32",
-   "title": "A new admission under a new visit number, while the plan awaits approval",
+   "title": "A second admission under another visit number, while the plan awaits approval",
    "why": "played in rules mode only"
   },
   {
@@ -4048,7 +4048,7 @@
   },
   {
    "scenario": "S14",
-   "title": "A later movement only the index has seen",
+   "title": "A later transfer with no known delivery outcome",
    "why": "played in rules and policy modes only"
   },
   {
@@ -4063,17 +4063,17 @@
   },
   {
    "scenario": "S17",
-   "title": "S2 in HL7 2.4",
+   "title": "A failed HL7 2.4 transfer on a 2.5.1 route",
    "why": "played in policy mode only"
   },
   {
    "scenario": "S18",
-   "title": "S2 in HL7 2.3.1",
+   "title": "A failed HL7 2.3.1 transfer on a 2.5.1 route",
    "why": "played in policy mode only"
   },
   {
    "scenario": "S19",
-   "title": "Shape A: a failed transfer in the hospital's own production",
+   "title": "A failed transfer forwarded from the hospital's own production",
    "why": "played in policy mode only"
   },
   {
@@ -4083,7 +4083,7 @@
   },
   {
    "scenario": "S26",
-   "title": "A schema not loaded here",
+   "title": "A transfer held until its schema is imported",
    "why": "played in rules and policy modes only"
   }
  ],

@@ -54,6 +54,7 @@ The judges play the scenarios on the online demo, and the words for orders and r
 - **The scenario diagrams hold still across the modes.** The expected end's box was as wide as its caption, so it moved
   between Board ("after gate checks and approval") and Site policy ("after gate checks and release"). It now fits the
   longest label of the four modes, with the caption centred under it, so switching the mode changes only the words.
+- **The same words everywhere.** Home and the sign-in page lead with "Shutter resends a failed HL7 delivery only when its checks pass", as the trial does; S31 and S32 name S27's story by its new title; the start-here card says the gate blocks any plan that would send a merge; first-steps.md describes the run modes in the page's words; and Shutter in IRIS stays under Configure in the navigation in both views.
 - **Tested:** the unit suites on build 154 (1,083 passed, none failed) and 2026.2 (1,074 passed, none failed), with new
   tests that the judge runs and doesn't reset or purge, that the operator and the approver do both, and that an upgrade
   over 1.4.2's roles keeps their Reset; `tests/e2e/roles_check.py` on both with the judge's and the demo's passwords set

@@ -58,7 +58,7 @@ const STEPS: Step[] = [
   {
     scenario: 'S15',
     title: 'S15: a merge withheld, escalated to the PAS team, marked handled',
-    text: 'A patient merge (ADT^A40) is never sent by default: the gate blocks every plan.',
+    text: 'A patient merge (ADT^A40) is never sent by default: the gate blocks any plan that would send it.',
     more: 'The board is not convened, Escalate drafts the email to the PAS team, and Mark as handled by the team closes the case with what they did.',
   },
   {

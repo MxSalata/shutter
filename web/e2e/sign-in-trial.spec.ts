@@ -46,7 +46,7 @@ test.describe('the live sign-in page of a demo install, on a laptop', () => {
     await expect(
       page.getByRole('heading', {
         level: 2,
-        name: 'Shutter fixes a failed HL7 transfer only when its checks pass. Otherwise it stops and names the patient.',
+        name: 'Shutter resends a failed HL7 delivery only when its checks pass. Otherwise it stops and names the patient.',
       }),
     ).toBeVisible();
     // The board's own figure, and the comparison on its own base as two bars
@@ -68,7 +68,7 @@ test.describe('the live sign-in page of a demo install, on a laptop', () => {
     );
     // The proof sits on the left and the form on the right, side by side
     const proof = await page
-      .getByRole('region', { name: /^Shutter fixes a failed HL7 transfer/ })
+      .getByRole('region', { name: /^Shutter resends a failed HL7 delivery/ })
       .boundingBox();
     const form = await page.getByRole('button', { name: /^Sign in$/ }).boundingBox();
     expect(proof!.x + proof!.width).toBeLessThanOrEqual(form!.x);

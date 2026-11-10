@@ -436,7 +436,7 @@ def scenarios():
     d = message("S31", 3, "A01", "0930", ward="WARD-C", admit_time="0930", encounter="ENC-2031")
     out.append(({
         "id": "S31",
-        "title": "A new admission under a new visit number, in the hospital's own production",
+        "title": "A second admission under another visit number, in the hospital's own production",
         "summary": "S27's story in the hospital's own production. Shutter's own index never sees the new admission: it is "
                    "read in the namespace the case came from, and the resend stops and names both visits.",
         "steps": [
@@ -508,7 +508,7 @@ def scenarios():
     d = message("S32", 3, "A01", "0930", ward="WARD-C", admit_time="0930", encounter="ENC-2032")
     out.append(({
         "id": "S32",
-        "title": "A new admission under a new visit number, while the plan awaits approval",
+        "title": "A second admission under another visit number, while the plan awaits approval",
         "summary": "S27's new admission arrives after the plan went to the approver. The approval doesn't carry it through: "
                    "the check is read again at dispatch, and the write stops and names both visits.",
         "steps": [
