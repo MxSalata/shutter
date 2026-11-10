@@ -76,7 +76,7 @@ ClassMethod Build(case As Shutter.Store.Case, team As %DynamicObject, Output sub
     Set b = b _ "  Operation key: " _ case.OperationKey _ nl _ nl
 
     Set b = b _ "WHAT FAILED" _ nl
-    Set b = b _ "  " _ $SELECT(case.FailureText '= "": case.FailureText, 1: case.FailureKind) _ nl _ nl
+    Set b = b _ "  " _ $SELECT(case.FailureText '= "": ##class(Shutter.Store.Case).ShownFailureText(case.FailureText), 1: case.FailureKind) _ nl _ nl
 
     // An order or a result: what Shutter found, with no free text of the receiver's (Shutter.Util.CaseFindings).
     Set lines = ##class(Shutter.Util.CaseFindings).DraftLines(summary.%Get("findings"))
@@ -93,7 +93,7 @@ ClassMethod Build(case As Shutter.Store.Case, team As %DynamicObject, Output sub
     }
     Set it = failing.%GetIterator()
     While it.%GetNext(, .c) {
-        Set b = b _ "  Check " _ $CLASSMETHOD(json, "Str", c, "check") _ ": " _ $CLASSMETHOD(json, "Str", c, "result") _ ", " _ $CLASSMETHOD(json, "Str", c, "reason_code") _ $SELECT($CLASSMETHOD(json, "Str", c, "detail") '= "": ". " _ $CLASSMETHOD(json, "Str", c, "detail"), 1: "") _ nl
+        Set b = b _ "  Check " _ $CLASSMETHOD(json, "Str", c, "check") _ ": " _ $CLASSMETHOD(json, "Str", c, "result") _ ", " _ $CLASSMETHOD(json, "Str", c, "reason_code") _ $SELECT($CLASSMETHOD(json, "Str", c, "detail") '= "": ". " _ ##class(Shutter.Store.Case).ShownFailureText($CLASSMETHOD(json, "Str", c, "detail")), 1: "") _ nl
     }
     Set b = b _ nl
 

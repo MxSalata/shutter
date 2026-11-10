@@ -793,6 +793,31 @@ Method NotModelled() As %Boolean
     Quit ($EXTRACT(..FailureText, 1, 16) = "This message is ") && ($PIECE(..FailureText, ":", 1) [ ", not ADT")
 }
 
+/// The words a message Shutter does not model carries at intake (v1.42, words of 1.4.1): what it is, then what Shutter does
+/// with it. The case never resends it; since 1.4.0 an outage's one approval can have the engine send it again, at a
+/// receiver set up for the outage resend. The opening "This message is X, not ADT:" is what NotModelled reads.
+ClassMethod NotModelledWords(structure As %String) As %String
+{
+    Quit "This message is " _ structure _ ", not ADT: " _ ..#NOTMODELLEDWHAT
+}
+
+/// What Shutter does with a message it does not model, after the colon of NotModelledWords.
+Parameter NOTMODELLEDWHAT = "Shutter does not resend it from its case, so a person decides; where its receiver is set up for the outage resend, an approver can have the engine send it again from the Incidents page";
+
+/// A failure text as it reads now: the words stored at intake before 1.4.1 ("Shutter resends only ADT, so it sends
+/// nothing and a person decides", or a shorter form of it), which are no longer true, read as NotModelledWords' do, with
+/// what the source reported after them kept. Any other text is returned as it is; nothing stored is changed.
+ClassMethod ShownFailureText(text As %String) As %String
+{
+    Set at = $FIND(text, "Shutter resends only ADT")
+    Quit:'at text
+    Set start = at - $LENGTH("Shutter resends only ADT")
+    Set rest = $EXTRACT(text, at, *), keep = ""
+    Set source = $FIND(rest, ". The source reported: ")
+    If source Set keep = $EXTRACT(rest, source - $LENGTH(". The source reported: "), *)
+    Quit $EXTRACT(text, 1, start - 1) _ ..#NOTMODELLEDWHAT _ keep
+}
+
 /// The case's events, oldest first, as a dynamic array.
 Method Events() As %DynamicArray
 {

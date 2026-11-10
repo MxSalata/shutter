@@ -8,7 +8,7 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { Timestamp } from '@/components/Timestamp';
 import { checkCounts, CHECK_STATES, checkState, gateOutcome } from '@/lib/status';
 import { asArray, asObject } from '@/lib/json';
-import { checksOf } from './derive';
+import { checksOf, shownFailureText } from './derive';
 import { planLeader } from './follows';
 import { humanize } from '@/lib/format';
 import { KeyValueList } from '@/components/KeyValueList';
@@ -83,7 +83,7 @@ function GateTable({ d }: { d: GateDecision }) {
                     </Text>
                   </StackTable.Td>
                   <StackTable.Td data-label="Detail">
-                    <Text size="sm">{c.detail}</Text>
+                    <Text size="sm">{shownFailureText(c.detail)}</Text>
                   </StackTable.Td>
                 </StackTable.Tr>
               );

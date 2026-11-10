@@ -337,6 +337,36 @@ ClassMethod Body(ns As %String, headerId As %String) [ Private ]
 }
 
 /// The finding in words, one sentence per field, the count beside it.
+/// The finding's fields grouped by field, character and the bytes sent, in the order they first stand: [{"field",
+/// "character", "wire", "places": ["position 3", "position 4 of component 2"]}].
+ClassMethod Groups(out As %DynamicObject) As %DynamicArray
+{
+    Set groups = [], at = ""
+    Quit:'$ISOBJECT(out.%Get("fields")) groups
+    Set iter = out.fields.%GetIterator()
+    While iter.%GetNext(, .f) {
+        Set key = f.field _ $CHAR(0) _ f.character _ $CHAR(0) _ f.wire
+        Set place = $SELECT(f.position '= "": "position " _ f.position _ $SELECT(f.component > 1: " of component " _ f.component, 1: ""), 1: "")
+        If $DATA(at(key)) {
+            Do:place'="" groups.%Get(at(key)).places.%Push(place)
+        } Else {
+            Set at(key) = groups.%Size()
+            Do groups.%Push({"field": (f.field), "character": (f.character), "wire": (f.wire), "places": ($SELECT(place '= "": [(place)], 1: []))})
+        }
+    }
+    Quit groups
+}
+
+/// One group in words: "NTE-3 holds e with a grave accent, U+00E8 at position 9, position 11 and position 28; the
+/// operation sends E8."
+/// With places 0 (the escalation email), the places are left out: "NTE-3 holds e with a grave accent, U+00E8; ...".
+ClassMethod GroupLine(g As %DynamicObject, places As %Boolean = 1) As %String
+{
+    Set n = g.places.%Size(), where = ""
+    For i = 0:1:n - 1 { Set where = where _ $SELECT(i = 0: "", i = (n - 1): " and ", 1: ", ") _ g.places.%Get(i) }
+    Quit g.field _ " holds " _ g.character _ $SELECT(places && (where '= ""): " at " _ where, 1: "") _ "; the operation sends " _ g.wire _ "."
+}
+
 ClassMethod Sentence(out As %DynamicObject) As %String
 {
     If out.kind = "unreadable" Quit "The stored message could not be read."
@@ -347,12 +377,14 @@ ClassMethod Sentence(out As %DynamicObject) As %String
     If $ISOBJECT(shared) && (shared.characters '= "") {
         Set text = $SELECT(shared.failures '= "": shared.failures _ " of the last " _ shared."of_failures" _ " failures to this receiver in " _ ..#DAYS _ " days hold " _ shared.characters _ ", in any field.", 1: "Its failures could not be compared for " _ shared.characters _ ".")
     }
-    Set iter = out.fields.%GetIterator()
-    While iter.%GetNext(, .f) {
-        Set text = text _ $SELECT(text = "": "", 1: " ") _ f.field _ " holds " _ f.character _ " at position " _ f.position _ $SELECT(f.component > 1: " of component " _ f.component, 1: "") _ "; the operation sends " _ f.wire _ "."
-        If '$LISTFIND(seen, f.field) && out.count.%IsDefined(f.field) {
-            Set seen = seen _ $LISTBUILD(f.field), c = out.count.%Get(f.field)
-            Set text = text _ " " _ $SELECT(c.failures '= "": c.failures _ " of the last " _ c."of_failures" _ " failures to this receiver in " _ ..#DAYS _ " days carry a character above ASCII in " _ f.field, 1: "Its failures could not be compared") _ "; " _ $SELECT(c.delivered '= "": c.delivered _ " of the last " _ c."of_delivered" _ " delivered do.", 1: "not compared with what got through.")
+    // One sentence per field and character, every place it stands named once, then that field's count (1.4.1: a field
+    // that held the character at several places repeated the whole sentence for each).
+    Set iter = ..Groups(out).%GetIterator()
+    While iter.%GetNext(, .g) {
+        Set text = text _ $SELECT(text = "": "", 1: " ") _ ..GroupLine(g)
+        If '$LISTFIND(seen, g.field) && $ISOBJECT(out.count) && out.count.%IsDefined(g.field) {
+            Set seen = seen _ $LISTBUILD(g.field), c = out.count.%Get(g.field)
+            Set text = text _ " " _ $SELECT(c.failures '= "": c.failures _ " of the last " _ c."of_failures" _ " failures to this receiver in " _ ..#DAYS _ " days carry a character above ASCII in " _ g.field, 1: "Its failures could not be compared") _ "; " _ $SELECT(c.delivered '= "": c.delivered _ " of the last " _ c."of_delivered" _ " delivered do.", 1: "not compared with what got through.")
         }
     }
     Set iter = out.questions.%GetIterator()

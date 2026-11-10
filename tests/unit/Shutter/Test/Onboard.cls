@@ -120,6 +120,26 @@ Method TestSchemaLocalName()
     Do $$$AssertEquals(as, "ONBNOSUCH", "with that name")
 }
 
+/// The words of a message Shutter does not model (1.4.1): no claim that Shutter resends only ADT, the outage resend named,
+/// and NotModelled and the block reason still read them. Words stored before read the same way, the source's own words
+/// after them kept, and no other text changes.
+Method TestNotModelledWordsAreTrue()
+{
+    Set d = "Shutter.Store.Case"
+    Set w = $CLASSMETHOD(d, "NotModelledWords", "ORU")
+    Do $$$AssertEquals(w, "This message is ORU, not ADT: Shutter does not resend it from its case, so a person decides; where its receiver is set up for the outage resend, an approver can have the engine send it again from the Incidents page", w)
+    Set c = ##class(Shutter.Store.Case).%New()
+    Set c.FailureText = w _ ". The source reported: Alert"
+    Do $$$AssertTrue(c.NotModelled(), "NotModelled still reads them")
+    Set old = "This message is ORU, not ADT: Shutter resends only ADT, so it sends nothing and a person decides. The source reported: Alert from Quillon O9 Out"
+    Do $$$AssertEquals($CLASSMETHOD(d, "ShownFailureText", old), w _ ". The source reported: Alert from Quillon O9 Out", "stored words read as now")
+    Do $$$AssertEquals($CLASSMETHOD(d, "ShownFailureText", "This message is MDM, not ADT: Shutter resends only ADT"), $CLASSMETHOD(d, "NotModelledWords", "MDM"), "the short form")
+    Do $$$AssertEquals($CLASSMETHOD(d, "ShownFailureText", "There is no operation to resend. This message is ORM, not ADT: Shutter resends only ADT, so nothing is planned"), "There is no operation to resend. " _ $CLASSMETHOD(d, "NotModelledWords", "ORM"), "inside a gate check's words")
+    Do $$$AssertEquals($CLASSMETHOD(d, "ShownFailureText", "The connection was refused"), "The connection was refused", "any other text as it is")
+    Do $$$AssertEquals($CLASSMETHOD(d, "ShownFailureText", ""), "", "empty")
+    Do $$$AssertEquals(##class(Shutter.Util.DocumentCase).FailureWords({}), $CLASSMETHOD(d, "NotModelledWords", "MDM"), "a document's words are the same")
+}
+
 /// An order, a result or a document that failed says what the receiver did, and never blames the message or a mapping; an
 /// ADT message that really could not be mapped keeps those words.
 Method TestAFailedOrderSaysWhatTheReceiverDid()

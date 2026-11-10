@@ -39,7 +39,7 @@ import { useGuideTarget } from '@/lib/guideDock';
 import { usePrefersReducedMotion } from '@/lib/motion';
 import { TONE_COLOURS, TONE_ICONS, toneText, type Tone } from '@/lib/tone';
 import { Reinvestigate } from './Closure';
-import { checksOf } from './derive';
+import { checksOf, shownFailureText } from './derive';
 import { NotCheckedWords } from './NotCheckedWords';
 import { gateFactLabel, laterChecksLine } from './gateWords';
 import { NextActionPrecedents } from './Precedents';
@@ -479,7 +479,7 @@ export function DecisionCard({
                       <List size="sm" spacing={2}>
                         {b.checks.map((ch) => (
                           <List.Item key={ch.check}>
-                            {humanize(ch.check)}: {ch.reason_code}, {ch.detail}
+                            {humanize(ch.check)}: {ch.reason_code}, {shownFailureText(ch.detail)}
                           </List.Item>
                         ))}
                       </List>

@@ -39,7 +39,7 @@ Method OnEvidenceRequest(request As Shutter.Msg.EvidenceRequest, Output response
 
     // 2. The failure as the production saw it.
     Set failure = {}
-    Set failure.kind = case.FailureKind, failure.text = case.FailureText
+    Set failure.kind = case.FailureKind, failure.text = ##class(Shutter.Store.Case).ShownFailureText(case.FailureText)
     If case.FailureOutcome '= "" Set failure.outcome = case.FailureOutcome
     If case.FailureReasonCode '= "" Set failure."reason_code" = case.FailureReasonCode
     If case.FailureHttpStatus '= "" Do failure.%Set("http_status", case.FailureHttpStatus, "number")

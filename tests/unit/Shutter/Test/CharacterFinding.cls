@@ -116,6 +116,23 @@ Method TestSharedCharacter()
     Do $$$AssertTrue(##class(Shutter.Util.CharacterFinding).Sentence(one) [ "Its failures could not be compared for e with a grave accent", "an unread count says so")
 }
 
+/// A field that holds the character at several places is one sentence naming each place, with its count once; the
+/// email's lines name each field once.
+Method TestGroupedByField()
+{
+    Set e = "e with a grave accent, U+00E8"
+    Set f = {"kind": "characters", "msh18": "", "setting": "latin1", "questions": [], "count": {}, "fields": [{"field": "PID-5", "position": 3, "component": 1, "character": (e), "wire": "E8"}, {"field": "PID-5", "position": 4, "component": 2, "character": (e), "wire": "E8"}, {"field": "NTE-3", "position": 9, "component": 1, "character": (e), "wire": "E8"}, {"field": "NTE-3", "position": 11, "component": 1, "character": (e), "wire": "E8"}, {"field": "NTE-3", "position": 28, "component": 1, "character": (e), "wire": "E8"}]}
+    Do f.count.%Set("PID-5", {"failures": 6, "of_failures": 7, "delivered": 0, "of_delivered": 2})
+    Set s = ##class(Shutter.Util.CharacterFinding).Sentence(f)
+    Do $$$AssertTrue(s [ ("PID-5 holds " _ e _ " at position 3 and position 4 of component 2; the operation sends E8. 6 of the last 7 failures"), s)
+    Do $$$AssertTrue(s [ ("NTE-3 holds " _ e _ " at position 9, position 11 and position 28; the operation sends E8."), s)
+    Do $$$AssertEquals($LENGTH(s, "PID-5 holds") - 1, 1, "PID-5 named once")
+    Do $$$AssertEquals($LENGTH(s, "carry a character above ASCII in PID-5") - 1, 1, "its count once")
+    Set lines = ##class(Shutter.Util.CaseFindings).DraftLines({"custody": {}, "reply": {"msa1": "", "errors": []}, "obx": {}, "character": (f)})
+    Do $$$AssertEquals($LENGTH(lines, "NTE-3 holds") - 1, 1, "one email line per field: " _ lines)
+    Do $$$AssertTrue(lines [ ("NTE-3 holds " _ e _ "; the operation sends E8."), lines)
+}
+
 /// The words for characters: Latin-1 letters by name, others by code point.
 Method TestNames()
 {

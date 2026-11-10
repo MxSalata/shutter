@@ -9,6 +9,7 @@ import {
   outageResend,
   phaseStatuses,
   rounds,
+  shownFailureText,
 } from './derive';
 
 const transition = (seq: number, fromState: string, toState: string): CaseEvent => ({
@@ -329,5 +330,45 @@ describe('an order or a result, and its evidence', () => {
     expect(outageResend({ resends: [r('H8', 'handled_by_hand')] })).toBeUndefined();
     expect(outageResend({ resends: [r('R8-3', 'already_delivered')] })?.closure).toBe('already_delivered');
     expect(outageResend({})).toBeUndefined();
+  });
+});
+
+describe('the words of a message Shutter does not model', () => {
+  const now =
+    'Shutter does not resend it from its case, so a person decides; where its receiver is set up for the outage resend, an approver can have the engine send it again from the Incidents page';
+  it('reads the words stored before 1.4.1 as they are true now, keeping what the source reported', () => {
+    expect(
+      shownFailureText(
+        'This message is ORU, not ADT: Shutter resends only ADT, so it sends nothing and a person decides. The source reported: Alert from Quillon O9 Out',
+      ),
+    ).toBe(`This message is ORU, not ADT: ${now}. The source reported: Alert from Quillon O9 Out`);
+    expect(shownFailureText('This message is MDM, not ADT: Shutter resends only ADT')).toBe(
+      `This message is MDM, not ADT: ${now}`,
+    );
+    expect(
+      shownFailureText(
+        'There is no operation to resend. This message is ORM, not ADT: Shutter resends only ADT, so nothing is planned',
+      ),
+    ).toBe(`There is no operation to resend. This message is ORM, not ADT: ${now}`);
+  });
+  it('leaves every other text as it is', () => {
+    expect(shownFailureText('The connection was refused')).toBe('The connection was refused');
+    expect(shownFailureText(undefined)).toBe('');
+    expect(shownFailureText(`This message is ORU, not ADT: ${now}`)).toBe(
+      `This message is ORU, not ADT: ${now}`,
+    );
+  });
+  it('says the error item in the evidence in the words of now', () => {
+    const item = {
+      kind: 'error',
+      source: 'production',
+      observed_at: '2026-11-10T01:21:43Z',
+      digest: '',
+      data: {
+        kind: 'unmappable',
+        text: 'This message is ORU, not ADT: Shutter resends only ADT, so it sends nothing and a person decides',
+      },
+    } as unknown as SnapshotItem;
+    expect(describeItem(item)).toBe(`Unmappable: This message is ORU, not ADT: ${now}`);
   });
 });

@@ -1,5 +1,6 @@
 import { Stack, Text } from '@mantine/core';
 import { asObject } from '@/lib/json';
+import { characterLines } from './characterLines';
 
 const str = (v: unknown) => (v === undefined || v === null ? '' : String(v));
 
@@ -22,8 +23,9 @@ export function FindingsLines({ d }: { d: Record<string, unknown> }) {
     });
   if (str(obx.sentence) && ['obx', 'no_match', 'schema'].includes(str(obx.kind)))
     lines.push({ key: 'obx', text: str(obx.sentence) });
-  if (str(character.sentence) && ['characters', 'question'].includes(str(character.kind)))
-    lines.push({ key: 'character', text: str(character.sentence) });
+  // One line per finding, as the Evidence tab lists its other findings: never one paragraph for every field and place
+  if (['characters', 'question'].includes(str(character.kind)))
+    characterLines(character).forEach((text, i) => lines.push({ key: `character-${i}`, text }));
   if (!lines.length && str(d.why)) lines.push({ key: 'why', text: `No finding: ${str(d.why)}.` });
   if (!lines.length) return <Text size="md">No finding for this message.</Text>;
   return (

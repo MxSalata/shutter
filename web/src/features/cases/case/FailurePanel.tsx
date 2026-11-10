@@ -5,7 +5,7 @@ import { KeyValueList } from '@/components/KeyValueList';
 import { Timestamp } from '@/components/Timestamp';
 import { humanize } from '@/lib/format';
 import { useTechnical } from '@/stores/appearance';
-import { failureKindInWords } from './derive';
+import { failureKindInWords, shownFailureText } from './derive';
 import { receiverNoun } from './receiver';
 import { Section } from './Section';
 
@@ -49,7 +49,7 @@ export function FailurePanel({ c }: { c: CaseDetail }) {
               <Group gap={6} wrap="wrap">
                 {c.failureText ? (
                   <Text size="sm" className="mono-wrap">
-                    {c.failureText}
+                    {shownFailureText(c.failureText)}
                   </Text>
                 ) : null}
                 {codes}

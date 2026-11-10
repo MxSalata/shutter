@@ -128,7 +128,7 @@ ClassMethod Operation(block As %DynamicObject) As %DynamicObject
 /// nothing the source reported after them, since a receiver's words stay in the block.
 ClassMethod FailureWords(block As %DynamicObject = "") As %String
 {
-    Quit "This message is " _ $SELECT(..Noun(block) = "report": "ORU", 1: "MDM") _ ", not ADT: Shutter resends only ADT, so it sends nothing and a person decides"
+    Quit ##class(Shutter.Store.Case).NotModelledWords($SELECT(..Noun(block) = "report": "ORU", 1: "MDM"))
 }
 
 /// The refusal from what the forward reported: the code by itself, and the receiver's words for whoever may read them.
@@ -186,7 +186,7 @@ ClassMethod Collect(case As Shutter.Store.Case, snap As Shutter.Store.Snapshot, 
     }
     Set open = ..ForEvidence(block), op = open.operation
     Do open.%Remove("operation")
-    Set failure = {"kind": (case.FailureKind), "text": (case.FailureText), "outcome": (case.FailureOutcome), "reason_code": (case.FailureReasonCode)}
+    Set failure = {"kind": (case.FailureKind), "text": (##class(Shutter.Store.Case).ShownFailureText(case.FailureText)), "outcome": (case.FailureOutcome), "reason_code": (case.FailureReasonCode)}
     Set source = {"namespace": (case.SourceNamespace), "production": (case.SourceProduction), "route": (case.SourceRoute), "header_id": (case.OriginHeaderId)}
     Set count = 0
     Do snap.AddItem("operation", "production", now, op) Set count = count + 1

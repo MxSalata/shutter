@@ -21,6 +21,23 @@ export function notModelled(c: {
   return outcome === 'rejected' ? 'refused' : 'not_delivered';
 }
 
+/** What Shutter does with a message it does not model, as Shutter.Store.Case.NOTMODELLEDWHAT says it (1.4.1). */
+export const NOT_MODELLED_WHAT =
+  'Shutter does not resend it from its case, so a person decides; where its receiver is set up for the outage resend, an approver can have the engine send it again from the Incidents page';
+
+/**
+ * A failure text as it reads now (Shutter.Store.Case.ShownFailureText): the words stored before 1.4.1, "Shutter resends
+ * only ADT, so it sends nothing and a person decides" or a shorter form, are no longer true and read as NOT_MODELLED_WHAT,
+ * with what the source reported after them kept. Any other text is returned as it is.
+ */
+export function shownFailureText(text: unknown): string {
+  const t = str(text);
+  const at = t.indexOf('Shutter resends only ADT');
+  if (at < 0) return t;
+  const source = t.indexOf('. The source reported: ', at);
+  return `${t.slice(0, at)}${NOT_MODELLED_WHAT}${source >= 0 ? t.slice(source) : ''}`;
+}
+
 /**
  * Whether a case is an order or a result, and which: "result" (an ORU, event R01, R30 and the like) or "order" (ORM,
  * OML and the like, event O01, O21 ...), by the event code or the structure a message Shutter does not model names in its
@@ -97,7 +114,7 @@ export function describeItem(item: SnapshotItem, receiver?: string): string {
     case 'operation':
       return `${humanize(str(d.event))}${d.ward ? ` to ${str(d.ward)}` : ''} at ${formatTime(str(d.event_time))} for ${str(d.encounter_id)}`;
     case 'error':
-      return `${humanize(str(d.kind))}: ${str(d.text)}`;
+      return `${humanize(str(d.kind))}: ${shownFailureText(d.text)}`;
     case 'message': {
       const notes = asArray(d.notes);
       return `${str(d.message_type)} ${str(d.message_control_id)} from ${str(d.sending_application)}, location ${str(d.assigned_location).split('^')[0]}${notes.length ? `, ${notes.length} free-text note${notes.length > 1 ? 's' : ''}` : ''}`;

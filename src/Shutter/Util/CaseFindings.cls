@@ -99,8 +99,9 @@ ClassMethod DraftLines(findings As %DynamicObject) As %String
         Set b = b _ "  " _ ..ObxLine(findings.obx) _ nl
     }
     If $ISOBJECT(findings.character) && (findings.character.kind = "characters") {
-        Set iter = findings.character.fields.%GetIterator()
-        While iter.%GetNext(, .f) { Set b = b _ "  " _ f.field _ " holds " _ f.character _ "; the operation sends " _ f.wire _ "." _ nl }
+        // One line per field and character, with each place it stands (1.4.1: a line per place repeated the field).
+        Set iter = ##class(Shutter.Util.CharacterFinding).Groups(findings.character).%GetIterator()
+        While iter.%GetNext(, .g) { Set b = b _ "  " _ ##class(Shutter.Util.CharacterFinding).GroupLine(g, 0) _ nl }
     }
     Quit b
 }
