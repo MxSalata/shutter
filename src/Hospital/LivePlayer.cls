@@ -517,6 +517,9 @@ Method WriteStatus()
     Set state = ..StormState(.storm)
     If $ISOBJECT(storm) Set s.storm = storm
     Set ^Hospital.Live("status") = s.%ToJSON()
+    // The switch and the cadence alone, in Shutter's namespace, for a caller who may not read this one (CONTRACTS 12, 1.4.2):
+    // rewritten every round, so its time says the player is still running.
+    Do ##class(Shutter.Util.LivePublic).Write(..ShutterNamespace, s.%Get("enabled"), ..EveryMinutes)
 }
 
 }

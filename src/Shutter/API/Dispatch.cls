@@ -330,14 +330,12 @@ ClassMethod Health() As %Status
     Set o = {}
     For key = "status", "ok", "demo", "version", "production", "production_state", "mode", "last_live_run", "credentials_ok", "credentials_state", "receivers_ok", "watched_ok" { If full.%IsDefined(key) Do o.%Set(key, full.%Get(key), $CASE(full.%GetTypeOf(key), "boolean": "boolean", "null": "null", : "")) }
     Do o.%Set("ok", ##class(Shutter.Util.Json).Str(full, "production_state") = "running", "boolean")
-    // Whether the live hospital is on and how often it fails, so the sign-in page can say what stands behind it; nothing else of it
-    Set live = full.%Get("live")
-    If $ISOBJECT(live) {
-        Set l = {}
-        Do l.%Set("enabled", ''live.%Get("enabled"), "boolean")
-        If live.%IsDefined("every_minutes") Do l.%Set("every_minutes", +live.%Get("every_minutes"))
-        Set o.live = l
-    }
+    // Whether the live hospital is on and how often it fails, so the sign-in page can say what stands behind it; nothing else of it.
+    // Read from the hospital when this caller may; else (the hardened demo's UnknownUser has no roles, 1.4.2) from the public copy
+    // in Shutter's own namespace, which counts for nothing once stale; with neither, no live key.
+    Set status = ##class(Shutter.Setup).LiveStatus(.read, 0)
+    Set live = ##class(Shutter.Util.LivePublic).Anonymous(status, read)
+    If $ISOBJECT(live) Set o.live = live
     Quit ..Json(o)
 }
 

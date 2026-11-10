@@ -2261,9 +2261,12 @@ ClassMethod DeclaredNotInBuild(list As %DynamicArray = "") As %DynamicArray
 
 /// The live hospital's status as its player writes it in the hospital's namespace (CONTRACTS 4.4, v1.34): {enabled,
 /// every_minutes, scenarios, last_played, next, last_ordinary}; {enabled: false} when there is no hospital or no player.
-ClassMethod LiveStatus() As %DynamicObject
+/// read is 1 when the hospital's database was read, 0 when there is no hospital or this process may not read it (the
+/// hardened demo's anonymous GET /health, 1.4.2): that caller reads Shutter.Util.LivePublic's copy instead, which a read
+/// here keeps current. withStorm 0 leaves out the storm and its case counts.
+ClassMethod LiveStatus(Output read As %Boolean, withStorm As %Boolean = 1) As %DynamicObject
 {
-    Set s = {}
+    Set s = {}, read = 0
     Do s.%Set("enabled", 0, "boolean")
     Try {
         Set hospital = $GET(^Shutter.Config("hospitalNamespace"))
@@ -2271,6 +2274,10 @@ ClassMethod LiveStatus() As %DynamicObject
         Set text = $GET(^|hospital|Hospital.Live("status"))
         If text '= "" Set s = ##class(%DynamicObject).%FromJSON(text)
         Do s.%Set("enabled", ''$GET(^|hospital|Hospital.Config("live")), "boolean")
+        Set read = 1
+        // The public copy of the switch and the cadence (1.4.2), written only when it says otherwise.
+        Do ##class(Shutter.Util.LivePublic).Refresh(s)
+        Quit:'withStorm
         // The storm (4.4, v1.35): the player's record as it stands (the status above is rewritten only after each call,
         // and a storm is played within one), a press the player has not picked up yet before it, with Shutter's own view
         // of it: the incident and the case counts.

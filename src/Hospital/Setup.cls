@@ -28,6 +28,7 @@ ClassMethod InstallStatus(shutterNs As %String = "SHUTTER") As %Status
         Set ^Hospital.Config("installedAt") = ##class(Shutter.Util.Time).NowUTC()
         // The live hospital (v1.34): the install is told so (SHUTTER_LIVE=1), and the Live PAS item then runs.
         Set ^Hospital.Config("live") = ($SYSTEM.Util.GetEnviron("SHUTTER_LIVE") = "1")
+        Do ..WritePublicLive(shutterNs)
         Set sc = ..CreateFolders() Quit:$$$ISERR(sc)
         Set sc = ..CreateCredentials() Quit:$$$ISERR(sc)
         // Shutter.Util.Time reads the zone from the site profile's cache in this namespace; the hospital has no profile
@@ -54,6 +55,8 @@ ClassMethod SetLive(on As %Boolean = 1) As %String [ SqlProc ]
 {
     Set on = ''on
     Set ^Hospital.Config("live") = on
+    // The public copy in Shutter's namespace (1.4.2), at once: a hospital switched off must not read on from the old copy.
+    Do ..WritePublicLive()
     // The running production is updated; one that is not running (an install while the image is built, a start still under
     // way) gets the item's state in its definition, and starts with it.
     Set sc = ##class(Ens.Director).GetProductionStatus(.name, .state)
@@ -64,6 +67,23 @@ ClassMethod SetLive(on As %Boolean = 1) As %String [ SqlProc ]
     If (SQLCODE = 0) && (''enabled = on) Quit "ok (already " _ $SELECT(on: "on", 1: "off") _ ")"
     Set sc = ##class(Ens.Director).EnableConfigItem("Live PAS", on, running)
     Quit $SELECT($$$ISOK(sc): "ok" _ $SELECT(running: "", 1: " (saved in the definition; the production is not running)"), 1: $SYSTEM.Status.GetErrorText(sc))
+}
+
+/// The live switch and the player's cadence as anyone may read them (CONTRACTS 12, 1.4.2), written into Shutter's
+/// namespace (Shutter.Util.LivePublic): the switch as it now stands, and every_minutes from the player's last status, when
+/// it has written one. shutterNs "" takes the namespace the install recorded. Never throws.
+ClassMethod WritePublicLive(shutterNs As %String = "") As %Boolean
+{
+    Try {
+        If (shutterNs = "") || (shutterNs = $CHAR(0)) Set shutterNs = $GET(^Hospital.Config("shutterNamespace"), "SHUTTER")
+        Set every = ""
+        Set status = ##class(Shutter.Util.Json).Parse($GET(^Hospital.Live("status")), .sc)
+        If $ISOBJECT(status) && status.%IsA("%DynamicObject") Set every = status.%Get("every_minutes")
+        Return ##class(Shutter.Util.LivePublic).Write(shutterNs, ''$GET(^Hospital.Config("live")), every)
+    } Catch ex {
+        Return 0
+    }
+    Quit 0
 }
 
 /// The inbound, archive and work folders under the manager directory, beside Shutter's own (the same volume).

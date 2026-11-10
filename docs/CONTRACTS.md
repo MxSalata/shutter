@@ -384,7 +384,7 @@ hospital has. It never resets anything; the scenario runner's Reset (and so ever
 - **The record.** `^Hospital.Live("played", n)` holds `{scenario, title, at, n, patients, messages[, error]}` per story, and
   `^Hospital.Live("status")` `{enabled, every_minutes, scenarios, last_played, next: {scenario, at}, last_ordinary}`, which
   Shutter reads across namespaces (`^Shutter.Config("hospitalNamespace")`) as `live` in the Doctor and in `GET /settings`,
-  for the app's banner; `{enabled: false}` when there is no hospital or no player. The item logs one trace line per story
+  for the app's banner; `{enabled: false}` when there is no hospital or no player. Since 1.4.2 a copy of the switch and the cadence alone, `^Shutter.Live("public")` `{enabled, every_minutes, at}` in Shutter's own namespace (`Shutter.Util.LivePublic`), is written by the player on every round, by `SetLive` and the hospital's install, and by `Setup.LiveStatus` whenever it reads the hospital and the copy says otherwise, for a caller who may not read the hospital's database (12). The item logs one trace line per story
   ("Live story n: S with k message(s) for p patient(s)") and a warning when a story or a fault fails.
 
 ## 5. The REST API for the app
@@ -1899,7 +1899,7 @@ and the evidence's newest `ward_state` items (`from`: `connector` or `evidence`;
 `no_answer`, `server_error` (5xx), `refused` (401 or 403), `failing` (a delivery failed after its newest answer, or in the last hour when
 nothing has read it), `answering`, `not_read` or `no_api`. `receivers_ok` is false when any is in the first four, true when none is
 and one answered, and null when nothing is known; `receivers_state` is `read` or the reading's error; `watched_ok` is false when a
-watched namespace's `ok` is. `GET /health` carries `receivers_ok` and `watched_ok` in its anonymous answer too, and no receiver's name. Its anonymous answer also carries `live` with only `enabled` and `every_minutes` (the live hospital's switch and its cadence), so the sign-in page can say what stands behind it; nothing else of the player.
+watched namespace's `ok` is. `GET /health` carries `receivers_ok` and `watched_ok` in its anonymous answer too, and no receiver's name. Its anonymous answer also carries `live` with only `enabled` and `every_minutes` (the live hospital's switch and its cadence), so the sign-in page can say what stands behind it; nothing else of the player. Since 1.4.2, when the caller may not read the hospital's database (the hardened demo's UnknownUser holds no roles), they come from the public copy in Shutter's own namespace (4.4), which counts as unknown once older than three of the player's periods (`every_minutes`, else 7), and with neither the hospital nor a current copy the answer has no `live` key.
 The Health page keeps Ready out of its hero while either is false ("Needs a look", naming the first two and counting the rest, all of them in its Other group), and adds nothing to its first
 layer otherwise.
 
@@ -2738,6 +2738,10 @@ then null, never 0, with the reason in `sourceError`. `incomplete` for any of th
 No message content is copied: the rows hold ids, codes, the body's class and the HL7 structure's family (ADT, ORU).
 
 ## Changes
+
+- v1.56, 10 Nov 2026 (for 1.4.2, found on the public demo): the anonymous `GET /health` reads the live hospital's switch
+  and cadence from a public copy in Shutter's own namespace when it may not read the hospital's database, a copy older
+  than three of the player's periods counting as unknown (4.4, 12). No other field changes.
 
 - v1.55, 10 Nov 2026 (for 1.4.1, the 1.4.0 recheck's leftovers): an `unknown` resend is read again by Engine Resend's poll
   and settles by the send's own rules once its new header settles, with an outage event `resend_settled` (17.8); the

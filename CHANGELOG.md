@@ -4,6 +4,19 @@ Versions follow `major.minor.patch`: a minor release for new features, a patch r
 updates. The version in both `module.xml` files (the one the package manager publishes) is always the version of the
 GitHub tag on the same commit; `scripts/check-versions.py` checks every place the version is written.
 
+## 1.4.2 (10 November 2026)
+
+A fix for the public demo's sign-in page. No new features.
+
+- **The sign-in page says the live hospital is on when it is.** On the public demo a visitor who was not signed in got
+  "live" switched off from the health route while the live hospital was running, because that visitor may read
+  Shutter's own database but not the hospital's, so the sign-in page showed only its short line. The hospital's player,
+  the live switch and the hospital's install now keep a copy of the two values the page needs, whether the live
+  hospital is on and how often it fails, in Shutter's own database, and the health route reads that copy when it can't
+  read the hospital. Nothing else of the player is shown. A copy that has not been renewed for three of the player's
+  periods counts as unknown, so a player that has stopped is never shown as live; with no copy at all, the route says
+  nothing about the live hospital, as on a site install.
+
 ## 1.4.1 (10 November 2026)
 
 Fixes for what the hands-on recheck of 1.4.0 found left over. No new features.
