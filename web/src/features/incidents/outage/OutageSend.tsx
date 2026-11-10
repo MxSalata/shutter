@@ -9,14 +9,18 @@ import { StatusBadge, StatusNotice } from '@/components/StatusBadge';
 import { Timestamp } from '@/components/Timestamp';
 import { isApiError } from '@/lib/errors';
 import { useApproveOutage, useOutageAct } from './hooks';
+import { TechDetail } from '@/components/TechDetail';
 import {
   approveConsequence,
   asSentence,
+  byMessage,
   closureLabel,
   needsReceiverCheck,
   refusalWords,
   resendStatus,
+  runRows,
   stoppedBy,
+  stoppedWords,
 } from './outageWords';
 import type { Outage, OutageRow, Resend } from './types';
 
@@ -314,10 +318,15 @@ function ResendItem({ r }: { r: Resend }) {
   );
 }
 
-/** The ledger's rows: what Shutter sent and how each ended, and the messages closed by hand. */
+/**
+ * The ledger's rows by message: each message once, as it stands now (its latest row: a message one run left unsent and a
+ * later run sent reads Sent), what Shutter sent and how each ended, and the messages closed by hand; the rows a later run
+ * replaced are folded beneath, for the record.
+ */
 export function ResendList({ resends }: { resends: Resend[] }) {
-  const sent = resends.filter((r) => !r.runId.startsWith('H'));
-  const byHand = resends.filter((r) => r.runId.startsWith('H'));
+  const { latest, earlier } = byMessage(resends);
+  const sent = latest.filter((r) => !r.runId.startsWith('H'));
+  const byHand = latest.filter((r) => r.runId.startsWith('H'));
   return (
     <Stack gap="xs" data-testid="outage-resends">
       {sent.length ? (
@@ -344,23 +353,33 @@ export function ResendList({ resends }: { resends: Resend[] }) {
           </List>
         </Stack>
       ) : null}
+      {earlier.length ? (
+        <TechDetail kind="data" label={`Earlier runs' rows, replaced by a later one (${earlier.length})`}>
+          <List size="sm" spacing={4} data-testid="outage-resends-earlier">
+            {earlier.map((r) => (
+              <ResendItem key={`${r.runId}:${r.position}:${r.headerId}`} r={r} />
+            ))}
+          </List>
+        </TechDetail>
+      ) : null}
     </Stack>
   );
 }
 
-/** A failed or unknown resend, said first: which message, what the engine read, and that nothing more went. */
+/**
+ * A message whose latest row is a failed or unknown resend: which message, what the engine read, and what happens next.
+ * A message a later row settled is not shown here: the card follows each message's latest state.
+ */
 export function FailedResend({ resends }: { resends: Resend[] | undefined }) {
   const r = stoppedBy(resends);
   if (!r) return null;
   return (
     <StatusNotice
       tone={r.closure === 'failed' ? 'blocking' : 'attention'}
-      title={r.closure === 'failed' ? 'A resend failed' : "A resend's result is unknown"}
+      title={r.closure === 'failed' ? 'A resend failed' : "A resend's result is not known yet"}
     >
       <Text size="sm" data-testid="outage-failed-resend">
-        Control id {r.controlId || 'not read'}:{' '}
-        {asSentence(r.words) || 'the engine did not read it as Completed.'} Nothing more was sent; a person
-        reads the trace.
+        {stoppedWords(r, runRows(resends)[0]?.runId)}
       </Text>
     </StatusNotice>
   );

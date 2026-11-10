@@ -181,6 +181,12 @@ describe('OutageSection', () => {
     expect(within(acts).getByRole('button', { name: 'Read again' })).toBeInTheDocument();
     expect(within(acts).getByRole('button', { name: 'Pause' })).toBeDisabled();
     expect(within(acts).getByRole('button', { name: 'Close' })).toBeDisabled();
+    // The pause field's example is always ahead of now: the next 06:00 UTC at least an hour away
+    const until = within(acts).getByRole('textbox', { name: 'Down on purpose until (UTC)' });
+    const example = until.getAttribute('placeholder') ?? '';
+    expect(example).toMatch(/^\d{4}-\d\d-\d\dT06:00:00Z$/);
+    expect(Date.parse(example)).toBeGreaterThan(Date.now() + 60 * 60_000 - 1000);
+    expect(Date.parse(example)).toBeLessThanOrEqual(Date.now() + 25 * 60 * 60_000);
   });
 
   it('shows no Read again when the row does not list it', async () => {
@@ -412,6 +418,133 @@ describe('OutageSection', () => {
       expect(posts).toHaveLength(0);
     },
   );
+
+  it('offers no approval until the recovery control is read: it says it is reading it, then the notice, never the button first', async () => {
+    serve({ items: [offeredAtUnknown()], receivers: [] });
+    let answer: (() => void) | undefined;
+    const answered = new Promise<void>((resolve) => (answer = resolve));
+    server.use(
+      http.get('/api/shutter/recovery-control', async () => {
+        await answered;
+        return HttpResponse.json({
+          mode: 'shadow',
+          stopped: false,
+          generation: 2,
+          stoppedAt: '',
+          stoppedBy: '',
+          stopReason: '',
+          outstanding: [],
+          outstandingCount: 0,
+          readable: true,
+          covers: '',
+          doesNotCover: '',
+        });
+      }),
+    );
+    renderSection();
+    const card = await screen.findByRole('region', { name: 'Outage 7, Results Out' });
+    expect(await within(card).findByTestId('outage-approval-reading')).toHaveTextContent(
+      'Reading whether Shutter recovery is stopped before the resend can be approved',
+    );
+    expect(within(card).queryByRole('button', { name: 'Approve the resend…' })).toBeNull();
+    answer?.();
+    expect(await within(card).findByTestId('outage-approval-held')).toHaveTextContent(
+      'Shadow mode: recovery is off at this site',
+    );
+    expect(within(card).queryByTestId('outage-approval-reading')).toBeNull();
+    expect(within(card).queryByRole('button', { name: 'Approve the resend…' })).toBeNull();
+  });
+
+  it('holds the approval when the recovery control cannot be read, as the server would', async () => {
+    serve({ items: [offeredAtUnknown()], receivers: [] });
+    server.use(
+      http.get('/api/shutter/recovery-control', () =>
+        HttpResponse.json({ error: 'internal', detail: 'x' }, { status: 500 }),
+      ),
+    );
+    renderSection();
+    const card = await screen.findByRole('region', { name: 'Outage 7, Results Out' });
+    expect(await within(card).findByTestId('outage-approval-held')).toHaveTextContent(
+      "Whether Shutter recovery is stopped could not be read, so this resend can't be approved now.",
+    );
+    expect(within(card).queryByRole('button', { name: 'Approve the resend…' })).toBeNull();
+  });
+
+  it('follows each message to its latest state across runs: an unknown a later read settled is sent, and earlier rows fold', async () => {
+    const r = (
+      runId: string,
+      position: number,
+      header: number,
+      state: string,
+      closure: string | null,
+      words = '',
+    ) => ({
+      ...resend(position, `G6S${header - 40}`, state, closure, words),
+      runId,
+      headerId: String(header),
+      newHeaderId: closure ? String(300 + header) : null,
+    });
+    const rows = [
+      r('R3-3', 1, 41, 'unknown', 'unknown', 'new header 341 had not settled in 15 s (unread)'),
+      r('R3-3', 2, 42, 'stopped', null, 'not sent: the run stopped'),
+      r('R3-3', 3, 43, 'stopped', null, 'not sent: the run stopped'),
+      r('R3-8', 1, 42, 'completed', 'sent', 'Resent by Shutter; new header 342 Completed.'),
+      r('R3-8', 2, 43, 'completed', 'sent', 'Resent by Shutter; new header 343 Completed.'),
+    ];
+    const closed = (resends: Resend[], doLine: string) =>
+      outage({ state: 'closed', closedAt: NOW, acts: [], resends, words: { ...outage().words, do: doLine } });
+    // Still unknown: said after the card's own words, in words true for its run, and counted as such
+    serve({
+      items: [
+        closed(
+          rows,
+          'Do: read in the Message Viewer the message listed below whose resend result is not known yet; Shutter sends nothing more for it.',
+        ),
+      ],
+      receivers: [],
+    });
+    const view = renderSection();
+    let card = await screen.findByRole('region', { name: 'Outage 7, Results Out' });
+    expect(within(card).getByTestId('outage-tally')).toHaveTextContent(
+      "Shutter's resends: 2 sent, 1 result not known yet.",
+    );
+    expect(within(card).getByTestId('outage-failed-resend')).toHaveTextContent(
+      'Control id G6S1: New header 341 had not settled in 15 s (unread). That run stopped there; a person reads the trace.',
+    );
+    const ledger = within(card).getByRole('list', { name: /Each message sent, in order \(3\)/ });
+    expect(
+      within(ledger)
+        .getAllByRole('listitem')
+        .map((li) => li.getAttribute('data-closure')),
+    ).toEqual(['unknown', 'sent', 'sent']);
+    expect(within(card).getByText("Earlier runs' rows, replaced by a later one (2)")).toBeInTheDocument();
+    view.unmount();
+    // Once Engine Resend read its new header Completed: nothing left that needs a person, and nothing contradicts it
+    serve({
+      items: [
+        closed(
+          [
+            {
+              ...rows[0],
+              state: 'completed',
+              closure: 'sent',
+              words:
+                "Resent by Shutter; new header 341 Completed, read at 01:47 after the send's wait had run out.",
+            },
+            ...rows.slice(1),
+          ],
+          'Do: nothing more for this outage.',
+        ),
+      ],
+      receivers: [],
+    });
+    renderSection();
+    card = await screen.findByRole('region', { name: 'Outage 7, Results Out' });
+    expect(within(card).getByTestId('outage-tally')).toHaveTextContent("Shutter's resends: 3 sent.");
+    expect(within(card).queryByTestId('outage-failed-resend')).toBeNull();
+    const now = within(card).getByRole('list', { name: /Each message sent, in order \(3\)/ });
+    expect(within(now).queryByText(/Not known yet|not sent/i)).toBeNull();
+  });
 
   it('says a refusal by the recovery control in its own words, and that nothing was sent', async () => {
     serve({ items: [offeredAtUnknown()], receivers: [] });

@@ -15,8 +15,10 @@ import {
   canApprove,
   closedRowsToShow,
   offeredRowsToShow,
+  pauseExample,
   readingLabel,
   sendingLine,
+  stoppedInLatestRun,
   tallyLine,
 } from './outageWords';
 import type { Outage, OutageReading, OutageRow } from './types';
@@ -113,7 +115,16 @@ export function ReadingLine({ reading, now }: { reading: OutageReading; now: num
  */
 export function OutageCard({ outage: o }: { outage: Outage }) {
   const can = useCan();
-  const held = approvalHeld(useRecoveryControl().data);
+  // The approval shows only once the recovery control is known: until then the card says it is reading it, and a control
+  // that can't be read holds it (the server would refuse it), so the button never shows first and then goes
+  const control = useRecoveryControl();
+  const held = control.isError
+    ? "Whether Shutter recovery is stopped could not be read, so this resend can't be approved now. The messages stay offered: read the card again in a moment, or check Settings."
+    : approvalHeld(control.data);
+  const controlKnown = control.isError || !!control.data;
+  // A message whose resend failed or is not known yet is said first when the latest run stopped on it; one from an earlier
+  // run is said after the card's own words, under what the latest run did
+  const stoppedFirst = stoppedInLatestRun(o.resends);
   const closed = o.state === 'closed';
   const computed = o.set.status === 'computed';
   const resends = o.resends ?? [];
@@ -139,9 +150,10 @@ export function OutageCard({ outage: o }: { outage: Outage }) {
           </Title>
           <StatusBadge tone={STATE_TONE[o.state] ?? 'neutral'} label={o.state.replace(/_/g, ' ')} />
         </Group>
-        <FailedResend resends={resends} />
+        {stoppedFirst ? <FailedResend resends={resends} /> : null}
         {o.words.first ? <Text size="sm">{o.words.first}</Text> : null}
         {o.words.do ? <Text size="sm">{o.words.do}</Text> : null}
+        {stoppedFirst ? null : <FailedResend resends={resends} />}
         {o.words.call ? <Text size="sm">{o.words.call}</Text> : null}
         {o.words.critical ? (
           <StatusNotice tone="attention" title="Critical results">
@@ -194,7 +206,11 @@ export function OutageCard({ outage: o }: { outage: Outage }) {
           )
         ) : null}
         {can.approve && canApprove(o) ? (
-          held ? (
+          !controlKnown ? (
+            <Text size="sm" c="dimmed" role="status" data-testid="outage-approval-reading">
+              Reading whether Shutter recovery is stopped before the resend can be approved…
+            </Text>
+          ) : held ? (
             <StatusNotice tone="attention" title="The resend can't be approved now">
               <Text size="sm" data-testid="outage-approval-held">
                 {held}
@@ -292,6 +308,8 @@ function RowList({
 /** Only the acts the row lists: pause with a time, read again, close with a reason. */
 function Acts({ outage: o }: { outage: Outage }) {
   const act = useOutageAct(o.id);
+  // An example of the format, always ahead: the next 06:00 UTC at least an hour away
+  const example = pauseExample(useNow(60_000));
   const [until, setUntil] = useState('');
   const [reason, setReason] = useState('');
   const send = (body: { act: 'pause' | 'read_again' | 'close'; until?: string; reason?: string }) =>
@@ -315,7 +333,7 @@ function Acts({ outage: o }: { outage: Outage }) {
           <TextInput
             size="xs"
             label="Down on purpose until (UTC)"
-            placeholder="2026-11-09T06:00:00Z"
+            placeholder={example}
             value={until}
             onChange={(e) => setUntil(e.currentTarget.value)}
           />

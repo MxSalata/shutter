@@ -39,7 +39,7 @@ export function resendStatus(r: Pick<Resend, 'state' | 'closure'>): ResendStatus
     case 'failed':
       return { tone: 'blocking', label: 'Failed', icon: IconAlertCircle };
     case 'unknown':
-      return { tone: 'attention', label: 'Unknown: a person checks', icon: IconQuestionMark };
+      return { tone: 'attention', label: 'Not known yet: a person checks', icon: IconQuestionMark };
   }
   switch (r.state) {
     case 'approved':
@@ -80,11 +80,39 @@ export function sendingLine(o: Pick<Outage, 'state' | 'resends'>): string {
 const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 /**
- * What the ledger came to, in one line: "Shutter's resends: 4 sent, 1 the receiver already held, 2 not sent." Hand
- * closures are counted as such. Empty with no rows.
+ * The ledger by message (CONTRACTS 17.4 and 17.8): each message once, at its latest row, in the order it first appears.
+ * A message a run left unsent and a later run sent is the later row; a later run that sent Shutter's own clone in the
+ * origin's place (its header is an earlier row's new header) is the same message. `earlier` holds every row a later one
+ * replaced, oldest first. Header ids are compared as text.
+ */
+export function byMessage(resends: Resend[] | undefined): { latest: Resend[]; earlier: Resend[] } {
+  const rows = resends ?? [];
+  const alias = new Map<string, string>();
+  const at = new Map<string, number>();
+  const latest: Resend[] = [];
+  const earlier: Resend[] = [];
+  rows.forEach((r, i) => {
+    const header = String(r.headerId ?? '');
+    const key = header ? (alias.get(header) ?? header) : `${r.runId}:${r.position}:${i}`;
+    if (r.newHeaderId) alias.set(String(r.newHeaderId), key);
+    const was = at.get(key);
+    if (was === undefined) {
+      at.set(key, latest.length);
+      latest.push(r);
+    } else {
+      earlier.push(latest[was]);
+      latest[was] = r;
+    }
+  });
+  return { latest, earlier };
+}
+
+/**
+ * What the ledger came to, in one line, each message by its latest row: "Shutter's resends: 4 sent, 1 the receiver
+ * already held, 2 not sent." Hand closures are counted as such. Empty with no rows.
  */
 export function tallyLine(resends: Resend[] | undefined): string {
-  const rows = resends ?? [];
+  const rows = byMessage(resends).latest;
   if (!rows.length) return '';
   const by = (f: (r: Resend) => boolean) => rows.filter(f).length;
   const parts = [
@@ -92,7 +120,7 @@ export function tallyLine(resends: Resend[] | undefined): string {
     [by((r) => r.closure === 'already_delivered'), 'the receiver already held', 'the receiver already held'],
     [by((r) => r.closure === 'handled_by_hand'), 'handled by hand', 'handled by hand'],
     [by((r) => r.closure === 'failed'), 'failed', 'failed'],
-    [by((r) => r.closure === 'unknown'), 'unknown', 'unknown'],
+    [by((r) => r.closure === 'unknown'), 'result not known yet', 'results not known yet'],
     [by((r) => r.state === 'stopped'), 'not sent', 'not sent'],
     [
       by((r) => !r.closure && (r.state === 'approved' || r.state === 'sending')),
@@ -104,9 +132,46 @@ export function tallyLine(resends: Resend[] | undefined): string {
   return said.length ? `Shutter's resends: ${said.join(', ')}.` : '';
 }
 
-/** The run's row that stopped it: the last failed or unknown one, if any. */
+/**
+ * The message that still needs a person after a resend: the last one whose latest row is failed, or unknown (its new
+ * header had not settled in the wait, and Shutter reads it again until it does). A message a later row settled (sent,
+ * already held, handled by hand) is never it.
+ */
 export function stoppedBy(resends: Resend[] | undefined): Resend | undefined {
-  return (resends ?? []).filter((r) => r.closure === 'failed' || r.closure === 'unknown').at(-1);
+  return byMessage(resends)
+    .latest.filter((r) => r.closure === 'failed' || r.closure === 'unknown')
+    .at(-1);
+}
+
+/** Whether the message that still needs a person after a resend belongs to the latest run (the card says it first then). */
+export function stoppedInLatestRun(resends: Resend[] | undefined): boolean {
+  const r = stoppedBy(resends);
+  return !!r && r.runId === runRows(resends)[0]?.runId;
+}
+
+/** The words under a failed or unknown resend: what the engine read, then what happens next, true for its run. */
+export function stoppedWords(r: Resend, latestRun: string | undefined): string {
+  const read = asSentence(r.words) || 'The engine did not read it as Completed.';
+  const next =
+    r.runId === latestRun
+      ? 'Nothing more was sent; a person reads the trace.'
+      : 'That run stopped there; a person reads the trace.';
+  const later =
+    r.closure === 'unknown'
+      ? ' Shutter reads its new header again and settles it here once the engine shows how it ended.'
+      : '';
+  return `Control id ${r.controlId || 'not read'}: ${read} ${next}${later}`;
+}
+
+/**
+ * The next sensible "down on purpose until" for the pause field's example: 06:00 UTC on the next morning at least an hour
+ * away, as the route takes it ("2026-11-11T06:00:00Z").
+ */
+export function pauseExample(now: number): string {
+  const d = new Date(now + 60 * 60_000);
+  const at = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 6);
+  const next = at > now + 60 * 60_000 ? at : at + 24 * 60 * 60_000;
+  return new Date(next).toISOString().replace(/\.\d+Z$/, 'Z');
 }
 
 /**
@@ -132,11 +197,16 @@ export function canApprove(o: Pick<Outage, 'state' | 'approvable' | 'set' | 'lis
 
 /**
  * Why the approval is held by the recovery control (CONTRACTS 18), or '' when it isn't: Shutter recovery stopped, or the
- * site in shadow mode. The server refuses the approval then (409), so the card says so instead of offering it. A control
- * the page has not read holds nothing here: the server still refuses.
+ * site in shadow mode, or a control the server says it can't read. The server refuses the approval then (409), so the
+ * card says so instead of offering it. Until the control has been read the card offers nothing (OutageCard says it is
+ * reading it), so the button never shows first.
  */
-export function approvalHeld(c: Pick<RecoveryControl, 'mode' | 'stopped'> | undefined): string {
+export function approvalHeld(
+  c: (Pick<RecoveryControl, 'mode' | 'stopped'> & Partial<Pick<RecoveryControl, 'readable'>>) | undefined,
+): string {
   if (!c) return '';
+  if (c.readable === false)
+    return "The recovery control can't be read, so this resend can't be approved now. The messages stay offered: read the card again in a moment, or check Settings.";
   if (c.stopped)
     return "Shutter recovery is stopped, so this resend can't be approved. The messages stay offered: approve them once an approver has cleared the stop in Settings.";
   if (c.mode !== 'enabled')

@@ -246,6 +246,90 @@ function stopped(): Outage {
   };
 }
 
+/**
+ * A closed outage of three runs, as the 1.4.0 recheck left one: the first run's G6S1 was answered after the send's wait
+ * (unknown) and the rest left unsent, a later run sent them. `settled` is the same outage once Engine Resend has read
+ * G6S1's new header Completed.
+ */
+function threeRuns(settled: boolean): Outage {
+  const g = (
+    runId: string,
+    position: number,
+    n: number,
+    state: string,
+    closure: string | null,
+    words: string,
+  ) => ({
+    ...resend(runId, position, `G6S${n}`, state, closure, words, n === 1 ? 'C-000028' : null),
+    headerId: String(330 + n),
+    newHeaderId: closure ? String(340 + n) : null,
+  });
+  const first = settled
+    ? g(
+        'R10-3',
+        1,
+        1,
+        'completed',
+        'sent',
+        "Resent by Shutter at 01:46 under approval R10-3 by approver; new header 341 Completed, read at 01:46 after the send's wait had run out.",
+      )
+    : g('R10-3', 1, 1, 'unknown', 'unknown', 'new header 341 had not settled in 15 s (unread)');
+  return {
+    ...offered(),
+    id: '10',
+    receiver: 'Quillon O6 Out',
+    item: 'Quillon O6 Out',
+    readings: reading('Quillon O6 Out'),
+    state: 'closed',
+    closedAt: MINUTES_AGO(1),
+    version: 12,
+    lists: lists(),
+    set: { status: 'computed', reason: null, digest: 'sha256:set10', computedAt: MINUTES_AGO(2) },
+    approval: null,
+    acts: [],
+    resends: [
+      first,
+      ...[2, 3, 4, 5].map((n) => g('R10-3', n, n, 'stopped', null, 'not sent: the run stopped')),
+      g(
+        'R10-6',
+        1,
+        2,
+        'completed',
+        'sent',
+        'Resent by Shutter at 01:47 under approval R10-6 by approver; new header 342 Completed.',
+      ),
+      ...[3, 4, 5].map((n) =>
+        g(
+          'R10-6',
+          n - 1,
+          n,
+          'stopped',
+          null,
+          'not sent: Shutter recovery was stopped by approver, so the run halted before this message',
+        ),
+      ),
+      ...[3, 4, 5].map((n) =>
+        g(
+          'R10-9',
+          n - 2,
+          n,
+          'completed',
+          'sent',
+          `Resent by Shutter at 01:48 under approval R10-9 by approver; new header ${340 + n} Completed.`,
+        ),
+      ),
+    ],
+    words: words(
+      settled
+        ? 'Transport outage closed. Nothing remains queued. 0 deliveries Completed; Shutter sent 5 again, each new header Completed. Recovery attempts initiated by Shutter: 5.'
+        : 'Transport outage closed. Nothing remains queued. 0 deliveries Completed; Shutter sent 4 again, each new header Completed; 1 sent again whose result is not known yet: Shutter reads its new header again and a person reads the trace. Recovery attempts initiated by Shutter: 5.',
+      settled
+        ? 'Do: nothing more for this outage.'
+        : 'Do: read in the Message Viewer the message listed below whose resend result is not known yet; Shutter sends nothing more for it.',
+    ),
+  };
+}
+
 const ME = {
   approver: {
     username: 'approver',
@@ -269,11 +353,16 @@ interface Post {
 }
 
 /** The stand-in for a 1.4.0 server: the three outages, and the approval and the hand closure as the server answers them. */
-async function stubServer(page: Page, who: keyof typeof ME = 'approver') {
+async function stubServer(
+  page: Page,
+  who: keyof typeof ME = 'approver',
+  options: { control?: Record<string, unknown>; controlDelayMs?: number; settled?: boolean } = {},
+) {
   const outages: Record<string, Outage> = {
     '7': offered(),
     '8': sending(),
     '9': stopped(),
+    '10': threeRuns(options.settled ?? false),
   };
   const posts: Post[] = [];
   const unknown: string[] = [];
@@ -391,20 +480,24 @@ async function stubServer(page: Page, who: keyof typeof ME = 'approver') {
       case '/cases':
         return json(route, { items: [], total: 0 });
       case '/recovery-control':
+        if (options.controlDelayMs) await new Promise((r) => setTimeout(r, options.controlDelayMs));
         return json(route, {
-          mode: 'enabled',
-          generation: 1,
-          stopped: false,
-          stoppedAt: '',
-          stoppedBy: '',
-          stopReason: '',
-          outstanding: [],
-          outstandingCount: 0,
-          readable: true,
-          covers:
-            'Rehearsals, recovery writes, blind-resend previews and outage resends that Shutter itself starts; a resend under way halts before its next message.',
-          doesNotCover:
-            "The hospital's ordinary feed and its retries, other systems or people writing to the receiver, Shutter's own records, and read-back of earlier attempts.",
+          ...{
+            mode: 'enabled',
+            generation: 1,
+            stopped: false,
+            stoppedAt: '',
+            stoppedBy: '',
+            stopReason: '',
+            outstanding: [],
+            outstandingCount: 0,
+            readable: true,
+            covers:
+              'Rehearsals, recovery writes, blind-resend previews and outage resends that Shutter itself starts; a resend under way halts before its next message.',
+            doesNotCover:
+              "The hospital's ordinary feed and its retries, other systems or people writing to the receiver, Shutter's own records, and read-back of earlier attempts.",
+          },
+          ...options.control,
         });
       case '/outages':
         return json(route, {
@@ -565,6 +658,86 @@ for (const colorScheme of ['light', 'dark'] as const)
         1,
       );
       await expect(card.getByTestId('outage-resends')).toContainText('Closed by hand, nothing sent (1)');
+    });
+
+    test('offers no approval before the recovery control is read, then the notice in shadow mode, never the button first', async ({
+      page,
+    }) => {
+      await stubServer(page, 'approver', { control: { mode: 'shadow' }, controlDelayMs: 2500 });
+      // Every moment from the first paint: the button must never show while the control is read
+      await page.addInitScript(() => {
+        const w = window as unknown as { approveSeen?: boolean };
+        new MutationObserver(() => {
+          if (
+            [...document.querySelectorAll('button')].some((b) =>
+              b.textContent?.includes('Approve the resend'),
+            )
+          )
+            w.approveSeen = true;
+        }).observe(document, { subtree: true, childList: true });
+      });
+      await openIncidents(page);
+      const card = page.getByRole('region', { name: 'Outage 7, Results Out' });
+      await expect(card.getByTestId('outage-approval-reading')).toBeVisible();
+      await expect(card.getByRole('button', { name: 'Approve the resend…' })).toHaveCount(0);
+      await shot(page, `fix2-reading-control-1280-${colorScheme}`, card);
+      await expect(card.getByTestId('outage-approval-held')).toContainText(
+        'Shadow mode: recovery is off at this site',
+      );
+      await expect(card.getByTestId('outage-approval-reading')).toHaveCount(0);
+      await expect(card.getByRole('button', { name: /^Already handled by hand: control id / })).toHaveCount(
+        2,
+      );
+      expect(
+        await page.evaluate(() => (window as unknown as { approveSeen?: boolean }).approveSeen ?? false),
+      ).toBe(false);
+      expect(await audit(page)).toEqual([]);
+      await shot(page, `fix2-held-notice-1280-${colorScheme}`, card);
+    });
+
+    for (const settled of [false, true])
+      test(`reads a closed outage of three runs by each message's latest state${settled ? ', once the unknown has settled' : ', while one result is not known yet'}`, async ({
+        page,
+      }) => {
+        await stubServer(page, 'approver', { settled });
+        await openIncidents(page);
+        const card = page.getByRole('region', { name: 'Outage 10, Quillon O6 Out' });
+        const ledger = card.getByRole('list', { name: /Each message sent, in order \(5\)/ });
+        await expect(ledger.getByRole('listitem')).toHaveCount(5);
+        await expect(card.getByTestId('outage-tally')).toHaveText(
+          settled ? "Shutter's resends: 5 sent." : "Shutter's resends: 4 sent, 1 result not known yet.",
+        );
+        await expect(card.getByText("Earlier runs' rows, replaced by a later one (7)")).toBeVisible();
+        if (settled) {
+          await expect(card.getByTestId('outage-failed-resend')).toHaveCount(0);
+          await expect(ledger.getByText(/Not known yet|Not sent/)).toHaveCount(0);
+          await expect(card).toContainText('Do: nothing more for this outage.');
+        } else {
+          await expect(card.getByTestId('outage-failed-resend')).toHaveText(
+            'Control id G6S1: New header 341 had not settled in 15 s (unread). That run stopped there; a person reads the trace. Shutter reads its new header again and settles it here once the engine shows how it ended.',
+          );
+          await expect(ledger.getByRole('listitem').first()).toContainText('Not known yet: a person checks');
+          await expect(card).not.toContainText('Do: nothing more for this outage.');
+          await expect(card).not.toContainText('failed when Shutter sent');
+        }
+        expect(await audit(page)).toEqual([]);
+        await shot(
+          page,
+          `fix1-closed-three-runs-${settled ? 'settled' : 'unknown'}-1280-${colorScheme}`,
+          card,
+        );
+      });
+
+    test('gives the pause field an example ahead of now', async ({ page }) => {
+      await stubServer(page);
+      await openIncidents(page);
+      const card = page.getByRole('region', { name: 'Outage 7, Results Out' });
+      const until = card.getByRole('textbox', { name: 'Down on purpose until (UTC)' });
+      const example = (await until.getAttribute('placeholder')) ?? '';
+      expect(example).toMatch(/^\d{4}-\d\d-\d\dT06:00:00Z$/);
+      expect(Date.parse(example)).toBeGreaterThan(Date.now());
+      await until.scrollIntoViewIfNeeded();
+      await shot(page, `fix5-pause-example-1280-${colorScheme}`, card.getByTestId('outage-acts'));
     });
   });
 

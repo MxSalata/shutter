@@ -3,17 +3,21 @@ import { ApiError } from '@/lib/errors';
 import {
   approvalHeld,
   asSentence,
+  byMessage,
   canApprove,
   closedRowsToShow,
   closureLabel,
   needsReceiverCheck,
   offeredRowsToShow,
+  pauseExample,
   readingLabel,
   refusalWords,
   resendStatus,
   runRows,
   sendingLine,
   stoppedBy,
+  stoppedInLatestRun,
+  stoppedWords,
   tallyLine,
 } from './outageWords';
 import type { Outage, Resend } from './types';
@@ -42,7 +46,7 @@ describe("the send's words", () => {
       ['closed_as_present', 'already_delivered', 'neutral', 'Already delivered'],
       ['handled_by_hand', 'handled_by_hand', 'neutral', 'Handled by hand'],
       ['failed', 'failed', 'blocking', 'Failed'],
-      ['unknown', 'unknown', 'attention', 'Unknown: a person checks'],
+      ['unknown', 'unknown', 'attention', 'Not known yet: a person checks'],
       ['approved', null, 'neutral', 'Waiting to send'],
       ['sending', null, 'info', 'Sending now'],
       ['stopped', null, 'neutral', 'Not sent'],
@@ -76,6 +80,88 @@ describe("the send's words", () => {
     expect(stoppedBy(ended)?.controlId).toBe('C3');
     expect(stoppedBy([row(1, 'completed', 'sent')])).toBeUndefined();
     expect(tallyLine([])).toBe('');
+  });
+
+  it('reads each message by its latest row across runs, as the 1.4.0 recheck found it was not', () => {
+    // The recheck's outage: run 1 sent G6S1, whose answer came after the settle window, and left four unsent; run 2 sent
+    // one and halted at the stop; run 3 sent the last three. Engine Resend then read G6S1's new header Completed.
+    const g = (
+      runId: string,
+      position: number,
+      header: number,
+      state: string,
+      closure: string | null,
+      extra = {},
+    ) => ({
+      ...row(position, state, closure, runId),
+      headerId: String(header),
+      controlId: `G6S${header - 40}`,
+      ...extra,
+    });
+    const run1 = [
+      g('R3-3', 1, 41, 'unknown', 'unknown', {
+        newHeaderId: '328',
+        words: 'new header 328 had not settled in 15 s (unread)',
+      }),
+      g('R3-3', 2, 42, 'stopped', null),
+      g('R3-3', 3, 43, 'stopped', null),
+      g('R3-3', 4, 44, 'stopped', null),
+      g('R3-3', 5, 45, 'stopped', null),
+    ];
+    const run2 = [
+      g('R3-5', 1, 42, 'completed', 'sent', { newHeaderId: '329' }),
+      g('R3-5', 2, 43, 'stopped', null, { halt: 'recovery_stopped' }),
+      g('R3-5', 3, 44, 'stopped', null, { halt: 'recovery_stopped' }),
+      g('R3-5', 4, 45, 'stopped', null, { halt: 'recovery_stopped' }),
+    ];
+    const run3 = [
+      g('R3-8', 1, 43, 'completed', 'sent', { newHeaderId: '330' }),
+      g('R3-8', 2, 44, 'completed', 'sent', { newHeaderId: '331' }),
+      g('R3-8', 3, 45, 'completed', 'sent', { newHeaderId: '332' }),
+    ];
+    const still = [...run1, ...run2, ...run3];
+    expect(byMessage(still).latest.map((r) => `${r.controlId}:${r.state}`)).toEqual([
+      'G6S1:unknown',
+      'G6S2:completed',
+      'G6S3:completed',
+      'G6S4:completed',
+      'G6S5:completed',
+    ]);
+    expect(byMessage(still).earlier).toHaveLength(7);
+    expect(tallyLine(still)).toBe("Shutter's resends: 4 sent, 1 result not known yet.");
+    expect(stoppedBy(still)?.controlId).toBe('G6S1');
+    expect(stoppedInLatestRun(still)).toBe(false);
+    expect(stoppedWords(stoppedBy(still)!, 'R3-8')).toBe(
+      'Control id G6S1: New header 328 had not settled in 15 s (unread). That run stopped there; a person reads the trace. Shutter reads its new header again and settles it here once the engine shows how it ended.',
+    );
+    // Once Engine Resend has read its new header Completed, nothing on the card still needs a person
+    const settled = [
+      {
+        ...run1[0],
+        state: 'completed',
+        closure: 'sent',
+        words: 'Resent by Shutter; new header 328 Completed, read at 01:47.',
+      },
+      ...still.slice(1),
+    ];
+    expect(tallyLine(settled)).toBe("Shutter's resends: 5 sent.");
+    expect(stoppedBy(settled)).toBeUndefined();
+    // A later run that sent Shutter's own clone in the origin's place is the same message
+    const clone = [
+      { ...row(1, 'unknown', 'unknown', 'R1-2'), newHeaderId: '91' },
+      { ...row(1, 'completed', 'sent', 'R1-4'), headerId: '91', newHeaderId: '94' },
+    ];
+    expect(byMessage(clone).latest).toHaveLength(1);
+    expect(tallyLine(clone)).toBe("Shutter's resends: 1 sent.");
+    // The latest run's own failure is said as it was: nothing more went
+    const failed = [
+      row(1, 'completed', 'sent'),
+      { ...row(2, 'failed', 'failed'), words: 'new header 902 ended Suspended' },
+    ];
+    expect(stoppedInLatestRun(failed)).toBe(true);
+    expect(stoppedWords(stoppedBy(failed)!, 'R7-4')).toBe(
+      'Control id C2: New header 902 ended Suspended. Nothing more was sent; a person reads the trace.',
+    );
   });
 
   it('asks for the receiver check only where the route offers already handled by hand', () => {
@@ -147,6 +233,17 @@ describe("the send's words", () => {
     expect(approvalHeld({ mode: 'enabled', stopped: true })).toMatch(/^Shutter recovery is stopped/);
     expect(approvalHeld({ mode: 'shadow', stopped: true })).toMatch(/^Shutter recovery is stopped/);
     expect(approvalHeld({ mode: 'shadow', stopped: false })).toMatch(/^Shadow mode: recovery is off/);
+    expect(approvalHeld({ mode: 'enabled', stopped: false, readable: false })).toMatch(
+      /^The recovery control can't be read, so this resend can't be approved now/,
+    );
+  });
+
+  it('gives the pause field an example always ahead: the next 06:00 UTC at least an hour away', () => {
+    expect(pauseExample(Date.parse('2026-11-10T09:05:00Z'))).toBe('2026-11-11T06:00:00Z');
+    expect(pauseExample(Date.parse('2026-11-10T03:00:00Z'))).toBe('2026-11-10T06:00:00Z');
+    expect(pauseExample(Date.parse('2026-11-10T05:30:00Z'))).toBe('2026-11-11T06:00:00Z');
+    expect(pauseExample(Date.parse('2026-11-10T23:30:00Z'))).toBe('2026-11-11T06:00:00Z');
+    expect(pauseExample(Date.parse('2026-12-31T22:00:00Z'))).toBe('2027-01-01T06:00:00Z');
   });
 
   it("reads the server's words as a sentence", () => {
