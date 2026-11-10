@@ -65,11 +65,12 @@ describe('LibraryPage in the trial', () => {
     expect(impact.inDefaultBoard).toBe(true);
   });
 
-  it("keeps the public demo's role to reading, with no mention of a change", async () => {
+  it("locks the public demo's role's save, and never says a change was made in the trial", async () => {
     resetMock('demo');
     renderPage();
-    expect(await screen.findByTestId('demo-read-only')).toBeInTheDocument();
-    expect(screen.queryByRole('switch')).not.toBeInTheDocument();
+    expect(await screen.findByTestId('save-locked')).toBeInTheDocument();
+    await userEvent.click(screen.getAllByRole('switch')[0]);
+    expect(screen.getByRole('region', { name: 'Unsaved changes' })).toBeInTheDocument();
     expect(screen.queryByText('Changed in the trial only.')).not.toBeInTheDocument();
   });
 });

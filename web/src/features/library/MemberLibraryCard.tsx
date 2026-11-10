@@ -1,4 +1,4 @@
-import { Badge, Group, Stack, Switch, Text, Tooltip } from '@mantine/core';
+import { Badge, Group, Stack, Switch, Text } from '@mantine/core';
 import type { LibraryMember } from '@/api/types';
 import { CodeChip } from '@/components/CodeChip';
 import { IdentityBadge } from '@/components/IdentityBadge';
@@ -18,18 +18,12 @@ export type LibraryField = 'enabled' | 'inDefaultBoard';
  */
 export function MemberLibraryCard({
   m,
-  canEdit,
-  reading,
   busy,
   knowsTerm,
   changedInTrial,
   onChange,
 }: {
   m: LibraryMember;
-  /** The user may change which agents sit on the board. */
-  canEdit: boolean;
-  /** The public demo's role: it reads the board, so the settings are words and not switches. */
-  reading: boolean;
   /** A change is being saved: every switch waits. */
   busy: boolean;
   /** Explain "Knows" here (once on the page, on its first use). */
@@ -72,29 +66,21 @@ export function MemberLibraryCard({
       </Text>
       <Stack gap="xs" className="library-settings">
         <Group gap="lg" wrap="wrap" align="center">
-          {reading ? (
-            <Setting label="Enabled" value={m.enabled} />
-          ) : (
-            <SettingSwitch
-              label="Enabled"
-              name={`${m.name} enabled`}
-              checked={m.enabled}
-              disabled={!canEdit || busy}
-              canEdit={canEdit}
-              onChange={(v) => onChange(m, 'enabled', v)}
-            />
-          )}
+          <SettingSwitch
+            label="Enabled"
+            name={`${m.name} enabled`}
+            checked={m.enabled}
+            disabled={busy}
+            onChange={(v) => onChange(m, 'enabled', v)}
+          />
           {line ? (
             <Text size="sm">{line}</Text>
-          ) : reading ? (
-            <Setting label="On the default board" value={m.inDefaultBoard} />
           ) : (
             <SettingSwitch
               label="On the default board"
               name={`${m.name} on the default board`}
               checked={m.inDefaultBoard}
-              disabled={!canEdit || !m.enabled || busy}
-              canEdit={canEdit}
+              disabled={!m.enabled || busy}
               onChange={(v) => onChange(m, 'inDefaultBoard', v)}
             />
           )}
@@ -120,46 +106,30 @@ export function MemberLibraryCard({
   );
 }
 
-/** A setting a reader may not change, as a label and its value. */
-function Setting({ label, value }: { label: string; value: boolean }) {
-  return (
-    <Group gap={6} wrap="nowrap">
-      <Text size="sm">{label}</Text>
-      <Text size="sm" fw={600}>
-        {value ? 'Yes' : 'No'}
-      </Text>
-    </Group>
-  );
-}
-
 /** A labelled switch whose name for assistive technology says whose it is ("Coordinator enabled"). */
 function SettingSwitch({
   label,
   name,
   checked,
   disabled,
-  canEdit,
   onChange,
 }: {
   label: string;
   name: string;
   checked: boolean;
   disabled: boolean;
-  canEdit: boolean;
   onChange: (value: boolean) => void;
 }) {
   return (
-    <Tooltip label="Needs the approver role" disabled={canEdit}>
-      <Group>
-        <Switch
-          label={label}
-          aria-label={name}
-          checked={checked}
-          disabled={disabled}
-          onChange={(e) => onChange(e.currentTarget.checked)}
-        />
-      </Group>
-    </Tooltip>
+    <Group>
+      <Switch
+        label={label}
+        aria-label={name}
+        checked={checked}
+        disabled={disabled}
+        onChange={(e) => onChange(e.currentTarget.checked)}
+      />
+    </Group>
   );
 }
 

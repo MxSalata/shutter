@@ -70,6 +70,33 @@ export function freeTop(el: HTMLElement): number {
   return header + (bar?.getBoundingClientRect().height ?? 0);
 }
 
+/** How far a step's ring stands outside its section: the outline's offset and width (`[data-tour-active]` in styles.css). */
+export const RING_REACH_PX = 4 + 3;
+/** How far the notch's arrow nudges down toward the section while the ring pulses (`guide-nudge-down` in styles.css). */
+export const NOTCH_NUDGE_PX = 6;
+/** The room kept between the notch and the section's ring, with the arrow at the furthest of its nudge. */
+export const NOTCH_GAP_PX = 4;
+
+/**
+ * Keeps the card's notch off its section: the arrow hangs below the card (`.guide-notch`), and the room a page leaves
+ * between the card's host and the section (the host's margin, a flex gap, or a margin collapsed into the section's own)
+ * can be less than the arrow's reach, which then crossed the section's ring. Measured on the page, as the host and the
+ * section stand: the host's bottom padding makes up what is missing, so the notch stays NOTCH_GAP_PX above the ring
+ * even at the furthest of its nudge. The host is measured, not the card, so the card's entrance (a transform) does not
+ * count.
+ */
+export function clearNotch(host: HTMLElement): void {
+  host.style.paddingBottom = '';
+  const card = host.firstElementChild;
+  const notch = host.querySelector('.guide-notch');
+  const section = host.nextElementSibling;
+  if (!card || !notch || !section) return;
+  const reach = notch.getBoundingClientRect().bottom - card.getBoundingClientRect().bottom;
+  const room = section.getBoundingClientRect().top - host.getBoundingClientRect().bottom;
+  const missing = reach + NOTCH_NUDGE_PX + RING_REACH_PX + NOTCH_GAP_PX - room;
+  if (missing > 0) host.style.paddingBottom = `${Math.ceil(missing)}px`;
+}
+
 /** A reader's own move ends the watch: the page is theirs from then on. */
 const READER_MOVES = ['wheel', 'touchstart', 'pointerdown', 'keydown'] as const;
 

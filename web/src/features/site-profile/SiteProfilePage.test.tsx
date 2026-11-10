@@ -221,15 +221,25 @@ describe('SiteProfilePage', () => {
     expect(puts[0].body.approvers).toEqual({ ...recorded.profile.approvers, close_needs_approver: true });
   });
 
-  it('lets an operator read the answers but not change them', async () => {
+  it('lets an operator change the answers and review them, and locks the save: only an approver saves', async () => {
     resetMock('operator');
     renderPage();
-    expect(await screen.findByText(/Changing the answers needs the approver role/)).toBeInTheDocument();
-    expect((await inReceiver1()).getByRole('radio', { name: /2, operations/ })).toBeDisabled();
-    expect(screen.getByRole('switch', { name: /^Closing a case by hand needs an approver/ })).toBeDisabled();
-    expect(
-      screen.queryByRole('button', { name: /Review and save|Confirm these answers/ }),
-    ).not.toBeInTheDocument();
+    expect(await screen.findByTestId('save-locked')).toHaveTextContent(
+      'Only an approver saves here: sign in as approver.',
+    );
+    const radio = (await inReceiver1()).getByRole('radio', { name: /3, clinical safety/ });
+    expect(radio).toBeEnabled();
+    expect(screen.getByRole('switch', { name: /^Closing a case by hand needs an approver/ })).toBeEnabled();
+    await userEvent.click(radio);
+    const bar = screen.getByRole('region', { name: 'Unsaved changes' });
+    expect(within(bar).getByTestId('save-locked')).toHaveTextContent('Only an approver saves here');
+    await userEvent.click(within(bar).getByRole('button', { name: 'Review and save…' }));
+    const dialog = await screen.findByRole('dialog');
+    const save = within(dialog).getByRole('button', { name: 'Save version 8' });
+    expect(save).toHaveAttribute('aria-disabled', 'true');
+    expect(save).toHaveAccessibleDescription('Only an approver saves here: sign in as approver.');
+    await userEvent.click(save);
+    expect(puts).toEqual([]);
   });
 
   it('saves a change as the next version, sending the whole profile with expectedVersion', async () => {
@@ -663,57 +673,57 @@ describe('SiteProfilePage, a change a case suggested', () => {
     expect(within(card).queryByRole('button', { name: 'Review and save…' })).not.toBeInTheDocument();
   });
 
-  it('shows an operator the draft, and that an approver saves it', async () => {
+  it('shows an operator the draft and its review, and that only an approver saves it', async () => {
     resetMock('operator');
     renderPage(suggestion);
     const card = await screen.findByRole('region', { name: 'A suggested change from case C-000008' });
-    expect(within(card).getByText(/Saving it needs the approver role/)).toBeInTheDocument();
-    expect(within(card).queryByRole('button', { name: 'Review and save…' })).not.toBeInTheDocument();
+    expect(within(card).getByTestId('save-locked')).toHaveTextContent('Only an approver saves here');
+    expect(within(card).getByRole('button', { name: 'Review and save…' })).toBeInTheDocument();
   });
 });
 
 describe("SiteProfilePage, as the public demo's role reads it", () => {
   const suggestion = suggestionHref({ caseId: 'C-000008', fact: 'W1' }).replace('/site-profile', '');
-  const saves = () =>
-    screen.queryByRole('button', { name: /Review and save|Confirm these answers|Save version/ });
+  const LOCKED = "The online demo's settings are locked: nothing is saved.";
 
   beforeEach(() => resetMock('demo'));
 
-  it('keeps the answers for reading and puts a note where Save would be', async () => {
+  it('lets the answers be changed, and says beside the confirm that the demo saves nothing', async () => {
     renderPage();
-    expect(await screen.findByTestId('demo-read-only')).toHaveTextContent(
-      "On the online demo you can approve or reject plans; a site's approver saves changes here",
-    );
-    expect((await inReceiver1()).getByRole('radio', { name: /2, operations/ })).toBeDisabled();
-    expect(saves()).not.toBeInTheDocument();
-    expect(screen.queryByText(/Changing the answers needs the approver role/)).not.toBeInTheDocument();
+    const notice = (await screen.findByText("Shutter is running on the demo's answers")).closest('[role]')!;
+    expect(within(notice as HTMLElement).getByTestId('save-locked')).toHaveTextContent(LOCKED);
+    expect(
+      within(notice as HTMLElement).getByRole('button', { name: 'Confirm these answers…' }),
+    ).toBeEnabled();
+    expect((await inReceiver1()).getByRole('radio', { name: /2, operations/ })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Add a receiver' })).toBeEnabled();
     expect(screen.queryByText(/a save lasts until the page is reloaded/)).not.toBeInTheDocument();
-    // The demo's answers are listed, as for everyone
-    expect(screen.getByText("Shutter is running on the demo's answers")).toBeInTheDocument();
-    // Beside that notice it says who saves, and never tells this role to do it
-    const notice = screen.getByText("Shutter is running on the demo's answers").closest('[role]')!;
-    expect(within(notice as HTMLElement).getByTestId('demo-read-only')).toBeInTheDocument();
-    expect(screen.queryByText(/confirm or change them and save/)).not.toBeInTheDocument();
   });
 
-  it('keeps the pre-filled draft and its review for reading, with the note instead of Save', async () => {
+  it('builds the changes up in the page and the review, with a locked Save that says why', async () => {
     renderPage(suggestion);
     const card = await screen.findByRole('region', { name: 'A suggested change from case C-000008' });
     expect(within(card).getByText('BEDMGR')).toBeInTheDocument();
-    expect(within(card).queryByRole('button', { name: 'Review and save…' })).not.toBeInTheDocument();
-    expect(within(card).getByText(/On the online demo you can approve or reject plans/)).toBeInTheDocument();
-    await userEvent.click(within(card).getByRole('button', { name: 'Review the change…' }));
+    expect(within(card).getByTestId('save-locked')).toHaveTextContent(LOCKED);
+    // A change of the reader's own joins the suggested one
+    await userEvent.click((await inReceiver1()).getByRole('radio', { name: /3, clinical safety/ }));
+    const bar = screen.getByRole('region', { name: 'Unsaved changes' });
+    expect(within(bar).getByText('2 changes')).toBeInTheDocument();
+    expect(within(bar).getByTestId('save-locked')).toHaveTextContent(LOCKED);
+    await userEvent.click(within(bar).getByRole('button', { name: 'Review and save…' }));
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText(/Authoritative source: from .* to BEDMGR/)).toBeInTheDocument();
-    expect(within(dialog).getByTestId('demo-read-only')).toHaveTextContent(
-      'On the online demo you can approve or reject plans',
-    );
-    expect(within(dialog).queryByRole('button', { name: /Save version/ })).not.toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Done' }));
+    const save = within(dialog).getByRole('button', { name: 'Save version 8' });
+    expect(save).toHaveAttribute('aria-disabled', 'true');
+    expect(save).toHaveAccessibleDescription(LOCKED);
+    await userEvent.click(save);
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
-    // The page itself offers the review of the draft too, and still no save
-    expect(screen.getByRole('button', { name: 'Review the changes…' })).toBeInTheDocument();
-    expect(saves()).not.toBeInTheDocument();
+    // The changes stay in the page, and can be discarded
+    expect(within(bar).getByText('2 changes')).toBeInTheDocument();
+    await userEvent.click(within(bar).getByRole('button', { name: 'Discard changes' }));
+    expect(screen.queryByRole('region', { name: 'Unsaved changes' })).not.toBeInTheDocument();
     expect(puts).toEqual([]);
   });
 });
@@ -726,7 +736,7 @@ describe('SiteProfilePage, which server it asks', () => {
     asServer({ operator: true, approver: true });
     renderPage();
     expect(await screen.findByRole('button', { name: 'Confirm these answers…' })).toBeEnabled();
-    expect(screen.queryByTestId('demo-read-only')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('save-locked')).not.toBeInTheDocument();
   });
 
   it('offers Save to whoever the server says may configure', async () => {
@@ -739,14 +749,21 @@ describe('SiteProfilePage, which server it asks', () => {
     expect(await screen.findByRole('button', { name: 'Confirm these answers…' })).toBeEnabled();
   });
 
-  it('withholds Save from an approver the server says may not configure, and says the demo is read-only', async () => {
+  it('locks Save for an approver the server says may not configure, and says the demo saves nothing', async () => {
     asServer({
       operator: true,
       approver: true,
       can: { operate: true, approve: true, configure: false, scenarios: true },
     });
     renderPage();
-    expect(await screen.findByTestId('demo-read-only')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Review and save|Confirm these answers/ })).toBeNull();
+    expect(await screen.findByTestId('save-locked')).toHaveTextContent(
+      "The online demo's settings are locked: nothing is saved.",
+    );
+    await userEvent.click(await screen.findByRole('button', { name: 'Confirm these answers…' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByRole('button', { name: 'Confirm as version 8' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
   });
 });

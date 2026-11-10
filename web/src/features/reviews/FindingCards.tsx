@@ -337,7 +337,7 @@ export function FindingCards({
 }: {
   findings: ReviewFinding[];
   namespace: string;
-  /** The signed-in user may annotate (the configure resource): the buttons are not offered otherwise. */
+  /** The annotation buttons are offered (to every reader with a role; the save in the dialog may be locked). */
   canAnnotate: boolean;
   /** The explanations were replayed from a recorded run. */
   recorded?: boolean;

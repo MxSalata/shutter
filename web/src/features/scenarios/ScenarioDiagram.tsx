@@ -1,7 +1,13 @@
 import { useTechnical } from '@/stores/appearance';
 import './ScenarioDiagram.css';
 import type { Mode, Scenario } from '@/api/types';
-import { scenarioDiagram, type DiagramEnd, type DiagramNode } from './scenarioDiagramModel';
+import {
+  DIAGRAM_MODES,
+  endOf,
+  scenarioDiagram,
+  type DiagramEnd,
+  type DiagramNode,
+} from './scenarioDiagramModel';
 
 /** The drawing's measures, in px: one row of marks, a row of captions under them, and the join between marks. */
 const HEIGHT = 38;
@@ -25,6 +31,8 @@ const markWidth = (text: string) => wordsWidth(text, 6) + 11;
 const captionWidth = (text: string | undefined, bold = false) =>
   text ? wordsWidth(text, bold ? 7 : 6.7) : 0;
 const EXPECTED_WIDTH = captionWidth(EXPECTED, true);
+/** Where the expected end's pill starts, after the word "Expected". */
+const END_X = EXPECTED_WIDTH + EXPECTED_GAP;
 
 interface Placed {
   key: string;
@@ -186,8 +194,22 @@ function placeNode(node: DiagramNode, technical: boolean, i: number): Placed {
   }
 }
 
-function placeEnd(end: DiagramEnd): Placed {
-  const width = Math.max(markWidth(end.label), captionWidth(end.caption));
+/**
+ * The expected end's pill, sized for the scenario's ends in every mode, not for this one's caption: the pill fits the
+ * longest label, and is wide enough that the longest caption, centred under it, never starts left of the drawing. So a
+ * switch of mode changes only the words (and the pill's kind), never where a box stands. `right` is where the end row's
+ * furthest word ends, in any mode, which keeps the drawing's own width the same too.
+ */
+function endFrame(ends: DiagramEnd[]): { width: number; right: number } {
+  const width = Math.max(
+    ...ends.map((e) => markWidth(e.label)),
+    ...ends.map((e) => captionWidth(e.caption) - 2 * END_X),
+  );
+  const right = Math.max(END_X + width, ...ends.map((e) => END_X + (width + captionWidth(e.caption)) / 2));
+  return { width, right };
+}
+
+function placeEnd(end: DiagramEnd, width: number): Placed {
   return {
     key: 'end',
     width,
@@ -221,7 +243,8 @@ export function ScenarioDiagram({ scenario, mode }: { scenario: Scenario; mode: 
   const diagram = scenarioDiagram(scenario, mode, technical);
   if (!diagram) return null;
   const parts = diagram.nodes.map((n, i) => placeNode(n, technical, i));
-  const end = placeEnd(diagram.end);
+  const frame = endFrame(DIAGRAM_MODES.map((m) => endOf(scenario, m)));
+  const end = placeEnd(diagram.end, frame.width);
   let x = 0;
   const drawn: React.ReactNode[] = [];
   parts.forEach((part, i) => {
@@ -246,14 +269,14 @@ export function ScenarioDiagram({ scenario, mode }: { scenario: Scenario; mode: 
   // "Expected", then the end, on a row of its own under the story with no arrow into it: the end is what should happen,
   // not one more thing that does. On its own row the drawing fits a phone and the wide screen's 296 px column at its
   // own size, so its text is never scaled below 12 px.
-  const width = Math.max(x, EXPECTED_WIDTH + EXPECTED_GAP + end.width);
+  const width = Math.max(x, frame.right);
   const height = SECOND_ROW + HEIGHT;
   drawn.push(
     <g key="end-row" data-row="end" transform={`translate(0 ${SECOND_ROW})`}>
       <text className="diagram-expected" x={0} y={MARK_MIDDLE + 4}>
         {EXPECTED}
       </text>
-      <g>{end.draw(EXPECTED_WIDTH + EXPECTED_GAP)}</g>
+      <g>{end.draw(END_X)}</g>
     </g>,
   );
   const svg = (

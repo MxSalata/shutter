@@ -36,10 +36,13 @@ for (const { colorScheme, contrast, palette } of MODES) {
           expect(await audit(page)).toEqual([]);
         });
 
-    test(`the review of a change, for reading ${siteProfile.tag}`, async ({ page }) => {
+    test(`the review of a change, with its Save locked ${siteProfile.tag}`, async ({ page }) => {
       await signIn(page, AS_DEMO);
       await go(page, '/site-profile?suggest=C-000008&fact=W1', AS_DEMO);
-      await page.getByRole('button', { name: 'Review the change…' }).click();
+      await page
+        .getByRole('region', { name: 'A suggested change from case C-000008' })
+        .getByRole('button', { name: 'Review and save…' })
+        .click();
       await expect(page.getByRole('dialog').getByText(READ_ONLY)).toBeVisible();
       expect(await audit(page)).toEqual([]);
     });

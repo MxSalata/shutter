@@ -4,7 +4,7 @@ import { go, READ_ONLY, signIn } from './helpers';
 
 /**
  * The Site profile: the two halves (what the policy does, then the answers), the save bar and the review, and the
- * pre-filled draft and its review kept for reading by the live hospital's public role.
+ * pre-filled draft and its review, which the live hospital's public role changes and reviews with a locked Save.
  */
 
 /** The live hospital's public role: the address keeps `?as=demo` in every step. */
@@ -14,23 +14,33 @@ const AS_DEMO = { as: 'demo' } as const;
 test.beforeEach(({ page }) => skipWelcome(page));
 
 test.describe('the live hospital, as the public role sees it', () => {
-  test('keeps the pre-filled draft and its review for reading, with a note instead of Save', async ({
+  test('lets the pre-filled draft be changed and reviewed, with a Save that is locked and says why', async ({
     page,
   }) => {
     await signIn(page, AS_DEMO);
     await go(page, '/site-profile?suggest=C-000008&fact=W1', AS_DEMO);
     const card = page.getByRole('region', { name: 'A suggested change from case C-000008' });
     await expect(card).toBeVisible();
-    await expect(card.getByRole('button', { name: 'Review and save…' })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: /Review and save|Confirm these answers/ })).toHaveCount(0);
-    await card.getByRole('button', { name: 'Review the change…' }).click();
+    await expect(card.getByText(READ_ONLY)).toBeVisible();
+    // A change of the reader's own joins the suggested one, as an approver's would
+    const receiver = page.getByRole('group', { name: 'Receiver 1: Downstream Out' });
+    await receiver.getByRole('radio', { name: /3, clinical safety/ }).check();
+    const bar = page.getByRole('region', { name: 'Unsaved changes' });
+    await expect(bar.getByText('2 changes')).toBeVisible();
+    await expect(bar.getByText(READ_ONLY)).toBeVisible();
+    await bar.getByRole('button', { name: 'Review and save…' }).click();
     const dialog = page.getByRole('dialog');
     await expect(dialog.getByText(/Authoritative source: from .* to BEDMGR/)).toBeVisible();
-    await expect(dialog.getByText(READ_ONLY)).toBeVisible();
-    await expect(dialog.getByRole('button', { name: /^Save version/ })).toHaveCount(0);
-    await dialog.getByRole('button', { name: 'Done' }).click();
+    const save = dialog.getByRole('button', { name: /^Save version/ });
+    await expect(save).toHaveAttribute('aria-disabled', 'true');
+    await expect(save).toHaveAccessibleDescription(READ_ONLY);
+    // Reached from the keyboard, and pressing it saves nothing
+    await save.focus();
+    await page.keyboard.press('Enter');
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
     await expect(dialog).toHaveCount(0);
-    await expect(page.getByText(READ_ONLY).first()).toBeVisible();
+    await expect(bar.getByText('2 changes')).toBeVisible();
   });
 });
 

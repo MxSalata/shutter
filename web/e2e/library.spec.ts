@@ -73,10 +73,21 @@ test.describe('the board as cards', () => {
 });
 
 test.describe('the live hospital, as the public role sees it', () => {
-  test('hides the library switches', async ({ page }) => {
+  test('lets the switches be flipped, with a Save that is locked and says why', async ({ page }) => {
     await signIn(page, AS_DEMO);
     await go(page, '/library', AS_DEMO);
     await expect(page.getByText(READ_ONLY)).toBeVisible();
-    await expect(page.getByRole('switch')).toHaveCount(0);
+    const sw = page.getByRole('switch', { name: 'Impact Analysis on the default board' });
+    await expect(sw).toBeEnabled();
+    await sw.click();
+    // The board follows the change on the page, as it does for an approver
+    await expect(page.getByText('On the default board: 3 of 4')).toBeVisible();
+    const bar = page.getByRole('region', { name: 'Unsaved changes' });
+    await expect(bar.getByText('1 change')).toBeVisible();
+    const save = bar.getByRole('button', { name: 'Save the board' });
+    await expect(save).toHaveAttribute('aria-disabled', 'true');
+    await expect(save).toHaveAccessibleDescription(READ_ONLY);
+    await bar.getByRole('button', { name: 'Discard changes' }).click();
+    await expect(bar).toHaveCount(0);
   });
 });

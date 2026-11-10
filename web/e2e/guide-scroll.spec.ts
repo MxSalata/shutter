@@ -5,9 +5,15 @@ import { GUIDE_KEY } from './guide';
  * Where the tour's scrolling leaves things, with real smooth scrolling: on every step of the quick and the engineers' tours,
  * at a desktop's and a laptop's size, the card's top stands in view below everything that stays at the top of the screen
  * (the trial's band and header, and on a case page the tab bar once it has stuck), without having stopped far short of
- * there, the section it talks about starts on the screen, and nothing has shifted sideways. Everything is measured on
- * the page, so a header or a bar of another height is caught too.
+ * there, the section it talks about starts on the screen, the arrow under the card stops short of the section's ring,
+ * and nothing has shifted sideways. Everything is measured on the page, so a header or a bar of another height is caught
+ * too.
  */
+
+/** How far the section's ring stands outside it: the outline's offset and width (`[data-tour-active]` in styles.css). */
+const RING_REACH = 4 + 3;
+/** How far the arrow nudges down while the ring pulses (`guide-nudge-down`). */
+const NUDGE = 6;
 
 type Tour = 'quick' | 'engineer';
 
@@ -40,6 +46,8 @@ const measure = (page: Page) =>
     const host = document.querySelector<HTMLElement>('[data-guide-host]');
     const card = document.querySelector('[data-guide-card]')!.getBoundingClientRect();
     const target = host?.nextElementSibling?.getBoundingClientRect();
+    // The arrow under the card, pointing at the section: none when the card is docked or floats
+    const notch = document.querySelector('[data-guide-card] .guide-notch')?.getBoundingClientRect();
     const header = document.querySelector('.mantine-AppShell-header')!.getBoundingClientRect();
     const bar = document.querySelector('.sticky-tabs')?.getBoundingClientRect();
     const stuck = !!bar && bar.top <= header.bottom + 1;
@@ -52,6 +60,7 @@ const measure = (page: Page) =>
       title: document.querySelector('[data-guide-card] h2')?.textContent,
       cardTop: card.top,
       targetTop: target?.top ?? null,
+      notchBottom: notch && target ? notch.bottom : null,
       headerBottom: header.bottom,
       // Under the header, as the bar's own place must be: a bar behind the header is a fault of its own
       barTop: stuck ? bar.top : null,
@@ -84,6 +93,13 @@ function checkStep(m: Awaited<ReturnType<typeof measure>>, where: string) {
   if (!m.atEnd) expect(m.cardTop, `${where}: the scroll did not stop short`).toBeLessThanOrEqual(m.line + 24);
   expect(m.cardTop, `${where}: the card's top is on the screen`).toBeLessThan(m.height);
   expect(m.targetTop, `${where}: the section's start is on the screen`).toBeLessThan(m.height);
+  // The arrow points at the section and never reaches into its ring: at the furthest of its nudge, 4 px of the page
+  // still stand between them (half a pixel for rounding)
+  if (m.notchBottom !== null && m.targetTop !== null)
+    expect(
+      m.targetTop - RING_REACH - (m.notchBottom + NUDGE),
+      `${where}: the arrow stops short of the section's ring`,
+    ).toBeGreaterThanOrEqual(3.5);
   if (m.barTop !== null)
     expect(Math.abs(m.barTop - m.headerBottom), `${where}: the tab bar is under the header`).toBeLessThan(1);
   expect(m.scrollX, `${where}: the page has not shifted sideways`).toBe(0);
@@ -109,6 +125,7 @@ test.describe('where the tour scrolls to', () => {
   for (const [width, height] of [
     [1920, 1080],
     [1280, 800],
+    [390, 844],
   ] as const) {
     test.describe(`at ${width} by ${height}`, () => {
       test.use({ viewport: { width, height } });

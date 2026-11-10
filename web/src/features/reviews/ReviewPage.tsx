@@ -1,13 +1,14 @@
 import { Alert, Anchor, Container, Loader, Stack, Text } from '@mantine/core';
 import { IconClipboardSearch, IconEye } from '@tabler/icons-react';
 import { Link, useParams, useSearchParams } from 'react-router';
-import { DEMO_READ_ONLY, readOnlyDemo } from '@/api/can';
+import { saveLocked } from '@/api/can';
 import { isReviewRunning, useCan, useReview } from '@/api/hooks';
 import type { ReviewDetail } from '@/api/types';
 import { ApiSource } from '@/components/ApiSource';
 import { Digest } from '@/components/Digest';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { KeyValueList } from '@/components/KeyValueList';
+import { LockedNote } from '@/components/LockedSave';
 import { PageHeader } from '@/components/PageHeader';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { NotYet, Section } from '@/components/Section';
@@ -26,8 +27,10 @@ import { ReviewSummary } from './ReviewSummary';
 function Review({ r }: { r: ReviewDetail }) {
   // Annotating a finding changes what the site records about its production: the configure resource's
   const can = useCan();
-  const canAnnotate = can.configure;
-  const dialogs = useAnnotationDialogs(r);
+  // A reader without it (the public demo's role, a site's operator) still opens the dialogs, and finds their save locked
+  const locked = saveLocked(can);
+  const canAnnotate = can.operate || can.approve;
+  const dialogs = useAnnotationDialogs(r, locked);
   const [params] = useSearchParams();
   const running = isReviewRunning(r.state);
   const findings = orderedFindings(r);
@@ -90,11 +93,7 @@ function Review({ r }: { r: ReviewDetail }) {
               {hl7Note(r)}
             </Text>
           ) : null}
-          {readOnlyDemo(can) ? (
-            <Text size="sm" c="dimmed" data-testid="demo-read-only">
-              {DEMO_READ_ONLY}, annotations included.
-            </Text>
-          ) : null}
+          {locked && canAnnotate ? <LockedNote>{locked}</LockedNote> : null}
           {findings.length ? (
             <FindingCards
               findings={findings}

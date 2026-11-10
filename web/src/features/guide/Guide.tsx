@@ -33,6 +33,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   useEffect,
   useEffectEvent,
+  useLayoutEffect,
   useRef,
   useState,
   type ComponentPropsWithoutRef,
@@ -66,7 +67,15 @@ import {
   type GuideScope,
   type GuideStep,
 } from './registry';
-import { bringIntoFreePart, focusFrom, landOn, pageHeading, useMenuHandOver, waitForTarget } from './reveal';
+import {
+  bringIntoFreePart,
+  clearNotch,
+  focusFrom,
+  landOn,
+  pageHeading,
+  useMenuHandOver,
+  waitForTarget,
+} from './reveal';
 import { useGuide, type GuidePhase } from './store';
 import { useAssistant } from '@/features/assistant/store';
 
@@ -726,6 +735,16 @@ function StepHost({ pos }: { pos: GuidePosition }) {
     guideCard.set(true);
     return () => guideCard.set(false);
   }, [host]);
+
+  // The card's notch points at the section without reaching its ring: measured once the card is in its host, and again
+  // when the window's size changes the room the page leaves between them
+  useLayoutEffect(() => {
+    if (!host || docked || notFound) return;
+    const clear = () => clearNotch(host);
+    clear();
+    window.addEventListener('resize', clear);
+    return () => window.removeEventListener('resize', clear);
+  }, [host, docked, notFound]);
 
   // Focus moves to the card's title on every step
   useEffect(() => {

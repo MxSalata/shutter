@@ -1,22 +1,23 @@
-import { Badge, Group, Stack, Text, Title, VisuallyHidden } from '@mantine/core';
+import { Badge, Group, Stack, Title, VisuallyHidden } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconBooks } from '@tabler/icons-react';
-import { useState } from 'react';
-import { DEMO_READ_ONLY, readOnlyDemo } from '@/api/can';
+import { useId, useState } from 'react';
+import { saveLocked } from '@/api/can';
 import { useCan, useLibrary, useMe, usePatchMember } from '@/api/hooks';
 import type { LibraryMember } from '@/api/types';
 import { ApiSource } from '@/components/ApiSource';
 import { CodeChip } from '@/components/CodeChip';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorAlert } from '@/components/ErrorAlert';
+import { LockedNote, LockedSaveButton } from '@/components/LockedSave';
 import { PageHeader } from '@/components/PageHeader';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { TRIAL } from '@/env/mode';
 import { describeError } from '@/lib/errors';
+import { SaveBar } from '@/features/site-profile/SaveBar';
 import { BoardFlow } from './BoardFlow';
 import { groupMembers, libraryLead, onDefaultBoard } from './board';
 import { MemberLibraryCard, type LibraryField } from './MemberLibraryCard';
-import { toBecomeApprover } from '@/env/copy';
 
 export default function LibraryPage() {
   const me = useMe().data;
@@ -24,13 +25,20 @@ export default function LibraryPage() {
   const patch = usePatchMember();
   const can = useCan();
   // Which agents sit on the board is a change of the site, as the site profile is (CONTRACTS 5, Shutter_Configure)
-  const canEdit = can.configure;
-  // The public demo's role reads the library: the switches are not offered, and a note says why
-  const reading = readOnlyDemo(can);
+  // A reader without that right (the public demo's role, a site's operator) still flips the switches: the changes build
+  // up on this page, and the Save beside them is locked with the reason
+  const locked = saveLocked(can);
+  const [draft, setDraft] = useState<Record<string, Partial<Record<LibraryField, boolean>>>>({});
+  const lockedId = useId();
   // In the trial a change lasts until the page is reloaded; the card says so once it has been made
   const [changed, setChanged] = useState<ReadonlySet<string>>(new Set());
   const [announcement, setAnnouncement] = useState('');
-  const change = (m: LibraryMember, field: LibraryField, value: boolean) =>
+  const change = (m: LibraryMember, field: LibraryField, value: boolean) => {
+    if (locked) {
+      setDraft((was) => ({ ...was, [m.code]: { ...was[m.code], [field]: value } }));
+      setAnnouncement(`${m.name} changed on this page only: not saved.`);
+      return;
+    }
     patch.mutate(
       { code: m.code, change: { [field]: value } },
       {
@@ -43,8 +51,18 @@ export default function LibraryPage() {
           notifications.show({ color: 'red', title: `${m.name} was not changed`, message: describeError(e) }),
       },
     );
+  };
 
-  const members = library.data;
+  const stored = library.data;
+  // The board as this page shows it: the stored members with the changes not saved
+  const members = stored?.map((m) => ({ ...m, ...draft[m.code] }));
+  const changes = (stored ?? []).reduce(
+    (n, m) =>
+      n +
+      (Object.entries(draft[m.code] ?? {}) as [LibraryField, boolean][]).filter(([f, v]) => m[f] !== v)
+        .length,
+    0,
+  );
   const board = groupMembers(members ?? []);
   const count = onDefaultBoard(board);
   // The first member shown explains the word "Knows" once for the page
@@ -53,8 +71,6 @@ export default function LibraryPage() {
     <MemberLibraryCard
       key={m.code}
       m={m}
-      canEdit={canEdit}
-      reading={reading}
       busy={patch.isPending}
       knowsTerm={m.code === knowsFirst}
       changedInTrial={changed.has(m.code)}
@@ -95,13 +111,7 @@ export default function LibraryPage() {
       ) : null}
       {members && members.length > 0 ? (
         <Stack gap="lg">
-          {me && !canEdit ? (
-            <Text size="sm" c="dimmed" data-testid={reading ? 'demo-read-only' : undefined}>
-              {reading
-                ? `${DEMO_READ_ONLY}.`
-                : `Changing which agents sit on the board needs the approver role: ${toBecomeApprover()}.`}
-            </Text>
-          ) : null}
+          {me && locked && !changes ? <LockedNote>{locked}</LockedNote> : null}
           <Stack component="section" gap="md" aria-labelledby="library-board-title">
             <Group justify="space-between" align="center" gap="sm">
               <Title order={2} id="library-board-title">
@@ -124,7 +134,18 @@ export default function LibraryPage() {
               <Stack gap="md">{board.others.map(card)}</Stack>
             </Stack>
           ) : null}
-          <ApiSource endpoint="GET /api/shutter/library" data={members} />
+          <ApiSource endpoint="GET /api/shutter/library" data={stored} />
+          {locked && changes ? (
+            <SaveBar
+              count={changes}
+              onDiscard={() => {
+                setDraft({});
+                setAnnouncement('Changes discarded.');
+              }}
+              note={<LockedNote id={lockedId}>{locked}</LockedNote>}
+              primary={<LockedSaveButton label="Save the board" noteId={lockedId} />}
+            />
+          ) : null}
           {/* Told to a screen reader when a switch is saved in the trial; the card shows it in words too. Not a
               `status` region: a page has none once its data has arrived. */}
           <VisuallyHidden aria-live="polite" aria-atomic="true">

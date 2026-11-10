@@ -107,12 +107,20 @@ test.describe('the production review', () => {
 });
 
 test.describe('the live hospital, as the public role sees it', () => {
-  test('hides the review annotations', async ({ page }) => {
+  test('opens the annotation dialog, with a save that is locked and says why', async ({ page }) => {
     await signIn(page, AS_DEMO);
     await go(page, '/reviews/PR-000001', AS_DEMO);
     await expect(page.getByRole('heading', { name: 'Review PR-000001', exact: true })).toBeVisible();
     await expect(page.getByText(READ_ONLY)).toBeVisible();
-    await expect(page.getByRole('button', { name: /Annotate|Remove the annotation/ })).toHaveCount(0);
+    await page
+      .getByRole('button', { name: /^Annotate / })
+      .first()
+      .click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByRole('textbox', { name: /Reason/ }).fill('Tried on the demo');
+    const save = dialog.getByRole('button', { name: /^Mark as / });
+    await expect(save).toHaveAttribute('aria-disabled', 'true');
+    await expect(save).toHaveAccessibleDescription(READ_ONLY);
   });
 });
 

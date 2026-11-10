@@ -113,6 +113,54 @@ test.describe('the page at 1280 px @scenarios', () => {
 
   test.beforeEach(({ page }) => signIn(page));
 
+  test("keeps every diagram's boxes where they are across the four modes: a switch changes only words", async ({
+    page,
+  }) => {
+    await go(page, '/scenarios');
+    const list = page.getByRole('region', { name: 'Every scenario' });
+    /**
+     * Every box of every diagram in the list, by its scenario, as laid out on the page: the drawing's size, and each box
+     * from the drawing's corner. A row may move as the other cells' words change; the drawing's insides may not.
+     */
+    const boxes = () =>
+      list.evaluate((el) =>
+        Object.fromEntries(
+          [...el.querySelectorAll<SVGSVGElement>('.scenario-diagram')].map((svg) => {
+            const at = svg.getBoundingClientRect();
+            const round = (n: number) => Math.round(n * 10) / 10;
+            return [
+              svg.getAttribute('aria-label')!.split(',')[0],
+              [
+                `${round(at.width)}x${round(at.height)}`,
+                ...[...svg.querySelectorAll('rect')].map((rect) => {
+                  const r = rect.getBoundingClientRect();
+                  return [r.x - at.x, r.y - at.y, r.width, r.height].map(round).join(' ');
+                }),
+              ],
+            ];
+          }),
+        ),
+      );
+    // Each scenario's boxes as first drawn: a mode a scenario is not defined for draws no diagram, so it is compared in
+    // the modes it has
+    const first: Record<string, string[]> = {};
+    let compared = 0;
+    for (const mode of [/^Board/, /^Single investigator/, /^Rules only/, /^Site policy/]) {
+      // The trial greys out a mode it has no recording of; the unit tests draw all four
+      if (await page.getByRole('radio', { name: mode }).isDisabled()) continue;
+      compared++;
+      await page.getByRole('radio', { name: mode }).click();
+      await expect(page.getByRole('radio', { name: mode })).toBeChecked();
+      await expect(list.locator('.scenario-diagram').first()).toBeVisible();
+      const now = await boxes();
+      expect(Object.keys(now).length, `${mode}: diagrams drawn`).toBeGreaterThan(0);
+      for (const [id, b] of Object.entries(now))
+        if (first[id]) expect(b, `${id}'s boxes in ${mode}`).toEqual(first[id]);
+        else first[id] = b;
+    }
+    expect(compared, 'modes compared').toBeGreaterThanOrEqual(2);
+  });
+
   test('Back from a case returns to the run mode and the filter', async ({ page }) => {
     await go(page, '/scenarios');
     // One after the other with no wait, on a machine slowed four times: the second choice keeps the first

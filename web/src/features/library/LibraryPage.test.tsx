@@ -71,15 +71,23 @@ const knowsLine = (name: string) =>
   within(cardOf(name)).getByText((_, el) => el?.tagName === 'P' && /^Knows/.test(el.textContent ?? ''));
 
 describe('LibraryPage', () => {
-  it('lets an operator read the board but not change it', async () => {
+  it('lets an operator flip the switches on the page, and locks the save: only an approver saves', async () => {
     resetMock('operator');
     renderPage();
-    expect(
-      await screen.findByText(/Changing which agents sit on the board needs the approver role/),
-    ).toBeInTheDocument();
-    const switches = screen.getAllByRole('switch');
-    expect(switches.length).toBeGreaterThan(0);
-    for (const sw of switches) expect(sw).toBeDisabled();
+    expect(await screen.findByTestId('save-locked')).toHaveTextContent(
+      'Only an approver saves here: sign in as approver.',
+    );
+    const sw = screen.getByRole('switch', { name: `${coordinator.name} enabled` });
+    expect(sw).toBeEnabled();
+    await userEvent.click(sw);
+    expect(sw).toHaveProperty('checked', !coordinator.enabled);
+    const bar = screen.getByRole('region', { name: 'Unsaved changes' });
+    expect(within(bar).getByText('1 change')).toBeInTheDocument();
+    expect(within(bar).getByRole('button', { name: 'Save the board' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    expect(patches).toEqual([]);
   });
 
   it('lets an approver change it', async () => {
@@ -87,7 +95,7 @@ describe('LibraryPage', () => {
     renderPage();
     const sw = await screen.findByRole('switch', { name: `${coordinator.name} enabled` });
     expect(sw).toBeEnabled();
-    expect(screen.queryByText(/needs the approver role/)).not.toBeInTheDocument();
+    expect(screen.queryByTestId('save-locked')).not.toBeInTheDocument();
     const before = coordinator.enabled;
     await userEvent.click(sw);
     await waitFor(() => expect(patches).toHaveLength(1));
@@ -104,19 +112,36 @@ describe('LibraryPage', () => {
     await waitFor(() => expect(coordinator.enabled).toBe(before));
   });
 
-  it("shows the public demo's role the board for reading, with no switches and a note", async () => {
+  it("lets the public demo's role change the board on the page, with a locked Save that says why", async () => {
     resetMock('demo');
     renderPage();
-    expect(await screen.findByTestId('demo-read-only')).toHaveTextContent(
-      "On the online demo you can approve or reject plans; a site's approver saves changes here",
+    const LOCKED = "The online demo's settings are locked: nothing is saved.";
+    expect(await screen.findByTestId('save-locked')).toHaveTextContent(LOCKED);
+    const sw = screen.getByRole('switch', { name: `${conformance.name} on the default board` });
+    expect(sw).toBeEnabled();
+    expect(screen.getByText('On the default board: 4 of 4')).toBeInTheDocument();
+    await userEvent.click(sw);
+    // The board follows the change, as it does for an approver
+    expect(await screen.findByText('On the default board: 3 of 4')).toBeInTheDocument();
+    const bar = screen.getByRole('region', { name: 'Unsaved changes' });
+    const save = within(bar).getByRole('button', { name: 'Save the board' });
+    expect(save).toHaveAttribute('aria-disabled', 'true');
+    expect(save).toHaveAccessibleDescription(LOCKED);
+    await userEvent.click(save);
+    expect(patches).toEqual([]);
+    // Flipped back, it is no change at all
+    await userEvent.click(screen.getByRole('switch', { name: `${conformance.name} on the default board` }));
+    expect(screen.queryByRole('region', { name: 'Unsaved changes' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('switch', { name: `${coordinator.name} enabled` }));
+    await userEvent.click(
+      within(screen.getByRole('region', { name: 'Unsaved changes' })).getByRole('button', {
+        name: 'Discard changes',
+      }),
     );
-    expect(screen.getAllByText(coordinator.name).length).toBeGreaterThan(0);
-    expect(screen.queryByRole('switch')).not.toBeInTheDocument();
-    expect(screen.getAllByText('Yes').length).toBeGreaterThan(0);
-    // Each setting is a label and its value on the card
-    const card = within(cardOf(conformance.name));
-    expect(card.getByText('Enabled')).toBeInTheDocument();
-    expect(card.getByText('On the default board')).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: `${coordinator.name} enabled` })).toHaveProperty(
+      'checked',
+      coordinator.enabled,
+    );
     expect(patches).toEqual([]);
   });
 
@@ -129,7 +154,7 @@ describe('LibraryPage', () => {
     );
     renderPage();
     expect(await screen.findByRole('switch', { name: `${coordinator.name} enabled` })).toBeEnabled();
-    expect(screen.queryByTestId('demo-read-only')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('save-locked')).not.toBeInTheDocument();
   });
 });
 
