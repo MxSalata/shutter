@@ -2745,7 +2745,7 @@ No message content is copied: the rows hold ids, codes, the body's class and the
 
 ## Changes
 
-- v1.57, 10 Nov 2026 (for 1.4.3, the owner's decision that judges run the scenarios): running a scenario and resetting the
+- v1.57, 10 Nov 2026 (for 1.4.3, so the judges run the scenarios): running a scenario and resetting the
   shared demo are two resources. `Shutter_Scenarios` guards `POST /scenarios/{id}/run` only, and the role `Shutter_Judge`
   holds it; the new `Shutter_ScenarioReset` guards `POST /scenarios/reset` and `Shutter.Setup_PurgeStore`, held by the
   operator and approver roles and by neither public demo role (5). An install or an upgrade creates it and gives it to the
