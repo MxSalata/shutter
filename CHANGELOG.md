@@ -61,8 +61,10 @@ approval safeguards.
 - **F03 and F07 played live on release 1.3.2**, three runs each in Rules only, single investigator and board under
   the same gate: both close right in all 12 agent runs, and Rules only grades as on 1.0.0
   (`docs/readme/fair-test.md`, "Release 1.3.2: F03 and F07 live").
-- **Tested:** all 56 rows of the pathology rig on build 154; the unit suites on build 154 (1,056 passed) and 2026.2
-  (1,047 passed), none failed; the web suite (1,978 tests). CONTRACTS 1.53 and 1.54 describe the send.
+- **Tested:** all 56 rows of the pathology rig on build 154; the unit suites on build 154 (1,066 passed) and 2026.2
+  (1,057 passed), none failed; the web suite (2,023 tests) and the browser suite; a new check that the outage resend
+  sends nothing under the stop or in shadow mode (`tests/e2e/outage_stop_check.py`); and a hands-on test on build 154
+  before the release. CONTRACTS 1.54 describes the send.
 
 ## 1.3.2 (9 November 2026)
 
