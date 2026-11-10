@@ -27,12 +27,29 @@ The judges play the scenarios on the online demo, and the words for orders and r
   messages that never arrived are listed and can be resent after one approval through Engine Resend. The receiver cards,
   the release table, the category choice, the gate's reason `RECEIVER_NOT_MODELLED` (its words; the code is unchanged),
   the explain collection, the install guide's outage section and the README's limits say so.
+- **The run modes say what each one is.** The line above the modes says the mode decides who proposes the plan and that
+  the same gate checks it in every mode. Board names its four AI Hub agents and the three angles its specialists read the
+  sealed evidence from; Site policy says failures the catalogue recognises are settled by the site's written policy with
+  no model; Single investigator says it is live only; Rules only is the baseline, a plain Resend, and says where S8 lifts
+  one gate check on purpose.
+- **Scenario titles and summaries that put the decision first.** Eighteen scenarios' titles or summaries were reworded
+  so their first sentence says what the case is about: S3 explains reconciling, S8 names two transfers at the same
+  recorded time and its Rules only exemption, S9 and S27 tell an outpatient visit from a second admission, S11 gives the
+  incident's scale, and S17 to S19, S25 and S26 have titles that read on their own. The cards on Scenarios and the
+  guided path follow: the headline says Shutter resends a failed HL7 delivery only when its checks pass, an unresolved
+  gate check blocks a write, S23a's card says the other case frees the bed rather than that this one waits, S15's says
+  what the gate prevents, S8's Board card leads with the evidence problem, the S8 Rules only step says it is a
+  demonstration, and the guided path names the modes Board and Rules only. Ids, steps and expected outcomes are
+  unchanged, and the trial's recorded scenarios carry the same words, S9's without the other visit on the plan, which
+  its recording does not show.
 - **Tested:** the unit suites on build 154 (1,083 passed, none failed) and 2026.2 (1,074 passed, none failed), with new
   tests that the judge runs and doesn't reset or purge, that the operator and the approver do both, and that an upgrade
   over 1.4.2's roles keeps their Reset; `tests/e2e/roles_check.py` on both with the judge's and the demo's passwords set
   (CI's routes check now sets them), the judge playing S8 on the board in replay with its runs counted against the judge
   and refused the reset; the web suite and the browser specs for Scenarios, the judges' path, Site profile and Settings,
-  with axe. CONTRACTS 1.57 describes the split.
+  with axe. CONTRACTS 1.57 describes the split. For the new words, the web suite again, the browser specs for Scenarios,
+  the trial and the judges' path, with axe, and `fixtures/generate.py` writing the committed `scenarios.json` byte for
+  byte.
 
 ## 1.4.2 (10 November 2026)
 

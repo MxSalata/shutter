@@ -77,22 +77,27 @@ const ALL_MODES: { value: Mode; label: string; hint: string }[] = [
   {
     value: 'board',
     label: 'Board',
-    hint: 'Three specialist agents review the evidence in parallel; a coordinator agent proposes one plan.',
+    hint: "Four AI Hub agents. Three specialists read the sealed evidence at once, each from one angle: the message, the encounter's history, the impact on the receiver. A coordinator weighs their findings and proposes one plan, with reasons.",
   },
   {
     value: 'policy',
     label: 'Site policy',
-    hint: "The scenario catalogue and the site's profile settle the cases they know; the board takes the rest.",
+    hint: "How a hospital would run it. Failures the catalogue recognises are settled by the site's written policy, with no model; anything it doesn't recognise goes to the board.",
   },
   {
     value: 'single',
     label: 'Single investigator',
-    hint: 'One generalist agent looks at everything and proposes the plan.',
+    // The trial never calls itself live (DESIGN.md 1.3): there the card's badge says it has no recording instead
+    hint: byEnv({
+      live: 'One AI Hub agent with the same evidence and tools proposes the plan alone, to compare with the board. Live only, so not in the trial.',
+      trial:
+        'One AI Hub agent with the same evidence and tools proposes the plan alone, to compare with the board.',
+    }),
   },
   {
     value: 'rules',
     label: 'Rules only',
-    hint: 'No agents: resend unchanged unless the gate objects. The baseline to compare with.',
+    hint: 'No agents: the baseline. Shutter resends the message unchanged unless the gate objects, as a plain Resend would. In S8 one gate check is lifted on purpose, to show what that writes.',
   },
 ];
 
@@ -108,9 +113,9 @@ const modeLabel = (mode: Mode) => ALL_MODES.find((m) => m.value === mode)?.label
 
 /** A filter or a mode stays on the page: the address changes, Back keeps its place, and the page does not jump to its top. */
 
-/** What every mode keeps, said once above the modes, with the one exemption S8's card shows. */
+/** What every mode keeps, said once above the modes; the one exemption, S8's in Rules only, is in that mode's hint. */
 const MODES_INTRO =
-  "The mode chooses who proposes the plan; the gate and the rehearsal are the same in every mode, except one check that Rules only skips on purpose in a played scenario, so that S8 can show a plain resend; a person or the site's policy releases it.";
+  "The mode decides who proposes the plan. In every mode the same gate checks the plan, and a person or the site's policy releases any write.";
 
 /** Whether the scenario is defined for the mode: one that names its modes isn't for the others. */
 const definedFor = (s: Scenario, mode: Mode) => !s.expected?.modes || s.expected.modes.includes(mode);

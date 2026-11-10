@@ -79,14 +79,14 @@ export function ScenariosHero({ demo = false }: { demo?: boolean }) {
     <Stack
       gap="xs"
       component="section"
-      aria-label="Shutter fixes a failed HL7 transfer only when its checks pass. Otherwise it stops and names the patient."
+      aria-label="Shutter resends a failed HL7 delivery only when its checks pass. Otherwise it stops and names the patient."
     >
       <ProofLine />
       <TechDetail label="What a scenario does" kind="explain">
         <Stack gap="sm">
           <Text component="h2" fz="lg" fw={600} m={0}>
-            Shutter fixes a failed <Term term="hl7-transfer">HL7 transfer</Term> only when its checks pass.
-            Otherwise it stops and names the patient.
+            Shutter resends a failed <Term term="hl7">HL7</Term> delivery only when its checks pass. Otherwise
+            it stops and names the patient.
           </Text>
           <Text size="md" maw="68ch">
             {demo ? (
@@ -129,7 +129,7 @@ export function ScenariosHero({ demo = false }: { demo?: boolean }) {
             })}
           </Box>
           <Text size="sm" c="dimmed">
-            Nothing is written unless the gate passes the plan; an unknown blocks a write too.
+            Nothing is written unless the gate passes the plan. An unresolved gate check also blocks a write.
           </Text>
         </Stack>
       </TechDetail>
@@ -185,7 +185,7 @@ const FIRST: Featured[] = [
     mode: 'board',
     title: 'The board withholds a write',
     see: (entry) =>
-      `A resend would write over the bed manager's ward with every check passed. The evidence cannot tell which movement is current, so the coordinator agent escalates to a person${entry ? `, citing catalogue entry ${entry},` : ''} and keeps the dissent.`,
+      `Two movements have the same recorded time, so the board withholds the resend. The evidence cannot show which is current; the coordinator agent asks a person to decide${entry ? `, citing catalogue entry ${entry},` : ''} and records the agents' disagreement.`,
     byMode: {
       rules: {
         title: 'Rules only writes over a ward',
@@ -218,7 +218,7 @@ const FIRST: Featured[] = [
 /**
  * The public demo's three: its hospital plays its rotation by itself, in Site policy mode (S8 is out of it and S20 never
  * in it), so the cards are three of the rotation's stories, in the mode they are played in: a recovery the written
- * policy holds for a person, a case that waits on another patient's case, and a write the gate withholds. A card shows
+ * policy holds for a person, a case whose bed another patient's case frees, and a write the gate withholds. A card shows
  * the scenario's latest case in that mode, else its latest case in any mode under that case's own mode, and says so
  * where the link would be while the scenario has no case yet: the card's text is true before the hospital plays it.
  */
@@ -233,17 +233,17 @@ const DEMO_FIRST: Featured[] = [
   {
     id: 'S23a',
     mode: 'policy',
-    title: 'One case waits for another',
+    title: 'One case frees a bed for another',
     see: () =>
       "The receiver refuses the transfer: the bed is held by a patient whose own transfer out failed a moment before. Shutter reads who holds the bed, as a token, and once that patient's case frees it, this one is resent into the bed.",
-    more: "The receiver answers 409 bed_occupied. Shutter reads the occupant as a token, never the other patient's identifiers, and finds them leaving in another case; this case waits for that one, and when its resend lands, this transfer is released and resent into the freed bed, then verified from the receiver's history.",
+    more: "The receiver returns 409 bed_occupied. Shutter uses a token, not the other patient's identifiers, to find their transfer case. In this scenario, that case frees the bed before this case reads its evidence. If it were still running, this case would wait. The transfer is resent into the freed bed and verified from the receiver's history.",
   },
   {
     id: 'S15',
     mode: 'policy',
     title: 'The gate withholds a write',
     see: () =>
-      'A patient merge is never sent by default: the gate blocks every plan, in any mode, and the case goes to the PAS team, whose email Shutter drafts.',
+      'By default, the gate prevents a patient merge from being sent in any mode. The case goes to the patient administration system (PAS) team, whose email Shutter drafts.',
     more: "The PAS merges an older record into the admitted patient (ADT^A40). A merge changes which record a patient's history belongs to, so the gate withholds it (MERGE_WITHHELD) and Escalate drafts the email to the team the site profile names for merges from the PAS; nothing is written.",
   },
 ];

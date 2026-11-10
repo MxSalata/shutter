@@ -42,7 +42,7 @@ test.describe('the guided path', () => {
     await signIn(page);
     await page
       .getByRole('region', { name: 'Then follow this path' })
-      .getByRole('link', { name: 'Rules and board side by side' })
+      .getByRole('link', { name: 'Rules only and Board side by side' })
       .first()
       .click();
     await expect(page.getByRole('heading', { name: 'Case C-000008', exact: true })).toBeVisible();

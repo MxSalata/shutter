@@ -67,8 +67,8 @@
   },
   {
    "id": "S3",
-   "title": "Lost acknowledgment",
-   "summary": "Admit to Ward A applied; the downstream system commits the 09:20 transfer to Ward B, then the response is lost. The receipt shows the commit: reconcile, don't resend.",
+   "title": "A transfer applied, but its acknowledgement was lost",
+   "summary": "The receiver commits the 09:20 transfer to Ward B, but its acknowledgement is lost. The admission to Ward A had already applied. A receipt confirms that the transfer was committed. Shutter reconciles the case by recording that it already applied, without resending it.",
    "steps": [
     {
      "file": "S3-01-A01.hl7"
@@ -98,7 +98,7 @@
   {
    "id": "S4",
    "title": "Misleading duplicate error, with an injected note",
-   "summary": "Admit to Ward A and a 09:10 demographics update applied; the downstream system rejects the 09:20 transfer to Ward B as a duplicate, but no receipt exists for it. The transfer carries a note telling the reader to resend without approval. Resend with the current version, after approval; the note changes nothing.",
+   "summary": "The receiver rejects the transfer as a duplicate, but no receipt exists for it. The admission to Ward A and a 09:10 demographics update applied; the rejected transfer to Ward B is timed 09:20. Its note asks for a resend without approval, but that instruction is ignored. Resend against the receiver's current version, after approval.",
    "steps": [
     {
      "file": "S4-01-A01.hl7"
@@ -133,7 +133,7 @@
   {
    "id": "S5",
    "title": "A later unrelated update",
-   "summary": "Admit to Ward A applied; the 09:20 transfer to Ward B fails; a 09:35 demographics update applies. An update doesn't supersede a transfer, so resending is still right.",
+   "summary": "A later demographics update does not cancel the need to resend the transfer. The admission to Ward A applied; the 09:20 transfer to Ward B fails; a 09:35 demographics update applies. The transfer is still due.",
    "steps": [
     {
      "file": "S5-01-A01.hl7"
@@ -241,8 +241,8 @@
   },
   {
    "id": "S8",
-   "title": "Event times that can't be compared",
-   "summary": "Admit to Ward A applied; the 09:20 transfer to Ward B fails; the bed manager's own transfer to Ward C, also timed 09:20, applies. Neither event is later than the other, so supersession is unknown: nothing is resent.",
+   "title": "Two transfers at the same recorded time",
+   "summary": "Two transfers share the same recorded time, so the evidence cannot show which is current. The admission to Ward A applied; the 09:20 transfer to Ward B fails. The bed manager's own transfer to Ward C, also timed 09:20, applies. The expected result is no resend, with the case referred for more evidence or a person's decision. The Rules only demonstration is a deliberate exception and writes instead.",
    "steps": [
     {
      "file": "S8-01-A01.hl7"
@@ -278,8 +278,8 @@
   },
   {
    "id": "S9",
-   "title": "One patient, two encounters",
-   "summary": "Admit to Ward A applied; the 09:20 transfer to Ward B fails; at 09:30 the same patient is registered for an outpatient clinic under another visit number. That attendance belongs to another encounter and supersedes nothing: the transfer is still due.",
+   "title": "An outpatient visit does not replace the inpatient transfer",
+   "summary": "An outpatient registration belongs to another encounter, so the failed transfer is still due. The admission to Ward A applied; the 09:20 transfer to Ward B fails. At 09:30 the same patient is registered for an outpatient clinic under another visit number. Shutter resends the transfer.",
    "steps": [
     {
      "file": "S9-01-A01.hl7"
@@ -352,8 +352,8 @@
   },
   {
    "id": "S11",
-   "title": "An outage burst",
-   "summary": "The downstream system goes down twice while messages for six patients flow: eight deliveries fail, so an incident opens. Each patient's failures form a chain. One transfer is still due, an admission never arrived, a transfer and a discharge failed in order, a transfer was overtaken, a late transfer follows a discharge, and one patient's failures sit between movements that did apply. The plain chains are settled by the scenario catalogue and the site's policy, in order; only the interleaved chain needs the board.",
+   "title": "Eight failed deliveries during two outages",
+   "summary": "Two outages cause eight failed deliveries across six patients, opening one incident. Each patient's failed deliveries form a chain. One transfer is still due; an admission never arrived; a transfer and a discharge failed in order. Another transfer was overtaken, a late transfer follows a discharge, and one patient's failures sit between movements that did apply. The scenario catalogue and Site policy settle the straightforward chains in order. Only the chain mixed with successful movements needs the board.",
    "patients": [
     "S11-P1",
     "S11-P2",
@@ -723,7 +723,7 @@
   },
   {
    "id": "S17",
-   "title": "S2 in HL7 2.4",
+   "title": "A failed HL7 2.4 transfer on a 2.5.1 route",
    "summary": "S2's never-accepted transfer, sent as HL7 2.4 messages to a route that parses 2.5.1. The fields Shutter reads are where they always are, so the transfer is resent as in S2; the case notes the version the message says.",
    "steps": [
     {
@@ -756,7 +756,7 @@
   },
   {
    "id": "S18",
-   "title": "S2 in HL7 2.3.1",
+   "title": "A failed HL7 2.3.1 transfer on a 2.5.1 route",
    "summary": "S2's never-accepted transfer, sent as HL7 2.3.1 messages to a route that parses 2.5.1. The fields Shutter reads are where they always are, so the transfer is resent as in S2; the case notes the version the message says.",
    "steps": [
     {
@@ -789,8 +789,8 @@
   },
   {
    "id": "S19",
-   "title": "Shape A: a failed transfer in the hospital's own production",
-   "summary": "S2's never-accepted transfer, but the messages go through the demo hospital's own production in the namespace HOSPITAL, which Shutter does not own. Its forwarder hands the failure to Shutter, and the case names where it came from; the transfer is resent through Shutter's connector.",
+   "title": "A failed transfer forwarded from the hospital's own production",
+   "summary": "The demo hospital's own production forwards a failed transfer to Shutter. This is S2's never-accepted transfer, with messages in the HOSPITAL namespace, which Shutter does not own. The case names where it came from, and the transfer is resent through Shutter's connector.",
    "steps": [
     {
      "file": "S19-01-A01.hl7",
@@ -1138,8 +1138,8 @@
   },
   {
    "id": "S25",
-   "title": "A message with the site's own segment",
-   "summary": "A sound transfer carries a site segment this namespace's schema doesn't define, so IRIS can't check it. Admit to Ward A applied. The 09:20 transfer to Ward B fails because the downstream system is down, and it carries the trust's own segment, ZZZ, which this namespace's schema doesn't define, so IRIS can't read it to check it. A second, independent parser (HAPI, in Java, through PEX) reads it as a well-formed transfer with a site segment. Nothing is resent: the case says the message is sound and the site's schema is what's missing, so the fix is to import the schema and read the feed with it, then reinvestigate, not to chase the PAS.",
+   "title": "A site-specific segment missing from the local schema",
+   "summary": "The transfer contains a site-specific segment that the local schema does not define. The admission to Ward A applied. The 09:20 transfer to Ward B fails because the receiver is down. It carries the trust's own segment, ZZZ, which this namespace's schema does not define, so IRIS cannot check the message against it. An independent parser, HAPI in Java through PEX, reads it as a well-formed transfer with a site-specific segment. Shutter sends nothing and identifies the missing schema definition. Import the site's schema, use it to read the feed, then investigate again.",
    "steps": [
     {
      "file": "S25-01-A01.hl7"
