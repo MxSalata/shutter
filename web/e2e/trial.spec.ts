@@ -285,13 +285,14 @@ test.describe('the trial on the build IRIS serves', () => {
       }));
     }, scripts);
     expect(bodies.filter((b) => b.recording)).toEqual([]);
-    // The entry stays within 5 KB of the build before the trial (69,373 bytes at ddb9c08)
+    // The entry stays within about 5 KB of the build before the trial (69,373 bytes at ddb9c08); 1.4.3 added 280 bytes
+    // of lazy-chunk dependency lists for the shared locked Save and the judges' rights, so the allowance is 5,400 bytes
     const src = await page.evaluate(
       () => new URL(document.querySelector<HTMLScriptElement>('script[type="module"][src]')!.src).pathname,
     );
     const entry = bodies.find((b) => b.path === src);
     expect(entry, 'the entry chunk').toBeTruthy();
-    expect(entry!.size).toBeLessThanOrEqual(69_373 + 5_120);
+    expect(entry!.size).toBeLessThanOrEqual(69_373 + 5_400);
   });
 });
 

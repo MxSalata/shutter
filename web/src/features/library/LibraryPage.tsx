@@ -2,7 +2,7 @@ import { Badge, Group, Stack, Title, VisuallyHidden } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconBooks } from '@tabler/icons-react';
 import { useId, useState } from 'react';
-import { saveLocked } from '@/api/can';
+import { saveLocked } from '@/api/saveLocked';
 import { useCan, useLibrary, useMe, usePatchMember } from '@/api/hooks';
 import type { LibraryMember } from '@/api/types';
 import { ApiSource } from '@/components/ApiSource';

@@ -3,7 +3,7 @@
   <Document name="iris-shutter-core.ZPM">
     <Module>
       <Name>iris-shutter-core</Name>
-      <Version>1.4.2</Version>
+      <Version>1.4.3</Version>
       <Description>Shutter's core alone, for a plain IRIS or IRIS for Health Community 2026.2 or later without the AI Hub package: the production, the store, the gate, the web application and the demo, with the board replaying recorded agent runs. Loaded by path from the repository's core/ folder for the replay edition and for continuous integration; not published. The published package, iris-shutter at the repository root, is the whole of Shutter for an AI Hub build.</Description>
       <Keywords>interoperability,hl7,recovery,ai agents,ai hub,workflow,contest</Keywords>
       <Author>

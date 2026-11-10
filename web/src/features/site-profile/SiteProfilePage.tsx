@@ -19,7 +19,7 @@ import { useSearchParams } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { RunbookField } from './RunbookField';
 import { api } from '@/api/client';
-import { saveLocked } from '@/api/can';
+import { saveLocked } from '@/api/saveLocked';
 import { keys, useCan, useMe, useSaveSiteProfile, useSiteProfile, useWhatIf } from '@/api/hooks';
 import type { SiteProfile, SiteProfileView, SiteReceiver, WhatIf } from '@/api/types';
 import { ApiSource } from '@/components/ApiSource';

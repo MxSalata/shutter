@@ -1,7 +1,7 @@
 import { Alert, Anchor, Container, Loader, Stack, Text } from '@mantine/core';
 import { IconClipboardSearch, IconEye } from '@tabler/icons-react';
 import { Link, useParams, useSearchParams } from 'react-router';
-import { saveLocked } from '@/api/can';
+import { saveLocked } from '@/api/saveLocked';
 import { isReviewRunning, useCan, useReview } from '@/api/hooks';
 import type { ReviewDetail } from '@/api/types';
 import { ApiSource } from '@/components/ApiSource';
