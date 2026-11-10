@@ -112,7 +112,7 @@ describe('ScenariosPage', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'What a scenario does' }));
     expect(
       await screen.findByRole('heading', {
-        name: 'Shutter fixes a failed HL7 transfer only when its checks pass. Otherwise it stops and names the patient.',
+        name: 'Shutter resends a failed HL7 delivery only when its checks pass. Otherwise it stops and names the patient.',
       }),
     ).toBeInTheDocument();
     const steps = screen.getByRole('list', { name: 'What happens to every case' });
@@ -171,9 +171,11 @@ describe('ScenariosPage', () => {
     expect(
       await within(first).findByText(`citing catalogue entry ${entry},`, { exact: false }),
     ).toBeInTheDocument();
-    // Why it matters, on the card: the wrong write would pass every check
+    // Why it matters, on the card: the evidence cannot order the two movements, so the board withholds the write
     expect(
-      within(first).getByText(/^A resend would write over the bed manager's ward with every check passed\./),
+      within(first).getByText(
+        /^Two movements have the same recorded time, so the board withholds the resend\./,
+      ),
     ).toBeInTheDocument();
   });
 
@@ -195,13 +197,13 @@ describe('ScenariosPage', () => {
     const rules = await screen.findByRole('radio', { name: 'Rules only' });
     const hint = document.querySelector<HTMLElement>('[data-mode-hint]')!;
     expect(hint).toHaveTextContent(
-      'Board: Three specialist agents review the evidence in parallel; a coordinator agent proposes one plan.',
+      "Board: Four AI Hub agents. Three specialists read the sealed evidence at once, each from one angle: the message, the encounter's history, the impact on the receiver. A coordinator weighs their findings and proposes one plan, with reasons.",
     );
     await userEvent.click(rules);
     expect(hint).toHaveTextContent(
-      'Rules only: No agents: resend unchanged unless the gate objects. The baseline to compare with.',
+      'Rules only: No agents: the baseline. Shutter resends the message unchanged unless the gate objects, as a plain Resend would. In S8 one gate check is lifted on purpose, to show what that writes.',
     );
-    expect(hint).not.toHaveTextContent('Three specialist agents');
+    expect(hint).not.toHaveTextContent('Three specialists');
   });
 
   it('counts the scenarios each mode plays, and the list by outcome, from the list itself', async () => {
@@ -529,7 +531,7 @@ describe('ScenariosPage, as each role has it', () => {
     ).toBeInTheDocument();
     expect(within(first).getAllByRole('link', { name: /^Open C-/ })).toHaveLength(2);
     const s23a = first.querySelector<HTMLElement>('[data-first="S23a"]')!;
-    expect(within(s23a).getByText('One case waits for another')).toBeInTheDocument();
+    expect(within(s23a).getByText('One case frees a bed for another')).toBeInTheDocument();
     expect(within(s23a).getByText('Site policy')).toBeInTheDocument();
     expect(
       within(s23a).getByText('No case yet: the hospital plays one every few minutes.'),
@@ -569,7 +571,9 @@ describe('ScenariosPage, as each role has it', () => {
       await within(first).findByText(/holds the one conditional resend for a person/),
     ).toBeInTheDocument();
     expect(within(first).getByText(/this one is resent into the bed/)).toBeInTheDocument();
-    expect(within(first).getByText(/the gate blocks every plan/)).toBeInTheDocument();
+    expect(
+      within(first).getByText(/the gate prevents a patient merge from being sent in any mode/),
+    ).toBeInTheDocument();
   });
 
   it('keeps Run and Reset for an approver, and says nothing about a demo that plays itself', async () => {
@@ -843,19 +847,19 @@ describe('ScenariosPage, its rows and its proof', () => {
     const board = await screen.findByRole('radio', { name: 'Board' });
     await screen.findByRole('button', { name: 'Run S2' });
     expect(board).toHaveAccessibleDescription(
-      /^Three specialist agents review the evidence in parallel; a coordinator agent proposes one plan\. Plays \d+ of the \d+ scenarios$/,
+      /^Four AI Hub agents\. Three specialists read the sealed evidence at once, each from one angle: the message, the encounter's history, the impact on the receiver\. A coordinator weighs their findings and proposes one plan, with reasons\. Plays \d+ of the \d+ scenarios$/,
     );
     await screen.findByRole('button', { name: 'Run S2' });
     const count = document.getElementById('mode-board-count')!;
     expect(count).toHaveClass('mantine-Badge-root');
   });
 
-  it("wraps the headline's HL7 transfer and the proof's Rules only in their definitions", async () => {
+  it("wraps the headline's HL7 and the proof's Rules only in their definitions", async () => {
     renderScenarios();
     await userEvent.click(await screen.findByRole('button', { name: 'What a scenario does' }));
-    const heading = await screen.findByRole('heading', { name: /^Shutter fixes a failed HL7 transfer/ });
-    expect(within(heading).getByText('HL7 transfer')).toHaveAccessibleDescription(
-      'A message telling another hospital system that a patient moved ward.',
+    const heading = await screen.findByRole('heading', { name: /^Shutter resends a failed HL7 delivery/ });
+    expect(within(heading).getByText('HL7')).toHaveAccessibleDescription(
+      'The standard format hospital systems use to send each other messages, such as a patient transfer.',
     );
     const line = (await screen.findByText(/^Tested on/)).closest<HTMLElement>('[data-proof-line]')!;
     expect(within(line).getByText('Rules only')).toHaveAttribute('aria-describedby');

@@ -152,7 +152,7 @@ test.describe('the page at 1280 px @scenarios', () => {
       'aria-expanded',
       'false',
     );
-    await expect(page.getByRole('region', { name: /^Shutter fixes a failed HL7 transfer/ })).toBeVisible();
+    await expect(page.getByRole('region', { name: /^Shutter resends a failed HL7 delivery/ })).toBeVisible();
   });
 
   test('leads through the guided path by its links, each step a sentence with the rest behind More', async ({
@@ -165,7 +165,7 @@ test.describe('the page at 1280 px @scenarios', () => {
       'Case C-000002',
       'Case C-000021',
       'Case C-000008',
-      'Rules and board side by side',
+      'Rules only and Board side by side',
       'Case C-000012',
       'Incident I-000001',
       'Settings and costs',

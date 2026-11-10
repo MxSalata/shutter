@@ -36,21 +36,21 @@ const STEPS: Step[] = [
   {
     scenario: 'S2',
     mode: 'board',
-    title: 'S2 in board mode: approve, then verified',
+    title: 'S2 in Board: approve the resend, then see it verified',
     text: 'A transfer never arrived; approve the resend and see it verified.',
     more: 'Three specialist agents review the evidence, the coordinator agent proposes a resend, the gate passes it and the receiver\'s dry run says it would apply. Approve: one conditional write, then "Verified" from the receiver\'s own history.',
   },
   {
     scenario: 'S8',
     mode: 'rules',
-    title: "S8 in Rules only mode: the resend that overwrote the bed manager's placement",
-    text: 'Two systems moved the same patient at exactly the same recorded time, and a Rules only plan passes every check.',
-    more: "The approved resend writes WARD-B over the bed manager's WARD-C.",
+    title: 'S8 in Rules only: an unsafe resend allowed for demonstration',
+    text: 'This demonstration deliberately lets Rules only resend despite two systems moving the patient at the same recorded time.',
+    more: "Rules only is exempted here on purpose. Every check passes, and the approved resend writes WARD-B over the bed manager's WARD-C. In a real case, the gate blocks it.",
   },
   {
     scenario: 'S8',
     mode: 'board',
-    title: 'S8 in board mode: escalated, citing catalogue entry E7',
+    title: "S8 in Board: two movements need a person's decision",
     text: 'The same failure on the board: the evidence cannot tell which movement is current, so a person decides.',
     more: 'The coordinator agent escalates, citing entry E7 (two sources at the same time). The side-by-side puts the two cases and the evidence they share next to each other.',
     compare: true,
@@ -66,7 +66,7 @@ const STEPS: Step[] = [
     incident: true,
     title: 'S11: the outage incident, with a chain per encounter',
     text: 'The receiver went down twice and eight deliveries failed: one incident, a chain per encounter.',
-    more: 'Each chain is released in event order, one operation at a time, at the version the one before verified.',
+    more: 'Operations that still need resending are released in event order, one at a time. Each subsequent operation uses the receiver version verified after the previous one.',
   },
   {
     pages: [
@@ -103,7 +103,7 @@ function linksFor(step: Step, cases: CaseSummary[]): PageLink[] {
   const to = `/cases/${encodeURIComponent(c.caseId)}`;
   return [
     { to, label: `Case ${c.caseId}` },
-    ...(step.compare ? [{ to: `${to}?show=compare`, label: 'Rules and board side by side' }] : []),
+    ...(step.compare ? [{ to: `${to}?show=compare`, label: 'Rules only and Board side by side' }] : []),
   ];
 }
 

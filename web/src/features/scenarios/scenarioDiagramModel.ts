@@ -83,7 +83,7 @@ const eventOf = (step: ScenarioStep) => /(A\d{2})\.hl7$/i.exec(step.file ?? '')?
  * which the app never reads). A test checks this reading against every fixture's MSH-3, so the two can't drift apart.
  */
 const otherSourceAfterFailure = (s: Pick<Scenario, 'summary'>) =>
-  /\bthe bed manager's own transfer\b/.test(s.summary ?? '');
+  /\bthe bed manager's own transfer\b/i.test(s.summary ?? '');
 
 function nodesOf(s: Pick<Scenario, 'summary' | 'steps' | 'expected'>): DiagramNode[] {
   const steps = s.steps ?? [];

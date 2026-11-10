@@ -88,7 +88,7 @@ describe('ScenariosPage in the trial', () => {
     expect(within(modes).getByText('Not in the trial: no recording')).toBeInTheDocument();
     expect(within(modes).getByRole('radio', { name: 'Site policy' })).toBeChecked();
     // What it is, in view: the line under the cards speaks only for the chosen mode, and this one can't be chosen
-    expect(within(modes).getByText(/One generalist agent looks at everything/)).toBeVisible();
+    expect(within(modes).getByText(/One AI Hub agent with the same evidence and tools/)).toBeVisible();
   });
 
   it("says where the online demo's words apply, and how to get a role that can run one", async () => {
@@ -125,7 +125,7 @@ describe('ScenariosPage in the trial', () => {
       'href',
       '/cases/C-000002',
     );
-    expect(within(steps[2]).getByRole('link', { name: 'Rules and board side by side' })).toHaveAttribute(
+    expect(within(steps[2]).getByRole('link', { name: 'Rules only and Board side by side' })).toHaveAttribute(
       'href',
       '/cases/C-000008?show=compare',
     );
@@ -137,9 +137,13 @@ describe('ScenariosPage in the trial', () => {
     await screen.findByRole('region', { name: 'Try these three first' });
     expect(
       screen.getByText(
-        "Every Run button below uses it. The mode chooses who proposes the plan; the gate and the rehearsal are the same in every mode, except one check that Rules only skips on purpose in a played scenario, so that S8 can show a plain resend; a person or the site's policy releases it.",
+        "Every Run button below uses it. The mode decides who proposes the plan. In every mode the same gate checks the plan, and a person or the site's policy releases any write.",
       ),
     ).toBeInTheDocument();
+    // The exemption is said in Rules only's own hint, under the choice
+    expect(document.querySelector<HTMLElement>('[data-mode-hint]')).toHaveTextContent(
+      'Rules only: No agents: the baseline. Shutter resends the message unchanged unless the gate objects, as a plain Resend would. In S8 one gate check is lifted on purpose, to show what that writes.',
+    );
   });
 
   it("plays S8's card in the mode chosen under Run mode, and says so on its Run", async () => {
