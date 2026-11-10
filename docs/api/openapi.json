@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Shutter REST API",
-    "version": "1.4.0",
+    "version": "1.4.1",
     "summary": "The REST API the Shutter web application uses, as src/Shutter/API/Dispatch.cls builds it.",
     "description": "Every route of Shutter.API.Dispatch's UrlMap, under the web application /api/shutter. Sign in with POST /api/shutter/session (the CSP session cookie then carries the sign-in) or send HTTP Basic credentials on each request, as the intake's forwarder does. Every route checks the caller's IRIS resources on the server (x-required-resource): 401 unauthenticated when no one is signed in, 403 forbidden without the resource. Every change carries X-Requested-With: Shutter (403 csrf without it), and the idempotent ones honour an Idempotency-Key (x-idempotent). Errors are JSON with error and detail. Times are ISO 8601 UTC. The prose contract is docs/CONTRACTS.md; x-contract names the section. The examples come from the recorded demo (web/src/mocks/fixtures.json): synthetic patients and no secrets.",
     "license": {
