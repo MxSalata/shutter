@@ -17,6 +17,7 @@ import {
   IconClock,
   IconFileDownload,
   IconMailForward,
+  IconMailOff,
   IconMinus,
   IconPencil,
   IconSend,
@@ -44,7 +45,7 @@ import { addressesProblem, closeNeedsApprover, controlProblem } from '../../site
 import { formatZoned, humanize } from '@/lib/format';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { closableByHand } from './caseAction';
-import { automaticTeam, mailOutcome, sendConsequence, sentNotice } from './escalationWords';
+import { automaticTeam, mailOutcome, neverSent, sendConsequence, sentNotice } from './escalationWords';
 import { notModelled } from './derive';
 import { ReceiverCheckCard } from './ReceiverCheckCard';
 import { receiverNoun, receiverTeam } from './receiver';
@@ -62,8 +63,12 @@ const EMAIL_TONES: Record<string, Tone> = {
   failed: 'blocking',
   cancelled: 'neutral',
 };
-/** The badge's words: "Saved, not delivered" says what a saved file is not; the others by their state. */
-const emailLabel = (state: string) => (state === 'saved' ? 'Saved, not delivered' : humanize(state));
+/**
+ * The badge's words: "Saved, not delivered" says what a saved file is not; "Not sent" one the operation held before
+ * anything left (shadow mode), as the dialog promised; the others by their state.
+ */
+const emailLabel = (e: Pick<Escalation, 'state' | 'result'>) =>
+  e.state === 'saved' ? 'Saved, not delivered' : neverSent(e) ? 'Not sent' : humanize(e.state);
 
 /** The text's digest, by what was done with it: queued, sent through the mail server, or saved as a file. */
 const digestVerb = (state: string) => (state === 'saved' ? 'saved' : state === 'queued' ? 'queued' : 'sent');
@@ -422,9 +427,9 @@ export function EscalationPanel({
                   Escalation {e.seq}
                 </Text>
                 <StatusBadge
-                  tone={EMAIL_TONES[e.state] ?? 'neutral'}
-                  label={emailLabel(e.state)}
-                  icon={EMAIL_ICONS[e.state]}
+                  tone={neverSent(e) ? 'attention' : (EMAIL_TONES[e.state] ?? 'neutral')}
+                  label={emailLabel(e)}
+                  icon={neverSent(e) ? IconMailOff : EMAIL_ICONS[e.state]}
                 />
                 <Text size="xs" c="dimmed">
                   {e.teamName ? `${e.teamName}, ` : ''}
@@ -475,7 +480,7 @@ export function EscalationPanel({
                   </Text>
                 ) : null}
                 {e.state === 'failed' && e.result ? (
-                  <Text size="sm" c="red">
+                  <Text size="sm" c={neverSent(e) ? undefined : 'red'} data-testid="escalation-result">
                     {e.result}
                   </Text>
                 ) : null}

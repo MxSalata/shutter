@@ -1,10 +1,29 @@
 import { describe, expect, it } from 'vitest';
 import type { SiteProfile, SiteTeam } from '@/api/types';
-import { SHADOW_NO_MAIL, automaticTeam, mailOutcome, sendConsequence, sentNotice } from './escalationWords';
+import {
+  SHADOW_NO_MAIL,
+  automaticTeam,
+  mailOutcome,
+  neverSent,
+  sendConsequence,
+  sentNotice,
+} from './escalationWords';
 
 const profile = (more: Partial<SiteProfile>) => ({ receivers: [], ...more }) as unknown as SiteProfile;
 
 describe('what sending an escalation will do', () => {
+  it('reads an escalation shadow mode held as never sent, and nothing else', () => {
+    expect(
+      neverSent({
+        state: 'failed',
+        result: 'Not sent: shadow mode sends no email, and enabling recovery does not send this one',
+      }),
+    ).toBe(true);
+    expect(neverSent({ state: 'failed', result: 'Refused for team@example.nhs.uk' })).toBe(false);
+    expect(neverSent({ state: 'failed', result: undefined })).toBe(false);
+    expect(neverSent({ state: 'saved', result: 'Not sent: x' })).toBe(false);
+  });
+
   it('reads shadow mode as the server does: no email and no file, unless the site allows email in shadow mode', () => {
     expect(mailOutcome(undefined)).toBe('unknown');
     expect(mailOutcome(profile({}))).toBe('suppressed');

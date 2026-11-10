@@ -296,6 +296,30 @@ describe('EscalationPanel', () => {
     );
   });
 
+  it('reads an escalation shadow mode held as Not sent, as the dialog and the toast promise, and offers it again', async () => {
+    const held: Escalation = {
+      caseId: 'C-000008',
+      seq: 1,
+      state: 'failed',
+      teamName: 'Integration team',
+      to: 'integration@example.nhs.uk',
+      subject: 'Manual check needed',
+      body: 'Please check the message.',
+      bodyDigest: 'sha256:abc123',
+      sentBy: 'approver',
+      result: 'Not sent: shadow mode sends no email, and enabling recovery does not send this one',
+    };
+    server.use(http.get('/api/shutter/cases/:id/escalations', () => HttpResponse.json([held])));
+    renderCase('C-000008');
+    const panel = await screen.findByRole('region', { name: 'Escalations' });
+    expect(await within(panel).findByText('Not sent')).toBeInTheDocument();
+    expect(within(panel).queryByText('Failed')).toBeNull();
+    await userEvent.click(within(panel).getByRole('button', { name: /Escalation 1/ }));
+    expect(await within(panel).findByTestId('escalation-result')).toHaveTextContent(
+      'Not sent: shadow mode sends no email, and enabling recovery does not send this one',
+    );
+  });
+
   it('shows an email the mail server took as Sent, with what that does and does not show', async () => {
     const smtp: Escalation = {
       caseId: 'C-000008',

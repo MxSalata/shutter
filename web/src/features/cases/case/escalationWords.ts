@@ -1,4 +1,4 @@
-import type { CaseDetail, SiteProfile, SiteTeam } from '@/api/types';
+import type { CaseDetail, Escalation, SiteProfile, SiteTeam } from '@/api/types';
 
 /*
  * What sending an escalation will do, said before the press (CONTRACTS 10 and 18), and which team the Automatic choice
@@ -19,6 +19,15 @@ export function mailOutcome(profile: SiteProfile | null | undefined): 'suppresse
 /** The words for shadow mode, before a send and after it. */
 export const SHADOW_NO_MAIL =
   'Shutter is in shadow mode, so sending emails nobody and saves no email file: the escalation will read Not sent. To send it, the site enables recovery, or allows email in shadow mode (notifications.shadow_delivery in the site profile), and someone sends it again.';
+
+/**
+ * Whether an escalation was never sent: the operation held it before anything left (shadow mode, CONTRACTS 18), so its
+ * stored state is failed and its result starts "Not sent:". Its line reads Not sent, the word the dialog and the toast
+ * promise, and it can be sent again as a failed one can.
+ */
+export function neverSent(e: Pick<Escalation, 'state' | 'result'>): boolean {
+  return e.state === 'failed' && /^Not sent\b/.test(e.result ?? '');
+}
 
 /** The dialog's first line: what Send does, through the mail server, to a file, or not at all in shadow mode. */
 export function sendConsequence(
