@@ -12,7 +12,7 @@ import {
   useComputedColorScheme,
   useMantineColorScheme,
 } from '@mantine/core';
-import { useEffect, useRef, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react';
 import { useDisclosure } from '@mantine/hooks';
 import {
   IconContrast,
@@ -391,27 +391,30 @@ export function AppLayout() {
           onClick={close}
         />
         {sections.map(({ group, items }) => (
-          <div key={group} role="group" aria-labelledby={`nav-${group}`} className="nav-group">
-            <Text id={`nav-${group}`} className="nav-group-label" tt="uppercase" px="sm" pt="sm" pb={4}>
-              {group}
-            </Text>
-            {items.map((item) => (
-              <NavLink
-                key={item.to}
-                component={RouterNavLink}
-                to={item.to}
-                label={item.label}
-                active={isActive(pathname, item.to)}
-                className="nav-link"
-                style={{ '--nav-icon': hueVar(item.hue) } as CSSProperties}
-                leftSection={<item.icon size={18} stroke={1.6} className="nav-icon" aria-hidden />}
-                rightSection={item.count ? <NavCount /> : undefined}
-                onClick={close}
-              />
-            ))}
-          </div>
+          <Fragment key={group}>
+            <div role="group" aria-labelledby={`nav-${group}`} className="nav-group">
+              <Text id={`nav-${group}`} className="nav-group-label" tt="uppercase" px="sm" pt="sm" pb={4}>
+                {group}
+              </Text>
+              {items.map((item) => (
+                <NavLink
+                  key={item.to}
+                  component={RouterNavLink}
+                  to={item.to}
+                  label={item.label}
+                  active={isActive(pathname, item.to)}
+                  className="nav-link"
+                  style={{ '--nav-icon': hueVar(item.hue) } as CSSProperties}
+                  leftSection={<item.icon size={18} stroke={1.6} className="nav-icon" aria-hidden />}
+                  rightSection={item.count ? <NavCount /> : undefined}
+                  onClick={close}
+                />
+              ))}
+            </div>
+            {/* The page inside IRIS stays under Configure in both views, before the Technical group joins */}
+            {group === 'Configure' ? <PortalNavLink onClick={close} /> : null}
+          </Fragment>
         ))}
-        <PortalNavLink onClick={close} />
       </AppShell.Navbar>
       {/* The skip link's target: focusable by script only, so it is no tab stop of its own. */}
       <AppShell.Main
