@@ -4,6 +4,37 @@ Versions follow `major.minor.patch`: a minor release for new features, a patch r
 updates. The version in both `module.xml` files (the one the package manager publishes) is always the version of the
 GitHub tag on the same commit; `scripts/check-versions.py` checks every place the version is written.
 
+## 1.4.1 (10 November 2026)
+
+Fixes for what the hands-on recheck of 1.4.0 found left over. No new features.
+
+- **A resend whose result was unknown settles once the engine shows how it ended.** When a receiver answered after the
+  send's wait, the message read unknown for good: the closed outage card kept leading with "A resend's result is
+  unknown", counted it as failed, listed it as needing a person beside the same card's "Do: nothing more", and its case
+  stayed escalated. Engine Resend now reads such a message's new header again, for up to 7 days, and ends it by the
+  send's own rules once it settles: Completed resolves the message's case with what was sent, the receiver's declared
+  duplicate answer closes it as already held, and any other end is a failed resend with a note on its case. Nothing is
+  sent again, and the outage keeps its state, with an event saying what was read.
+- **The outage card follows each message's latest state.** Its list shows each message once, as it stands now, with the
+  rows a later run replaced folded beneath; its counts count each message once (a message an earlier run left unsent and
+  a later run sent counts as sent); a result not known yet is counted as such, not as failed; a failed or unknown resend
+  from an earlier run is said after the card's own words, in words true for that run; and a closed card says what still
+  needs a person instead of "nothing more" while one does.
+- **No approval button before the recovery control is read.** For about a second after Incidents loaded under the stop
+  or in shadow mode, the card offered "Approve the resend..." until the control arrived. It now says it is reading the
+  control, then shows the approval or the notice; a control that can't be read holds the approval, as the server does.
+- **A shadow-mode escalation reads Not sent.** Its line's badge read Failed while the dialog and the toast promised Not
+  sent; it now reads Not sent, and it can still be sent again.
+- **Words for orders, results and documents that are true in 1.4.0.** The intake's "Shutter resends only ADT" is
+  replaced: such a message is not resent from its case, and where its receiver is set up for the outage resend an
+  approver can have the engine send it again. Cases stored before read the new words in the email, the evidence and the
+  case page; nothing stored is rewritten.
+- **The findings on an order or result case have their structure.** One line per finding, with one line per field that
+  names every place the character stands once, instead of one paragraph that repeated a field for every place; the
+  escalation email names each field once.
+- **The outage pause field's example is in the future**: the next 06:00 UTC at least an hour ahead, not a fixed date
+  that had passed.
+
 ## 1.4.0 (9 November 2026)
 
 Pathology, tier C: after one approval, Shutter resends an outage's messages that never reached the receiver, one at a
