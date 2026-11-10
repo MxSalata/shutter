@@ -325,16 +325,18 @@ function ResendItem({ r }: { r: Resend }) {
  */
 export function ResendList({ resends }: { resends: Resend[] }) {
   const { latest, earlier } = byMessage(resends);
+  // The list's name, by an id of this card's own: a fixed id was shared by every card, so each list took the first one's
+  const sentId = useId();
   const sent = latest.filter((r) => !r.runId.startsWith('H'));
   const byHand = latest.filter((r) => r.runId.startsWith('H'));
   return (
     <Stack gap="xs" data-testid="outage-resends">
       {sent.length ? (
         <Stack gap={2}>
-          <Text size="sm" fw={600} id="outage-resends-sent">
+          <Text size="sm" fw={600} id={sentId}>
             Each message sent, in order ({sent.length})
           </Text>
-          <List type="ordered" size="sm" spacing={4} aria-labelledby="outage-resends-sent">
+          <List type="ordered" size="sm" spacing={4} aria-labelledby={sentId}>
             {sent.map((r) => (
               <ResendItem key={`${r.runId}:${r.position}`} r={r} />
             ))}
