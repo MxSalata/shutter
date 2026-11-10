@@ -21,7 +21,7 @@ done
 session() { # NAMESPACE COMMAND
   out=$(printf '%s\n' "$2" 'Halt' | docker exec -i "$CTR" iris session IRIS -U "$1")
   echo "$out" | tail -3
-  echo "$out" | grep -q '^RESULT: ok'
+  grep -q '^RESULT: ok' <<<"$out"
 }
 python3 scripts/iris-load.py --url "$URL" --ns USER src/Shutter/Setup.cls
 session USER 'Set r = ##class(Shutter.Setup).CreateNamespace("SHUTTER") Write !,"RESULT: ",r,!'

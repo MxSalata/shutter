@@ -154,7 +154,7 @@ jobs:
           set -e
           echo "$out"
           [ "$code" = "0" ] || exit "$code"
-          if echo "$out" | grep -q ': missing '; then echo "A scenario lacks recordings for its board"; exit 1; fi
+          if grep -q ': missing ' <<<"$out"; then echo "A scenario lacks recordings for its board"; exit 1; fi
       - name: The recording checks refuse what they must (their own synthetic recordings)
         run: |
           python3 scripts/check-records.py --self-test
@@ -293,7 +293,7 @@ jobs:
           out=$(printf '%s\n' 'Set r = ##class(Shutter.Setup).CreateNamespace("SHUTTER") Write !,"RESULT: ",r,!' 'Halt' \
             | docker exec -i "$CTR" iris session IRIS -U USER)
           echo "$out" | tail -20
-          echo "$out" | grep -q '^RESULT: ok'
+          grep -q '^RESULT: ok' <<<"$out"
       - name: Load and compile the core, the downstream system and its tests
         # The core module's sources only (scripts/module-sources.py reads core/module.xml): the agents' classes under src/
         # need the %AI package, which the plain image has not.
@@ -303,7 +303,7 @@ jobs:
           out=$(printf '%s\n' 'Set r = ##class(Shutter.Setup).Install("/home/irisowner/dev/") Write !,"RESULT: ",r,!' 'Halt' \
             | docker exec -i "$CTR" iris session IRIS -U SHUTTER)
           echo "$out" | tail -30
-          echo "$out" | grep -q '^RESULT: ok'
+          grep -q '^RESULT: ok' <<<"$out"
       # The demo hospital (shape A): its own namespace, with Shutter's packages mapped from SHUTTER, and its production,
       # which forwards its failed deliveries to Shutter's intake. Both write their progress to the current device, as
       # above, so they run in terminal sessions too.
@@ -312,11 +312,11 @@ jobs:
           out=$(printf '%s\n' 'Set r = ##class(Shutter.Installer).RunHospital("SHUTTER") Write !,"RESULT: ",r,!' 'Halt' \
             | docker exec -i "$CTR" iris session IRIS -U SHUTTER)
           echo "$out" | tail -20
-          echo "$out" | grep -q '^RESULT: ok'
+          grep -q '^RESULT: ok' <<<"$out"
           out=$(printf '%s\n' 'Set r = ##class(Hospital.Setup).Install("SHUTTER") Write !,"RESULT: ",r,!' 'Halt' \
             | docker exec -i "$CTR" iris session IRIS -U HOSPITAL)
           echo "$out" | tail -20
-          echo "$out" | grep -q '^RESULT: ok'
+          grep -q '^RESULT: ok' <<<"$out"
       # The demo records system (v1.25): the demo receiver package in a namespace of its own behind /records/api, the
       # second receiver (category history_of_record) the production feeds beside the bed manager.
       - name: The demo records system's namespace
@@ -324,7 +324,7 @@ jobs:
           out=$(printf '%s\n' 'Set r = ##class(Shutter.Installer).RunRecords("SHUTTER") Write !,"RESULT: ",r,!' 'Halt' \
             | docker exec -i "$CTR" iris session IRIS -U SHUTTER)
           echo "$out" | tail -20
-          echo "$out" | grep -q '^RESULT: ok'
+          grep -q '^RESULT: ok' <<<"$out"
       - name: The downstream system's contract tests, in process
         if: matrix.shard == 'checks'
         run: |
@@ -367,8 +367,8 @@ jobs:
         run: |
           out=$(python3 scripts/iris-sql.py --url "$IRIS_URL" --ns SHUTTER --json "SELECT Shutter_Util.ModelView_Preview('C-000001') AS p")
           echo "$out" | head -40
-          echo "$out" | grep -q 'MRN-T1'
-          echo "$out" | grep -q 'ENC-T1'
+          grep -q 'MRN-T1' <<<"$out"
+          grep -q 'ENC-T1' <<<"$out"
           if echo "$out" | grep -Eq 'MRN1001|ENC-1001|9991001018'; then echo "A real identifier reached the model's view"; exit 1; fi
       # Times without an offset are read in the feed's zone: British Summer Time in July, GMT in January, and the hour
       # before the October clock change flagged.

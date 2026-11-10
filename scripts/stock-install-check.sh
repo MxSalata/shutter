@@ -52,7 +52,7 @@ sleep 5
 
 docker cp vendor/ipm/zpm-0.10.10.xml "$ctr:/tmp/zpm.xml"
 out=$(printf '%s\n' 'Set sc = $SYSTEM.OBJ.Load("/tmp/zpm.xml", "ck") Write !,"RESULT: ",$SELECT(sc: "ok", 1: $SYSTEM.Status.GetErrorText(sc)),!' 'Halt' | session USER)
-echo "$out" | grep -q '^RESULT: ok' || { echo "$out" | tail -30; echo "IPM did not install"; exit 1; }
+grep -q '^RESULT: ok' <<<"$out" || { echo "$out" | tail -30; echo "IPM did not install"; exit 1; }
 echo "IPM 0.10.10 installed"
 
 if [ -n "$archive" ]; then
@@ -68,7 +68,7 @@ fi
 
 start=$SECONDS
 out=$(printf '%s\n' "Set sc = ##class(%IPM.Main).Shell(\"load $target -v$load_args\") Write !,\"RESULT: \",\$SELECT(sc: \"ok\", 1: \$SYSTEM.Status.GetErrorText(sc)),!" 'Halt' | session USER)
-echo "$out" | grep -q '^RESULT: ok' || { echo "$out" | tail -40; echo "the load failed on a stock instance"; exit 1; }
+grep -q '^RESULT: ok' <<<"$out" || { echo "$out" | tail -40; echo "the load failed on a stock instance"; exit 1; }
 echo "loaded $target in USER in $((SECONDS - start)) s"
 
 code=$(curl -s -m 20 -o /dev/null -w '%{http_code}' "$url/shutter/index.html" || true)
@@ -92,7 +92,7 @@ echo "GET /health answers a caller who is not signed in"
 if [ -n "$write_archive" ]; then
   name=$(sed -n 's:.*<Name>\(iris-[a-z-]*\)</Name>.*:\1:p' "$module/module.xml" | head -1)
   out=$(printf '%s\n' "Set sc = ##class(%IPM.Main).Shell(\"$name package -only -path /tmp/pkg\") Write !,\"RESULT: \",\$SELECT(sc: \"ok\", 1: \$SYSTEM.Status.GetErrorText(sc)),!" 'Halt' | session USER)
-  echo "$out" | grep -q '^RESULT: ok' || { echo "$out" | tail -30; echo "the package was not written"; exit 1; }
+  grep -q '^RESULT: ok' <<<"$out" || { echo "$out" | tail -30; echo "the package was not written"; exit 1; }
   docker cp "$ctr:/tmp/pkg.tgz" "$write_archive"
   echo "wrote $write_archive"
 fi
