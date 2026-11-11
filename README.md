@@ -20,9 +20,9 @@
   <a href="https://github.com/MxSalata/shutter#try-it">Install</a> ·
   <a href="https://github.com/MxSalata/shutter#how-it-works">How it works</a> ·
   <a href="https://github.com/MxSalata/shutter#where-the-agents-sit">The agents</a> ·
+  <a href="https://github.com/MxSalata/shutter#what-has-been-measured">Results</a> ·
   <a href="https://github.com/MxSalata/shutter#documents">Documents</a> ·
   <a href="https://github.com/MxSalata/shutter#pathology">Pathology</a> ·
-  <a href="https://github.com/MxSalata/shutter#what-has-been-measured">Results</a> ·
   <a href="https://github.com/MxSalata/shutter#how-it-is-tested">Testing</a> ·
   <a href="https://github.com/MxSalata/shutter#limits-plainly">Limits</a> ·
   <a href="https://github.com/MxSalata/shutter#technology-bonuses">Bonuses</a>
@@ -46,6 +46,13 @@ There are two recovery paths, with different guarantees:
 
 - **Case recovery:** a conditional write through the receiver's API, verified in its receipt and history.
 - **Outage recovery:** stored HL7 messages resent through the engine, completed in the engine and settled by the receiver's declared duplicate handling. This is not receiver-side verification.
+
+**Judge the complete workflow**
+
+- **Try:** S2, S3 and S8 in the trial, below: a verified recovery, a delivery the receiver already had, and an escalation with 0 writes.
+- **Inspect:** S2's receipt and history on its case, then **Message trace**, the agents' steps in IRIS's Visual Trace.
+- **Know the mode:** the trial plays recordings in your browser; the online demo runs on real IRIS, where the `demo` account replays the recorded agents and the judges' account calls them live; your machine runs either.
+- **The contest's workflow in code:** [CaseWorkflow](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Process/CaseWorkflow.cls) runs the case; the [AI Hub agents](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Agent), three specialists and a [coordinator](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Agent/Coordinator.cls), read the sealed evidence; the coordinator calls [SubmitPlan](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Tools/SubmitPlan.cls); the [gate](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Operation/Gate.cls) checks the plan; an IRIS Workflow task takes the approval; one conditional write follows, and the [verifier](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Operation/Verify.cls) reads the receiver's receipts and history.
 
 <a id="for-judges"></a>
 
@@ -129,6 +136,40 @@ Also included: **Ask Shutter** about the page on screen, a read-only production 
 
 [Agent source](https://github.com/MxSalata/shutter/tree/main/src/Shutter/Agent) · [AI Hub integration](https://github.com/MxSalata/shutter/blob/main/docs/readme/ai-hub.md) · [Trace an agent, step by step](https://github.com/MxSalata/shutter/blob/main/docs/readme/tracing.md)
 
+## What has been measured
+
+### The full comparison: release 1.0.0
+
+Twelve synthetic held-out cases, three runs per mode, live agents on `claude-opus-5-5`. Cases, expected outcomes and scoring were hashed before the runs and published with them, but this was not an independently sealed evaluation.
+
+Loss runs from **0 for a right outcome to 20 for a wrong write made**.
+
+| Mode | Mean loss | Wrong writes executed | USD per run |
+| --- | ---: | ---: | ---: |
+| Board | 0.167 | 0 | 0.48 |
+| Single investigator | 0.167 or 0.500, depending on the F08 grading described below | 0 | 0.13 |
+| Site policy, tested without a model key | 3.500 | 3 | 0 |
+| Rules only | 5.000 | 3 | 0 |
+| Always escalating, computed once per case | 1.250 | 0 | 0 |
+
+Board and single investigator each produced 30 right and 6 defensible answers out of 36 runs. Treating defensible answers as free gives both a mean loss of 0.000. The single investigator scores 0.500 if two F08 runs are graded on the plan made after the gate voided their approval, rather than 0.167.
+
+Site policy's three board cases had no model key and fell back to a plain resend. Its row is not a measurement of Site policy with a live board.
+
+### Follow-up evidence, with its scope
+
+| Evidence | What it establishes |
+| --- | --- |
+| **Release 1.3.2, F03 and F07** | Both cases closed correctly in every board and single-investigator run, three runs each, with F07 using the shipped `show` setting |
+| **Release 1.4.3, all twelve cases rerun** | Board 0.167 and single investigator 0.167 as settled (0.667 by the unchanged grader, which counts F08's three runs as false closures; the fair-test page gives both), as on 1.0.0, with the same 12 writes, all verified; Site policy with a live board 0.900 on ten cases; Rules only 4.000; no mode made a wrong write. A regression rerun on cases that influenced fixes, not a new held-out test |
+| **Catalogue demonstration, S1 to S10 and S13** | The board reached all 11 expected outcomes, live and in replay, with the catalogue's preferred outcome supplied to it |
+
+**Sonnet 5.5 specialists with an Opus 5.5 coordinator: the same grades in all 36 runs of the twelve cases on release 1.1.1, at 0.331 USD a run against 0.527.**
+
+Separately, an all-Sonnet 5.5 board made the same decisions as Opus 5.5 in all 36 runs of the full comparison, at 0.24 USD per run against 0.48.
+
+[Full comparison, scoring and every run](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md) · [F03 and F07 on 1.3.2](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#release-132-f03-and-f07-live) · [All twelve on 1.4.3](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#release-143-all-12-cases-rerun) · [What the catalogue demonstration does and does not show](https://github.com/MxSalata/shutter/blob/main/docs/readme/evaluation.md)
+
 <a id="documents"></a>
 
 ## Documents: MDM exceptions without a blind resend
@@ -168,40 +209,6 @@ Shadow mode and **Stop Shutter recovery** hold this path too. An unknown send re
 ![A pathology outage after recovery: each ORU^R01 resent under one approval, its new header completed, and the two handled by hand](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/pathology-oru-r01-outage-recovery.png)
 
 [Release history](https://github.com/MxSalata/shutter/blob/main/CHANGELOG.md) · [Outage recovery contract](https://github.com/MxSalata/shutter/blob/main/docs/CONTRACTS.md#178-the-send-v151-to-v154)
-
-## What has been measured
-
-### The full comparison: release 1.0.0
-
-Twelve synthetic held-out cases, three runs per mode, live agents on `claude-opus-5-5`. Cases, expected outcomes and scoring were hashed before the runs and published with them, but this was not an independently sealed evaluation.
-
-Loss runs from **0 for a right outcome to 20 for a wrong write made**.
-
-| Mode | Mean loss | Wrong writes executed | USD per run |
-| --- | ---: | ---: | ---: |
-| Board | 0.167 | 0 | 0.48 |
-| Single investigator | 0.167 or 0.500, depending on the F08 grading described below | 0 | 0.13 |
-| Site policy, tested without a model key | 3.500 | 3 | 0 |
-| Rules only | 5.000 | 3 | 0 |
-| Always escalating, computed once per case | 1.250 | 0 | 0 |
-
-Board and single investigator each produced 30 right and 6 defensible answers out of 36 runs. Treating defensible answers as free gives both a mean loss of 0.000. The single investigator scores 0.500 if two F08 runs are graded on the plan made after the gate voided their approval, rather than 0.167.
-
-Site policy's three board cases had no model key and fell back to a plain resend. Its row is not a measurement of Site policy with a live board.
-
-### Follow-up evidence, with its scope
-
-| Evidence | What it establishes |
-| --- | --- |
-| **Release 1.3.2, F03 and F07** | Both cases closed correctly in every board and single-investigator run, three runs each, with F07 using the shipped `show` setting |
-| **Release 1.4.3, all twelve cases rerun** | Board 0.167 and single investigator 0.167 as settled (0.667 by the unchanged grader, which counts F08's three runs as false closures; the fair-test page gives both), as on 1.0.0, with the same 12 writes, all verified; Site policy with a live board 0.900 on ten cases; Rules only 4.000; no mode made a wrong write. A regression rerun on cases that influenced fixes, not a new held-out test |
-| **Catalogue demonstration, S1 to S10 and S13** | The board reached all 11 expected outcomes, live and in replay, with the catalogue's preferred outcome supplied to it |
-
-**Sonnet 5.5 specialists with an Opus 5.5 coordinator: the same grades in all 36 runs of the twelve cases on release 1.1.1, at 0.331 USD a run against 0.527.**
-
-Separately, an all-Sonnet 5.5 board made the same decisions as Opus 5.5 in all 36 runs of the full comparison, at 0.24 USD per run against 0.48.
-
-[Full comparison, scoring and every run](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md) · [F03 and F07 on 1.3.2](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#release-132-f03-and-f07-live) · [All twelve on 1.4.3](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#release-143-all-12-cases-rerun) · [What the catalogue demonstration does and does not show](https://github.com/MxSalata/shutter/blob/main/docs/readme/evaluation.md)
 
 ## Try it
 
