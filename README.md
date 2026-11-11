@@ -1,23 +1,44 @@
 <p align="center">
-  <a href="https://github.com/MxSalata/shutter/actions/workflows/ci.yml"><img src="https://github.com/MxSalata/shutter/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
-  <a href="https://github.com/MxSalata/shutter/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT licence" /></a>
-</p>
-<p align="center">
   <img src="https://raw.githubusercontent.com/MxSalata/shutter/main/web/public/favicon.svg" width="96" alt="Shutter's mark" />
 </p>
 <h1 align="center">Shutter</h1>
-<p align="center"><b>Supervised recovery of failed HL7 deliveries, with IRIS AI Hub agents inside an Interoperability production.</b></p>
+<p align="center"><b>IRIS AI Hub agents for failed HL7 deliveries, in an Interoperability production.</b></p>
 <p align="center">The AI board proposes; the gate disposes.</p>
 <p align="center">
-  <a href="https://mxsalata.github.io/shutter/"><b>Try it in your browser</b></a> ·
-  <a href="https://shutter.mxsalata.com"><b>Online demo on real IRIS</b></a> ·
+  <a href="https://github.com/MxSalata/shutter/actions/workflows/ci.yml"><img src="https://github.com/MxSalata/shutter/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
+  <a href="https://github.com/MxSalata/shutter/tags"><img src="https://img.shields.io/github/v/tag/MxSalata/shutter?label=version&color=0e7299" alt="Version" /></a>
+  <a href="https://mxsalata.github.io/shutter/"><img src="https://img.shields.io/badge/trial-try%20it-45acd1" alt="Trial" /></a>
+  <a href="https://shutter.mxsalata.com"><img src="https://img.shields.io/badge/online%20demo-live-2f9e6b" alt="Online demo" /></a>
+  <a href="https://github.com/MxSalata/shutter#try-it"><img src="https://img.shields.io/badge/docker-compose%20up-2496ed?logo=docker&logoColor=white" alt="Docker" /></a>
+  <a href="https://github.com/MxSalata/shutter#ipm-on-a-stock-ai-hub-image"><img src="https://img.shields.io/badge/IPM-iris--shutter-095c7c" alt="IPM package" /></a>
+  <a href="https://github.com/MxSalata/shutter/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT licence" /></a>
+</p>
+<p align="center">
+  <a href="https://mxsalata.github.io/shutter/"><b>Trial</b> (no IRIS)</a> ·
+  <a href="https://shutter.mxsalata.com"><b>Online demo</b> (real IRIS)</a> ·
+  <a href="https://github.com/MxSalata/shutter#for-judges">For judges</a> ·
   <a href="https://github.com/MxSalata/shutter#try-it">Install</a> ·
-  <a href="https://openexchange.intersystems.com/package/Shutter">Open Exchange</a>
+  <a href="https://github.com/MxSalata/shutter#how-it-works">How it works</a> ·
+  <a href="https://github.com/MxSalata/shutter#where-the-agents-sit">The agents</a> ·
+  <a href="https://github.com/MxSalata/shutter#documents">Documents</a> ·
+  <a href="https://github.com/MxSalata/shutter#pathology">Pathology</a> ·
+  <a href="https://github.com/MxSalata/shutter#what-has-been-measured">Results</a> ·
+  <a href="https://github.com/MxSalata/shutter#how-it-is-tested">Testing</a> ·
+  <a href="https://github.com/MxSalata/shutter#limits-plainly">Limits</a> ·
+  <a href="https://github.com/MxSalata/shutter#technology-bonuses">Bonuses</a>
+</p>
+<p align="center">
+  <a href="https://openexchange.intersystems.com/package/Shutter">Open Exchange</a> ·
+  <a href="https://github.com/MxSalata/shutter#technology-bonuses">Articles</a> ·
+  <a href="https://github.com/MxSalata/shutter/blob/main/CHANGELOG.md">What's new</a> ·
+  <a href="https://github.com/MxSalata/shutter/releases">Releases</a>
 </p>
 
-**Failed messages go unactioned every day. Shutter will not fix every one, but it helps with most.** Its scope comes from the kinds of failure encountered in interoperability work with 28 NHS hospitals. That is its practical grounding, not a measured hospital recovery rate: the published tests use synthetic data and demo receivers or stubs.
+**When a hospital's HL7 delivery fails, the usual fix is Resend, and when two systems move a patient at the same moment, that resend can write over the bed manager's newer ward. Shutter's IRIS AI Hub agents decide how to put the failure right; a deterministic gate decides whether anything is written.**
 
-A plain **Resend** can deliver a missing transfer. It can also overwrite a newer ward, repeat something the receiver already holds, or revive a cancelled movement.
+On an ordinary day a hospital's integration engine can see hundreds of failed messages. Engineers put right what they can by hand, and the rest can go unactioned. Shutter won't fix them all, but it helps with most: in my work on interoperability with 28 NHS hospitals, most failures were of the kinds it knows. It resends the failed patient movements that pass its checks, closes those the receiver already has, and for the rest stops, writes nothing, and identifies the patient for a person to review.
+
+A plain **Resend** can also repeat something the receiver already holds, or revive a cancelled movement.
 
 Shutter turns a failed delivery into a case. AI Hub agents examine sealed evidence and propose a plan. A deterministic gate checks whether it may write. A person, or the site's written policy, releases it. **The agents have no write tool.**
 
@@ -42,7 +63,7 @@ Then visit the [online demo](https://shutter.mxsalata.com), a fictional hospital
 
 | Sign-in | What you can do |
 | --- | --- |
-| `demo` / `shutter` | Read, ask questions and approve waiting cases; no scenario runs |
+| `demo` / `shutter` | Read, ask questions, approve waiting cases, and run scenarios from their recordings (no model call, no spend); no reset |
 | Judges' account, supplied by the organisers | Run scenarios with live agents or **Convene the board**, one run at a time |
 
 The demo resets hourly. Live spending is capped at 5 USD an hour and 15 USD a day, with a 2 USD share per judge.
@@ -108,6 +129,8 @@ Also included: **Ask Shutter** about the page on screen, a read-only production 
 
 [Agent source](https://github.com/MxSalata/shutter/tree/main/src/Shutter/Agent) · [AI Hub integration](https://github.com/MxSalata/shutter/blob/main/docs/readme/ai-hub.md) · [Trace an agent, step by step](https://github.com/MxSalata/shutter/blob/main/docs/readme/tracing.md)
 
+<a id="documents"></a>
+
 ## Documents: MDM exceptions without a blind resend
 
 At a receiver with a document profile, a failed **MDM^T01 to T11**, including **MDM^T02**, or a report-carrying **ORU^R01** becomes a document exception.
@@ -120,6 +143,8 @@ Without a document profile, a failed MDM gets the ordinary case instead, with th
 
 
 [Document exceptions and their contract](https://github.com/MxSalata/shutter/blob/main/docs/CONTRACTS.md#112-document-exceptions)
+
+<a id="pathology"></a>
 
 ## Pathology: ORU^R01 results, findings and outage recovery
 
