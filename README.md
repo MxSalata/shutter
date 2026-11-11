@@ -31,7 +31,8 @@
   <a href="https://openexchange.intersystems.com/package/Shutter">Open Exchange</a> ·
   <a href="https://github.com/MxSalata/shutter#technology-bonuses">Articles</a> ·
   <a href="https://github.com/MxSalata/shutter/blob/main/CHANGELOG.md">What's new</a> ·
-  <a href="https://github.com/MxSalata/shutter/releases">Releases</a>
+  <a href="https://github.com/MxSalata/shutter/releases">Releases</a> ·
+  <a href="https://github.com/MxSalata/shutter/releases/download/v1.4.4/shutter-demo.mp4">Video (MP4)</a>
 </p>
 
 **When a hospital's HL7 delivery fails, the usual fix is Resend, and when two systems move a patient at the same moment, that resend can write over the bed manager's newer ward. Shutter's IRIS AI Hub agents decide how to put the failure right; a deterministic gate decides whether anything is written.**
@@ -49,6 +50,7 @@ There are two recovery paths, with different guarantees:
 
 **Judge the complete workflow**
 
+- **Watch:** the [15-minute demo video](https://github.com/MxSalata/shutter/releases/download/v1.4.4/shutter-demo.mp4) (MP4, captioned, downloads without signing in): a live run on the online demo, from an escalated case to an approved resend verified at the receiver.
 - **Try:** S2, S3 and S8 in the trial, below: a verified recovery, a delivery the receiver already had, and an escalation with 0 writes.
 - **Inspect:** S2's receipt and history on its case, then **Message trace**, the agents' steps in IRIS's Visual Trace.
 - **Know the mode:** the trial plays recordings in your browser; the online demo runs on real IRIS, where the `demo` account replays the recorded agents and the judges' account calls them live; your machine runs either.
@@ -321,7 +323,7 @@ Each technology has a job in the workflow.
 | **Embedded Python bug reports** | [#26](https://github.com/intersystems-community/python-bugreports/issues/26), [#27](https://github.com/intersystems-community/python-bugreports/issues/27) |
 | **Articles** | [Building on AI Hub](https://community.intersystems.com/post/building-shutter-iris-ai-hub-what-worked-what-was-hard-and-what-it-cost), [testing the recovery gate](https://community.intersystems.com/post/what-failed-when-i-tested-my-hl7-recovery-gate), [integrating at a site](https://community.intersystems.com/post/integrating-shutter-your-organisation-one-namespace-time) |
 | **Questionnaire** | Submitted on 3 November 2026 |
-| **Video** | Not yet published |
+| **Video** | [Demo video, MP4 with captions](https://github.com/MxSalata/shutter/releases/download/v1.4.4/shutter-demo.mp4), attached to the [1.4.4 release](https://github.com/MxSalata/shutter/releases/tag/v1.4.4) |
 
 **See the tracing idea in one case:** run S8 in Board mode, then choose **In IRIS: Message trace**. Each agent has its own lane, each tool call its own step, and the response records model, mode, tokens and tool calls. Replay is explicitly marked. In the trial this opens a screenshot; on an installed instance it opens the session's Visual Trace.
 
