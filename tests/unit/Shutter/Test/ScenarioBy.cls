@@ -97,7 +97,7 @@ Method TestTheRunnerRecordsAndTheResetForgets()
     Set begin = ..Source("Shutter.Scenarios.Runner", "Begin"), reset = ..Source("Shutter.Scenarios.Runner", "Reset")
     Do $$$AssertTrue(begin [ "^Shutter.Config(""scenarioBy"") = requestedBy", "Begin records who started the run")
     Do $$$AssertTrue(reset [ "^Shutter.Config(""scenarioBy"")", "Reset forgets it with the scenario")
-    Do $$$AssertTrue(..Source("Shutter.Operation.ScenarioPlayer", "OnRun") [ "request.RequestedBy)", "the Scenario Player passes the user the API sent the run for")
+    Do $$$AssertTrue(..Source("Shutter.Operation.ScenarioPlayer", "OnRun") [ "request.RequestedBy, ''request.LiveAllowed)", "the Scenario Player passes the user the API sent the run for, and whether that user has the live agents")
 }
 
 ClassMethod Source(class As %String, method As %String) As %String
