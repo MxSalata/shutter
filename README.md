@@ -73,7 +73,7 @@ Then visit the [online demo](https://shutter.mxsalata.com), a fictional hospital
 | `demo` / `shutter` | Read, ask questions, approve waiting cases, and run scenarios from their recordings (no model call, no spend); no reset |
 | Judges' account, supplied by the organisers | Run scenarios with live agents or **Convene the board**, one run at a time |
 
-The demo resets hourly. Live spending is capped at 5 USD an hour and 15 USD a day, with a 2 USD share per judge.
+The demo resets hourly. Live spending is capped at 5 USD an hour and 15 USD a day. All judges sign in to the one judges' account, so they share its 2 USD an hour.
 
 **Optional comparison:** run S8 in **Rules only**. This demonstration deliberately lifts one gate check, allowing WARD-B to overwrite WARD-C. The trial's recorded case, C-000021, is already approved and written. On real cases the normal gate holds that resend. This is a demonstration of a plain resend's consequence, not evidence that AI alone prevents it.
 
