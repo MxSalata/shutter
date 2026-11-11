@@ -10,9 +10,12 @@ is in [fair-test/results.json](https://github.com/MxSalata/shutter/blob/main/doc
 Every figure on this page is on release 1.0.0's code, except the sections
 [Release 1.1.x](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#release-11x) and
 [Release 1.3.2: F03 and F07 live](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#release-132-f03-and-f07-live)
+and [Release 1.4.3: all 12 cases rerun](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#release-143-all-12-cases-rerun)
 near the end: on 1.1.1's code the board proposes the same, and the gate stops two right plans; with release 1.2.0's
 receipt check loaded over it, F03 closes right in all three runs; on release 1.3.2's whole code, F03 and F07 close right
-in every run of the board and the single investigator.
+in every run of the board and the single investigator; on release 1.4.3's whole code, all twelve cases in every mode, a
+regression rerun on cases that have influenced fixes, the board and the single investigator grade as on 1.0.0 and no
+mode executes a wrong write.
 
 ## Headline
 
@@ -645,6 +648,124 @@ investigator ran one after the other on one instance, not interleaved. F07 goes 
 `show`: the demo install keeps `stop`, and an install over a site from before 1.2.0 whose profile doesn't name the
 setting keeps the stop it had, so there F07 is held for a person as on 1.1.1.
 
+## Release 1.4.3: all 12 cases rerun
+
+All twelve sealed cases were played again on release 1.4.3's whole code, three runs a case, in every mode the test has:
+the board, the single investigator, Site policy with the board live and with it not live, and Rules only. Its `src/` was
+loaded and compiled over the 1.3.2 build on the same AI Hub 109 instance, its `knowledge/` copied into the module root
+and checked file by file, the install run again over the kept data and the production restarted, after which the
+instance reported version 1.4.3 and gate policy 2026-11-07.1. Every run used the site profile of the 1.3.2 section
+(`recovery.mode` `enabled`, `further_messages.in_patient_movement` `show`), with each case's own fields put in before
+its run and taken out after it, as `play.py` does, and the same gate; nothing was exempted. Same harness, seed, `--day`,
+600 s timeout, approval by the rig and case order as the 1.0.0 runs, every agent on `claude-opus-5-5`, one play at a
+time, 11 November 2026 from 01:27 to 03:28 UTC; the manifest checked OK before and after. Every run is in
+[fair-test/results-r143-all.json](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test/results-r143-all.json).
+
+**This is a regression rerun, not a new held-out test.** The twelve cases were sealed against release 1.0.0's code.
+Since then the board has played all twelve on 1.1.1's code, F03 has been played with 1.2.0's receipt check, and F03 and
+F07 on 1.3.2; the 1.1.1 runs on F03 and F07 came before release 1.2.0 changed the receipt check and the shipped
+further-movement default. Code changed
+after the cases were known can be fitted to them, so these figures say whether 1.4.3 still does what 1.0.0 did on the
+same set and where it now differs. They do not say how 1.4.3 does on failures nobody has seen; that needs new cases,
+sealed before a run.
+
+Rules only and Site policy without a live board ran with the agents in replay, where no recording exists for these
+cases: the board is convened and no member can answer, which is what an install with no provider does. The other three
+modes ran live.
+
+| Release 1.4.3, all 12 cases | Runs | R | D | N+ | N- | F | Wp | Wx | Strict mean | Lenient mean | USD a run | Strict on 1.0.0 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| The board | 36 | 30 | 6 | 0 | 0 | 0 | 0 | 0 | **0.167** | 0.000 | 0.480 | 0.167 |
+| Single investigator, as settled here | 36 | 30 | 6 | 0 | 0 | 0 | 0 | 0 | **0.167** | 0.000 | 0.127 | 0.167 |
+| Single investigator, as graded by `grade.py` | 36 | 27 | 6 | 0 | 0 | 3 | 0 | 0 | 0.667 | 0.500 | 0.127 | 0.500 |
+| Site policy, board live, the 10 cases played | 29 | 23 | 3 | 0 | 0 | 0 | 3 | 0 | 0.900 | 0.800 | 0.040 | not played |
+| Site policy, board live, composed with the board's F03 and F12 | | | | | | | | | 0.750 | 0.667 | | not played |
+| Site policy, board not live | 35 | 23 | 3 | 3 | 0 | 0 | 6 | 0 | 1.583 | 1.500 | 0 | 3.500 |
+| Rules only | 36 | 18 | 0 | 0 | 0 | 0 | 18 | 0 | 4.000 | 4.000 | 0 | 5.000 |
+| Always escalate, computed | 12 | 2 | 5 | 5 | 0 | 0 | 0 | 0 | 1.250 | 0.833 | 0 | 1.250 |
+
+Means are per case, then over the cases, as `scoring.md` sets them. One F08 run in each Site policy row was declared
+unscorable by `grade.py` (the evidence was read after the delayed commit), so those rows count 35 and 29 runs. Site
+policy with the board live was not played on F03 and F12 (below); its composed row adds the board mode's F03 and F12
+from this same code (R R R each) to the 10 cases played, and was not played as one set.
+
+**Per case** (each cell is the category of all three runs unless shown; in bold where it differs from 1.0.0):
+
+| Case | Reference (also accepted) | Board | Single | Site policy, board live | Site policy, board not live | Rules only |
+| --- | --- | --- | --- | --- | --- | --- |
+| F01 | resend | R | R | R | R | R |
+| F02 | superseded (escalate) | R | R | R | R | Wp |
+| F03 | reconcile (superseded) | R | R | not played | **N+** | Wp |
+| F04 | escalate | R | R | **R** | **R** | Wp |
+| F05 | resend (escalate) | D | D | D | **D** | R |
+| F06 | superseded | R | R | R | R | Wp |
+| F07 | resend | R | R | R | R | R |
+| F08 | resend (escalate) | R | R (graded **F, F, F**) | R, R; one run unscorable | R, R; one run unscorable | R |
+| F09 | superseded (escalate) | D | D | **Wp** | **Wp** | **Wp** |
+| F10 | resend (escalate) | R | R | R | R | R |
+| F11 | resend | R | R | R | R | R |
+| F12 | escalate | R | R | not played | Wp | Wp |
+
+- **The board and the single investigator grade as on 1.0.0.** The board's categories are 1.0.0's in all 36 runs, and
+  so are the single investigator's as settled. Both modes made the same 12 writes as on 1.0.0 (F01, F07, F10 and F11,
+  three runs each), each under the failed key at the expected version, applied and verified; neither proposed or made
+  a wrong write. The only proposal that differs is board F09 run 2, which asked for more evidence instead of
+  escalating; both write nothing. Against the 1.1.1 board (strict 0.667 as graded, 0.500 as settled), F03 and F07 are
+  right again in every run.
+- **F08 for the single investigator, settled as before.** All three runs took the path that 1.0.0's runs 1 and 2 took:
+  plan v1 a resend on the 404 snapshot, a dispatch gate stop when the delayed commit landed
+  (`APPROVAL_RECEIVER_CHANGED`, `RECEIVER_CHANGED`), then plan v2 a verified reconcile, with the key committed once
+  and no row added by Shutter. `grade.py` reads the last plan and gives F; this page reads them as R on the grounds
+  given in [the one
+  disagreement](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#the-one-disagreement-and-how-it-was-settled).
+  The board's three runs planned after the commit, their rehearsal said `already_committed`, and they stopped
+  `blocked`, R, as on 1.0.0. No blind re-grade was done this time.
+- **No mode executed a wrong write.** On 1.0.0, Site policy and Rules only each wrote F09's cancelled transfer in all
+  three runs. On 1.4.3 the gate stops that resend at proposal (`FURTHER_MOVEMENT`: a cancel of the transfer, ADT^A12,
+  that the receiver has not applied), so F09 is a wrong write proposed and stopped (Wp, loss 8) instead of executed
+  (Wx, 20). That is all of Rules only's change: its other eleven cases grade as on 1.0.0.
+- **Site policy's false closure on F04 is gone.** The catalogue path still matches E3 and proposes a reconcile, and
+  the gate now stops it (`RECEIPT_PAYLOAD_DIFFERS`: the receiver holds the reused key with other content), so a person
+  gets the case. `grade.py` grades that R.
+- **Site policy without a live board no longer resends blind.** On 1.0.0, each of its three board cases fell back to a
+  plain resend. On 1.4.3, when no member answers, F03 and F05 are escalated with nothing planned (N+ and D), and only
+  F12, which the catalogue sends to the board as a new pattern, still takes the plain resend, which the gate stops
+  (`PATIENT_MISMATCH`, `NEW_PATTERN`). `grade.py`'s `no_model_answer` flag looks for 1.0.0's wording and is false on
+  all of these runs, so its figures with and without them are not separate here.
+- **Site policy with the board live** played the nine cases it settles alone exactly as without the board, and F05
+  live: the board escalated on E7 in all three runs, D, as in the board mode. Over the nine cases it settles alone it
+  scores 0.889 strict and lenient, against 2.889 on 1.0.0; the board and the single investigator score 0.111 there,
+  and always escalating 1.333. With F05 played and F03 and F12 composed from the board mode, its strict mean is 0.750,
+  below always escalating's 1.250 with no executed write, so under the sealed rule it would beat always escalating;
+  that rests on a composed figure.
+
+**Ranking by the sealed rule.** The board and the single investigator (as settled) tie at 0.167 with Wx 0, and each is
+better than always escalating, both Site policy rows and Rules only. Site policy without a live board (1.583) does not
+beat always escalating (1.250); Rules only (4.000) does not either. Site policy is better than Rules only.
+
+**Spend and time** (Costs page, read after every case): 23.535 USD in all, against a 25 USD cap.
+
+| | Board | Single | Site policy, board live | Site policy, board not live | Rules only |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| USD, all runs | 17.295 | 4.588 | 1.173 (F05) | 0 | 0 |
+| USD per run | 0.480 | 0.127 | 0.040 | 0 | 0 |
+| Agent runs (Costs page) | 167 | 45 | 12 | 0 | 0 |
+| Seconds per run, mean | 55.2 | 45.1 | 29.1 | 25.2 | 26.8 |
+
+Per case, USD for the three runs: board F01 1.218, F02 1.175, F03 1.356, F04 2.414, F05 1.122, F06 1.637, F07 1.230, F08
+1.254, F09 1.451, F10 1.171, F11 1.143, F12 2.125; single F01 0.258, F02 0.273, F03 0.294, F04 0.413, F05 0.240, F06
+0.590, F07 0.158, F08 0.355, F09 0.964, F10 0.206, F11 0.240, F12 0.596. The 23.535 includes 0.478 USD for a Site policy
+F03 run with the board live that was under way when the instance's container restarted at 03:29 UTC: the case resolved
+on a verified reconcile after the restart, but the player lost its record, so it is not graded. F03 and F12 were then
+left unplayed in that mode, because their estimates would have taken the spend past the cap.
+
+**What it does not show.** This is not a new held-out test (above). Three runs a case, twelve cases and one fictional
+hospital, as for 1.0.0. Site policy with the board live is missing F03 and F12. The modes ran one after another on one
+instance, case by case, not interleaved or shuffled. It is an upgrade in place over the 1.1.x image, not a fresh image
+of 1.4.3; the REST play and the agents don't read the files left from 1.1.0 (`www/`, `fixtures/records`, the pex jar).
+`recovery.mode` was enabled by hand and `show` set, as a site upgrading must decide; a demo install keeps `stop`, and
+there F07 is held for a person. The reason flags were not graded.
+
 ## The files
 
 In [docs/readme/fair-test](https://github.com/MxSalata/shutter/tree/main/docs/readme/fair-test):
@@ -674,6 +795,10 @@ In [docs/readme/fair-test](https://github.com/MxSalata/shutter/tree/main/docs/re
 - [results-r132-f03-f07.json](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test/results-r132-f03-f07.json):
   release 1.3.2's whole code on F03 and F07: per mode (Rules only, single investigator, board), each run with its
   proposal, gate, attempts, receiver at the end, category, seconds and Costs page figure, and each case's cost.
+- [results-r143-all.json](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test/results-r143-all.json):
+  release 1.4.3's whole code on all twelve cases: per mode (Rules only, Site policy with the board not live and live, the
+  single investigator, the board), each run's graded row with its Costs page figure, each case's cost and seconds, the
+  totals, the settled single investigator and what was not played.
 
 **To repeat it:** [tests/fair_test](https://github.com/MxSalata/shutter/tree/main/tests/fair_test) holds the fixtures
 built from `cases.md`, the player and the grader; its README says how to run them.
