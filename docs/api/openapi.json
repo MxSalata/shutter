@@ -525,7 +525,7 @@
           "scenarios"
         ],
         "summary": "Run a scenario",
-        "description": "With the production's Scenario Player enabled, writes a run record in state queued and sends the run to the player, which moves it through running to done or failed; without it, Runner.Start plays it in a background job.\n\nNeeds Shutter_Scenarios. A change: send X-Requested-With: Shutter. An Idempotency-Key replays the first reply.\n\nCONTRACTS 4.2.",
+        "description": "With the production's Scenario Player enabled, writes a run record in state queued and sends the run to the player, which moves it through running to done or failed; without it, Runner.Start plays it in a background job.\n\nNeeds Shutter_Scenarios. A starter without Shutter_LiveAgents (since 1.4.4, the public demo's role) runs replay only: every agent of the run's cases answers from its recording, with no model call and nothing spent, the record says replay true, and the single investigator, never recorded, is refused 409 not_recorded. A change: send X-Requested-With: Shutter. An Idempotency-Key replays the first reply.\n\nCONTRACTS 4.2.",
         "x-contract": "docs/CONTRACTS.md section 4.2",
         "x-required-resource": "Shutter_Scenarios",
         "x-writes": true,
@@ -641,10 +641,11 @@
             }
           },
           "409": {
-            "description": "Conflict. wrong_state: A run is queued or still playing (the run record comes with it).; idempotency_key_reused: The key was used with another body.",
+            "description": "Conflict. wrong_state: A run is queued or still playing (the run record comes with it).; idempotency_key_reused: The key was used with another body.; not_recorded: The single investigator has no recordings, and this starter's runs replay the recorded agents only (since 1.4.4).",
             "x-error-codes": [
               "wrong_state",
-              "idempotency_key_reused"
+              "idempotency_key_reused",
+              "not_recorded"
             ],
             "content": {
               "application/json": {
@@ -662,6 +663,12 @@
                     "value": {
                       "error": "idempotency_key_reused",
                       "detail": "The key was used with another body"
+                    }
+                  },
+                  "not_recorded": {
+                    "value": {
+                      "error": "not_recorded",
+                      "detail": "The single investigator has no recordings, and a run from this sign-in replays the recorded agents only: choose Board, Site policy or Rules only"
                     }
                   }
                 }
@@ -15698,6 +15705,10 @@
           },
           "error": {
             "type": "string"
+          },
+          "replay": {
+            "type": "boolean",
+            "description": "Since 1.4.4: the run is replay only, since who started it holds no Shutter_LiveAgents; every agent of its cases answers from its recording."
           }
         },
         "required": [

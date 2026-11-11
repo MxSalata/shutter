@@ -51,3 +51,10 @@ export const scenariosHidden = (can: Can): boolean => can.operate && !can.scenar
  * operator or approver role; it says what their sign-in lacks.
  */
 export const showsRoleBadges = (me: Me | null | undefined): boolean => !!me && (me.operator || me.approver);
+
+/**
+ * The user runs scenarios without the live agents (1.4.4, the public demo's account): every agent of such a run answers
+ * from its recording, with no model call and nothing spent, and a mode that was never recorded (the single investigator)
+ * can't be played. A judge, with the live agents, runs them live under the budget.
+ */
+export const replaysOnly = (can: Can): boolean => can.scenarios && !can.liveAgents;

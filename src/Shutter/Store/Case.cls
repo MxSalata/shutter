@@ -138,6 +138,15 @@ Property ScenarioRecorded As %Boolean(%JSONINCLUDE = "none") [ InitialExpression
 /// does. Empty for a live story's case and the feed's own.
 Property ScenarioBy As %String(%JSONINCLUDE = "none", MAXLEN = 100);
 
+/// Whether the scenario run that opened the case was replay only (1.4.4): who started it holds no Shutter_LiveAgents (the
+/// public demo's role), so every agent of the case answers from its recording (Shutter.Process.CaseWorkflow, Stamp), with
+/// no model call and nothing spent, and the case's trail says so from its opening. A reopening or a convened board goes
+/// by its own requester's right.
+Property ScenarioReplay As %Boolean(%JSONINCLUDE = "none") [ InitialExpression = 0 ];
+
+/// The line a replay-only scenario run's case carries from its opening (1.4.4).
+Parameter REPLAYNOTE = "Replayed: this scenario run was started by a sign-in without the live agents, so every agent of this case answers from its recording; no model is called and nothing is spent";
+
 Index ScenarioIdx On Scenario;
 
 /// The production session of the failed delivery: the Visual Trace link.
@@ -248,7 +257,7 @@ ClassMethod Open(op As %DynamicObject, failureKind As %String, failureText As %S
     Set case.Mode = $SELECT(mode = "": "board", 1: mode)
     Set case.Scenario = $GET(^Shutter.Config("scenario"))
     Set case.ScenarioRecorded = (case.Scenario '= "") && (case.Scenario = $GET(^Shutter.Config("scenarioRun")))
-    If case.ScenarioRecorded Set case.ScenarioBy = $EXTRACT($GET(^Shutter.Config("scenarioBy")), 1, 100)
+    If case.ScenarioRecorded Set case.ScenarioBy = $EXTRACT($GET(^Shutter.Config("scenarioBy")), 1, 100), case.ScenarioReplay = +$GET(^Shutter.Config("scenarioReplay"))
     Set now = ##class(Shutter.Util.Time).NowUTC()
     Set case.OpenedAt = now, case.UpdatedAt = now
     // A held message's headline is the hold itself ("Held: the schema X is not loaded here ..."), as the feed wrote it.
@@ -256,6 +265,7 @@ ClassMethod Open(op As %DynamicObject, failureKind As %String, failureText As %S
     TSTART
     Set sc = case.%Save()
     If $$$ISOK(sc) Set sc = ##class(Shutter.Store.CaseEvent).Append(case, "state", "", "detected", "Case opened: " _ case.Headline, "system", "ens:" _ sourceHeaderId)
+    If $$$ISOK(sc) && case.ScenarioReplay Set sc = ##class(Shutter.Store.CaseEvent).Append(case, "note", "", "", ..#REPLAYNOTE, "system", "")
     If $$$ISOK(sc) {
         TCOMMIT
         Set opened = 1
@@ -1006,6 +1016,9 @@ Storage Default
 </Value>
 <Value name="55">
 <Value>ScenarioBy</Value>
+</Value>
+<Value name="56">
+<Value>ScenarioReplay</Value>
 </Value>
 </Data>
 <DataLocation>^Shutter.Store.CaseD</DataLocation>

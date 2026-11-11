@@ -5,19 +5,25 @@ import { skipWelcome } from './guide';
 
 /**
  * The Scenarios page of the online demo on the build IRIS serves, against a stand-in server, before its hospital has
- * played a story. Signed in as the public demo's viewer: the three cards keep their text and say they have no case yet,
- * Run and Reset are greyed out, and all four modes are described with no word about the trial. Signed in as a judge
- * (1.4.3): Run is on, Reset is greyed out with its reason written under it, and no reason asks for the operator or
- * approver role, which the user menu shows the judge. Nothing here reaches IRIS.
+ * played a story. Signed in as the public demo's viewer of a server before 1.4.4: the three cards keep their text and say
+ * they have no case yet, Run and Reset are greyed out, and all four modes are described with no word about the trial.
+ * Signed in as the public demo's viewer since 1.4.4: Run is on and says its runs replay the recorded agents, the single
+ * investigator can't be chosen, Reset is greyed out with its reason. Signed in as a judge (1.4.3): Run is on, Reset is
+ * greyed out with its reason written under it, and no reason asks for the operator or approver role, which the user menu
+ * shows the judge. Nothing here reaches IRIS.
  */
 
-const DEMO = {
+/** The public demo's viewer as a server before 1.4.4 answers: it runs no scenarios. */
+const OLD_DEMO = {
   username: 'demo',
   roles: ['Shutter_Demo'],
   operator: true,
   approver: true,
   can: { operate: true, approve: true, configure: false, scenarios: false, reset: false, liveAgents: false },
 };
+
+/** The public demo's viewer since 1.4.4: it runs the scenarios with no live agents, so they replay their recordings. */
+const DEMO = { ...OLD_DEMO, can: { ...OLD_DEMO.can, scenarios: true } };
 
 const JUDGE = {
   username: 'judge',
@@ -63,10 +69,10 @@ for (const width of [1280, 360])
   test.describe(`at ${width} px`, () => {
     test.use({ viewport: { width, height: 900 } });
 
-    test("shows the public demo's viewer its three cards, greyed-out controls and four modes", async ({
+    test("shows the public demo's viewer of an older server its three cards, greyed-out controls and four modes", async ({
       page,
     }) => {
-      await standIn(page, DEMO);
+      await standIn(page, OLD_DEMO);
       await page.goto('./#/scenarios');
       // The live build's first visit offers the trial in a dialog over the page
       await page.getByRole('button', { name: 'Not now' }).click();
@@ -86,6 +92,45 @@ for (const width of [1280, 360])
           path: `${process.env.E2E_SHOTS}/b-live-demo-${width}.png`,
           fullPage: true,
         });
+    });
+
+    test("gives the public demo's viewer Run from the recordings, and Reset greyed out with its reason", async ({
+      page,
+    }) => {
+      await standIn(page, DEMO);
+      await page.goto('./#/scenarios');
+      await page.getByRole('button', { name: 'Not now' }).click();
+      const list = page.getByRole('region', { name: 'Every scenario' });
+      const run = list.getByRole('button', { name: 'Run S8' });
+      await expect(run).toBeEnabled();
+      await expect(page.getByText(/Runs from this sign-in replay the recorded agents/)).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Reset' })).toBeDisabled();
+      await expect(page.getByText(RESET_WHY)).toBeVisible();
+      await expect(page.getByText(/plays its stories by itself/)).toHaveCount(0);
+      await expect(page.getByText(/needs the operator or approver role/)).toHaveCount(0);
+      const modes = page.getByRole('radiogroup', { name: 'Run mode' });
+      await expect(modes.getByRole('radio', { name: /Single investigator/ })).toBeDisabled();
+      await expect(modes.getByText('No recording to replay')).toBeVisible();
+      await expect(modes.getByText(/Not in the trial/)).toHaveCount(0);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+      // WCAG 2.1 A and AA, as every screen is audited
+      expect(await audit(page)).toEqual([]);
+      if (process.env.E2E_SHOTS)
+        await page.screenshot({
+          path: `${process.env.E2E_SHOTS}/demo-runs-${width}.png`,
+          fullPage: true,
+        });
+      // Run's tooltip says the run replays, and wraps within the screen
+      await run.locator('..').hover();
+      await expect(page.getByRole('tooltip')).toHaveText('Play S8 in Board mode from its recordings');
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+      if (process.env.E2E_SHOTS)
+        await page.screenshot({ path: `${process.env.E2E_SHOTS}/demo-run-tooltip-${width}.png` });
+      await page.mouse.move(0, 0);
+      await page.getByRole('button', { name: 'Reset' }).locator('..').hover();
+      await expect(page.getByRole('tooltip')).toHaveText(RESET_WHY);
+      if (process.env.E2E_SHOTS)
+        await page.screenshot({ path: `${process.env.E2E_SHOTS}/demo-reset-tooltip-${width}.png` });
     });
 
     test('gives a judge Run, and Reset greyed out with a reason that asks for no role it shows', async ({

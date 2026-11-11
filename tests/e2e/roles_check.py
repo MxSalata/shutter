@@ -23,14 +23,18 @@ liveAgents false, never spending the model budget (a `skip` line says so when th
 back with the answers it had, saved from the API: from then on a change of the seed file no longer replaces it, as for any
 profile a person saved. Last, Reset on the Scenarios page: the operator's and the approver's answer 200 with the mode back
 to board, a new resetAt, every demo receiver reset and the live feed's bed map not left behind, and it is 403 signed in as
-the demo user, who may not run a scenario either (403).
+the demo user. Since 1.4.4 the demo user runs scenarios with no live agents: GET /me says it runs, does not reset and has
+no live agents; the single investigator, never recorded, is 409 not_recorded; it plays S8 on the board (202, replay true),
+and the case it opens says it was replayed and settles with every agent run replayed (mode replay), costing nothing and
+counted against the demo user, whose own spend stays 0, even on an instance whose agents run live (the API mimic or a key).
 
 When SHUTTER_JUDGE_PASSWORD names the user judge's password (1.4.3), the judges' account: GET /me says it runs scenarios
 and does not reset; POST /scenarios/reset is 403 forbidden naming Shutter_ScenarioReset, and the reset time is unchanged;
 GET /me's can.reset, false, is the check Shutter.Setup.PurgeStore makes first, and GET /access says the reset's
 resource is held by the operator and the approver and not by the judge; the judge plays S8 on the board (in replay on an instance without a key: no model is called), a second run while it is queued
 or playing is 409 wrong_state, and the case it opens settles with its agent runs counted against the judge's share
-(requestedBy judge). A `skip` line says so when the variable is unset.
+(requestedBy judge), live on an instance whose agents run live (none replayed). A `skip` line says so when the variable is
+unset.
 
 It closes two cases that are escalated, blocked or failed, the newest first, so run it after the scenarios (CI runs it
 after them), and not on an instance someone else is using. Exit status 1 when a check fails. Standard library only.
@@ -430,10 +434,9 @@ def main():
     if demo_password:
         demo = Session(args.url).sign_in("demo", demo_password)
         status, body = demo.call("POST", "/scenarios/reset", {})
-        check("demo: POST /scenarios/reset is 403 forbidden", status == 403 and error_of(body) == "forbidden", f"{status} {body}")
-        status, body = demo.call("POST", "/scenarios/S8/run", {"mode": "board"}, idempotent=True)
-        check("demo: POST /scenarios/S8/run is 403 forbidden, naming Shutter_Scenarios",
-              status == 403 and error_of(body) == "forbidden" and "Shutter_Scenarios" in (body or {}).get("detail", ""), f"{status} {body}")
+        check("demo: POST /scenarios/reset is 403 forbidden, naming Shutter_ScenarioReset",
+              status == 403 and error_of(body) == "forbidden" and "Shutter_ScenarioReset" in (body or {}).get("detail", ""), f"{status} {body}")
+        demo_run_checks(args, operator, demo, check, error_of)
 
     # ---- the judges' account (1.4.3): runs scenarios, never resets the shared demo or purges its store ----
     judge_password = os.environ.get("SHUTTER_JUDGE_PASSWORD", "")
@@ -444,6 +447,80 @@ def main():
 
     print(f"{len(failures)} of {checks[0]} failed" if failures else f"all {checks[0]} checks passed")
     return 1 if failures else 0
+
+
+def agents_run_live(session):
+    """Whether the instance's board answers live (a key, or the API mimic): GET /settings' agent items' effective mode."""
+    _, settings = session.call("GET", "/settings")
+    agents = (settings or {}).get("agents") or []
+    return any((a or {}).get("effectiveMode") in ("live", "record") for a in agents)
+
+
+def scenario_idle(operator):
+    _, body = operator.call("GET", "/scenarios")
+    return ((body or {}).get("run") or {}).get("state") not in ("queued", "running")
+
+
+def play_s8(args, operator, session, who, check):
+    """Plays S8 on the board as `session` and returns the settled case and its runs, or (None, None)."""
+    wait(lambda: scenario_idle(operator), args.timeout * 3)
+    floor = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    status, started = session.call("POST", "/scenarios/S8/run", {"mode": "board"}, idempotent=True)
+    check(f"{who}: POST /scenarios/S8/run in board mode: 202", status == 202, f"{status} {started}")
+    if status != 202:
+        return None, None, started
+    floor = max(floor, (started or {}).get("queuedAt") or "", (started or {}).get("startedAt") or "")
+
+    def opened():
+        _, body = operator.call("GET", "/cases?scenario=S8&limit=5")
+        items = [c for c in (body or {}).get("items", []) if c.get("openedAt", "") >= floor]
+        return items[0] if items else None
+
+    found = wait(opened, args.timeout * 3)
+    if not check(f"{who}'s run: S8 opens a case", bool(found), floor):
+        return None, None, started
+    case_id = found["caseId"]
+    final = wait(lambda: (lambda c: c if c.get("state") in ("escalated", "resolved", "blocked", "failed", "awaiting_approval") else None)(
+        operator.call("GET", f"/cases/{urllib.parse.quote(case_id)}")[1] or {}), args.timeout * 3) or {}
+    check(f"{who}'s run: {case_id} settles", bool(final), final.get("state"))
+    _, runs = operator.call("GET", f"/cases/{urllib.parse.quote(case_id)}/runs")
+    return case_id, runs or [], started
+
+
+def demo_run_checks(args, operator, demo, check, error_of):
+    """The public demo's account (1.4.4): it runs scenarios replay only, never resets, and spends nothing."""
+    status, me = demo.call("GET", "/me")
+    can = (me or {}).get("can") or {}
+    check("demo: GET /me says it runs scenarios, does not reset and has no live agents",
+          status == 200 and can.get("scenarios") is True and can.get("reset") is False and can.get("liveAgents") is False
+          and can.get("configure") is False, f"{status} {me}")
+    status, body = demo.call("POST", "/scenarios/S8/run", {"mode": "single"}, idempotent=True)
+    check("demo: the single investigator, never recorded, is 409 not_recorded, before anything is queued",
+          status == 409 and error_of(body) == "not_recorded" and "recording" in (body or {}).get("detail", ""), f"{status} {body}")
+    live = agents_run_live(operator)
+    print(f"note: the instance's board answers {'live' if live else 'from recordings'}", flush=True)
+    _, settings = demo.call("GET", "/settings")
+    spent_before = ((settings or {}).get("budget") or {}).get("spentByMeUsd") or 0
+    case_id, runs, started = play_s8(args, operator, demo, "demo", check)
+    check("demo: the run says it replays", (started or {}).get("replay") is True, started)
+    if case_id is None:
+        return
+    modes = sorted({r.get("mode") for r in runs})
+    askers = sorted({r.get("requestedBy") for r in runs})
+    cost = sum(float(r.get("costUsd") or 0) for r in runs)
+    check(f"demo's run: every agent run of {case_id} is replayed, costs nothing and counts against the demo user"
+          + (", though the board answers live here" if live else ""),
+          bool(runs) and modes == ["replay"] and cost == 0 and askers == ["demo"],
+          f"{len(runs)} run(s), modes {modes}, cost {cost}, requested by {askers}")
+    _, events = operator.call("GET", f"/cases/{urllib.parse.quote(case_id)}/events")
+    items = events if isinstance(events, list) else (events or {}).get("items") or (events or {}).get("events") or []
+    check(f"demo's run: {case_id}'s trail says it was replayed",
+          any(str((e or {}).get("text", "")).startswith("Replayed: this scenario run was started by a sign-in without the live agents") for e in items),
+          [e.get("text") for e in items][:4])
+    _, settings = demo.call("GET", "/settings")
+    spent_after = ((settings or {}).get("budget") or {}).get("spentByMeUsd") or 0
+    check("demo: its own spend of the day's budget stays 0", spent_before == 0 and spent_after == 0, f"{spent_before} then {spent_after}")
+    wait(lambda: scenario_idle(operator), args.timeout * 3)
 
 
 def judge_checks(args, operator, judge, check, error_of):
@@ -476,37 +553,34 @@ def judge_checks(args, operator, judge, check, error_of):
           all((reset_row.get("roles") or {}).get(r) is True for r in ("Shutter_Operator", "Shutter_Approver"))
           and run_row.get("you") is True and (run_row.get("roles") or {}).get("Shutter_Judge") is True, {"reset": reset_row, "run": run_row})
 
-    # One board run of S8, as a judge plays it on the demo; one run at a time
-    def idle():
-        _, body = operator.call("GET", "/scenarios")
-        return ((body or {}).get("run") or {}).get("state") not in ("queued", "running")
+    # One board run of S8, as a judge plays it on the demo; one run at a time. A second run while it is queued or playing
+    # is sent by the judge as soon as the first is accepted.
+    live = agents_run_live(operator)
+    second = {}
 
-    wait(idle, args.timeout * 3)
-    floor = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-    status, started = judge.call("POST", "/scenarios/S8/run", {"mode": "board"}, idempotent=True)
-    check("judge: POST /scenarios/S8/run in board mode: 202", status == 202, f"{status} {started}")
-    status, body = judge.call("POST", "/scenarios/S3/run", {"mode": "board"}, idempotent=True)
+    class Judge:
+        def call(self, method, path, body=None, idempotent=False, csrf=True):
+            out = judge.call(method, path, body, idempotent, csrf)
+            if path == "/scenarios/S8/run" and out[0] == 202:
+                second["answer"] = judge.call("POST", "/scenarios/S3/run", {"mode": "board"}, idempotent=True)
+            return out
+
+    case_id, runs, started = play_s8(args, operator, Judge(), "judge", check)
+    status, body = second.get("answer", (None, None))
     check("judge: a second run while S8 is queued or playing is 409 wrong_state",
           status == 409 and error_of(body) == "wrong_state", f"{status} {body}")
-    floor = max(floor, (started or {}).get("queuedAt") or "", (started or {}).get("startedAt") or "")
-
-    def opened():
-        _, body = operator.call("GET", "/cases?scenario=S8&limit=5")
-        items = [c for c in (body or {}).get("items", []) if c.get("openedAt", "") >= floor]
-        return items[0] if items else None
-
-    found = wait(opened, args.timeout * 3)
-    if not check("judge's run: S8 opens a case", bool(found), floor):
+    check("judge: the run is not replay only (the judge has the live agents)", (started or {}).get("replay") is False, started)
+    if case_id is None:
         return
-    case_id = found["caseId"]
-    final = wait(lambda: (lambda c: c if c.get("state") in ("escalated", "resolved", "blocked", "failed", "awaiting_approval") else None)(
-        operator.call("GET", f"/cases/{urllib.parse.quote(case_id)}")[1] or {}), args.timeout * 3) or {}
-    check(f"judge's run: {case_id} settles", bool(final), final.get("state"))
-    _, runs = operator.call("GET", f"/cases/{urllib.parse.quote(case_id)}/runs")
-    askers = sorted({r.get("requestedBy") for r in runs or []})
+    askers = sorted({r.get("requestedBy") for r in runs})
+    modes = sorted({r.get("mode") for r in runs})
     check(f"judge's run: {case_id}'s agent runs count against the judge's share", bool(runs) and askers == ["judge"],
-          f"{len(runs or [])} run(s), requested by {askers}")
-    wait(idle, args.timeout * 3)
+          f"{len(runs)} run(s), requested by {askers}")
+    if live:
+        check(f"judge's run: {case_id}'s agent runs are live, as the board answers here", bool(runs) and "replay" not in modes, modes)
+    else:
+        print(f"note: the board answers from recordings here, so the judge's runs replay too ({modes})", flush=True)
+    wait(lambda: scenario_idle(operator), args.timeout * 3)
 
 
 if __name__ == "__main__":

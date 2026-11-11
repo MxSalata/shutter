@@ -86805,7 +86805,7 @@
     ],
     "available": true,
     "roles": {
-     "Shutter_Demo": false,
+     "Shutter_Demo": true,
      "Shutter_Judge": true,
      "Shutter_Operator": true,
      "Shutter_Approver": true,

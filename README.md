@@ -59,7 +59,7 @@ cd shutter
 | --- | --- | --- |
 | The [trial](https://mxsalata.github.io/shutter/) | No sign-in | The scenarios and their cases, on recorded runs, apart from what needs a live instance (the single investigator, receiver outages); nothing leaves the browser |
 | Your machine's web app | `approver` / `shutter`, or `operator` / `shutter` | `approver` approves; `operator` runs and reads, and can't approve |
-| The [online demo](https://shutter.mxsalata.com) | `demo` / `shutter` | Reads, asks, approves a case that waits; runs no scenario |
+| The [online demo](https://shutter.mxsalata.com) | `demo` / `shutter` | Reads, asks, approves a case that waits; runs the scenarios from their recordings (no model called, nothing spent), and can't reset them |
 
 The judges' account (the organisers pass on its sign-in) runs the board live and plays the scenarios, one run at a time, up to 2 USD a judge (the demo's caps: 5 USD an hour, 15 a day). The demo resets hourly.
 

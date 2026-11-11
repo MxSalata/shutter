@@ -7,7 +7,8 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { api } from '@/api/client';
 import type { CaseDetail } from '@/api/types';
 import { server } from '@/mocks/node';
-import { resetMock } from '@/mocks/handlers';
+import { http, HttpResponse } from 'msw';
+import { LOOK_ONLY_DEMO, resetMock } from '@/mocks/handlers';
 import { useAppearance } from '@/stores/appearance';
 import { theme } from '@/theme';
 import { bannerForm } from '@/trial/visit';
@@ -442,6 +443,8 @@ describe('the guide', () => {
 
   it("offers a reader who cannot run scenarios S20's case to see instead of Run S20", async () => {
     resetMock('demo');
+    // The public demo's account before 1.4.4, which ran no scenarios
+    server.use(http.get('/api/shutter/me', () => HttpResponse.json(LOOK_ONLY_DEMO)));
     at('evaluation/headline');
     const router = renderApp();
     const guide = await card();

@@ -24,7 +24,8 @@ Method OnRun(request As Shutter.Msg.ScenarioRun, Output response As Shutter.Msg.
     }
     Set error = ""
     Set found = $CLASSMETHOD(runner, "Prepare", request.Scenario, request.Mode, .inbound, .error)
-    If error = "" Set started = $CLASSMETHOD(runner, "Begin", request.Scenario, request.Mode, .error, request.RequestedBy)
+    // Whether who asked may run the agents live travels with the run (1.4.4): this job runs as the production, which may.
+    If error = "" Set started = $CLASSMETHOD(runner, "Begin", request.Scenario, request.Mode, .error, request.RequestedBy, ''request.LiveAllowed)
     If error '= "" {
         Set response.State = "refused", response.Error = error
         Set run = {"scenario": (request.Scenario), "mode": (request.Mode), "state": "failed", "error": (error), "files": [], "timeouts": []}
@@ -35,6 +36,7 @@ Method OnRun(request As Shutter.Msg.ScenarioRun, Output response As Shutter.Msg.
         Quit $$$OK
     }
     Set run = {"scenario": (request.Scenario), "mode": (request.Mode), "startedAt": (started), "state": "running", "files": [], "timeouts": [], "player": (..%ConfigName)}
+    Do run.%Set("replay", 'request.LiveAllowed, "boolean")
     Set ^Shutter.Scenarios("run") = run.%ToJSON()
     Set ^Shutter.Scenarios("run", "job") = $JOB
     $$$TRACE("Playing scenario " _ request.Scenario _ " (" _ request.Mode _ ") from " _ started)

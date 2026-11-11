@@ -1,8 +1,9 @@
 /// The roles and resources the install makes (Shutter.Setup.CreateSecurity; CONTRACTS 5 and 12, v1.33): the demo controls and
 /// the site's writes are guarded by resources of their own, the operator and the approver hold them, and the public demo's
 /// role holds neither while it approves. Since 1.4.3 running a scenario (Shutter_Scenarios) and resetting the shared demo
-/// (Shutter_ScenarioReset, which the purge needs too) are two resources: the judges' role runs and never resets. Read in
-/// %SYS after the install's refresh, which is repeatable.
+/// (Shutter_ScenarioReset, which the purge needs too) are two resources: the judges' role runs and never resets, and since
+/// 1.4.4 the public demo's role runs too (replay only, with no Shutter_LiveAgents) and never resets. Read in %SYS after the
+/// install's refresh, which is repeatable.
 Class Shutter.Test.Roles Extends %UnitTest.TestCase
 {
 
@@ -51,7 +52,8 @@ Method TestResourcesAndRoles()
     Do $$$AssertTrue(ap [ "%Ens_EventLog:U", "the approver reads the trace's events, or its diamonds answer that they are not permitted: " _ ap)
     Set demo = ..Resources("Shutter_Demo")
     Do $$$AssertTrue((demo [ "Shutter_Operate:U") && (demo [ "Shutter_Approve:U"), "the demo role reads and approves: " _ demo)
-    Do $$$AssertTrue('(demo [ "Shutter_Configure") && '..Names("Shutter_Demo", "Shutter_Scenarios") && '..Names("Shutter_Demo", "Shutter_ScenarioReset"), "and neither configures, runs scenarios nor resets")
+    Do $$$AssertTrue('(demo [ "Shutter_Configure") && '..Names("Shutter_Demo", "Shutter_ScenarioReset"), "and neither configures nor resets")
+    Do $$$AssertTrue(..Holds("Shutter_Demo", "Shutter_Scenarios:U"), "it runs the scenarios (1.4.4), replay only: " _ demo)
     Do $$$AssertTrue(demo [ "%Ens_MessageTrace:U", "it reads traces as the approver does")
     Do $$$AssertTrue((op [ "Shutter_LiveAgents:U") && (ap [ "Shutter_LiveAgents:U"), "operators and approvers may spend the model budget")
     Do $$$AssertNotTrue(demo [ "Shutter_LiveAgents", "the public demo's role never spends it")
@@ -64,15 +66,18 @@ Method TestResourcesAndRoles()
     Do $$$AssertTrue((trace [ "%Ens_MessageTrace:U") && (trace [ "%Ens_Portal:U") && '(trace [ "Shutter_"), "the trace role sees traces and nothing of Shutter's: " _ trace)
 }
 
-/// Running and resetting are two resources (1.4.3): the operator and the approver hold both, the judge runs only, and the
-/// demo viewer neither; the routes and the purge check the resource the table says, read from their source.
+/// Running and resetting are two resources (1.4.3): the operator and the approver hold both, the judge and, since 1.4.4,
+/// the demo viewer run only; the routes and the purge check the resource the table says, read from their source.
 Method TestRunAndResetAreSplit()
 {
     For role = "Shutter_Operator", "Shutter_Approver" {
         Do $$$AssertTrue(..Holds(role, "Shutter_Scenarios:U") && ..Holds(role, "Shutter_ScenarioReset:U"), role _ " runs and resets: " _ ..Resources(role))
     }
     Do $$$AssertTrue(..Holds("Shutter_Judge", "Shutter_Scenarios:U") && '..Names("Shutter_Judge", "Shutter_ScenarioReset"), "the judge runs and does not reset")
-    Do $$$AssertTrue('..Names("Shutter_Demo", "Shutter_Scenarios") && '..Names("Shutter_Demo", "Shutter_ScenarioReset"), "the demo viewer does neither")
+    Do $$$AssertTrue(..Holds("Shutter_Demo", "Shutter_Scenarios:U") && '..Names("Shutter_Demo", "Shutter_ScenarioReset"), "the demo viewer runs and does not reset (1.4.4)")
+    Do $$$AssertNotTrue(..Names("Shutter_Demo", "Shutter_LiveAgents"), "and holds no live agents, so its runs replay")
+    Do ##class(Shutter.Test.Roles).GrantedOf("Shutter_Demo", .demoGranted)
+    Do $$$AssertEquals(demoGranted, "%EnsRole_Monitor", "the demo viewer is granted %EnsRole_Monitor only, which resets nothing")
     // The judge's granted roles add neither: %EnsRole_Monitor holds nothing of Shutter's.
     Do ##class(Shutter.Test.Roles).GrantedOf("Shutter_Judge", .granted)
     Do $$$AssertEquals(granted, "%EnsRole_Monitor", "the judge is granted %EnsRole_Monitor only")
@@ -115,6 +120,7 @@ Method TestAnUpgradeFrom142KeepsTheResetWithTheOperatorAndTheApprover()
     Do $$$AssertNotTrue(..ResourceExists("Shutter_ScenarioReset"), "1.4.2 had no Shutter_ScenarioReset")
     Do $$$AssertTrue(..Holds("Shutter_Operator", "Shutter_Scenarios:U") && '..Names("Shutter_Operator", "Shutter_ScenarioReset"), "1.4.2's operator: " _ ..Resources("Shutter_Operator"))
     Do $$$AssertNotTrue(..Names("Shutter_Judge", "Shutter_Scenarios"), "1.4.2's judge runs nothing: " _ ..Resources("Shutter_Judge"))
+    Do $$$AssertNotTrue(..Names("Shutter_Demo", "Shutter_Scenarios"), "nor does 1.4.2's demo viewer: " _ ..Resources("Shutter_Demo"))
     Set sc = ##class(Shutter.Setup).RefreshSecurity($NAMESPACE)
     Do $$$AssertStatusOK(sc, "the install's refresh over 1.4.2's roles")
     Do $$$AssertTrue(..ResourceExists("Shutter_ScenarioReset"), "the upgrade creates Shutter_ScenarioReset")
@@ -122,30 +128,31 @@ Method TestAnUpgradeFrom142KeepsTheResetWithTheOperatorAndTheApprover()
         Do $$$AssertTrue(..Holds(role, "Shutter_ScenarioReset:U") && ..Holds(role, "Shutter_Scenarios:U"), role _ " still resets and runs after the upgrade: " _ ..Resources(role))
     }
     Do $$$AssertTrue(..Holds("Shutter_Judge", "Shutter_Scenarios:U") && '..Names("Shutter_Judge", "Shutter_ScenarioReset"), "the judge now runs and still does not reset: " _ ..Resources("Shutter_Judge"))
-    Do $$$AssertTrue('..Names("Shutter_Demo", "Shutter_Scenarios") && '..Names("Shutter_Demo", "Shutter_ScenarioReset"), "the demo viewer gains nothing")
+    Do $$$AssertTrue(..Holds("Shutter_Demo", "Shutter_Scenarios:U") && '..Names("Shutter_Demo", "Shutter_ScenarioReset"), "the demo viewer runs and never resets: " _ ..Resources("Shutter_Demo"))
     Do $$$AssertEquals(..Description("Shutter_Scenarios"), "Shutter: run the demo's scenarios", "Shutter_Scenarios says what it guards now")
     // The uninstall takes every resource named as Shutter's (Shutter.Util.Uninstall, TakeResources), the new one included
     Do $$$AssertTrue(##class(Shutter.Util.Uninstall).OwnSecurityName("Shutter_ScenarioReset"), "the uninstall removes Shutter_ScenarioReset")
     // A second refresh changes nothing: the install is repeatable.
-    Set before = ..Resources("Shutter_Operator") _ "|" _ ..Resources("Shutter_Approver") _ "|" _ ..Resources("Shutter_Judge")
+    Set before = ..Resources("Shutter_Operator") _ "|" _ ..Resources("Shutter_Approver") _ "|" _ ..Resources("Shutter_Judge") _ "|" _ ..Resources("Shutter_Demo")
     Do $$$AssertStatusOK(##class(Shutter.Setup).RefreshSecurity($NAMESPACE), "a second refresh")
-    Do $$$AssertEquals(..Resources("Shutter_Operator") _ "|" _ ..Resources("Shutter_Approver") _ "|" _ ..Resources("Shutter_Judge"), before, "and the roles are the same")
+    Do $$$AssertEquals(..Resources("Shutter_Operator") _ "|" _ ..Resources("Shutter_Approver") _ "|" _ ..Resources("Shutter_Judge") _ "|" _ ..Resources("Shutter_Demo"), before, "and the roles are the same")
 }
 
-/// 1.4.2's roles on this instance: Shutter_ScenarioReset taken out of every role and deleted, the judge without
-/// Shutter_Scenarios, and Shutter_Scenarios with 1.4.2's description.
+/// 1.4.2's roles on this instance: Shutter_ScenarioReset taken out of every role and deleted, the judge and the demo viewer
+/// without Shutter_Scenarios, and Shutter_Scenarios with 1.4.2's description.
 ClassMethod MakeRoles142() As %Status
 {
     New $NAMESPACE
     Set $NAMESPACE = "%SYS", sc = $$$OK
-    For role = "Shutter_Operator", "Shutter_Approver", "Shutter_Judge" {
+    For role = "Shutter_Operator", "Shutter_Approver", "Shutter_Judge", "Shutter_Demo" {
         Continue:'##class(Security.Roles).Exists(role)
         Kill p
         Do ##class(Security.Roles).Get(role, .p)
         Set kept = "", list = $LISTFROMSTRING($GET(p("Resources")), ",")
         For i = 1:1:$LISTLENGTH(list) {
             Set one = $LIST(list, i), name = $PIECE(one, ":")
-            Continue:(name = "Shutter_ScenarioReset")||((role = "Shutter_Judge") && (name = "Shutter_Scenarios"))
+            // Before 1.4.3 the judge ran nothing, and before 1.4.4 the demo viewer neither
+            Continue:(name = "Shutter_ScenarioReset")||(((role = "Shutter_Judge") || (role = "Shutter_Demo")) && (name = "Shutter_Scenarios"))
             Set kept = kept _ $SELECT(kept = "": "", 1: ",") _ one
         }
         Kill q

@@ -7,7 +7,7 @@ export const TRIAL_ROLES: { role: TrialRole; name: string; can: string }[] = [
   {
     role: 'demo',
     name: 'Online demo role',
-    can: 'Approves, cannot run or configure; sees the replayed hospital feed.',
+    can: 'Approves and runs scenarios from their recordings, cannot reset or configure; sees the replayed hospital feed.',
   },
   {
     role: 'judge',

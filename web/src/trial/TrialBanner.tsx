@@ -26,9 +26,9 @@ import { LeaveTrialButton } from './LeaveTrial';
 import { bannerForm, takeLostActions } from './visit';
 
 /**
- * What works here, replayed, for this role: the public demo's role approves but cannot run a scenario or save the site
- * profile, a judge approves and runs scenarios but saves nothing, and the operator cannot approve, so the list promises
- * only what the page then offers.
+ * What works here, replayed, for this role: the public demo's role approves and runs scenarios from their recordings
+ * (1.4.4) but cannot save the site profile, a judge approves and runs scenarios but saves nothing, and the operator cannot
+ * approve, so the list promises only what the page then offers.
  */
 function worksHere(can: Can): string[] {
   return [

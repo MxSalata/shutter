@@ -410,6 +410,12 @@ ClassMethod ScenarioRun(id As %String) As %Status
     If '$ISOBJECT(body) Set body = {}
     Set mode = ##class(Shutter.Util.Json).Str(body, "mode", "board")
     If '$LISTFIND($LISTBUILD("board", "single", "rules", "policy"), mode) Quit ..Fail("400 Bad Request", "bad_request", "mode must be board, single, rules or policy")
+    // A starter without the live agents (the public demo's role, 1.4.4) runs replay only: every agent of the run's cases
+    // answers from its recording, with no model call and nothing counted against the budget or a share. The single
+    // investigator was never recorded, so that mode is refused here before anything is queued or reset.
+    Set live = $SYSTEM.Security.Check("Shutter_LiveAgents", "USE")
+    Set notRecorded = ##class(Shutter.Scenarios.Runner).NotRecorded(mode, live)
+    If notRecorded '= "" Quit ..Fail("409 Conflict", "not_recorded", notRecorded)
     Set r = ..Idempotent(bodyText, .replayed)
     If replayed Quit $$$OK
     If ..PlayerEnabled() {
@@ -421,11 +427,12 @@ ClassMethod ScenarioRun(id As %String) As %Status
         If ##class(Shutter.Scenarios.Runner).Running() Quit ..Fail("409 Conflict", "wrong_state", "a run of " _ run.scenario _ " is still playing", run)
         Set out = {"scenario": (id), "mode": (mode), "state": "queued", "files": [], "timeouts": []}
         Do out.%Set("running", 1, "boolean")
+        Do out.%Set("replay", 'live, "boolean")
         Set out.queuedAt = ##class(Shutter.Util.Time).NowUTC()
         Set ^Shutter.Scenarios("run") = out.%ToJSON()
         Kill ^Shutter.Scenarios("run", "job")
         Set msg = ##class(Shutter.Msg.ScenarioRun).%New()
-        Set msg.Scenario = id, msg.Mode = mode, msg.RequestedBy = $USERNAME
+        Set msg.Scenario = id, msg.Mode = mode, msg.RequestedBy = $USERNAME, msg.LiveAllowed = live
         Set sc = ##class(Ens.Director).CreateBusinessService("Shutter API", .service)
         If $$$ISERR(sc) || '$ISOBJECT(service) {
             // Nothing was queued: a record left saying queued would refuse every later run as wrong_state.

@@ -12,6 +12,10 @@ Property Mode As %String(MAXLEN = 16) [ InitialExpression = "board" ];
 /// Who asked, for the trace.
 Property RequestedBy As %String(MAXLEN = 160);
 
+/// Whether the run's agents may run live (1.4.4): false when who asked holds no Shutter_LiveAgents (the public demo's
+/// role), and then every agent of the cases the run opens replays its recording, with no model call.
+Property LiveAllowed As %Boolean [ InitialExpression = 1 ];
+
 Storage Default
 {
 <Data name="ScenarioRunDefaultData">
@@ -24,6 +28,9 @@ Storage Default
 </Value>
 <Value name="3">
 <Value>RequestedBy</Value>
+</Value>
+<Value name="4">
+<Value>LiveAllowed</Value>
 </Value>
 </Data>
 <DefaultData>ScenarioRunDefaultData</DefaultData>

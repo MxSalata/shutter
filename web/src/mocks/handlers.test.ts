@@ -541,13 +541,13 @@ describe("the public demo's role", () => {
       stopRecovery: true,
       liveAgents: true,
     });
-    // The public demo's own user replays; a judge spends the day's model budget (v1.34) and runs the scenarios, never
-    // resetting them (1.4.3)
+    // The public demo's own user replays, and since 1.4.4 runs the scenarios from their recordings; a judge spends the
+    // day's model budget (v1.34) and runs the scenarios, never resetting them (1.4.3)
     expect(await can('demo')).toEqual({
       operate: true,
       approve: true,
       configure: false,
-      scenarios: false,
+      scenarios: true,
       reset: false,
       liveAgents: false,
     });
@@ -561,9 +561,15 @@ describe("the public demo's role", () => {
     });
   });
 
-  it('refuses the scenario controls and every change to the site, and still approves', async () => {
+  it('runs a scenario from its recordings, refuses the reset and every change to the site, and still approves', async () => {
     resetMock('demo');
-    expect(await code(api.post('/scenarios/S2/run', { mode: 'board' }))).toEqual([403, 'forbidden']);
+    // Its runs replay the recorded agents (1.4.4): the single investigator has none, so that mode is refused
+    const started = await api.post<{ scenario: string; replay: boolean }>('/scenarios/S2/run', {
+      mode: 'board',
+    });
+    expect(started).toMatchObject({ scenario: 'S2', replay: true });
+    resetMock('demo');
+    expect(await code(api.post('/scenarios/S8/run', { mode: 'single' }))).toEqual([409, 'not_recorded']);
     expect(await code(api.post('/scenarios/reset'))).toEqual([403, 'forbidden']);
     expect(await code(api.patch(`/library/${fixtures.library[0].code}`, { sort: 1 }))).toEqual([
       403,
@@ -586,8 +592,10 @@ describe("the public demo's role", () => {
 
   it('lets a judge run a scenario and refuses the judge the reset (1.4.3)', async () => {
     resetMock('judge');
-    const started = await api.post<{ scenario: string }>('/scenarios/S2/run', { mode: 'board' });
-    expect(started.scenario).toBe('S2');
+    const started = await api.post<{ scenario: string; replay: boolean }>('/scenarios/S2/run', {
+      mode: 'board',
+    });
+    expect(started).toMatchObject({ scenario: 'S2', replay: false });
     expect(await code(api.post('/scenarios/reset'))).toEqual([403, 'forbidden']);
     resetMock('approver');
   });

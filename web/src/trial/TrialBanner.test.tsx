@@ -121,14 +121,15 @@ describe('the trial banner', () => {
     expect(document.title).toBe('Shutter (trial)');
   });
 
-  it("lists under Works here only what the role may do: the public demo's role cannot run or configure", async () => {
+  it("lists under Works here only what the role may do: the public demo's role runs scenarios and does not configure", async () => {
     resetMock('demo');
     await renderShell(true);
     await userEvent.click(screen.getByRole('button', { name: "What's different?" }));
     const popover = await screen.findByRole('dialog', { name: 'The trial environment' });
     expect(await within(popover).findByText('Approve or reject a plan')).toBeInTheDocument();
     expect(within(popover).getByText('Switch role')).toBeInTheDocument();
-    expect(within(popover).queryByText('Run a scenario')).not.toBeInTheDocument();
+    // Since 1.4.4 its runs replay the recorded agents, as every run in the trial does
+    expect(within(popover).getByText('Run a scenario')).toBeInTheDocument();
     expect(within(popover).queryByText('Save the site profile')).not.toBeInTheDocument();
   });
 

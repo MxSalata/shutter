@@ -195,6 +195,8 @@ export interface ScenarioRun {
   step?: string;
   finishedAt?: string;
   error?: string;
+  /** The run's agents replay their recordings (1.4.4): who started it has no live agents. Absent from an older server. */
+  replay?: boolean;
 }
 
 export interface Scenario {

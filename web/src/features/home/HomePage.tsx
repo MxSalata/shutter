@@ -77,8 +77,9 @@ export default function HomePage() {
 }
 
 /**
- * The way in for someone new. The public demo's role cannot run scenarios, since its hospital plays them by itself, so it
- * starts from the cases already there; everyone else starts from S2, which shows the whole path, and then S8, the case the agents are there for.
+ * The way in for someone new. A role that cannot run scenarios (the public demo's before 1.4.4, whose hospital plays
+ * them by itself) starts from the cases already there; everyone else starts from S2, which shows the whole path, and
+ * then S8, the case the agents are there for.
  */
 function FirstStep() {
   const can = useCan();

@@ -113,8 +113,8 @@ Method TestEachRoleRowMatchesItsResources()
     }
 }
 
-/// The roles as the install makes them (Shutter.Setup.CreateSecurity): the public demo's viewer approves but neither
-/// runs scenarios, spends the model budget nor configures; the judge adds the model budget and running the scenarios
+/// The roles as the install makes them (Shutter.Setup.CreateSecurity): the public demo's viewer approves and runs the
+/// scenarios (1.4.4, from their recordings) but neither resets them, spends the model budget nor configures; the judge adds the model budget and running the scenarios
 /// (1.4.3), never their reset; the operator runs and resets scenarios and publishes but neither approves nor configures; the approver does everything; the trace role does nothing
 /// of Shutter's.
 Method TestTheInstalledRolesAsSetupMakesThem()
@@ -124,7 +124,8 @@ Method TestTheInstalledRolesAsSetupMakesThem()
     While iter.%GetNext(.k, .r) { Do $$$AssertTrue(r.installed, r.role _ " is installed") }
     Do $$$AssertEquals(report.roles.%Size(), 5, "five roles: the four a person signs in to Shutter with, and the trace role")
     Do $$$AssertTrue(..Cell(report, "view", "Shutter_Demo") && ..Cell(report, "approve", "Shutter_Demo"), "the demo viewer views and approves")
-    Do $$$AssertNotTrue(..Cell(report, "scenarios", "Shutter_Demo") || ..Cell(report, "reset", "Shutter_Demo") || ..Cell(report, "liveAgents", "Shutter_Demo") || ..Cell(report, "configure", "Shutter_Demo"), "and neither runs or resets scenarios, spends the budget nor configures")
+    Do $$$AssertTrue(..Cell(report, "scenarios", "Shutter_Demo"), "the demo viewer runs the scenarios (1.4.4)")
+    Do $$$AssertNotTrue(..Cell(report, "reset", "Shutter_Demo") || ..Cell(report, "liveAgents", "Shutter_Demo") || ..Cell(report, "configure", "Shutter_Demo"), "and neither resets them, spends the budget nor configures")
     Do $$$AssertTrue(..Cell(report, "liveAgents", "Shutter_Judge") && ..Cell(report, "scenarios", "Shutter_Judge"), "the judge spends the model budget and runs the scenarios")
     Do $$$AssertNotTrue(..Cell(report, "reset", "Shutter_Judge") || ..Cell(report, "configure", "Shutter_Judge"), "and, like the demo viewer, neither resets the demo nor configures")
     Do $$$AssertTrue(..Cell(report, "scenarios", "Shutter_Operator") && ..Cell(report, "reset", "Shutter_Operator") && ..Cell(report, "liveAgents", "Shutter_Operator"), "the operator runs and resets scenarios and spends the budget")

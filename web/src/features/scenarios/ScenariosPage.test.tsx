@@ -9,7 +9,7 @@ import { keys } from '@/api/hooks';
 import type { CaseSummary, Scenario } from '@/api/types';
 import { server } from '@/mocks/node';
 import { recordedSiteProfile } from '@/mocks/profile';
-import { resetMock, writesOf } from '@/mocks/handlers';
+import { LOOK_ONLY_DEMO, resetMock, writesOf } from '@/mocks/handlers';
 import type { CaseFixture } from '@/mocks/hold';
 import { caseOutcome } from '@/lib/status';
 import { PROOF } from '@/lib/proof';
@@ -409,8 +409,9 @@ describe('ScenariosPage, as each role has it', () => {
   const asServer = (me: object) =>
     server.use(http.get('/api/shutter/me', () => HttpResponse.json({ username: 'x', ...me })));
 
-  it("greys out Run and Reset for the public demo's role, and says once why", async () => {
+  it("greys out Run and Reset for the public demo's role on a server before 1.4.4, and says once why", async () => {
     resetMock('demo');
+    asServer(LOOK_ONLY_DEMO);
     renderScenarios();
     const list = await screen.findByRole('region', { name: 'Every scenario' });
     const why = await screen.findByText(
@@ -480,6 +481,7 @@ describe('ScenariosPage, as each role has it', () => {
 
   it('gives the public demo its own three, in the mode its hospital plays them, each with the case it has', async () => {
     resetMock('demo');
+    asServer(LOOK_ONLY_DEMO);
     renderScenarios();
     const first = await screen.findByRole('region', { name: 'Three to look at first' });
     // S2 and S23a have a Site policy case in the recording; S15 has none, so its card shows its latest case under
@@ -514,6 +516,7 @@ describe('ScenariosPage, as each role has it', () => {
 
   it('keeps a card whose scenario has no case yet, saying so where the link would be', async () => {
     resetMock('demo');
+    asServer(LOOK_ONLY_DEMO);
     server.use(
       http.get('/api/shutter/cases', () =>
         HttpResponse.json({ items: [summaryOf('C-000028'), summaryOf('C-000025')], total: 2 }),
@@ -542,6 +545,7 @@ describe('ScenariosPage, as each role has it', () => {
 
   it('shows the three cards on a fresh demo, before its hospital has played any of them', async () => {
     resetMock('demo');
+    asServer(LOOK_ONLY_DEMO);
     server.use(http.get('/api/shutter/cases', () => HttpResponse.json({ items: [], total: 0 })));
     renderScenarios();
     const first = await screen.findByRole('region', { name: 'Three to look at first' });
@@ -565,6 +569,7 @@ describe('ScenariosPage, as each role has it', () => {
     // S15: the merge is withheld by the gate and escalated, nothing written
     expect(def('S15')).toMatchObject({ disposition: 'escalate', write: false, blocked_by: 'MERGE_WITHHELD' });
     resetMock('demo');
+    asServer(LOOK_ONLY_DEMO);
     renderScenarios();
     const first = await screen.findByRole('region', { name: 'Three to look at first' });
     expect(
@@ -618,6 +623,53 @@ describe('ScenariosPage, as each role has it', () => {
     // The run goes to the server, which plays it: the page then says it is playing
     await userEvent.click(within(list).getByRole('button', { name: 'Run S2' }));
     expect((await screen.findAllByText(/Playing S2/)).length).toBeGreaterThan(0);
+    resetMock('approver');
+  });
+
+  it("gives the public demo's account Run, saying its runs replay the recorded agents, and keeps Reset greyed out", async () => {
+    resetMock('demo');
+    renderScenarios();
+    const list = await screen.findByRole('region', { name: 'Every scenario' });
+    const run = await within(list).findByRole('button', { name: 'Run S2' });
+    expect(run).toBeEnabled();
+    // Said once above the modes: no model call, nothing spent, and the case says it was replayed
+    expect(
+      screen.getByText(
+        /Runs from this sign-in replay the recorded agents: no model is called, nothing is spent/,
+      ),
+    ).toBeInTheDocument();
+    await userEvent.hover(run.parentElement!);
+    expect(await screen.findByText('Play S2 in Board mode from its recordings')).toBeInTheDocument();
+    await userEvent.unhover(run.parentElement!);
+    // Reset stays with the hospital's own team, its reason under it, never asking for a role the menu shows
+    expect(screen.getByRole('button', { name: 'Reset' })).toBeDisabled();
+    expect(
+      screen.getByText(
+        'This sign-in runs scenarios but does not reset the shared demo, which would clear it for everyone signed in',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/needs the operator or approver role/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/plays its stories by itself/)).not.toBeInTheDocument();
+    // The single investigator was never recorded: it is described and can't be chosen
+    expect(screen.getByRole('radio', { name: /Single investigator/ })).toBeDisabled();
+    expect(screen.getByText('No recording to replay')).toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: /^Board/ })).toBeChecked();
+    // The run plays, and the page says its agents answer from their recordings
+    await userEvent.click(run);
+    expect(
+      await screen.findByText(/Its agents answer from their recordings, with no model call/),
+    ).toBeInTheDocument();
+    resetMock('approver');
+  });
+
+  it("keeps the judge's runs live: no word of replaying", async () => {
+    resetMock('judge');
+    renderScenarios();
+    const list = await screen.findByRole('region', { name: 'Every scenario' });
+    expect(await within(list).findByRole('button', { name: 'Run S2' })).toBeEnabled();
+    expect(screen.queryByText(/replay the recorded agents/)).not.toBeInTheDocument();
+    expect(screen.getByRole('radio', { name: /Single investigator/ })).toBeEnabled();
+    expect(screen.queryByText('No recording to replay')).not.toBeInTheDocument();
     resetMock('approver');
   });
 

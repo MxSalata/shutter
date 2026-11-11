@@ -161,7 +161,7 @@ neither the build log nor the image's history carries it; the build needs BuildK
 | Variable | Meaning |
 | --- | --- |
 | `SHUTTER_DEMO_PASSWORD` | The demo users' password (default `shutter`); demo only. |
-| `SHUTTER_PUBLIC_DEMO_PASSWORD` | When set, the user `demo` exists with the role `Shutter_Demo`: reads, reinvestigates, approves and asks, and can neither run or reset scenarios nor save the site profile, the library or a schema. For a public demo; no default. |
+| `SHUTTER_PUBLIC_DEMO_PASSWORD` | When set, the user `demo` exists with the role `Shutter_Demo`: reads, reinvestigates, approves and asks, and runs the scenarios (since 1.4.4) from their recordings only, with no model call and nothing counted against the budget; it can neither reset the scenarios nor save the site profile, the library or a schema. For a public demo; no default. |
 | `SHUTTER_TRACE_PASSWORD` | When set, the user `demo-trace` exists with the role `Shutter_Trace`: the Visual Trace and the messages in the Management Portal, read only. No default. |
 | `SHUTTER_JUDGE_PASSWORD` | When set, the user `judge` exists with the role `Shutter_Judge`: the public demo's role plus the live agents (live questions, convening the board) and, since 1.4.3, running the scenarios (`Shutter_Scenarios`, one run at a time), under the model budget and the judge's share. It cannot reset the demo or purge its store (`Shutter_ScenarioReset`, the operator's and the approver's). No default. |
 | `SHUTTER_JUDGE_BUDGET_USD` | Each user's share of the day's model budget in US dollars (CONTRACTS 9): a user whose live runs today reach it is refused `budget_exhausted`. Empty or 0: no share, the day's cap alone. |

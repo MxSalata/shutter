@@ -95,9 +95,10 @@ let recovery = RECOVERY;
 
 /**
  * The mock's users, with `can` as the server answers it (CONTRACTS 5, v1.34): the operator runs and resets scenarios and
- * cannot configure, the approver can do everything, and `demo` is the public demo's role, which operates and approves but
- * neither configures the site nor runs scenarios, and sees the live hospital's status in the settings. A judge (1.4.3)
- * runs scenarios and spends the model budget, and does not reset the shared demo.
+ * cannot configure, the approver can do everything, and `demo` is the public demo's role, which operates and approves,
+ * does not configure the site, and sees the live hospital's status in the settings; since 1.4.4 it runs the scenarios
+ * from their recordings (no live agents) and does not reset them. A judge (1.4.3) runs scenarios and spends the model
+ * budget, and does not reset the shared demo.
  */
 const USERS: Record<string, Me> = {
   operator: {
@@ -136,7 +137,7 @@ const USERS: Record<string, Me> = {
       operate: true,
       approve: true,
       configure: false,
-      scenarios: false,
+      scenarios: true,
       reset: false,
       liveAgents: false,
     },
@@ -149,6 +150,15 @@ const USERS: Record<string, Me> = {
     approver: true,
     can: { operate: true, approve: true, configure: false, scenarios: true, reset: false, liveAgents: true },
   },
+};
+
+/**
+ * The public demo's account as a server before 1.4.4 answers GET /me: it may not run scenarios, so the Scenarios page is
+ * for looking at. For the tests of that page, which a server older than 1.4.4 still serves.
+ */
+export const LOOK_ONLY_DEMO: Me = {
+  ...USERS.demo,
+  can: { ...USERS.demo.can!, scenarios: false },
 };
 
 /**
@@ -783,6 +793,14 @@ export const handlers = [
         delete escalations[id];
         delete trail[id];
       }
+    // A starter without the live agents replays the recorded agents, and the single investigator has no recording (1.4.4)
+    const replay = !session?.can?.liveAgents;
+    if (replay && mode === 'single')
+      return error(
+        409,
+        'not_recorded',
+        'The single investigator has no recordings, and a run from this sign-in replays the recorded agents only: choose Board, Site policy or Rules only',
+      );
     run = {
       scenario: String(params.id),
       mode,
@@ -791,10 +809,11 @@ export const handlers = [
       files: [],
       timeouts: [],
       step: `delivering ${filesOf(String(params.id))[0] ?? 'the first file'}`,
+      replay,
     };
     await delay(300);
     return HttpResponse.json(
-      { scenario: run.scenario, mode, startedAt: run.startedAt, files: [] },
+      { scenario: run.scenario, mode, startedAt: run.startedAt, files: [], replay },
       { status: 202 },
     );
   }),

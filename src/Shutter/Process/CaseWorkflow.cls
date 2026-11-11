@@ -801,17 +801,20 @@ Method AgentRequestFor(case As Shutter.Store.Case, m As Shutter.Store.BoardMembe
 /// Who asked, for the budget's share (v1.34, v1.39, 1.4.3): a judge who convened the board, else the person who reopened
 /// the case, else the person who started the scenario run that opened it, else the feed itself ("system", no share); and
 /// whether the run may go live: a reopener without the live agents gets recordings only (ModeOverride replay), as a
-/// question's runs do (14).
+/// question's runs do (14), and so does a case of a scenario run started without them (1.4.4, Case's ScenarioReplay).
 Method StampRequester(req As Shutter.Bridge.Msg.AgentRequest, case As Shutter.Store.Case = "")
 {
-    Do ..Stamp(req, ..ForceBoard, ..ConvenedBy, ..ReopenedBy, ..LiveAllowed, $SELECT($ISOBJECT(case): case.ScenarioBy, 1: ""))
+    Do ..Stamp(req, ..ForceBoard, ..ConvenedBy, ..ReopenedBy, ..LiveAllowed, $SELECT($ISOBJECT(case): case.ScenarioBy, 1: ""), $SELECT($ISOBJECT(case): case.ScenarioReplay, 1: 0))
 }
 
-/// The rule itself, a class method so a test can apply it without a running process.
-ClassMethod Stamp(req As Shutter.Bridge.Msg.AgentRequest, forceBoard As %Boolean = 0, convenedBy As %String = "", reopenedBy As %String = "", liveAllowed As %Boolean = 1, scenarioBy As %String = "")
+/// The rule itself, a class method so a test can apply it without a running process. A replay-only scenario run
+/// (<var>scenarioReplay</var>) replays its case's agents while the run is what they answer to; a convener's or a
+/// reopener's request goes by that person's own right (<var>liveAllowed</var>).
+ClassMethod Stamp(req As Shutter.Bridge.Msg.AgentRequest, forceBoard As %Boolean = 0, convenedBy As %String = "", reopenedBy As %String = "", liveAllowed As %Boolean = 1, scenarioBy As %String = "", scenarioReplay As %Boolean = 0)
 {
-    Set req.RequestedBy = $SELECT(forceBoard && (convenedBy '= ""): convenedBy, reopenedBy '= "": reopenedBy, scenarioBy '= "": scenarioBy, 1: "system")
-    If 'liveAllowed Set req.ModeOverride = "replay"
+    Set byScenario = '(forceBoard && (convenedBy '= "")) && (reopenedBy = "")
+    Set req.RequestedBy = $SELECT('byScenario: $SELECT(forceBoard && (convenedBy '= ""): convenedBy, 1: reopenedBy), scenarioBy '= "": scenarioBy, 1: "system")
+    If 'liveAllowed || (byScenario && scenarioReplay) Set req.ModeOverride = "replay"
 }
 
 /// The model view of the case could not be built (Shutter.Util.ModelView.Learn): nothing was sent to a model, and a
@@ -946,6 +949,8 @@ Method AllNoRecord(case As Shutter.Store.Case) As %Boolean
 Method UnansweredWhy(case As Shutter.Store.Case) As %String
 {
     Set cid = case.%Id(), sid = $SELECT($ISOBJECT(case.CurrentSnapshot): case.CurrentSnapshot.%Id(), 1: ""), n = 0
+    // A replay-only scenario run's case (1.4.4) never called a model: it can only lack a recording.
+    If case.ScenarioReplay && '..Reopened && '..ForceBoard Quit "this scenario run replays the recorded agents only, and this case has no recording"
     &sql(SELECT COUNT(*) INTO :n FROM Shutter_Store.AgentRun WHERE "Case" = :cid AND Snapshot = :sid AND Status = 'budget_exhausted')
     If +n > 0 Quit "the day's model budget is spent (budget_exhausted)"
     &sql(SELECT COUNT(*) INTO :n FROM Shutter_Store.AgentRun WHERE "Case" = :cid AND Snapshot = :sid AND Status = 'provider_auth')

@@ -6,7 +6,8 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { server } from '@/mocks/node';
-import { resetMock } from '@/mocks/handlers';
+import { http, HttpResponse } from 'msw';
+import { LOOK_ONLY_DEMO, resetMock } from '@/mocks/handlers';
 import { useAppearance } from '@/stores/appearance';
 import type { DetailLevel } from '@/env/mode';
 import { layer1WordCount } from '@/test/words';
@@ -81,6 +82,8 @@ describe('ScenariosPage in the trial', () => {
 
   it("describes all four modes to a role that can't choose, and says the trial has no recording of one", async () => {
     resetMock('demo');
+    // The public demo's account as a server before 1.4.4 answered, which ran no scenarios
+    server.use(http.get('/api/shutter/me', () => HttpResponse.json(LOOK_ONLY_DEMO)));
     renderTrial();
     const modes = await screen.findByRole('radiogroup', { name: 'Investigation modes' });
     for (const name of ['Board', 'Site policy', 'Single investigator', 'Rules only'])
@@ -93,6 +96,7 @@ describe('ScenariosPage in the trial', () => {
 
   it("says where the online demo's words apply, and how to get a role that can run one", async () => {
     resetMock('demo');
+    server.use(http.get('/api/shutter/me', () => HttpResponse.json(LOOK_ONLY_DEMO)));
     renderTrial();
     const first = await screen.findByRole('region', { name: 'Three to look at first' });
     expect(

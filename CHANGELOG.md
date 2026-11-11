@@ -4,6 +4,25 @@ Versions follow `major.minor.patch`: a minor release for new features, a patch r
 updates. The version in both `module.xml` files (the one the package manager publishes) is always the version of the
 GitHub tag on the same commit; `scripts/check-versions.py` checks every place the version is written.
 
+## 1.4.4 (11 November 2026)
+
+Anyone on the online demo can play the scenarios now, from their recordings.
+
+- **The public demo's account runs the scenarios, replayed.** Signed in as `demo`, **Run** on Scenarios is on. A run
+  started by someone without the live agents plays every agent of its cases from the recordings: no model is called and
+  nothing counts against the day's budget or anyone's share, even on an instance whose board answers live. The judges'
+  runs stay live, as in 1.4.3, and a reopening or a convened board goes by its own requester's right.
+- **A replayed run says so.** The case carries "Replayed: this scenario run was started by a sign-in without the live
+  agents..." on its trail from its opening, its agent runs show as recorded replays costing nothing, and the run banner
+  says its agents answer from their recordings. `POST /scenarios/{id}/run` and the run record carry `replay`.
+- **The single investigator, never recorded, is refused to a replayed run.** Such a run in that mode is 409
+  `not_recorded`, before anything is reset; the Scenarios page greys the mode out for the demo's account with "No recording
+  to replay", as the trial does.
+- **Reset stays locked.** The demo's account still can't reset the shared demo or purge its store, and the greyed-out
+  Reset says why without naming a role the user menu shows. The hourly reset cleans up after visitors' runs.
+- **On an upgrade,** the install gives the role `Shutter_Demo` the resource `Shutter_Scenarios`, and nothing else. The
+  trial's online demo role runs scenarios too. CONTRACTS 1.58 says all of this.
+
 ## 1.4.3 (10 November 2026)
 
 The judges play the scenarios on the online demo, and the words for orders and results say what 1.4.x does.

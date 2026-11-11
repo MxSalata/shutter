@@ -28,6 +28,7 @@ import { hueVar, MODE_IDENTITY } from '@/lib/hues';
 import { MoreAbout } from './MoreAbout';
 import { ScenarioDiagram } from './ScenarioDiagram';
 import { ProofLine } from './ProofLine';
+import { REPLAY_ONLY } from './scenarioText';
 
 /** Where a role that sees no board can watch one decide: in the trial, S8's recording, wherever this page is. */
 function BoardRecording() {
@@ -271,6 +272,7 @@ export function TryFirst({
   demo = false,
   whyId,
   chosen,
+  replayed = false,
 }: {
   /** The scenarios, once read; the section and its heading render before that, as the guide's first target. */
   scenarios: Scenario[] | undefined;
@@ -287,6 +289,8 @@ export function TryFirst({
    */
   demo?: boolean;
   whyId?: string;
+  /** The sign-in's runs replay the recorded agents (1.4.4): each Run's tooltip says so. */
+  replayed?: boolean;
 }) {
   const casesRead = useCases({ limit: 100 });
   const cases = casesRead.data?.items ?? [];
@@ -392,7 +396,14 @@ export function TryFirst({
                   </Stack>
                   {/* The action row sits at the card's foot, so the three Run buttons line up */}
                   <Stack gap="xs" align="flex-start" className="first-actions">
-                    <Tooltip label={reason || `Play ${s.id} in ${modeName} mode`} multiline maw={260}>
+                    <Tooltip
+                      label={
+                        reason ||
+                        (replayed ? REPLAY_ONLY.play(s.id, modeName) : `Play ${s.id} in ${modeName} mode`)
+                      }
+                      multiline
+                      maw={260}
+                    >
                       <span>
                         <Button
                           size="sm"

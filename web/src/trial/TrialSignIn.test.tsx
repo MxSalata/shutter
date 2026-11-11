@@ -80,7 +80,7 @@ describe("the trial's sign-in page", () => {
     expect(screen.getByRole('button', { name: 'Leave trial' })).toBeInTheDocument();
   });
 
-  it("signs the public demo's role in, which cannot configure or run, and sees the replayed hospital feed", async () => {
+  it("signs the public demo's role in, which runs scenarios from their recordings, cannot configure or reset, and sees the replayed hospital feed", async () => {
     const client = renderSignIn();
     expect(screen.getByText(/sees the replayed hospital feed/)).toBeInTheDocument();
     await userEvent.click(await screen.findByRole('button', { name: 'Continue as online demo role' }));
@@ -90,7 +90,7 @@ describe("the trial's sign-in page", () => {
       operate: true,
       approve: true,
       configure: false,
-      scenarios: false,
+      scenarios: true,
       reset: false,
       liveAgents: false,
     });

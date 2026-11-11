@@ -21,6 +21,18 @@ export function runNeedsWords(badges: boolean): string {
 }
 
 /**
+ * What a run from a sign-in without the live agents does (1.4.4, the online demo's account): its agents answer from their
+ * recordings. Said once above the modes, in the Run buttons' tooltips and when the run starts or finishes.
+ */
+export const REPLAY_ONLY = {
+  line: 'Runs from this sign-in replay the recorded agents: no model is called, nothing is spent, and the case says it was replayed.',
+  play: (id: string, mode: string) => `Play ${id} in ${mode} mode from its recordings`,
+  started: 'replayed from the recordings',
+  notRecorded: 'No recording to replay',
+  notRecordedWhy: 'The single investigator has no recordings, and this sign-in replays recorded agents only',
+};
+
+/**
  * Why Reset is greyed out for someone who may not reset the shared demo: a judge runs scenarios and does not reset, since a
  * reset clears the demo for everyone signed in to it. As for Run, a sign-in that shows the operator or approver badge is
  * told what it lacks.

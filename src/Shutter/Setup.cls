@@ -290,14 +290,17 @@ ClassMethod CreateSecurity(ns As %String, demo As %Boolean) As %Status
     Set sc = ..EnsureRole("Shutter_Operator", "Shutter operator: cases, scenarios, investigations", "Shutter_Operate:U,Shutter_Scenarios:U,Shutter_ScenarioReset:U,Shutter_LiveAgents:U,Shutter_Publish:U,Shutter_StopRecovery:U," _ db _ ":RW" _ codeRead _ watchReset _ recordsRW _ ",%Ens_Portal:U", "")
     Quit:$$$ISERR(sc) sc
     // What an approver and the public demo's role share (v1.34): reading, approving, the traces; the approver adds the site's
-    // writes (Shutter_Configure) and the demo controls (Shutter_Scenarios to run, Shutter_ScenarioReset to reset), which the
-    // demo role never holds.
+    // writes (Shutter_Configure) and the demo controls (Shutter_Scenarios to run, Shutter_ScenarioReset to reset); the demo
+    // role runs (1.4.4) and never resets.
     Set approverCore = "Shutter_Operate:U,Shutter_Approve:U," _ db _ ":RW" _ codeRead
     Set traces = ",%Ens_MessageTrace:U,%Ens_MessageHeader:U,%Ens_MessageContent:U"
     Set approverRes = approverCore _ watchRead _ traces
     Set sc = ..EnsureRole("Shutter_Approver", "Shutter approver: everything an operator can, plus approvals, the site's settings and the Workflow inbox", approverCore _ watchReset _ recordsRW _ traces _ ",%Ens_EventLog:U,Shutter_Configure:U,Shutter_Scenarios:U,Shutter_ScenarioReset:U,Shutter_LiveAgents:U,Shutter_StopRecovery:U", "Shutter_Operator,%EnsRole_Monitor")
     Quit:$$$ISERR(sc) sc
-    Set sc = ..EnsureRole("Shutter_Demo", "Shutter public demo: reads everything, reinvestigates, approves and asks; cannot run or reset scenarios, save the site profile or the library, or import a schema", approverRes _ ",%Ens_Portal:U", "%EnsRole_Monitor")
+    // Since 1.4.4 the public demo's role runs the scenarios too (Shutter_Scenarios), never resetting them: it holds no
+    // Shutter_LiveAgents, so a run it starts plays every agent of its cases from the recordings, with no model call and
+    // nothing counted against the budget or a share (Shutter.Scenarios.Runner Begin, Shutter.Process.CaseWorkflow Stamp).
+    Set sc = ..EnsureRole("Shutter_Demo", "Shutter public demo: reads everything, reinvestigates, approves and asks, and runs the scenarios from their recordings; cannot reset them, save the site profile or the library, or import a schema", approverRes _ ",%Ens_Portal:U,Shutter_Scenarios:U", "%EnsRole_Monitor")
     Quit:$$$ISERR(sc) sc
     // A judge (v1.34, decided on 1 Nov 2026): the public demo's role plus the live agents, under the model budget and
     // a share of their own; the demo role never spends. Since 1.4.3 a judge also runs the scenarios (Shutter_Scenarios),

@@ -106,11 +106,15 @@ ClassMethod Start(scenario As %String, mode As %String = "board") As %String [ S
     Set started = ..Begin(scenario, mode, .error)
     Quit:error'="" {"error": (error)}.%ToJSON()
     Kill ^Shutter.Scenarios("run")
-    Set ^Shutter.Scenarios("run") = {"scenario": (scenario), "mode": (mode), "startedAt": (started), "state": "running", "files": [], "timeouts": []}.%ToJSON()
+    Set record = {"scenario": (scenario), "mode": (mode), "startedAt": (started), "state": "running", "files": [], "timeouts": []}
+    Do record.%Set("replay", ..ReplayOnly(), "boolean")
+    Set ^Shutter.Scenarios("run") = record.%ToJSON()
     Job ##class(Shutter.Scenarios.Runner).Background(scenario, mode, started)::10
     If $TEST {
         Set ^Shutter.Scenarios("run", "job") = $ZCHILD
-        Quit {"scenario": (scenario), "mode": (mode), "startedAt": (started), "files": [], "running": true}.%ToJSON()
+        Set out = {"scenario": (scenario), "mode": (mode), "startedAt": (started), "files": [], "running": true}
+        Do out.%Set("replay", ..ReplayOnly(), "boolean")
+        Quit out.%ToJSON()
     }
     // No process to spare (the Community licence caps them, and the production holds most): play the steps here,
     // in the caller's process, and answer when they are done. Called over HTTP, the gateway is asked to wait.
@@ -122,7 +126,9 @@ ClassMethod Start(scenario As %String, mode As %String = "board") As %String [ S
     If run.state '= "done" {
         Quit {"error": (run.error), "files": (run.files)}.%ToJSON()
     }
-    Quit {"scenario": (scenario), "mode": (mode), "startedAt": (started), "files": (run.files), "timeouts": (run.timeouts), "running": false}.%ToJSON()
+    Set out = {"scenario": (scenario), "mode": (mode), "startedAt": (started), "files": (run.files), "timeouts": (run.timeouts), "running": false}
+    Do out.%Set("replay", ..ReplayOnly(), "boolean")
+    Quit out.%ToJSON()
 }
 
 /// The background run <method>Start</method> began, or the last one: scenario, mode, startedAt, state (running, done,
@@ -208,10 +214,17 @@ ClassMethod Prepare(scenario As %String, mode As %String, Output inbound As %Str
 /// The reset before a run, and the mode and scenario recorded (CONTRACTS 4), with who started the run: the cases it opens
 /// carry that user (Shutter.Store.Case's ScenarioBy), so their live agent runs count against that user's share of the day's
 /// model budget, as a convened board does (1.4.3). <var>requestedBy</var> is the user the Scenario Player was sent the run
-/// by; empty, the caller itself. Returns the time of the reset.
-ClassMethod Begin(scenario As %String, mode As %String, Output error As %String, requestedBy As %String = "") As %String
+/// by; empty, the caller itself. <var>liveAllowed</var> is whether that user holds Shutter_LiveAgents, as the API read it
+/// in the user's own process; empty, the caller's own right. Without it (the public demo's role, 1.4.4) the run is replay
+/// only: ^Shutter.Config("scenarioReplay") says so, the cases it opens keep it (Case's ScenarioReplay), and every agent of
+/// theirs answers from its recording (Shutter.Process.CaseWorkflow Stamp), with no model call and nothing spent; a mode
+/// with no recording is refused before the reset (<method>NotRecorded</method>). Returns the time of the reset.
+ClassMethod Begin(scenario As %String, mode As %String, Output error As %String, requestedBy As %String = "", liveAllowed As %String = "") As %String
 {
     Set error = ""
+    If liveAllowed = "" Set liveAllowed = $SYSTEM.Security.Check("Shutter_LiveAgents", "USE")
+    Set error = ..NotRecorded(mode, liveAllowed)
+    Quit:error'="" ""
     Set reset = {}.%FromJSON(..Reset())
     If reset.ward.error '= "" {
         Set error = "the downstream system refused the reset: is the demo flag (^Downstream.Config) set?"
@@ -221,7 +234,23 @@ ClassMethod Begin(scenario As %String, mode As %String, Output error As %String,
     Set ^Shutter.Config("scenario") = scenario, ^Shutter.Config("scenarioRun") = scenario
     If requestedBy = "" Set requestedBy = $SELECT($USERNAME = "UnknownUser": "", 1: $USERNAME)
     Set ^Shutter.Config("scenarioBy") = requestedBy
+    Set ^Shutter.Config("scenarioReplay") = '+liveAllowed
     Quit reset."reset_at"
+}
+
+/// Why a run in <var>mode</var> can't be played replay only, or "": the single investigator was never recorded, so a
+/// starter without the live agents would have nothing to replay (1.4.4). The trial leaves that mode out for the same reason.
+ClassMethod NotRecorded(mode As %String, liveAllowed As %Boolean) As %String
+{
+    Quit:+liveAllowed ""
+    Quit:mode'="single" ""
+    Quit "The single investigator has no recordings, and a run from this sign-in replays the recorded agents only: choose Board, Site policy or Rules only"
+}
+
+/// Whether the run playing now, or the last one, is replay only (1.4.4): who started it holds no Shutter_LiveAgents.
+ClassMethod ReplayOnly() As %Boolean
+{
+    Quit +$GET(^Shutter.Config("scenarioReplay"))
 }
 
 /// Plays the steps of <var>found</var> after <method>Begin</method>. With <var>track</var>, each step is recorded for
@@ -441,7 +470,7 @@ ClassMethod Reset() As %String [ SqlProc ]
         }
     }
     Set ^Shutter.Config("mode") = "board"
-    Kill ^Shutter.Config("scenario"), ^Shutter.Config("scenarioRun"), ^Shutter.Config("scenarioBy")
+    Kill ^Shutter.Config("scenario"), ^Shutter.Config("scenarioRun"), ^Shutter.Config("scenarioBy"), ^Shutter.Config("scenarioReplay")
     // S26 turns the hold on for its own run: a run cut off must not leave it on, so the profile's word stands again.
     Do ##class(Shutter.Scenarios.SiteSchema).PreventFailures(0)
     Set ^Shutter.Config("resetAt") = resetAt

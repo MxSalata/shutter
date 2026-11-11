@@ -35,7 +35,7 @@ import {
   useScenarios,
   useSiteProfile,
 } from '@/api/hooks';
-import { scenariosHidden, showsRoleBadges } from '@/api/can';
+import { replaysOnly, scenariosHidden, showsRoleBadges } from '@/api/can';
 import type { CaseSummary, Mode, Scenario, ScenarioRun } from '@/api/types';
 import { ENV, TRIAL } from '@/env/mode';
 import { byEnv } from '@/env/copy';
@@ -66,6 +66,7 @@ import { ModeName, ScenariosHero, TryFirst } from './TryFirst';
 import {
   hl7Events,
   recordedLine,
+  REPLAY_ONLY,
   resetNeedsWords,
   runNeedsWords,
   scenarioCount,
@@ -101,13 +102,16 @@ const ALL_MODES: { value: Mode; label: string; hint: string }[] = [
   },
 ];
 
-/** The trial cannot play the single investigator: its runs were never recorded, so it has nothing to replay. */
-const notRecorded = (mode: Mode) => TRIAL && mode === 'single';
+/**
+ * The single investigator's runs were never recorded, so it has nothing to replay: the trial cannot play it, nor can a
+ * sign-in whose runs replay the recorded agents (`replayOnly`, 1.4.4: the online demo's account).
+ */
+const notRecorded = (mode: Mode, replayOnly = false) => mode === 'single' && (TRIAL || replayOnly);
 
-const NOT_RECORDED = 'Not in the trial: no recording';
+const NOT_RECORDED = TRIAL ? 'Not in the trial: no recording' : REPLAY_ONLY.notRecorded;
 
 /** The modes that can be played here. All four are always shown; the one that can't says so and can't be chosen. */
-const MODES = ALL_MODES.filter((m) => !notRecorded(m.value));
+const modesFor = (replayOnly = false) => ALL_MODES.filter((m) => !notRecorded(m.value, replayOnly));
 
 const modeLabel = (mode: Mode) => ALL_MODES.find((m) => m.value === mode)?.label ?? humanize(mode);
 
@@ -131,6 +135,9 @@ const PLAYER_OFF = 'The Scenario Player is switched off on a site install, which
  * in the trial the scenario's case is the recorded one, already in its final state.
  */
 function RunBanner({ run, latest }: { run: ScenarioRun; latest: string | undefined }) {
+  // A run from a sign-in without the live agents (1.4.4) says its agents answer from their recordings
+  const replayed =
+    !TRIAL && run.replay ? ' Its agents answer from their recordings, with no model call.' : '';
   if (run.state === 'queued')
     return (
       <Alert
@@ -139,7 +146,7 @@ function RunBanner({ run, latest }: { run: ScenarioRun; latest: string | undefin
         icon={<Loader size={16} />}
         title={`${run.scenario} is queued (${humanize(run.mode)})`}
       >
-        <Text size="sm">The scenario player starts it in a moment.</Text>
+        <Text size="sm">The scenario player starts it in a moment.{replayed}</Text>
       </Alert>
     );
   if (run.state === 'running')
@@ -152,7 +159,7 @@ function RunBanner({ run, latest }: { run: ScenarioRun; latest: string | undefin
       >
         <Text size="sm">
           {run.step ? `Now ${run.step}.` : 'Starting.'} Files delivered so far:{' '}
-          {run.files.length ? run.files.join(', ') : 'none'}.
+          {run.files.length ? run.files.join(', ') : 'none'}.{replayed}
         </Text>
       </Alert>
     );
@@ -165,7 +172,8 @@ function RunBanner({ run, latest }: { run: ScenarioRun; latest: string | undefin
       >
         <Text size="sm">
           Delivered {run.files.join(', ') || 'no files'}.
-          {run.timeouts.length ? ` The case did not reach ${run.timeouts.join(', ')} in time.` : ''}{' '}
+          {run.timeouts.length ? ` The case did not reach ${run.timeouts.join(', ')} in time.` : ''}
+          {replayed}{' '}
           {byEnv({
             live: (
               <>
@@ -401,6 +409,7 @@ function ScenarioRow({
   onRun,
   starting,
   lookOnly,
+  replayOnly,
 }: {
   s: Scenario;
   mode: Mode;
@@ -415,11 +424,15 @@ function ScenarioRow({
   starting: boolean;
   /** The public demo's role: Run is greyed out, its reason said once at the top of the page. */
   lookOnly: boolean;
+  /** The sign-in's runs replay the recorded agents (1.4.4): Run says so. */
+  replayOnly: boolean;
 }) {
   const technical = useTechnical();
   // With the player switched off there is no mode to play in, so no row is marked for one.
   const defined = playerOff || definedFor(s, mode);
-  const modes = (s.expected?.modes ?? []).filter((m) => MODES.some((x) => x.value === m)).map(modeLabel);
+  const modes = (s.expected?.modes ?? [])
+    .filter((m) => modesFor(replayOnly).some((x) => x.value === m))
+    .map(modeLabel);
   const why = playerOff
     ? PLAYER_OFF
     : lookOnly
@@ -498,7 +511,14 @@ function ScenarioRow({
         style={{ verticalAlign: 'top' }}
       >
         <Stack gap={4} align="flex-start">
-          <Tooltip label={why || `Play ${s.id} in ${humanize(mode)} mode`} multiline maw={260}>
+          <Tooltip
+            label={
+              why ||
+              (replayOnly ? REPLAY_ONLY.play(s.id, humanize(mode)) : `Play ${s.id} in ${humanize(mode)} mode`)
+            }
+            multiline
+            maw={260}
+          >
             <span>
               <Button
                 size="xs"
@@ -574,14 +594,17 @@ function RunModes({
   scenarios,
   lookOnly,
   defaultMode,
+  replayOnly = false,
 }: {
   mode: Mode;
   onChange: (m: Mode) => void;
   scenarios: Scenario[] | undefined;
   lookOnly: boolean;
   defaultMode: Mode;
+  /** The sign-in's runs replay the recorded agents (1.4.4): a mode with no recording can't be chosen. */
+  replayOnly?: boolean;
 }) {
-  const chosen = MODES.find((m) => m.value === mode);
+  const chosen = modesFor(replayOnly).find((m) => m.value === mode);
   return (
     <Box data-tour="scenarios-mode">
       <Radio.Group
@@ -593,13 +616,13 @@ function RunModes({
             {lookOnly ? 'Investigation modes' : 'Run mode'}
           </Text>
         }
-        description={`${lookOnly ? 'Pick one to read the list below in it.' : 'Every Run button below uses it.'} ${MODES_INTRO}`}
+        description={`${lookOnly ? 'Pick one to read the list below in it.' : 'Every Run button below uses it.'} ${MODES_INTRO}${replayOnly ? ` ${REPLAY_ONLY.line}` : ''}`}
         styles={{ description: { fontSize: 'var(--mantine-font-size-sm)' } }}
       >
         <SimpleGrid cols={{ base: 1, sm: 2, md: ALL_MODES.length }} spacing="sm" mt="sm">
           {ALL_MODES.map((m) => {
             const n = scenarios?.filter((s) => definedFor(s, m.value)).length;
-            const out = notRecorded(m.value);
+            const out = notRecorded(m.value, replayOnly);
             return (
               <Radio.Card
                 key={m.value}
@@ -776,6 +799,10 @@ export default function ScenariosPage() {
   const run = useRunScenario();
   const reset = useResetScenarios();
   const canRun = can.scenarios;
+  // Runs from a sign-in without the live agents replay the recorded agents (1.4.4, the online demo's account); the trial
+  // replays every run anyway and says so in its own words
+  const replayOnly = !TRIAL && replaysOnly(can);
+  const playable = modesFor(replayOnly);
   // Resetting the shared demo is a right of its own (1.4.3): a judge runs scenarios and does not reset them. A server
   // older than that sends no `reset`, and resolveCan takes `scenarios` for it.
   const canReset = can.reset ?? canRun;
@@ -785,13 +812,13 @@ export default function ScenariosPage() {
   const runNeeds = runNeedsWords(badges);
   // Only a report that says so switches the runs off: an older server, or one not answering yet, keeps them.
   const playerOff = useHealth().data?.demo === false;
-  // The public demo's role operates but may not run or reset: Run and Reset greyed out, its own three cards, a line saying
-  // why. A site install has no demo hospital whichever role reads it, so its own notice speaks there.
+  // A role that operates but may not run or reset (the public demo's before 1.4.4): Run and Reset greyed out, its own
+  // three cards, a line saying why. A site install has no demo hospital whichever role reads it, so its own notice speaks there.
   const hidden = scenariosHidden(can) && !playerOff;
   // Where nobody here can run one, the list starts in the mode the hospital plays; the role can arrive after the first paint
   const defaultMode: Mode = hidden ? 'policy' : 'board';
   const [params, change] = useListParams();
-  const picked = MODES.find((m) => m.value === params.get('mode'))?.value;
+  const picked = playable.find((m) => m.value === params.get('mode'))?.value;
   const mode = picked ?? defaultMode;
   const setMode = (next: Mode) => change((p) => p.set('mode', next));
   useJudgeLanding(!!scenarios.data);
@@ -813,7 +840,7 @@ export default function ScenariosPage() {
               live: {
                 color: 'blue',
                 title: `${s.id} started`,
-                message: `${humanize(m)} mode. The case appears in a few seconds.`,
+                message: `${humanize(m)} mode${replayOnly ? `, ${REPLAY_ONLY.started}` : ''}. The case appears in a few seconds.`,
               },
               trial: { color: 'blue', message: `${s.id} is playing from its recording in your browser.` },
             }),
@@ -831,8 +858,10 @@ export default function ScenariosPage() {
         ? runNeeds
         : !definedFor(s, m)
           ? `${s.id} is not defined for ${modeLabel(m)} mode`
-          : !MODES.some((x) => x.value === m)
-            ? `${modeLabel(m)} mode has no recordings here`
+          : !playable.some((x) => x.value === m)
+            ? replayOnly
+              ? REPLAY_ONLY.notRecordedWhy
+              : `${modeLabel(m)} mode has no recordings here`
             : !canRun
               ? runNeeds
               : runBusy || pending;
@@ -920,6 +949,7 @@ export default function ScenariosPage() {
             demo={hidden}
             whyId={LOOK_ONLY_WHY}
             chosen={mode}
+            replayed={replayOnly}
           />
         )}
         {playerOff ? (
@@ -937,6 +967,7 @@ export default function ScenariosPage() {
             scenarios={scenarios.data?.scenarios}
             lookOnly={hidden}
             defaultMode={defaultMode}
+            replayOnly={replayOnly}
           />
         )}
         {scenarios.isPending ? <PageSkeleton label="Loading the scenarios…" /> : null}
@@ -958,6 +989,7 @@ export default function ScenariosPage() {
                 mode={mode}
                 found={s.latestCase ? byId.get(s.latestCase.caseId) : undefined}
                 lookOnly={hidden}
+                replayOnly={replayOnly}
                 canRun={canRun}
                 runNeeds={runNeeds}
                 playerOff={playerOff}
