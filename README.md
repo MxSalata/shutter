@@ -55,7 +55,7 @@ Open the [trial](https://mxsalata.github.io/shutter/), choose **Explore on my ow
 
 1. **S2: recover a transfer that never arrived.** Open the case named by the banner, C-000002 in the trial. Choose **Decide on the resend**, **Review the plan and decide**, **Approve plan**, then **Approve this plan**. One conditional write, then **Verified**.
 2. **S3: recognise a delivery that already arrived.** Its case, C-000003, reads the receiver's receipt. Only the acknowledgement was lost. Nothing is written.
-3. **S8: stop an ambiguous movement.** Two systems moved the same patient at the same recorded time. Its case, C-000008, escalates with **0 writes**. A person must decide.
+3. **S8: stop an ambiguous movement.** Two systems moved the same patient at the same recorded time. Its case, C-000008, escalates with **0 writes**. A person must decide. Its **In IRIS:** line opens **Message trace**, the agents' steps in IRIS's Visual Trace (a screenshot in the trial).
 
 **The same gate checks all three.** The trial uses recorded runs and keeps everything in the browser; it demonstrates the workflow and gate, not a new model inference.
 
@@ -194,11 +194,10 @@ Site policy's three board cases had no model key and fell back to a plain resend
 | Evidence | What it establishes |
 | --- | --- |
 | **Release 1.3.2, F03 and F07** | Both cases closed correctly in every board and single-investigator run, three runs each, with F07 using the shipped `show` setting |
-| **Release 1.4.3, all twelve cases rerun** | Board 0.167 and single investigator 0.167, as on 1.0.0, with the same 12 writes, all verified; Site policy with a live board 0.900 on ten cases; Rules only 4.000; no mode made a wrong write. A regression rerun on cases that influenced fixes, not a new held-out test |
-| **144 reported agent-mode case runs** | No wrong write proposed or made in those runs, not a guarantee for unseen cases |
+| **Release 1.4.3, all twelve cases rerun** | Board 0.167 and single investigator 0.167 as settled (0.667 by the unchanged grader, which counts F08's three runs as false closures; the fair-test page gives both), as on 1.0.0, with the same 12 writes, all verified; Site policy with a live board 0.900 on ten cases; Rules only 4.000; no mode made a wrong write. A regression rerun on cases that influenced fixes, not a new held-out test |
 | **Catalogue demonstration, S1 to S10 and S13** | The board reached all 11 expected outcomes, live and in replay, with the catalogue's preferred outcome supplied to it |
 
-**Sonnet 5.5 specialists: same grades, 0.331 USD a run against 0.527.** This belongs to the F03/F07 follow-up, not the full twelve-case comparison.
+**Sonnet 5.5 specialists with an Opus 5.5 coordinator: the same grades in all 36 runs of the twelve cases on release 1.1.1, at 0.331 USD a run against 0.527.**
 
 Separately, an all-Sonnet 5.5 board made the same decisions as Opus 5.5 in all 36 runs of the full comparison, at 0.24 USD per run against 0.48.
 
