@@ -2,7 +2,9 @@
 
 Shutter is an IRIS Interoperability production that recovers failed HL7 ADT deliveries: a failed message becomes a
 case, the evidence is collected, a plan is checked by a deterministic gate and approved by a person or by the site's
-policy, and the result is verified at the receiver. This document is for the integration team that installs it beside
+policy, and the result is verified at the receiver through its API. A receiver's outage has a second path: at a receiver set up
+for it, one approval has the engine resend the messages that never arrived, settled by the engine's delivery outcome and the
+receiver's declared duplicate handling rather than verified at the receiver (section 11). This document is for the integration team that installs it beside
 the productions a hospital already runs; the README's `docker compose up` is the demo.
 
 ## 1. In one page
@@ -11,8 +13,9 @@ the productions a hospital already runs; the README's `docker compose up` is the
 
 | Your receiver | What a failed message becomes today |
 | --- | --- |
-| An API with state, receipt, capabilities and conditional writes, described in the site profile | ADT: a case, the evidence, a plan and the gate, then a resend once its checks pass. Orders, results and documents: a case and a drafted email |
-| MLLP or TCP with no API | Any message type: a case, the evidence, a diagnosis where the agents can run, and a drafted email. Never a resend |
+| An API with state, receipt, capabilities and conditional writes, described in the site profile | ADT: a case, the evidence, a plan and the gate, then a resend once its checks pass, verified in the receiver's receipt and history (case recovery). Orders, results and documents: a case and a drafted email |
+| MLLP or TCP with no API | Any message type: a case, the evidence, a diagnosis where the agents can run, and a drafted email. Never a resend from the case |
+| An HL7 TCP receiver with a `watch` block and `engine_resend`, during an outage | Outage recovery (1.4.0): the messages that never arrived, any type, resent unchanged by the engine after one approval. Completed in the engine, as far as the declared `ack_level` and duplicate handling say; not verified at the receiver (section 11) |
 | FHIR, or anything else that isn't HL7 | A warning in the event log and no case |
 | Any receiver, a message over 2 MB | A warning in the event log and no case |
 | Any receiver, a transport ACK and then lost downstream | Nothing: Shutter doesn't hear of it (section 10) |
@@ -33,14 +36,18 @@ the case page (`POST /api/shutter/cases/{id}/escalations` through the API); unti
   `Downstream Out`, `ADT to Records`, `Records Out` and `Scenario Player`) are present but switched off in shape A (the
   installer disables them in `Shutter.Production`), and not added at all in shape B (`InstallInto`).
 - **A new install starts in shadow mode.** Shutter investigates and records what it would propose, and sends no rehearsal, recovery write, resend preview or outage resend, and no escalation email; the hospital's ordinary feed goes on as before. A person enables recovery by saving `"recovery": {"mode": "enabled"}` in the site profile. Settings has "Stop Shutter recovery", for any operator or approver, and the shadow report (`docs/CONTRACTS.md`, 18).
-- **A receiver with no API is escalated, never resent.** Shutter resends only to a receiver whose site profile entry
-  describes its API (state, receipt, capabilities and operations paths). A ward system that takes HL7 over TCP and
-  keeps no receipts is investigated and escalated; the team corrects it by hand and marks the case handled.
+- **A case at a receiver with no API is escalated, never resent.** A case resends only to a receiver whose site profile
+  entry describes its API (state, receipt, capabilities and operations paths), and that write is verified in the
+  receiver's receipt and history. A ward system that takes HL7 over TCP and keeps no receipts is investigated and
+  escalated; the team corrects it by hand and marks the case handled. The one resend such a receiver can get is an
+  outage's, through the engine (next point).
 - **A receiver's outage is one incident (v1.1.0).** Give a receiver's profile entry a `watch` block and Shutter reads what the
   engine shows about its HL7 TCP operation, never the receiver, opens one outage for the time it is down, says what to do
   and whom to call, and closes it when every message has settled. Since 1.4.0, at a receiver whose entry says
   `engine_resend`, one approval has the engine resend the messages that never arrived, orders and results included
-  (section 11, CONTRACTS 17.8); a case never resends an order or result.
+  (section 11, CONTRACTS 17.8). Each is settled by the engine's delivery outcome and the receiver's declared duplicate
+  handling, not verified at the receiver, and **Stop Shutter recovery** and shadow mode hold it. A case never resends an
+  order or result.
 
 ## Before you install: will it work here?
 
@@ -243,7 +250,7 @@ readable from SHUTTER, is not in this version.
 **3.4 The receivers.** Each system Shutter should recover is a receiver entry in the site profile: its name (the
 production item that delivers to it), tier, what it takes (cancels, merges) and its API paths. For a system with no API,
 such as a plain MLLP receiver, declare its `features` all false and leave `api` out. There is then no read-back, no
-receipt lookup and no resend: the gate blocks any write, and the case holds the evidence and the reason nothing was
+receipt lookup and no resend from a case: the gate blocks any write, and the case holds the evidence and the reason nothing was
 sent. Nothing goes out by itself: a person reads the case on the Cases page, and its page drafts the email for the team
 that owns the system. A receiver you do give an API needs a connector of its name in Shutter's production and the credential
 it signs in with (section 9, "Giving a receiver its API"). A resend needs that receiver to offer conditional writes, receipts, a readable history and dry runs. With no history there is no resend (`HISTORY_UNSUPPORTED`), since a move made outside the feed wouldn't show and the verifier reads the operation there; and a receiver that offers one must send `history` as an array on every encounter read, an empty one included, or each case reads it as unknown (`HISTORY_UNREADABLE`). Shutter checks that receiver's answers against the interface contract: a 200 or 404 on a read counts only with the contract's own fields, a 200 on a write only with its receipt, and a receipt closes a case only if it holds the message's own digest, ward and bed. If your receiver answers another way, cases stop for a person saying the receiver could not be read; look at what it sends, then set `"strict_answers": false` on its entry, and its answers are read on their status alone. On a site install a receiver the profile does not name at all
@@ -489,7 +496,8 @@ namespaces with stock classes.
 
 **What you get per namespace.** A failed delivery in that namespace opens a case in Shutter, with where it came from. What
 happens next depends on the receiver: ADT to a receiver whose API you describe can be recovered; **every other message type
-(ORM, ORU, OML, MDM and the rest) and every receiver with no API escalates with its evidence, and nothing is resent.** A
+(ORM, ORU, OML, MDM and the rest) and every receiver with no API escalates with its evidence, and nothing is resent from
+the case.** An outage at a receiver set up for it can be resent through the engine (section 11). A
 Pathology or Documents namespace gets a durable case and a drafted email per failure, not a recovery (section 10).
 
 **Each step is an SQL call or a terminal line, in Shutter's namespace, as a user who can reach `%SYS` and every namespace involved** (`_SYSTEM`, or a
@@ -778,7 +786,7 @@ Or set them by hand:
 
 The Doctor's `documents_mismatch` (9.5) lists any receiver where only one of the two is on.
 
-Then a failed MDM T01 to T11 there opens a case that shows the document number, the parent, every PID-3 identifier, the statuses and the delivery, and says what the message store holds for that document. **Nothing is resent, and no model is involved.** The email is a notice with a link. A restricted document (TXA-18 V or R) shows its identity only to a holder of `Shutter_Approve`, as does the receiver's own wording of a refusal.
+Then a failed MDM T01 to T11 there opens a case that shows the document number, the parent, every PID-3 identifier, the statuses and the delivery, and says what the message store holds for that document. **Nothing is resent from the case, and no model is involved.** The email is a notice with a link. A restricted document (TXA-18 V or R) shows its identity only to a holder of `Shutter_Approve`, as does the receiver's own wording of a refusal.
 
 **What it can't tell you.** Whether the receiver filed the document, whether it holds another copy, or whether the identifiers name the right patient. Merges and identifier changes aren't read. A chain covers the messages to that one item back to the time the case states, so a retention purge or another route is outside it. A chain's messages are read one by one: a receiver with many messages a day may need a higher `chain_read_limit`, at the cost of a longer read.
 
@@ -846,8 +854,10 @@ Say these plainly to whoever owns the feed.
 Shutter watches configured HL7 TCP operations without contacting their receivers. It groups outages, shows whether the
 engine is retrying or messages have settled, preserves unresolved exceptions, and shows the site's next action and contact.
 It resends an outage's messages that never arrived only at a receiver whose entry says `engine_resend`, after one approval,
-through Engine Resend (1.4.0, CONTRACTS 17.8); a case at an `orders_results` receiver gets its findings and goes to a person,
-with no resend from the case. At supported stock TCP routes, it also prevents Shutter's ADT API recovery from competing
+through Engine Resend (1.4.0, CONTRACTS 17.8). That is outage recovery: each message is completed in the engine, as far as the
+entry's `ack_level` says, or closed as already delivered on the receiver's declared duplicate answer, and nothing is read at
+the receiver, where a case's recovery through the receiver's API is verified in its receipt and history. A case at an
+`orders_results` receiver gets its findings and goes to a person, with no resend from the case. At supported stock TCP routes, it also prevents Shutter's ADT API recovery from competing
 with the engine's delivery (section 10).
 
 **11.1 The watch block.** A receiver is watched when its site profile entry has a `watch` block naming the production item

@@ -1,6 +1,6 @@
 # What a receiver needs for Shutter to recover to it
 
-Shutter resends a failed message only to a receiver that can answer four questions: where is this encounter now, did this exact operation land, can you rehearse it, and will you refuse it if the encounter has moved. A receiver that cannot is investigated and escalated, never resent to (the last section).
+A case resends a failed message only to a receiver that can answer four questions: where is this encounter now, did this exact operation land, can you rehearse it, and will you refuse it if the encounter has moved. A receiver that cannot has its cases investigated and escalated, never resent (the last section). An outage's resend through the engine, at a receiver set up for it, is a separate path that this contract does not govern ([the install guide, section 11](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md#11-a-receivers-outages-v110)).
 
 ## The endpoints
 
@@ -103,4 +103,4 @@ A plain MLLP receiver, or one whose entry declares its features false, still get
 - a drafted email to the team that owns the system, which a person checks and sends (**Escalate to**);
 - the team corrects the receiver by hand and marks the case handled.
 
-Never a resend: an ACK says a message arrived, not what the receiver now holds. [`plain_receiver_check.py`](https://github.com/MxSalata/shutter/blob/main/tests/e2e/plain_receiver_check.py) plays this on a stock `EnsLib.HL7.Operation.TCPOperation`, down and answering AE, and checks nothing was sent. [What each kind of receiver gets](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md#what-shutter-does-at-your-site).
+Never a resend from the case: an ACK says a message arrived, not what the receiver now holds. [`plain_receiver_check.py`](https://github.com/MxSalata/shutter/blob/main/tests/e2e/plain_receiver_check.py) plays this on a stock `EnsLib.HL7.Operation.TCPOperation`, down and answering AE, and checks nothing was sent. During an outage, at a receiver whose entry has a `watch` block and `engine_resend`, one approval has the engine resend the stored messages that never arrived; each is completed in the engine, as far as the entry's `ack_level` says, or closed on the receiver's declared duplicate answer, and is not verified at the receiver ([CONTRACTS 17.8](https://github.com/MxSalata/shutter/blob/main/docs/CONTRACTS.md#178-the-send-v151-to-v154)). [What each kind of receiver gets](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md#what-shutter-does-at-your-site).

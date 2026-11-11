@@ -35,15 +35,17 @@
 
 On an ordinary day a hospital's integration engine can see hundreds of failed messages. Engineers put right what they can by hand, and the rest can go unactioned. Shutter won't fix them all, but it helps with most: in my work on interoperability with 28 NHS hospitals, most failures were of the kinds it knows. It resends the failed patient movements that pass its checks, closes those the receiver already has, and for the rest stops, writes nothing, and identifies the patient for a person to review.
 
-Instead of a **Resend** in the Message Viewer, Shutter makes each failed delivery a case: **the board**, four AI Hub agents, reads its sealed evidence and proposes a plan; **the gate**, deterministic checks, decides whether the plan may write; **a person, or the site's written policy,** releases it; **one conditional write** follows, checked against the receiver's receipt and history.
+Instead of a **Resend** in the Message Viewer, Shutter makes each failed delivery a case: **the board**, four AI Hub agents, reads its sealed evidence and proposes a plan; **the gate**, deterministic checks, decides whether the plan may write; **a person, or the site's written policy,** releases it; **one conditional write** through the receiver's API follows, verified in its receipt and history. A receiver's outage has a second path: the engine's resend, after one approval ([both paths](#how-it-works)).
 
 <a id="for-judges"></a>
 
-**For judges: three minutes, nothing to install, no key.** Start in the [trial](https://mxsalata.github.io/shutter/) (**Explore on my own**). S8 is two systems moving one patient at the same recorded time. To show what a plain resend does there, **Rules only** skips one gate check in S8 alone, on purpose:
+**For judges: three minutes, nothing to install, no key.** Start in the [trial](https://mxsalata.github.io/shutter/) (**Explore on my own**). In **Scenarios**, under **Run mode**, choose **Board**; the same gate checks every step:
 
-1. In **Scenarios**, choose **Rules only** (a plain resend, no agents), then under **Every scenario**, press **Run** on S8's row (not the S8 card at the top). About 20 seconds later open the case the banner names (C-000021, already approved; on your machine, approve it): "Wrote WARD-B over the bed manager's WARD-C".
-2. Choose **Board** (four AI Hub agents), run S8's row again and open its case (C-000008): escalated, **0 writes**, the patient (MRN1008) handed to a person.
-3. On the case page, open **Message trace** on its **In IRIS:** line for the Visual Trace (in the trial a screenshot; on your machine, sign in to IRIS as `approver` / `shutter`). Then press **Run** on S3's row in **Board**: only the receiver's answer was lost, so the case reads the receipt and writes nothing.
+1. Under **Every scenario**, press **Run** on S2's row, a transfer that never arrived. Then open the case the banner names (C-000002): the resend passed the gate and waits. **Decide on the resend**, **Approve plan**, **Approve this plan**: one conditional write, verified in the receiver's history.
+2. Run S3's row: only the receiver's answer was lost, so its case (C-000003) reads the receipt and writes nothing.
+3. Run S8's row: two systems moved one patient at one recorded time, so its case (C-000008) escalates, **0 writes**, the patient (MRN1008) handed to a person. Its **In IRIS:** line opens **Message trace**, the Visual Trace (in the trial a screenshot; on your machine, sign in to IRIS as `approver` / `shutter`).
+
+Optional: S8's row in **Rules only** (a plain resend, no agents) skips one gate check there, on purpose, and writes WARD-B over the bed manager's WARD-C (C-000021, once approved).
 
 **Then the [online demo](https://shutter.mxsalata.com)**, my fictional hospital on AI Hub build `2026.3.0AI.154.0`. **Then your machine:** the replay edition (no key, no Early Access file) needs Docker (5 GB memory, 25 GB disk) and a 6 GB image pull, then is healthy in about 8 min on 8 cores, at http://localhost:52773/shutter/index.html (press **Not now** on the "New here?" card).
 
@@ -59,7 +61,7 @@ cd shutter
 | Your machine's web app | `approver` / `shutter`, or `operator` / `shutter` | `approver` approves; `operator` runs and reads, and can't approve |
 | The [online demo](https://shutter.mxsalata.com) | `demo` / `shutter` | Reads, asks, approves a case that waits; runs no scenario |
 
-The judges' account (the organisers pass on its sign-in) runs the board live and plays the scenarios too, S8 with the real agents included, one run at a time, up to 2 USD a judge (the demo's caps: 5 USD an hour, 15 a day). It cannot reset the shared demo; the hourly reset does.
+The judges' account (the organisers pass on its sign-in) runs the board live and plays the scenarios, one run at a time, up to 2 USD a judge (the demo's caps: 5 USD an hour, 15 a day). The demo resets hourly.
 
 **Measured:**
 
@@ -137,7 +139,8 @@ git clone https://github.com/MxSalata/shutter.git && cd shutter
 The gate holds in every mode but S8's recorded **Rules only** run (above). **Single investigator** runs live only ([the modes](https://github.com/MxSalata/shutter/blob/main/docs/readme/first-steps.md#the-modes)).
 
 1. In **Scenarios**, run **S2** in **Board** mode. About 20 seconds later (a minute live) the case under **Latest case** on S2's row (C-000002 in the trial) is waiting for approval: **Decide on the resend**, **Review the plan and decide**, **Approve plan**, **Approve this plan**. One conditional write, then "Verified".
-2. Run **S8** in **Rules only**, then in **Board**, as in the judges' steps: the case page sets the two side by side.
+2. Run **S3** in **Board**: the receiver holds the message and only its answer was lost, so the case (C-000003) reads the receipt and writes nothing.
+3. Run **S8** in **Board**: the case (C-000008) escalates and writes nothing. Optionally run it in **Rules only** too, exempted from one gate check in S8 alone: WARD-B overwrites WARD-C, and the case page sets the two side by side.
 
 ![S8 played twice: Rules only overwrites WARD-C; the board escalates and writes nothing](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/s8-rules-and-board.png)
 
@@ -158,7 +161,7 @@ One web app for a PC and a phone, 57 screens and states tested at a phone's widt
 
 ![S2's case in the web app, waiting for approval: the stages done, and approve or reject plan v1](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/case-s2-approval.png)
 
-**Terms:** the **receiver**, the system the failed message was going to (in the demo a bed manager); its **receipt**, the receiver's own record of a message it holds; the **catalogue**, the failures Shutter knows and each one's safe outcome; the **matcher**, which links a failure to its catalogue entry with no model; the **site profile**, the site's written policy, with an entry for each receiver; **PAS**, the patient administration system; **Verified**, read in the receiver's receipt and history, never from an acknowledgement ([all terms](https://github.com/MxSalata/shutter/blob/main/docs/readme/first-steps.md#terms)).
+**Terms:** the **receiver**, the system the failed message was going to (in the demo a bed manager); its **receipt**, the receiver's own record of a message it holds; the **catalogue**, the failures Shutter knows and each one's safe outcome; the **matcher**, which links a failure to its catalogue entry with no model; the **site profile**, the site's written policy, with an entry for each receiver; **PAS**, the patient administration system; **Verified**, read in the receiver's receipt and history, never from an acknowledgement, and said only of case recovery through the receiver's API ([all terms](https://github.com/MxSalata/shutter/blob/main/docs/readme/first-steps.md#terms)).
 
 ![A case's life, from the failed delivery to verification](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/case-lifecycle.png)
 
@@ -169,7 +172,14 @@ One web app for a PC and a phone, 57 screens and states tested at a phone's widt
 5. **Release.** A person approves the exact plan, bound to its digest, the evidence, the policy and the receiver's version, or the site's written profile releases what its catalogue settles.
 6. **One conditional write, then verification:** a dry run, a fresh read, a second gate, one write at the expected version, then a check of the receiver's history.
 
-A resend needs a receiver with [an API](https://github.com/MxSalata/shutter/blob/main/docs/readme/receiver-contract.md) supporting versioned reads, conditional writes, receipts, readable history and non-mutating dry runs. A plain MLLP receiver gets investigation and a drafted email, never a resend.
+**Two recovery paths, each with its own guarantee:**
+
+| Path | What is sent | How it is settled |
+| --- | --- | --- |
+| **Case recovery**, the steps above | One mapped operation through the receiver's [API](https://github.com/MxSalata/shutter/blob/main/docs/readme/receiver-contract.md), which supports versioned reads, conditional writes, receipts, readable history and non-mutating dry runs: rehearsed, then one conditional write | **Verified at the receiver:** read back in its receipt and history |
+| **Outage recovery** (1.4.0), at a watched receiver whose entry says `engine_resend` (at a current-state or history-of-record receiver, with `ack_level` `application`) | The stored HL7 messages that never arrived, orders and results included, unchanged and in order, resent through the engine by the item `Engine Resend` after one approval | **Completed in the engine:** each new header's delivery outcome, which proves what the entry's declared `ack_level` says, and the receiver's declared duplicate answer, which closes a message as already delivered; where the receiver isn't declared to refuse a duplicate, the approver first checks the receiver and says so. Shutter reads nothing at the receiver. **Stop Shutter recovery** and shadow mode hold it ([CONTRACTS 17.8](https://github.com/MxSalata/shutter/blob/main/docs/CONTRACTS.md#178-the-send-v151-to-v154)) |
+
+Outside an outage, a plain MLLP receiver gets investigation and a drafted email, never a resend from the case.
 
 **For a site getting ready to pilot it:**
 
@@ -192,7 +202,7 @@ A resend needs a receiver with [an API](https://github.com/MxSalata/shutter/blob
 
 ## Where the agents sit
 
-The three specialists (conformance, encounter and impact) and the coordinator are business operations: the specialists run in parallel, then the coordinator writes the plan. A pass takes 24 to 47 seconds and costs 0.34 to 0.50 USD across the 25 recorded passes on `claude-opus-5-5`. No agent has a write tool. The contest's task, and the code to read first: [ai-hub.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/ai-hub.md). [What one S8 agent was sent and did](https://github.com/MxSalata/shutter/blob/main/docs/readme/s8-what-the-agents-saw.md); in the trial, **Show the recording** on each member's card.
+The three specialists (conformance, encounter and impact) and the coordinator are business operations: the specialists run in parallel, then the coordinator writes the plan. A pass takes 24 to 47 seconds and costs 0.34 to 0.50 USD across the 25 recorded passes on `claude-opus-5-5`. No agent has a write tool. **The board or one agent:** **Single investigator** mode gives one AI Hub agent the same evidence, tools and gate. On the twelve held-out cases the two tied (mean loss 0.167, 30 right and 6 defensible of 36 runs each), and the single investigator cost 0.13 USD a run against the board's 0.48 ([fair test](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#headline)). What the board adds is three findings from separate views and a plan that records each specialist it overruled and why, for the person deciding (in S8, the conformance specialist's resend); that test did not show it changing a decision. The contest's task, and the code to read first: [ai-hub.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/ai-hub.md). [What one S8 agent was sent and did](https://github.com/MxSalata/shutter/blob/main/docs/readme/s8-what-the-agents-saw.md); in the trial, **Show the recording** on each member's card.
 
 ![The Visual Trace of S8 in board mode: the case workflow, the evidence, each board member's lane, then the gate](https://raw.githubusercontent.com/MxSalata/shutter/main/web/public/s8-visual-trace.png)
 
@@ -265,7 +275,7 @@ Figures from [CI's run at the 1.1.0 release commit](https://github.com/MxSalata/
 ## Limits, plainly
 
 - **Not yet measured at a hospital:** the scenarios are mine, the data is synthetic and the receiver is a demo bed manager built for them.
-- **A resend needs a receiver API** the site profile describes; a plain MLLP receiver gets a case and a drafted email, never a resend.
+- **A case's resend needs a receiver API** the site profile describes; a plain MLLP receiver's case gets investigation and a drafted email, never a resend. Only an outage, at a receiver set up for it (`engine_resend`), has the engine resend its messages that never arrived, after one approval: completed in the engine and settled by the receiver's declared duplicate handling, not verified at the receiver.
 - **Every resend waits for a person** under the shipped site profile (a demo install keeps its own labelled table), and a new install with no demo starts in shadow mode, which writes nothing until the site enables recovery. With no provider configured the agents replay recordings; **if the model fails** or there is none, no agent or rules plan is released without a person ([how](https://github.com/MxSalata/shutter/blob/main/docs/readme/model-fails.md)).
 - **A large incident is approved once, and its task lists only the first chains:** the Workflow message holds 2,000 characters, so above about four chains it names how many it leaves out and points to the incident page; one approval binds every chain. 40 and 200 failures were released whole at about 3 s an item; at 1,000 only the first 50 items were measured ([the measurements](https://github.com/MxSalata/shutter/blob/main/docs/readme/storm-at-scale.md#after-the-fix)).
 - **No notification by default:** nothing tells anyone that an outage opened or an approval went undecided for 24 hours unless the site sets it up. The outage email (since 1.3.0) is an item the site adds and switches on per receiver; otherwise the site's own alert, or a person watching, must. A reminder mail for cases left open is a site profile setting, off unless the site turns it on.
