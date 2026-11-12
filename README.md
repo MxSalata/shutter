@@ -178,7 +178,7 @@ Separately, on release 1.0.0, an all-Sonnet 5.5 board reached the same grades as
 
 ## Documents: MDM exceptions without a blind resend
 
-At a receiver with a document profile, a failed **MDM^T01 to T11**, including **MDM^T02**, or a report-carrying **ORU^R01** becomes a document exception.
+Where document handling is switched on in both places, the receiver's site profile entry and its source's Shutter Forwarder, a failed **MDM^T01 to T11**, including **MDM^T02**, becomes a document exception, at any size. So does an **ORU^R01** with an OBX whose OBX-2 says ED or RP; a report sent as Base64 under TX or ST takes the ordinary path.
 
 The case shows the document's identity, status and chain for a person to review. **No agent runs, the case resends nothing, and Shutter keeps no copy of the message.** A drafted email supports the handoff; a draft is not proof that anyone was notified.
 
@@ -277,7 +277,7 @@ Install in a dedicated namespace with `-Ddemo=0`, without the demo users or rece
 
 **Start on captured synthetic traffic in a sandbox.** Onboarding edits the watched production: it renames the site's `Ens.Alert`, adds items and maps classes. That production then depends on Shutter's database to start. The module's `Hospital` and `Downstream` packages can also collide with a site's classes; a dedicated namespace matters.
 
-A non-demo installation starts in **shadow mode**. It investigates and records proposals but sends no rehearsal, recovery write, blind-resend preview or outage resend until recovery is enabled.
+A non-demo installation starts in **shadow mode**. It investigates and records proposals but sends no rehearsal, recovery write, blind-resend preview, outage resend or escalation email until recovery is enabled.
 
 Before enabling it:
 

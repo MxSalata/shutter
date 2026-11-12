@@ -1,6 +1,6 @@
 # What a receiver needs for Shutter to recover to it
 
-A case resends a failed message only to a receiver that can answer four questions: where is this encounter now, did this exact operation land, can you rehearse it, and will you refuse it if the encounter has moved. A receiver that cannot has its cases investigated and escalated, never resent (the last section). An outage's resend through the engine, at a receiver set up for it, is a separate path that this contract does not govern ([the install guide, section 11](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md#11-a-receivers-outages-v110)).
+Case recovery sends one mapped ADT operation through the receiver's API, not the original HL7 message, and only to a receiver that can answer four questions: where is this encounter now, did this exact operation land, can you rehearse it, and will you refuse it if the encounter has moved. A receiver that cannot has its cases investigated and escalated, never resent (the last section). In this version Evidence Collector and Verifier call one server, so every receiver with an API answers on the same host and port ([INSTALL section 9.6](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md#9-onboarding-several-namespaces), "Giving a receiver its API"). An outage's resend through the engine, at a receiver set up for it, is a separate path that this contract does not govern ([the install guide, section 11](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md#11-a-receivers-outages-v110)).
 
 ## The endpoints
 

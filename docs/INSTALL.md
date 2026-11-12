@@ -17,7 +17,7 @@ the productions a hospital already runs; the README's `docker compose up` is the
 | MLLP or TCP with no API | Any message type: a case, the evidence, a diagnosis where the agents can run, and a drafted email. Never a resend from the case |
 | An HL7 TCP receiver with a `watch` block and `engine_resend`, during an outage | Outage recovery (1.4.0): the messages that never arrived, any type, resent unchanged by the engine after one approval. Completed in the engine, as far as the declared `ack_level` and duplicate handling say; not verified at the receiver (section 11) |
 | FHIR, or anything else that isn't HL7 | A warning in the event log and no case |
-| Any receiver, a message over 2 MB | A warning in the event log and no case |
+| Any receiver, a message over 2 MB | A warning in the event log and no case, except a document exception (section 9.10): a qualifying MDM or report-carrying ORU opens a case at any size, with no copy in Shutter |
 | Any receiver, a transport ACK and then lost downstream | Nothing: Shutter doesn't hear of it (section 10) |
 
 A production review needs none of this configured. The drafted email is made when a person presses **Escalate to** its team on
@@ -201,7 +201,7 @@ disabled (the six named in section 1), so it has no feed of its own until the in
 one. **Load only in the namespace made for Shutter.** A load in a namespace running another production is refused and says
 so, since starting `Shutter.Production` there would stop it; name that production (`-Dproduction=...`) for shape B.
 
-**From the registry.** The IPM in `vendor/ipm` starts with no registry, so `zpm "install iris-shutter"` answers "No repositories are configured and enabled in this namespace" until you run `zpm "repo -reset-defaults"`. `zpm "install iris-shutter"` installs the latest version published on the registry, which can be behind this repository: on 8 Nov 2026 the registry served 1.1.1, which has no uninstall and no `Uninstall_Plan` (both are 1.2.0's). `zpm "list"` shows the version installed; for the exact version of a clone, use `zpm "load <module>"` instead. `zpm "load"` from a clone doesn't need the registry. This demo install, from a clone of this repository, took about 2.5 minutes on clean 154 and 109 containers on 7 Nov 2026, and started `Shutter.Production` and `Hospital.Production`:
+**From the registry.** The IPM in `vendor/ipm` starts with no registry, so `zpm "install iris-shutter"` answers "No repositories are configured and enabled in this namespace" until you run `zpm "repo -reset-defaults"`. `zpm "install iris-shutter"` installs the latest version published on the registry, which can be behind this repository: on 8 Nov 2026 the registry served 1.1.1, which has no uninstall and no `Uninstall_Plan` (both are 1.2.0's). `zpm "list"` shows the version installed; for the exact version of a clone, use `zpm "load <module> -Ddemo=0"` instead. `zpm "load"` from a clone doesn't need the registry. For a hospital, install with the demo switched off, as below; without `-Ddemo=0` either command installs the demo, with its users and well-known passwords. The same commands without `-Ddemo=0`, a demo install, took about 2.5 minutes on clean 154 and 109 containers on 7 Nov 2026, and started `Shutter.Production` and `Hospital.Production`:
 
 ```
 Do $SYSTEM.OBJ.Load("<module>/src/Shutter/Setup.cls", "ck")
@@ -209,7 +209,7 @@ Write ##class(Shutter.Setup).CreateNamespace("SHUTTER")
 zn "SHUTTER"
 Do $SYSTEM.OBJ.Load("<module>/vendor/ipm/zpm-0.10.10.xml", "ck")
 zpm "repo -reset-defaults"
-zpm "install iris-shutter"
+zpm "install iris-shutter -Ddemo=0"
 ```
 
 **3.2 The hook.** A failure reaches Shutter through `POST /api/shutter/intake`. The caller signs in with HTTP Basic
@@ -253,7 +253,7 @@ such as a plain MLLP receiver, declare its `features` all false and leave `api` 
 receipt lookup and no resend from a case: the gate blocks any write, and the case holds the evidence and the reason nothing was
 sent. Nothing goes out by itself: a person reads the case on the Cases page, and its page drafts the email for the team
 that owns the system. A receiver you do give an API needs a connector of its name in Shutter's production and the credential
-it signs in with (section 9, "Giving a receiver its API"). A resend needs that receiver to offer conditional writes, receipts, a readable history and dry runs. With no history there is no resend (`HISTORY_UNSUPPORTED`), since a move made outside the feed wouldn't show and the verifier reads the operation there; and a receiver that offers one must send `history` as an array on every encounter read, an empty one included, or each case reads it as unknown (`HISTORY_UNREADABLE`). Shutter checks that receiver's answers against the interface contract: a 200 or 404 on a read counts only with the contract's own fields, a 200 on a write only with its receipt, and a receipt closes a case only if it holds the message's own digest, ward and bed. If your receiver answers another way, cases stop for a person saying the receiver could not be read; look at what it sends, then set `"strict_answers": false` on its entry, and its answers are read on their status alone. On a site install a receiver the profile does not name at all
+it signs in with (section 9, "Giving a receiver its API"). A resend needs that receiver to offer conditional writes, receipts, a readable history and dry runs. With no history there is no resend (`HISTORY_UNSUPPORTED`), since a move made outside the feed wouldn't show and the verifier reads the operation there; and a receiver that offers one must send `history` as an array on every encounter read, an empty one included, or each case reads it as unknown (`HISTORY_UNREADABLE`). Shutter checks that receiver's answers against the interface contract: a 200 or 404 on a read counts only with the contract's own fields, a 200 on a write only with its receipt, and a receipt closes a case only if it holds the message's own digest, ward and bed. If your receiver answers another way, cases stop for a person saying the receiver could not be read. Look at what it sends, and keep the check on while you and the supplier compare its answers with the contract on a test endpoint. Setting `"strict_answers": false` on its entry reads its answers on their status alone and skips the content checks, among them the comparison of a receipt with the message before a reconcile: a weaker contract, not a routine fix for a blocked case. On a site install a receiver the profile does not name at all
 reads as one with no API: nothing is resent to it. `tests/e2e/plain_receiver_check.py` plays this on a stock `EnsLib.HL7.Operation.TCPOperation`,
 down and answering AE.
 
@@ -930,7 +930,7 @@ to close one: a linked case is resolved only when it is a failed delivery whose 
 acknowledgement level established; every other one stays open, with its reason. A closed transport outage can leave
 urgent clinical exceptions unresolved: it lists them and settles none of them. The outage's words (`words`: `first`, `do`,
 `call`, and `critical` at an `orders_results` receiver) are composed on each read from the row, the reading, the profile
-entry and what the build holds, and always say "Recovery attempts initiated by Shutter: 0."
+entry and what the build holds, and say "Recovery attempts initiated by Shutter: N.", the messages Shutter itself has sent for the outage: 0 unless an approved engine resend has run (1.4.0).
 
 **11.4 The acts.** `POST /api/shutter/outages/{id}/acts` (an approver's, with `X-Requested-With: Shutter`) takes
 `{"act": "pause", "until": "<UTC time>"}`, for a receiver down on purpose until a time, or `{"act": "close", "reason": "..."}`.
