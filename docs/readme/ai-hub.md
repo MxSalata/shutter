@@ -1,6 +1,6 @@
 # AI Hub inside Shutter: where the agents sit, and the contest's task
 
-What the README's "Where the agents sit" and "AI Hub inside Shutter" shorten, in full. The agents' code: [src/Shutter/Agent](https://github.com/MxSalata/shutter/tree/main/src/Shutter/Agent).
+What the README's "Where the agents sit" shortens, in full. The agents' code: [src/Shutter/Agent](https://github.com/MxSalata/shutter/tree/main/src/Shutter/Agent).
 
 ## Where the agents sit
 

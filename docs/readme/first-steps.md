@@ -1,6 +1,6 @@
 # First steps, step by step
 
-The README's "On your machine or in the trial, first" in full: the four modes, the first three scenarios, three ways to try to break the approval, the online demo's four steps, how a hospital pilots it first, what to look at in S2, S8 and S20, what CI attacks at the approval boundary, and the terms. Sign-ins are under [Try it](https://github.com/MxSalata/shutter#try-it).
+The README's "For judges" and "Try it" in full: the four modes, the first three scenarios, three ways to try to break the approval, the online demo's four steps, how a hospital pilots it first, what to look at in S2, S8 and S20, what CI attacks at the approval boundary, and the terms. Sign-ins are under [Try it](https://github.com/MxSalata/shutter#try-it).
 
 ## The tours
 
@@ -8,7 +8,7 @@ The quick tour ([open it](https://mxsalata.github.io/shutter/?trial=tour)): 9 st
 
 ## The modes
 
-The mode decides who proposes the plan. In every mode the same gate checks the plan, and a person or the site's policy releases any write. **Board** (the default): four AI Hub agents. Three specialists read the sealed evidence at once, each from one angle: the message, the encounter's history, the impact on the receiver. A coordinator weighs their findings and proposes one plan, with reasons. **Site policy**: how a hospital would run it. Failures the catalogue recognises are settled by the site's written policy, with no model; anything it doesn't recognise goes to the board. **Single investigator**: one AI Hub agent with the same evidence and tools proposes the plan alone, to compare with the board. Live only, so not in the trial. On the twelve held-out cases the two tied (mean loss 0.167), the single investigator at 0.13 USD a run against the board's 0.48; what the board adds is three findings from separate views and a plan that records each specialist it overruled, which that test did not show changing a decision ([fair test](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#headline)). **Rules only**: no agents, the baseline. Shutter resends the message unchanged unless the gate objects, as a plain Resend would. In S8 one gate check is lifted on purpose, to show what that writes.
+The mode decides who proposes the plan. In every mode the same gate checks the plan, and a person or the site's policy releases any write. **Board** (the default): four AI Hub agents. Three specialists read the sealed evidence at once, each from one angle: the message, the encounter's history, the impact on the receiver. A coordinator weighs their findings and proposes one plan, with reasons. **Site policy**: how a hospital would run it. Failures the catalogue recognises are settled by the site's written policy, with no model; anything it doesn't recognise goes to the board. **Single investigator**: one AI Hub agent with the same evidence and tools proposes the plan alone, to compare with the board. Live only, so not in the trial. On the twelve held-out cases the two tied (mean loss 0.167), the single investigator at 0.13 USD a run against the board's 0.48; what the board adds is three findings from separate views and a plan that records each specialist it overruled, which that test did not show changing a decision ([fair test](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#headline)). **Rules only**: no agents, the baseline. Shutter resends the message unchanged unless the gate objects, as a plain Resend would. In a recorded scenario one gate check (`ENTRY_NOT_NAMED_WRITE`) is lifted on purpose, so that S8 can show what that writes; a real case gets the whole gate.
 
 ## On your machine or in the trial, first
 
@@ -52,7 +52,7 @@ For a hospital trying Shutter beside a real production, as [the install guide](h
 
 ![S2 at phone size: the case waiting, the approve dialog, and the outcome verified at the receiver](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/phone-s2.png)
 
-- **S8, the case this gate doesn't catch.** The plan records the conformance specialist's dissent and why it was overruled. The case page sets Rules only and the board side by side:
+- **S8, two movements the evidence can't order.** In Board mode the plan records the conformance specialist's dissent and why it was overruled. In Rules only one gate check is lifted on purpose, to show what a plain resend writes; on a real case the gate holds that resend. The case page sets Rules only and the board side by side:
 
 ![S8 played twice: Rules only overwrites WARD-C; the board escalates and writes nothing](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/s8-rules-and-board.png)
 

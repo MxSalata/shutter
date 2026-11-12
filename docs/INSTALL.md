@@ -935,7 +935,7 @@ entry and what the build holds, and always say "Recovery attempts initiated by S
 **11.4 The acts.** `POST /api/shutter/outages/{id}/acts` (an approver's, with `X-Requested-With: Shutter`) takes
 `{"act": "pause", "until": "<UTC time>"}`, for a receiver down on purpose until a time, or `{"act": "close", "reason": "..."}`.
 The person recorded is the signed-in user. An act the row does not list (`acts`) is refused, 400, and the row is left as it
-was; an operator's session reads every route and is refused here with 403. There is no Read again in this build.
+was; an operator's session reads every route and is refused here with 403. Since 1.3.0 **Read again** computes the offered set afresh; since 1.4.0 an approver approves that set with `POST /api/shutter/outages/{id}/approvals` (CONTRACTS 17.8).
 
 **11.5 The Doctor's lines.** `SELECT Shutter.Setup_Doctor()` has `outages`: the count open and by state; per watched receiver
 its reading, stamp and settings with where each came from (`item`, `class_default` or `unknown`), `SaveReplies`, and
@@ -945,8 +945,10 @@ and an operation with `AlertOnError` off, reach no intake); and `declared_not_in
 Watch` when the production lacks it. `release_sweep.engine_unreadable` counts the cases waiting on the engine whose record
 the Case Releaser could not read on its last sweep.
 
-**11.6 The site's alert must carry the link.** Nothing in this build tells anyone an outage has opened: no mail goes and no
-screen of the web application shows outages yet. The engine's own alerts still reach your consumer (`Site Alerts` after
+**11.6 Who is told.** By default nothing tells anyone an outage has opened. Since 1.3.0 the Incidents page shows each
+watched receiver and its outages, and Outage Mailer, an item a site adds and switches on per receiver, sends one email per
+outage state the receiver's entry names, at most one every 10 minutes, naming the receiver, the counts and the page, never
+a patient. The engine's own alerts still reach your consumer whether or not outage mail is on (`Site Alerts` after
 onboarding), so put the address of Shutter's outages there, `https://<your Shutter host>/api/shutter/outages`, or the web
 application's `/shutter/index.html` for the cases, in the alert's text or your on-call's notification. The `runbook` and
 `call` lines are for whoever opens it. A watcher that stops shows as `unknown` with its last stamp; nothing outside Shutter

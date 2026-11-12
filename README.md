@@ -75,9 +75,9 @@ Then visit the [online demo](https://shutter.mxsalata.com), a fictional hospital
 | `demo` / `shutter` | Read, ask questions, approve waiting cases, and run scenarios from their recordings (no model call, no spend); no reset |
 | Judges' account, supplied by the organisers | Run scenarios with live agents or **Convene the board**, one run at a time |
 
-The demo resets hourly. Live spending is capped at 5 USD an hour and 15 USD a day. All judges sign in to the one judges' account, so they share its 2 USD an hour.
+The demo resets hourly. Live spending is capped at 5 USD an hour and 15 USD a day. All judges sign in to the one judges' account, so they share its 2 USD an hour. When that is spent, live runs are refused until the next hour, and the `demo` account still plays the scenarios from their recordings.
 
-**Optional comparison:** run S8 in **Rules only**. This demonstration deliberately lifts one gate check, allowing WARD-B to overwrite WARD-C. The trial's recorded case, C-000021, is already approved and written. On real cases the normal gate holds that resend. This is a demonstration of a plain resend's consequence, not evidence that AI alone prevents it.
+**Optional comparison:** run S8 in **Rules only**. In a recorded scenario played in Rules only, the gate deliberately lifts one check, `ENTRY_NOT_NAMED_WRITE`, which blocks a write that names no catalogue entry where the matched entry calls for no resend. S8 is built to show what that lets through: WARD-B overwrites WARD-C. Every other check still runs. The trial's recorded case, C-000021, is already approved and written. A real case gets the whole gate, which holds that resend. This is a demonstration of a plain resend's consequence, not evidence that AI alone prevents it.
 
 ## How it works
 
@@ -101,12 +101,12 @@ Outside an outage, a plain MLLP receiver's case gets investigation and a drafted
 1. **Seal the evidence.** One snapshot, with a digest, holds the message, receiver state, receipt and history, other operations for the encounter, and the catalogue match.
 2. **Propose a plan.** The board reviews that evidence and records its reasons and any specialist it overruled.
 3. **Check the plan.** The [gate](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Operation/Gate.cls) checks identity, conformance, intent, ordering, state transition, effect, authorisation, rehearsal, concurrency, freshness, receiver capabilities and the catalogue. An unknown blocks a write as a failed check does.
-4. **Bind the release.** Approval covers the plan's digest, evidence, policy and receiver version. A changed receiver or changed plan voids that approval.
-5. **Recheck, write once, then verify.** Recovery includes a dry run, a fresh read and a second gate before the conditional write. The receiver's receipt and history settle what happened.
+4. **Rehearse, then bind the release.** Once the gate passes a write, the receiver dry-runs the exact action. The approval binds the plan's digest, the evidence, that dry run, the gate's policy version, the site profile's version, and the receiver's version and epoch, and it expires after an hour by default. If one of them changes, the approval is void; refreshed evidence keeps it only when nothing material changed.
+5. **Recheck, write once, then verify.** After release Shutter reads the receiver again and the gate runs a second time, checking the approval and its dry run against that read. One conditional write follows, and the receiver's receipt and history settle what happened.
 
 A **catalogue** entry describes a known failure and its safe outcome. The **site profile** is the site's written policy, including what each receiver permits and what needs a person. The shipped non-demo profile asks a person before every resend.
 
-For an API-recovery incident, cases become chains per encounter, released in order under one approval, each item checked before the next proceeds.
+For an API-recovery incident, one approval binds the incident's plan. Its cases become chains per encounter, released in order, each item's own evidence, dry run and dispatch checks completed before the next proceeds.
 
 ![S2 waiting for approval: completed checks and the exact plan to approve or reject](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/case-s2-approval.png)
 
@@ -123,14 +123,14 @@ The board is four `%AI.Agent` business operations inside the production, not an 
 | Impact specialist | The effect on the receiver |
 | Coordinator | The specialists' findings, combined into one plan with reasons and recorded dissent |
 
-The specialists run in parallel. Their typed tools are read-only; case-scoped authorisation, a pinned tool catalogue and evidence-reference checks constrain each run. Every tool call is audited in the production's **Visual Trace**.
+The specialists run in parallel. Their typed tools read the sealed evidence and search interface knowledge, and each run ends with a submit tool that returns a finding or a plan; no tool writes to a receiver. case-scoped authorisation, a pinned tool catalogue and evidence-reference checks constrain each run. Every tool call is audited in the production's **Visual Trace**.
 
 **Four modes make the comparison explicit:**
 
 - **Board:** three specialist findings and a coordinated plan.
-- **Single investigator:** one live agent with the same evidence, tools and gate.
-- **Site policy:** recognised failures settled by written policy without a model; unresolved ones go to the board.
-- **Rules only:** the plain-resend baseline, subject to the gate, apart from S8's deliberate demonstration exemption.
+- **Single investigator:** one live agent with the same evidence, tools and gate. It has no recording, so it runs live only: not in the trial or the `demo` account's replays.
+- **Site policy:** recognised failures settled by written policy without a model; unresolved ones go to the board. The default for a watched production's failures.
+- **Rules only:** the plain-resend baseline, subject to the whole gate, except in a recorded scenario, where one catalogue check is lifted so that S8 can show what a plain resend writes.
 
 The board's measured advantage is **not better decisions than one agent**. The full twelve-case comparison tied them. What the board supplies is separate review perspectives and an explicit record of disagreement for the person deciding.
 
@@ -142,9 +142,9 @@ Also included: **Ask Shutter** about the page on screen, a read-only production 
 
 ### The full comparison: release 1.0.0
 
-Twelve synthetic held-out cases, three runs per mode, live agents on `claude-opus-5-5`. Cases, expected outcomes and scoring were hashed before the runs and published with them, but this was not an independently sealed evaluation.
+Twelve synthetic held-out cases, three runs of each case in each mode, live agents on `claude-opus-5-5`. Cases, expected outcomes and scoring were hashed before the runs and published with them, but this was not an independently sealed evaluation.
 
-Loss runs from **0 for a right outcome to 20 for a wrong write made**.
+Loss runs from **0 for a right outcome to 20 for a wrong write executed**.
 
 | Mode | Mean loss | Wrong writes executed | USD per run |
 | --- | ---: | ---: | ---: |
@@ -154,21 +154,23 @@ Loss runs from **0 for a right outcome to 20 for a wrong write made**.
 | Rules only | 5.000 | 3 | 0 |
 | Always escalating, computed once per case | 1.250 | 0 | 0 |
 
-Board and single investigator each produced 30 right and 6 defensible answers out of 36 runs. Treating defensible answers as free gives both a mean loss of 0.000. The single investigator scores 0.500 if two F08 runs are graded on the plan made after the gate voided their approval, rather than 0.167.
+Board and single investigator each produced 30 right and 6 defensible answers out of 36 runs. Treating defensible answers as free gives both a mean loss of 0.000. The single investigator scores 0.500, not 0.167, if two F08 runs are graded on their second plan. While their first plan, a resend, waited for approval, the receiver committed the slow original delivery; the gate voided the approval, nothing was sent, and the case closed on the receipt. The unchanged grader reads the second plan; this page and a blind re-grade read the first ([the one disagreement](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#the-one-disagreement-and-how-it-was-settled)).
 
 Site policy's three board cases had no model key and fell back to a plain resend. Its row is not a measurement of Site policy with a live board.
+
+**What the agents added over no model:** both agent modes lost 0.167, against 1.250 for always escalating and 3.500 for Site policy without a key. On F04 and F09 the catalogue's match pointed the wrong way; Site policy followed it, and the agents read the entry against the evidence and escalated.
 
 ### Follow-up evidence, with its scope
 
 | Evidence | What it establishes |
 | --- | --- |
 | **Release 1.3.2, F03 and F07** | Both cases closed correctly in every board and single-investigator run, three runs each, with F07 using the shipped `show` setting |
-| **Release 1.4.3, all twelve cases rerun** | Board 0.167 and single investigator 0.167 as settled (0.667 by the unchanged grader, which counts F08's three runs as false closures; the fair-test page gives both), as on 1.0.0, with the same 12 writes, all verified; Site policy with a live board 0.900 on ten cases; Rules only 4.000; no mode made a wrong write. A regression rerun on cases that influenced fixes, not a new held-out test |
+| **Release 1.4.3, all twelve cases rerun** | Board 0.167 and single investigator 0.167 as settled, both as on 1.0.0, with the same 12 writes, all verified. By the unchanged grader the single investigator is 0.667 (0.500 on 1.0.0), counting F08's three runs as false closures; the fair-test page gives both, and no blind re-grade was done this time. Site policy with a live board 0.900 on the ten cases played (not F03 or F12); Rules only 4.000. No mode executed a wrong write: the gate stopped the ones Site policy and Rules only proposed. A regression rerun on cases that influenced fixes, not a new held-out test |
 | **Catalogue demonstration, S1 to S10 and S13** | The board reached all 11 expected outcomes, live and in replay, with the catalogue's preferred outcome supplied to it |
 
-**Sonnet 5.5 specialists with an Opus 5.5 coordinator: the same grades in all 36 runs of the twelve cases on release 1.1.1, at 0.331 USD a run against 0.527.**
+**Sonnet 5.5 specialists with an Opus 5.5 coordinator: the same grades as the all-Opus board in all 36 runs of the twelve cases on release 1.1.1, at 0.331 USD a run against 0.527.** Both boards graded 0.667 there (0.500 with F03 settled as right), not 0.167, because the 1.1.x gate held two right plans, F03 and F07.
 
-Separately, an all-Sonnet 5.5 board made the same decisions as Opus 5.5 in all 36 runs of the full comparison, at 0.24 USD per run against 0.48.
+Separately, on release 1.0.0, an all-Sonnet 5.5 board reached the same grades as the Opus 5.5 board in all 36 runs of the full comparison, at 0.24 USD per run against 0.48; its plans differed only on F09, where both write nothing.
 
 [Full comparison, scoring and every run](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md) · [F03 and F07 on 1.3.2](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#release-132-f03-and-f07-live) · [All twelve on 1.4.3](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#release-143-all-12-cases-rerun) · [What the catalogue demonstration does and does not show](https://github.com/MxSalata/shutter/blob/main/docs/readme/evaluation.md)
 
@@ -230,7 +232,7 @@ The installer checks Docker, Compose, memory, disk, ports and the image before c
 
 ### Live agents instead
 
-Get AI Hub Community build `2027.1.0AI.109.0` from the [Early Access portal](https://evaluation.intersystems.com/Eval/early-access/AIHub). Copy `.env.example` to `.env` and set `ANTHROPIC_API_KEY` for live agents, then:
+Get AI Hub Community build `2027.1.0AI.109.0` from the [Early Access portal](https://evaluation.intersystems.com/Eval/early-access/AIHub). If you installed the replay edition first, [switch editions](https://github.com/MxSalata/shutter/blob/main/docs/readme/running.md) before this: `install.sh` refuses an `.env` made for the other edition. Copy `.env.example` to `.env` and set `ANTHROPIC_API_KEY` for live agents, then:
 
 ```sh
 ./install.sh --image-file irishealth-community-2027.1.0AI.109.0-docker.tar.gz
@@ -265,7 +267,7 @@ zpm "repo -reset-defaults"
 zpm "install iris-shutter"
 ```
 
-The last command installs the registry's latest version. For the exact clone, replace the last two lines with `zpm "load <module>"`.
+The last command installs the registry's latest version, which can lag this repository; `zpm "list"` shows the version installed. For the exact clone, replace the last two lines with `zpm "load <module>"`.
 
 [Installation, upgrades and uninstall](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md)
 
@@ -298,7 +300,7 @@ The failure census can compare watched failures with opened cases. A redacted ca
 | **Release 1.4.3** | 1,083 unit tests passed on AI Hub build 154 and 1,074 on IRIS 2026.2, none failed. Role checks covered judges running but not resetting, upgraded permissions and attribution of scenario runs. Web and relevant browser suites included accessibility checks |
 | **Pathology, release 1.4.0** | All 56 pathology-rig rows passed on build 154. An end-to-end check counted receiver sends under shadow mode and the recovery stop |
 | **Replay CI, figures at 1.1.0** | Full installation on IRIS 2026.2, 37 receiver-contract tests, 26 scenarios end to end and approval-boundary attacks over HTTP |
-| **Live AI Hub** | Separate fresh-install checks on builds 109 and 154, recorded live runs and live comparative tests. CI cannot download the Early Access image, so replay CI does not replace this evidence |
+| **Live AI Hub** | Separate fresh-install checks on builds 109 and 154, last recorded on release 1.0.0 (6 November 2026), recorded live runs, and live comparative tests up to the 1.4.3 rerun. CI cannot download the Early Access image, so replay CI does not replace this evidence |
 
 The approval boundary tests stale versions, wrong digests, insufficient roles, repeated approval and a receiver changed after approval. Privacy checks inspect recordings.
 
@@ -340,6 +342,7 @@ Each technology has a job in the workflow.
 - **Large incidents need a full review.** One approval binds every chain, although the Workflow task lists only those fitting its 2,000-character message. The incident page has the full set. Complete release at 1,000 failures has not been measured.
 - **Failover, mirrors and backup restoration are untested.**
 - **FHIR R4 is in development, not supported.** Some components are present and tested; no case uses them yet.
+- **The catalogue guides the agents.** In the scenario demonstration each agent is given the matching entry and its preferred outcome, and the coordinator took it in 24 of 25 recorded plans. The held-out cases are the test of judgement.
 
 [Every limit, with effect, workaround and status](https://github.com/MxSalata/shutter/blob/main/docs/readme/limits.md) · [Failure scenarios and their boundaries](https://github.com/MxSalata/shutter/blob/main/docs/edge-cases.md) · [What happens when a model fails](https://github.com/MxSalata/shutter/blob/main/docs/readme/model-fails.md)
 

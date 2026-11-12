@@ -1,6 +1,6 @@
 # Troubleshooting
 
-The README's "Troubleshooting" in full. The health report is `curl http://localhost:52773/api/shutter/health`; more about running Shutter: [running.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/running.md).
+Troubleshooting, in full (the README links it from Try it). The health report is `curl http://localhost:52773/api/shutter/health`; more about running Shutter: [running.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/running.md).
 
 - **`install.sh` stops at a check.** It prints `[fix]` with what to do for each one, and changes nothing until every check passes. A port in use: `SHUTTER_WEB_PORT` is the web app's, `SHUTTER_SUPERSERVER_PORT` is 1972, IRIS's own; with no `.env` yet, `SHUTTER_SUPERSERVER_PORT=1973 ./install.sh --replay` keeps it in the `.env` it creates, and otherwise set it in `.env`.
 - **Not healthy after 25 minutes.** `install.sh` prints the last 30 lines of the log and the health address; `curl http://localhost:52773/api/shutter/health` is the report to read.

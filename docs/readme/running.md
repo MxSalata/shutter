@@ -1,10 +1,10 @@
 # Running Shutter: more detail
 
-The README's Try it and Run details sections have the commands. This page keeps the detail that does not fit there.
+The README's Try it section has the commands. This page keeps the detail that does not fit there.
 
 ### Notes on the install
 
-- On Windows, run `install.sh` in Git Bash or a WSL 2 shell (Docker Desktop's WSL integration); from PowerShell, use the [README's Run details](https://github.com/MxSalata/shutter#run-details) commands.
+- On Windows, run `install.sh` in Git Bash or a WSL 2 shell (Docker Desktop's WSL integration); PowerShell isn't supported by the installer.
 - On Apple silicon, pass `--image-file` the `irishealth_arm64-community` file of the same build (the replay edition's public image has an ARM64 build too); Shutter has not been run on ARM64 yet.
 - The first `up` builds the image in 2 to 15 minutes, depending on the machine: 14.5 minutes on 8 cores and 5 GB of memory, most of it in the install step. The replay edition builds in about 8 minutes on that machine; on a 12-thread VM with 11 GB of memory it built and was healthy in 2 minutes 4 seconds from a fresh copy, with `--no-cache` and the public image already pulled (3 November 2026; the 6 GB image download comes first on a new machine).
 - Measured on 8 November 2026 with the base image already on the machine, from `install.sh` to healthy: the replay edition 2 min 21 s, build 154 2 min 30 s and build 109 2 min 52 s, on the test VMs; the six IPM commands on a stock 154 image took 2 min 20 s. Downloading an image comes first and is not counted.
