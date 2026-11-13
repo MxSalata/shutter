@@ -517,12 +517,14 @@ function TileGroup({ title, four, children }: { title: string; four?: boolean; c
 
 /**
  * The empty list with no filter on: what it says depends on the install (emptyCases.ts), read from the health report
- * only here, where the list is empty, so a list with cases asks for nothing more.
+ * only here, where the list is empty, so a list with cases asks for nothing more. Until the report has answered (or
+ * failed), the loader stays, so a live install never shows the words for an unknown one first.
  */
 function NoCasesYet() {
   const health = useHealth();
   const can = useCan();
   const { kind, words, link } = emptyGuidance({ trial: TRIAL, health: health.data, can });
+  if (!TRIAL && health.isPending) return <PageSkeleton label="Loading the cases…" />;
   return (
     <div data-testid="no-cases" data-install={kind}>
       <EmptyState

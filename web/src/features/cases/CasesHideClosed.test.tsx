@@ -15,7 +15,12 @@ import { server } from '@/mocks/node';
 import { useAppearance } from '@/stores/appearance';
 import { theme } from '@/theme';
 import CasesPage from './CasesPage';
-import { DEMO_INSTALL, SITE_AWAITING_SETUP, SITE_WITH_INTAKE } from './emptyCases.fixtures';
+import {
+  DEMO_INSTALL,
+  SITE_AWAITING_SETUP,
+  SITE_IN_ITS_OWN_PRODUCTION,
+  SITE_WITH_INTAKE,
+} from './emptyCases.fixtures';
 
 /** Whether the page is the trial: set per test. */
 const env = vi.hoisted(() => ({ trial: false }));
@@ -464,6 +469,45 @@ describe('the empty list, by what the install can do', () => {
       '/health',
     );
     expect(box).not.toHaveTextContent(/scenario/i);
+  });
+
+  it("tells a site that put Shutter's items in its own production where they run, never to set up a namespace", async () => {
+    noCases();
+    healthIs(SITE_IN_ITS_OWN_PRODUCTION);
+    renderList();
+    const box = await guidance();
+    expect(box).toHaveAttribute('data-install', 'site-production');
+    expect(box).toHaveTextContent(
+      "No cases yet. Shutter's items run in Trust.Production; a case opens when its HL7 process or a forwarder reports a failed delivery.",
+    );
+    expect(within(box).getByRole('link', { name: 'If one was expected, check Health' })).toHaveAttribute(
+      'href',
+      '/health',
+    );
+    expect(within(box).queryByRole('link', { name: 'Set up a watched namespace' })).not.toBeInTheDocument();
+    expect(box).not.toHaveTextContent(/scenario/i);
+  });
+
+  it('keeps the loader while the health report is on its way, so no stand-in words show first', async () => {
+    noCases();
+    let answer: (() => void) | undefined;
+    server.use(
+      http.get(
+        '/api/shutter/health',
+        () =>
+          new Promise<Response>((resolve) => {
+            answer = () => resolve(HttpResponse.json(SITE_WITH_INTAKE));
+          }),
+      ),
+    );
+    renderList();
+    await waitFor(() => expect(answer).toBeDefined());
+    expect(screen.getByText('Loading the cases…')).toBeVisible();
+    expect(screen.queryByTestId('no-cases')).not.toBeInTheDocument();
+    expect(screen.queryByText('No cases yet.')).not.toBeInTheDocument();
+    answer?.();
+    const box = await screen.findByTestId('no-cases');
+    expect(box).toHaveAttribute('data-install', 'site-intake');
   });
 
   it('names the missing step on a site awaiting set-up, with its page for someone who may configure', async () => {

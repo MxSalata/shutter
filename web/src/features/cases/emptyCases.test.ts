@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { Health } from '@/api/types';
-import { emptyGuidance, emptyInstall, forwardingNamespaces } from './emptyCases';
+import { emptyGuidance, emptyInstall, forwardingNamespaces, siteProduction } from './emptyCases';
 import {
   DEMO_INSTALL,
   SITE_AWAITING_SETUP,
+  SITE_IN_ITS_OWN_PRODUCTION,
   SITE_WITH_INTAKE,
   SITE_WITH_NOTHING_FORWARDING,
   SITE_WITH_TROUBLED_INTAKE,
@@ -47,14 +48,38 @@ describe('emptyInstall', () => {
     expect(forwardingNamespaces({ demo: false })).toBeNull();
   });
 
+  it("tells a site whose own production holds Shutter's items (shape B) from one awaiting set-up", () => {
+    expect(siteProduction(SITE_IN_ITS_OWN_PRODUCTION)).toBe('Trust.Production');
+    expect(emptyInstall(false, SITE_IN_ITS_OWN_PRODUCTION)).toBe('site-production');
+    // Shutter's own production, or a report that names none, is not shape B
+    expect(siteProduction({ ...SITE_AWAITING_SETUP, shutter_production: 'Shutter.Production' })).toBeNull();
+    expect(emptyInstall(false, { ...SITE_AWAITING_SETUP, shutter_production: 'Shutter.Production' })).toBe(
+      'site-setup',
+    );
+    expect(siteProduction({ ...SITE_AWAITING_SETUP, shutter_production: '' })).toBeNull();
+    expect(siteProduction(SITE_AWAITING_SETUP)).toBeNull();
+    // A shape B site that also has a namespace forwarding has an intake, and is told so
+    expect(
+      emptyInstall(false, {
+        ...SITE_IN_ITS_OWN_PRODUCTION,
+        watched_namespaces: SITE_WITH_INTAKE.watched_namespaces,
+      }),
+    ).toBe('site-intake');
+    // Its production is named even by a server that sends no list of watched namespaces
+    const { watched_namespaces: _none, ...older } = SITE_IN_ITS_OWN_PRODUCTION;
+    expect(emptyInstall(false, older)).toBe('site-production');
+  });
+
   it('never reads a name: a site whose namespace and production are called Demo is still a site', () => {
     const named: Health = {
       ...SITE_AWAITING_SETUP,
       namespace: 'DEMO',
       production: 'Demo.Production',
-      shutter_production: 'Demo.Production',
+      shutter_production: 'Shutter.Production',
     };
     expect(emptyInstall(false, named)).toBe('site-setup');
+    // And in shape B, a production called Demo is the site's own, not a demo
+    expect(emptyInstall(false, { ...named, shutter_production: 'Demo.Production' })).toBe('site-production');
     // And a demo install is one whatever it is called
     expect(emptyInstall(false, { demo: true, namespace: 'TRUST', production: 'Trust.Production' })).toBe(
       'demo',
@@ -110,6 +135,17 @@ describe('emptyGuidance', () => {
     expect(g.link).toEqual({ to: '/health', label: 'Open Health' });
   });
 
+  it("says where Shutter's items run on a site that put them in its own production, and never sends it to set up a namespace", () => {
+    for (const can of [all, operator, lookOnly]) {
+      expect(at(false, SITE_IN_ITS_OWN_PRODUCTION, can)).toEqual({
+        kind: 'site-production',
+        words:
+          "No cases yet. Shutter's items run in Trust.Production; a case opens when its HL7 process or a forwarder reports a failed delivery.",
+        link: { to: '/health', label: 'If one was expected, check Health' },
+      });
+    }
+  });
+
   it('names the missing step on a site awaiting set-up, with the page for someone who may configure it', () => {
     expect(at(false, SITE_AWAITING_SETUP, all)).toEqual({
       kind: 'site-setup',
@@ -127,7 +163,12 @@ describe('emptyGuidance', () => {
   });
 
   it('never tells a site to play a scenario or to make a failure', () => {
-    for (const health of [SITE_WITH_INTAKE, SITE_WITH_TROUBLED_INTAKE, SITE_AWAITING_SETUP])
+    for (const health of [
+      SITE_WITH_INTAKE,
+      SITE_WITH_TROUBLED_INTAKE,
+      SITE_IN_ITS_OWN_PRODUCTION,
+      SITE_AWAITING_SETUP,
+    ])
       for (const can of [all, operator, lookOnly]) {
         const g = at(false, health, can);
         expect(`${g.words} ${g.link.label}`).not.toMatch(/scenario|play/i);

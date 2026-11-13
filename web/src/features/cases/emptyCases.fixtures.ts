@@ -53,3 +53,18 @@ export const SITE_WITH_NOTHING_FORWARDING: Health = {
     { ...watched('DOCUMENTS'), onboarded: false, forwarder: false },
   ],
 };
+
+/**
+ * A site that put Shutter's items in its own production (shape B, `InstallInto`): the report names that production in
+ * `shutter_production`, and no namespace is onboarded, since a process in the production sends its failures to Case
+ * Workflow itself.
+ */
+export const SITE_IN_ITS_OWN_PRODUCTION: Health = {
+  demo: false,
+  namespace: 'TRUST',
+  production: 'Trust.Production',
+  shutter_production: 'Trust.Production',
+  production_state: 'running',
+  watched_ok: null,
+  watched_namespaces: [],
+};

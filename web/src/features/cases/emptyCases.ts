@@ -1,18 +1,34 @@
 import type { Can, Health } from '@/api/types';
 
 /**
- * What kind of install an empty cases list is on, read from what the install says of itself and never from its address
+ * What kind of install an empty cases list is on, read from what the install says of itself and never from its hostname
  * or the signed-in name:
  *
  * - `trial`: the recorded cases answered in the browser (the build and `?trial`, env/mode.ts);
  * - `demo`: a demo install (`GET /health`, `demo` true), where scenarios open cases;
  * - `site-intake`: a site (`demo` false) with a watched namespace that forwards its failures: one the Doctor lists in
  *   `watched_namespaces` as onboarded, not taken off, with its forwarder in place (CONTRACTS 11.1);
- * - `site-setup`: a site whose report lists no such namespace yet;
+ * - `site-production`: a site with no such namespace whose report names a production of its own in
+ *   `shutter_production` (shape B: `InstallInto` put Shutter's items in the site's production, and a process there
+ *   sends its failures to Case Workflow), so no watched namespace is needed;
+ * - `site-setup`: a site whose report lists no such namespace and names Shutter's own production;
  * - `unknown`: the report is not read yet, could not be read, or comes without the field (a server before v1.42 sends
  *   no `watched_namespaces`): nothing is guessed.
  */
-export type EmptyInstall = 'trial' | 'demo' | 'site-intake' | 'site-setup' | 'unknown';
+export type EmptyInstall = 'trial' | 'demo' | 'site-intake' | 'site-production' | 'site-setup' | 'unknown';
+
+/** The production Shutter's items run in when no site production was named (`Shutter.Setup.ProductionName()`). */
+const OWN_PRODUCTION = 'Shutter.Production';
+
+/**
+ * The site's own production Shutter's items run in (shape B), as the health report names it in `shutter_production`;
+ * null when they run in Shutter's own production or the report does not say. The name is a field the install reports
+ * about itself (CONTRACTS, "Shape B"), compared with the default the server itself uses.
+ */
+export function siteProduction(health: Health | undefined): string | null {
+  const name = health?.shutter_production;
+  return typeof name === 'string' && name !== '' && name !== OWN_PRODUCTION ? name : null;
+}
 
 /** The fields of a `watched_namespaces` row this reads (CONTRACTS 11.1 lists the rest). */
 interface Watched {
@@ -42,8 +58,10 @@ export function emptyInstall(trial: boolean, health: Health | undefined): EmptyI
   if (typeof health?.demo !== 'boolean') return 'unknown';
   if (health.demo) return 'demo';
   const forwarding = forwardingNamespaces(health);
+  if (forwarding !== null && forwarding.length > 0) return 'site-intake';
+  if (siteProduction(health) !== null) return 'site-production';
   if (forwarding === null) return 'unknown';
-  return forwarding.length > 0 ? 'site-intake' : 'site-setup';
+  return 'site-setup';
 }
 
 /** "HOSPITAL", "HOSPITAL and LAB", "HOSPITAL, LAB and 2 more": a list short enough for one sentence. */
@@ -65,8 +83,9 @@ export interface EmptyGuidance {
 /**
  * What an empty cases list with no filter says, and the one link under it. A demo or the trial offers a scenario, and
  * only to someone who may run one. A site is never told to make a failure: with a namespace forwarding, nothing has
- * failed yet and Health shows the intake; with none, the missing step is named, with the page that does it for someone
- * who may configure the site and Health for anyone else.
+ * failed yet and Health shows the intake; with Shutter's items in the site's own production, the words say where they
+ * run and how a case opens, claiming nothing about the wiring, and point at Health; with neither, the missing step is
+ * named, with the page that does it for someone who may configure the site and Health for anyone else.
  */
 export function emptyGuidance({
   trial,
@@ -109,6 +128,12 @@ export function emptyGuidance({
       link: { to: '/health', label: 'If one was expected, check Health' },
     };
   }
+  if (kind === 'site-production')
+    return {
+      kind,
+      words: `No cases yet. Shutter's items run in ${siteProduction(health) ?? ''}; a case opens when its HL7 process or a forwarder reports a failed delivery.`,
+      link: { to: '/health', label: 'If one was expected, check Health' },
+    };
   if (kind === 'site-setup')
     return can.configure
       ? {
