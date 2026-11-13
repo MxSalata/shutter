@@ -1,10 +1,10 @@
-import { Alert, Button, Fieldset, Group, SimpleGrid, Stack, Text } from '@mantine/core';
+import { Alert, Button, Group, SimpleGrid, Stack, Text } from '@mantine/core';
 import { IconPlus, IconTrash } from '@tabler/icons-react';
 import { useState, type ChangeEvent } from 'react';
 import type { SiteProfile, SiteTeam } from '@/api/types';
 import { Section } from '@/components/Section';
 import { TechDetail } from '@/components/TechDetail';
-import { Checkbox, NativeSelect, NumberInput, Radio, Switch, TextInput } from './controls';
+import { AnswerGroup, Checkbox, NativeSelect, NumberInput, Radio, Switch, TextInput } from './controls';
 import { IANA_ZONE, ZONE_LABELS, newTeam, parseList } from './profile';
 import { Question, QuestionDetails } from './Question';
 import {
@@ -79,7 +79,7 @@ function TeamFields({
   const named = t.receivers ?? [];
   const unknown = named.filter((r) => !receivers.includes(r));
   return (
-    <Fieldset legend={`Team ${i + 1}: ${t.name || 'new'}`}>
+    <AnswerGroup legend={`Team ${i + 1}: ${t.name || 'new'}`}>
       <Stack gap="sm">
         <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm">
           <TextInput
@@ -185,7 +185,7 @@ function TeamFields({
           </Button>
         </Group>
       </Stack>
-    </Fieldset>
+    </AnswerGroup>
   );
 }
 
@@ -198,6 +198,7 @@ function Teams({ draft, setDraft, problem }: { draft: SiteProfile; setDraft: Set
     <Section
       id="site-escalation"
       title="Escalation"
+      wideNote
       note="When Shutter can't recover a case, it drafts an email for a person to check and send."
     >
       <Question
@@ -302,6 +303,7 @@ function Feed({ draft, setDraft, problem }: { draft: SiteProfile; setDraft: SetD
     <Section
       id="site-feed"
       title="Feed"
+      wideNote
       note="HL7 times that carry no offset (EVN-2, EVN-6, MSH-7, PV1-44) are read in this zone; the gate orders and supersedes by them."
     >
       <Question n={10} text="In which time zone does the PAS send times without an offset?" acts />
@@ -367,6 +369,7 @@ function Model({ draft, setDraft }: { draft: SiteProfile; setDraft: SetDraft }) 
     <Section
       id="site-model"
       title="What the model sees"
+      wideNote
       note="The model always gets tokens for the patient's identifiers, and never the patient's name, date of birth or address as fields."
     >
       <Question n={11} text="May the text of notes (OBX and NTE) go to the model?" acts />
@@ -395,6 +398,7 @@ function Merges({ draft, setDraft, problem }: { draft: SiteProfile; setDraft: Se
     <Section
       id="site-merges-section"
       title="Merges"
+      wideNote
       note="A merge (ADT^A40) changes which record a patient's history belongs to. By default Shutter never sends one."
     >
       <Question n={12} text="May Shutter ever send a merge (A40)?" acts />
@@ -432,6 +436,7 @@ function PreventFailures({
     <Section
       id="site-prevent-failures"
       title="Prevent failures"
+      wideNote
       note="Without its schema, IRIS still reads a message by segment position and delivers it, so a receiver can get misplaced values."
     >
       <Question
@@ -473,6 +478,7 @@ function Recovery({
     <Section
       id="site-recovery"
       title="Recovery"
+      wideNote
       note="Off is shadow mode: Shutter investigates, sending no recovery write, rehearsal, resend preview or outage resend. The hospital's feed goes on either way."
     >
       <Question n={14} text="May Shutter attempt recovery here, within its gate and the policy above?" acts />
@@ -542,6 +548,7 @@ function CaseReminders({
     <Section
       id="site-reminders"
       title="Reminders"
+      wideNote
       note="A scheduled mail when a case that needs a person stays open. It writes to no receiver, calls no model and moves no case."
     >
       <Question n={15} text="Should anyone be reminded of cases left open?" acts />

@@ -254,6 +254,68 @@ describe('the receivers section', () => {
       'true',
     );
   });
+
+  it('names each receiver, tier and team as a group with no box, so a question inside one is not inset', async () => {
+    renderPage();
+    const receiver = await screen.findByRole('group', { name: 'Receiver 1: Downstream Out' });
+    for (const name of ['Receiver 2: Records Out', 'Tier 3: clinical safety', 'Team 1: Integration team'])
+      expect(screen.getByRole('group', { name })).toHaveClass('answer-group');
+    expect(receiver).toHaveClass('answer-group');
+    expect(receiver).toHaveAttribute('data-variant', 'unstyled');
+    // Questions 2 to 6 sit in the receiver's group and question 1 outside it: the group must not inset them
+    expect(receiver.querySelectorAll('[data-question]')).toHaveLength(5);
+    expect(document.querySelector('[data-question="1"]')?.closest('fieldset')).toBeNull();
+    expect(document.querySelector('#site-receivers fieldset:not(.answer-group)')).toBeNull();
+  });
+
+  it('gives the folds of a receiver one disclosure style, the runbook line and the history policy included', async () => {
+    renderPage();
+    const receiver = within(await screen.findByRole('group', { name: 'Receiver 1: Downstream Out' }));
+    const folds = [
+      receiver.getByRole('button', { name: 'Site runbook line' }),
+      receiver.getByRole('button', { name: 'Advanced: its history policy' }),
+      ...receiver.getAllByRole('button', { name: 'Keys and values' }),
+      ...receiver.getAllByRole('button', { name: 'More about this question' }),
+    ];
+    expect(folds.length).toBeGreaterThan(8);
+    for (const fold of folds) {
+      expect(fold).toHaveClass('tech-detail-toggle');
+      expect(fold).not.toHaveClass('mantine-Button-root');
+      expect(fold).toHaveAttribute('aria-expanded');
+    }
+    // The history policy's fold heads the category question's own list, above its Keys and values
+    const advanced = receiver.getByRole('button', { name: 'Advanced: its history policy' });
+    const keys = receiver.getAllByRole('button', { name: 'Keys and values' })[0];
+    expect(advanced.parentElement?.parentElement).toBe(keys.parentElement?.parentElement);
+    expect(advanced.compareDocumentPosition(keys) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('opens the history policy from its fold, closed until asked for, and closes it again', async () => {
+    renderPage();
+    const receiver = within(await screen.findByRole('group', { name: 'Receiver 1: Downstream Out' }));
+    const advanced = receiver.getByRole('button', { name: 'Advanced: its history policy' });
+    expect(advanced).toHaveAttribute('aria-expanded', 'false');
+    expect(receiver.queryByRole('combobox', { name: /When a failure at it has been overtaken/ })).toBeNull();
+    await userEvent.click(advanced);
+    expect(advanced).toHaveAttribute('aria-expanded', 'true');
+    const select = receiver.getByRole('combobox', { name: /When a failure at it has been overtaken/ });
+    expect(document.getElementById(advanced.getAttribute('aria-controls')!)).toContainElement(select);
+    await userEvent.click(advanced);
+    expect(receiver.queryByRole('combobox', { name: /When a failure at it has been overtaken/ })).toBeNull();
+  });
+
+  it('runs each section’s intro the width of the section, not the prose width', async () => {
+    renderPage();
+    await screen.findByRole('table', { name: 'Who releases each write' });
+    const intros = [...document.querySelectorAll('section[id^="site-"] h2')]
+      .map((h) => h.nextElementSibling as HTMLElement | null)
+      .filter((n): n is HTMLElement => n?.tagName === 'P');
+    expect(intros.length).toBeGreaterThanOrEqual(10);
+    for (const intro of intros) expect(intro.style.maxWidth).toBe('');
+    expect(document.querySelector('#site-receivers h2')?.nextElementSibling).toHaveTextContent(
+      'For each system this production feeds.',
+    );
+  });
 });
 
 describe('the save bar and the confirm', () => {

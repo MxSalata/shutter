@@ -1,0 +1,30 @@
+/*
+ * The Site profile's own rules. Its disclosures are the shared `tech-detail-toggle` in styles.css.
+ */
+
+/*
+ * A named group of answers: the name sits on a rule at the fields' left edge, and the group has no box, so what it
+ * holds lines up with what is outside it.
+ */
+fieldset.answer-group {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-top: 1px solid var(--mantine-color-default-border);
+  border-radius: 0;
+}
+fieldset.answer-group > legend {
+  margin-bottom: var(--mantine-spacing-xs);
+  padding: 0 var(--mantine-spacing-sm) 0 0;
+  font-size: var(--mantine-font-size-md);
+  font-weight: 600;
+}
+/* One group after another (a second receiver, tier or team) starts a little lower, so each reads as a whole. */
+fieldset.answer-group + fieldset.answer-group {
+  margin-top: var(--mantine-spacing-md);
+}
+/* Inside a group, each question and its fields are a block: a question's line stands a little off what precedes it. */
+fieldset.answer-group [data-question] {
+  margin-top: var(--mantine-spacing-xs);
+}

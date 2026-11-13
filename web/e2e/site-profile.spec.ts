@@ -103,6 +103,51 @@ test.describe('the trial, as the approver of the recorded runs', () => {
     await expect(page.getByRole('heading', { name: 'Incidents', exact: true })).toBeFocused();
   });
 
+  // A receiver's questions sit in its group and question 1 outside it: the numbers, the icons and the folds line up
+  for (const width of [1280, 360])
+    test(`lines up the receivers' questions and folds, in a receiver's group or outside it, at ${width} px`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await signIn(page);
+      await go(page, '/site-profile');
+      const section = page.locator('#site-receivers');
+      await expect(section.getByRole('group', { name: 'Receiver 2: Records Out' })).toBeVisible();
+      const at = await section.evaluate((sec) => {
+        const box = (e: Element) => e.getBoundingClientRect();
+        const questions = [...sec.querySelectorAll('[data-question]')];
+        const folds = [...sec.querySelectorAll('fieldset button[aria-expanded]')];
+        const intro = sec.querySelector('h2')!.nextElementSibling!;
+        return {
+          inGroup: questions.filter((q) => q.closest('fieldset')).length,
+          outside: questions.filter((q) => !q.closest('fieldset')).length,
+          numbers: questions.map((q) => box(q.firstElementChild!).left),
+          icons: questions.map((q) => box(q.lastElementChild!).right),
+          heading: box(sec.querySelector('h2')!).left,
+          // Each receiver's first field, Production item
+          fields: [...sec.querySelectorAll('fieldset')].map((f) => box(f.querySelector('input')!).left),
+          intro: { left: box(intro).left, right: box(intro).right },
+          folds: folds.map((f) => ({ name: f.textContent, left: box(f).left })),
+          styles: folds.map((f) => {
+            const css = getComputedStyle(f);
+            return `${css.color} ${css.fontWeight} ${css.fontSize} ${css.backgroundColor}`;
+          }),
+        };
+      });
+      const spread = (xs: number[]) => Math.max(...xs) - Math.min(...xs);
+      expect(at.outside).toBe(1);
+      expect(at.inGroup).toBe(10);
+      // Each number starts where the heading and the fields do, and each icon ends where the intro does
+      expect(spread([...at.numbers, at.heading, at.intro.left, ...at.fields])).toBeLessThanOrEqual(1);
+      expect(spread([...at.icons, at.intro.right])).toBeLessThanOrEqual(1);
+      // The runbook line, the history policy, Keys and values and More about this question: one style, one edge
+      expect(at.folds.map((f) => f.name)).toEqual(
+        expect.arrayContaining(['Site runbook line', 'Advanced: its history policy', 'Keys and values']),
+      );
+      expect(spread([...at.folds.map((f) => f.left), at.heading])).toBeLessThanOrEqual(1);
+      expect(new Set(at.styles).size).toBe(1);
+    });
+
   test('puts each question’s key path in Keys and values, open in Technical', async ({ page }) => {
     await signIn(page, { detail: 'technical' });
     await go(page, '/site-profile', { detail: 'technical' });

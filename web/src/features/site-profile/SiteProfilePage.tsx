@@ -5,7 +5,6 @@ import {
   Button,
   Card,
   Collapse,
-  Fieldset,
   Group,
   List,
   SimpleGrid,
@@ -39,7 +38,7 @@ import { CATEGORIES, CATEGORY_TEXT, categoryOf, derivedPolicy } from '@/lib/cate
 import { describeError, isApiError } from '@/lib/errors';
 import { glossary } from '@/lib/glossary';
 import { SITE_ICON } from '@/lib/hues';
-import { NativeSelect, NumberInput, Radio, Switch, TextInput } from './controls';
+import { AnswerGroup, FoldToggle, NativeSelect, NumberInput, Radio, Switch, TextInput } from './controls';
 import { MoreQuestions } from './MoreQuestions';
 import { PageIndexNav, PageIndexSelect } from './PageIndex';
 import { ReceiverCards } from './ReceiverCards';
@@ -117,31 +116,19 @@ function Choice({
 
 type Problem = { path: string; message: string } | null;
 
-/**
- * The receiver's category, with what it means, and the history policy override behind "Advanced": the category derives
- * the policy, and an override is for a records system that keeps only the present placement, or a bed manager that
- * wants its history straight.
- */
-function CategoryFields({
-  r,
-  i,
-  err,
-  update,
-}: {
+interface ReceiverAnswer {
   r: SiteReceiver;
   i: number;
   err: (key: string) => string | undefined;
   update: (fn: (r: SiteReceiver) => void) => void;
-}) {
+}
+
+/** The receiver's category, with what it means: systems of the kind, and what Shutter does at one. */
+function CategoryFields({ r, i, err, update }: ReceiverAnswer) {
   const id = (key: string) => `site-receivers-${i}-${key}`;
   const category = categoryOf(r);
   const known = !r.category || (CATEGORIES as string[]).includes(String(r.category));
-  const [shown, setAdvanced] = useState(!!r.history_policy);
-  // A problem with the override opens it, so the alert's link reaches the field
-  const advanced = shown || !!err('history_policy');
   const text = CATEGORY_TEXT[category];
-  const derived = derivedPolicy(category);
-  const policyKnown = !r.history_policy || ['current', 'correct'].includes(String(r.history_policy));
   return (
     <Stack gap={6}>
       <NativeSelect
@@ -167,29 +154,31 @@ function CategoryFields({
         error={err('category')}
       />
       <Text size="sm" id={id('category-meaning')}>
-        {text.examples}. {overtakenLine(category, derived)}
+        {text.examples}. {overtakenLine(category, derivedPolicy(category))}
       </Text>
-      <Group>
-        <Button
-          variant="subtle"
-          size="compact-sm"
-          color="gray"
-          onClick={() => setAdvanced((a) => !a)}
-          aria-expanded={advanced}
-          aria-controls={id('advanced')}
-          leftSection={
-            <IconChevronDown
-              size={14}
-              aria-hidden
-              style={{ transform: advanced ? 'rotate(180deg)' : undefined, transition: 'transform 150ms' }}
-            />
-          }
-        >
-          Advanced: its history policy
-        </Button>
-      </Group>
+    </Stack>
+  );
+}
+
+/**
+ * The history policy override behind "Advanced", the first of the category question's disclosures: the category derives
+ * the policy, and an override is for a records system that keeps only the present placement, or a bed manager that
+ * wants its history straight.
+ */
+function HistoryPolicyFold({ r, i, err, update }: ReceiverAnswer) {
+  const id = (key: string) => `site-receivers-${i}-${key}`;
+  const [shown, setAdvanced] = useState(!!r.history_policy);
+  // A problem with the override opens it, so the alert's link reaches the field
+  const advanced = shown || !!err('history_policy');
+  const derived = derivedPolicy(categoryOf(r));
+  const policyKnown = !r.history_policy || ['current', 'correct'].includes(String(r.history_policy));
+  return (
+    <>
+      <FoldToggle open={advanced} onToggle={() => setAdvanced((a) => !a)} controls={id('advanced')}>
+        Advanced: its history policy
+      </FoldToggle>
       {advanced ? (
-        <div id={id('advanced')}>
+        <div id={id('advanced')} style={{ paddingBlock: 6 }}>
           <NativeSelect
             id={id('history_policy')}
             label="When a failure at it has been overtaken"
@@ -219,7 +208,7 @@ function CategoryFields({
       ) : (
         <div id={id('advanced')} hidden />
       )}
-    </Stack>
+    </>
   );
 }
 
@@ -243,7 +232,7 @@ function ReceiverFields({
   const at = (key: string) => `receivers[${i}].${key}`;
   const category = categoryOf(r);
   return (
-    <Fieldset legend={`Receiver ${i + 1}: ${r.name || 'new'}`}>
+    <AnswerGroup legend={`Receiver ${i + 1}: ${r.name || 'new'}`}>
       <Stack gap="sm">
         <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
           <TextInput
@@ -276,6 +265,7 @@ function ReceiverFields({
         <Question n={2} text="What kind of system is it?" acts />
         <CategoryFields r={r} i={i} err={err} update={update} />
         <QuestionDetails
+          first={<HistoryPolicyFold r={r} i={i} err={err} update={update} />}
           keys={[
             [at('category'), r.category, 'current_state'],
             [at('history_policy'), r.history_policy, 'from its category'],
@@ -393,7 +383,7 @@ function ReceiverFields({
           </Button>
         </Group>
       </Stack>
-    </Fieldset>
+    </AnswerGroup>
   );
 }
 
@@ -416,6 +406,7 @@ function ProfileForm({
       <Section
         id="site-receivers"
         title="Receivers"
+        wideNote
         note="For each system this production feeds. The category sets what an overtaken failure does; the tier sets who releases a write."
         aside={
           <Button
@@ -475,6 +466,7 @@ function ProfileForm({
         <Section
           id="site-history"
           title="Site-wide history policy"
+          wideNote
           note="Read only for a receiver with no category of its own. Give each receiver its category above, and this answer is no longer read."
         >
           <Choice
@@ -506,11 +498,12 @@ function ProfileForm({
         id="site-approvals"
         tour="site-approvals"
         title="Approvals"
+        wideNote
         note="Automatic overwrites the receiver's record, such as a patient's placement, with no person looking. It is still gated, rehearsed and verified."
       >
         <Question n={7} text="How each tier's chains are approved" acts />
         {TIERS.map((tier) => (
-          <Fieldset key={tier} legend={`Tier ${tier}: ${TIER_NAMES[tier]}`}>
+          <AnswerGroup key={tier} legend={`Tier ${tier}: ${TIER_NAMES[tier]}`}>
             <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm">
               {KINDS.map((kind) => {
                 const value = draft.policy?.[tier]?.[kind] ?? '';
@@ -538,7 +531,7 @@ function ProfileForm({
                 );
               })}
             </SimpleGrid>
-          </Fieldset>
+          </AnswerGroup>
         ))}
         <QuestionDetails
           keys={TIERS.map((tier): KeyRow => [`policy.${tier}`, draft.policy?.[tier], 'one approval'])}
