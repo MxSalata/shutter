@@ -1143,14 +1143,14 @@ ClassMethod CaseReceiverCheck(caseId As %String) As %Status
 /// or a case no board could answer, which never reached the gate this round.
 ClassMethod StoppedAfterTheGate(text As %String) As %Boolean
 {
-    Quit (text [ "during a rehearsal") || (text [ "Not committed:") || (text [ "Not verified (unknown)") || (text [ "outcome of the resend is unknown") || (text [ "no usable answer") || (text [ "Error from the write call") || (text [ "no board member could answer")
+    Quit (text [ "during a rehearsal") || (text [ "Not committed:") || (text [ "Not verified (unknown)") || (text [ "outcome of the resend is unknown") || (text [ "no usable answer") || (text [ "Error from the write call") || (text [ "no board member could answer") || (text [ "(FHIR_")
 }
 
 /// The reason code of a stopped case no failing gate check names, from the words of the event that stopped it. A rehearsal
 /// that got no usable answer showed nothing about the action, so it is no refusal, whatever the word rehearsal suggests.
 ClassMethod ReasonFromEvent(text As %String, state As %String) As %String
 {
-    Quit $SELECT(text [ "during a rehearsal": "WRITE_NOT_RELEASED", text [ "FURTHER_MOVEMENT": "FURTHER_MOVEMENT", text [ "no board member could answer": "NO_BOARD_ANSWER", text [ "Error from the write call": "WRITE_OUTCOME_UNKNOWN", text [ "Rejected by": "REJECTED_BY_APPROVER", text [ "no usable answer": "BLOCKED", text [ "rehearsal": "REHEARSAL_WOULD_NOT_APPLY", text [ "refused": "DISPATCH_REFUSED", text [ "Not committed:": "WRITE_NOT_COMMITTED", (text [ "Not verified (unknown)") || (text [ "outcome of the resend is unknown"): "WRITE_OUTCOME_UNKNOWN", text [ "person": "ESCALATED", state = "escalated": "ESCALATED", 1: "BLOCKED")
+    Quit $SELECT(text [ "(FHIR_": "FHIR_" _ $PIECE($PIECE(text, "(FHIR_", 2), ")", 1), text [ "during a rehearsal": "WRITE_NOT_RELEASED", text [ "FURTHER_MOVEMENT": "FURTHER_MOVEMENT", text [ "no board member could answer": "NO_BOARD_ANSWER", text [ "Error from the write call": "WRITE_OUTCOME_UNKNOWN", text [ "Rejected by": "REJECTED_BY_APPROVER", text [ "no usable answer": "BLOCKED", text [ "rehearsal": "REHEARSAL_WOULD_NOT_APPLY", text [ "refused": "DISPATCH_REFUSED", text [ "Not committed:": "WRITE_NOT_COMMITTED", (text [ "Not verified (unknown)") || (text [ "outcome of the resend is unknown"): "WRITE_OUTCOME_UNKNOWN", text [ "person": "ESCALATED", state = "escalated": "ESCALATED", 1: "BLOCKED")
 }
 
 // ---- library, settings, costs ----
