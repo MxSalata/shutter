@@ -35,7 +35,7 @@ the case page (`POST /api/shutter/cases/{id}/escalations` through the API); unti
   namespace-wide purge unless asked for. The feed, records and scenario items (`ADT In`, `ADT to Downstream`,
   `Downstream Out`, `ADT to Records`, `Records Out` and `Scenario Player`) are present but switched off in shape A (the
   installer disables them in `Shutter.Production`), and not added at all in shape B (`InstallInto`).
-- **A new install starts in shadow mode.** Shutter investigates and records what it would propose, and sends no rehearsal, recovery write, resend preview or outage resend, and no escalation email (unless the profile says `"notifications": {"shadow_delivery": "enabled"}`, which lets email go while recovery stays off); the hospital's ordinary feed goes on as before. An approver enables recovery by saving `"recovery": {"mode": "enabled"}` in the site profile, as a step of its own (section 5, step 8): the save releases no plan made before it and sends no email held before it. Settings has "Stop Shutter recovery", for any operator or approver, and the shadow report (`docs/CONTRACTS.md`, 18).
+- **A new install starts in shadow mode.** Shutter investigates and records what it would propose, and sends no rehearsal, recovery write, resend preview or outage resend, and no escalation email (unless the profile says `"notifications": {"shadow_delivery": "enabled"}`, which lets email go while recovery stays off); the hospital's ordinary feed goes on as before. An approver enables recovery by saving `"recovery": {"mode": "enabled"}` in the site profile, as a step of its own (section 5, step 9): the save releases no plan made before it and sends no email held before it. Settings has "Stop Shutter recovery", for any operator or approver, and the shadow report (`docs/CONTRACTS.md`, 18).
 - **A case at a receiver with no API is escalated, never resent.** A case resends only to a receiver whose site profile
   entry describes its API (state, receipt, capabilities and operations paths), and that write is verified in the
   receiver's receipt and history. A ward system that takes HL7 over TCP and keeps no receipts is investigated and
@@ -344,29 +344,29 @@ Shape A:
    `Shutter.Intake.Forwarder.ForwardFor` builds it, as the demo hospital's `Hospital.Process.PASToDownstream` does.
 7. Replay a known failure in a test environment: a case opens in SHUTTER, the evidence shows the message and the
    receiver's state, and the escalation draft names the right team.
-8. Enable recovery as a step of its own, and only once you mean Shutter to write to a receiver. Until then the install
-   stays in shadow mode (section 1), and a site that only investigates can stay there. First, in the test environment:
-   - run the [receiver conformance kit](https://github.com/MxSalata/shutter/blob/main/docs/receiver-conformance.md)
-     against each receiver's test endpoint. It reports what that endpoint demonstrated and enables nothing;
-   - test the stop. With recovery enabled there and a plan waiting, press **Stop Shutter recovery** in Settings: the plan
-     can no longer be approved and nothing is sent, and at a receiver with `engine_resend` an outage's resend can't be
-     approved either. Clearing the stop takes an approver and releases nothing: the case is reinvestigated. The pilot
-     pack has [a stop drill](https://github.com/MxSalata/shutter/blob/main/docs/pilot/07-stop-and-withdraw.md).
-
-   Then an approver turns on **Enable recovery** on the Site profile page (question 14), which saves
-   `"recovery": {"mode": "enabled"}`. A plan made before that save is not released: reject it and reinvestigate the
-   case. Nor does the save send email that shadow mode held: an escalation a person sent in shadow mode reads Not sent
-   until a person sends it again. A site that wants escalation and reminder email while still in shadow mode sets
+8. Before enabling recovery, test in the test environment. Until recovery is enabled the install stays in shadow mode
+   (section 1), and a site that only investigates can stay there. Run the
+   [receiver conformance kit](https://github.com/MxSalata/shutter/blob/main/docs/receiver-conformance.md) against each
+   receiver's test endpoint: it reports what that endpoint demonstrated and enables nothing. Then test the stop: with
+   recovery enabled there and a plan waiting, press **Stop Shutter recovery** in Settings. The plan can no longer be
+   approved and nothing is sent, and at a receiver with `engine_resend` an outage's resend can't be approved either.
+   Clearing the stop takes an approver and releases nothing: the case is reinvestigated. The pilot pack has
+   [a stop drill](https://github.com/MxSalata/shutter/blob/main/docs/pilot/07-stop-and-withdraw.md).
+9. Enable recovery, as a step of its own and only once you mean Shutter to write to a receiver: an approver turns on
+   **Enable recovery** on the Site profile page (question 14), which saves `"recovery": {"mode": "enabled"}`. A plan
+   made before that save is not released: reject it and reinvestigate the case. Nor does the save send email that
+   shadow mode held: an escalation a person sent in shadow mode reads Not sent until a person sends it again. A site
+   that wants escalation and reminder email while still in shadow mode sets
    `"notifications": {"shadow_delivery": "enabled"}` in the profile's JSON (`docs/CONTRACTS.md`, 18).
-9. Watch the first weeks on the Settings and costs page and in the Doctor report (`SELECT Shutter.Setup_Doctor()`). A
-   watched production's failures run in Site policy from the start (`policy` unless the site sets
-   `^Shutter.Config("watchedMode")` to another mode), so there is no mode to switch: the catalogue proposes what it
-   knows, and the shipped release policy asks a person before every resend. Releasing any tier without one is a separate
-   choice in the site profile, made once the catalogue's entries are reviewed.
-   `ok` in the health route says Shutter's production runs, and no more. `receivers_ok` says whether each receiver answered when
-   Shutter last read it, and `watched_ok` whether each watched namespace can still be heard (the alert intake and the forwarder
-   there and enabled). Shutter sends no probe: a receiver that died since its last read reads as it last answered, with the time,
-   so silence is not proof. An outside monitor on `receivers_ok`, `watched_ok` and `last_forward` is still yours to set up.
+10. Watch the first weeks on the Settings and costs page and in the Doctor report (`SELECT Shutter.Setup_Doctor()`). A
+    watched production's failures run in Site policy from the start (`policy` unless the site sets
+    `^Shutter.Config("watchedMode")` to another mode), so there is no mode to switch: the catalogue proposes what it
+    knows, and the shipped release policy asks a person before every resend. Releasing any tier without one is a separate
+    choice in the site profile, made once the catalogue's entries are reviewed.
+    `ok` in the health route says Shutter's production runs, and no more. `receivers_ok` says whether each receiver answered when
+    Shutter last read it, and `watched_ok` whether each watched namespace can still be heard (the alert intake and the forwarder
+    there and enabled). Shutter sends no probe: a receiver that died since its last read reads as it last answered, with the time,
+    so silence is not proof. An outside monitor on `receivers_ok`, `watched_ok` and `last_forward` is still yours to set up.
 
 Shape B: section 4 in place of steps 1, 2 and 6; the rest as above.
 
