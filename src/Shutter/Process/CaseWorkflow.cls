@@ -2381,12 +2381,6 @@ Storage Default
 <Value name="43">
 <Value>ConvenedBy</Value>
 </Value>
-<Value name="48">
-<Value>ReopenedBy</Value>
-</Value>
-<Value name="49">
-<Value>LiveAllowed</Value>
-</Value>
 <Value name="44">
 <Value>BoardsPerMinute</Value>
 </Value>
@@ -2398,6 +2392,15 @@ Storage Default
 </Value>
 <Value name="47">
 <Value>LeadSignature</Value>
+</Value>
+<Value name="48">
+<Value>ReopenedBy</Value>
+</Value>
+<Value name="49">
+<Value>LiveAllowed</Value>
+</Value>
+<Value name="50">
+<Value>ApprovalWaitSeconds</Value>
 </Value>
 </Data>
 <DefaultData>CaseWorkflowDefaultData</DefaultData>
