@@ -4,6 +4,44 @@ Versions follow `major.minor.patch`: a minor release for new features, a patch r
 updates. The version in both `module.xml` files (the one the package manager publishes) is always the version of the
 GitHub tag on the same commit; `scripts/check-versions.py` checks every place the version is written.
 
+## 1.4.5 (13 November 2026)
+
+A case leads with what it proposes and opens its review in one press, the Cases list can hide what is closed, and the
+Scenarios page says how each run executes.
+
+- **The plan says its action first.** A waiting case's action button, its copy in the tab bar and "What needs you now"
+  open the review of the exact plan from any tab, named for what it does ("Approve the resend"). The review leads with
+  the plan's action in plain words, read from the plan's own operation, says what releasing it is expected to leave, and
+  keeps the plan digest, the case version and Cancel in view at the confirming press. Opening, switching and cancelling
+  send nothing; the confirming press sends the digest and version the review opened on, as before.
+- **Hide closed on Cases.** `GET /cases` takes `open=1`, which leaves out resolved, blocked, escalated and failed cases in
+  the query itself, so the total and the pages count the same rows. The Cases page's Hide closed switch sends it and
+  keeps it in the address. The closed-outcome tiles say when they counted only the 100 newest cases, and the Failed tile
+  says "at most" when more failed.
+- **An empty Cases list fits the install.** The words come from the trial flag, the health report and the caller's
+  rights, never from a name: the trial and a demo offer a scenario, a site says what it watches and points at Health, and
+  a site that put Shutter's items in its own production says that a case opens when its HL7 process or a forwarder
+  reports a failed delivery. CONTRACTS 1.59 says all of this.
+- **The Source message link opens the message.** Every link to the Management Portal's message page names
+  `Ens.MessageHeader` before the header's id; the page answered ERROR #5809 without it. The agent runs' `messageLink` in
+  `GET /cases/{id}/runs` comes from one class method, and a link from a recording gains the class before it is shown.
+- **Scenarios: each run mode in its own card.** Board, Single investigator and Rules only show their approved words
+  without a choice or a hover, how a run executes here is said apart from who proposes, and a finished run leads to its
+  own case. Home starts a short route on S2's card in Board mode, then S3 and S8, with S20 optional.
+- **Provenance in plain words.** The trial's runs say "Browser recording: no new inference", a replay on IRIS says it
+  is recorded, and a run is called live only when its own case's runs show a model call. S8's "every check passed" lines
+  say that Rules only is exempted there on purpose and that the gate holds the resend on a real case.
+- **Site profile.** The questions line up, the folds share one style, and the Orders and results card says what a case
+  gets and how the outage resend works.
+- **Repository checks on every push.** The credentials scan, the version check, the ASCII check of both module files
+  and the dash check of the files and pushed commit messages run in a workflow of their own,
+  `.github/workflows/repository-checks.yml`, on every push to main (documentation-only pushes included) and on pull
+  requests; CI calls the same workflow and still waits for it.
+- **Docs.** The README puts S8 side by side under the opening, one block for judges and Try it after the results, and
+  gives each figure its cases, runs and release; it ends with a note on how Shutter was developed. The install guide
+  makes enabling recovery its own step after the conformance and stop tests; the safety page, first steps, limits and the
+  AI Hub page say which email shadow mode holds and that runs started together can pass a spending cap a little.
+
 ## 1.4.4 (11 November 2026)
 
 Anyone on the online demo can play the scenarios now, from their recordings.
