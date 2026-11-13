@@ -213,6 +213,27 @@ describe('HomePage', () => {
     expect(await screen.findByText('1 needs a person')).toBeInTheDocument();
   });
 
+  it('says "at most" when more cases failed than the count read, as the Failed tile does', async () => {
+    server.use(
+      http.get('/api/shutter/cases', ({ request }) => {
+        const state = new URL(request.url).searchParams.get('state');
+        if (state !== 'failed')
+          return HttpResponse.json({ items: [], total: state === 'escalated' ? 120 : 0 });
+        // 150 failed, the newest 100 read, three of those given up: older ones given up cannot be taken off
+        return HttpResponse.json({
+          items: Array.from({ length: 100 }, (_, i) => ({
+            caseId: `C-F${i}`,
+            state: 'failed',
+            disposition: i < 3 ? 'abandoned' : '',
+          })),
+          total: 150,
+        });
+      }),
+    );
+    renderHome();
+    expect(await screen.findByText('At most 267 need a person')).toBeInTheDocument();
+  });
+
   it('says nothing beside Cases when no case needs a person', async () => {
     server.use(http.get('/api/shutter/cases', () => HttpResponse.json({ items: [], total: 0 })));
     renderHome();

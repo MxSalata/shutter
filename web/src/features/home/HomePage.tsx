@@ -221,13 +221,14 @@ function SectionCard({ item }: { item: SectionItem }) {
   );
 }
 
-/** Nothing at 0 or while it loads, as the navigation's own count. */
+/** Nothing at 0 or while it loads, and "at most" where the failed part is an upper bound, as the navigation's own count. */
 function NeedAPerson() {
-  const n = useNeedAPerson();
-  if (!n) return null;
+  const need = useNeedAPerson();
+  if (!need?.count) return null;
+  const { count: n, atMost } = need;
   return (
     <Badge size="sm" color="yellow" variant="light">
-      {n} {n === 1 ? 'needs' : 'need'} a person
+      {`${atMost ? 'At most ' : ''}${n} ${n === 1 ? 'needs' : 'need'} a person`}
     </Badge>
   );
 }

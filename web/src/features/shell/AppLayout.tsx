@@ -94,20 +94,22 @@ function RecoveryBannerSlot() {
 
 /**
  * The count beside Cases: how many cases need a person, from the same queries as the Cases page's tiles. Nothing at
- * 0 or while any of them is still loading, so it never shows a partial sum.
+ * 0 or while any of them is still loading, so it never shows a partial sum. Where the failed part is an upper bound
+ * (more failed cases than the count read), it says "at most", as the Failed tile does.
  */
 export function NavCount() {
-  const n = useNeedAPerson();
-  if (!n) return null;
+  const need = useNeedAPerson();
+  if (!need?.count) return null;
+  const { count: n, atMost } = need;
   return (
     <Badge
       size="sm"
       color="yellow"
       variant="light"
       className="nav-count"
-      aria-label={`${n} ${n === 1 ? 'case needs' : 'cases need'} a person`}
+      aria-label={`${atMost ? 'At most ' : ''}${n} ${n === 1 ? 'case needs' : 'cases need'} a person`}
     >
-      {n}
+      {atMost ? `at most ${n}` : n}
     </Badge>
   );
 }
