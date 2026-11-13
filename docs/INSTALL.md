@@ -143,7 +143,10 @@ auto-start production. The operator, approver, demo, judge and forwarder roles a
 (`Shutter_Store`; all but the forwarder also `Shutter_Index`, `Shutter_Msg`, `Shutter_Bridge` and `Ens_Config`, and the one table outside Shutter's schemas the cases list reads, `Ens.MessageHeader`; the uninstall revokes it): the API
 reads without privilege checks, but a cached query that has to be compiled again in the caller's process is checked
 as the caller. Once the demo hospital is installed, the operator and approver roles also read its databases. With `demo=1` it also creates the demo users, the demo receiver's resource, role, user and
-`/downstream/api`, the `DownstreamAPI` credential and the feed and demo items.
+`/downstream/api`, the `DownstreamAPI` credential and the feed and demo items, and the test FHIR server: the resources
+`FHIRFacade_API` and `FHIRFacade_Admin`, the role `Shutter_FHIRFacadeClient`, the user `fhir-client`, the web application
+`/fhir-facade/r4` and the `FHIRFacade` credential. No install places the FHIR items; a site places them with the steps of
+section 12.
 
 Environment variables read when the installer runs. Eleven of them, `SHUTTER_LIVE`, `SHUTTER_LIVE_SCENARIOS`, `SHUTTER_DEMO_PORTAL`,
 `SHUTTER_DAILY_BUDGET_USD`, `SHUTTER_JUDGE_BUDGET_USD`, `SHUTTER_DEMO_BUDGET_USD`, `SHUTTER_DEMO_BUDGET_PERIOD`,
@@ -1075,6 +1078,24 @@ listeners on the loopback address of a test instance:
 - **Every receiver behaviour measured is a fake's.** No real laboratory system, order communications system or integration
   engine has been tried, and every reply wording in the measurements was made up for the test. What a real system answers
   to a duplicate is the site's word in its profile and nobody's measurement.
+
+## 12. A FHIR R4 receiver
+
+One FHIR R4 receiver per install can be repaired over FHIR: one ward move on an existing, in-progress Encounter at
+InterSystems IRIS for Health's own FHIR R4 server, off until the entry's `recovery_enabled` is set. The entry, what stops a
+case and the limits are in [fhir.md](readme/fhir.md). The site steps:
+
+```
+# 1. The entry: GET /api/shutter/site-profile, add the receiver entry of fhir.md with "recovery_enabled": false, PUT it back.
+# 2. In a terminal, in Shutter's namespace: the credential and the four items.
+Do ##class(Ens.Config.Credentials).SetCredential("FHIRServer", "<user>", "<password>", 1)
+Write ##class(Shutter.FHIR.Install).PlaceItems("<host>", "<port>", "FHIRServer", "<TLS configuration, or empty>").%ToJSON()
+# 3. The conformance run, against a TEST instance of the same server software: it creates and deletes resources.
+FHIR_PASSWORD=<password> python3 tests/conformance/fhir_conformance.py --base https://<test host>/<base> --target iris --user <user> --proof proof.json
+Do $SYSTEM.Status.DisplayError(##class(Shutter.Store.FHIRProof).ImportFile("<receiver name>", "<path>/proof.json"))
+# 4. Confirm (items_problem empty, endpoints_agree true, proof "matches"), then PUT the entry again with "recovery_enabled": true.
+Write ##class(Shutter.FHIR.Install).Doctor().%ToJSON()
+```
 
 ## The publisher: Shutter's read-only tools for an MCP client
 

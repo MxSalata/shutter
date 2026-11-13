@@ -4,6 +4,8 @@ Before a site adds a recovery API to a receiver's profile, and after that receiv
 
 The kit answers that and nothing more. It does not certify a supplier, does not enable recovery and changes nothing in Shutter: a report has no authority over the gate, and no route or profile field reads one. A pass describes one endpoint during one run.
 
+The kit does not cover FHIR. A FHIR server is measured with `tests/conformance/fhir_conformance.py`, whose `--proof` file is what the FHIR gate's capability check reads ([fhir.md](readme/fhir.md)).
+
 ```
 python3 scripts/receiver-conformance.py init --run-id SITE-TEST-01 \
     --base-url https://receiver-test.example.invalid/downstream/api \

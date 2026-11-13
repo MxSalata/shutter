@@ -28,6 +28,10 @@ Everything is played against the demo receiver or a stub listener; what a real r
 | The same operation comes again with other content while the plan waits | **Stops and flags.** The case blocks and says the content changed; nothing is written | [edge rows](https://github.com/MxSalata/shutter/blob/main/tests/e2e/edge_rows_check.py), [edge unit tests](https://github.com/MxSalata/shutter/blob/main/tests/unit/Shutter/Test/EdgeRows.cls) | A bed-only change blocks too, though the digest leaves the bed out. The headline gives the reason; the reason code only says handed to a person. The next correction opens its own case with no link to the first |
 | The message's text would now map to another ward | **Handled.** The operation a case writes is built from the case's own fields and the digest its plan bound, not re-read from the message | [edge unit tests](https://github.com/MxSalata/shutter/blob/main/tests/unit/Shutter/Test/EdgeRows.cls) | A mapping change before the case opened |
 | A note with a raw line break, or a second PID | **Stops and flags.** Validation refuses the message, the case blocks, and nothing is written | [edge rows](https://github.com/MxSalata/shutter/blob/main/tests/e2e/edge_rows_check.py), [edge unit tests](https://github.com/MxSalata/shutter/blob/main/tests/unit/Shutter/Test/EdgeRows.cls) | These two shapes only |
+| The Encounter changed between the approval and the write (412) | **Stops and flags:** the approval is void; fresh evidence and a new approval, never a retry | `Shutter.Test.FHIRExecute`, `Shutter.Test.FHIRFlow` | A re-plan in the same case |
+| The answer to a FHIR update was lost | Verified from the history, or left unknown | `Shutter.Test.FHIRJudge`, `Shutter.Test.FHIRVerify` | A history that lost a version |
+| A later move at the FHIR receiver | **Stops and flags** | `Shutter.Test.FHIRGate` | |
+| The receiver ignored If-Match and overwrote another change | Never verified: a person checks | `Shutter.Test.FHIRVerify` | An overwritten version the history also hides |
 
 ## What it doesn't do yet
 
@@ -39,6 +43,7 @@ Everything is played against the demo receiver or a stub listener; what a real r
 - It trusts the receiver's API: an ignored condition, a gateway's page or a partial history isn't detected.
 - On the alert route it reads the alert's words and the session's first HL7 message, and doesn't see a hand resend.
 - When no agent can answer, a case the catalogue gives to the board or a person goes to a person with no plan; others take the rules path, where a person still approves.
+- Over FHIR it makes one kind of change only, and a returned history without a next link is not proof that no version was lost.
 - Failover, mirrors and restores are untested. "Stop Shutter recovery" stops Shutter's own recovery calls, not the hospital's feed or a call already on its way.
 
 **Check it yourself:** the [scenarios](readme/scenarios.md) name their modes; run them with `tests/e2e/scenario_check.py --url "$IRIS_URL" --approve S4 S7 S15`, and the approval attacks with `tests/e2e/boundary_check.py --url "$IRIS_URL"`.
