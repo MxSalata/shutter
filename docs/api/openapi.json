@@ -750,10 +750,7 @@
             "in": "query",
             "required": false,
             "schema": {
-              "type": "string",
-              "enum": [
-                "1"
-              ]
+              "type": "string"
             },
             "description": "1 leaves out the closed cases (resolved, blocked, escalated or failed), so the total and the pages are of the open cases; any other value filters nothing (v1.59)."
           },

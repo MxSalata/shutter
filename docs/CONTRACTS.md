@@ -462,15 +462,19 @@ been searched."); its Failed tile takes the abandoned cases off among the 100 ne
 when more than that failed.
 
 **What an empty list says** (v1.59; no new field). With no filter on and no case, the Cases page chooses its words from
-what the install says of itself, never from its address or the signed-in name: the trial (the build, or `?trial`) offers a
+what the install says of itself, never from its hostname or the signed-in name: the trial (the build, or `?trial`) offers a
 recorded scenario; a demo (`GET /health`, `demo` true) offers a scenario, to someone `GET /me` says may run one
 (`can.scenarios`), and otherwise says who can; a site (`demo` false) with a namespace in the report's
 `watched_namespaces` that is `onboarded`, not `removed` and has its `forwarder` (11.1) says that no failed delivery has
 reached Shutter yet, names what it watches and points at Health, naming instead a namespace whose row is not `ok`; a site
-with no such namespace says that no watched namespace reports its failures here, with the Watched namespaces page for
-someone who may configure the site (`can.configure`) and Health for anyone else; and when the report could not be read,
-or has no `demo` or no `watched_namespaces` (a server before v1.42), it says only "No cases yet." and points at Health. A
-site is never told to play a scenario. The page asks for the report only when its list is empty.
+with no such namespace whose `shutter_production` is not `Shutter.Production` (shape B, 12: Shutter's items in the site's
+own production) says that Shutter's items run there and that a case opens when its HL7 process or a forwarder reports a
+failed delivery, and points at Health, never at the Watched namespaces page; any other site with no such namespace says
+that no watched namespace reports its failures here, with the Watched namespaces page for someone who may configure the
+site (`can.configure`) and Health for anyone else; and when the report could not be read, or has no `demo` or no
+`watched_namespaces` (a server before v1.42) and names no production of the site's, it says only "No cases yet." and
+points at Health. A site is never told to play a scenario. The page asks for the report only when its list is empty, and
+keeps its loader until the report answers.
 
 **Writes and verification on the list** (v1.24). Each `GET /cases` item carries `writes`, the number of its attempts that
 reached the receiver and may have landed (outcome `applied`, `already_committed` or `uncertain`, as the case page's receipt
@@ -2777,7 +2781,7 @@ No message content is copied: the rows hold ids, codes, the body's class and the
   closed state; the trial's API takes the same parameter. A closed outcome chosen where there are more than 100 cases
   says how many match "among the 100 most recent cases" and that older cases have not been searched, the Failed tile
   reads "at most" when more than 100 cases failed, and an empty list's words come from the install's own report
-  (`demo`, `watched_namespaces`) and the caller's rights, with no new field (5).
+  (`demo`, `watched_namespaces`, `shutter_production`) and the caller's rights, with no new field (5).
 
 - v1.58, 11 Nov 2026 (for 1.4.4, so the public demo's account plays the scenarios): the role `Shutter_Demo` holds
   `Shutter_Scenarios` and still neither `Shutter_ScenarioReset` nor `Shutter_LiveAgents`, so it runs the scenarios and
