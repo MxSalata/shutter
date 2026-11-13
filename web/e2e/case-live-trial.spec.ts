@@ -285,8 +285,13 @@ test.describe(`the live case page against a v1.35 server ${area.tag}`, () => {
       .getByRole('region', { name: 'Outcome' })
       .getByRole('button', { name: 'Outcome', exact: true })
       .click();
+    // One press from any tab: the review of the exact plan, named for its action; Cancel comes back to the button
     await action.click();
-    await expect(page.getByRole('heading', { name: 'Approval', exact: true })).toBeFocused();
+    const review = page.getByRole('dialog', { name: /^Approve the resend: plan v\d+$/ });
+    await expect(review.getByRole('button', { name: 'Approve the resend' })).toBeVisible();
+    await review.getByRole('button', { name: 'Cancel' }).click();
+    await expect(review).toBeHidden();
+    await expect(action).toBeFocused();
     // The strip's Evidence stage opens the Evidence tab
     await page.getByRole('button', { name: 'Evidence: done, show the evidence' }).click();
     await expect(page.getByRole('tab', { name: 'Evidence' })).toHaveAttribute('aria-selected', 'true');
