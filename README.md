@@ -132,7 +132,7 @@ The specialists run in parallel. Their typed tools read the sealed evidence and 
 - **Site policy:** recognised failures settled by written policy without a model; unresolved ones go to the board. The default for a watched production's failures.
 - **Rules only:** the plain-resend baseline, subject to the whole gate, except in a recorded scenario, where one catalogue check is lifted so that S8 can show what a plain resend writes.
 
-The board's measured advantage is **not better decisions than one agent**. The full twelve-case comparison tied them. What the board supplies is separate review perspectives and an explicit record of disagreement for the person deciding.
+The board's measured advantage is **not better decisions than one agent**. In the release 1.4.3 rerun (12 cases, 36 runs in each of the two modes) the board equalled the single investigator, 0.167 each as settled with no wrong write, at about 3.8 times the cost: 0.480 against 0.127 USD a run. What the board supplies is separate review perspectives, kept dissent and reasoning a person can review. The single investigator is the economical choice.
 
 Also included: **Ask Shutter** about the page on screen, a read-only production review, and audited read-only MCP access to cases, evidence and plans.
 
@@ -140,39 +140,54 @@ Also included: **Ask Shutter** about the page on screen, a read-only production 
 
 ## What has been measured
 
-### The full comparison: release 1.0.0
+Every figure below names its cases, its runs and its release. The cases are synthetic, and nothing here was measured at a hospital.
 
-Twelve synthetic held-out cases, three runs of each case in each mode, live agents on `claude-opus-5-5`. Cases, expected outcomes and scoring were hashed before the runs and published with them, but this was not an independently sealed evaluation.
+### The latest rerun: release 1.4.3, 12 cases, three runs each
 
-Loss runs from **0 for a right outcome to 20 for a wrong write executed**.
+On 11 November 2026 all twelve held-out cases were played again on release 1.4.3: three runs of each case in each mode, the agent modes live on `claude-opus-5-5`, on AI Hub build 109. **It is a regression rerun on cases that have influenced fixes since release 1.0.0, not a new held-out test,** and the instance was upgraded in place, not installed fresh. No later release has been rerun.
 
-| Mode | Mean loss | Wrong writes executed | USD per run |
+Loss runs from **0 for a right outcome to 20 for a wrong write executed**. It is not a recovery rate: in all three board runs of F08 the answer graded right and the case still ended blocked for a person, although the receiver had committed the operation.
+
+| Mode, release 1.4.3, with the cases and runs scored | Mean loss | Wrong writes executed | USD per run |
+| --- | ---: | ---: | ---: |
+| Board: 12 cases, 36 runs | 0.167 | 0 | 0.480 |
+| Single investigator: 12 cases, 36 runs | 0.167 as settled, 0.667 by the unchanged grader | 0 | 0.127 |
+| Site policy with a live board: 10 cases, 29 runs (not F03 or F12) | 0.900 | 0 | 0.040 |
+| Rules only: 12 cases, 36 runs | 4.000 | 0 | 0 |
+| Always escalating, computed once per case: 12 cases, not played | 1.250 | 0 | 0 |
+
+**No mode executed a wrong write in this rerun:** the gate stopped the ones Site policy and Rules only proposed. The board, and the single investigator as settled, graded as on release 1.0.0 and made the same 12 writes, all verified. The single investigator's 0.667 counts F08's three runs as false closures (0.500 on 1.0.0, where two runs took that path); the fair-test page gives both readings, and no blind re-grade was done this time.
+
+### The original full comparison: release 1.0.0, 12 cases, 36 runs in each mode
+
+Twelve synthetic held-out cases, three runs of each case in each mode, live agents on `claude-opus-5-5`, played on 6 and 8 November 2026. Cases, expected outcomes and scoring were hashed before the runs and published with them, but this was not an independently sealed evaluation. **These figures are historical:** the wrong writes in this table were executed on release 1.0.0, and the 1.4.3 rerun above executed none.
+
+| Mode, release 1.0.0 | Mean loss | Wrong writes executed, of 36 runs | USD per run |
 | --- | ---: | ---: | ---: |
 | Board | 0.167 | 0 | 0.48 |
 | Single investigator | 0.167 or 0.500, depending on the F08 grading described below | 0 | 0.13 |
 | Site policy, tested without a model key | 3.500 | 3 | 0 |
 | Rules only | 5.000 | 3 | 0 |
-| Always escalating, computed once per case | 1.250 | 0 | 0 |
+| Always escalating, computed once per case, not played | 1.250 | 0 | 0 |
 
 Board and single investigator each produced 30 right and 6 defensible answers out of 36 runs. Treating defensible answers as free gives both a mean loss of 0.000. The single investigator scores 0.500, not 0.167, if two F08 runs are graded on their second plan. While their first plan, a resend, waited for approval, the receiver committed the slow original delivery; the gate voided the approval, nothing was sent, and the case closed on the receipt. The unchanged grader reads the second plan; this page and a blind re-grade read the first ([the one disagreement](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#the-one-disagreement-and-how-it-was-settled)).
 
 Site policy's three board cases had no model key and fell back to a plain resend. Its row is not a measurement of Site policy with a live board.
 
-**What the agents added over no model:** both agent modes lost 0.167, against 1.250 for always escalating and 3.500 for Site policy without a key. On F04 and F09 the catalogue's match pointed the wrong way; Site policy followed it, and the agents read the entry against the evidence and escalated.
+**What the agents added over no model, on release 1.0.0:** both agent modes lost 0.167, against 1.250 for always escalating and 3.500 for Site policy without a key. On F04 and F09 the catalogue's match pointed the wrong way; Site policy followed it, and the agents read the entry against the evidence and escalated.
 
 ### Follow-up evidence, with its scope
 
 | Evidence | What it establishes |
 | --- | --- |
-| **Release 1.3.2, F03 and F07** | Both cases closed correctly in every board and single-investigator run, three runs each, with F07 using the shipped `show` setting |
-| **Release 1.4.3, all twelve cases rerun** | Board 0.167 and single investigator 0.167 as settled, both as on 1.0.0, with the same 12 writes, all verified. By the unchanged grader the single investigator is 0.667 (0.500 on 1.0.0), counting F08's three runs as false closures; the fair-test page gives both, and no blind re-grade was done this time. Site policy with a live board 0.900 on the ten cases played (not F03 or F12); Rules only 4.000. No mode executed a wrong write: the gate stopped the ones Site policy and Rules only proposed. A regression rerun on cases that influenced fixes, not a new held-out test |
-| **Catalogue demonstration, S1 to S10 and S13** | The board reached all 11 expected outcomes, live and in replay, with the catalogue's preferred outcome supplied to it |
+| **Release 1.3.2, F03 and F07: 2 cases, 6 runs in each agent mode** | Both cases closed correctly in every board and single-investigator run, three runs each, with F07 using the shipped `show` setting |
+| **Catalogue demonstration, S1 to S10 and S13: 11 scenarios, recorded live on 25 October 2026, before release 1.0.0** | The board reached all 11 expected outcomes, live and in replay, with the catalogue's preferred outcome supplied to it |
 
 **Sonnet 5.5 specialists with an Opus 5.5 coordinator: the same grades as the all-Opus board in all 36 runs of the twelve cases on release 1.1.1, at 0.331 USD a run against 0.527.** Both boards graded 0.667 there (0.500 with F03 settled as right), not 0.167, because the 1.1.x gate held two right plans, F03 and F07.
 
 Separately, on release 1.0.0, an all-Sonnet 5.5 board reached the same grades as the Opus 5.5 board in all 36 runs of the full comparison, at 0.24 USD per run against 0.48; its plans differed only on F09, where both write nothing.
 
-[Full comparison, scoring and every run](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md) · [F03 and F07 on 1.3.2](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#release-132-f03-and-f07-live) · [All twelve on 1.4.3](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#release-143-all-12-cases-rerun) · [What the catalogue demonstration does and does not show](https://github.com/MxSalata/shutter/blob/main/docs/readme/evaluation.md)
+[All twelve on 1.4.3](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#release-143-all-12-cases-rerun) · [Full comparison on 1.0.0, scoring and every run](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md) · [F03 and F07 on 1.3.2](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#release-132-f03-and-f07-live) · [What the catalogue demonstration does and does not show](https://github.com/MxSalata/shutter/blob/main/docs/readme/evaluation.md)
 
 <a id="documents"></a>
 
@@ -342,7 +357,7 @@ Each technology has a job in the workflow.
 - **Large incidents need a full review.** One approval binds every chain, although the Workflow task lists only those fitting its 2,000-character message. The incident page has the full set. Complete release at 1,000 failures has not been measured.
 - **Failover, mirrors and backup restoration are untested.**
 - **FHIR R4 is in development, not supported.** Some components are present and tested; no case uses them yet.
-- **The catalogue guides the agents.** In the scenario demonstration each agent is given the matching entry and its preferred outcome, and the coordinator took it in 24 of 25 recorded plans. The held-out cases are the test of judgement.
+- **The catalogue guides the agents.** In the scenario demonstration each agent is given the matching entry and its preferred outcome, and the coordinator took it in 24 of the 25 board plans recorded between 25 October and 1 November 2026, before release 1.0.0. The held-out cases are the test of judgement.
 
 [Every limit, with effect, workaround and status](https://github.com/MxSalata/shutter/blob/main/docs/readme/limits.md) · [Failure scenarios and their boundaries](https://github.com/MxSalata/shutter/blob/main/docs/edge-cases.md) · [What happens when a model fails](https://github.com/MxSalata/shutter/blob/main/docs/readme/model-fails.md)
 
