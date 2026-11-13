@@ -48,17 +48,11 @@ There are two recovery paths, with different guarantees:
 - **Case recovery:** a conditional write through the receiver's API, verified in its receipt and history.
 - **Outage recovery:** stored HL7 messages resent through the engine, completed in the engine and settled by the receiver's declared duplicate handling. This is not receiver-side verification.
 
-**Judge the complete workflow**
+## For judges
 
-- **Watch:** the [13-minute demo video](https://youtu.be/oGW7u9RKf9M) on YouTube, or [download the MP4](https://github.com/MxSalata/shutter/releases/download/v1.4.4/shutter-demo.mp4) (captioned, no sign-in): recorded live on the online demo, from an escalated case to an approved resend verified at the receiver.
-- **Try:** S2, S3 and S8 in the trial, below: a verified recovery, a delivery the receiver already had, and an escalation with 0 writes.
-- **Inspect:** S2's receipt and history on its case, then S8's **Message trace**, the agents' steps in IRIS's Visual Trace. In the trial that trace is a screenshot of S8's; on IRIS every case opens its own session.
-- **Know the mode:** the trial plays recordings in your browser; the online demo runs on real IRIS, where the `demo` account replays the recorded agents and the judges' account calls them live; your machine runs either.
-- **The contest's workflow in code:** [CaseWorkflow](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Process/CaseWorkflow.cls) runs the case; the [AI Hub agents](https://github.com/MxSalata/shutter/tree/main/src/Shutter/Agent), three specialists and a [coordinator](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Agent/Coordinator.cls), read the sealed evidence; the coordinator calls [SubmitPlan](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Tools/SubmitPlan.cls); the [gate](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Operation/Gate.cls) checks the plan; an IRIS Workflow task takes the approval; one conditional write follows, and the [verifier](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Operation/Verify.cls) reads the receiver's receipts and history.
+**Start here: about three minutes, nothing to install and no key.**
 
-<a id="for-judges"></a>
-
-**For judges: start here, about three minutes, nothing to install and no key.**
+**Know the mode:** the trial plays recordings in your browser; the online demo runs on real IRIS, where the `demo` account replays the recorded agents and the judges' account calls them live; your machine runs either ([Try it](https://github.com/MxSalata/shutter#try-it)).
 
 Open the [trial](https://mxsalata.github.io/shutter/), choose **Explore on my own**, then **Scenarios**. Under **Run mode**, choose **Board**. Use **Run** on each scenario's row under **Every scenario**:
 
@@ -78,6 +72,12 @@ Then visit the [online demo](https://shutter.mxsalata.com), a fictional hospital
 The demo resets hourly. Live spending is capped at 5 USD an hour and 15 USD a day. All judges sign in to the one judges' account, so they share its 2 USD an hour. When that is spent, live runs are refused until the next hour, and the `demo` account still plays the scenarios from their recordings. Shutter checks its caps as a run starts, against the recorded spend plus an estimate for every run in flight, so runs started at the same moment can pass a cap a little.
 
 **Optional comparison:** run S8 in **Rules only**. In a recorded scenario played in Rules only, the gate deliberately lifts one check, `ENTRY_NOT_NAMED_WRITE`, which blocks a write that names no catalogue entry where the matched entry calls for no resend. S8 is built to show what that lets through: WARD-B overwrites WARD-C. Every other check still runs. The trial's recorded case, C-000021, is already approved and written. A real case gets the whole gate, which holds that resend. This is a demonstration of a plain resend's consequence, not evidence that AI alone prevents it.
+
+**Then, to judge the complete workflow, as time allows:**
+
+- **Watch:** the [13-minute demo video](https://youtu.be/oGW7u9RKf9M) on YouTube, or [download the MP4](https://github.com/MxSalata/shutter/releases/download/v1.4.4/shutter-demo.mp4) (captioned, no sign-in): recorded live on the online demo, from an escalated case to an approved resend verified at the receiver.
+- **Inspect:** S2's receipt and history on its case, then S8's **Message trace**, the agents' steps in IRIS's Visual Trace. In the trial that trace is a screenshot of S8's; on IRIS every case opens its own session.
+- **The contest's workflow in code:** [CaseWorkflow](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Process/CaseWorkflow.cls) runs the case; the [AI Hub agents](https://github.com/MxSalata/shutter/tree/main/src/Shutter/Agent), three specialists and a [coordinator](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Agent/Coordinator.cls), read the sealed evidence; the coordinator calls [SubmitPlan](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Tools/SubmitPlan.cls); the [gate](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Operation/Gate.cls) checks the plan; an IRIS Workflow task takes the approval; one conditional write follows, and the [verifier](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Operation/Verify.cls) reads the receiver's receipts and history.
 
 ## How it works
 
