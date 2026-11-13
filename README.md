@@ -50,7 +50,7 @@ There are two recovery paths, with different guarantees:
 
 **Judge the complete workflow**
 
-- **Watch:** the [13-minute demo video](https://youtu.be/oGW7u9RKf9M) on YouTube, or [download the MP4](https://github.com/MxSalata/shutter/releases/download/v1.4.4/shutter-demo.mp4) (captioned, no sign-in): a live run on the online demo, from an escalated case to an approved resend verified at the receiver.
+- **Watch:** the [13-minute demo video](https://youtu.be/oGW7u9RKf9M) on YouTube, or [download the MP4](https://github.com/MxSalata/shutter/releases/download/v1.4.4/shutter-demo.mp4) (captioned, no sign-in): recorded live on the online demo, from an escalated case to an approved resend verified at the receiver.
 - **Try:** S2, S3 and S8 in the trial, below: a verified recovery, a delivery the receiver already had, and an escalation with 0 writes.
 - **Inspect:** S2's receipt and history on its case, then S8's **Message trace**, the agents' steps in IRIS's Visual Trace. In the trial that trace is a screenshot of S8's; on IRIS every case opens its own session.
 - **Know the mode:** the trial plays recordings in your browser; the online demo runs on real IRIS, where the `demo` account replays the recorded agents and the judges' account calls them live; your machine runs either.
