@@ -268,43 +268,31 @@ The failure census can compare watched failures with opened cases. A redacted ca
 
 <a id="documents"></a>
 
-## Documents: MDM exceptions without a blind resend
+## Documents and pathology: no agent decides, and no case resends
 
-Where document handling is switched on in both places, the receiver's site profile entry and its source's Shutter Forwarder, a failed **MDM^T01 to T11**, including **MDM^T02**, becomes a document exception at any size: the Forwarder posts the document's metadata, not the message, so the ordinary 2 MB forwarding limit is lifted. So does an **ORU^R01** with an OBX whose OBX-2 says ED or RP; a report sent as Base64 under TX or ST takes the ordinary path.
+These failures sit outside patient movements. In both kinds no agent is convened and the case itself resends nothing: a person decides.
 
-The case shows the document's identity, status and chain for a person to review. **No agent runs, the case resends nothing, and Shutter keeps no copy of the message.** A drafted email supports the handoff; a draft is not proof that anyone was notified.
+### Documents: MDM exceptions without a blind resend
 
-**MDM^T02 with Base64 documents:** the case reads the document's identity, not its content: the document number, the parent, every PID-3 identifier, the statuses and the delivery, and what the message store holds for that document. The Base64 document itself stays in the source's message store.
+Where document handling is switched on in both places, the receiver's site profile entry and its source's Shutter Forwarder, a failed **MDM^T01 to T11**, including **MDM^T02**, becomes a document exception at any size: the Forwarder posts the document's metadata, not the message, so the ordinary 2 MB forwarding limit is lifted. So does an **ORU^R01** with an OBX whose OBX-2 says ED or RP; a report sent as Base64 under TX or ST takes the ordinary path. Without a document profile, a failed MDM gets the ordinary case instead, with the message copied into Shutter's store, and one over 2 MB gets no case.
 
-Without a document profile, a failed MDM gets the ordinary case instead, with the message copied into Shutter's store, and one over 2 MB gets no case.
-
-
-[Document exceptions and their contract](https://github.com/MxSalata/shutter/blob/main/docs/CONTRACTS.md#112-document-exceptions)
+The case shows the document's identity, status and chain for a person to review, never its content: the document number, the parent, every PID-3 identifier, the statuses and the delivery, and what the message store holds for that document. Shutter keeps no copy of the message: an **MDM^T02's Base64 document** stays in the source's message store. A drafted email supports the handoff; a draft is not proof that anyone was notified.
 
 <a id="pathology"></a>
 
-## Pathology: ORU^R01 results, findings and outage recovery
+### Pathology: ORU^R01 results, findings and outage recovery
 
-Orders and results have their own handling, not a patient-movement screen with a different label.
+**An individual failure is investigated, not resent.** Its case carries the receiver's own response, the OBX it names and findings about characters above plain ASCII. The escalation draft names the relevant fields but takes no result value, units or comment.
 
-**Investigate an individual failure.** Its case carries the receiver's own response, the OBX it names and findings about characters above plain ASCII. The escalation draft names the relevant fields but takes no result value, units or comment. **The case itself does not resend.**
+**An eligible outage is recovered through the engine.** At a receiver configured for `engine_resend`, Shutter lists the messages that never arrived. After one approval, **Engine Resend** sends them unchanged, one at a time, in order, stopping at the first message that does not complete. These resends are **completed in the engine**, with the duplicate-handling contract above. An unknown send result is read again from its new engine header for up to seven days, without sending again.
 
-**Recover an eligible outage.** At a receiver configured for `engine_resend`, Shutter lists the messages that never arrived. After one approval, **Engine Resend** sends them unchanged, one at a time, in order, stopping at the first message that does not complete.
+**What cannot safely join that set is held:** a newer message on the same or a linked order; a newer patient message that cannot be shown to concern another order; a patient merge or identity change; an unresolved case on the same order; evidence Shutter cannot read; and a message whose “never sent” cannot be established. Shadow mode and **Stop Shutter recovery** hold this path too.
 
-**Hold what cannot safely join that set.** A result on an unrelated order no longer holds the set. These still do:
-
-- A newer message on the same or a linked order, including an amendment, cancellation or reflex order.
-- A newer patient message that cannot be shown to concern another order.
-- A patient merge or identity change, an unresolved case on the same order, or evidence Shutter cannot read.
-- An attempt history crossing a production start, or a message the engine put back, where “never sent” cannot be established.
-
-Shadow mode and **Stop Shutter recovery** hold this path too. An unknown send result is read again from its new engine header for up to seven days, without sending again.
-
-**Release scope:** 1.3.0 introduced the outage lists and findings work. 1.4.0 made the findings work end to end and added approved engine resend. 1.4.1 added settlement of late outcomes and corrected the outage's presentation. These resends are **completed in the engine**, with the duplicate-handling contract above.
+**Release scope:** outage lists and findings from 1.3.0, approved engine resend from 1.4.0, settlement of late outcomes from 1.4.1.
 
 ![A pathology outage after recovery: each ORU^R01 resent under one approval, its new header completed, and the two handled by hand](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/pathology-oru-r01-outage-recovery.png)
 
-[Release history](https://github.com/MxSalata/shutter/blob/main/CHANGELOG.md) · [Outage recovery contract](https://github.com/MxSalata/shutter/blob/main/docs/CONTRACTS.md#178-the-send-v151-to-v154)
+[Document exceptions and their contract](https://github.com/MxSalata/shutter/blob/main/docs/CONTRACTS.md#112-document-exceptions) · [Outage recovery contract](https://github.com/MxSalata/shutter/blob/main/docs/CONTRACTS.md#178-the-send-v151-to-v154) · [Release history](https://github.com/MxSalata/shutter/blob/main/CHANGELOG.md)
 
 ## How it is tested
 
