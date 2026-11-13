@@ -18,7 +18,7 @@ import { beforeEvidence, useCases, usePlan } from '@/api/hooks';
 import { TRIAL, trialHref } from '@/env/mode';
 import { byEnv } from '@/env/copy';
 import { TRIAL_BOARD_CASE } from '@/lib/hospital';
-import type { Mode, Scenario } from '@/api/types';
+import type { CaseSummary, Mode, Scenario } from '@/api/types';
 import { OutcomeBadge } from '@/components/OutcomeBadge';
 import { StateBadge } from '@/components/StateBadge';
 import { TechDetail } from '@/components/TechDetail';
@@ -139,9 +139,12 @@ export function ScenariosHero({ demo = false }: { demo?: boolean }) {
 }
 
 /**
- * The three scenarios to try first, each in the mode that shows what it is for: a recovery, a write the board
- * withholds, and a write the gate stops. Each links to its latest case in that mode, found among the cases by scenario
- * and mode (never a written-in id), else to the scenario's latest case in any mode.
+ * The short route: three scenarios to try first, in order, ahead of the full list. S2 recovers a transfer, S3 finds one
+ * that had already arrived and writes nothing, and S8 is a write the board withholds. Each plays in Board mode; S8's
+ * card follows the mode chosen under Run mode, to show the same failure by the rules alone. S20, the approval boundary,
+ * is kept beside them as an optional fourth (`OPTIONAL`), never one of the three. Each card links to its latest case in
+ * its mode, found among the cases by scenario and mode (never a written-in id), else to the scenario's latest case in
+ * any mode.
  *
  * What you will see follows each scenario's definition (its expected disposition, write, blocking check and final
  * reason; ScenariosPage.test checks each claim against fixtures/scenarios.json). The catalogue entry S8's coordinator
@@ -182,6 +185,13 @@ const FIRST: Featured[] = [
       "One conditional resend that waits for approval. Approve it, and the receiver's own history verifies the effect.",
   },
   {
+    id: 'S3',
+    mode: 'board',
+    title: 'A transfer that had already arrived',
+    see: () =>
+      "Only the acknowledgement was lost: the receiver's receipt shows the transfer applied. The case is reconciled, and nothing is written.",
+  },
+  {
     id: 'S8',
     mode: 'board',
     title: 'The board withholds a write',
@@ -202,26 +212,34 @@ const FIRST: Featured[] = [
       single: {
         title: 'One agent weighs a write',
         see: () =>
-          "A resend would write over the bed manager's ward with every check passed. One generalist agent reads all the evidence and proposes the plan; the gate checks it as in every mode.",
+          "In Rules only, exempted here on purpose, a resend writes over the bed manager's ward with every check passed; on a real case the gate holds it. Here one generalist agent reads all the evidence and proposes the plan; the gate checks it as in every mode.",
       },
     },
-  },
-  {
-    id: 'S20',
-    mode: 'rules',
-    title: 'The gate stops a write',
-    see: () =>
-      "The approval stops holding when a nurse's move changes the record; the gate blocks the replanned resend, and nothing is written.",
-    more: "The resend waits for approval, bound to the receiver's version. A nurse's move by hand changes that version, so the approval no longer holds; planned again, the resend is superseded by the later move, the gate blocks it and nothing is written.",
   },
 ];
 
 /**
- * The public demo's three: its hospital plays its rotation by itself, in Site policy mode (S8 is out of it and S20 never
- * in it), so the cards are three of the rotation's stories, in the mode they are played in: a recovery the written
- * policy holds for a person, a case whose bed another patient's case frees, and a write the gate withholds. A card shows
- * the scenario's latest case in that mode, else its latest case in any mode under that case's own mode, and says so
- * where the link would be while the scenario has no case yet: the card's text is true before the hospital plays it.
+ * The optional fourth, apart from the three: the approval boundary. S20 is defined for Rules only, where the approval
+ * stops holding and the gate blocks the replanned resend. It is a card of its own under the route, with its own Run.
+ */
+const OPTIONAL: Featured = {
+  id: 'S20',
+  mode: 'rules',
+  title: 'The approval boundary: the gate stops a write',
+  see: () =>
+    "The approval stops holding when a nurse's move changes the record; the gate blocks the replanned resend, and nothing is written.",
+  more: "The resend waits for approval, bound to the receiver's version. A nurse's move by hand changes that version, so the approval no longer holds; planned again, the resend is superseded by the later move, the gate blocks it and nothing is written.",
+};
+
+/**
+ * The public demo's three: its hospital plays its rotation by itself, in Site policy mode. The rotation as shipped is
+ * S2, S8, S1, S23a, S3, S24 and S15 (Hospital.LivePlayer, DEFAULTSCENARIOS; a build can set its own with
+ * SHUTTER_LIVE_SCENARIOS), so S8 is in it and S20 never is. S8's policy case goes to the board, so it is not one of
+ * these: the cards are three of the rotation's stories that the written policy or the gate settles, in the mode they are
+ * played in: a recovery the written policy holds for a person, a case whose bed another patient's case frees, and a
+ * write the gate withholds. A card shows the scenario's latest case in that mode, else its latest case in any mode
+ * under that case's own mode, and says so where the link would be while the scenario has no case yet: the card's text
+ * is true before the hospital plays it.
  */
 const DEMO_FIRST: Featured[] = [
   {
@@ -263,6 +281,114 @@ function SeeWithEntry({
   return <Text size="md">{see(plan?.plan?.catalogueEntry || undefined)}</Text>;
 }
 
+/** A featured scenario as its card shows it: in its mode, with its latest case there, else its latest in any mode. */
+type Shown = Featured & {
+  s: Scenario;
+  inMode: CaseSummary | undefined;
+  latest: { caseId: string; state: string } | undefined;
+  /** The card follows the mode chosen under Run mode, and names it on its Run. */
+  follows?: boolean;
+};
+
+type RunProps = {
+  why: (s: Scenario, mode: Mode) => string;
+  starting: (s: Scenario, mode: Mode) => boolean;
+  onRun: (s: Scenario, mode: Mode) => void;
+  demo: boolean;
+  whyId?: string;
+  replayed: boolean;
+  /** The cases have been read: only then is it known that a scenario has none. */
+  casesKnown: boolean;
+};
+
+/** A card's foot: its Run, why it is off when it is, and the latest case it has in its mode. */
+function FirstActions({
+  f,
+  why,
+  starting,
+  onRun,
+  demo,
+  whyId,
+  replayed,
+  casesKnown,
+}: { f: Shown } & RunProps) {
+  const { s, mode, inMode, latest } = f;
+  const reason = why(s, mode);
+  const modeName = MODE_NAMES[mode];
+  return (
+    <Stack gap="xs" align="flex-start" className="first-actions">
+      <Tooltip
+        label={reason || (replayed ? REPLAY_ONLY.play(s.id, modeName) : `Play ${s.id} in ${modeName} mode`)}
+        multiline
+        maw={260}
+      >
+        <span>
+          <Button
+            size="sm"
+            leftSection={<IconPlayerPlay size={16} />}
+            disabled={!!reason}
+            loading={starting(s, mode)}
+            onClick={() => onRun(s, mode)}
+            aria-label={`Run ${s.id} in ${modeName} mode`}
+            aria-describedby={demo ? whyId : undefined}
+            data-tour-action={`run-${s.id}`}
+          >
+            {/* A card that follows the chosen mode names it on its Run: "Run S8 in Rules only" */}
+            {f.follows ? `Run ${s.id} in ${modeName}` : `Run ${s.id}`}
+          </Button>
+        </span>
+      </Tooltip>
+      {!demo && reason ? (
+        <Text size="xs" c="dimmed">
+          {reason}
+        </Text>
+      ) : null}
+      {latest ? (
+        <Group gap={8} wrap="wrap">
+          <Anchor
+            component={Link}
+            to={`/cases/${encodeURIComponent(latest.caseId)}`}
+            size="sm"
+            fw={600}
+            aria-label={`Open ${latest.caseId}, the latest ${s.id} case${inMode ? ` in ${modeName} mode` : ''}`}
+          >
+            Open {latest.caseId}
+          </Anchor>
+          {inMode ? <OutcomeBadge c={inMode} scenario={s} /> : <StateBadge state={latest.state} />}
+        </Group>
+      ) : demo ? (
+        // Until the cases are read it isn't known that there is none
+        casesKnown ? (
+          <Text size="sm" c="dimmed">
+            {byEnv({
+              live: 'No case yet: the hospital plays one every few minutes.',
+              trial: "No recording of it here; the online demo's hospital plays it.",
+            })}
+          </Text>
+        ) : null
+      ) : (
+        <Text size="sm" c="dimmed">
+          Not played since the last reset
+        </Text>
+      )}
+      {latest && !inMode ? (
+        <Text size="sm" c="dimmed">
+          Its latest case, in any mode: none in {modeName} mode among the newest cases.
+        </Text>
+      ) : null}
+    </Stack>
+  );
+}
+
+/** What you will see on a card, with the catalogue entry its case's plan cites when it has a case in its mode. */
+function See({ f }: { f: Shown }) {
+  return f.inMode ? (
+    <SeeWithEntry caseId={f.inMode.caseId} state={f.inMode.state} see={f.see} />
+  ) : (
+    <Text size="md">{f.see()}</Text>
+  );
+}
+
 export function TryFirst({
   scenarios,
   failed,
@@ -295,32 +421,31 @@ export function TryFirst({
   const casesRead = useCases({ limit: 100 });
   const cases = casesRead.data?.items ?? [];
   // A card that follows the chosen mode takes that mode and its words for it (the demo's cards keep their own)
-  const list = demo
+  const list: (Featured & { follows?: boolean })[] = demo
     ? DEMO_FIRST
     : FIRST.map((f) => {
         const words = chosen && f.byMode ? f.byMode[chosen] : undefined;
         return words ? { ...f, ...words, mode: chosen!, follows: true } : { ...f, follows: !!f.byMode };
       });
-  const first = list
-    .map((f) => ({ ...f, s: scenarios?.find((s) => s.id === f.id) }))
-    .filter((f): f is Featured & { s: Scenario } => !!f.s)
-    .flatMap((f) => {
-      const inMode = caseOf(cases, f.s.id, f.mode);
-      if (!demo)
-        return [
-          {
-            ...f,
-            inMode,
-            latest: inMode ?? (f.s.latestCase ? { ...f.s.latestCase, mode: undefined } : undefined),
-          },
-        ];
-      // The demo: the case in the mode, else the latest in any mode as the card's own; none, the card in its own mode
-      const found = inMode ?? caseOf(cases, f.s.id);
-      return found
-        ? [{ ...f, mode: found.mode, inMode: found, latest: found }]
-        : [{ ...f, inMode: undefined, latest: undefined }];
-    });
+  const shown = (featured: (Featured & { follows?: boolean })[]): Shown[] =>
+    featured
+      .map((f) => ({ ...f, s: scenarios?.find((s) => s.id === f.id) }))
+      .filter((f): f is Featured & { follows?: boolean; s: Scenario } => !!f.s)
+      .map((f) => {
+        const inMode = caseOf(cases, f.s.id, f.mode);
+        if (!demo)
+          return { ...f, inMode, latest: inMode ?? (f.s.latestCase ? { ...f.s.latestCase } : undefined) };
+        // The demo: the case in the mode, else the latest in any mode as the card's own; none, the card in its own mode
+        const found = inMode ?? caseOf(cases, f.s.id);
+        return found
+          ? { ...f, mode: found.mode as Mode, inMode: found, latest: found }
+          : { ...f, inMode: undefined, latest: undefined };
+      });
+  const first = shown(list);
+  // The optional fourth is offered where scenarios can be run; the public demo's look-only role keeps its three
+  const [optional] = demo ? [] : shown([OPTIONAL]);
   const ids = list.map((f) => f.id).join(', ');
+  const run: RunProps = { why, starting, onRun, demo, whyId, replayed, casesKnown: casesRead.isSuccess };
   return (
     <section aria-labelledby="try-first-title" data-tour="scenarios">
       <Group gap="xs" align="baseline" mb="sm" wrap="wrap">
@@ -333,7 +458,7 @@ export function TryFirst({
                 live: 'The hospital plays these in Site policy mode.',
                 trial: "Recorded; the online demo's hospital plays these in Site policy mode.",
               })
-            : 'Each one in the mode that shows what it is for.'}
+            : 'A short route, in this order.'}
         </Text>
       </Group>
       {!scenarios ? (
@@ -355,119 +480,72 @@ export function TryFirst({
         </Text>
       ) : (
         <SimpleGrid cols={{ base: 1, md: 3 }} spacing="md" verticalSpacing={{ base: 'md', md: 0 }}>
-          {first.map(({ s, mode, title, see, more, diagramNote, inMode, latest, ...f }) => {
-            const reason = why(s, mode);
-            const modeName = MODE_NAMES[mode];
-            // A card that follows the chosen mode names it on its Run: "Run S8 in Rules only"
-            const follows = 'follows' in f && f.follows;
-            return (
-              <Card key={s.id} padding="md" data-first={s.id} className="first-card">
-                <Stack gap="sm" style={{ flex: 1 }}>
-                  <Stack gap={4}>
-                    <Text component="div" className="overline">
-                      <Group gap={6} wrap="nowrap" component="span" display="inline-flex">
-                        <span>{s.id} ·</span>
-                        <ModeName mode={mode} />
-                      </Group>
-                    </Text>
-                    <Title order={3} fw={600}>
-                      {title}
-                    </Title>
-                    <Text size="sm">{s.title}</Text>
-                    {diagramNote ? (
-                      <Text size="xs" fw={600}>
-                        {diagramNote}
-                      </Text>
-                    ) : null}
-                    <ScenarioDiagram scenario={s} mode={mode} />
-                  </Stack>
-                  <Stack gap={4}>
-                    <Text className="overline">{demo ? 'What it shows' : 'You will see'}</Text>
-                    {inMode ? (
-                      <SeeWithEntry caseId={inMode.caseId} state={inMode.state} see={see} />
-                    ) : (
-                      <Text size="md">{see()}</Text>
-                    )}
-                    {more ? (
-                      <MoreAbout about={s.id}>
-                        <Text size="sm">{more}</Text>
-                      </MoreAbout>
-                    ) : null}
-                  </Stack>
-                  {/* The action row sits at the card's foot, so the three Run buttons line up */}
-                  <Stack gap="xs" align="flex-start" className="first-actions">
-                    <Tooltip
-                      label={
-                        reason ||
-                        (replayed ? REPLAY_ONLY.play(s.id, modeName) : `Play ${s.id} in ${modeName} mode`)
-                      }
-                      multiline
-                      maw={260}
-                    >
+          {first.map((f, i) => (
+            <Card key={f.s.id} padding="md" data-first={f.s.id} className="first-card">
+              <Stack gap="sm" style={{ flex: 1 }}>
+                <Stack gap={4}>
+                  <Text component="div" className="overline">
+                    <Group gap={6} wrap="nowrap" component="span" display="inline-flex">
+                      {/* The route's order, in words a screen reader has too; the demo's three are not a route */}
                       <span>
-                        <Button
-                          size="sm"
-                          leftSection={<IconPlayerPlay size={16} />}
-                          disabled={!!reason}
-                          loading={starting(s, mode)}
-                          onClick={() => onRun(s, mode)}
-                          aria-label={`Run ${s.id} in ${modeName} mode`}
-                          aria-describedby={demo ? whyId : undefined}
-                          data-tour-action={`run-${s.id}`}
-                        >
-                          {follows ? `Run ${s.id} in ${modeName}` : `Run ${s.id}`}
-                        </Button>
+                        {demo ? '' : `${i + 1} of ${first.length} · `}
+                        {f.s.id} ·
                       </span>
-                    </Tooltip>
-                    {!demo && reason ? (
-                      <Text size="xs" c="dimmed">
-                        {reason}
-                      </Text>
-                    ) : null}
-                    {latest ? (
-                      <Group gap={8} wrap="wrap">
-                        <Anchor
-                          component={Link}
-                          to={`/cases/${encodeURIComponent(latest.caseId)}`}
-                          size="sm"
-                          fw={600}
-                          aria-label={`Open ${latest.caseId}, the latest ${s.id} case${inMode ? ` in ${modeName} mode` : ''}`}
-                        >
-                          Open {latest.caseId}
-                        </Anchor>
-                        {inMode ? (
-                          <OutcomeBadge c={inMode} scenario={s} />
-                        ) : (
-                          <StateBadge state={latest.state} />
-                        )}
-                      </Group>
-                    ) : demo ? (
-                      // Until the cases are read it isn't known that there is none
-                      casesRead.isSuccess ? (
-                        <Text size="sm" c="dimmed">
-                          {byEnv({
-                            live: 'No case yet: the hospital plays one every few minutes.',
-                            trial: "No recording of it here; the online demo's hospital plays it.",
-                          })}
-                        </Text>
-                      ) : null
-                    ) : (
-                      <Text size="sm" c="dimmed">
-                        Not played since the last reset
-                      </Text>
-                    )}
-                    {latest && !inMode ? (
-                      <Text size="sm" c="dimmed">
-                        Its latest case, in any mode: none in {modeName} mode among the newest cases.
-                      </Text>
-                    ) : null}
-                  </Stack>
+                      <ModeName mode={f.mode} />
+                    </Group>
+                  </Text>
+                  <Title order={3} fw={600}>
+                    {f.title}
+                  </Title>
+                  <Text size="sm">{f.s.title}</Text>
+                  {f.diagramNote ? (
+                    <Text size="xs" fw={600}>
+                      {f.diagramNote}
+                    </Text>
+                  ) : null}
+                  <ScenarioDiagram scenario={f.s} mode={f.mode} />
                 </Stack>
-              </Card>
-            );
-          })}
+                <Stack gap={4}>
+                  <Text className="overline">{demo ? 'What it shows' : 'You will see'}</Text>
+                  <See f={f} />
+                  {f.more ? (
+                    <MoreAbout about={f.s.id}>
+                      <Text size="sm">{f.more}</Text>
+                    </MoreAbout>
+                  ) : null}
+                </Stack>
+                {/* The action row sits at the card's foot, so the three Run buttons line up */}
+                <FirstActions f={f} {...run} />
+              </Stack>
+            </Card>
+          ))}
         </SimpleGrid>
       )}
+      {/* The approval boundary, apart from the three: its own card under them, its Run beside its words from a laptop up */}
+      {scenarios && optional ? (
+        <Card padding="md" mt="md" data-first={optional.s.id} className="first-optional">
+          <Group gap="md" align="flex-start" justify="space-between" wrap="wrap">
+            <Stack gap={4} style={{ flex: '1 1 320px', minWidth: 0 }}>
+              <Text component="div" className="overline">
+                <Group gap={6} wrap="nowrap" component="span" display="inline-flex">
+                  <span>Optional · {optional.s.id} ·</span>
+                  <ModeName mode={optional.mode} />
+                </Group>
+              </Text>
+              <Title order={3} fw={600}>
+                {optional.title}
+              </Title>
+              <See f={optional} />
+              {optional.more ? (
+                <MoreAbout about={optional.s.id}>
+                  <Text size="sm">{optional.more}</Text>
+                </MoreAbout>
+              ) : null}
+            </Stack>
+            <FirstActions f={optional} {...run} />
+          </Group>
+        </Card>
+      ) : null}
     </section>
   );
 }

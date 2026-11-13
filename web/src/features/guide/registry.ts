@@ -171,7 +171,7 @@ export const CHAPTERS: GuideChapter[] = [
       {
         id: 'start',
         title: 'Three stories to start with',
-        say: 'Each scenario replays a known message failure. Start with these three: a transfer delivered, a fix held back, and one the safety checks stopped.',
+        say: 'Each scenario replays a known message failure. Start with these three: a transfer recovered, one that had already arrived, and a fix held back.',
         lookOnly: {
           say: "Each scenario replays a known failure. The cards show three of the online hospital's stories; this tour then follows S2, S8 and S20.",
         },
