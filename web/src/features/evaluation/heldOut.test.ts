@@ -6,6 +6,28 @@ import { HELD_OUT } from './heldOut';
 /** The held-out card's figures, each read back from the document it quotes. */
 const doc = readFileSync(join(__dirname, '../../../../docs/readme/fair-test.md'), 'utf8');
 
+/** The 1.4.3 rerun's run records, which the same-gate example is read from. */
+const r143Runs = JSON.parse(
+  readFileSync(join(__dirname, '../../../../docs/readme/fair-test/results-r143-all.json'), 'utf8'),
+) as {
+  about: string;
+  site_profile: string;
+  modes: Record<string, { cases: Record<string, { runs: R143Run[] }> }>;
+};
+
+interface R143Run {
+  proposal: string;
+  final_state: string;
+  category: string;
+  gate: { stage: string; outcome: string; codes: string[] }[];
+  attempts: { key: string | null; outcome: string | null }[];
+  receiver_final: { version: number; history: string[] };
+}
+
+/** The section the document gives release 1.4.3's rerun in. */
+const R143_HEADING = '## Release 1.4.3: all 12 cases rerun';
+const r143 = doc.slice(doc.indexOf(`\n${R143_HEADING}\n`), doc.indexOf('\n## The files\n'));
+
 /** The section the document gives release 1.1.x's own rows in, once it has one. */
 const V111_HEADING = '## Release 1.1.x';
 const v111 = doc.includes(`\n${V111_HEADING}\n`) ? doc.slice(doc.indexOf(`\n${V111_HEADING}\n`)) : null;
@@ -62,6 +84,78 @@ describe('the held-out card', () => {
     expect(f[4]).not.toMatch(/W/);
     expect(row('The board')[8]).toBe('0');
     expect(row('Single investigator, as settled here')[8]).toBe('0');
+  });
+
+  it('counts 36 runs in each mode the card names, on release 1.0.0 and on the 1.4.3 rerun', () => {
+    // Mode | Runs | ...
+    for (const label of ['The board', 'Single investigator, as settled here', 'Rules only']) {
+      expect(row(label)[1], `${label}, 1.0.0`).toBe(String(HELD_OUT.runs));
+      expect(row(label, r143)[1], `${label}, 1.4.3`).toBe(String(HELD_OUT.runs));
+    }
+    expect(HELD_OUT.runs).toBe(HELD_OUT.cases * HELD_OUT.repeats);
+  });
+
+  it("gives release 1.4.3's rerun as the document's section does, a regression rerun with no wrong write executed", () => {
+    const r = HELD_OUT.r143;
+    expect(r143).toContain(`release ${r.release}'s whole code`);
+    expect(r143).toContain('**This is a regression rerun, not a new held-out test.**');
+    // Release 1.4.3, all 12 cases | Runs | R | D | N+ | N- | F | Wp | Wx | Strict mean | Lenient mean | ...
+    expect(row('The board', r143)[9]).toBe(r.board);
+    expect(row('Single investigator, as settled here', r143)[9]).toBe(r.single);
+    expect(row('Single investigator, as graded by', r143)[9]).toBe(r.singleGraded);
+    expect(row('Rules only', r143)[9]).toBe(r.rules);
+    expect(row('Always escalate, computed', r143)[9]).toBe(HELD_OUT.escalate);
+    // Wx, wrong writes executed: 0 in every row of the results table that counts runs (the composed row counts none)
+    const lines = r143.split('\n');
+    const head = lines.findIndex((l) => l.startsWith('| Release 1.4.3, all 12 cases |'));
+    const end = lines.findIndex((l, i) => i > head && !l.startsWith('|'));
+    const counted = lines.slice(head + 2, end).filter((l) => /^\d+$/.test(l.split('|')[2].trim()));
+    expect(counted).toHaveLength(7);
+    for (const line of counted) expect(line.split('|')[9].trim(), line).toBe(String(r.wrongWrites));
+    expect(r143).toContain('**No mode executed a wrong write.**');
+    expect(r.url).toBe(`${HELD_OUT.url}#release-143-all-12-cases-rerun`);
+  });
+
+  it('reads the same-gate example from the run records: F03, both outcomes, and no write in any run', () => {
+    const g = HELD_OUT.r143.sameGate;
+    // One profile and one gate for every mode, with nothing exempted
+    expect(r143Runs.about).toContain("Release 1.4.3's whole code");
+    expect(r143Runs.about).toContain('the same gate for every mode');
+    expect(r143Runs.site_profile).toContain('No exemption of any kind');
+    const runsOf = (mode: string) => r143Runs.modes[mode].cases[g.case].runs;
+    for (const mode of ['board', 'single']) {
+      const runs = runsOf(mode);
+      expect(runs).toHaveLength(g.runs);
+      for (const run of runs) {
+        expect(run.proposal).toBe(g.agents.proposal);
+        expect(run.final_state).toBe(g.agents.state);
+        expect(run.gate.map((s) => s.outcome)).toEqual(['pass']);
+        expect(run.category).toBe('R');
+      }
+    }
+    const rules = runsOf('rules');
+    expect(rules).toHaveLength(g.runs);
+    for (const run of rules) {
+      expect(run.proposal).toBe(g.rules.proposal);
+      expect(run.final_state).toBe(g.rules.state);
+      expect(run.gate).toEqual([{ stage: 'proposal', outcome: 'block', codes: [...g.rules.codes] }]);
+      // A wrong write proposed and stopped, never executed
+      expect(run.category).toBe('Wp');
+      expect(run.attempts).toEqual([]);
+    }
+    // No write in any of the nine runs: no attempt carries an operation key or an outcome, and the receiver ends on
+    // the same version with the same three movements, none of them Shutter's
+    const all = ['board', 'single', 'rules'].flatMap(runsOf);
+    const written = all.flatMap((run) => run.attempts).filter((a) => a.key !== null || a.outcome !== null);
+    expect(written).toHaveLength(g.writes);
+    expect(new Set(all.map((run) => JSON.stringify(run.receiver_final))).size).toBe(1);
+    expect(all[0].receiver_final.history).toHaveLength(3);
+    // The document's own per-case rows say the same: Case | What it tests | Reference | Board | Single | ...
+    expect(row(g.case)[1]).toBe(g.what);
+    // Case | Reference | Board | Single | Site policy, board live | Site policy, board not live | Rules only
+    const perCase = row(g.case, r143);
+    expect([perCase[2], perCase[3], perCase[6]]).toEqual(['R', 'R', 'Wp']);
+    expect(g.url).toBe(HELD_OUT.url.replace('fair-test.md', 'fair-test/results-r143-all.json'));
   });
 
   it('links the published document', () => {

@@ -2,7 +2,16 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import slice from '../../../docs/readme/evaluation.json?proof';
-import { PROOF, playedFor, playedResult, proofFrom, type ProofSource } from './proof';
+import {
+  CATALOGUE_COHORT,
+  cohortLabel,
+  FIRST_RELEASE,
+  PROOF,
+  playedFor,
+  playedResult,
+  proofFrom,
+  type ProofSource,
+} from './proof';
 
 describe("the proof's figures, from the board's evaluation", () => {
   it("counts the board's proposals: 24 of 24 scored passes, 25 passes in 24 cases, 1 not scored", () => {
@@ -121,5 +130,32 @@ describe("the proof's figures, from the board's evaluation", () => {
     expect(source.match(/from '[^']*evaluation\.json[^']*'/g)).toEqual([
       "from '../../../docs/readme/evaluation.json?proof'",
     ]);
+  });
+});
+
+describe('the cohort and release said beside the figures', () => {
+  const changelog = readFileSync(join(__dirname, '../../../CHANGELOG.md'), 'utf8');
+
+  it("takes the first release's day from the changelog", () => {
+    const version = FIRST_RELEASE.version.replace(/\./g, '\\.');
+    const heading = new RegExp(`^## ${version} \\((\\d+ \\w+ \\d{4})\\)$`, 'm').exec(changelog);
+    expect(heading, 'the 1.0.0 heading of CHANGELOG.md').not.toBeNull();
+    const day = new Date(`${heading![1]} UTC`).toISOString().slice(0, 10);
+    expect(day).toBe(FIRST_RELEASE.day);
+  });
+
+  it("names the catalogue demonstration as recorded before release 1.0.0, from the runs' own dates", () => {
+    expect(PROOF.recordedFrom! < PROOF.recordedTo!).toBe(true);
+    expect(PROOF.recordedTo!.slice(0, 10) < FIRST_RELEASE.day).toBe(true);
+    expect(cohortLabel(PROOF)).toBe('Catalogue demonstration, recorded before release 1.0.0');
+  });
+
+  it('gives the cohort alone when the runs are not dated, or one is as late as the release', () => {
+    expect(cohortLabel({})).toBe(CATALOGUE_COHORT);
+    expect(cohortLabel({ recordedTo: null })).toBe(CATALOGUE_COHORT);
+    expect(cohortLabel({ recordedTo: `${FIRST_RELEASE.day}T00:00:00Z` })).toBe(CATALOGUE_COHORT);
+    expect(cohortLabel({ recordedTo: '2026-11-05T23:59:59Z' })).toBe(
+      'Catalogue demonstration, recorded before release 1.0.0',
+    );
   });
 });

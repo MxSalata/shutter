@@ -100,6 +100,28 @@ export interface Proof {
   playedBy: Record<string, { board: PlayedResult; rules: PlayedResult }>;
 }
 
+/**
+ * The cohort these figures belong to, said beside every one of them: the catalogue demonstration, the recorded scenario
+ * runs in which each agent was given the catalogue's matching entry and its preferred outcome. The held-out cases are
+ * another cohort, with releases of their own (features/evaluation/heldOut.ts).
+ */
+export const CATALOGUE_COHORT = 'Catalogue demonstration';
+
+/** The first release and its day, as CHANGELOG.md dates it (proof.test.ts reads it back from there). */
+export const FIRST_RELEASE = { version: '1.0.0', day: '2026-11-06' } as const;
+
+/**
+ * The cohort with its release: "Catalogue demonstration, recorded before release 1.0.0" when the evaluation's last run
+ * started before that release's day, so the release is read from the runs' own dates, never typed. An evaluation that
+ * does not date its runs, or dates one later, gets the cohort's name alone.
+ */
+export function cohortLabel(proof: { recordedTo?: string | null }): string {
+  const last = proof.recordedTo ? proof.recordedTo.slice(0, 10) : '';
+  return last && last < FIRST_RELEASE.day
+    ? `${CATALOGUE_COHORT}, recorded before release ${FIRST_RELEASE.version}`
+    : CATALOGUE_COHORT;
+}
+
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
 /** The board's played result from the comparison's status. */
