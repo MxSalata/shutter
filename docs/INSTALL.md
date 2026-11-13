@@ -17,7 +17,7 @@ the productions a hospital already runs; the README's `docker compose up` is the
 | MLLP or TCP with no API | Any message type: a case, the evidence, a diagnosis where the agents can run, and a drafted email. Never a resend from the case |
 | An HL7 TCP receiver with a `watch` block and `engine_resend`, during an outage | Outage recovery (1.4.0): the messages that never arrived, any type, resent unchanged by the engine after one approval. Completed in the engine, as far as the declared `ack_level` and duplicate handling say; not verified at the receiver (section 11) |
 | FHIR, or anything else that isn't HL7 | A warning in the event log and no case |
-| Any receiver, a message over 2 MB | A warning in the event log and no case, except a document exception (section 9.10): a qualifying MDM or report-carrying ORU opens a case at any size, with no copy in Shutter |
+| Any receiver, a message over 2 MB | A warning in the event log and no case, except a document exception (section 9.10): the forwarder sends a qualifying MDM or report-carrying ORU as metadata only, so the 2 MB limit on a forwarded message doesn't apply to it and no copy is kept in Shutter. That limit is lifted and no more: a whole message posted to the intake is still refused over 2 MB |
 | Any receiver, a transport ACK and then lost downstream | Nothing: Shutter doesn't hear of it (section 10) |
 
 A production review needs none of this configured. The drafted email is made when a person presses **Escalate to** its team on
@@ -35,7 +35,7 @@ the case page (`POST /api/shutter/cases/{id}/escalations` through the API); unti
   namespace-wide purge unless asked for. The feed, records and scenario items (`ADT In`, `ADT to Downstream`,
   `Downstream Out`, `ADT to Records`, `Records Out` and `Scenario Player`) are present but switched off in shape A (the
   installer disables them in `Shutter.Production`), and not added at all in shape B (`InstallInto`).
-- **A new install starts in shadow mode.** Shutter investigates and records what it would propose, and sends no rehearsal, recovery write, resend preview or outage resend, and no escalation email; the hospital's ordinary feed goes on as before. A person enables recovery by saving `"recovery": {"mode": "enabled"}` in the site profile. Settings has "Stop Shutter recovery", for any operator or approver, and the shadow report (`docs/CONTRACTS.md`, 18).
+- **A new install starts in shadow mode.** Shutter investigates and records what it would propose, and sends no rehearsal, recovery write, resend preview or outage resend, and no escalation or reminder email (unless the profile says `"notifications": {"shadow_delivery": "enabled"}`, which lets both go while recovery stays off); the hospital's ordinary feed goes on as before. An approver enables recovery by saving `"recovery": {"mode": "enabled"}` in the site profile, as a step of its own (section 5, step 9): the save releases no plan made before it and sends no escalation email held before it. Settings has "Stop Shutter recovery", for any operator or approver, and the shadow report (`docs/CONTRACTS.md`, 18).
 - **A case at a receiver with no API is escalated, never resent.** A case resends only to a receiver whose site profile
   entry describes its API (state, receipt, capabilities and operations paths), and that write is verified in the
   receiver's receipt and history. A ward system that takes HL7 over TCP and keeps no receipts is investigated and
@@ -344,12 +344,31 @@ Shape A:
    `Shutter.Intake.Forwarder.ForwardFor` builds it, as the demo hospital's `Hospital.Process.PASToDownstream` does.
 7. Replay a known failure in a test environment: a case opens in SHUTTER, the evidence shows the message and the
    receiver's state, and the escalation draft names the right team.
-8. Switch the investigation mode to `policy` for the easy chains once the catalogue's entries are reviewed; watch the
-   first weeks on the Settings and costs page and in the Doctor report (`SELECT Shutter.Setup_Doctor()`).
-   `ok` in the health route says Shutter's production runs, and no more. `receivers_ok` says whether each receiver answered when
-   Shutter last read it, and `watched_ok` whether each watched namespace can still be heard (the alert intake and the forwarder
-   there and enabled). Shutter sends no probe: a receiver that died since its last read reads as it last answered, with the time,
-   so silence is not proof. An outside monitor on `receivers_ok`, `watched_ok` and `last_forward` is still yours to set up.
+8. Before enabling recovery, test in the test environment. Until recovery is enabled the install stays in shadow mode
+   (section 1), and a site that only investigates can stay in it. Run the
+   [receiver conformance kit](https://github.com/MxSalata/shutter/blob/main/docs/receiver-conformance.md) against each
+   receiver's test endpoint: it reports what that endpoint demonstrated and enables nothing. Then test the stop. In the
+   test environment only, enable recovery as step 9 does, then replay a failure whose plan waits for approval (step 7):
+   a plan made before the enable is void already. With that plan waiting, press **Stop Shutter recovery** in Settings. The plan can no longer be
+   approved and nothing is sent, and at a receiver with `engine_resend` an outage's resend can't be approved either.
+   Clearing the stop takes an approver and releases nothing: reject the plan and reinvestigate the case. The pilot pack has
+   [a stop drill](https://github.com/MxSalata/shutter/blob/main/docs/pilot/07-stop-and-withdraw.md).
+9. Enable recovery, as a step of its own and only once you mean Shutter to write to a receiver: an approver turns on
+   **Enable recovery** on the Site profile page (question 14) and saves the profile through the page's review, which
+   stores `"recovery": {"mode": "enabled"}`. The switch alone changes nothing until the profile is saved. A plan
+   made before that save is not released: reject it and reinvestigate the case. Nor does the save send an escalation
+   that shadow mode held: one a person sent in shadow mode reads Not sent until a person sends it again. A site
+   that wants escalation and reminder email while still in shadow mode sets
+   `"notifications": {"shadow_delivery": "enabled"}` in the profile's JSON (`docs/CONTRACTS.md`, 18).
+10. Watch the first weeks on the Settings and costs page and in the Doctor report (`SELECT Shutter.Setup_Doctor()`). A
+    watched production's failures run in Site policy from the start (`policy` unless the site sets
+    `^Shutter.Config("watchedMode")` to another mode), so there is no mode to switch: the catalogue proposes what it
+    knows, and the shipped release policy asks a person before every resend. Releasing any tier without one is a separate
+    choice in the site profile, made once the catalogue's entries are reviewed.
+    `ok` in the health route says Shutter's production runs, and no more. `receivers_ok` says whether each receiver answered when
+    Shutter last read it, and `watched_ok` whether each watched namespace can still be heard (the alert intake and the forwarder
+    there and enabled). Shutter sends no probe: a receiver that died since its last read reads as it last answered, with the time,
+    so silence is not proof. An outside monitor on `receivers_ok`, `watched_ok` and `last_forward` is still yours to set up.
 
 Shape B: section 4 in place of steps 1, 2 and 6; the rest as above.
 
@@ -686,7 +705,7 @@ and releasing a held case from it (`KnownIn` reads only this instance).
 | --- | --- | --- |
 | `ZPM "version"` then `<SYNTAX>` | No IPM in this namespace | Load `vendor/ipm/zpm-0.10.10.xml` there |
 | `<CLASS DOES NOT EXIST>getProductionItems+51^Ens.Director.1 *Shutter.Intake.AlertProcess` | Items added by hand with no mapping | Use the apply |
-| Event log: `HTTP 413 from Shutter ... too_large` | Over 2 MB. No case | No way round it yet |
+| Event log: `HTTP 413 from Shutter ... too_large` | Over 2 MB. No case | For a document or a report with an attachment, a document profile (9.10); otherwise no way round it yet |
 | `ErrNoCredentials ... 'DownstreamAPI'`, gate `RECEIVER_UNREADABLE` | A site install has no such credential | `SetCredential`, then reinvestigate |
 | Page says "Round 2: the receiver changed after the approval" with no approval given | Wrong words after a reinvestigation | Ignore them |
 | "Source message" link: `ERROR #5809` | The link's URL form is wrong, and it opens Shutter's copy | Add `HeaderClass=Ens.MessageHeader&` to the URL |
@@ -773,6 +792,8 @@ By default a failed MDM or ORU gets the ordinary case below, with the message co
 ```sql
 SELECT Shutter.Setup_OnboardApply('DOCUMENTS', '{"document_receivers": "Results Out"}')
 ```
+
+"At any size" means the 2 MB limit on a forwarded message is lifted, because the forwarder then sends the metadata and not the message. It is no promise about capacity, and a whole message posted to the intake is still refused over 2 MB.
 
 Or set them by hand:
 

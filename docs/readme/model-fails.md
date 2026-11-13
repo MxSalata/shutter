@@ -29,7 +29,7 @@ Every agent run ends with one status (`Shutter.Bridge.Msg.AgentResponse`), store
 | `timeout` | The run passed its deadline, or the error's text says timeout or timed out. |
 | `model_error` | Any other error from the provider or the framework, and an agent that couldn't start. |
 | `denied`, `loop_detected` | An error whose text says denied, or loop. |
-| `catalogue_mismatch` | The agent's tools aren't exactly the declared ones. No model call is made. |
+| `catalogue_mismatch` | The agent's tool names aren't exactly the declared ones. No model call is made. |
 | `refused` | Record mode while the API mimic is on. No model call. |
 | `error` | The agent class or the runner isn't installed, the agent replaced the runner's provider (no model call), or the runner itself failed. |
 | `no_record` | Replay, with no recording for this case. |
