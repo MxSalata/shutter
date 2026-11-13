@@ -1,4 +1,5 @@
 import { MantineProvider } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -1149,7 +1150,10 @@ describe('CasePage', () => {
     const plan = (await (await fetch('/api/shutter/cases/C-000002/plan')).json()) as {
       plan: { digest: string };
     };
-    const detail = (await (await fetch('/api/shutter/cases/C-000002')).json()) as { version: number };
+    const detail = (await (await fetch('/api/shutter/cases/C-000002')).json()) as {
+      version: number;
+      encounterId: string;
+    };
     // The header says what an approval would do before anything is opened
     expect(await screen.findByTestId('case-proposal')).toHaveTextContent(
       /^Proposed: Resend the PAS transfer to WARD-B, once, only if the bed-management system is still at version 1\.$/,
@@ -1168,12 +1172,31 @@ describe('CasePage', () => {
     );
     expect(within(dialog).getByRole('rowheader', { name: 'Plan digest' })).toBeInTheDocument();
     expect(within(dialog).getByRole('rowheader', { name: 'Case version' })).toBeInTheDocument();
-    // The binding again beside the controls, so it is in view at the confirming press
+    // The binding again beside the controls, with the encounter it is for, so it is in view at the confirming press
+    expect(detail.encounterId).toMatch(/^ENC-/);
     expect(within(dialog).getByTestId('review-binding')).toHaveTextContent(
       new RegExp(
-        `^Bound to plan v1 \\(digest ${plan.plan.digest.slice(0, 10)}.*\\) and case version ${detail.version}: a change to either stops it\\.$`,
+        `^Bound to plan v1 for encounter ${detail.encounterId} \\(digest ${plan.plan.digest.slice(0, 10)}.*\\) and case version ${detail.version}: a change to either stops it\\.$`,
       ),
     );
+    // Read in this order: the action, what releasing it is expected to leave, what the press does, then the controls,
+    // which sit in the block after those three and so can't come into view before them
+    const inOrder = [
+      within(dialog).getByTestId('plan-headline'),
+      within(dialog).getByTestId('approval-change'),
+      within(dialog).getByTestId('confirm-consequence'),
+      within(dialog).getByTestId('review-binding'),
+      within(dialog).getByRole('button', { name: 'Approve the resend' }),
+    ];
+    inOrder
+      .slice(1)
+      .forEach((el, i) =>
+        expect(inOrder[i].compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy(),
+      );
+    const rest = dialog.querySelector('.review-rest');
+    expect(rest).toContainElement(within(dialog).getByTestId('review-binding'));
+    expect(rest).not.toContainElement(within(dialog).getByTestId('approval-change'));
+    expect(rest).not.toContainElement(within(dialog).getByTestId('confirm-consequence'));
     expect(within(dialog).getByRole('button', { name: 'Reject instead' })).toBeEnabled();
     expect(sent).toHaveLength(0);
     // Press two: the approval, of the plan and the case version the review opened on
@@ -1392,6 +1415,47 @@ describe('CasePage', () => {
     );
     expect(posted).toBe(1);
     expect(screen.getByRole('dialog', { name: 'Approve the resend: plan v1' })).toBeInTheDocument();
+    // Answered, the review can be closed again
+    expect(within(dialog).getByRole('button', { name: 'Close' })).toBeEnabled();
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeEnabled();
+  });
+
+  it('holds the review open while a decision is being sent, so its answer is always announced', async () => {
+    const sent: unknown[] = [];
+    let answer!: () => void;
+    const held = new Promise<void>((resolve) => (answer = resolve));
+    server.use(
+      http.post('/api/shutter/cases/C-000002/approvals', async ({ request }) => {
+        sent.push(await request.clone().json());
+        await held;
+        return HttpResponse.json({ approver: 'approver' }, { status: 202 });
+      }),
+    );
+    const announced = vi.spyOn(notifications, 'show');
+    renderCase('C-000002');
+    await screen.findByTestId('case-proposal');
+    await userEvent.click(screen.getByTestId('case-action'));
+    const dialog = await screen.findByRole('dialog', { name: 'Approve the resend: plan v1' });
+    // Before the press the review closes as any dialog does
+    expect(within(dialog).getByRole('button', { name: 'Close' })).toBeEnabled();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Approve the resend' }));
+    await waitFor(() => expect(sent).toHaveLength(1));
+    // On its way: Cancel, the close button, Escape and the way to the other decision all do nothing
+    expect(within(dialog).getByRole('button', { name: 'Close' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Reject instead' })).toBeDisabled();
+    await userEvent.keyboard('{Escape}');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+    expect(screen.getByRole('dialog', { name: 'Approve the resend: plan v1' })).toBeInTheDocument();
+    expect(announced).not.toHaveBeenCalled();
+    // Answered: the notice says who approved, and only then the review closes
+    answer();
+    await waitFor(() =>
+      expect(announced).toHaveBeenCalledWith(expect.objectContaining({ title: 'Approved by approver' })),
+    );
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(sent).toHaveLength(1);
+    announced.mockRestore();
   });
 
   it('sends the digest the review read, even an empty one, and the server refuses it as stale', async () => {

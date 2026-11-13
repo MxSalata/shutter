@@ -324,21 +324,81 @@ test.describe('the case page made easier to read', () => {
     );
   });
 
-  for (const [name, viewport] of [
-    ['laptop', { width: 1280, height: 800 }],
-    ['phone', { width: 360, height: 740 }],
+  test('completes an approval in two presses from the waiting case, at laptop width', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await signIn(page);
+    await go(page, '/cases/C-000002');
+    await expect(page.getByTestId('case-proposal')).toBeVisible();
+    await page.getByTestId('case-action').click();
+    const dialog = page.getByRole('dialog', { name: 'Approve the resend: plan v1' });
+    const confirm = dialog.getByRole('button', { name: 'Approve the resend' });
+    // The confirming press is in view as the review opens, under what the release is expected to leave: no scroll
+    // stands between the two presses, and nothing says the decision is further down
+    await expect(confirm).toBeInViewport({ ratio: 1 });
+    await expect(dialog.getByTestId('approval-change')).toBeInViewport({ ratio: 1 });
+    await expect(dialog.getByTestId('review-more')).toHaveCount(0);
+    await confirm.click();
+    await expect(page.getByRole('region', { name: 'Outcome' }).getByTestId('outcome-line')).toHaveText(
+      'Delivered: verified at the receiver',
+      { timeout: 20_000 },
+    );
+  });
+
+  for (const [width, height] of [
+    [360, 740],
+    [390, 844],
   ] as const) {
-    test(`completes an approval in two presses from the waiting case, at ${name} width`, async ({ page }) => {
-      await page.setViewportSize(viewport);
+    test(`shows what the release is expected to leave before the confirming press comes into view, at ${width} by ${height}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height });
       await signIn(page);
       await go(page, '/cases/C-000002');
       await expect(page.getByTestId('case-proposal')).toBeVisible();
       await page.getByTestId('case-action').click();
-      const confirm = page
-        .getByRole('dialog', { name: 'Approve the resend: plan v1' })
-        .getByRole('button', { name: 'Approve the resend' });
-      // The confirming press is in view as the review opens: no scroll stands between the two presses
-      await expect(confirm).toBeInViewport();
+      const dialog = page.getByRole('dialog', { name: 'Approve the resend: plan v1' });
+      const effect = dialog.getByTestId('approval-change');
+      await expect(effect).toContainText('Expected if this plan is released');
+      await expect(effect).toBeInViewport();
+      /** Where the review's parts stand: the dialog's foot, the controls, the confirming press and what precedes them. */
+      const stand = () =>
+        dialog.evaluate((el) => {
+          const box = (q: string) => (el.querySelector(q) as HTMLElement).getBoundingClientRect();
+          const buttons = el.querySelectorAll('.review-actions button');
+          const press = buttons[buttons.length - 1].getBoundingClientRect();
+          return {
+            foot: (el.closest('.mantine-Modal-content') as HTMLElement).getBoundingClientRect().bottom,
+            controlsTop: box('.review-actions').top,
+            pressTop: press.top,
+            pressBottom: press.bottom,
+            effectBottom: box('[data-testid="approval-change"]').bottom,
+            consequenceBottom: box('[data-testid="confirm-consequence"]').bottom,
+          };
+        });
+      // Read from the top, a little at a time, until the confirming press is wholly in view. Whenever any of the press
+      // is in view, the expected effect and what the decision does have come into view above the controls; while the
+      // controls are wholly below the dialog's foot, a line at the foot says the decision is further down
+      let effectSeen = false;
+      let consequenceSeen = false;
+      for (let step = 0; step < 120; step += 1) {
+        const at = await stand();
+        effectSeen ||= at.effectBottom <= at.foot;
+        consequenceSeen ||= at.consequenceBottom <= at.foot;
+        if (at.pressTop < at.foot) {
+          expect(effectSeen && consequenceSeen, 'both were in view before the press').toBe(true);
+          expect(at.effectBottom).toBeLessThanOrEqual(at.controlsTop + 0.5);
+          expect(at.consequenceBottom).toBeLessThanOrEqual(at.controlsTop + 0.5);
+        }
+        if (at.controlsTop >= at.foot + 1) await expect(dialog.getByTestId('review-more')).toHaveCount(1);
+        if (at.controlsTop <= at.foot - 1) await expect(dialog.getByTestId('review-more')).toHaveCount(0);
+        if (at.pressBottom <= at.foot) break;
+        await dialog.evaluate((el) => el.closest('.mantine-Modal-content')?.scrollBy(0, 12));
+      }
+      // Still two presses in all: the press, now in view with its binding beside it, approves the plan
+      const confirm = dialog.getByRole('button', { name: 'Approve the resend' });
+      await expect(confirm).toBeInViewport({ ratio: 1 });
+      await expect(dialog.getByTestId('review-binding')).toBeInViewport({ ratio: 1 });
+      await expect(dialog.getByTestId('review-binding')).toContainText('Bound to plan v1 for encounter ENC-');
       await confirm.click();
       await expect(page.getByRole('region', { name: 'Outcome' }).getByTestId('outcome-line')).toHaveText(
         'Delivered: verified at the receiver',
