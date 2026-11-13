@@ -268,6 +268,16 @@ ClassMethod PortalPath() As %String
     Quit app
 }
 
+/// The Management Portal's page of one message, by its header id, under the portal path given, or the namespace's own
+/// (PortalPath). The page opens the header by the class its link names: with no HeaderClass it answers "ERROR #5809:
+/// Object to Load not found, class ''" for any id, so the link always names Ens.MessageHeader, the class of a
+/// production's message headers. The web application builds the same link (web/src/lib/messageLink.ts).
+ClassMethod MessageLink(headerId As %String, portal As %String = "") As %String
+{
+    If portal = "" Set portal = ..PortalPath()
+    Quit portal _ "EnsPortal.MessageContents.zen?HeaderClass=Ens.MessageHeader&HeaderId=" _ headerId
+}
+
 // ---- session ----
 
 ClassMethod Login() As %Status
@@ -667,7 +677,7 @@ ClassMethod CaseRuns(caseId As %String) As %Status
         &sql(SELECT TOP 1 ID INTO :fid FROM Shutter_Store.Finding WHERE Run = :rid)
         If (SQLCODE = 0) && (fid '= "") { Set o.finding = ..Project(##class(Shutter.Store.Finding).%OpenId(fid)) } Else { Do o.%Set("finding", "", "null") }
         Set o.toolCalls = ##class(Shutter.Bridge.ToolCall).ForRun(run.EnsMessageId)
-        Set o.messageLink = ..PortalPath() _ "EnsPortal.MessageContents.zen?HeaderId=" _ run.EnsMessageId
+        Set o.messageLink = ..MessageLink(run.EnsMessageId)
         Do out.%Push(o)
     }
     Quit ..Json(out)
