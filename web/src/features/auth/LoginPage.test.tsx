@@ -87,6 +87,13 @@ describe('LoginPage', () => {
     await renderDemoLogin();
     const line = screen.getByText(/Online demo:/);
     expect(line).toHaveTextContent('Online demo: demo / shutter.');
+    // How that account's runs execute, said where it is entered, one press away so the page keeps its word budget: a
+    // replay on real IRIS, not the trial and not live
+    expect(
+      screen.getByText(
+        /On the online demo, scenario runs from the demo account replay the recorded agents on real IRIS, with no new inference; the judges' account there calls the agents live\./,
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Demo users' })).toHaveAttribute('aria-expanded', 'false');
     expect(line.closest('[data-tech-detail]')).toBeNull();
     expect(screen.getByText(/They are for your own instance/)).toBeInTheDocument();
@@ -441,7 +448,7 @@ describe('LoginPage, the way into the trial', () => {
     renderLogin(true);
     const card = await screen.findByRole('region', { name: 'New to Shutter?' });
     expect(card).toHaveTextContent(
-      "Try it in the trial environment: Mikolaj's Fictional Hospital, with made-up patients, where each action replays a recording. Nothing reaches IRIS.",
+      "Try the trial: Mikolaj's Fictional Hospital, with made-up patients. Each action replays a recording: no new inference, and nothing reaches IRIS.",
     );
     const tour = within(card).getByRole('link', { name: 'Take the guided tour of the trial' });
     const open = within(card).getByRole('link', { name: 'Open the trial' });
