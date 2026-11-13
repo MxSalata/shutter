@@ -1,0 +1,71 @@
+name: Repository checks
+
+# Checks of the repository as a whole, which need no IRIS and no build: no credentials, one version everywhere it is
+# written, both module.xml files in plain ASCII, and no em or en dash in the files or the pushed commit messages.
+#
+# A workflow of its own so that it also runs on a push that changes only the docs, which CI skips (its paths-ignore):
+# every push to main runs it. CI calls it too (workflow_call), so the dependency release and the Pages deployment
+# still wait for these checks; a push that changes code therefore runs it twice, once on its own and once inside CI.
+# Called from CI, github.event, github.event_name, github.sha and github.ref are CI's, so the dash check reads the
+# same pushed commits either way.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  # Dependabot's update pull requests are checked before they are merged; no other pull request runs (the job's
+  # condition)
+  pull_request:
+  workflow_call:
+
+# Read only. Called from CI, the token can only have what CI's calling job has (contents: read), never more.
+permissions:
+  contents: read
+
+# No concurrency group here: called from CI, github.workflow is CI's name, so a group built from it would be CI's own
+# group and GitHub would cancel the call as a deadlock. CI's queue covers the called run; a run on its own takes a
+# few minutes and writes nothing.
+
+jobs:
+  # The job reads only its own checkout, waits for no other job and uses no secret.
+  repository-checks:
+    name: Repository checks
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.user.login == 'dependabot[bot]'
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The whole history: the credential scan reads what the last 20 commits added, and the dash check the
+          # messages of every commit a push brings.
+          fetch-depth: 0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      # No API key, token or private key in a tracked file or in what the last 20 commits added, and no committed .env
+      - name: No credentials in the repository
+        run: python3 scripts/secret-scan.py --commits 20
+      # The IPM version equals the release tag, so every place that writes the version holds the same one: both
+      # module.xml files (the full package and the core module), Setup.cls, the web package and its lockfile,
+      # and the recorded demo's health.version. On a version tag (a run started by hand on the tag) they must also equal
+      # the tag.
+      - name: The version is the same everywhere it is written
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            python3 scripts/check-versions.py --tag "${{ github.ref_name }}"
+          else
+            python3 scripts/check-versions.py
+          fi
+      # Open Exchange's reader of module.xml keeps only the low byte of a character, so anything outside ASCII breaks a
+      # publish.
+      - name: Both module.xml files are plain ASCII
+        run: python3 scripts/check-ascii.py module.xml core/module.xml
+      # No em dash and no en dash (U+2014, U+2013) in any tracked file but the built www/ and the vendored installer,
+      # nor in the messages of the commits a push brings. A run that is not a push reads the last commit's message.
+      - name: No em or en dash in the tracked files or in the pushed commit messages
+        run: |
+          before="${{ github.event.before }}"
+          if [ "${{ github.event_name }}" = "push" ] && [ -n "$before" ] && [ "$before" != "0000000000000000000000000000000000000000" ] && git cat-file -e "$before^{commit}" 2>/dev/null; then
+            python3 scripts/check-text.py --messages "$before..${{ github.sha }}"
+          else
+            python3 scripts/check-text.py --messages "-1"
+          fi
