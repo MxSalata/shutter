@@ -308,7 +308,7 @@ The failure census can compare watched failures with opened cases. A redacted ca
 
 ## How it is tested
 
-**Current release checks and historical evaluations are different evidence.**
+**Release-specific checks and historical evaluations are different evidence.** The latest unit-suite totals given here are release 1.4.3's. Release 1.4.4 changed who may run scenarios on the online demo, and its changelog gives no separate totals.
 
 | Scope | Recorded checks |
 | --- | --- |
