@@ -87,6 +87,9 @@ ClassMethod Material(summary As %DynamicObject) As %DynamicObject
     If (##class(Shutter.Util.FurtherMessages).Count(further, "stops") + ##class(Shutter.Util.FurtherMessages).Count(further, "shows")) > 0 Set m."further_messages" = {"stops": (further.%Get("stops")), "shows": (further.%Get("shows"))}
     Set inc = summary.%Get("incident")
     If $ISOBJECT(inc) Set m.incident = {"incident_id": ($CLASSMETHOD(json, "Str", inc, "incident_id")), "chain_seq": ($CLASSMETHOD(json, "Str", inc, "chain_seq")), "position": ($CLASSMETHOD(json, "Str", inc, "position"))}
+    // A FHIR receiver's reads count only when the summary has them, so every other summary gives the digest it always gave.
+    Set fh = summary.%Get("fhir")
+    If $ISOBJECT(fh) Set m.fhir = ##class(Shutter.FHIR.Reader).Material(fh)
     Quit m
 }
 

@@ -20,7 +20,11 @@ Property Receiver As %String(MAXLEN = 128) [ InitialExpression = {$PARAMETER("Sh
 /// operation running HAPI in Java); empty never asks.
 Property SecondParserTarget As %String(MAXLEN = 128) [ InitialExpression = "Second Parser" ];
 
-Parameter SETTINGS = "FreshSeconds:Evidence,Receiver:Evidence,SecondParserTarget:Evidence";
+/// The item that reads a FHIR R4 receiver (FHIR Receiver): asked for the reads of a case whose receiver has a fhir block
+/// in the site profile, and for no other case.
+Property FHIRReceiverTarget As %String(MAXLEN = 128) [ InitialExpression = "FHIR Receiver" ];
+
+Parameter SETTINGS = "FreshSeconds:Evidence,Receiver:Evidence,SecondParserTarget:Evidence,FHIRReceiverTarget:Evidence";
 
 Method OnEvidenceRequest(request As Shutter.Msg.EvidenceRequest, Output response As Shutter.Msg.EvidenceResult) As %Status
 {
@@ -86,8 +90,12 @@ Method OnEvidenceRequest(request As Shutter.Msg.EvidenceRequest, Output response
     // names no encounter to read: the state and the receipt are not applicable, recorded with the statuses the
     // matcher reads as encounter_state unknown (no answer, 0) and receipt none (-1), and the timeline is empty.
     Set noEncounter = (case.EncounterId = "-")
+    // A receiver with a fhir block is read through FHIR Receiver, and its answers projected (Shutter.FHIR.Reader).
+    Set fhirKind = 'noEncounter && (##class(Shutter.Store.SiteProfile).ReceiverKind(receiver) = "fhir_r4"), fhirView = ""
     If noEncounter {
         Set status = 0, wardState = {"note": "Not applicable: the case names no encounter (the message carries no visit number)"}
+    } ElseIf fhirKind {
+        Set fhirView = ..FHIRCollect(case, receiver), status = fhirView."ward_state_http_status", wardState = fhirView."ward_state"
     } Else {
         Set statePath = ##class(Shutter.Store.SiteProfile).ReceiverPath(receiver, "state", case.EncounterId)
         If statePath = "" { Set status = 0, wardState = {"error": "no state endpoint in the receiver's description"} } Else { Set wardState = ..WardGet(statePath, .status) Do ##class(Shutter.Operation.Ward).TrustRead("state", .status, .wardState, "", ##class(Shutter.Store.SiteProfile).StrictAnswers(receiver)) }
@@ -119,6 +127,9 @@ Method OnEvidenceRequest(request As Shutter.Msg.EvidenceRequest, Output response
     // 5. The receipt for the operation key, if any.
     If noEncounter {
         Set rstatus = -1, receipt = {"note": "Not applicable: the case names no encounter"}
+    } ElseIf fhirKind {
+        // Present, absent or unreadable from the history read: never -1, which would say the receiver keeps no receipts.
+        Set rstatus = fhirView."receipt_http_status", receipt = fhirView.receipt
     } Else {
         Set receiptPath = ##class(Shutter.Store.SiteProfile).ReceiverPath(receiver, "receipt", "", case.OperationKey)
         Set receipt = $SELECT(receiptPath = "": {}, 1: ..WardGet(receiptPath, .rstatus))
@@ -160,6 +171,12 @@ Method OnEvidenceRequest(request As Shutter.Msg.EvidenceRequest, Output response
     // check reads this, never an assumption. A receiver without such an endpoint is described by the site profile's
     // declared features, and the route says so.
     Set route = ..Route(receiver, case)
+    // A FHIR receiver's capability is what its CapabilityStatement says; of the Encounter read the snapshot keeps the
+    // digest, the ETag and the version id, never the body.
+    If fhirKind {
+        Do ##class(Shutter.FHIR.Reader).RouteInto(route, fhirView.route)
+        Do snap.AddItem("fhir", "fhir_api", now, ##class(Shutter.FHIR.Reader).Item(fhirView.fhir)) Set count = count + 1
+    }
     Do snap.AddItem("route", "ward_api", now, route) Set count = count + 1
 
     // The summary the agents and the gate read.
@@ -181,6 +198,7 @@ Method OnEvidenceRequest(request As Shutter.Msg.EvidenceRequest, Output response
     Set summary."pending_messages" = pending
     Set summary."further_messages" = further
     Set summary.route = route
+    If fhirKind Set summary.fhir = fhirView.fhir
     If $ISOBJECT(source) Set summary.source = source
     Set summary.epoch = ##class(Shutter.Util.Json).Str(wardState, "epoch", ##class(Shutter.Util.Json).Str(route, "epoch"))
     Set summary."observed_at" = now
@@ -204,6 +222,11 @@ Method OnEvidenceRequest(request As Shutter.Msg.EvidenceRequest, Output response
     Set summary."fresh_until" = snap.FreshUntil
     Set sc = snap.Seal(summary)
     If $$$ISERR(sc) Set response.Error = $SYSTEM.Status.GetErrorText(sc) Quit $$$OK
+    // The Encounter as it was read is kept beside the snapshot, never in it: the gate and the binding build from it.
+    If fhirKind && (fhirView."encounter_body" '= "") {
+        Set sc = ##class(Shutter.Store.FHIRSealedRead).Keep(case, snap.%Id(), fhirView."encounter_body")
+        If $$$ISERR(sc) Set response.Error = $SYSTEM.Status.GetErrorText(sc) Quit $$$OK
+    }
     // The snapshot field alone: this copy of the case was read before the lookups, and the case may have joined an
     // incident meanwhile.
     Set sc = case.SetSnapshot(snap)
@@ -212,6 +235,43 @@ Method OnEvidenceRequest(request As Shutter.Msg.EvidenceRequest, Output response
     Set response.SnapshotId = snap.%Id(), response.Digest = snap.Digest, response.SummaryJSON = snap.Summary, response.ItemCount = count
     $$$TRACE("Snapshot " _ snap.%Id() _ " for " _ case.CaseId _ ": downstream HTTP " _ status _ ", receipt HTTP " _ rstatus _ ", " _ laterCount _ " later events")
     Quit $$$OK
+}
+
+/// The reads of a FHIR R4 receiver for a case, through the item that makes them. The one seam a test double overrides.
+Method FHIRReadParts(read As Shutter.Msg.FHIRRead, Output result As Shutter.Msg.FHIRReadResult) As %Status
+{
+    Quit ..SendRequestSync(..FHIRReceiverTarget, read, .result, 60)
+}
+
+/// The evidence of a case whose receiver is a FHIR R4 server: the reads, projected (Shutter.FHIR.Reader.Project). A call
+/// that fails, an answer with an error and an answer with no parts all give a view with every status 0 and the reason.
+Method FHIRCollect(case As Shutter.Store.Case, receiver As %String) As %DynamicObject
+{
+    Set parts = "", error = ""
+    Try {
+        Set read = ##class(Shutter.Msg.FHIRRead).%New()
+        Set read.CaseId = case.CaseId, read.Purpose = "evidence"
+        Set sc = ..FHIRReadParts(read, .result)
+        If $$$ISERR(sc) {
+            Set error = $SYSTEM.Status.GetErrorText(sc)
+        } ElseIf '$ISOBJECT($GET(result)) {
+            Set error = "no answer from " _ ..FHIRReceiverTarget
+        } ElseIf result.Error '= "" {
+            Set error = result.Error
+        } ElseIf result.PartsJSON = "" {
+            Set error = "the answer of " _ ..FHIRReceiverTarget _ " carries no parts"
+        } Else {
+            Set parts = ##class(%DynamicAbstractObject).%FromJSON(result.PartsJSON)
+        }
+    } Catch ex {
+        Set parts = "", error = ex.DisplayString()
+    }
+    If '$ISOBJECT(parts) {
+        Set parts = {}
+        Do parts.%Set("error", $EXTRACT("the receiver was not read: " _ error, 1, 400), "string")
+    }
+    Set entry = ##class(Shutter.Store.SiteProfile).Receiver(receiver)
+    Quit ##class(Shutter.FHIR.Reader).Project(parts, entry, case, ##class(Shutter.FHIR.Reader).PriorWard(case), ##class(Shutter.Store.FHIRAttempt).SentOperationIds(case))
 }
 
 /// The case's operation as the contract's object.
