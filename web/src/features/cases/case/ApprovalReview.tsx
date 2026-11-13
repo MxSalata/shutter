@@ -12,8 +12,9 @@ import { Digest } from '@/components/Digest';
 import { KeyValueList } from '@/components/KeyValueList';
 import { Timestamp } from '@/components/Timestamp';
 import { describeError, isApiError } from '@/lib/errors';
-import { shortDigest } from '@/lib/format';
+import { formatZoned, shortDigest } from '@/lib/format';
 import { ApprovalChangeRows } from './ApprovalChangeRows';
+import { fhirSummary, kindOfPlan, receiverKind } from './derive';
 import { PlanHeadline } from './PlanHeadline';
 import { decisionLabels, planWords } from './planAction';
 import { receiverNoun } from './receiver';
@@ -123,6 +124,9 @@ function ReviewBody({
   const { decision } = opened;
   const approving = decision === 'approve';
   const labels = decisionLabels(opened.view.plan);
+  // A FHIR case is approved on the Encounter's ETag as read: the evidence's route.kind, else the FHIR gate's policy
+  const fhir = (receiverKind(opened.snapshot) ?? kindOfPlan(opened.view)) === 'fhir_r4';
+  const etag = fhirSummary(opened.snapshot)?.encounter?.etag ?? '';
   // A decision sent or answered moves the case by itself: only a change before that stops the dialog
   const moved =
     live &&
@@ -209,6 +213,12 @@ function ReviewBody({
                 'Nothing is sent. The case stops as blocked, in this browser only, until a reload starts the recording afresh.',
             })}
       </Text>
+      {/* A FHIR case is approved on the Encounter's ETag as read, with no dry run and no resend of the HL7 message */}
+      {approving && fhir ? (
+        <Text size="sm" data-testid="fhir-approval">
+          {`Shutter sends this update with If-Match on the version read at ${formatZoned(opened.snapshot?.takenAt)} (ETag ${etag}). This server software refused a changed version when it was measured. No dry run exists for this receiver. After this update, do not resend the original HL7 message from the engine.`}
+        </Text>
+      ) : null}
       {/* The rest scrolls under the controls, which are sticky inside this block and so never rise over the three
           above: the confirming press comes into view only after them */}
       <Stack gap="sm" className="review-rest">

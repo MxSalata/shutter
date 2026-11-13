@@ -17,6 +17,7 @@ import { asObject } from '@/lib/json';
 import { humanize } from '@/lib/format';
 import type { ApprovalEvidence } from './approvalChange';
 import { ApprovalChangeRows } from './ApprovalChangeRows';
+import { fhirSummary, kindOfPlan, receiverKind } from './derive';
 import type { Decision } from './ApprovalReview';
 import { PlanHeadline } from './PlanHeadline';
 import { decisionLabels, planWords } from './planAction';
@@ -138,6 +139,9 @@ export function ApprovalPanel({
         ? 'There is no plan to decide on'
         : '';
   const policy = view?.gateDecisions?.at(-1)?.policyVersion ?? '';
+  // A FHIR case is approved on the Encounter's ETag as read, with no dry run and no resend of the HL7 message
+  const fhir = (receiverKind(snapshot) ?? kindOfPlan(view)) === 'fhir_r4';
+  const etag = fhirSummary(snapshot)?.encounter?.etag ?? '';
   // Only the current plan's approval that still stands is shown as the decision; a re-plan revokes the earlier
   // plan's, which is history.
   const { current, earlier } = approvalsByPlan(approvals, view);
@@ -246,9 +250,9 @@ export function ApprovalPanel({
           <TechDetail kind="data" label="Approval details">
             <Stack gap="xs">
               <Text size="sm" maw="68ch">
-                The release binds the plan digest, the evidence snapshot, the gate&apos;s policy and the
-                receiver version; if any of them changes before dispatch, it no longer authorises the write,
-                and the gate checks again at dispatch.
+                {fhir
+                  ? "The release binds the plan digest, the evidence snapshot, the gate's policy and the Encounter version read (its ETag); if any of them changes before dispatch, it no longer authorises the update, and the gate checks again at dispatch."
+                  : "The release binds the plan digest, the evidence snapshot, the gate's policy and the receiver version; if any of them changes before dispatch, it no longer authorises the write, and the gate checks again at dispatch."}
               </Text>
               <KeyValueList
                 rows={[
@@ -270,7 +274,9 @@ export function ApprovalPanel({
                     ),
                   ],
                   ['Gate policy', latest?.policyVersion || policy],
-                  ['Receiver version', String(latest?.expectedVersion ?? plan?.expectedVersion ?? '')],
+                  fhir
+                    ? ['Base version (ETag)', etag]
+                    : ['Receiver version', String(latest?.expectedVersion ?? plan?.expectedVersion ?? '')],
                   [
                     'Incident plan digest',
                     latest?.incidentPlanDigest ? (
@@ -283,7 +289,7 @@ export function ApprovalPanel({
               />
             </Stack>
           </TechDetail>
-          <BlindResendPreview c={c} me={me} />
+          {fhir ? null : <BlindResendPreview c={c} me={me} />}
           {approvals?.tasks?.length ? (
             <Table.ScrollContainer minWidth={520} className="stack-scroll">
               <StackTable verticalSpacing={4} className="stack-table">

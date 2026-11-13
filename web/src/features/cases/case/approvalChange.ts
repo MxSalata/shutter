@@ -1,6 +1,7 @@
 import type { PlanView, Snapshot } from '@/api/types';
 import { humanize } from '@/lib/format';
 import { asObject } from '@/lib/json';
+import { quotedVersion, receiverKind } from './derive';
 import { evidenceOf } from './message';
 import { planOperation, type ActionCase } from './planAction';
 
@@ -65,7 +66,7 @@ export function approvalChange(
   const known = where && read?.version !== undefined && read.version !== null;
   const reading = {
     held: known
-      ? `${where} at version ${str(read.version)}`
+      ? `${where} at version ${receiverKind(snapshot) === 'fhir_r4' ? quotedVersion(read.version) : str(read.version)}`
       : snapshot === undefined
         ? 'Not read yet'
         : 'Not in the evidence',

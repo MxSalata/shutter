@@ -4,6 +4,7 @@ import { displayZone, formatZoned, humanize } from '@/lib/format';
 import type { PlayedResult } from '@/lib/proof';
 import type { OutcomeCase } from '@/lib/status';
 import type { Tone } from '@/lib/tone';
+import { NO_MARKER, quotedVersion, receiverKind } from './derive';
 import { WRITE_OUTCOMES } from './receipt';
 import { encounterTimeline, type TimelineRow } from './timeline';
 
@@ -66,6 +67,7 @@ export function evidenceFacts(snapshot: Snapshot | null | undefined): EvidenceFa
   const others = own ? rows.filter((r) => !r.thisCase && r.sameTime && r.eventTime === own.eventTime) : [];
   const ward = asObject(s.ward_state) ?? {};
   const receiptStatus = Number(s.receipt_http_status);
+  const fhir = receiverKind(snapshot) === 'fhir_r4';
   return {
     failed: own
       ? `${operation(own)}: ${humanize(own.outcome).toLowerCase()}${own.httpStatus ? ` (HTTP ${own.httpStatus})` : ''}`
@@ -78,10 +80,14 @@ export function evidenceFacts(snapshot: Snapshot | null | undefined): EvidenceFa
           )
           .join('; ')
       : 'none',
-    receiver: ward.ward ? `${str(ward.ward)} at version ${str(ward.version)}` : 'not read',
+    receiver: ward.ward
+      ? `${str(ward.ward)} at version ${fhir ? quotedVersion(ward.version) : str(ward.version)}`
+      : 'not read',
     receipt:
       receiptStatus === 404
-        ? 'none: never committed'
+        ? fhir
+          ? NO_MARKER
+          : 'none: never committed'
         : receiptStatus === 200
           ? 'committed'
           : `unknown (HTTP ${str(s.receipt_http_status) || 'none'})`,

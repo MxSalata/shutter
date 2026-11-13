@@ -15,6 +15,9 @@ import { theme } from '@/theme';
 import CasePage from '../CasePage';
 import { failureMapOf } from './failureMapModel';
 import { deliveredByEngineWords, notCheckedAtReceiver } from './receiver';
+import { kindOfAttempts, receiverKind } from './derive';
+import { FHIR_DISPATCH_NOTE, FHIR_VERIFIED_NOTE } from './DispatchPanel';
+import { evidenceSummary } from './outcome';
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 afterEach(() => {
@@ -275,5 +278,69 @@ describe('the case page', () => {
     expect(closure.textContent).not.toMatch(/verif/i);
     expect(within(closure).getByText('Not checked at the receiver')).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'At the receiver' }).textContent).not.toMatch(/verif/i);
+  });
+});
+
+describe('the words of a FHIR case', () => {
+  const FHIR_HEADLINE =
+    "Updated the Encounter's location once, by another route than the original HL7 delivery";
+
+  it('leaves every recorded case to its own words, each new branch dead there', () => {
+    for (const [id, x] of Object.entries(fixtures.cases)) {
+      const snapshot = x.snapshot as unknown as Snapshot;
+      expect(receiverKind(snapshot), id).toBeUndefined();
+      expect(kindOfAttempts(x.attempts as unknown as AttemptView[]), id).toBeUndefined();
+      expect(evidenceSummary(snapshot), id).not.toMatch(/marker/);
+    }
+  });
+
+  it('shows the one update with If-Match, its answer and its verification, and never a resend', async () => {
+    const x = fixtures.cases['C-000002'];
+    const [view] = structuredClone(x.attempts) as unknown as AttemptView[];
+    const attempts = [
+      {
+        attempt: {
+          ...view.attempt,
+          expectedVersion: '',
+          httpStatus: 200,
+          outcome: 'applied',
+          receipt: {
+            kind: 'fhir',
+            encounter: 'Encounter/enc-1',
+            expected_etag: 'W/"1"',
+            response_etag: 'W/"2"',
+            response_location: '',
+            body_digest: 'sha256:abc123',
+            operation_id: 'op-1',
+            marker_system: 'urn:shutter',
+          },
+        },
+        verification: {
+          ...view.verification,
+          outcome: 'verified',
+          summary: 'Verified in Encounter version "2", which carries Shutter\'s marker.',
+          detail: { kind: 'fhir', judge_outcome: 'verified', disposition: 'resend', case_code: '' },
+        },
+      },
+    ];
+    serve({ ...x.detail, caseId: ID }, { kind: 'fhir_r4' }, attempts, x.closure);
+    renderCase();
+    await waitFor(() =>
+      expect(screen.getByRole('region', { name: 'Outcome' })).toHaveTextContent(FHIR_HEADLINE),
+    );
+    expect(document.body).not.toHaveTextContent(/Sent the transfer again/);
+    await openStep('What was written');
+    const dispatch = await screen.findByRole('region', { name: 'Dispatch' });
+    expect(await within(dispatch).findByText('Sent with If-Match')).toBeInTheDocument();
+    expect(within(dispatch).getByText('W/"1"')).toBeInTheDocument();
+    expect(within(dispatch).getByText('HTTP 200, ETag W/"2"')).toBeInTheDocument();
+    expect(within(dispatch).getByText('Body digest')).toBeInTheDocument();
+    expect(dispatch).toHaveTextContent(FHIR_DISPATCH_NOTE);
+    expect(within(dispatch).queryByText('Conditional on version')).not.toBeInTheDocument();
+    expect(dispatch.textContent).not.toMatch(/version \S* to /);
+    await openStep('What was verified');
+    const verification = await screen.findByRole('region', { name: 'Verification' });
+    expect(verification).toHaveTextContent(FHIR_VERIFIED_NOTE);
+    expect(within(verification).getByText(/^Verified in Encounter version "2"/)).toBeInTheDocument();
   });
 });
