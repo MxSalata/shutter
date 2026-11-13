@@ -16,6 +16,7 @@ export function VersionsPanel({ current }: { current: number }) {
     <Section
       id="site-versions"
       title="Versions"
+      wideNote
       note="Every saved version is kept. A save refuses approvals made under an earlier version, and they come back to a person."
     >
       {history.isPending ? <PageSkeleton label="Loading the versions…" /> : null}

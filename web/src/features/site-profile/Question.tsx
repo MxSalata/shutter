@@ -82,11 +82,21 @@ function stored(value: unknown): string {
 /**
  * A question's second layer. "Keys and values" (data: opens in Technical) starts with the profile key path as a code
  * chip, the name the API's own errors use, then what is stored under it and what is read when nothing is. "More about
- * this question" (explain: closed in both modes) holds the prose past the description's 25 words.
+ * this question" (explain: closed in both modes) holds the prose past the description's 25 words. A fold that belongs
+ * to the question (`first`: an advanced field) heads the list, so the question's disclosures read as one.
  */
-export function QuestionDetails({ keys, more }: { keys: KeyRow[]; more?: ReactNode }) {
+export function QuestionDetails({
+  keys,
+  more,
+  first,
+}: {
+  keys: KeyRow[];
+  more?: ReactNode;
+  first?: ReactNode;
+}) {
   return (
     <Stack gap={0}>
+      {first}
       <TechDetail label="Keys and values" kind="data">
         <Stack gap={4}>
           {keys.map(([path, value, whenNotSet]) => (

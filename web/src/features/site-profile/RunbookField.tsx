@@ -1,7 +1,7 @@
-import { Button, Group, TextInput } from '@mantine/core';
-import { IconChevronDown } from '@tabler/icons-react';
+import { Stack } from '@mantine/core';
 import { useState } from 'react';
 import type { SiteReceiver } from '@/api/types';
+import { FoldToggle, TextInput } from './controls';
 
 /**
  * The site's one line on where to look at this receiver, shown on its stopped cases as a navigation hint, never as
@@ -24,25 +24,10 @@ export function RunbookField({
   const open = shown || !!problem;
   const id = `site-receivers-${i}-manual_check.runbook`;
   return (
-    <>
-      <Group>
-        <Button
-          variant="subtle"
-          size="compact-sm"
-          color="gray"
-          onClick={() => setShown((s) => !s)}
-          aria-expanded={open}
-          leftSection={
-            <IconChevronDown
-              size={14}
-              aria-hidden
-              style={{ transform: open ? 'rotate(180deg)' : undefined, transition: 'transform 150ms' }}
-            />
-          }
-        >
-          Site runbook line
-        </Button>
-      </Group>
+    <Stack gap={6}>
+      <FoldToggle open={open} onToggle={() => setShown((s) => !s)}>
+        Site runbook line
+      </FoldToggle>
       {open ? (
         <TextInput
           id={id}
@@ -60,6 +45,6 @@ export function RunbookField({
           error={problem}
         />
       ) : null}
-    </>
+    </Stack>
   );
 }

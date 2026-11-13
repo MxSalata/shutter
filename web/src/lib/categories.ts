@@ -24,6 +24,29 @@ export interface CategoryText {
   modelled: boolean;
 }
 
+/**
+ * Orders and results, in the parts its two forms share, so the card's line and the whole sentence cannot drift apart.
+ * Checked against the server: the workflow sends such a case to a person before any model runs
+ * (CaseWorkflow.NotModelledToPerson), with its findings (Shutter.Util.CaseFindings); the gate blocks every write from
+ * the case (RECEIVER_NOT_MODELLED); and where the receiver's entry has a watch block and engine_resend, a person's one
+ * approval of an outage's offered set has the engine send those messages again (Shutter.Operation.EngineResend,
+ * CONTRACTS 17.8).
+ */
+const ORDERS_RESULTS = {
+  person: 'A case goes to a person with its findings',
+  findings:
+    "(who holds the message, the receiver's own words and the result they name) before any model runs",
+  noResend: 'and nothing is resent from the case.',
+  outage:
+    "At a receiver set up for it, an outage's messages that never arrived are listed, and after one approval the engine sends them again.",
+} as const;
+
+/**
+ * Orders and results in a card's two sentences: what a case gets, and the one resend there is, an outage's. The whole
+ * of it, with what the findings are, is `CATEGORY_TEXT.orders_results.overtaken`.
+ */
+export const ORDERS_RESULTS_BRIEF = `${ORDERS_RESULTS.person}, ${ORDERS_RESULTS.noResend} ${ORDERS_RESULTS.outage}`;
+
 export const CATEGORY_TEXT: Record<ReceiverCategory, CategoryText> = {
   current_state: {
     label: 'Current state',
@@ -45,8 +68,7 @@ export const CATEGORY_TEXT: Record<ReceiverCategory, CategoryText> = {
     label: 'Orders and results',
     gist: 'Each order or result is its own record',
     examples: 'Order communications, a laboratory system (LIMS)',
-    overtaken:
-      "A case goes to a person with its findings (who holds the message, the receiver's own words and the result they name) before any model runs, and nothing is resent from the case. At a receiver set up for it, an outage's messages that never arrived are listed, and after one approval the engine sends them again.",
+    overtaken: `${ORDERS_RESULTS.person} ${ORDERS_RESULTS.findings}, ${ORDERS_RESULTS.noResend} ${ORDERS_RESULTS.outage}`,
     modelled: false,
   },
 };
