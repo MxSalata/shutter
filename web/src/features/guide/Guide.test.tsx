@@ -227,11 +227,11 @@ describe('the guide', () => {
     expect(useAppearance.getState().detail).toBe('technical');
   });
 
-  it('sits just above Approve plan on the step that invites the press', async () => {
+  it('sits just above Approve the resend on the step that invites the press', async () => {
     at('s2/decision');
     renderApp('/start');
     const guide = await card();
-    const control = await screen.findByRole('button', { name: 'Approve plan' });
+    const control = await screen.findByRole('button', { name: 'Approve the resend' });
     const host = guide.closest<HTMLElement>('[data-guide-host]')!;
     await waitFor(() => expect(host.nextElementSibling).toContainElement(control));
     expect(host.dataset.guideNear).toBe('true');
@@ -278,7 +278,7 @@ describe('the guide', () => {
         sent.push(await request.clone().json());
     });
     await userEvent.click(within(guide).getByRole('button', { name: 'Next' }));
-    // Through the same call Approve plan makes, with its own comment
+    // Through the same call Approve the resend makes, with its own comment
     await waitFor(async () => expect((await api.get<CaseDetail>('/cases/C-000002')).state).toBe('resolved'));
     expect(sent).toEqual([expect.objectContaining({ decision: 'approve', comment: APPROVED_FOR_YOU })]);
     server.events.removeAllListeners();
@@ -319,7 +319,7 @@ describe('the guide', () => {
     at('s2/decision');
     renderApp();
     const guide = await card();
-    const chip = await within(guide).findByRole('button', { name: 'Try it: press Approve plan' });
+    const chip = await within(guide).findByRole('button', { name: 'Try it: press Approve the resend' });
     const control = document.querySelector<HTMLElement>('[data-tour-action="approve-plan"]')!;
     expect(control).toBeTruthy();
     // jsdom has no IntersectionObserver, so the control counts as in view: the pointer and halo stand at rest
@@ -338,7 +338,7 @@ describe('the guide', () => {
     at('s2/decision');
     renderApp();
     const guide = await card();
-    await within(guide).findByRole('button', { name: 'Try it: press Approve plan' });
+    await within(guide).findByRole('button', { name: 'Try it: press Approve the resend' });
     const played = (detail: string) =>
       act(() => {
         window.dispatchEvent(new CustomEvent(REPLAY_DONE, { detail }));

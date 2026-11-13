@@ -236,12 +236,16 @@ describe("the case's action", () => {
     await waitFor(() => expect(document.activeElement?.id).toBe('escalations-title'));
   });
 
-  it('takes the approver to the Approval section, where Approve and Reject are', async () => {
+  it('opens the review of the exact plan for the approver in one press, where Approve and Reject are', async () => {
     renderCase('C-000002');
     const action = await screen.findByTestId('case-action');
     await waitFor(() => expect(action).toHaveAccessibleName('Needs you: decide on the resend'));
+    // Once the plan is read: before that the press goes to the Approval section, which loads it
+    await screen.findByTestId('case-proposal');
     await userEvent.click(action);
-    await waitFor(() => expect(document.activeElement?.id).toBe('approval-title'));
+    const dialog = await screen.findByRole('dialog', { name: 'Approve the resend: plan v1' });
+    expect(within(dialog).getByRole('button', { name: 'Approve the resend' })).toBeEnabled();
+    expect(within(dialog).getByRole('button', { name: 'Reject instead' })).toBeEnabled();
   });
 
   it("opens the card's details for an action that has no place of its own", async () => {

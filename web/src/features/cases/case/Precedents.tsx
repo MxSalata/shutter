@@ -92,7 +92,7 @@ export function NextActionPrecedents({
       <Line summary={summary} labelled define />
       {!none && onSee ? (
         <Group>
-          {/* The default surface keeps its words at 4.5:1 on the tinted card, as Review the plan and decide does */}
+          {/* The default surface keeps its words at 4.5:1 on the tinted card, as Review the resend does */}
           <Button size="compact-xs" variant="default" onClick={onSee}>
             See them<VisuallyHidden component="span"> in the audit trail</VisuallyHidden>
           </Button>

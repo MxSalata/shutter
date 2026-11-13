@@ -209,7 +209,7 @@ test.describe('where the tour scrolls to', () => {
   async function approveByHand(page: Page, width = 1280, height = 800) {
     const guide = await resumeAt(page, 's2/decision', 3, width, height);
     await expect(page.locator('[data-guide-card]')).toBeVisible();
-    await guide.getByRole('button', { name: 'Try it: press Approve plan' }).click();
+    await guide.getByRole('button', { name: 'Try it: press Approve the resend' }).click();
     await expect(page.getByTestId('guide-try-pointer')).toBeVisible();
     const control = page.locator('[data-tour-action="approve-plan"]');
     await expect(control).toBeFocused();
@@ -218,7 +218,7 @@ test.describe('where the tour scrolls to', () => {
     await expect(page.getByTestId('guide-try-pointer')).toHaveCount(0);
     await page
       .getByRole('dialog')
-      .getByRole('button', { name: /^Approve this plan/ })
+      .getByRole('button', { name: /^Approve the resend/ })
       .click();
     return guide;
   }
@@ -269,8 +269,8 @@ test.describe('where the tour scrolls to', () => {
   }) => {
     const guide = await resumeAt(page, 's2/decision', 3);
     await expect(page.locator('[data-guide-card]')).toBeVisible();
-    await page.getByRole('button', { name: 'Reject plan' }).click();
-    await page.getByRole('dialog').getByRole('button', { name: 'Reject this plan' }).click();
+    await page.getByRole('button', { name: 'Reject the resend' }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Reject the resend' }).click();
     await expect(guide).toContainText('Step 4 of 9');
     await expect(guide.getByRole('heading', { name: 'Rejected, so nothing written' })).toBeFocused();
     await expect(guide).toContainText('The plan was rejected, so nothing was written.');
@@ -294,13 +294,13 @@ test.describe('where the tour scrolls to', () => {
     page,
   }) => {
     const guide = await resumeAt(page, 's2/decision', 3);
-    await guide.getByRole('button', { name: 'Try it: press Approve plan' }).click();
+    await guide.getByRole('button', { name: 'Try it: press Approve the resend' }).click();
     const control = page.locator('[data-tour-action="approve-plan"]');
     await control.click();
     await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
     await expect(guide).toContainText('Step 3 of 9');
     await expect(page.getByTestId('guide-try-pointer')).toHaveCount(0);
-    await guide.getByRole('button', { name: 'Try it: press Approve plan' }).click();
+    await guide.getByRole('button', { name: 'Try it: press Approve the resend' }).click();
     await expect(page.getByTestId('guide-try-pointer')).toBeVisible();
   });
 

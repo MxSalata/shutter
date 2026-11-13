@@ -31,6 +31,7 @@ import { receiverWords } from './failureMapModel';
 import { followedBoard } from './follows';
 import { evidenceOf, messageTypeLabel, messageTypeOf } from './message';
 import { actionHead, headerSentence } from './outcome';
+import { keepTogether } from './keepTogether';
 import { FailedAt } from './TechFacts';
 import { catalogueEntryOf, digestPrefix, failureCode, messageContentsLink } from './technical';
 
@@ -114,6 +115,8 @@ export interface HeaderNext {
   action: string;
   role: string;
   tone: Tone;
+  /** On a case that waits for approval, the plan's own action in a sentence: what the approval would release. */
+  proposal?: string;
 }
 
 /** A code with what it is, or its whole value, in its tooltip: the header's Technical facts carry no label of their own. */
@@ -252,17 +255,28 @@ export function CaseHeader({
                 aria-hidden
                 style={{ flex: 'none', color: toneText(next.tone), marginTop: 1 }}
               />
-              <Text size="md">
-                <Text span fw={700}>
-                  {'Next: '}
+              <Stack gap={2} style={{ minWidth: 0 }}>
+                <Text size="md">
+                  <Text span fw={700}>
+                    {'Next: '}
+                  </Text>
+                  {nextHead}
+                  {roleKnown ? (
+                    <Text span c="dimmed">
+                      {` · ${next.role}`}
+                    </Text>
+                  ) : null}
                 </Text>
-                {nextHead}
-                {roleKnown ? (
-                  <Text span c="dimmed">
-                    {` · ${next.role}`}
+                {/* What an approval would do, in the plan's own words: read here before anything is opened */}
+                {next.proposal ? (
+                  <Text size="md" maw="75ch" data-testid="case-proposal">
+                    <Text span fw={700}>
+                      {'Proposed: '}
+                    </Text>
+                    {keepTogether(next.proposal)}
                   </Text>
                 ) : null}
-              </Text>
+              </Stack>
             </Group>
           ) : null}
           {/* The patient first: what Shutter wrote for them, their number, the encounter, the bed asked for and where

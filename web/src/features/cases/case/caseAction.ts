@@ -2,6 +2,7 @@ import { resolveCan } from '@/api/can';
 import type { CaseDetail, Escalation, Me } from '@/api/types';
 import { caseState } from '@/lib/status';
 import { nextAction, type CaseFacts } from './outcome';
+import { decisionLabels } from './planAction';
 
 /**
  * What the case needs from the person reading it, for the action button at the top of the case page (and its copy in
@@ -18,7 +19,7 @@ export interface CaseAction {
   name: string;
   /**
    * Where the button goes when the action is done somewhere else than "What needs you now": the side by side of a
-   * scenario's two runs, the Approval section with its Approve and Reject, or the Escalations panel.
+   * scenario's two runs, the review of the exact plan with its Approve and Reject, or the Escalations panel.
    */
   goes?: ActionPlace;
   /** Nothing is pending, but the outcome isn't what the scenario expects: never drawn as all clear. */
@@ -101,7 +102,8 @@ export interface ActionContext {
 
 /**
  * The case's action for this user:
- * - waiting for approval: an approver decides on the plan ("Decide on the resend"); anyone else waits for one;
+ * - waiting for approval: an approver decides on the plan ("Decide on the resend"), and the button opens the review of
+ *   the exact plan directly; anyone else waits for one;
  * - stopped (blocked, escalated, failed): an operator marks it handled once the escalation went out (at once for a
  *   withheld case), escalates it
  *   when that is the next step, reinvestigates a failed one (not in the trial), and otherwise decides the next step
@@ -120,10 +122,7 @@ export function caseActionOf(f: CaseFacts, ctx: ActionContext): CaseAction {
   const can = resolveCan(ctx.me);
   if (c.state === 'awaiting_approval') {
     if (!can.approve) return notYours('Waiting for an approver');
-    return yours(
-      f.plan?.plan && f.plan.plan.disposition !== 'resend' ? 'Decide on the plan' : 'Decide on the resend',
-      'approval',
-    );
+    return yours(decisionLabels(f.plan?.plan).decide, 'approval');
   }
   if (!can.operate) return notYours('Waiting for an operator');
   // Once the email to the team was sent or saved as a file (or at once for a withheld case) the team corrects the systems and the case

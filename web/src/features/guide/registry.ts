@@ -269,7 +269,7 @@ export const CHAPTERS: GuideChapter[] = [
         target: 'case-decision',
         nearTry: 'case-approve',
         open: 'decision',
-        tryIt: { action: 'approve-plan', text: 'Try it: press Approve plan' },
+        tryIt: { action: 'approve-plan', text: 'Try it: press Approve the resend' },
         noApprove: {
           title: 'An approver decides here',
           say: "The safety checks (the gate) passed and a test run worked. Your role can't approve, so the fix waits for an approver.",

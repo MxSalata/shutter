@@ -5,6 +5,7 @@ import type { CaseDetail, Me } from '@/api/types';
 import { KeyValueList } from '@/components/KeyValueList';
 import { keyLabel } from '@/lib/format';
 import { ApprovalPanel } from './ApprovalPanel';
+import type { Decision } from './ApprovalReview';
 import { BoardPanel } from './BoardPanel';
 import { ClosureRecord } from './Closure';
 import { describeItem, kindLabel } from './derive';
@@ -79,6 +80,7 @@ export function CaseStory({
   portalBase,
   compareFocus,
   boardOnTop = false,
+  onDecide,
 }: {
   c: CaseDetail;
   me: Me | null | undefined;
@@ -88,6 +90,8 @@ export function CaseStory({
   onChange: (steps: string[]) => void;
   /** Switches to the Evidence tab. */
   onShowEvidence: () => void;
+  /** Opens the review of the exact plan on a decision: the Approval section's buttons. */
+  onDecide: (decision: Decision) => void;
   portalBase: string;
   compareFocus: boolean;
   /** The board's cards are at the top of the page, under the outcome: this step then holds the plan alone. */
@@ -100,7 +104,6 @@ export function CaseStory({
     loading: plan === undefined && !facts.planError,
     error: facts.planError,
     onRetry: facts.retryPlan,
-    receiver: c.receiver,
   };
   // A case with no receipt reads what the engine and the site say, and that nobody read the receiver
   const notChecked = notCheckedAtReceiver(c, facts.snapshot, facts.attempts);
@@ -172,12 +175,19 @@ export function CaseStory({
             portalBase={portalBase}
           />
         )}
-        <PlanPanel {...planRead} />
+        <PlanPanel {...planRead} c={c} snapshot={facts.snapshot} />
       </Step>
       <Step value="decision" n={4} title="Gate and decision" summary={decisionSummary(facts)}>
         <GatePanel {...planRead} />
         {me ? (
-          <ApprovalPanel c={c} me={me} view={plan} approvals={facts.approvals} snapshot={facts.snapshot} />
+          <ApprovalPanel
+            c={c}
+            me={me}
+            view={plan}
+            approvals={facts.approvals}
+            snapshot={facts.snapshot}
+            onDecide={onDecide}
+          />
         ) : null}
       </Step>
       <Step value="written" n={5} title="What was written" summary={writtenSummary(facts)}>

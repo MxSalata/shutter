@@ -273,14 +273,38 @@ describe('the case header for a busy reader (8 Nov)', () => {
     expect(shownText(pas.closest('p')!)).toBe('The PAS merge was withheld, never sent.');
   });
 
+  it("says what an approval would release under the next step, in the plan's own sentence", () => {
+    renderUi(
+      <CaseHeader
+        c={recorded('C-000002')}
+        next={{
+          action: 'Approve or reject the resend',
+          role: 'Approver',
+          tone: 'attention',
+          proposal:
+            'Resend the PAS transfer to WARD-B, once, only if the bed-management system is still at version 1.',
+        }}
+      />,
+    );
+    const next = screen.getByTestId('case-next');
+    expect(next).toHaveTextContent(/^Next: Approve or reject the resend · Approver/);
+    expect(screen.getByTestId('case-proposal')).toHaveTextContent(
+      /^Proposed: Resend the PAS transfer to WARD-B, once, only if the bed-management system is still at version 1\.$/,
+    );
+    expect(next).toContainElement(screen.getByTestId('case-proposal'));
+  });
+
   it("says a person's next step and who takes it before the facts, and nothing when none is given", () => {
     const { unmount } = renderUi(
       <CaseHeader
         c={recorded('C-000002')}
-        next={{ action: 'Approve or reject plan v1', role: 'Approver', tone: 'attention' }}
+        next={{ action: 'Approve or reject the resend', role: 'Approver', tone: 'attention' }}
       />,
     );
-    expect(screen.getByTestId('case-next')).toHaveTextContent(/^Next: Approve or reject plan v1 · Approver$/);
+    expect(screen.getByTestId('case-next')).toHaveTextContent(
+      /^Next: Approve or reject the resend · Approver$/,
+    );
+    expect(screen.queryByTestId('case-proposal')).not.toBeInTheDocument();
     unmount();
     renderUi(
       <CaseHeader c={recorded('C-000002')} next={{ action: 'Not read yet', role: '', tone: 'attention' }} />,

@@ -38,7 +38,7 @@ export function Section({
     <Stack gap="sm">
       <Group justify="space-between" align="flex-start" wrap="wrap" gap="xs">
         <Stack gap={2} style={{ minWidth: 0, flex: '1 1 260px' }}>
-          {/* Focusable from script only: a link to a section (Review the plan and decide) moves focus to its heading */}
+          {/* Focusable from script only: a link to a section (a stage of the progress strip) moves focus to its heading */}
           <Title order={nested ? 3 : 2} id={`${id}-title`} tabIndex={-1}>
             {title}
           </Title>

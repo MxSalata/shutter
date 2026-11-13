@@ -14,23 +14,25 @@ vi.mock('@/env/mode', async (importOriginal) => ({
 describe('ConfirmModal', () => {
   it('is named by its title alone, with where the action takes effect beside it', async () => {
     const { unmount } = renderUi(
-      <ConfirmModal opened onClose={() => {}} title="Approve plan v1">
+      <ConfirmModal opened onClose={() => {}} title="Approve the resend: plan v1">
         <p>This sends the fix.</p>
       </ConfirmModal>,
     );
-    const dialog = await screen.findByRole('dialog', { name: 'Approve plan v1' });
+    const dialog = await screen.findByRole('dialog', { name: 'Approve the resend: plan v1' });
     expect(within(dialog).getByText('Live system')).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: 'Close' })).toBeInTheDocument();
     expect(dialog).toHaveTextContent('This sends the fix.');
     unmount();
     mode.trial = true;
     renderUi(
-      <ConfirmModal opened onClose={() => {}} title="Approve plan v1">
+      <ConfirmModal opened onClose={() => {}} title="Approve the resend: plan v1">
         <p>Nothing leaves this browser.</p>
       </ConfirmModal>,
     );
     expect(
-      within(await screen.findByRole('dialog', { name: 'Approve plan v1' })).getByText('Trial only'),
+      within(await screen.findByRole('dialog', { name: 'Approve the resend: plan v1' })).getByText(
+        'Trial only',
+      ),
     ).toBeInTheDocument();
     mode.trial = false;
   });
