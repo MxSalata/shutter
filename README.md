@@ -81,20 +81,7 @@ The demo resets hourly. Live spending is capped at 5 USD an hour and 15 USD a da
 
 ## How it works
 
-### Two recovery contracts
-
 A **receiver** is the system the message was going to. A **receipt** is that receiver's own record of a message it holds.
-
-| | Case recovery through the receiver's API | Outage recovery through the engine |
-| --- | --- | --- |
-| **What is sent** | One mapped operation, not the original HL7 message | Stored HL7 messages that never arrived, unchanged and in order |
-| **What the receiver must offer** | Versioned reads, conditional writes, receipts, readable history and non-mutating dry runs | A watched receiver configured for `engine_resend`; a current-state or history-of-record receiver must also declare `ack_level: application` |
-| **Release** | Approval bound to the exact plan, or release under the site's written policy | One approval bound to the offered set |
-| **Completion evidence** | **Verified at the receiver:** the operation is read back in its receipt and history | **Completed in the engine:** each new header's delivery outcome. What a completed header proves at the receiver is what the site declared in `ack_level`, not something Shutter establishes |
-| **Duplicates** | The receipt and history establish what the receiver holds | The receiver's declared duplicate answer closes a message as already delivered. Where duplicate refusal is not declared, the approver first checks the receiver and confirms it |
-| **What is not claimed** | A guarantee beyond the receiver API's contract | Shutter reads nothing at the receiver and does not claim receiver-side verification |
-
-Outside an outage, a plain MLLP receiver's case gets investigation and a drafted email, never a resend from the case.
 
 ### A case, from evidence to decision
 
@@ -109,6 +96,19 @@ A **catalogue** entry describes a known failure and its safe outcome. The **site
 For an API-recovery incident, one approval binds the incident's plan. Its cases become chains per encounter, released in order, each item's own evidence, dry run and dispatch checks completed before the next proceeds.
 
 ![S2 waiting for approval: completed checks and the exact plan to approve or reject](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/case-s2-approval.png)
+
+### Two recovery contracts
+
+| | Case recovery through the receiver's API | Outage recovery through the engine |
+| --- | --- | --- |
+| **What is sent** | One mapped operation, not the original HL7 message | Stored HL7 messages that never arrived, unchanged and in order |
+| **What the receiver must offer** | Versioned reads, conditional writes, receipts, readable history and non-mutating dry runs | A watched receiver configured for `engine_resend`; a current-state or history-of-record receiver must also declare `ack_level: application` |
+| **Release** | Approval bound to the exact plan, or release under the site's written policy | One approval bound to the offered set |
+| **Completion evidence** | **Verified at the receiver:** the operation is read back in its receipt and history | **Completed in the engine:** each new header's delivery outcome. What a completed header proves at the receiver is what the site declared in `ack_level`, not something Shutter establishes |
+| **Duplicates** | The receipt and history establish what the receiver holds | The receiver's declared duplicate answer closes a message as already delivered. Where duplicate refusal is not declared, the approver first checks the receiver and confirms it |
+| **What is not claimed** | A guarantee beyond the receiver API's contract | Shutter reads nothing at the receiver and does not claim receiver-side verification |
+
+Outside an outage, a plain MLLP receiver's case gets investigation and a drafted email, never a resend from the case.
 
 The [receiver contract](https://github.com/MxSalata/shutter/blob/main/docs/readme/receiver-contract.md) defines the API path. [CONTRACTS 17.8](https://github.com/MxSalata/shutter/blob/main/docs/CONTRACTS.md#178-the-send-v151-to-v154) defines the engine resend.
 
