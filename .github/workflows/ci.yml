@@ -3,7 +3,8 @@ name: CI
 # The jobs run on GitHub-hosted runners: the repository is public, and no job of a public repository runs on
 # private machines. CI runs on main after a merge, and on a branch only by hand (workflow_dispatch): branch work is
 # tested on the development IRIS instances before it is pushed. A push that changes only the docs
-# (docs/ and the top-level Markdown) runs nothing; the knowledge's Markdown is checked, so it still runs.
+# (docs/ and the top-level Markdown) runs nothing here; the knowledge's Markdown is checked, so it still runs. The
+# repository checks (repository-checks.yml) run on every push to main, docs-only ones too, and CI calls them as well.
 on:
   push:
     branches: [main]
@@ -140,9 +141,6 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          # The whole history: the writing rules' step reads the messages of every commit a push brings.
-          fetch-depth: 0
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: '3.12'
@@ -170,9 +168,6 @@ jobs:
           python3 "$out/generate.py"
           cmp "$out/scenarios.json" fixtures/scenarios.json
           for folder in "$out"/S*/; do diff -r "$folder" "fixtures/$(basename "$folder")"; done
-      # No API key, token or private key in a tracked file or in what the last 20 commits added, and no committed .env
-      - name: No credentials in the repository
-        run: python3 scripts/secret-scan.py --commits 20
       - name: The scenario catalogue keeps to the condition vocabulary, and catalogue.json is built from it
         run: python3 scripts/build-catalogue.py knowledge/catalogue --check
       # The Explain agent searches the explain collection for the plain meaning of a gate check, so every reason code
@@ -184,31 +179,6 @@ jobs:
       # and no NHS number in it or in the demo's agent output.
       - name: Nothing personal from the fixtures reached the model in any recording
         run: python3 tests/privacy_check.py --demo web/src/mocks/fixtures.json
-      # The IPM version equals the release tag, so every place that writes the version holds the same one: both
-      # module.xml files (the full package and the core module), Setup.cls, the web package and its lockfile,
-      # and the recorded demo's health.version. On a version tag (a run started by hand on the tag) they must also equal
-      # the tag.
-      - name: The version is the same everywhere it is written
-        run: |
-          if [ "${{ github.ref_type }}" = "tag" ]; then
-            python3 scripts/check-versions.py --tag "${{ github.ref_name }}"
-          else
-            python3 scripts/check-versions.py
-          fi
-      # Open Exchange's reader of module.xml keeps only the low byte of a character, so anything outside ASCII breaks a
-      # publish.
-      - name: Both module.xml files are plain ASCII
-        run: python3 scripts/check-ascii.py module.xml core/module.xml
-      # The writing rules: no em or en dashes and no Co-Authored-By trailer, in every tracked file but
-      # the built www/ and the vendored installer, and in the messages of the commits a push brings.
-      - name: The files and the pushed commit messages keep the writing rules
-        run: |
-          before="${{ github.event.before }}"
-          if [ "${{ github.event_name }}" = "push" ] && [ -n "$before" ] && [ "$before" != "0000000000000000000000000000000000000000" ] && git cat-file -e "$before^{commit}" 2>/dev/null; then
-            python3 scripts/check-text.py --messages "$before..${{ github.sha }}"
-          else
-            python3 scripts/check-text.py --messages "-1"
-          fi
       # The REST API's description (docs/api/openapi.json) names every route of Dispatch.cls's UrlMap and nothing else,
       # each with the resource and the write flag the route's own check says (scripts/check-openapi.py). A push of docs
       # alone runs no CI, so a route change and its description go in one commit.
@@ -223,6 +193,14 @@ jobs:
       # from its own list
       - name: The Evaluation page lists the boundary check's own checks
         run: python3 tests/e2e/boundary_check.py --check-list docs/readme/boundary.json
+
+  # Checks of the repository as a whole (credentials, versions, module.xml in ASCII, no em or en dash), in a workflow
+  # of their own, .github/workflows/repository-checks.yml, which also runs on the docs-only pushes this workflow skips.
+  # Called here so the dependency release and the Pages deployment wait for them. A called workflow gets this run's
+  # event (the push's before and after commits) and at most the token this job has (contents: read), and no secret.
+  repository-checks:
+    name: Repository checks
+    uses: ./.github/workflows/repository-checks.yml
 
   # The ObjectScript side on a real IRIS for Health Community 2026.2 (InterSystems' image; the AI Hub build is not on a
   # registry CI can pull from, and the core needs none of it): the namespace, a full load and compile, the installer,
@@ -495,7 +473,7 @@ jobs:
   # GitHub-hosted runner, so package code the first job ran cannot change what the second runs with the write token. It
   # runs only once a version tag exists.
   dependency-release-build:
-    needs: [web, web-e2e, fixtures, iris]
+    needs: [web, web-e2e, fixtures, repository-checks, iris]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -809,15 +787,16 @@ jobs:
           docker builder prune -af --filter until=2h > /dev/null 2>&1 || true
 
   # Publishes the demo to GitHub Pages. Skipped (not failed) until the repository is public, Pages is enabled
-  # (Settings, Pages, Source: GitHub Actions) and the repository variable DEPLOY_DEMO is 'true'. The five checks are
+  # (Settings, Pages, Source: GitHub Actions) and the repository variable DEPLOY_DEMO is 'true'. The six checks are
   # named in the condition: the release jobs before the image are skipped on most runs, and a skipped job further up
   # would otherwise skip this one too.
   deploy-demo:
     if: >-
       ${{ !cancelled() && needs.web.result == 'success' && needs.web-e2e.result == 'success'
-      && needs.fixtures.result == 'success' && needs.iris.result == 'success' && needs.image.result == 'success'
+      && needs.fixtures.result == 'success' && needs.repository-checks.result == 'success'
+      && needs.iris.result == 'success' && needs.image.result == 'success'
       && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.DEPLOY_DEMO == 'true' }}
-    needs: [web, web-e2e, fixtures, iris, image]
+    needs: [web, web-e2e, fixtures, repository-checks, iris, image]
     runs-on: ubuntu-latest
     permissions:
       contents: read

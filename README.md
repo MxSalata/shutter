@@ -346,6 +346,10 @@ Each technology has a job in the workflow.
 
 [Every limit, with effect, workaround and status](https://github.com/MxSalata/shutter/blob/main/docs/readme/limits.md) · [Failure scenarios and their boundaries](https://github.com/MxSalata/shutter/blob/main/docs/edge-cases.md) · [What happens when a model fails](https://github.com/MxSalata/shutter/blob/main/docs/readme/model-fails.md)
 
+## How Shutter was developed
+
+Shutter was developed with substantial AI assistance. I set the requirements and the design direction, reviewed the work and decided what shipped. Coding assistants wrote much of the code and documentation under my direction, and I also used model-based reviewer workflows. I take responsibility for the published project.
+
 ---
 
 Shutter is an entry in the InterSystems Programming Contest **AI Agents in Interoperability Workflows**, [contest 49](https://openexchange.intersystems.com/contest/49).
