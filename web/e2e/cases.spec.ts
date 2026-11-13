@@ -79,6 +79,31 @@ test.describe('the outcome of each case', () => {
     await expect(caseRows(page).first().getByRole('link', { name: /^C-/ })).toHaveText(second);
   });
 
+  test('Hide closed stays on through a case and Back, and a closed tile turns it off', async ({ page }) => {
+    await signIn(page);
+    await go(page, '/cases');
+    const hide = page.getByRole('switch', { name: 'Hide closed' });
+    await expect(hide).not.toBeChecked();
+    await expect(page.getByText('64 cases', { exact: true })).toBeVisible();
+    await hide.click();
+    await expect(hide).toBeChecked();
+    await expect(page).toHaveURL(/#\/cases\?open=1$/);
+    // The trial holds one case at its approval: the only one that is not closed
+    await expect(page.getByText('1 open case', { exact: true })).toBeVisible();
+    await expect(caseRows(page)).toHaveCount(1);
+    await caseRows(page).first().getByRole('link', { name: 'C-000002' }).click();
+    await expect(page).toHaveURL(/#\/cases\/C-000002/);
+    await page.goBack();
+    await expect(page).toHaveURL(/#\/cases\?open=1$/);
+    await expect(hide).toBeChecked();
+    await expect(page.getByText('1 open case', { exact: true })).toBeVisible();
+    // A closed outcome is the newer choice: the switch gives way, so the list shows what was asked for
+    await page.getByRole('button', { name: /^\d+ Delivered, verified Show these/ }).click();
+    await expect(hide).not.toBeChecked();
+    await expect(page).toHaveURL(/#\/cases\?outcome=delivered$/);
+    await expect(caseRows(page).filter({ hasNotText: 'Delivered, verified' })).toHaveCount(0);
+  });
+
   test('counts the closed cases by outcome, and a tile filters the list to them', async ({ page }) => {
     await signIn(page);
     await go(page, '/cases');

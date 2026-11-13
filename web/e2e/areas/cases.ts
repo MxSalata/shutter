@@ -9,6 +9,8 @@ export const area: Area = {
     { path: '/cases', heading: 'Cases', detail: 'technical' },
     // One scenario's cases, as the Scenarios page links to it
     { path: '/cases?scenario=S8', heading: 'Cases' },
+    // Hide closed on: the open cases, with the line that says what is hidden
+    { path: '/cases?open=1', heading: 'Cases' },
   ],
   liveWordChecked: true,
 };
