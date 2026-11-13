@@ -14,8 +14,10 @@
 /// <p>What it does not do, and says so with a 400 (<class>FHIRFacade.Outcome</class>, NotImplemented): create by POST,
 /// PATCH, transactions and batches, conditional interactions, <code>$</code> operations, other resource types, XML and
 /// <code>_format</code>, search parameters but <code>identifier</code>, profile validation. Login failures belong to the
-/// web application (IRIS answers a failed login with a plain-text 404), TLS to the web server. Fault modes are added
-/// separately; with none set, this class is the plain server.</p>
+/// web application (IRIS answers a failed login with a plain-text 404), TLS to the web server.</p>
+/// <p>For tests of a client it can also misbehave, on request: <method>SetFault</method> sets one or more of three fault
+/// modes for a number of Encounter PUTs, and <method>Stats</method> counts the PUTs that arrived. With no fault set,
+/// this class is the plain server.</p>
 Class FHIRFacade.Service
 {
 
@@ -28,6 +30,9 @@ Parameter TYPES = "Encounter,Location,Patient";
 
 /// The ids IRIS takes in a URL.
 Parameter ID = "[A-Za-z0-9\-\.]{1,64}";
+
+/// The fault modes <method>SetFault</method> takes.
+Parameter FAULTS = "ignore_if_match,commit_drop_response,second_writer_between_read_and_write";
 
 /// The tag IRIS puts on a body reduced by <code>_elements</code>.
 Parameter SUBSETTEDSYSTEM = "http://terminology.hl7.org/CodeSystem/v3-ObservationValue";
@@ -48,10 +53,50 @@ ClassMethod Handle(request As %DynamicObject) As %DynamicObject
 }
 
 /// Every resource and version gone, version ids from "1" again, as IRIS's <code>HS.FHIRServer.Installer.Reset</code>
-/// leaves its store: a PUT with an ETag from before gets 412 with the current version ''.
-ClassMethod Reset()
+/// leaves its store: a PUT with an ETag from before gets 412 with the current version ''. The fault and the counters
+/// go too. 0, with nothing cleared, when a write that was under way did not end in 10 seconds.
+ClassMethod Reset() As %Boolean
 {
-    Do ##class(FHIRFacade.Store).Reset()
+    Quit ##class(FHIRFacade.Store).Reset()
+}
+
+/// Sets a fault for tests of a client: <var>modes</var> is a comma list of the names below, <var>times</var> how many
+/// requests it fires on; "" (or no times) clears it. A fault fires on an Encounter PUT that carries a well-formed
+/// <code>If-Match</code> and a body the server would store, once per request whatever the number of modes, and is gone
+/// after its last firing. A name that is not a mode is an error, and leaves the fault as it was.
+/// <ul>
+/// <li><code>ignore_if_match</code>: the version in <code>If-Match</code> is not compared, so a stale or unknown one
+/// is written (a malformed one is still the 405);</li>
+/// <li><code>commit_drop_response</code>: the version is written, and the answer is a 500 with an empty
+/// <code>text/html</code> body and no ETag, Location or Last-Modified;</li>
+/// <li><code>second_writer_between_read_and_write</code>: before the comparison another writer puts the stored current
+/// body again, which makes a new version, so the request's ETag is stale and the answer is the 412.</li>
+/// </ul>
+/// They combine: the second writer with <code>ignore_if_match</code> is a lost update.
+ClassMethod SetFault(modes As %String, times As %Integer = 1)
+{
+    Set known = $LISTFROMSTRING(..#FAULTS), list = ""
+    For i = 1:1:$LENGTH(modes, ",") {
+        Set mode = $ZSTRIP($PIECE(modes, ",", i), "<>W")
+        Continue:mode=""
+        If '$LISTFIND(known, mode) Throw ##class(%Exception.General).%New("UnknownFaultMode", "UnknownFaultMode", , "'" _ mode _ "' is not a fault mode of the test FHIR server; the modes are " _ ..#FAULTS)
+        Set:'$LISTFIND(list, mode) list = list _ $LISTBUILD(mode)
+    }
+    Do ##class(FHIRFacade.Store).SetFault($LISTTOSTRING(list, ","), times)
+}
+
+/// What arrived since the last reset: <code>{"puts_received", "puts_refused", "fault", "fault_left"}</code>. Every PUT
+/// of a resource counts as received, the seed's included, and as refused too when it wrote nothing; <code>fault</code>
+/// is the comma list still set ("" for none) and <code>fault_left</code> the times it still fires.
+ClassMethod Stats() As %DynamicObject
+{
+    Do ##class(FHIRFacade.Store).Fault(.modes, .left)
+    Set out = {}
+    Do out.%Set("puts_received", ##class(FHIRFacade.Store).Tallied("puts_received"), "number")
+    Do out.%Set("puts_refused", ##class(FHIRFacade.Store).Tallied("puts_refused"), "number")
+    Do out.%Set("fault", modes)
+    Do out.%Set("fault_left", left, "number")
+    Quit out
 }
 
 /// Writes each resource by its id with a PUT and no <code>If-Match</code>; returns <code>[{"type", "id", "status"}]</code>.
@@ -89,9 +134,57 @@ ClassMethod AdminReset(body As %String) As %DynamicObject
             Quit {"status": 400, "headers": {"Content-Type": "application/json; charset=utf-8"}, "body": ({"error": "the body must be empty or a JSON array of resources"}.%ToJSON())}
         }
     }
-    Do ..Reset()
+    Quit:'..Reset() ..Admin(500, {"error": "the store is locked by a write that did not end"})
     Set seeded = $SELECT($ISOBJECT(seed): ..Seed(seed), 1: [])
-    Quit {"status": 200, "headers": {"Content-Type": "application/json; charset=utf-8"}, "body": ({"reset": true, "seeded": (seeded)}.%ToJSON())}
+    Quit ..Admin(200, {"reset": true, "seeded": (seeded)})
+}
+
+/// The demo control <code>POST /admin/fault</code>: <var>body</var> is <code>{"modes": [..], "times": 1}</code>; no
+/// modes, or an empty list, clears the fault. Answers <method>Stats</method>; a body that is not such an object, or
+/// names a mode that is not one, changes nothing and is refused.
+ClassMethod AdminFault(body As %String) As %DynamicObject
+{
+    Set ask = ""
+    Try {
+        Set ask = {}.%FromJSON(body)
+    } Catch {
+        Set ask = ""
+    }
+    If '$ISOBJECT(ask) || 'ask.%IsA("%Library.DynamicObject") Quit ..Admin(400, {"error": "the body must be a JSON object with modes (an array of mode names) and times (a number)"})
+    Set modes = "", times = 1, problem = ""
+    If ask.%IsDefined("modes") {
+        Set list = ask.%Get("modes")
+        If '$ISOBJECT(list) || 'list.%IsA("%Library.DynamicArray") Quit ..Admin(400, {"error": "modes must be a JSON array of mode names"})
+        Set iter = list.%GetIterator()
+        While iter.%GetNext(, .mode) {
+            If $ISOBJECT(mode) || (mode [ ",") Set problem = "modes must be a JSON array of mode names" Quit
+            Set modes = modes _ $SELECT(modes = "": "", 1: ",") _ mode
+        }
+    }
+    If ask.%IsDefined("times") {
+        Set times = ask.%Get("times")
+        If (ask.%GetTypeOf("times") '= "number") || (times '?1.N) || (times < 1) Set problem = "times must be a whole number from 1"
+    }
+    Quit:problem'="" ..Admin(400, {"error": (problem)})
+    Try {
+        Do ..SetFault(modes, times)
+    } Catch ex {
+        Set problem = ex.Data
+    }
+    Quit:problem'="" ..Admin(400, {"error": (problem)})
+    Quit ..Admin(200, ..Stats())
+}
+
+/// The demo control <code>GET /admin/stats</code>: <method>Stats</method>.
+ClassMethod AdminStats() As %DynamicObject
+{
+    Quit ..Admin(200, ..Stats())
+}
+
+/// An answer of the demo controls: plain JSON, never FHIR.
+ClassMethod Admin(status As %Integer, body As %DynamicObject) As %DynamicObject [ Private ]
+{
+    Quit {"status": (status), "headers": {"Content-Type": "application/json; charset=utf-8"}, "body": (body.%ToJSON())}
 }
 
 ClassMethod Route(request As %DynamicObject) As %DynamicObject [ Private ]
@@ -379,14 +472,32 @@ ClassMethod Matches(resource As %DynamicObject, token As %String) As %Boolean [ 
     Quit 0
 }
 
+/// PUT {type}/{id}, counted: every PUT that gets here is one of <code>puts_received</code>, and one that wrote nothing
+/// is also one of <code>puts_refused</code> (<method>Stats</method>). The answer is <method>Write</method>'s.
+ClassMethod Update(type As %String, id As %String, headers As %DynamicObject, body As %String, base As %String) As %DynamicObject [ Private ]
+{
+    Do ##class(FHIRFacade.Store).Tally("puts_received")
+    Set written = 0
+    Try {
+        Set answer = ..Write(type, id, headers, body, base, .written)
+    } Catch ex {
+        Set answer = ..Fhir(500, ##class(FHIRFacade.Outcome).Failure(ex.DisplayString()))
+    }
+    Do:'written ##class(FHIRFacade.Store).Tally("puts_refused")
+    Quit answer
+}
+
 /// PUT {type}/{id}. Checks in this order: a malformed <code>If-Match</code> is 405; a body this server cannot store is
 /// 400, and so is one that fails IRIS's structural checks (<class>FHIRFacade.Structure</class>: every problem listed
 /// in one OperationOutcome); an <code>id</code> missing or not the URL's is 400; an <code>If-Match</code> whose
 /// version is not the current one ('' for an id never written, the delete's version for a deleted one) is 412. Nothing
 /// is written by a refusal. Otherwise a new version: 200 for an id written before (deleted ones included), 201 for a new
-/// one, which only a PUT without <code>If-Match</code> can make.
-ClassMethod Update(type As %String, id As %String, headers As %DynamicObject, body As %String, base As %String) As %DynamicObject [ Private ]
+/// one, which only a PUT without <code>If-Match</code> can make. <var>written</var> says whether a version was made.
+/// <p>A fault (<method>SetFault</method>) fires once the checks before the comparison have passed, on an Encounter PUT
+/// with an <code>If-Match</code>.</p>
+ClassMethod Write(type As %String, id As %String, headers As %DynamicObject, body As %String, base As %String, Output written As %Boolean) As %DynamicObject [ Private ]
 {
+    Set written = 0
     // HTTP drops the spaces around a header's value; IRIS accepted W/"2" with a trailing space.
     Set ifMatch = $ZSTRIP(..Header(headers, "If-Match"), "<>W"), prefer = $ZCONVERT(..Header(headers, "Prefer"), "L")
     Set asked = ""
@@ -407,16 +518,29 @@ ClassMethod Update(type As %String, id As %String, headers As %DynamicObject, bo
     If (resource.%GetTypeOf("id") '= "string") || (resource.%Get("id") '= id) Quit ..Fhir(400, ##class(FHIRFacade.Outcome).InvalidUpdateId())
     Quit:'##class(FHIRFacade.Store).Lock(type, id) ..Fhir(500, ##class(FHIRFacade.Outcome).Failure("The resource is locked by another request"))
     Try {
-        Set exists = ##class(FHIRFacade.Store).Current(type, id, .current)
-        If (ifMatch '= "") && (asked '= current) {
+        Set exists = ##class(FHIRFacade.Store).Current(type, id, .current, .deleted)
+        Set fault = ""
+        If (type = "Encounter") && (ifMatch '= "") Set fault = "," _ ##class(FHIRFacade.Store).TakeFault() _ ","
+        If (fault [ ",second_writer_between_read_and_write,") && exists && 'deleted {
+            // The other writer: the stored current body, put again as it stands, which takes the next version id.
+            Do ##class(FHIRFacade.Store).Version(type, id, current, , , .stored)
+            Set other = {}.%FromJSON(stored), current = ##class(FHIRFacade.Store).NextVid(type, id), now = ..Now()
+            Do ..Stamp(other, current, now)
+            Do ##class(FHIRFacade.Store).Append(type, id, current, "PUT", other.%ToJSON(), now)
+        }
+        If (ifMatch '= "") && (asked '= current) && (fault '[ ",ignore_if_match,") {
             Set answer = ..Fhir(412, ##class(FHIRFacade.Outcome).IfMatchViolation(asked, current))
         } Else {
             Set vid = ##class(FHIRFacade.Store).NextVid(type, id), now = ..Now()
             Do ..Stamp(resource, vid, now)
             Set text = resource.%ToJSON()
             Do ##class(FHIRFacade.Store).Append(type, id, vid, "PUT", text, now)
+            Set written = 1
             Set status = $SELECT(exists: 200, 1: 201), out = ..VersionHeaders(type, id, vid, now, base)
-            If prefer [ "return=representation" {
+            If fault [ ",commit_drop_response," {
+                // Written, and the answer lost: what a client sees when the server fails after its commit.
+                Set answer = ..Empty(500, {})
+            } ElseIf prefer [ "return=representation" {
                 Set answer = ..Fhir(status, text, out)
             } Else {
                 Set answer = ..Empty(status, out)

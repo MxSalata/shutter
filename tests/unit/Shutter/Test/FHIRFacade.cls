@@ -562,6 +562,361 @@ Method TestIdsAndTypeNames()
     }
 }
 
+/// ignore_if_match: for the times it was set, an Encounter PUT with a stale or unknown If-Match is written as if it
+/// matched; the malformed 405 stays; then the server compares again.
+Method TestIgnoreIfMatchFiresTimesThenStops()
+{
+    Quit:'..Ready()
+    Do ..Seed()
+    Do $CLASSMETHOD(..#SERVICE, "SetFault", "ignore_if_match", 2)
+    Do $$$AssertEquals(..FaultNow(" "), "ignore_if_match 2", "the fault is set")
+    Set m = ..Put("Encounter/enc-1", ..Enc("enc-1", "V1001"), """7""")
+    Do $$$AssertEquals(m.status, 405, "a malformed If-Match is still the 405")
+    Do $$$AssertEquals(..Stats().%Get("fault_left"), 2, "and does not use the fault up")
+    Do $$$AssertEquals(..Put("Location/ward-a", {"resourceType": "Location", "id": "ward-a", "status": "active", "name": "Ward A"}, "W/""7""").status, 412, "a Location is never touched by a fault")
+    Do $$$AssertEquals(..Put("Encounter/enc-1", ..Enc("enc-1", "V1001")).status, 200, "nor is a PUT without If-Match")
+    Do $$$AssertEquals(..Stats().%Get("fault_left"), 2, "neither uses the fault up")
+    Set a = ..Put("Encounter/enc-1", ..Enc("enc-1", "V1001"), "W/""1""")
+    Do $$$AssertEquals(a.status _ " " _ a.headers.ETag, "200 W/""3""", "a stale If-Match is written")
+    Set b = ..Put("Encounter/enc-1", ..Enc("enc-1", "V1001"), "W/""99""")
+    Do $$$AssertEquals(b.status _ " " _ b.headers.ETag, "200 W/""4""", "and an unknown one")
+    Do $$$AssertEquals(..FaultNow("|"), "|0", "the fault is gone after its two times")
+    Set c = ..Put("Encounter/enc-1", ..Enc("enc-1", "V1001"), "W/""1""")
+    Do $$$AssertEquals(c.status, 412, "the third is compared again")
+    Do $$$AssertEquals(..Versions("Encounter", "enc-1"), 4, "and wrote nothing")
+}
+
+/// commit_drop_response: the version is written and the answer is a 500 with an empty text/html body and no ETag.
+Method TestCommitDropResponseWritesAndAnswers500()
+{
+    Quit:'..Ready()
+    Do ..Seed()
+    Do $CLASSMETHOD(..#SERVICE, "SetFault", "commit_drop_response")
+    Set w = ..Put("Encounter/enc-1", ..Enc("enc-1", "V1001", [{"location": {"reference": "Location/ward-b"}, "status": "active"}]), "W/""1""", "return=representation")
+    Do $$$AssertEquals(w.status _ " " _ w.headers.%Get("Content-Type") _ " [" _ w.body _ "]", "500 text/html; charset=utf-8 []", "a 500 with an empty text/html body")
+    Do $$$AssertEquals(w.headers.%IsDefined("ETag") + w.headers.%IsDefined("Location") + w.headers.%IsDefined("Last-Modified"), 0, "and no ETag, Location or Last-Modified")
+    Set r = ..Get("Encounter/enc-1")
+    Do $$$AssertEquals(r.headers.ETag, "W/""2""", "the version was written")
+    Do $$$AssertEquals({}.%FromJSON(r.body).location.%Get(0).location.reference, "Location/ward-b", "with the body that was sent")
+    Do $$$AssertEquals(..Stats().%Get("puts_refused"), 0, "it is not counted as refused")
+    Set again = ..Put("Encounter/enc-1", ..Enc("enc-1", "V1001"), "W/""2""")
+    Do $$$AssertEquals(again.status _ " " _ again.headers.ETag, "200 W/""3""", "once only: the next PUT is answered")
+    // A PUT the server refuses is refused as ever, and the fault fired on it
+    Do $CLASSMETHOD(..#SERVICE, "SetFault", "commit_drop_response")
+    Do $$$AssertEquals(..Put("Encounter/enc-1", ..Enc("enc-1", "V1001"), "W/""1""").status, 412, "a stale PUT is the 412, with nothing to drop")
+    Do $$$AssertEquals(..Stats().%Get("fault_left"), 0, "and it used the fault up")
+}
+
+/// second_writer_between_read_and_write: another writer's version lands first, so the request's ETag is stale: 412,
+/// one more version, and it is the stored body again, not the request's.
+Method TestSecondWriterMakesTheRequestStale()
+{
+    Quit:'..Ready()
+    Do ..Seed()
+    Do $CLASSMETHOD(..#SERVICE, "SetFault", "second_writer_between_read_and_write")
+    Set w = ..Put("Encounter/enc-1", ..Enc("enc-1", "V1001", [{"location": {"reference": "Location/ward-b"}, "status": "active"}]), "W/""1""")
+    Do $$$AssertEquals(w.status, 412, "the request is stale")
+    Do $$$AssertEquals(..Issue(w).details.text, "The version in the 'If-Match' header, '1', does not match the current version, '2'", "against the other writer's version")
+    Do $$$AssertEquals(..Versions("Encounter", "enc-1"), 2, "one more version: the other writer's")
+    Set one = {}.%FromJSON(..Get("Encounter/enc-1/_history/1").body), two = {}.%FromJSON(..Get("Encounter/enc-1/_history/2").body)
+    Do $$$AssertEquals(two.meta.versionId, "2", "stamped as version 2")
+    Do $$$AssertEquals(two.location.%ToJSON(), one.location.%ToJSON(), "with the stored body, not the request's")
+    Do $$$AssertEquals(..Counts(), "5 1", "the other writer is not a PUT that arrived (four seeded, one sent)")
+    Set next = ..Put("Encounter/enc-1", ..Enc("enc-1", "V1001"), "W/""2""")
+    Do $$$AssertEquals(next.status, 200, "once only: the next PUT with the new ETag is written")
+}
+
+/// The modes combine: the second writer with ignore_if_match is a lost update, and with commit_drop_response as well
+/// the client hears a 500 for it.
+Method TestFaultsCombine()
+{
+    Quit:'..Ready()
+    Do ..Seed()
+    Do $CLASSMETHOD(..#SERVICE, "SetFault", "second_writer_between_read_and_write, ignore_if_match")
+    Do $$$AssertEquals(..Stats().fault, "second_writer_between_read_and_write,ignore_if_match", "both are set")
+    Set w = ..Put("Encounter/enc-1", ..Enc("enc-1", "V1001"), "W/""1""")
+    Do $$$AssertEquals(w.status _ " " _ w.headers.ETag, "200 W/""3""", "written over the other writer's version")
+    Do $$$AssertEquals(..Stats().%Get("fault_left"), 0, "one firing for the two modes")
+    Do $CLASSMETHOD(..#SERVICE, "SetFault", "ignore_if_match,commit_drop_response,second_writer_between_read_and_write")
+    Set w = ..Put("Encounter/enc-1", ..Enc("enc-1", "V1001"), "W/""1""")
+    Do $$$AssertEquals(w.status _ " [" _ w.body _ "]", "500 []", "all three: written, and a 500")
+    Do $$$AssertEquals(..Get("Encounter/enc-1").headers.ETag, "W/""5""", "two more versions")
+    // A name that is not a mode is an error and leaves the fault as it was
+    Do $CLASSMETHOD(..#SERVICE, "SetFault", "ignore_if_match", 3)
+    Set thrown = 0
+    Try {
+        Do $CLASSMETHOD(..#SERVICE, "SetFault", "history_503")
+    } Catch {
+        Set thrown = 1
+    }
+    Do $$$AssertEquals(thrown, 1, "a mode that is not built is an error")
+    Do $$$AssertEquals(..FaultNow(" "), "ignore_if_match 3", "and the fault stays as it was")
+    Do $CLASSMETHOD(..#SERVICE, "SetFault", "")
+    Do $$$AssertEquals(..FaultNow("|"), "|0", "an empty list clears it")
+    // The admin route's body
+    Set a = $CLASSMETHOD(..#SERVICE, "AdminFault", "{""modes"": [""commit_drop_response"", ""ignore_if_match""], ""times"": 2}")
+    Do $$$AssertEquals(a.status, 200, "the admin route sets a fault")
+    Set stats = {}.%FromJSON(a.body)
+    Do $$$AssertEquals(stats.fault _ " " _ stats.%Get("fault_left"), "commit_drop_response,ignore_if_match 2", "and answers the stats")
+    Do $$$AssertEquals($CLASSMETHOD(..#SERVICE, "AdminFault", "{""modes"": [""drop_meta_tag""]}").status, 400, "an unknown mode is refused")
+    Do $$$AssertEquals($CLASSMETHOD(..#SERVICE, "AdminFault", "{""modes"": ""ignore_if_match""}").status, 400, "modes that are not an array")
+    Do $$$AssertEquals($CLASSMETHOD(..#SERVICE, "AdminFault", "{""modes"": [""ignore_if_match""], ""times"": 0}").status, 400, "no times")
+    Do $$$AssertEquals($CLASSMETHOD(..#SERVICE, "AdminFault", "[]").status, 400, "not an object")
+    Do $$$AssertEquals(..FaultNow(" "), "commit_drop_response,ignore_if_match 2", "a refusal changes nothing")
+    Do $$$AssertEquals({}.%FromJSON($CLASSMETHOD(..#SERVICE, "AdminFault", "{""modes"": []}").body).fault, "", "an empty list clears it")
+    Do $$$AssertEquals({}.%FromJSON($CLASSMETHOD(..#SERVICE, "AdminStats").body).%Get("puts_received"), 6, "the stats route counts: four seeded, two sent")
+}
+
+/// Reset clears the fault and the counters with the resources, and keeps the clock.
+Method TestResetClearsFaultAndStats()
+{
+    Quit:'..Ready()
+    Do ..Seed()
+    Do ..Put("Encounter/enc-1", ..Enc("enc-1", "V1001"), "W/""9""")
+    Do $CLASSMETHOD(..#SERVICE, "SetFault", "ignore_if_match", 5)
+    Do $$$AssertEquals(..Stats().%ToJSON(), "{""puts_received"":5,""puts_refused"":1,""fault"":""ignore_if_match"",""fault_left"":5}", "before the reset")
+    Do $$$AssertEquals($CLASSMETHOD(..#SERVICE, "Reset"), 1, "the reset")
+    Do $$$AssertEquals(..Stats().%ToJSON(), "{""puts_received"":0,""puts_refused"":0,""fault"":"""",""fault_left"":0}", "after it")
+    Do $$$AssertEquals($CLASSMETHOD(..#SERVICE, "Now"), ..#CLOCK, "the clock is kept")
+    Do $CLASSMETHOD(..#SERVICE, "SetFault", "commit_drop_response")
+    Do $CLASSMETHOD(..#SERVICE, "AdminReset", "")
+    Do $$$AssertEquals(..Stats().fault, "", "the admin reset clears the fault too")
+    // A reset waits for a write: while another process holds a resource, it gives up and clears nothing
+    Do ..Seed()
+    Job ##class(Shutter.Test.FHIRFacade).HoldALock($JOB)
+    Set child = $ZCHILD
+    Set got = $SYSTEM.Event.WaitMsg("", 10)
+    Do $$$AssertEquals($LISTGET(got, 2), "held", "another process holds a resource's lock")
+    Lock +^FHIRFacade.Data:0
+    Set free = $TEST
+    Lock:free -^FHIRFacade.Data
+    Do $$$AssertEquals(free, 0, "so the whole store cannot be locked")
+    Do $SYSTEM.Event.Signal(child, "go")
+    Set got = $SYSTEM.Event.WaitMsg("", 10)
+    Do $$$AssertEquals($CLASSMETHOD(..#SERVICE, "Reset"), 1, "once it lets go, the reset runs")
+    Do $$$AssertEquals(..Get("Encounter/enc-1").status, 404, "and clears the store")
+}
+
+/// Takes one resource's lock as a write does, tells the parent, and lets go when told.
+ClassMethod HoldALock(parent As %Integer)
+{
+    Do ##class(FHIRFacade.Store).Lock("Encounter", "enc-1")
+    Do $SYSTEM.Event.Signal(parent, "held")
+    Do $SYSTEM.Event.WaitMsg("", 20)
+    Do ##class(FHIRFacade.Store).Unlock("Encounter", "enc-1")
+    Do $SYSTEM.Event.Signal(parent, "freed")
+}
+
+/// Every PUT of a resource that arrives is counted, and one that wrote nothing is counted as refused too: the stale,
+/// the malformed and the unstorable. Reads and deletes are not counted.
+Method TestTheCounterCountsARefusedPut()
+{
+    Quit:'..Ready()
+    Do $$$AssertEquals(..Stats().%ToJSON(), "{""puts_received"":0,""puts_refused"":0,""fault"":"""",""fault_left"":0}", "nothing yet")
+    Do ..Seed()
+    Do $$$AssertEquals(..Counts(), "4 0", "the seed's four PUTs")
+    Do ..Put("Encounter/enc-1", ..Enc("enc-1", "V1001"), "W/""1""")
+    Do $$$AssertEquals(..Counts(), "5 0", "a PUT that was written")
+    Do ..Put("Encounter/enc-1", ..Enc("enc-1", "V1001"), "W/""1""")
+    Do $$$AssertEquals(..Counts(), "6 1", "a stale one, the 412")
+    Do ..Put("Encounter/enc-1", ..Enc("enc-1", "V1001"), "2")
+    Do $$$AssertEquals(..Counts(), "7 2", "a malformed If-Match, the 405")
+    Do ..Call("PUT", "Encounter/enc-1", , "not json")
+    Do $$$AssertEquals(..Counts(), "8 3", "a body that is not JSON, the 400")
+    Do ..Put("Encounter/enc-2", ..Enc("enc-1", "V1001"))
+    Do $$$AssertEquals(..Counts(), "9 4", "an id that is not the URL's")
+    Do ..Get("Encounter/enc-1")
+    Do ..Call("DELETE", "Encounter/enc-1")
+    Do ..Call("PUT", "Encounter", , "{}")
+    Do ..Call("POST", "Encounter", , "{}")
+    Do $$$AssertEquals(..Counts(), "9 4", "a read, a delete, a conditional PUT and a POST are not PUTs of a resource")
+}
+
+/// The installer makes the two resources, the role, the user, the credential and the web application, and a second
+/// run leaves them as they are. What this test made it takes away again.
+Method TestTheInstallerTwice()
+{
+    Quit:'..Ready()
+    If '##class(%Dictionary.CompiledClass).%ExistsId("FHIRFacade.Installer") Do $$$AssertSkipped("FHIRFacade.Installer is not loaded on this instance") Quit
+    If '$SYSTEM.Security.Check("%Admin_Secure", "USE") Do $$$AssertSkipped("The installer needs %Admin_Secure") Quit
+    Set ns = $NAMESPACE, app = "/fhir-facade/r4"
+    Do ..Installed(.before)
+    Set hadNode = $DATA(^Shutter.Config("webapp", app)), hadCredential = ##class(Ens.Config.Credentials).%ExistsId("FHIRFacade")
+    Try {
+        Do $$$AssertStatusOK($CLASSMETHOD("FHIRFacade.Installer", "Install", ns), "the first run")
+        Do ..Installed(.first, .detail)
+        Do $$$AssertEquals(first, "resource:FHIRFacade_API,resource:FHIRFacade_Admin,role,user,application", "everything is there")
+        Do $$$AssertEquals(detail("role"), "FHIRFacade_API:RW", "the role holds the API resource, read and write")
+        Do $$$AssertTrue(("," _ detail("user") _ ",") [ ",Shutter_FHIRFacadeClient,", "the user has the role: " _ detail("user"))
+        Do $$$AssertTrue((("," _ detail("user") _ ",") [ ",Shutter_DownstreamClient,") || (("," _ detail("user") _ ",") [ ",Shutter_Operator,"), "and one that carries the database: " _ detail("user"))
+        Do $$$AssertNotTrue(detail("userResources") [ "FHIRFacade_Admin", "never the controls")
+        Do $$$AssertEquals(detail("comment"), "Used by the production's HTTP operation", "the comment the uninstall knows the user by")
+        Do $$$AssertEquals(detail("application"), ns _ "|1|32|FHIRFacade.API|||2|/fhir-facade/r4/", "the web application: a password and nothing else")
+        Do $$$AssertEquals(^Shutter.Config("webapp", app), 1, "recorded as Shutter's")
+        Set credential = ##class(Ens.Config.Credentials).%OpenId("FHIRFacade")
+        Do $$$AssertEquals($SELECT($ISOBJECT(credential): credential.Username, 1: ""), "fhir-client", "the credential names the user")
+        Do $$$AssertStatusOK($CLASSMETHOD("FHIRFacade.Installer", "Install", ns), "the second run")
+        Do ..Installed(.second, .again)
+        Do $$$AssertEquals(second, first, "nothing more, nothing less")
+        Do $$$AssertEquals(again("user") _ "#" _ again("role") _ "#" _ again("application"), detail("user") _ "#" _ detail("role") _ "#" _ detail("application"), "and nothing changed")
+        Do $$$AssertEquals(ns, $NAMESPACE, "the namespace is the caller's again")
+    } Catch ex {
+        Do $$$AssertStatusOK(ex.AsStatus(), "the installer")
+    }
+    Set $NAMESPACE = ns
+    // Only what was not there before goes
+    If 'hadCredential Do ##class(Ens.Config.Credentials).%DeleteId("FHIRFacade")
+    If 'hadNode Kill ^Shutter.Config("webapp", app)
+    Set before = "," _ before _ ","
+    Set $NAMESPACE = "%SYS"
+    If before '[ ",application," Do ##class(Security.Applications).Delete(app)
+    If before '[ ",user," Do ##class(Security.Users).Delete("fhir-client")
+    If before '[ ",role," Do ##class(Security.Roles).Delete("Shutter_FHIRFacadeClient")
+    If before '[ ",resource:FHIRFacade_API," Do ##class(Security.Resources).Delete("FHIRFacade_API")
+    If before '[ ",resource:FHIRFacade_Admin," Do ##class(Security.Resources).Delete("FHIRFacade_Admin")
+    Set $NAMESPACE = ns
+}
+
+/// What of the installer's is on the instance, as a comma list, and how each stands.
+Method Installed(Output found As %String, Output detail)
+{
+    Kill detail
+    Set found = "", ns = $NAMESPACE
+    New $NAMESPACE
+    Set $NAMESPACE = "%SYS"
+    For name = "FHIRFacade_API", "FHIRFacade_Admin" {
+        Set:##class(Security.Resources).Exists(name) found = found _ ",resource:" _ name
+    }
+    If ##class(Security.Roles).Exists("Shutter_FHIRFacadeClient") {
+        Kill props
+        Do ##class(Security.Roles).Get("Shutter_FHIRFacadeClient", .props)
+        Set found = found _ ",role", detail("role") = $GET(props("Resources"))
+    }
+    If ##class(Security.Users).Exists("fhir-client") {
+        Kill props
+        Do ##class(Security.Users).Get("fhir-client", .props)
+        Set found = found _ ",user", detail("user") = $GET(props("Roles")), detail("comment") = $GET(props("Comment"))
+        Set detail("userResources") = ""
+        For i = 1:1:$LENGTH(detail("user"), ",") {
+            Kill props
+            Continue:$PIECE(detail("user"), ",", i)=""
+            Continue:$$$ISERR(##class(Security.Roles).Get($PIECE(detail("user"), ",", i), .props))
+            Set detail("userResources") = detail("userResources") _ "," _ $GET(props("Resources"))
+        }
+    }
+    If ##class(Security.Applications).Exists("/fhir-facade/r4") {
+        Kill props
+        Do ##class(Security.Applications).Get("/fhir-facade/r4", .props)
+        Set found = found _ ",application"
+        Set detail("application") = $GET(props("NameSpace")) _ "|" _ $GET(props("Enabled")) _ "|" _ $GET(props("AutheEnabled")) _ "|" _ $GET(props("DispatchClass")) _ "|" _ $GET(props("Resource")) _ "|" _ $GET(props("MatchRoles")) _ "|" _ $GET(props("UseCookies")) _ "|" _ $GET(props("CookiePath"))
+    }
+    Set found = $EXTRACT(found, 2, *)
+}
+
+/// The fake adapter is the server in process: a read gives the ETag, a PUT with it is written, the same PUT again is
+/// the 412 with the real adapter's error status, and every request is logged.
+Method TestFakeFhirRoundTripWithAnEtag()
+{
+    Quit:'..Ready()
+    Do ..Seed()
+    Set http = ##class(Shutter.Test.FakeFhir).%New()
+    Set http.Base = "/fhir-facade/r4"
+    Set sc = http.SendFormDataArray(.resp, "GET", ..Ask(), "", "", "/fhir-facade/r4/Encounter/enc-1")
+    Do $$$AssertStatusOK(sc, "the read")
+    Do $$$AssertEquals(resp.StatusCode _ " " _ resp.GetHeader("ETag") _ " " _ resp.ContentType, "200 W/""1"" application/fhir+json; charset=UTF-8", "its status, ETag and content type")
+    Do $$$AssertEquals(resp.GetHeader("Location"), "/fhir-facade/r4/Encounter/enc-1/_history/1", "the Location begins with the base")
+    Set etag = resp.GetHeader("ETag"), read = {}.%FromJSON($ZCONVERT(resp.Data.Read(1000000), "I", "UTF8"))
+    Do $$$AssertEquals(read.id, "enc-1", "the body is the Encounter")
+    // A name above ASCII goes out as UTF-8 bytes and comes back as UTF-8 bytes
+    Set name = "Zo" _ $CHAR(235) _ " " _ $CHAR(321) _ "uk"
+    Set change = ..Enc("enc-1", "V1001")
+    Do change.%Set("serviceProvider", {"display": (name)})
+    Set put = ..Ask("W/""1""", $ZCONVERT(change.%ToJSON(), "O", "UTF8"))
+    Set sc = http.SendFormDataArray(.resp, "PUT", put, "", "", "/fhir-facade/r4/Encounter/enc-1")
+    Do $$$AssertStatusOK(sc, "the PUT with the ETag")
+    Do $$$AssertEquals(resp.StatusCode _ " " _ resp.GetHeader("ETag") _ " [" _ resp.Data.Read() _ "]", "200 W/""2"" []", "written, with an empty body")
+    Set sc = http.SendFormDataArray(.resp, "GET", ..Ask(), "", "", "/fhir-facade/r4/Encounter/enc-1/_history/2")
+    Set bytes = resp.Data.Read(1000000)
+    Do $$$AssertNotTrue($ZISWIDE(bytes), "a body is bytes")
+    Do $$$AssertEquals({}.%FromJSON($ZCONVERT(bytes, "I", "UTF8")).serviceProvider.display, name, "and the name is whole")
+    Set sc = http.SendFormDataArray(.resp, "PUT", ..Ask("W/""1""", change.%ToJSON()), "", "", "/fhir-facade/r4/Encounter/enc-1")
+    Do $$$AssertTrue($SYSTEM.Status.GetErrorText(sc) [ "412", "the same PUT again is an error status, as the real adapter gives: " _ $SYSTEM.Status.GetErrorText(sc))
+    Do $$$AssertEquals(resp.StatusCode, 412, "with the response")
+    Do $$$AssertEquals({}.%FromJSON($ZCONVERT(resp.Data.Read(1000000), "I", "UTF8")).resourceType, "OperationOutcome", "and its OperationOutcome")
+    Set sc = http.SendFormDataArray(.resp, "GET", ..Ask(), "", "", "/fhir-facade/r4/Encounter?identifier=" _ $ZCONVERT(..#SYS _ "|V1001", "O", "URL"))
+    Do $$$AssertEquals({}.%FromJSON(resp.Data.Read(1000000)).total, 1, "a search's query reaches the server")
+    Do $$$AssertEquals(http.Requests, 5, "five requests logged")
+    Do $$$AssertEquals($LISTGET(http.Requests(1), 1) _ " " _ $LISTGET(http.Requests(1), 2) _ " [" _ $LISTGET(http.Requests(1), 3) _ "]", "GET Encounter/enc-1 []", "the read")
+    Do $$$AssertEquals($LISTGET(http.Requests(2), 1) _ " " _ $LISTGET(http.Requests(2), 2) _ " " _ $LISTGET(http.Requests(2), 3), "PUT Encounter/enc-1 W/""1""", "the PUT and its If-Match")
+    Do $$$AssertEquals({}.%FromJSON($LISTGET(http.Requests(2), 4)).serviceProvider.display, name, "its body, as characters")
+    Do $$$AssertEquals({}.%FromJSON($LISTGET(http.Requests(4), 4)).serviceProvider.display, name, "also when it was sent as characters")
+    Do $$$AssertEquals($PIECE($LISTGET(http.Requests(5), 2), "?", 1), "Encounter", "the search's path, with its query after it")
+    Do $$$AssertEquals(..Counts(), "6 1", "and the server counted the two PUTs")
+}
+
+/// A canned answer comes instead of the server's: a page behind a 200, a plain 404, and no answer at all.
+Method TestFakeFhirCannedAnswers()
+{
+    Quit:'..Ready()
+    Do ..Seed()
+    Set http = ##class(Shutter.Test.FakeFhir).%New()
+    Set http.Base = "http://fhir.test/r4"
+    Set http.Canned("GET", "Encounter/enc-1") = $LISTBUILD(200, "text/html; charset=utf-8", "", "", "<html><body>Sign in</body></html>")
+    Set http.Canned("GET", "Patient/demo-p1") = $LISTBUILD(404, "text/plain", "", "", "Not Found")
+    Set http.Canned("GET", "Encounter/enc-1/_history") = $LISTBUILD(0)
+    Set http.Canned("PUT", "Encounter/enc-1") = $LISTBUILD(200, "text/html; charset=utf-8", "W/""41""", "http://fhir.test/r4/Encounter/enc-1/_history/41", "")
+    Set sc = http.SendFormDataArray(.resp, "GET", ..Ask(), "", "", "http://fhir.test/r4/Encounter/enc-1")
+    Do $$$AssertStatusOK(sc, "a page behind a 200")
+    Do $$$AssertEquals(resp.StatusCode _ " " _ resp.ContentType _ " " _ resp.Data.Read(), "200 text/html; charset=utf-8 <html><body>Sign in</body></html>", "as it was canned")
+    Do $$$AssertEquals(resp.GetHeader("ETag"), "", "with no ETag")
+    Set sc = http.SendFormDataArray(.resp, "GET", ..Ask(), "", "", "http://fhir.test/r4/Patient/demo-p1")
+    Do $$$AssertTrue($$$ISERR(sc), "a plain 404 is an error status")
+    Do $$$AssertEquals(resp.StatusCode _ " " _ resp.ContentType _ " " _ resp.Data.Read(), "404 text/plain Not Found", "with its response")
+    Set sc = http.SendFormDataArray(.resp, "GET", ..Ask(), "", "", "http://fhir.test/r4/Encounter/enc-1/_history")
+    Do $$$AssertTrue($$$ISERR(sc), "no answer is an error status")
+    Do $$$AssertEquals($ISOBJECT(resp), 0, "and no response")
+    Set sc = http.SendFormDataArray(.resp, "PUT", ..Ask("W/""1""", ..Enc("enc-1", "V1001").%ToJSON()), "", "", "http://fhir.test/r4/Encounter/enc-1")
+    Do $$$AssertEquals(resp.StatusCode _ " " _ resp.GetHeader("ETag") _ " " _ resp.GetHeader("Location"), "200 W/""41"" http://fhir.test/r4/Encounter/enc-1/_history/41", "a canned PUT, its ETag and Location")
+    Do $$$AssertEquals(..Stats().%Get("puts_received"), 4, "which never reached the server (four seeded)")
+    Set sc = http.SendFormDataArray(.resp, "GET", ..Ask(), "", "", "http://fhir.test/r4/Location/ward-a")
+    Do $$$AssertEquals(resp.StatusCode, 200, "what is not canned is the server's")
+    Do $$$AssertEquals(http.Requests, 5, "and canned requests are logged with the rest")
+}
+
+/// A request as the FHIR operations make one: the Accept header, and for a write the If-Match, the content type and
+/// the body.
+Method Ask(ifMatch As %String = "", body As %String = "") As %Net.HttpRequest
+{
+    Set http = ##class(%Net.HttpRequest).%New()
+    Set http.ReadRawMode = 1
+    Do http.SetHeader("Accept", "application/fhir+json")
+    If ifMatch '= "" {
+        Do http.SetHeader("If-Match", ifMatch)
+        Do http.SetHeader("Prefer", "return=minimal")
+        Set http.ContentType = "application/fhir+json"
+        Set http.WriteRawMode = 1
+        Do http.EntityBody.Write(body)
+    }
+    Quit http
+}
+
+/// The two counters, "received refused".
+Method Counts() As %String
+{
+    Quit ..Stats().%Get("puts_received") _ " " _ ..Stats().%Get("puts_refused")
+}
+
+/// The fault and the times it has left, with <var>between</var> between them.
+Method FaultNow(between As %String) As %String
+{
+    Quit ..Stats().fault _ between _ ..Stats().%Get("fault_left")
+}
+
+Method Stats() As %DynamicObject
+{
+    Quit $CLASSMETHOD(..#SERVICE, "Stats")
+}
+
 Method Ready() As %Boolean
 {
     Quit:..Loaded() 1

@@ -3,6 +3,9 @@
 Class Shutter.Test.Uninstall Extends %UnitTest.TestCase
 {
 
+/// The scratch production of the FHIR item test; it never runs.
+Parameter FHIRPRODUCTION = "ShutterTest.FhirSite";
+
 Method TestRolesAndResources()
 {
     Do $$$AssertEquals(##class(Shutter.Util.Uninstall).OwnSecurityName("Shutter_Operator"), 1, "Shutter's role")
@@ -324,6 +327,99 @@ Method TestAStubRunTakesThePageQuestions()
 }
 
 /// The stub of the page question step: only questions asked before 1900-01-02, the test's own.
+/// What the test FHIR server's installer makes is Shutter's by name: the user (with the comment the installer gives
+/// it), the credential, both resources and the role. A site's own that begins alike stays.
+Method TestFhirNamesAreShutters()
+{
+    Do $$$AssertEquals(##class(Shutter.Util.Uninstall).OwnUser("fhir-client", "Used by the production's HTTP operation"), 1, "the user")
+    Do $$$AssertEquals(##class(Shutter.Util.Uninstall).OwnUser("fhir-client", ""), 0, "a site's fhir-client, with no comment")
+    Do $$$AssertTrue($LISTFIND($LISTFROMSTRING(##class(Shutter.Util.Uninstall).#CREDENTIALS), "FHIRFacade") > 0, "the credential")
+    Do $$$AssertEquals(##class(Shutter.Util.Uninstall).OwnSecurityName("FHIRFacade_API"), 1, "the API's resource")
+    Do $$$AssertEquals(##class(Shutter.Util.Uninstall).OwnSecurityName("FHIRFacade_Admin"), 1, "the controls' resource")
+    Do $$$AssertEquals(##class(Shutter.Util.Uninstall).OwnSecurityName("Shutter_FHIRFacadeClient"), 1, "the role, by its prefix")
+    Do $$$AssertEquals(##class(Shutter.Util.Uninstall).OwnSecurityName("FHIRFacade_Reader"), 0, "a site's that begins alike")
+    Do $$$AssertEquals(##class(Shutter.Util.Uninstall).OwnSecurityName("FHIR_API"), 0, "and a site's FHIR resource")
+    Do $$$AssertTrue(("," _ ##class(Shutter.Util.Uninstall).#GLOBALS _ ",") [ ",^FHIRFacade.,", "the server's global goes with the demo's")
+}
+
+/// The four items of a FHIR receiver go from a site's production where the set-up recorded itself, and only with the
+/// name and the class it gives; without the record they are the site's and stay.
+Method TestFhirItemsAreTakenFromASitesProduction()
+{
+    Set had = $DATA(^Shutter.Config("fhirItems"), was)
+    Try {
+        Kill ^Shutter.Config("fhirItems")
+        Do $$$AssertEquals(##class(Shutter.Util.Uninstall).OwnItem("FHIR Out", "Shutter.Operation.FHIRExecute", ""), 0, "without the record, not Shutter's")
+        Do $$$AssertStatusOK(..MakeFhirProduction(), "a scratch production with the four items and two of the site's")
+        Do $$$AssertStatusOK(##class(Shutter.Util.Uninstall).TakeItemsFrom(..#FHIRPRODUCTION, .taken), "without the record")
+        Do $$$AssertEquals(taken, 0, "nothing is taken")
+        Do $$$AssertEquals(..ItemNames(), "FHIR Gate,FHIR Out,FHIR Receiver,FHIR Verifier,Site Out,Site Verifier", "the six stay")
+        Set ^Shutter.Config("fhirItems") = $LISTBUILD("127.0.0.1", "52773", "FHIRFacade", "")
+        For row = $LISTBUILD("FHIR Receiver", "Shutter.Operation.FHIRReceiver"), $LISTBUILD("FHIR Out", "Shutter.Operation.FHIRExecute"), $LISTBUILD("FHIR Gate", "Shutter.Operation.FHIRGate"), $LISTBUILD("FHIR Verifier", "Shutter.Operation.FHIRVerify") {
+            Do $$$AssertEquals(##class(Shutter.Util.Uninstall).OwnItem($LIST(row, 1), $LIST(row, 2), ""), 1, $LIST(row, 1) _ " is Shutter's, though no production of Shutter's has it")
+            Do $$$AssertEquals(##class(Shutter.Util.Uninstall).TakenByUninstall(..#FHIRPRODUCTION, $LIST(row, 1), $LIST(row, 2), ..#FHIRPRODUCTION, "", "", 0), 1, $LIST(row, 1) _ " is taken by the uninstall, so it does not refuse")
+        }
+        Do $$$AssertEquals(##class(Shutter.Util.Uninstall).OwnItem("FHIR Out", "Site.TheirFhirOut", ""), 0, "a site's item of that name, on its own class")
+        Do $$$AssertEquals(##class(Shutter.Util.Uninstall).OwnItem("FHIR Out", "", ""), 0, "one with no class")
+        Do $$$AssertEquals(##class(Shutter.Util.Uninstall).OwnItem("Site Out", "Shutter.Operation.FHIRExecute", ""), 0, "a second one the site added by hand, under its own name")
+        Do $$$AssertEquals(##class(Shutter.Util.Uninstall).OwnItem("FHIR Out", "Shutter.Operation.FHIRVerify", ""), 0, "a name with another of the four classes")
+        Do $$$AssertEquals(##class(Shutter.Util.Uninstall).OwnItem("Gate", "Shutter.Operation.Gate", "Shutter.Operation.Gate"), 1, "and the items of Shutter's production as before")
+        Do $$$AssertStatusOK(##class(Shutter.Util.Uninstall).TakeItemsFrom(..#FHIRPRODUCTION, .taken), "with the record")
+        Do $$$AssertEquals(taken, 4, "the four are taken")
+        Do $$$AssertEquals(..ItemNames(), "Site Out,Site Verifier", "and the site's two stay")
+    } Catch ex {
+        Do $$$AssertStatusOK(ex.AsStatus(), "the scratch production")
+    }
+    Do ..RemoveFhirProduction()
+    Kill ^Shutter.Config("fhirItems")
+    Set:had ^Shutter.Config("fhirItems") = was
+}
+
+/// A production that never runs: the four FHIR items as their set-up places them, one of the site's on one of those
+/// classes under its own name, and one of the site's that shares a name's pattern only.
+Method MakeFhirProduction() As %Status
+{
+    Do ..RemoveFhirProduction()
+    Set p = ##class(Ens.Config.Production).%New()
+    Set p.Name = ..#FHIRPRODUCTION
+    For row = $LISTBUILD("FHIR Receiver", "Shutter.Operation.FHIRReceiver"), $LISTBUILD("FHIR Out", "Shutter.Operation.FHIRExecute"), $LISTBUILD("FHIR Gate", "Shutter.Operation.FHIRGate"), $LISTBUILD("FHIR Verifier", "Shutter.Operation.FHIRVerify"), $LISTBUILD("Site Out", "Shutter.Operation.FHIRExecute"), $LISTBUILD("Site Verifier", "EnsLib.HTTP.GenericOperation") {
+        Set i = ##class(Ens.Config.Item).%New()
+        Set i.Name = $LIST(row, 1), i.ClassName = $LIST(row, 2), i.PoolSize = 1, i.Enabled = 1, i.Category = "Recovery", i.Production = p
+        Do p.Items.Insert(i)
+    }
+    Quit p.%Save()
+}
+
+/// The scratch production's item names, sorted.
+Method ItemNames() As %String
+{
+    Set p = ##class(Ens.Config.Production).%OpenId(..#FHIRPRODUCTION), out = ""
+    Quit:'$ISOBJECT(p) ""
+    For i = 1:1:p.Items.Count() Set names(p.Items.GetAt(i).Name) = ""
+    Set name = ""
+    For {
+        Set name = $ORDER(names(name))
+        Quit:name=""
+        Set out = out _ $SELECT(out = "": "", 1: ",") _ name
+    }
+    Quit out
+}
+
+Method RemoveFhirProduction()
+{
+    Set p = ##class(Ens.Config.Production).%OpenId(..#FHIRPRODUCTION)
+    If $ISOBJECT(p) {
+        For i = p.Items.Count():-1:1 {
+            Set id = p.Items.GetAt(i).%Id()
+            Do p.Items.RemoveAt(i)
+            Do:id'="" ##class(Ens.Config.Item).%DeleteId(id)
+        }
+        Kill p
+        Do ##class(Ens.Config.Production).%DeleteId(..#FHIRPRODUCTION)
+    }
+    If ##class(%Dictionary.ClassDefinition).%ExistsId(..#FHIRPRODUCTION) Do $SYSTEM.OBJ.Delete(..#FHIRPRODUCTION, "-d")
+}
+
 ClassMethod TakePageQuestions(out As %DynamicObject)
 {
     Do ##class(Shutter.Util.Uninstall).TakePageQuestions(out, "1900-01-02T00:00:00Z")
