@@ -8,6 +8,7 @@ import {
   Pagination,
   SimpleGrid,
   Stack,
+  Switch,
   Table,
   Text,
   Tooltip,
@@ -23,8 +24,16 @@ import {
 import { useId, useMemo, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { useListParams } from '@/lib/listParams';
-import { useCases, useFailedForAPerson, useScenarios, type CaseFilters } from '@/api/hooks';
-import type { CaseSummary, Scenario } from '@/api/types';
+import {
+  FAILED_READ,
+  useCan,
+  useCases,
+  useFailedCount,
+  useHealth,
+  useScenarios,
+  type CaseFilters,
+} from '@/api/hooks';
+import { CLOSED_STATES, type CaseSummary, type Scenario } from '@/api/types';
 import { ApiSource } from '@/components/ApiSource';
 import { CodeChip } from '@/components/CodeChip';
 import { EmptyState } from '@/components/EmptyState';
@@ -52,15 +61,21 @@ import {
   type ExpectedScenario,
 } from '@/lib/status';
 import type { Tone } from '@/lib/tone';
+import { TRIAL } from '@/env/mode';
 import { useTechnical } from '@/stores/appearance';
 import { forwardedFrom } from './case/derive';
 import { CaseTechLine } from './case/TechFacts';
+import { emptyGuidance } from './emptyCases';
 import './cases-list.css';
 
 const PAGE = 25;
 
 /** How many of the newest cases the Closed tiles count over (the API filters by state only). */
 const NEWEST = 100;
+
+/** Whether a state is one of the closed ones (resolved, blocked, escalated, failed), which Hide closed leaves out. */
+const isClosedState = (state: string | null | undefined) =>
+  !!state && (CLOSED_STATES as readonly string[]).includes(state);
 
 /** The states a case is in before anyone has made its plan. */
 const BEFORE_PLAN = new Set(['detected', 'collecting', 'investigating', 'grouped']);
@@ -333,13 +348,18 @@ const tileName = (n: number | string | undefined, label: string, caption: string
 const SHOW = { seen: 'Show', name: 'Show these' };
 const SHOWING = { seen: 'Showing; press to clear', name: 'Showing these; press to clear' };
 
-/** A failed case needs a person too; its tile shows only when there is one, or a tile of nought would say nothing. */
+/**
+ * A failed case needs a person too; its tile shows only when there is one, or a tile of nought would say nothing. With
+ * more failed cases than the count read (`atMost`), ones a person gave up may still be in it, so it reads "at most".
+ */
 function FailedTile({
   n,
+  atMost,
   chosen,
   onChoose,
 }: {
   n: number | undefined;
+  atMost: boolean;
   chosen: boolean;
   onChoose: () => void;
 }) {
@@ -347,14 +367,14 @@ function FailedTile({
   const caption = chosen ? SHOWING : SHOW;
   return (
     <StatTile
-      label={o.short}
+      label={atMost ? `${o.short}, at most` : o.short}
       figure={n === undefined ? '…' : n}
       caption={caption.seen}
       tone={o.tone}
       icon={o.icon as TablerIcon | undefined}
       onClick={onChoose}
       pressed={chosen}
-      aria-label={tileName(n, o.short, caption.name)}
+      aria-label={`${atMost ? 'At most ' : ''}${tileName(n, o.short, caption.name)}`}
     />
   );
 }
@@ -495,6 +515,33 @@ function TileGroup({ title, four, children }: { title: string; four?: boolean; c
   );
 }
 
+/**
+ * The empty list with no filter on: what it says depends on the install (emptyCases.ts), read from the health report
+ * only here, where the list is empty, so a list with cases asks for nothing more. Until the report has answered (or
+ * failed), the loader stays, so a live install never shows the words for an unknown one first.
+ */
+function NoCasesYet() {
+  const health = useHealth();
+  const can = useCan();
+  const { kind, words, link } = emptyGuidance({ trial: TRIAL, health: health.data, can });
+  if (!TRIAL && health.isPending) return <PageSkeleton label="Loading the cases…" />;
+  return (
+    <div data-testid="no-cases" data-install={kind}>
+      <EmptyState
+        icon={IconListDetails}
+        hue="indigo"
+        action={
+          <Anchor component={Link} to={link.to} size="sm">
+            {link.label}
+          </Anchor>
+        }
+      >
+        {words}
+      </EmptyState>
+    </div>
+  );
+}
+
 /** The request the list's page reads, as an engineer would type it. */
 function requestOf(filters: CaseFilters): string {
   const params = new URLSearchParams();
@@ -512,11 +559,16 @@ export default function CasesPage() {
   // A link from the Scenarios page names its scenario (S22: one case per receiver)
   const scenario = params.get('scenario');
   const page = Math.max(1, Math.floor(Number(params.get('page'))) || 1);
+  // Hide closed, kept as open=1 like the rest. A closed state or a closed outcome in the same address wins: the list
+  // never shows nothing for a choice the person made
+  const closedState = isClosedState(state);
+  const hideClosed = params.get('open') === '1' && !closedState && outcome === null;
   // One write for all of them
   const setList = (patch: {
     state?: string | null;
     outcome?: string | null;
     scenario?: string | null;
+    open?: string | null;
     page?: number;
   }) => {
     change((next) => {
@@ -529,12 +581,15 @@ export default function CasesPage() {
   const filters: CaseFilters = {
     state: state ?? undefined,
     scenario: scenario ?? undefined,
+    open: hideClosed ? 1 : undefined,
     limit: PAGE,
     offset: (page - 1) * PAGE,
   };
   const paged = useCases(filters, outcome === null);
   const newest = useCases({ limit: NEWEST });
-  const failed = useFailedForAPerson();
+  const failedCount = useFailedCount();
+  const failed = failedCount?.count;
+  const failedAtMost = failedCount?.atMost ?? false;
   // A chosen tile stays, or the filter on show could not be turned off where it was turned on
   const failedShown = (failed ?? 0) > 0 || state === 'failed';
   const scenarios = useScenarios();
@@ -562,10 +617,30 @@ export default function CasesPage() {
   const items = outcome ? matching?.slice((page - 1) * PAGE, page * PAGE) : paged.data?.items;
   const total = outcome ? (matching?.length ?? 0) : (paged.data?.total ?? 0);
   // A page past the end, from an old address, offers the way back as a filter does
-  const filtered = state !== null || outcome !== null || scenario !== null || page > 1;
+  const filtered = state !== null || outcome !== null || scenario !== null || hideClosed || page > 1;
+  // A closed outcome is looked for among the newest cases only: with more cases than that, the list says so
+  const bounded = outcome !== null && overBase;
 
+  // A closed tile or a closed state is the newer choice, so it turns Hide closed off; any other leaves it as it is
   const choose = (next: { state?: string | null; outcome?: ClosedGroupId | null }) =>
-    setList({ state: next.state ?? null, outcome: next.outcome ?? null, page: 1 });
+    setList({
+      state: next.state ?? null,
+      outcome: next.outcome ?? null,
+      open: hideClosed && !next.outcome && !isClosedState(next.state) ? '1' : null,
+      page: 1,
+    });
+  // Turned on over a closed tile or a closed state, the switch is the newer choice, and that one gives way
+  const setHideClosed = (on: boolean) =>
+    setList({
+      open: on ? '1' : null,
+      ...(on ? { outcome: null, ...(closedState ? { state: null } : {}) } : {}),
+      page: 1,
+    });
+  const emptyWords = bounded
+    ? `No matches in the ${NEWEST} most recent cases. Older cases have not been searched.`
+    : hideClosed && total === 0
+      ? `No open cases${state !== null || scenario !== null ? ' match these filters' : ''}. Closed cases are hidden.`
+      : 'No cases match these filters.';
   const scenarioIds = scenarioList.map((s) => s.id);
   if (scenario && !scenarioIds.includes(scenario)) scenarioIds.push(scenario);
 
@@ -575,7 +650,7 @@ export default function CasesPage() {
         title="Cases"
         icon={IconListDetails}
         hue="indigo"
-        lead="Every failed delivery, newest first. The tiles show which need a person."
+        lead="Every failed delivery, newest first. Tiles show which need a person."
       />
       <Stack gap="md">
         <div className="cases-tile-groups" data-closed={closedShown.length} data-need={failedShown ? 4 : 3}>
@@ -591,6 +666,7 @@ export default function CasesPage() {
             {failedShown ? (
               <FailedTile
                 n={failed}
+                atMost={failedAtMost}
                 chosen={state === 'failed' && outcome === null}
                 onChoose={() => choose({ state: state === 'failed' ? null : 'failed' })}
               />
@@ -616,6 +692,9 @@ export default function CasesPage() {
               proposed, which the gate can still stop: Blocked beside Resend is a resend that was proposed and
               blocked. At the receiver is what was written and what the verifier found there. Investigated by
               is who made the plan.
+              {failedAtMost
+                ? ` Failed is at most its figure: cases a person gave up are taken off among the ${FAILED_READ} newest failed cases only.`
+                : null}
             </Text>
           </TechDetail>
         </Stack>
@@ -638,15 +717,27 @@ export default function CasesPage() {
               data={[{ value: '', label: 'Any scenario' }, ...scenarioIds]}
               w={170}
             />
-            {read.data ? (
+            <Switch
+              label="Hide closed"
+              checked={hideClosed}
+              onChange={(e) => setHideClosed(e.currentTarget.checked)}
+              className="cases-hide-closed"
+            />
+            {read.data && !bounded ? (
               <Text size="sm" c="dimmed" pb={6} ml="auto" aria-live="polite">
-                {plural(total, 'case')}
+                {plural(total, hideClosed ? 'open case' : 'case')}
               </Text>
             ) : null}
           </Group>
-          {outcome && overBase ? (
-            <Text size="sm" mb="sm">
-              Showing the newest {NEWEST} cases with this outcome
+          {hideClosed ? (
+            <Text size="sm" c="dimmed" mb="sm">
+              Hiding closed cases: resolved, blocked, escalated and failed.
+            </Text>
+          ) : null}
+          {bounded && read.data && total > 0 ? (
+            <Text size="sm" mb="sm" aria-live="polite">
+              {plural(total, 'match')} among the {NEWEST} most recent cases. Older cases have not been
+              searched.
             </Text>
           ) : null}
           {read.isPending || (scenarios.isPending && !read.isError) ? (
@@ -660,27 +751,27 @@ export default function CasesPage() {
             />
           ) : null}
           {read.data && !scenarios.isPending && items && items.length === 0 ? (
-            <EmptyState
-              icon={IconListDetails}
-              hue="indigo"
-              action={
-                filtered ? (
+            filtered ? (
+              <EmptyState
+                icon={IconListDetails}
+                hue="indigo"
+                action={
                   <Button
                     size="xs"
                     variant="default"
-                    onClick={() => setList({ state: null, outcome: null, scenario: null, page: 1 })}
+                    onClick={() =>
+                      setList({ state: null, outcome: null, scenario: null, open: null, page: 1 })
+                    }
                   >
                     Show every case
                   </Button>
-                ) : (
-                  <Anchor component={Link} to="/scenarios" size="sm">
-                    Play a scenario
-                  </Anchor>
-                )
-              }
-            >
-              {filtered ? 'No cases match these filters.' : 'No cases yet. Play a scenario to open one.'}
-            </EmptyState>
+                }
+              >
+                {emptyWords}
+              </EmptyState>
+            ) : (
+              <NoCasesYet />
+            )
           ) : null}
           {read.data && !scenarios.isPending && items && items.length > 0 ? (
             <CasesTable items={items} scenarios={scenarioList} />

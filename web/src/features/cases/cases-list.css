@@ -32,6 +32,11 @@
 .cases-tiles .stat-tile .mantine-Group-root {
   flex-wrap: wrap;
 }
+/* Hide closed stands level with the selects' inputs beside it, and is as tall as they are to press */
+.cases-hide-closed .mantine-Switch-body {
+  min-height: 36px;
+  align-items: center;
+}
 @media (min-width: 77em) {
   .cases-tile-groups {
     grid-template-columns: 1fr 1fr;

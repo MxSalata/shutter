@@ -209,6 +209,11 @@ export function useResetScenarios() {
 export interface CaseFilters {
   state?: string;
   scenario?: string;
+  /**
+   * 1 leaves out the closed cases (CLOSED_STATES: resolved, blocked, escalated, failed). The server filters and counts
+   * them, so `total` and every page are of the open cases only (CONTRACTS 5).
+   */
+  open?: 1;
   limit?: number;
   offset?: number;
 }
@@ -222,14 +227,37 @@ export function useCases(filters: CaseFilters, enabled = true) {
   });
 }
 
+/** How many of the newest failed cases the count below reads, to take the abandoned ones off. */
+export const FAILED_READ = 100;
+
+export interface FailedForAPerson {
+  /** The failed cases that need a person, as far as the read can tell. */
+  count: number;
+  /**
+   * True when more cases failed than were read: one a person gave up among the older ones is still counted, so the
+   * figure is an upper bound and is shown as one ("at most").
+   */
+  atMost: boolean;
+}
+
 /**
  * How many failed cases need a person, undefined while it loads: a case a person gave up is failed too, and is counted
- * under By hand. The API counts by state only, so the abandoned ones are taken off among the newest 100; more failed
- * cases than that can count one given up, which errs towards a person looking.
+ * under By hand. The API counts by state only, so the abandoned ones are taken off among the newest 100; with more
+ * failed cases than that the older ones were not read, and the count says it is an upper bound (`atMost`), which errs
+ * towards a person looking.
  */
+export function useFailedCount(): FailedForAPerson | undefined {
+  const { data } = useCases({ state: 'failed', limit: FAILED_READ });
+  if (!data) return undefined;
+  return {
+    count: data.total - data.items.filter((c) => c.disposition === 'abandoned').length,
+    atMost: data.total > data.items.length,
+  };
+}
+
+/** The count alone, for a sum of what needs a person (the navigation, Home): an upper bound past 100 failed cases. */
 export function useFailedForAPerson(): number | undefined {
-  const { data } = useCases({ state: 'failed', limit: 100 });
-  return data && data.total - data.items.filter((c) => c.disposition === 'abandoned').length;
+  return useFailedCount()?.count;
 }
 
 /**

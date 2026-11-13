@@ -704,7 +704,7 @@ describe('the page', () => {
     const rows = () => screen.getAllByRole('row').slice(1);
     await waitFor(() => expect(rows()).toHaveLength(25));
     for (const r of rows()) expect(within(r).getAllByText('Delivered, verified').length).toBeGreaterThan(0);
-    expect(screen.queryByText(/Showing the newest 100 cases/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/among the 100 most recent cases/)).not.toBeInTheDocument();
     // The 26th is on the second page
     await userEvent.click(screen.getByRole('button', { name: 'Page 2' }));
     await waitFor(() => expect(rows()).toHaveLength(1));
@@ -749,10 +749,15 @@ describe('the page', () => {
     renderPage();
     const closed = await screen.findByRole('region', { name: 'Closed, in the newest 100' });
     const tile = await within(closed).findByRole('button', { name: /^100 Delivered, verified Show these$/ });
-    expect(screen.queryByText(/Showing the newest 100 cases/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/among the 100 most recent cases/)).not.toBeInTheDocument();
     await userEvent.click(tile);
-    expect(await screen.findByText('Showing the newest 100 cases with this outcome')).toBeVisible();
-    expect(await screen.findByText('100 cases')).toBeVisible();
+    // The count with its scope, once: the bare "100 cases" would read as every case with this outcome
+    expect(
+      await screen.findByText(
+        '100 matches among the 100 most recent cases. Older cases have not been searched.',
+      ),
+    ).toBeVisible();
+    expect(screen.queryByText('100 cases')).not.toBeInTheDocument();
   });
 
   it('hides the Not as expected tile at nought, as on a hospital that never played S8 by rules alone', async () => {
