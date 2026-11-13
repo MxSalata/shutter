@@ -1,10 +1,11 @@
 {
   "id": "block-reasons",
-  "version": "1.9",
+  "version": "1.10",
   "effective_from": "2026-10-25",
   "applies_to": [
     "downstream-api-v1",
-    "hl7-v2-adt"
+    "hl7-v2-adt",
+    "fhir-r4-encounter-location-v1"
   ],
   "roles": {
     "Operator": "The integration operator working the case",
@@ -832,6 +833,483 @@
       "owner": "Approver",
       "reevaluate_when": "The evidence has been read again, or a person has read the new visit",
       "text": "This site lets a movement on another visit through, shown on the plan, so the approver sees it. A new admission or ward stay for the same patient under another visit number reached the engine after the plan was made, so the plan did not show it and an approval of that plan does not cover it. Nothing is sent on that approval."
+    },
+    {
+      "code": "FHIR_NO_DRY_RUN_SUBSTITUTED",
+      "title": "No dry run exists for a FHIR receiver",
+      "prerequisite": "A FHIR receiver, which offers no dry run of an update",
+      "next_action": "None: a pass. A person still approves the update.",
+      "owner": "Integration team",
+      "reevaluate_when": "Nothing: a pass",
+      "text": "No dry run exists for this receiver. In its place stand a complete versioned read, a bounded change, If-Match on the version read, this case's own approval by a person, and a search of the returned history for the marked version, read back by id when the answer named it."
+    },
+    {
+      "code": "FHIR_ITEMS_MISSING",
+      "title": "The production's FHIR items are not ready",
+      "prerequisite": "The four FHIR items in the production (FHIR Receiver, FHIR Out, FHIR Gate, FHIR Verifier), enabled, with FHIR Receiver and FHIR Out set to the same server",
+      "next_action": "Add or enable the items the note names and set FHIR Receiver and FHIR Out to the same server, port, TLS configuration and credential, then reinvestigate the case.",
+      "owner": "Integration team",
+      "reevaluate_when": "The four items are there, enabled and set to one server",
+      "text": "The site profile describes a FHIR receiver, but the production's FHIR items are missing, switched off or set to different servers, so nothing was read or sent."
+    },
+    {
+      "code": "FHIR_ITEM_ERROR",
+      "title": "A FHIR item failed before anything was sent",
+      "prerequisite": "FHIR items that answer without an error",
+      "next_action": "Read the error in the case's note and in the production's event log, correct what it names, then reinvestigate the case.",
+      "owner": "Integration team",
+      "reevaluate_when": "The item answers without an error",
+      "text": "A FHIR item of the production answered with an error before anything was sent. Nothing was written."
+    },
+    {
+      "code": "FHIR_PLAN_NEEDS_PERSON",
+      "title": "Over FHIR this case is for a person",
+      "prerequisite": "A plan for the one ward move the failed message asked for, proposed by the rules or by one catalogue entry that says to send it",
+      "next_action": "Read the evidence and decide by hand: make the change at the receiver or leave it, and mark the case handled.",
+      "owner": "Operator",
+      "reevaluate_when": "A person decides",
+      "text": "For a FHIR receiver Shutter proposes one thing only, the ward move the failed message asked for: in Rules only mode always, in every other mode when one catalogue entry says to send it. Here that did not hold, or the plan asks for a person, so a person decides."
+    },
+    {
+      "code": "FHIR_RECEIVER_UNREADABLE",
+      "title": "The FHIR server could not be read",
+      "prerequisite": "An answer from the FHIR server itself to every read: a FHIR JSON resource, Bundle or OperationOutcome",
+      "next_action": "Check that the server runs and that the FHIR items' server, port, path and credential are right, then collect the evidence again.",
+      "owner": "Integration team",
+      "reevaluate_when": "The server answers the reads itself",
+      "text": "The FHIR server did not answer, or answered with something that is not its own answer for this request (a sign-in page, a plain 404, another media type). Nothing is assumed about the record."
+    },
+    {
+      "code": "FHIR_ENCOUNTER_NOT_FOUND",
+      "title": "No Encounter carries this visit number",
+      "prerequisite": "Exactly one Encounter with the message's visit number under the identifier system of the site profile (fhir.encounter_identifier.system)",
+      "next_action": "Check the visit number and the identifier system. If the receiver never had the admission, recover that first; otherwise decide by hand.",
+      "owner": "Operator",
+      "reevaluate_when": "An Encounter with this visit number exists, or the profile's identifier system is corrected",
+      "text": "No Encounter carries this visit number under the identifier system the site profile names."
+    },
+    {
+      "code": "FHIR_ENCOUNTER_AMBIGUOUS",
+      "title": "More than one Encounter carries this visit number",
+      "prerequisite": "Exactly one Encounter with the message's visit number, in a search answered whole",
+      "next_action": "Find the right Encounter at the receiver and make the change by hand, or have the duplicate records corrected.",
+      "owner": "Operator",
+      "reevaluate_when": "The search gives exactly one Encounter",
+      "text": "More than one Encounter carries this visit number, or the search came in pages, so which record the message meant is not known."
+    },
+    {
+      "code": "FHIR_IDENTIFIER_UNMAPPED",
+      "title": "The identifiers are not the ones the site profile maps",
+      "prerequisite": "A patient identifier from the assigning authority the site profile names (fhir.patient_identifier.hl7_authority), and an Encounter that carries the visit number searched",
+      "next_action": "Check the assigning authority in PID-3 against the site profile and the Encounter's identifiers. Correct the profile if it is wrong; otherwise decide by hand.",
+      "owner": "Integration team",
+      "reevaluate_when": "The profile maps the message's authority, or a corrected message arrives",
+      "text": "The message's patient identifier does not come from the assigning authority the site profile maps to the FHIR identifier system, or the Encounter read does not carry the visit number that was searched."
+    },
+    {
+      "code": "FHIR_SUBJECT_UNRESOLVED",
+      "title": "The Encounter's patient could not be read",
+      "prerequisite": "An Encounter whose subject is a literal Patient/{id} reference, and a Patient the server returns",
+      "next_action": "Read the Encounter's subject at the receiver. If the Patient read failed, collect the evidence again; otherwise decide by hand.",
+      "owner": "Operator",
+      "reevaluate_when": "The subject is a literal reference and the Patient reads",
+      "text": "The Encounter's subject is not a literal reference to a Patient, or that Patient could not be read."
+    },
+    {
+      "code": "FHIR_PATIENT_MISMATCH",
+      "title": "The Encounter belongs to another patient",
+      "prerequisite": "A Patient who carries the message's patient identifier under the mapped system",
+      "next_action": "Escalate the identity conflict to the integration team. Nothing is sent.",
+      "owner": "Integration team",
+      "reevaluate_when": "A corrected message or a confirmed identity arrives",
+      "text": "The Encounter belongs to a Patient who does not carry the message's patient identifier."
+    },
+    {
+      "code": "FHIR_PATIENT_LINKED",
+      "title": "The Patient record is linked or not active",
+      "prerequisite": "An active Patient with no link to another record",
+      "next_action": "Check the Patient at the receiver, and with the PAS team whether a merge happened. A person decides.",
+      "owner": "Operator",
+      "reevaluate_when": "A person has checked the Patient record",
+      "text": "The Patient record is linked to another or is not active, which often means a merge. A person decides."
+    },
+    {
+      "code": "FHIR_EVENT_UNSUPPORTED",
+      "title": "Over FHIR only a ward move is changed",
+      "prerequisite": "A transfer message: a ward move on an existing Encounter",
+      "next_action": "Make the change by hand at the receiver if it is still wanted, and mark the case handled.",
+      "owner": "Operator",
+      "reevaluate_when": "Never for this message: the event does not change",
+      "text": "Over FHIR Shutter makes one kind of change, a ward move on an existing Encounter. This message is another kind of event."
+    },
+    {
+      "code": "FHIR_FAILURE_KIND_UNSUPPORTED",
+      "title": "Over FHIR only a failed or uncertain delivery is repaired",
+      "prerequisite": "A delivery that failed, or one whose outcome is uncertain",
+      "next_action": "Read why the message was rejected, withheld or unreadable, and handle that cause. Nothing is sent over FHIR.",
+      "owner": "Operator",
+      "reevaluate_when": "Never for this message: the kind of failure does not change",
+      "text": "Over FHIR Shutter repairs only a delivery that failed or whose outcome is uncertain. This message was rejected, withheld or could not be read, so the receiver or the site already said no to it."
+    },
+    {
+      "code": "FHIR_RECOVERY_DISABLED",
+      "title": "Recovery is not turned on for this receiver",
+      "prerequisite": "fhir.recovery_enabled true in the receiver's entry of the site profile",
+      "next_action": "Make the change by hand. To let Shutter write to this receiver, import a conformance proof for its server software and set fhir.recovery_enabled to true; that applies to later evidence.",
+      "owner": "Integration team",
+      "reevaluate_when": "The site profile turns recovery on and the evidence is collected again",
+      "text": "The receiver's entry in the site profile does not turn recovery on (fhir.recovery_enabled), so nothing is written to it."
+    },
+    {
+      "code": "FHIR_REPRESENTATION_PARTIAL",
+      "title": "The server returned a reduced copy of the Encounter",
+      "prerequisite": "A complete Encounter: no SUBSETTED tag",
+      "next_action": "Check why the server reduces its reads for this credential, then collect the evidence again.",
+      "owner": "Integration team",
+      "reevaluate_when": "The read returns the whole Encounter",
+      "text": "The server returned a reduced copy of the Encounter (marked SUBSETTED). A change built on part of a record would remove the rest."
+    },
+    {
+      "code": "FHIR_MODIFIER_EXTENSION",
+      "title": "The Encounter carries a modifierExtension",
+      "prerequisite": "An Encounter with no modifierExtension and no implicitRules",
+      "next_action": "Make the change by hand at the receiver, where the extension's meaning is known.",
+      "owner": "Operator",
+      "reevaluate_when": "The Encounter no longer carries one",
+      "text": "The Encounter carries a modifierExtension, which can change what its other fields mean. Shutter does not change such a record."
+    },
+    {
+      "code": "FHIR_NARRATIVE_PRESENT",
+      "title": "The Encounter carries a narrative",
+      "prerequisite": "An Encounter with no narrative text",
+      "next_action": "Make the change by hand at the receiver, so the narrative is corrected with it.",
+      "owner": "Operator",
+      "reevaluate_when": "The Encounter no longer carries a narrative",
+      "text": "The Encounter carries a narrative text, which the server does not regenerate. After the move it would describe the old ward."
+    },
+    {
+      "code": "FHIR_RESTRICTED",
+      "title": "The Encounter carries a security label",
+      "prerequisite": "An Encounter with no meta.security label",
+      "next_action": "Make the change by hand at the receiver, by someone the label allows.",
+      "owner": "Operator",
+      "reevaluate_when": "The Encounter no longer carries a label",
+      "text": "The Encounter carries a security label. Shutter does not change a labelled record."
+    },
+    {
+      "code": "FHIR_NO_ETAG",
+      "title": "The read named no version to write against",
+      "prerequisite": "An ETag on the Encounter read that names the version read (meta.versionId)",
+      "next_action": "Collect the evidence again. If the server still sends no usable ETag, make the change by hand.",
+      "owner": "Integration team",
+      "reevaluate_when": "A read comes with an ETag that names its version",
+      "text": "The read came with no ETag, or one that does not name the version read, so a write could not be made conditional on it."
+    },
+    {
+      "code": "FHIR_STATUS_NOT_IN_PROGRESS",
+      "title": "The Encounter is not in progress",
+      "prerequisite": "An Encounter whose status is in-progress",
+      "next_action": "Nothing to send. Check the Encounter at the receiver and close the case with what was found.",
+      "owner": "Operator",
+      "reevaluate_when": "The Encounter is in progress again",
+      "text": "The Encounter is not in progress, so a ward move no longer applies to it."
+    },
+    {
+      "code": "FHIR_ALREADY_THERE",
+      "title": "The patient is already on that ward at the receiver",
+      "prerequisite": "An Encounter whose open location is not yet the ward the message moves the patient to",
+      "next_action": "Nothing to send. Check the Encounter at the receiver and mark the case handled.",
+      "owner": "Operator",
+      "reevaluate_when": "Never: the move is already there",
+      "text": "The Encounter already shows the patient on the ward the message moves them to. Shutter cannot tell who made that change, so it takes no credit and sends nothing."
+    },
+    {
+      "code": "FHIR_LATER_MOVE_AT_RECEIVER",
+      "title": "The receiver shows a later move",
+      "prerequisite": "No location on the Encounter that starts at or after the message's event time",
+      "next_action": "Nothing to send. Close the case as superseded, recording the later location.",
+      "owner": "Operator",
+      "reevaluate_when": "Only if the later location is removed at the receiver",
+      "text": "The Encounter shows a location that starts at or after the failed message's event time. Sending the older move would undo it."
+    },
+    {
+      "code": "FHIR_PRIOR_LOCATION_DIFFERS",
+      "title": "The patient is not where the message says they came from",
+      "prerequisite": "One open location on the Encounter, on the ward the message names as the prior ward (PV1-6)",
+      "next_action": "Compare the Encounter's locations with the message and decide by hand.",
+      "owner": "Operator",
+      "reevaluate_when": "The Encounter's open location is the message's prior ward",
+      "text": "The Encounter's open location is not the ward the message says the patient came from, or the message names none."
+    },
+    {
+      "code": "FHIR_TIME_UNREADABLE",
+      "title": "A location's start time could not be read",
+      "prerequisite": "Every location entry of the Encounter with a start that carries a date, a time and an offset",
+      "next_action": "Read the Encounter's locations at the receiver and decide by hand.",
+      "owner": "Operator",
+      "reevaluate_when": "Every location entry has a readable start",
+      "text": "A location entry's start is not a time with an offset that Shutter can order against the message's event time."
+    },
+    {
+      "code": "FHIR_LOCATION_UNMAPPED",
+      "title": "A ward of the message has no Location in the site profile",
+      "prerequisite": "The prior ward and the target ward of the message in the site profile's map (fhir.location_map)",
+      "next_action": "Add the ward and its Location to the site profile's map, or make the change by hand.",
+      "owner": "Integration team",
+      "reevaluate_when": "The map holds both wards and the evidence is collected again",
+      "text": "The ward the message names has no Location in the site profile's map."
+    },
+    {
+      "code": "FHIR_LOCATION_UNREADABLE",
+      "title": "A mapped Location could not be read",
+      "prerequisite": "Every mapped Location read from the server",
+      "next_action": "Check the Location references in the site profile's map against the server, then collect the evidence again.",
+      "owner": "Integration team",
+      "reevaluate_when": "Every mapped Location reads",
+      "text": "A mapped Location could not be read, so it could not be checked."
+    },
+    {
+      "code": "FHIR_LOCATION_MISMATCH",
+      "title": "A mapped Location is not what the site profile recorded",
+      "prerequisite": "Every mapped Location active and carrying the identifier the site profile recorded for it",
+      "next_action": "Check the Location at the receiver against the site profile's map and correct whichever is wrong.",
+      "owner": "Integration team",
+      "reevaluate_when": "The Location is active and carries the recorded identifier",
+      "text": "A mapped Location is not active, or does not carry the identifier the site profile recorded for it."
+    },
+    {
+      "code": "FHIR_SHAPE_UNSUPPORTED",
+      "title": "The Encounter's locations are not the one shape Shutter changes",
+      "prerequisite": "Exactly one open, mapped, ward-level location entry on the Encounter",
+      "next_action": "Make the change by hand at the receiver.",
+      "owner": "Operator",
+      "reevaluate_when": "The Encounter has exactly one open, mapped, ward-level location",
+      "text": "The Encounter's location entries are not the one shape Shutter changes: exactly one open, mapped, ward-level entry."
+    },
+    {
+      "code": "FHIR_BED_MOVE_UNSUPPORTED",
+      "title": "The message names a bed",
+      "prerequisite": "A ward move that names no bed (PV1-3.3 empty)",
+      "next_action": "Make the move by hand at the receiver, where the bed can be checked.",
+      "owner": "Operator",
+      "reevaluate_when": "Never for this message: it names a bed",
+      "text": "The message names a bed. An Encounter's version does not reserve a bed, so this version moves wards only and sends nothing for a move that names one."
+    },
+    {
+      "code": "FHIR_DIFF_OUT_OF_BOUNDS",
+      "title": "The change touches more than the move",
+      "prerequisite": "An update that differs from the read only in the closed entry, the new entry and its marker",
+      "next_action": "Report this to the integration team with the case: it is a fault in Shutter, not in the message. Make the change by hand.",
+      "owner": "Integration team",
+      "reevaluate_when": "The fault is corrected",
+      "text": "The change Shutter built touches more than the closed entry, the new entry and its marker. Nothing is sent."
+    },
+    {
+      "code": "FHIR_BODY_CHANGED",
+      "title": "The update is no longer the one that was approved",
+      "prerequisite": "An update built from the newest read that is, byte for byte, the one the person approved",
+      "next_action": "Collect the evidence again and make the plan afresh; the approver then decides on the new update.",
+      "owner": "Approver",
+      "reevaluate_when": "A new plan is approved against the new read",
+      "text": "The update built from the read made just before the write is not the one the person approved."
+    },
+    {
+      "code": "FHIR_NO_BINDING",
+      "title": "The approval is not tied to a sealed update",
+      "prerequisite": "An approval bound to the sealed record of the version, the body and the Locations it approved",
+      "next_action": "Make the plan afresh and send it to an approver again.",
+      "owner": "Approver",
+      "reevaluate_when": "An approval is given on a sealed plan",
+      "text": "The approval is not tied to a sealed record of what it approved (the version, the body, the Locations), so it authorises nothing."
+    },
+    {
+      "code": "FHIR_RECEIVER_CHANGED",
+      "title": "The Encounter changed after the approval",
+      "prerequisite": "The Encounter still at the version the person approved against",
+      "next_action": "Collect the evidence again and make the plan afresh; the approver then decides on the record as it now is.",
+      "owner": "Approver",
+      "reevaluate_when": "A new plan is approved against the new version",
+      "text": "The Encounter is at another version than the one the person approved against. The approval is void."
+    },
+    {
+      "code": "FHIR_PATIENT_CHANGED",
+      "title": "The Patient record changed after the approval",
+      "prerequisite": "The Patient still at the version read for the approval",
+      "next_action": "Collect the evidence again and make the plan afresh; the approver then decides again.",
+      "owner": "Approver",
+      "reevaluate_when": "A new plan is approved against the new read",
+      "text": "The Patient record changed after the approval. The approval is void."
+    },
+    {
+      "code": "FHIR_LOCATION_CHANGED",
+      "title": "A mapped Location changed after the approval",
+      "prerequisite": "Every bound Location still at the version read for the approval",
+      "next_action": "Collect the evidence again and make the plan afresh; the approver then decides again.",
+      "owner": "Approver",
+      "reevaluate_when": "A new plan is approved against the new read",
+      "text": "A mapped Location changed after the approval. The approval is void."
+    },
+    {
+      "code": "FHIR_EARLIER_WRITE_UNRESOLVED",
+      "title": "An earlier update of this case may yet land",
+      "prerequisite": "No earlier update of this case, conditional on this version, without a known outcome",
+      "next_action": "Check the Encounter at the receiver: whether the earlier update arrived. Then decide by hand and mark the case handled.",
+      "owner": "Operator",
+      "reevaluate_when": "The Encounter moves to another version, or a person settles the earlier update",
+      "text": "An earlier update of this case, conditional on this same version, has no known outcome and may yet land. Nothing is sent until the record moves on or a person settles it."
+    },
+    {
+      "code": "FHIR_CAPABILITIES_UNREADABLE",
+      "title": "The server's CapabilityStatement could not be read",
+      "prerequisite": "A CapabilityStatement read from the server's metadata",
+      "next_action": "Check that the server answers its metadata request for this credential, then collect the evidence again.",
+      "owner": "Integration team",
+      "reevaluate_when": "The metadata reads",
+      "text": "The server's CapabilityStatement could not be read, so what it guarantees is not known."
+    },
+    {
+      "code": "FHIR_NO_HISTORY",
+      "title": "The server does not offer what a checked write needs",
+      "prerequisite": "read, vread, update and history-instance for Encounters in the server's CapabilityStatement",
+      "next_action": "Make the change by hand. Shutter writes only where it can read the history afterwards.",
+      "owner": "Integration team",
+      "reevaluate_when": "The server declares all four interactions",
+      "text": "The server does not offer read, version read, update and instance history for Encounters, so a write could not be checked afterwards."
+    },
+    {
+      "code": "FHIR_VERSIONING_UNPROVEN",
+      "title": "This server software is not proved to refuse a stale write",
+      "prerequisite": "A conformance proof for this server's software name and version, with its three measurements true, and versioned-update in its CapabilityStatement",
+      "next_action": "Run tests/conformance/fhir_conformance.py against a test instance of the same InterSystems IRIS for Health FHIR server software and import its proof file. No other FHIR server can pass that file in this release.",
+      "owner": "Integration team",
+      "reevaluate_when": "A proof for this software and version is imported",
+      "text": "No conformance run recorded for this server software shows that it refuses a stale and an unknown If-Match and keeps a version's tags on that version, or the server now names other software or another version than the run measured."
+    },
+    {
+      "code": "FHIR_HISTORY_UNAVAILABLE",
+      "title": "The Encounter's history could not be read whole",
+      "prerequisite": "The Encounter's whole history in one answer",
+      "next_action": "Collect the evidence again. If the history stays unreadable or comes in pages, make the change by hand.",
+      "owner": "Operator",
+      "reevaluate_when": "The whole history reads",
+      "text": "The Encounter's history could not be read whole."
+    },
+    {
+      "code": "FHIR_HISTORY_HEAD_DIFFERS",
+      "title": "The history's newest version is not the one read",
+      "prerequisite": "A history whose newest version is the version of the Encounter read",
+      "next_action": "Collect the evidence again: the record moved between the two reads.",
+      "owner": "Operator",
+      "reevaluate_when": "The read and the history name the same version",
+      "text": "The newest version in the Encounter's history is not the version that was read."
+    },
+    {
+      "code": "FHIR_ALREADY_WRITTEN",
+      "title": "This case's update is already in the history",
+      "prerequisite": "No version in the Encounter's history with the marker of an update this case sent",
+      "next_action": "Nothing to send. Read the case's outcome and check the Encounter at the receiver.",
+      "owner": "Operator",
+      "reevaluate_when": "Never: the update is there",
+      "text": "A version in the Encounter's history carries the marker of an update this case already sent. Nothing is sent again."
+    },
+    {
+      "code": "FHIR_APPROVAL_NOT_PERSONAL",
+      "title": "This approval is not a person's approval of this case",
+      "prerequisite": "An approval given by a person for this one case",
+      "next_action": "Send the plan to an approver.",
+      "owner": "Approver",
+      "reevaluate_when": "An approver decides on this case",
+      "text": "A FHIR update goes only on a person's approval of this one case. This approval came from a policy or an incident."
+    },
+    {
+      "code": "FHIR_ENGINE_NOT_IN_SCOPE",
+      "title": "The engine's record cannot show whether it is still trying",
+      "prerequisite": "A failed delivery through a stock HL7 TCP operation, with its source header",
+      "next_action": "Read the message in the source production's Message Viewer, make sure the engine no longer holds it, then decide by hand.",
+      "owner": "Integration team",
+      "reevaluate_when": "A person has read the engine's record",
+      "text": "The delivery that failed did not go through a stock HL7 TCP operation, so whether the engine is still trying it cannot be read. Unknown is not nothing pending."
+    },
+    {
+      "code": "FHIR_ENGINE_SUBCLASS_UNPROVEN",
+      "title": "The delivery went through a subclass of the stock operation",
+      "prerequisite": "A failed delivery through the stock HL7 TCP operation class itself",
+      "next_action": "Read the message in the source production's Message Viewer, make sure the engine no longer holds it, then decide by hand.",
+      "owner": "Integration team",
+      "reevaluate_when": "A person has read the engine's record",
+      "text": "The delivery went through a subclass of the stock HL7 TCP operation. What the engine's record proves was measured for the stock class only."
+    },
+    {
+      "code": "FHIR_ENGINE_DELIVERED",
+      "title": "The engine delivered this message over HL7",
+      "prerequisite": "A message the engine has not delivered",
+      "next_action": "Nothing to send. Check the receiver's own record of the move and note what was found.",
+      "owner": "Integration team",
+      "reevaluate_when": "Never: the delivery happened",
+      "text": "The engine delivered this message over HL7. Whatever the receiver then answered, it was handed the move once, so Shutter does not write it again over FHIR."
+    },
+    {
+      "code": "FHIR_ENGINE_HOLDS_SUSPENDED",
+      "title": "The engine holds this message suspended",
+      "prerequisite": "No suspended copy of the message in the source production",
+      "next_action": "Discard the suspended message in the source production, then reinvestigate the case.",
+      "owner": "Integration team",
+      "reevaluate_when": "The suspended message is discarded and the evidence is collected again",
+      "text": "The engine holds this message suspended, and anyone can send it again. Discard it in the source production, then reinvestigate."
+    },
+    {
+      "code": "FHIR_WRITE_REFUSED",
+      "title": "The update was not applied",
+      "prerequisite": "An update the receiver accepts, after Shutter's own last checks pass",
+      "next_action": "Read the reason in the case's note. Reinvestigate to try again on fresh evidence and a new approval, or make the change by hand.",
+      "owner": "Operator",
+      "reevaluate_when": "The cause named in the note is corrected",
+      "text": "The update was not applied: the receiver refused it, or Shutter's own last checks stopped it before anything was sent."
+    },
+    {
+      "code": "FHIR_WRITE_CONFLICT",
+      "title": "The Encounter changed before the update arrived",
+      "prerequisite": "The Encounter still at the version read when the update arrives",
+      "next_action": "Reinvestigate the case: any further write needs fresh evidence and a new approval.",
+      "owner": "Operator",
+      "reevaluate_when": "A new plan is approved against the new version",
+      "text": "The receiver refused the update because the Encounter changed after it was read (412). It is not retried: any further write needs fresh evidence and a new approval."
+    },
+    {
+      "code": "FHIR_WRITE_OUTCOME_UNKNOWN",
+      "title": "What became of the update is not known",
+      "prerequisite": "An answer from the receiver, and a history, that establish whether the update was committed",
+      "next_action": "Check the Encounter at the receiver, record what was found and mark the case handled. Do not send it again.",
+      "owner": "Operator",
+      "reevaluate_when": "A person has checked at the receiver",
+      "text": "What became of the update cannot be established from what the receiver returned. Shutter does not repeat it. A person checks at the receiver."
+    },
+    {
+      "code": "FHIR_WRITE_NOT_FOUND",
+      "title": "The update is not in the history the receiver returned",
+      "prerequisite": "A version in the Encounter's history that carries this update's marker",
+      "next_action": "Check the Encounter at the receiver before anything else. If the move is not there and is still wanted, reinvestigate for a new approval or make it by hand.",
+      "owner": "Operator",
+      "reevaluate_when": "A person has checked at the receiver",
+      "text": "No version of this update is in the history the receiver returned. A returned history is not a proof that none was committed. The approval is spent."
+    },
+    {
+      "code": "FHIR_COMMITTED_NEEDS_REVIEW",
+      "title": "The update is in the history, but the record has moved on",
+      "prerequisite": "A current Encounter that still shows the update as it was written",
+      "next_action": "Read the Encounter's current locations at the receiver and decide whether anything is left to do, then mark the case handled.",
+      "owner": "Operator",
+      "reevaluate_when": "A person has read the current record",
+      "text": "The approved update is in the Encounter's history, but the current record no longer shows it as it was written. The case stays open for a person."
+    },
+    {
+      "code": "FHIR_WRITE_CONTRADICTED",
+      "title": "The receiver's record contradicts the update",
+      "prerequisite": "A history in which the marked version follows the version the write was conditional on",
+      "next_action": "Check the Encounter and its history at the receiver, and tell the integration team: the server may not honour If-Match.",
+      "owner": "Integration team",
+      "reevaluate_when": "A person has checked at the receiver",
+      "text": "The receiver's record contradicts the update, for example a version that carries Shutter's marker but does not follow the version the write was conditional on. A person checks at the receiver."
     }
   ]
 }
