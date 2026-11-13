@@ -8,7 +8,7 @@ export const TRIAL_WORDS = `${HOSPITAL_NAME}: a demo hospital with made-up patie
  * inference, and the two kinds of run on real IRIS are named beside it so the three are never taken for one another.
  */
 export const TRIAL_NO_INFERENCE =
-  "No model is called here: scenario runs play from recordings made on IRIS, so nothing you see is new inference. On the online demo, real IRIS replays the recorded agents from the demo sign-in and calls them live from the judges' sign-in.";
+  "No model is called here: scenario runs play from recordings made on IRIS, so nothing you see is new inference. On the online demo, real IRIS replays the recorded agents from the demo sign-in, and the judges' sign-in calls the model.";
 /** The one-line form's words, once the welcome has closed. */
 export const TRIAL_WORDS_SHORT = 'Recorded, made-up patients; nothing leaves this browser';
 

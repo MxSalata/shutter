@@ -176,7 +176,7 @@ describe('ScenariosPage in the trial', () => {
       'The mode says who proposes the plan, not how a run executes. Here every run plays a recording in your browser, Board included: no new inference, and nothing reaches IRIS.',
     );
     expect(how).toHaveTextContent(
-      "Live agents run on your own install with a model key, and from the judges' sign-in on the online demo.",
+      "Agents that call a model run on your own install with a model key, and from the judges' sign-in on the online demo.",
     );
     expect(within(how).getByRole('link', { name: /^how to install/ })).toHaveAttribute(
       'href',
@@ -268,7 +268,7 @@ describe('ScenariosPage in the trial', () => {
     expect(alert).not.toHaveTextContent('The production does the rest');
     // S8's board case is the one whose trace the trial pictures, and the banner says what that picture is
     expect(alert).toHaveTextContent(
-      'In IRIS: Message trace on this case opens a screenshot of an S8 Board trace taken on a test instance, not a live session.',
+      "In IRIS: Message trace on this case opens a screenshot of an S8 Board case's trace, taken on a test instance, not this case's own session.",
     );
     expect(alert).toHaveTextContent(
       'That is the short route. S20 below shows the approval boundary, and every scenario is listed under it.',

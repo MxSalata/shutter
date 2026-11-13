@@ -154,7 +154,7 @@ describe('the trial banner', () => {
     const popover = await screen.findByRole('dialog', { name: 'The trial environment' });
     expect(within(popover).getByTestId('trial-no-inference')).toHaveTextContent(TRIAL_NO_INFERENCE);
     expect(TRIAL_NO_INFERENCE).toBe(
-      "No model is called here: scenario runs play from recordings made on IRIS, so nothing you see is new inference. On the online demo, real IRIS replays the recorded agents from the demo sign-in and calls them live from the judges' sign-in.",
+      "No model is called here: scenario runs play from recordings made on IRIS, so nothing you see is new inference. On the online demo, real IRIS replays the recorded agents from the demo sign-in, and the judges' sign-in calls the model.",
     );
   });
 
