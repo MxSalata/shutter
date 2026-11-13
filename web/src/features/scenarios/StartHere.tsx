@@ -5,7 +5,9 @@ import type { CaseSummary, Mode } from '@/api/types';
 import { MoreAbout } from './MoreAbout';
 
 /**
- * The demo's guided path: a short path through the recorded cases, and then the Settings and Evaluation pages. Each
+ * The demo's guided path: the longer path through the recorded cases, for after the short route at the top of the page
+ * (S2, S3 and S8 in Board mode), and then the Settings and Evaluation pages. It has no S2 step of its own, so the page
+ * offers one start, the route's, and this path picks up where the route ends: the same S8 failure in Rules only. Each
  * step's case is found among the recorded cases by scenario and mode, never by a written-in id, so a recording made
  * again still links to the right case; a step whose recording is missing is left out. The demo build alone shows it.
  * Each step is a title, one sentence and its links; the rest of what it shows is behind "More".
@@ -33,13 +35,6 @@ interface PageLink {
 }
 
 const STEPS: Step[] = [
-  {
-    scenario: 'S2',
-    mode: 'board',
-    title: 'S2 in Board: approve the resend, then see it verified',
-    text: 'A transfer never arrived; approve the resend and see it verified.',
-    more: 'Three specialist agents review the evidence, the coordinator agent proposes a resend, the gate passes it and the receiver\'s dry run says it would apply. Approve: one conditional write, then "Verified" from the receiver\'s own history.',
-  },
   {
     scenario: 'S8',
     mode: 'rules',
@@ -122,8 +117,8 @@ export function StartHere() {
             Then follow this path
           </Title>
           <Text size="md" c="dimmed" maw="68ch">
-            A short path through the recorded cases. Approve, escalate and close replay here; nothing leaves
-            your browser.
+            The longer path, for after the short route above. Approve, escalate and close replay here; nothing
+            leaves your browser.
           </Text>
         </Stack>
         <Stack component="ol" gap="md" m={0} p={0} style={{ listStyle: 'none' }} className="start-here-steps">

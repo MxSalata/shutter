@@ -124,22 +124,31 @@ describe('ScenariosPage in the trial', () => {
     renderTrial();
     const card = await screen.findByRole('region', { name: 'Then follow this path' });
     const steps = within(card).getAllByRole('listitem');
-    expect(steps).toHaveLength(6);
+    // It is the longer path, after the short route above, and says so: the page offers one start
+    expect(
+      within(card).getByText(
+        'The longer path, for after the short route above. Approve, escalate and close replay here; nothing leaves your browser.',
+      ),
+    ).toBeInTheDocument();
+    expect(steps).toHaveLength(5);
     for (const [i, step] of steps.entries())
       expect(within(step).getByRole('button', { name: `More about step ${i + 1}` })).toHaveAttribute(
         'aria-expanded',
         'false',
       );
+    // No second start: S2 is the route's first card, and this path picks up at the same S8 failure in Rules only
+    expect(within(card).queryByRole('link', { name: 'Case C-000002' })).not.toBeInTheDocument();
+    expect(within(card).queryByText(/^S2 in Board/)).not.toBeInTheDocument();
     // The links keep their words, which the browser tests follow
-    expect(within(steps[0]).getByRole('link', { name: 'Case C-000002' })).toHaveAttribute(
+    expect(within(steps[0]).getByRole('link', { name: 'Case C-000021' })).toHaveAttribute(
       'href',
-      '/cases/C-000002',
+      '/cases/C-000021',
     );
-    expect(within(steps[2]).getByRole('link', { name: 'Rules only and Board side by side' })).toHaveAttribute(
+    expect(within(steps[1]).getByRole('link', { name: 'Rules only and Board side by side' })).toHaveAttribute(
       'href',
       '/cases/C-000008?show=compare',
     );
-    expect(within(steps[4]).getByRole('link', { name: 'Incident I-000001' })).toBeInTheDocument();
+    expect(within(steps[3]).getByRole('link', { name: 'Incident I-000001' })).toBeInTheDocument();
   });
 
   it('says under Run mode that S8 in Rules only is exempted on purpose, as its card does', async () => {

@@ -3,7 +3,7 @@ import { skipWelcome } from './guide';
 import { go, signIn } from './helpers';
 
 /**
- * A case's page: the guided path's S2 case and its approval, the S8 comparison, S22's two receivers, the tab in the
+ * A case's page: the short route's S2 case and its approval, the S8 comparison, S22's two receivers, the tab in the
  * address, and Approve and Reject for the live hospital's public role.
  */
 
@@ -14,19 +14,20 @@ const AS_DEMO = { as: 'demo' } as const;
 test.beforeEach(({ page }) => skipWelcome(page));
 
 test.describe('the guided path', () => {
-  test('leads from the path card to the held S2 case and its approval', async ({ page }) => {
+  test("leads from the short route's S2 card to the held S2 case and its approval, and the longer path to the rest", async ({
+    page,
+  }) => {
     await signIn(page);
+    // The longer path under the list starts after the short route: S2 is the route's first card, not a step of the path
     const card = page.getByRole('region', { name: 'Then follow this path' });
     await expect(card).toBeVisible();
-    for (const name of [
-      'Case C-000002',
-      'Case C-000021',
-      'Case C-000008',
-      'Case C-000012',
-      'Incident I-000001',
-    ])
+    for (const name of ['Case C-000021', 'Case C-000008', 'Case C-000012', 'Incident I-000001'])
       await expect(card.getByRole('link', { name, exact: true })).toBeVisible();
-    await card.getByRole('link', { name: 'Case C-000002', exact: true }).click();
+    await expect(card.getByRole('link', { name: 'Case C-000002', exact: true })).toHaveCount(0);
+    await page
+      .locator('[data-first="S2"]')
+      .getByRole('link', { name: 'Open C-000002, the latest S2 case in Board mode' })
+      .click();
     await expect(page.getByRole('heading', { name: 'Case C-000002', exact: true })).toBeVisible();
     const outcome = page.getByRole('region', { name: 'Outcome' });
     await expect(outcome.getByTestId('outcome-line')).toHaveText('Waiting for approval');

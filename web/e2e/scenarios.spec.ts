@@ -212,9 +212,11 @@ test.describe('the page at 1280 px @scenarios', () => {
   }) => {
     await go(page, '/scenarios');
     const card = page.getByRole('region', { name: 'Then follow this path' });
-    await expect(card.getByRole('listitem')).toHaveCount(6);
+    // The longer path, after the short route: it has no S2 step, so the page offers one start
+    await expect(card).toContainText('The longer path, for after the short route above.');
+    await expect(card.getByRole('listitem')).toHaveCount(5);
+    await expect(card.getByRole('link', { name: 'Case C-000002', exact: true })).toHaveCount(0);
     for (const name of [
-      'Case C-000002',
       'Case C-000021',
       'Case C-000008',
       'Rules only and Board side by side',
@@ -228,7 +230,7 @@ test.describe('the page at 1280 px @scenarios', () => {
     await expect(more).toHaveAttribute('aria-expanded', 'false');
     await more.click();
     await expect(more).toHaveAttribute('aria-expanded', 'true');
-    await expect(card.getByText(/one conditional write, then "Verified"/)).toBeVisible();
+    await expect(card.getByText(/^Rules only is exempted here on purpose\./)).toBeVisible();
   });
 
   test("shows each row's latest case by its outcome, with how it compares with what the scenario expects", async ({
