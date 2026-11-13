@@ -358,7 +358,7 @@ const pressers = new Map<string, () => void>();
 
 // ---- a step ----
 
-/** Approves the held case for the reader, through the same call Approve plan makes, when it still waits. */
+/** Approves the held case for the reader, through the same call Approve the resend makes, when it still waits. */
 async function approveForYou(caseId: string): Promise<boolean> {
   const c = await api.get<CaseDetail>(`/cases/${seg(caseId)}`);
   if (c.state !== 'awaiting_approval') return false;
@@ -651,7 +651,7 @@ function StepHost({ pos }: { pos: GuidePosition }) {
     if (path) go(path);
   }, [path]);
 
-  // Approve plan pressed by hand on this step: once the replay has played, the tour goes on to what it shows, so the
+  // Approve the resend pressed by hand on this step: once the replay has played, the tour goes on to what it shows, so the
   // reader isn't left on a card that still says it is their turn. Next's own approval moves on by itself
   // Read from the step itself: the case resolves before the replay ends, and the words for that drop the try-it
   const approveStep = pos.step.tryIt?.action === 'approve-plan';
@@ -664,7 +664,7 @@ function StepHost({ pos }: { pos: GuidePosition }) {
     return () => window.removeEventListener(REPLAY_DONE, played);
   }, [approveStep, path]);
 
-  // Reject plan pressed by hand on this step: the page has closed up around the decision, so the tour goes on to what it
+  // Reject the resend pressed by hand on this step: the page has closed up around the decision, so the tour goes on to what it
   // means and lands there, as it does after the replay of an approval. Arriving on a case rejected earlier stays put
   const stateBefore = useRef(caseState);
   useEffect(() => {

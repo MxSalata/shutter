@@ -1,26 +1,25 @@
-import { Alert, Button, Group, Stack, Table, Text, Textarea, Tooltip } from '@mantine/core';
-import { notifications } from '@mantine/notifications';
+import { Alert, Button, Group, Stack, Table, Text, Tooltip } from '@mantine/core';
 import { IconCheck, IconEye, IconX } from '@tabler/icons-react';
-import { useState } from 'react';
-import { usePreviewBlindResend, useDecideApproval } from '@/api/hooks';
-import { newIdempotencyKey } from '@/api/client';
+import { usePreviewBlindResend } from '@/api/hooks';
 import { resolveCan } from '@/api/can';
-import type { ApprovalsView, CaseDetail, Me, Plan, PlanView } from '@/api/types';
+import type { ApprovalsView, CaseDetail, Me, PlanView } from '@/api/types';
 import { TRIAL } from '@/env/mode';
-import { byEnv, toBecomeApprover } from '@/env/copy';
+import { toBecomeApprover } from '@/env/copy';
 import { Digest } from '@/components/Digest';
-import { ConfirmModal } from '@/components/ConfirmModal';
 import { TechDetail } from '@/components/TechDetail';
 import { KeyValueList } from '@/components/KeyValueList';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Timestamp } from '@/components/Timestamp';
 import { StackTable } from '@/components/StackTable';
 import { APPROVALS } from '@/lib/status';
-import { describeError, isApiError } from '@/lib/errors';
+import { describeError } from '@/lib/errors';
 import { asObject } from '@/lib/json';
 import { humanize } from '@/lib/format';
 import type { ApprovalEvidence } from './approvalChange';
 import { ApprovalChangeRows } from './ApprovalChangeRows';
+import type { Decision } from './ApprovalReview';
+import { PlanHeadline } from './PlanHeadline';
+import { decisionLabels, planWords } from './planAction';
 import { approvalsByPlan, earlierApprovalText } from './receipt';
 import { NotYet, Section } from './Section';
 import { capitalReceiverNoun, receiverNoun } from './receiver';
@@ -104,12 +103,20 @@ function BlindResendPreview({ c, me }: { c: CaseDetail; me: Me }) {
   );
 }
 
+/**
+ * The Approval section of the decision step: the plan's action as its headline, what the evidence read at the receiver
+ * and what releasing the plan is expected to leave, then the two decisions, each named for the action ("Approve the
+ * resend"). Both open the review of the exact plan (`ApprovalReview`, which the case page holds, so the case's action
+ * button opens the same one); nothing is sent from here. What an approval binds, in digests and versions, is one
+ * click away under "Approval details", open in Technical.
+ */
 export function ApprovalPanel({
   c,
   me,
   view,
   approvals,
   snapshot,
+  onDecide,
 }: {
   c: CaseDetail;
   me: Me;
@@ -117,16 +124,9 @@ export function ApprovalPanel({
   approvals: ApprovalsView | null | undefined;
   /** The evidence, for what the receiver held when it was read. */
   snapshot: ApprovalEvidence;
+  /** Opens the review of the exact plan on this decision. */
+  onDecide: (decision: Decision) => void;
 }) {
-  const decide = useDecideApproval(c.caseId);
-  const [decision, setDecision] = useState<'approve' | 'reject' | null>(null);
-  // The dialog keeps the last decision's words while it animates closed: approve must not flash as a red Reject
-  const [lastDecision, setLastDecision] = useState<'approve' | 'reject'>('approve');
-  if (decision && decision !== lastDecision) setLastDecision(decision);
-  const [comment, setComment] = useState('');
-  const [key, setKey] = useState('');
-  // What the dialog opened on: the page's reads carry on under it, and a decision is only ever on what the person read
-  const [opened, setOpened] = useState<{ plan: Plan; version: number } | null>(null);
   const plan = view?.plan;
   const awaiting = c.state === 'awaiting_approval';
   const write = plan?.disposition === 'resend';
@@ -145,53 +145,7 @@ export function ApprovalPanel({
   const underIncident = Boolean(latest?.incidentPlanDigest);
   const revoked = !latest && current.some((a) => a.revoked);
   const history = earlierApprovalText(earlier, view);
-
-  const openDialog = (d: 'approve' | 'reject') => {
-    if (!plan) return;
-    setOpened({ plan, version: c.version });
-    setDecision(d);
-    setComment('');
-    setKey(newIdempotencyKey());
-    decide.reset();
-  };
-  // A decision sent or answered moves the case by itself: only a change before that stops the dialog
-  const moved =
-    decision !== null &&
-    opened !== null &&
-    !decide.isPending &&
-    !decide.isSuccess &&
-    (plan?.digest !== opened.plan.digest || c.version !== opened.version);
-  const submit = () => {
-    if (!decision || !opened || moved) return;
-    decide.mutate(
-      {
-        decision: { decision, planDigest: opened.plan.digest, expectedVersion: opened.version, comment },
-        idempotencyKey: key,
-      },
-      {
-        onSuccess: (reply) => {
-          setDecision(null);
-          // In the trial the page itself plays out what came next, and announces it once
-          if (TRIAL && decision === 'approve') return;
-          const by = reply?.approver ? ` by ${reply.approver}` : '';
-          notifications.show({
-            color: decision === 'approve' ? 'blue' : 'gray',
-            title:
-              decision === 'approve'
-                ? `Approved${by}`
-                : byEnv({ live: `Rejected${by}`, trial: 'Rejected in the trial' }),
-            message:
-              decision !== 'approve'
-                ? 'Nothing will be sent.'
-                : 'The receiver is read again and the gate checks the dispatch.',
-          });
-        },
-      },
-    );
-  };
-  // Only a stale plan or case version asks for a fresh look; any other refusal (a 403 naming the Workflow role, a 409
-  // naming who the task is assigned to) is shown as the server worded it.
-  const stale = decide.error && isApiError(decide.error) && decide.error.code === 'stale_version';
+  const labels = decisionLabels(plan);
 
   return (
     <Section
@@ -219,13 +173,6 @@ export function ApprovalPanel({
         ) : null
       }
     >
-      <TechDetail kind="explain" label="What an approval binds">
-        <Text size="sm" maw="68ch">
-          The release binds the plan digest, the evidence snapshot, the gate&apos;s policy and the receiver
-          version; if any of them changes before dispatch, it no longer authorises the write, and the gate
-          checks again at dispatch.
-        </Text>
-      </TechDetail>
       {!write && plan ? <NotYet>No approval needed: the plan writes nothing.</NotYet> : null}
       {history ? (
         <Group gap="xs" wrap="wrap">
@@ -235,6 +182,9 @@ export function ApprovalPanel({
       ) : null}
       {write || awaiting ? (
         <Stack gap="sm">
+          {/* What is to be decided, while it waits: the plan's action, and what releasing it is expected to leave */}
+          {awaiting && plan ? <PlanHeadline words={planWords(plan, c, snapshot)} /> : null}
+          {awaiting && view ? <ApprovalChangeRows view={view} c={c} snapshot={snapshot} /> : null}
           {TRIAL && awaiting ? (
             <Alert color="blue" variant="light" title="Held for you to decide">
               This recorded case waits here for you. Approve it and the recording plays on: the fix goes out
@@ -242,57 +192,18 @@ export function ApprovalPanel({
               further.
             </Alert>
           ) : null}
-          <KeyValueList
-            rows={[
-              [
-                'Plan digest',
-                <Stack key="p" gap={0}>
-                  <Digest value={latest?.planDigest || plan?.digest} label="plan digest" />
-                  <Text size="xs" c="dimmed">
-                    A fingerprint of the exact plan: any change to it gives another digest.
-                  </Text>
-                </Stack>,
-              ],
-              [
-                'Evidence snapshot',
-                latest?.snapshotDigest ? (
-                  <Digest key="s" value={latest.snapshotDigest} label="snapshot digest" />
-                ) : (
-                  ''
-                ),
-              ],
-              ['Gate policy', latest?.policyVersion || policy],
-              ['Receiver version', String(latest?.expectedVersion ?? plan?.expectedVersion ?? '')],
-              ['Valid until', latest?.expiresAt ? <Timestamp key="e" iso={latest.expiresAt} /> : ''],
-              ['Comment', latest?.comment ?? ''],
-              [
-                'Incident plan digest',
-                latest?.incidentPlanDigest ? (
-                  <Digest key="i" value={latest.incidentPlanDigest} label="incident plan digest" />
-                ) : (
-                  ''
-                ),
-              ],
-              [
-                'Approved as',
-                latest?.incidentPlanDigest
-                  ? `${latest.boundEntry ?? ''} · ${humanize(latest.boundOutcome ?? '')}`
-                  : '',
-              ],
-            ]}
-          />
           {awaiting ? (
             <Stack gap={4} data-tour="case-approve">
               <Group gap="sm">
-                <Tooltip label={why || 'Approve exactly this plan'} disabled={!why}>
+                <Tooltip label={why || 'Review and approve exactly this plan'} disabled={!why}>
                   <span>
                     <Button
                       leftSection={<IconCheck size={16} />}
                       disabled={!!why}
-                      onClick={() => openDialog('approve')}
+                      onClick={() => onDecide('approve')}
                       data-tour-action="approve-plan"
                     >
-                      Approve plan
+                      {labels.approve}
                     </Button>
                   </span>
                 </Tooltip>
@@ -303,9 +214,9 @@ export function ApprovalPanel({
                       variant="light"
                       leftSection={<IconX size={16} />}
                       disabled={!!why}
-                      onClick={() => openDialog('reject')}
+                      onClick={() => onDecide('reject')}
                     >
-                      Reject plan
+                      {labels.reject}
                     </Button>
                   </span>
                 </Tooltip>
@@ -317,6 +228,61 @@ export function ApprovalPanel({
               ) : null}
             </Stack>
           ) : null}
+          {/* The decision in words, once there is one */}
+          {latest && (latest.expiresAt || latest.comment || latest.incidentPlanDigest) ? (
+            <KeyValueList
+              rows={[
+                ['Valid until', latest.expiresAt ? <Timestamp key="e" iso={latest.expiresAt} /> : ''],
+                ['Comment', latest.comment ?? ''],
+                [
+                  'Approved as',
+                  latest.incidentPlanDigest
+                    ? `${latest.boundEntry ?? ''} · ${humanize(latest.boundOutcome ?? '')}`
+                    : '',
+                ],
+              ]}
+            />
+          ) : null}
+          <TechDetail kind="data" label="Approval details">
+            <Stack gap="xs">
+              <Text size="sm" maw="68ch">
+                The release binds the plan digest, the evidence snapshot, the gate&apos;s policy and the
+                receiver version; if any of them changes before dispatch, it no longer authorises the write,
+                and the gate checks again at dispatch.
+              </Text>
+              <KeyValueList
+                rows={[
+                  [
+                    'Plan digest',
+                    <Stack key="p" gap={0}>
+                      <Digest value={latest?.planDigest || plan?.digest} label="plan digest" />
+                      <Text size="xs" c="dimmed">
+                        A fingerprint of the exact plan: any change to it gives another digest.
+                      </Text>
+                    </Stack>,
+                  ],
+                  [
+                    'Evidence snapshot',
+                    latest?.snapshotDigest ? (
+                      <Digest key="s" value={latest.snapshotDigest} label="snapshot digest" />
+                    ) : (
+                      ''
+                    ),
+                  ],
+                  ['Gate policy', latest?.policyVersion || policy],
+                  ['Receiver version', String(latest?.expectedVersion ?? plan?.expectedVersion ?? '')],
+                  [
+                    'Incident plan digest',
+                    latest?.incidentPlanDigest ? (
+                      <Digest key="i" value={latest.incidentPlanDigest} label="incident plan digest" />
+                    ) : (
+                      ''
+                    ),
+                  ],
+                ]}
+              />
+            </Stack>
+          </TechDetail>
           <BlindResendPreview c={c} me={me} />
           {approvals?.tasks?.length ? (
             <Table.ScrollContainer minWidth={520} className="stack-scroll">
@@ -352,85 +318,6 @@ export function ApprovalPanel({
           ) : null}
         </Stack>
       ) : null}
-      <ConfirmModal
-        opened={decision !== null}
-        onClose={() => setDecision(null)}
-        title={
-          lastDecision === 'approve'
-            ? `Approve plan v${opened?.plan.version ?? ''}`
-            : `Reject plan v${opened?.plan.version ?? ''}`
-        }
-        size="lg"
-      >
-        {opened ? (
-          <Stack gap="sm">
-            {/* What the action does, first: for real on a live system, in this browser only in the trial */}
-            <Text size="sm" fw={600} data-testid="confirm-consequence">
-              {lastDecision === 'approve'
-                ? byEnv({
-                    live: `This sends the fix to ${receiverNoun(c.receiver)}, for real. The receiver is read again and the gate checks the dispatch.`,
-                    trial:
-                      'Go ahead. You will see what happened next in the recording: the fix goes out and the receiving system confirms it. Nothing leaves this browser, and a reload starts the recording afresh.',
-                  })
-                : byEnv({
-                    live: `Nothing is sent to ${receiverNoun(c.receiver)}: the case stops as blocked for a person to take further.`,
-                    trial:
-                      'Nothing is sent. The case stops as blocked, in this browser only, until a reload starts the recording afresh.',
-                  })}
-            </Text>
-            {lastDecision === 'approve' ? (
-              <Text size="sm">
-                {`You approve exactly this: ${humanize(opened.plan.actionType || 'resend').toLowerCase()} the ${humanize(c.event).toLowerCase()}${c.ward ? ` to ${c.ward}` : ''} for ${c.encounterId}, conditional on receiver version ${String(opened.plan.expectedVersion)}.`}
-              </Text>
-            ) : null}
-            {lastDecision === 'approve' ? <ApprovalChangeRows c={c} snapshot={snapshot} /> : null}
-            <KeyValueList
-              rows={[
-                ['Case', c.caseId],
-                ['Patient', `${c.patientId}${c.patientIdAuthority ? ` (${c.patientIdAuthority})` : ''}`],
-                ['Event time', <Timestamp key="t" iso={c.eventTime} />],
-                ['Bed', c.bed ?? ''],
-                ['Why it is still due', opened.plan.why || opened.plan.summary],
-                ['Plan digest', <Digest key="p" value={opened.plan.digest} label="plan digest" />],
-                ['Case version', String(opened.version)],
-              ]}
-            />
-            <Textarea
-              label="Comment"
-              description="Recorded with your decision"
-              autosize
-              minRows={2}
-              value={comment}
-              onChange={(e) => setComment(e.currentTarget.value)}
-            />
-            {moved ? (
-              <Alert color="red" variant="light" role="alert">
-                The plan or the case changed since you opened this, so this decision can&apos;t be recorded.
-                Close this and review the new plan.
-              </Alert>
-            ) : decide.error ? (
-              <Alert color="red" variant="light" role="alert">
-                {stale
-                  ? 'Approval no longer valid: the plan or the case changed since you opened this, so this decision was not recorded. Close this and review the new plan.'
-                  : describeError(decide.error)}
-              </Alert>
-            ) : null}
-            <Group justify="flex-end" gap="sm">
-              <Button variant="default" onClick={() => setDecision(null)}>
-                Cancel
-              </Button>
-              <Button
-                color={lastDecision === 'approve' ? undefined : 'red'}
-                loading={decide.isPending}
-                onClick={submit}
-                disabled={!!stale || moved}
-              >
-                {lastDecision === 'approve' ? 'Approve this plan' : 'Reject this plan'}
-              </Button>
-            </Group>
-          </Stack>
-        ) : null}
-      </ConfirmModal>
     </Section>
   );
 }

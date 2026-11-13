@@ -55,6 +55,8 @@ import {
   releaseStatus,
   type CaseFacts,
 } from './outcome';
+import { keepTogether } from './keepTogether';
+import { decisionLabels, planWords } from './planAction';
 import { proposalCaption, writesCaption, writesDetail } from './receipt';
 import { CorrectionDraft } from './CorrectionDraft';
 import { AT_THE_RECEIVER, caseReceiver, correctionStepsOf, notCheckedAtReceiver } from './receiver';
@@ -168,7 +170,7 @@ export function DecisionCard({
   facts: CaseFacts;
   /** The case's round of evidence and planning: a re-plan after the receiver changed starts another. */
   round?: number;
-  /** Opens the gate and decision step, where the approval is decided. */
+  /** Opens the review of the exact plan, where the approval is decided. */
   onReview?: () => void;
   /** What came of the case, with its scenario's expectation; from the facts alone when not given. */
   outcome?: CaseOutcome;
@@ -274,7 +276,10 @@ export function DecisionCard({
   const caption = writesCaption(r);
   const verifierSummary = VERIFIER_OUTCOMES.includes(r.verificationState) ? r.verification : '';
   const notChecked = notCheckedAtReceiver(c, facts.snapshot, facts.attempts);
-  const proposal = proposalCaption(r);
+  // The plan's own action, in the words its section and the review carry: a resend is named by what it sends
+  const planned = facts.plan?.plan;
+  const words = planned ? planWords(planned, c, facts.snapshot) : undefined;
+  const proposal = words?.write ? words.action : proposalCaption(r);
   return (
     <Paper
       component="section"
@@ -411,6 +416,12 @@ export function DecisionCard({
                     </Button>
                   </Group>
                 ) : null}
+                {/* On a case that waits for approval, what an approval would release: the plan's action, whole */}
+                {c.state === 'awaiting_approval' && words ? (
+                  <Text size="sm" data-testid="next-action-proposal">
+                    {keepTogether(words.headline)}
+                  </Text>
+                ) : null}
                 {/* What (the title) and who; the rest of a long action, why, the reason's code, what must hold, when to
                     look again and any steps that correct a receiver's history behind the details */}
                 {next.kind === 'person' ? (
@@ -428,7 +439,7 @@ export function DecisionCard({
                       // A light button on the tinted card falls short of 4.5:1 in dark mode: the default surface keeps
                       // it. On a phone it takes the card's width, as the one thing to do.
                       <Button size="xs" variant="default" onClick={onReview} w={{ base: '100%', sm: 'auto' }}>
-                        Review the plan and decide
+                        {`Review ${decisionLabels(planned).noun}`}
                       </Button>
                     ) : null}
                     {hasWhy ? (

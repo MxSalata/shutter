@@ -14,6 +14,7 @@ import {
   useScenarios,
   useSiteProfile,
 } from '@/api/hooks';
+import { resolveCan } from '@/api/can';
 import type { CaseDetail } from '@/api/types';
 import { TRIAL } from '@/env/mode';
 import { ApiSource } from '@/components/ApiSource';
@@ -29,8 +30,10 @@ import { CaseHeader } from './case/CaseHeader';
 import { Lifecycle, REPLAYED_STAGES, type StageKey } from './case/Lifecycle';
 import { FailureMap } from './case/FailureMap';
 import { failureMapOf } from './case/failureMapModel';
+import { ApprovalReview, type Decision, type OpenedReview } from './case/ApprovalReview';
 import { CaseActionButton } from './case/CaseActionButton';
 import { caseActionOf, type ActionPlace } from './case/caseAction';
+import { planWords } from './case/planAction';
 import { closeNeedsApprover } from '../site-profile/profile';
 import { EvidencePanel } from './case/EvidencePanel';
 import { WarehouseHistoryPanel } from './case/WarehouseHistoryPanel';
@@ -118,7 +121,7 @@ function CaseBody({ c }: { c: CaseDetail }) {
   }, [open, c.caseId, client]);
 
   // The trial plays out what came of an approval, once: when a case this page saw waiting for approval resolves
-  // (the reader's Approve plan, or the guide's approve-for-you), its last three stages fill in one at a time, then the
+  // (the reader's Approve the resend, or the guide's approve-for-you), its last three stages fill in one at a time, then the
   // band turns to the outcome. Live pages never replay: they show the real states as the case polls them.
   const [seen, setSeen] = useState(c.state);
   const [replay, setReplay] = useState(false);
@@ -287,20 +290,36 @@ function CaseBody({ c }: { c: CaseDetail }) {
     comparable,
   });
   // A person's next step for the header, as "What needs you now" says it; not where the outcome is not as expected,
-  // which the outcome and the action button already say
+  // which the outcome and the action button already say. On a case that waits for approval the plan's own action
+  // goes with it, so the header says what an approval would do before anything is opened
   const next = nextAction(facts);
+  const waitingPlan = c.state === 'awaiting_approval' ? facts.plan?.plan : undefined;
   const headerNext =
     next.kind === 'person' && verdict.key !== 'not-as-expected'
       ? {
           action: next.action,
           role: next.role,
           tone: (c.state === 'blocked' || c.state === 'failed' ? 'blocking' : 'attention') as Tone,
+          proposal: waitingPlan ? planWords(waitingPlan, c, facts.snapshot).headline : undefined,
         }
       : undefined;
   const showCompare = () => openStep('compare', 's8-compare');
+  // The review of the exact plan, the one place a decision is sent from. It is held here, above the tabs, so the
+  // case's action button opens it from any tab; it opens on what the page reads at that moment and keeps to it.
+  // Whoever cannot decide, or a plan not read yet, goes to the Approval section instead, which says why
+  const [review, setReview] = useState<OpenedReview | null>(null);
+  const openings = useRef(0);
+  const openReview = (decision: Decision) => {
+    if (c.state !== 'awaiting_approval' || !facts.plan?.plan || !resolveCan(me).approve) {
+      openStep('decision', 'approval');
+      return;
+    }
+    openings.current += 1;
+    setReview({ decision, c, view: facts.plan, snapshot: facts.snapshot, n: openings.current });
+  };
   const goToAction = (place: ActionPlace) => {
     if (place === 'compare') showCompare();
-    else if (place === 'approval') openStep('decision', 'approval');
+    else if (place === 'approval') openReview('approve');
     else {
       setTab('summary');
       reveal('escalations');
@@ -363,7 +382,7 @@ function CaseBody({ c }: { c: CaseDetail }) {
       <DecisionCard
         facts={facts}
         round={rounds(events.data ?? [])}
-        onReview={() => openStep('decision', 'approval')}
+        onReview={() => openReview('approve')}
         outcome={shown}
         fading={played}
         onSeePrecedents={seePrecedents}
@@ -419,6 +438,7 @@ function CaseBody({ c }: { c: CaseDetail }) {
                 portalBase={base}
                 compareFocus={compare}
                 boardOnTop={boardOnTop}
+                onDecide={openReview}
               />
             </Stack>
           </Tabs.Panel>
@@ -452,6 +472,13 @@ function CaseBody({ c }: { c: CaseDetail }) {
           </Tabs.Panel>
         </Tabs>
       )}
+      <ApprovalReview
+        c={c}
+        view={facts.plan}
+        review={review}
+        onClose={() => setReview(null)}
+        onSwitch={(decision) => setReview((r) => (r ? { ...r, decision } : r))}
+      />
       {/* The case as the API sends it, for the engineer: open in Technical */}
       <Stack mt="lg">
         <ApiSource endpoint={`GET /api/shutter/cases/${c.caseId}`} data={c} />

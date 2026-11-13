@@ -462,7 +462,8 @@ describe('CasePage', () => {
     expect(await within(top).findByText('Approved by approver')).toBeInTheDocument();
     // One plain caption per fact; the versions, epochs and the verifier's words wait in their detail
     expect(await within(top).findByText('1 update, accepted')).toBeInTheDocument();
-    expect(within(top).getByText('Send it again, unchanged')).toBeInTheDocument();
+    // The proposal in the plan's own words, as its section and the review say it
+    expect(within(top).getByText('Resend the PAS transfer to WARD-B, once')).toBeInTheDocument();
     // Shown once the band has opened
     const keys = await within(top).findByRole('button', { name: 'Versions, keys and times' });
     expect(keys).toHaveAttribute('aria-expanded', 'false');
@@ -980,23 +981,38 @@ describe('CasePage', () => {
     expect(within(top).queryByText('Passed')).not.toBeInTheDocument();
   });
 
-  it('names what the evidence read and the after in the approval dialog, with the condition the write goes on', async () => {
+  it('names what the evidence read and what the plan is expected to leave, in the section and the dialog alike', async () => {
     renderCase('C-000002');
     await openStep('Gate and decision');
     const approval = await screen.findByRole('region', { name: 'Approval' });
-    await userEvent.click(await within(approval).findByRole('button', { name: 'Approve plan' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Approve plan v1' });
+    // The section says it before anything is opened: the action as its headline, then the two readings
+    expect(await within(approval).findByTestId('plan-action')).toHaveTextContent(
+      /^Resend the PAS transfer to WARD-B, once, only if the bed-management system is still at version 1\.$/,
+    );
+    expect(within(within(approval).getByTestId('plan-only-if')).getAllByRole('listitem')).toHaveLength(2);
+    const onPage = within(approval).getByTestId('approval-change').textContent;
+    await userEvent.click(await within(approval).findByRole('button', { name: 'Approve the resend' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Approve the resend: plan v1' });
     // Read when the case was investigated, so the row says so and carries its time: never a "before" that looks live
     expect(within(dialog).queryByText('Before')).not.toBeInTheDocument();
-    const held = within(dialog).getByText('Held when read').closest('tr') as HTMLElement;
-    const time = held.querySelector('time[datetime="2026-11-02T14:16:40Z"]') as HTMLElement;
-    expect(time.parentElement?.textContent).toMatch(/^WARD-A at version 1 \(.+\)$/);
-    expect(within(dialog).getByText('After').closest('tr')).toHaveTextContent(/^After\s*WARD-B$/);
-    expect(
-      within(dialog).getByText(
-        /^You approve exactly this: resend the transfer to WARD-B for ENC-1002, conditional on receiver version 1\.$/,
-      ),
-    ).toBeInTheDocument();
+    const change = within(dialog).getByTestId('approval-change');
+    const held = within(change)
+      .getByText(/^Receiver state read at/)
+      .closest('tr') as HTMLElement;
+    expect(held.querySelector('time[datetime="2026-11-02T14:16:40Z"]')).not.toBeNull();
+    expect(held).toHaveTextContent(/^Receiver state read at .+WARD-A, bed BAY1-01 at version 1$/);
+    // What the receiver's own dry run of this plan would leave, and that it is where the words come from
+    expect(within(change).getByText('Expected if this plan is released').closest('tr')).toHaveTextContent(
+      /^Expected if this plan is released\s*WARD-B, bed BAY2-04 at version 2 \(the receiver's dry run of this plan\)$/,
+    );
+    // One derivation for the two: the dialog's rows are the section's, word for word
+    expect(change.textContent).toBe(onPage);
+    expect(within(dialog).getByTestId('plan-action')).toHaveTextContent(
+      /^Resend the PAS transfer to WARD-B, once, only if the bed-management system is still at version 1\.$/,
+    );
+    expect(within(dialog).getByRole('rowheader', { name: 'Encounter' }).closest('tr')).toHaveTextContent(
+      'ENC-1002',
+    );
   });
 
   it('names every stage of the progress in words: done, waiting for approval and not yet', async () => {
@@ -1095,11 +1111,149 @@ describe('CasePage', () => {
     expect(within(top).queryByText(/approval was revoked/)).not.toBeInTheDocument();
   });
 
-  it('moves focus to the approval when the reader asks to review the plan', async () => {
+  it('opens the review from "What needs you now", moves focus into it, and gives it back on Cancel', async () => {
+    let posted = 0;
+    server.use(
+      http.post('/api/shutter/cases/C-000002/approvals', () => {
+        posted += 1;
+        return HttpResponse.json({ approver: 'approver' }, { status: 202 });
+      }),
+    );
     renderCase('C-000002');
     const top = await outcome();
-    await userEvent.click(await within(top).findByRole('button', { name: 'Review the plan and decide' }));
+    // The card says what an approval would release, in the plan's own sentence
+    expect(await within(top).findByTestId('next-action-proposal')).toHaveTextContent(
+      /^Resend the PAS transfer to WARD-B, once, only if the bed-management system is still at version 1\.$/,
+    );
+    const opener = await within(top).findByRole('button', { name: 'Review the resend' });
+    await userEvent.click(opener);
+    const dialog = await screen.findByRole('dialog', { name: 'Approve the resend: plan v1' });
+    await waitFor(() => expect(dialog).toContainElement(document.activeElement as HTMLElement));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await waitFor(() => expect(opener).toHaveFocus());
+    // Opening and cancelling sent nothing, and the case still waits
+    expect(posted).toBe(0);
+    expect(screen.getByTestId('outcome-line')).toHaveTextContent('Waiting for approval');
+  });
+
+  it("reaches the review in one press of the case's action, and a second press approves: two in all", async () => {
+    const sent: { body: unknown; key: string | null }[] = [];
+    server.use(
+      http.post('/api/shutter/cases/C-000002/approvals', async ({ request }) => {
+        sent.push({ body: await request.clone().json(), key: request.headers.get('Idempotency-Key') });
+        return undefined;
+      }),
+    );
+    renderCase('C-000002');
+    const plan = (await (await fetch('/api/shutter/cases/C-000002/plan')).json()) as {
+      plan: { digest: string };
+    };
+    const detail = (await (await fetch('/api/shutter/cases/C-000002')).json()) as { version: number };
+    // The header says what an approval would do before anything is opened
+    expect(await screen.findByTestId('case-proposal')).toHaveTextContent(
+      /^Proposed: Resend the PAS transfer to WARD-B, once, only if the bed-management system is still at version 1\.$/,
+    );
+    expect(screen.getByTestId('case-next')).toHaveTextContent(
+      /^Next: Approve or reject the resend · Approver/,
+    );
+    // Press one: the review of the exact plan, with the operation, the receiver, the binding and the way to reject
+    await userEvent.click(screen.getByTestId('case-action'));
+    const dialog = await screen.findByRole('dialog', { name: 'Approve the resend: plan v1' });
+    expect(within(dialog).getByTestId('plan-action')).toHaveTextContent(
+      /^Resend the PAS transfer to WARD-B, once/,
+    );
+    expect(within(dialog).getByTestId('confirm-consequence')).toHaveTextContent(
+      'This sends the fix to Downstream Out, for real.',
+    );
+    expect(within(dialog).getByRole('rowheader', { name: 'Plan digest' })).toBeInTheDocument();
+    expect(within(dialog).getByRole('rowheader', { name: 'Case version' })).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Reject instead' })).toBeEnabled();
+    expect(sent).toHaveLength(0);
+    // Press two: the approval, of the plan and the case version the review opened on
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Approve the resend' }));
+    await outcomeLine('Delivered: verified at the receiver');
+    expect(sent).toHaveLength(1);
+    expect(sent[0].body).toEqual({
+      decision: 'approve',
+      planDigest: plan.plan.digest,
+      expectedVersion: detail.version,
+      comment: '',
+    });
+    expect(sent[0].key).toBeTruthy();
+  });
+
+  it('turns the review to a rejection in one press, which sends nothing until it is confirmed', async () => {
+    const sent: unknown[] = [];
+    server.use(
+      http.post('/api/shutter/cases/C-000002/approvals', async ({ request }) => {
+        sent.push(await request.clone().json());
+        return undefined;
+      }),
+    );
+    renderCase('C-000002');
+    await screen.findByTestId('case-proposal');
+    await userEvent.click(screen.getByTestId('case-action'));
+    const dialog = await screen.findByRole('dialog', { name: 'Approve the resend: plan v1' });
+    await userEvent.type(within(dialog).getByRole('textbox', { name: /Comment/ }), 'Moved by hand');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Reject instead' }));
+    // The same review, turned: it names the rejection, says nothing is sent and keeps what was typed
+    const turned = await screen.findByRole('dialog', { name: 'Reject the resend: plan v1' });
+    expect(within(turned).getByTestId('confirm-consequence')).toHaveTextContent(
+      'Nothing is sent to Downstream Out: the case stops as blocked for a person to take further.',
+    );
+    expect(within(turned).getByTestId('plan-action')).toHaveTextContent(
+      /^Resend the PAS transfer to WARD-B, once/,
+    );
+    expect(within(turned).queryByTestId('approval-change')).not.toBeInTheDocument();
+    expect(within(turned).getByRole('textbox', { name: /Comment/ })).toHaveValue('Moved by hand');
+    expect(within(turned).getByRole('button', { name: 'Approve instead' })).toBeEnabled();
+    expect(sent).toHaveLength(0);
+    // Three presses in all complete a rejection: the action, Reject instead, and the confirming press
+    await userEvent.click(within(turned).getByRole('button', { name: 'Reject the resend' }));
+    await outcomeLine('Blocked: nothing sent');
+    expect(sent).toEqual([expect.objectContaining({ decision: 'reject', comment: 'Moved by hand' })]);
+    // Nothing was dispatched: the receipt counts no write
+    const top = await outcome();
+    expect(await within(top).findByText('0 writes')).toBeInTheDocument();
+  });
+
+  it("opens the same review from the tab bar's copy of the action, on a tab that does not show the approval", async () => {
+    renderCase('C-000002');
+    await screen.findByTestId('case-proposal');
+    await openTab('Evidence');
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Approval' })).not.toBeInTheDocument());
+    const compact = screen.getByTestId('case-action-compact');
+    await userEvent.click(compact);
+    const dialog = await screen.findByRole('dialog', { name: 'Approve the resend: plan v1' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(compact).toHaveFocus());
+    // The reader is still where they were
+    expect(screen.getByRole('tab', { name: 'Evidence' })).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('offers an operator no review: the section says who decides, and a decision sent anyway is refused', async () => {
+    resetMock('operator');
+    renderCase('C-000002');
+    const top = await outcome();
+    await userEvent.click(await within(top).findByRole('button', { name: 'Review the resend' }));
+    // No dialog: the reader lands on the Approval section, whose buttons say why they are off
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Approval' })).toHaveFocus());
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    const approval = screen.getByRole('region', { name: 'Approval' });
+    expect(within(approval).getByRole('button', { name: 'Approve the resend' })).toBeDisabled();
+    expect(within(approval).getByRole('button', { name: 'Reject the resend' })).toBeDisabled();
+    expect(within(approval).getByText(/^Deciding needs the approver role/)).toBeInTheDocument();
+    // The server's own refusal is unchanged: the role, not the page, is what decides
+    const plan = (await (await fetch('/api/shutter/cases/C-000002/plan')).json()) as {
+      plan: { digest: string };
+    };
+    const refused = await fetch('/api/shutter/cases/C-000002/approvals', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'Shutter' },
+      body: JSON.stringify({ decision: 'approve', planDigest: plan.plan.digest, expectedVersion: 1 }),
+    });
+    expect(refused.status).toBe(403);
   });
 
   it('shows a plan that could not be read as an error, not as loading', async () => {
@@ -1160,7 +1314,7 @@ describe('CasePage', () => {
   it('opens the decision on a held case, and the approval then replays its recorded outcome', async () => {
     renderCase('C-000002');
     const top = await outcome();
-    expect(await within(top).findByText('Approve or reject plan v1')).toBeInTheDocument();
+    expect(await within(top).findByText('Approve or reject the resend')).toBeInTheDocument();
     expect(within(top).getByText('Approver')).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: /^4\. Gate and decision/ })).toHaveAttribute(
       'aria-expanded',
@@ -1173,15 +1327,15 @@ describe('CasePage', () => {
       'data-variant',
       'default',
     );
-    await userEvent.click(within(approval).getByRole('button', { name: 'Approve plan' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Approve plan v1' });
-    // A live system's confirm says first that the write is real, with the chip beside the title
+    await userEvent.click(within(approval).getByRole('button', { name: 'Approve the resend' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Approve the resend: plan v1' });
+    // A live system's confirm says that the write is real, with the chip beside the title
     expect(within(dialog).getByTestId('confirm-consequence')).toHaveTextContent(
       'This sends the fix to Downstream Out, for real. The receiver is read again and the gate checks the dispatch.',
     );
     expect(within(dialog).getByText('Live system')).toBeInTheDocument();
     expect(within(dialog).queryByText('Trial only')).not.toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Approve this plan' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Approve the resend' }));
     await outcomeLine('Delivered: verified at the receiver');
     // A live page shows the states as they come: no replay, no note
     expect(screen.queryByTestId('replay-note')).not.toBeInTheDocument();
@@ -1201,13 +1355,64 @@ describe('CasePage', () => {
     );
     renderCase('C-000002');
     const approval = await screen.findByRole('region', { name: 'Approval' });
-    await userEvent.click(await within(approval).findByRole('button', { name: 'Approve plan' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Approve plan v1' });
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Approve this plan' }));
+    await userEvent.click(await within(approval).findByRole('button', { name: 'Approve the resend' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Approve the resend: plan v1' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Approve the resend' }));
     expect(await within(dialog).findByRole('alert')).toHaveTextContent(
       /^Approval no longer valid: .* Close this and review the new plan\.$/,
     );
-    expect(within(dialog).getByRole('button', { name: 'Approve this plan' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Approve the resend' })).toBeDisabled();
+  });
+
+  it('shows a duplicate approval refused as the server words it, sent once and never again by itself', async () => {
+    let posted = 0;
+    // Another tab decided first: the server answers this one as a case no longer waiting
+    server.use(
+      http.post('/api/shutter/cases/C-000002/approvals', () => {
+        posted += 1;
+        return HttpResponse.json(
+          { error: 'wrong_state', detail: 'The case is resolved, not awaiting approval' },
+          { status: 409 },
+        );
+      }),
+    );
+    renderCase('C-000002');
+    await screen.findByTestId('case-proposal');
+    await userEvent.click(screen.getByTestId('case-action'));
+    const dialog = await screen.findByRole('dialog', { name: 'Approve the resend: plan v1' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Approve the resend' }));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      'The case is resolved, not awaiting approval (wrong_state)',
+    );
+    expect(posted).toBe(1);
+    expect(screen.getByRole('dialog', { name: 'Approve the resend: plan v1' })).toBeInTheDocument();
+  });
+
+  it('sends the digest the review read, even an empty one, and the server refuses it as stale', async () => {
+    const sent: { planDigest?: string }[] = [];
+    server.events.on('request:start', async ({ request }) => {
+      if (request.method === 'POST' && request.url.endsWith('/cases/C-000002/approvals'))
+        sent.push(await request.clone().json());
+    });
+    const view = (await (await fetch('/api/shutter/cases/C-000002/plan')).json()) as {
+      plan: Record<string, unknown>;
+    };
+    // A plan read with no digest: the page fills nothing in, and the gate's binding is the server's to refuse
+    server.use(
+      http.get('/api/shutter/cases/C-000002/plan', () =>
+        HttpResponse.json({ ...view, plan: { ...view.plan, digest: '' } }),
+      ),
+    );
+    renderCase('C-000002');
+    await screen.findByTestId('case-proposal');
+    await userEvent.click(screen.getByTestId('case-action'));
+    const dialog = await screen.findByRole('dialog', { name: 'Approve the resend: plan v1' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Approve the resend' }));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(/^Approval no longer valid: /);
+    expect(within(dialog).getByRole('button', { name: 'Approve the resend' })).toBeDisabled();
+    expect(sent).toEqual([expect.objectContaining({ decision: 'approve', planDigest: '' })]);
+    server.events.removeAllListeners();
+    expect(screen.getByTestId('outcome-line')).toHaveTextContent('Waiting for approval');
   });
 
   it('stops a dialog left open when the plan changes under it, and posts nothing', async () => {
@@ -1220,8 +1425,8 @@ describe('CasePage', () => {
     );
     renderCase('C-000002');
     const approval = await screen.findByRole('region', { name: 'Approval' });
-    await userEvent.click(await within(approval).findByRole('button', { name: 'Approve plan' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Approve plan v1' });
+    await userEvent.click(await within(approval).findByRole('button', { name: 'Approve the resend' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Approve the resend: plan v1' });
     await userEvent.type(within(dialog).getByRole('textbox', { name: /Comment/ }), 'Read plan one');
     const view = (await (await fetch('/api/shutter/cases/C-000002/plan')).json()) as {
       plan: Record<string, unknown>;
@@ -1232,13 +1437,16 @@ describe('CasePage', () => {
         HttpResponse.json({ ...view, plan: { ...view.plan, version: 2, digest: 'sha256:another' } }),
       ),
     );
-    const confirm = within(dialog).getByRole('button', { name: 'Approve this plan' });
+    const confirm = within(dialog).getByRole('button', { name: 'Approve the resend' });
     await waitFor(() => expect(confirm).toBeDisabled(), { timeout: 10_000 });
     expect(within(dialog).getByRole('alert')).toHaveTextContent(
       /^The plan or the case changed since you opened this, so this decision can't be recorded\. Close this and review the new plan\.$/,
     );
     // The dialog still says what the person read, so its words can't sit over a plan they didn't
-    expect(screen.getByRole('dialog', { name: 'Approve plan v1' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Approve the resend: plan v1' })).toBeInTheDocument();
+    expect(within(dialog).getByTestId('plan-action')).toHaveTextContent(
+      /^Resend the PAS transfer to WARD-B, once, only if the bed-management system is still at version 1\.$/,
+    );
     expect(posted).toBe(0);
   });
 
@@ -1246,14 +1454,14 @@ describe('CasePage', () => {
     const detail = (await (await fetch('/api/shutter/cases/C-000002')).json()) as { version: number };
     renderCase('C-000002');
     const approval = await screen.findByRole('region', { name: 'Approval' });
-    await userEvent.click(await within(approval).findByRole('button', { name: 'Reject plan' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Reject plan v1' });
+    await userEvent.click(await within(approval).findByRole('button', { name: 'Reject the resend' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Reject the resend: plan v1' });
     server.use(
       http.get('/api/shutter/cases/C-000002', () =>
         HttpResponse.json({ ...detail, version: detail.version + 1 }),
       ),
     );
-    const confirm = within(dialog).getByRole('button', { name: 'Reject this plan' });
+    const confirm = within(dialog).getByRole('button', { name: 'Reject the resend' });
     await waitFor(() => expect(confirm).toBeDisabled(), { timeout: 10_000 });
     expect(within(dialog).getByRole('alert')).toHaveTextContent(/changed since you opened this/);
   });
@@ -1261,8 +1469,8 @@ describe('CasePage', () => {
   it('names the case, the patient, the time, the bed and why it is still due in the dialog', async () => {
     renderCase('C-000002');
     const approval = await screen.findByRole('region', { name: 'Approval' });
-    await userEvent.click(await within(approval).findByRole('button', { name: 'Approve plan' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Approve plan v1' });
+    await userEvent.click(await within(approval).findByRole('button', { name: 'Approve the resend' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Approve the resend: plan v1' });
     const row = (label: string) => within(dialog).getByRole('rowheader', { name: label }).closest('tr')!;
     expect(row('Case')).toHaveTextContent('C-000002');
     expect(row('Patient')).toHaveTextContent('MRN1002 (HOSP)');
@@ -1274,10 +1482,10 @@ describe('CasePage', () => {
   it('closes the held case as blocked when the approver rejects it', async () => {
     renderCase('C-000002');
     const approval = await screen.findByRole('region', { name: 'Approval' });
-    await userEvent.click(await within(approval).findByRole('button', { name: 'Reject plan' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Reject plan v1' });
-    expect(within(dialog).queryByText('Held when read')).not.toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Reject this plan' }));
+    await userEvent.click(await within(approval).findByRole('button', { name: 'Reject the resend' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Reject the resend: plan v1' });
+    expect(within(dialog).queryByTestId('approval-change')).not.toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Reject the resend' }));
     await outcomeLine('Blocked: nothing sent');
     expect(await within(approval).findByText('Rejected by approver')).toBeInTheDocument();
   });
@@ -1582,13 +1790,13 @@ describe('the case page in the trial', () => {
     renderCase('C-000002');
     await outcomeLine('Waiting for approval');
     const approval = await screen.findByRole('region', { name: 'Approval' });
-    await userEvent.click(await within(approval).findByRole('button', { name: 'Approve plan' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Approve plan v1' });
+    await userEvent.click(await within(approval).findByRole('button', { name: 'Approve the resend' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Approve the resend: plan v1' });
     expect(within(dialog).getByTestId('confirm-consequence')).toHaveTextContent(
       'Go ahead. You will see what happened next in the recording: the fix goes out and the receiving system confirms it. Nothing leaves this browser, and a reload starts the recording afresh.',
     );
     expect(within(dialog).getByText('Trial only')).toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Approve this plan' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Approve the resend' }));
     // Under reduced motion, the final state at once
     await outcomeLine('Delivered: verified at the receiver');
     expect(await screen.findByTestId('replay-note')).toHaveTextContent(

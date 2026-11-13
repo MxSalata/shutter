@@ -382,7 +382,7 @@ describe('precedents on the case page', () => {
     );
     renderCase(HELD);
     await screen.findByRole('heading', { name: 'What needs you now' });
-    await screen.findByText('Review the plan and decide');
+    await screen.findByText('Review the resend');
     expect(screen.queryByTestId('next-action-precedents')).not.toBeInTheDocument();
     await userEvent.click(await screen.findByRole('tab', { name: 'Audit trail' }));
     await screen.findByRole('region', { name: 'Timeline' });

@@ -15,6 +15,7 @@ import { APPROVALS, caseState, gateOutcome, PROVENANCE, type OutcomeCase } from 
 import type { Status } from '@/lib/tone';
 import { checksOf, failureKindInWords, orderOrResult, outageResend } from './derive';
 import { planLeader } from './follows';
+import { decisionLabels } from './planAction';
 import { approvalsByPlan, WRITE_OUTCOMES, type SafetyReceipt } from './receipt';
 import { NOT_CHECKED, notCheckedAtReceiver } from './receiver';
 import { investigationRuns } from './runClock';
@@ -351,7 +352,8 @@ export function nextAction(f: CaseFacts): NextAction {
   if (c.state === 'awaiting_approval')
     return {
       kind: 'person',
-      action: `Approve or reject plan v${str(f.plan?.plan?.version) || '?'}`,
+      // Named for the action, as the buttons are: "Approve or reject the resend"
+      action: decisionLabels(f.plan?.plan).nextAction,
       role: 'Approver',
       blocking: 'The write waits for a person to release it; the gate checks it again at dispatch',
       lookAgain: '',

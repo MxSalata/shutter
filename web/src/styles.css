@@ -1167,6 +1167,19 @@ body {
   padding: var(--mantine-spacing-sm);
 }
 /*
+ * The review dialog's controls (`ApprovalReview`): they stay at the foot of the dialog while its facts scroll, so the
+ * decision, the way to the other decision and Cancel are in view from the moment it opens, on a phone too.
+ */
+.review-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  background: var(--mantine-color-body);
+  border-top: calc(0.0625rem * var(--mantine-scale)) solid var(--mantine-color-default-border);
+  padding-block: var(--mantine-spacing-sm);
+  margin-bottom: calc(-1 * var(--mantine-spacing-md));
+}
+/*
  * A badge that keeps its whole label: in a narrow column or cell it wraps rather than ending in an ellipsis (no
  * ellipsis on a fact, DESIGN.md 5.5). A receipt's badges always do; elsewhere put `wrap-badges` on the cell or group.
  */

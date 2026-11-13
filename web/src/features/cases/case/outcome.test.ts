@@ -237,7 +237,7 @@ describe('the outcome sentence', () => {
     expect(nextAction(f)).toMatchObject({
       kind: 'person',
       role: 'Approver',
-      action: 'Approve or reject plan v1',
+      action: 'Approve or reject the resend',
     });
     expect(releaseStatus(f)?.label).toBe('Waiting for approval');
   });
