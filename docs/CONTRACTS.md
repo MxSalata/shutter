@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.58, 11 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.59, 13 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -447,6 +447,30 @@ escalation), the case's `outcome` ("Handled by hand, recorded by <who>: <reason>
 
 **Abandoning a case the workflow left behind** (v1.21). A case can be left in a working state (detected, collecting, investigating, grouped, proposed, gated, rehearsing, awaiting_approval, approved, executing or verifying) when the answer its workflow instance waits for never comes: a container killed in the middle of a scenario, an alarm or a delivered request lost with it. `POST /cases/{id}/abandon` with `{reason, expectedVersion?}` (`Shutter_Approve` only, whatever the site profile says; `X-Requested-With`; an `Idempotency-Key`) answers 202 `{caseId, state: "abandoning", requestedBy, reason}` and sends `Shutter.Msg.CaseAbandon` to the Case Workflow item, as `/close` and `/reinvestigate` go through it, so the abandon shows in the trace. There a fresh instance fails the case (`Shutter.Store.Case.Abandon`): state `failed`, disposition `abandoned`, headline "Abandoned by <who>. <reason>" (the reason clipped to 200), outcome "Abandoned, recorded by <who>: <reason>. The workflow stopped in <state>; nothing more is sent", the current approval revoked, every draft or queued escalation email cancelled, and an open approval task completed as cancelled (an `approval` event "Approval task <id> cancelled: the case was abandoned"). The record is the state event: its actor is the approver, its time when, its text "Abandoned from <state>: <reason>" (with "; N pending emails cancelled" when any were). The case keeps its `workflowSessionId`, so the trace link still shows where it stopped; the old instance, if it ever answers, finds the case closed and ignores the answer. A failed case reopens with `/reinvestigate`, so a wrong abandon is recoverable. Errors: 400 `bad_request` when the body is not a JSON object or `reason` is empty; 404 `not_found`; 409 `wrong_state` for a closed case (resolved, blocked, escalated or failed), whose detail says a closed case is marked handled (`/close`) or reopened (`/reinvestigate`); 409 `stale_version` with `currentVersion` when `expectedVersion` is not the case's version; 409 `busy` with `{state, inFlight, newestAt, deferred}` while the case's workflow has a message in flight. The in-flight rule (`Shutter.Store.Case.InFlight`): the case's workflow session (for a grouped case, its incident's) is busy while any `Ens.MessageHeader` of the session is Created, Queued or Deferred, or Delivered with `TimeCreated` within the last N minutes; a case with no session yet is busy while its last state event is younger than N minutes. `inFlight` is the count, `newestAt` the newest header's time (the state event's for a case with no session), and `deferred: true` means an approval task is waiting for a person: the case is not stuck, reject the plan through `POST /cases/{id}/approvals` instead (the detail says so). N is `^Shutter.Config("abandonAfterMinutes")`, 15 by default; a value of 10 or less reads as 11, since N must exceed the 600 s board timeout, the longest wait the workflow arms. Age is never judged by `updatedAt`, which a note writes (the start sweep's note, below, would make every stranded case look fresh). The 202 is given before the transition: when the instance moves the case between the route's check and the workflow's transition, the version check refuses the abandon (logged, case unchanged) and the approver re-reads the case and tries again.
 
+
+**The cases list's query** (`open` since v1.59). `GET /cases?state=&scenario=&open=&limit=&offset=` answers `{items, total}`, newest
+first: `state` keeps the cases in that one state, `scenario` those a scenario opened, and `open=1` leaves out the closed
+cases, those whose state is `resolved`, `blocked`, `escalated` or `failed` (what `Shutter.Store.Case.IsClosed` and the
+app's `CLOSED_STATES` call closed), so what is left is still being worked on or waits for an approval. The three combine
+with AND, so `open=1` beside a closed `state` matches nothing; any other value of `open` filters nothing. Every filter is
+part of the query itself (`Shutter.API.Dispatch.CasesWhere`), so `total` counts the filter's rows and `limit` (50; 1 to
+500) and `offset` (0 to 100000) page through the same rows. The Cases page's **Hide closed** switch sends `open=1` and
+keeps it in its own address, as it keeps `state`, `scenario` and `page`; choosing a closed outcome's tile or a closed
+state there turns it off. The list's closed-outcome tiles are counted in the browser over the 100 newest cases
+(`limit=100`), which the page says when there are more ("7 matches among the 100 most recent cases. Older cases have not
+been searched."); its Failed tile takes the abandoned cases off among the 100 newest failed ones, and reads "at most"
+when more than that failed.
+
+**What an empty list says** (v1.59; no new field). With no filter on and no case, the Cases page chooses its words from
+what the install says of itself, never from its address or the signed-in name: the trial (the build, or `?trial`) offers a
+recorded scenario; a demo (`GET /health`, `demo` true) offers a scenario, to someone `GET /me` says may run one
+(`can.scenarios`), and otherwise says who can; a site (`demo` false) with a namespace in the report's
+`watched_namespaces` that is `onboarded`, not `removed` and has its `forwarder` (11.1) says that no failed delivery has
+reached Shutter yet, names what it watches and points at Health, naming instead a namespace whose row is not `ok`; a site
+with no such namespace says that no watched namespace reports its failures here, with the Watched namespaces page for
+someone who may configure the site (`can.configure`) and Health for anyone else; and when the report could not be read,
+or has no `demo` or no `watched_namespaces` (a server before v1.42), it says only "No cases yet." and points at Health. A
+site is never told to play a scenario. The page asks for the report only when its list is empty.
 
 **Writes and verification on the list** (v1.24). Each `GET /cases` item carries `writes`, the number of its attempts that
 reached the receiver and may have landed (outcome `applied`, `already_committed` or `uncertain`, as the case page's receipt
@@ -2744,6 +2768,16 @@ then null, never 0, with the reason in `sourceError`. `incomplete` for any of th
 No message content is copied: the rows hold ids, codes, the body's class and the HL7 structure's family (ADT, ORU).
 
 ## Changes
+
+- v1.59, 13 Nov 2026 (the Cases list: hiding the closed cases, and saying what it searched): `GET /cases` takes
+  `open=1`, which leaves out the cases that are resolved, blocked, escalated or failed, in the query itself
+  (`Shutter.API.Dispatch.CasesWhere`), so `total` and the pages are of the open cases; any other value filters nothing,
+  and a list read without it is unchanged (5; `tests/unit/Shutter/Test/CasesOpen.cls`). The Cases page has a **Hide
+  closed** switch that sends it and keeps `open=1` in its address, turned off by choosing a closed outcome's tile or a
+  closed state; the trial's API takes the same parameter. A closed outcome chosen where there are more than 100 cases
+  says how many match "among the 100 most recent cases" and that older cases have not been searched, the Failed tile
+  reads "at most" when more than 100 cases failed, and an empty list's words come from the install's own report
+  (`demo`, `watched_namespaces`) and the caller's rights, with no new field (5).
 
 - v1.58, 11 Nov 2026 (for 1.4.4, so the public demo's account plays the scenarios): the role `Shutter_Demo` holds
   `Shutter_Scenarios` and still neither `Shutter_ScenarioReset` nor `Shutter_LiveAgents`, so it runs the scenarios and
