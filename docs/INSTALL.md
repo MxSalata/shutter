@@ -35,7 +35,7 @@ the case page (`POST /api/shutter/cases/{id}/escalations` through the API); unti
   namespace-wide purge unless asked for. The feed, records and scenario items (`ADT In`, `ADT to Downstream`,
   `Downstream Out`, `ADT to Records`, `Records Out` and `Scenario Player`) are present but switched off in shape A (the
   installer disables them in `Shutter.Production`), and not added at all in shape B (`InstallInto`).
-- **A new install starts in shadow mode.** Shutter investigates and records what it would propose, and sends no rehearsal, recovery write, resend preview or outage resend, and no escalation email (unless the profile says `"notifications": {"shadow_delivery": "enabled"}`, which lets email go while recovery stays off); the hospital's ordinary feed goes on as before. An approver enables recovery by saving `"recovery": {"mode": "enabled"}` in the site profile, as a step of its own (section 5, step 9): the save releases no plan made before it and sends no email held before it. Settings has "Stop Shutter recovery", for any operator or approver, and the shadow report (`docs/CONTRACTS.md`, 18).
+- **A new install starts in shadow mode.** Shutter investigates and records what it would propose, and sends no rehearsal, recovery write, resend preview or outage resend, and no escalation or reminder email (unless the profile says `"notifications": {"shadow_delivery": "enabled"}`, which lets both go while recovery stays off); the hospital's ordinary feed goes on as before. An approver enables recovery by saving `"recovery": {"mode": "enabled"}` in the site profile, as a step of its own (section 5, step 9): the save releases no plan made before it and sends no escalation email held before it. Settings has "Stop Shutter recovery", for any operator or approver, and the shadow report (`docs/CONTRACTS.md`, 18).
 - **A case at a receiver with no API is escalated, never resent.** A case resends only to a receiver whose site profile
   entry describes its API (state, receipt, capabilities and operations paths), and that write is verified in the
   receiver's receipt and history. A ward system that takes HL7 over TCP and keeps no receipts is investigated and
@@ -345,17 +345,19 @@ Shape A:
 7. Replay a known failure in a test environment: a case opens in SHUTTER, the evidence shows the message and the
    receiver's state, and the escalation draft names the right team.
 8. Before enabling recovery, test in the test environment. Until recovery is enabled the install stays in shadow mode
-   (section 1), and a site that only investigates can stay there. Run the
+   (section 1), and a site that only investigates can stay in it. Run the
    [receiver conformance kit](https://github.com/MxSalata/shutter/blob/main/docs/receiver-conformance.md) against each
-   receiver's test endpoint: it reports what that endpoint demonstrated and enables nothing. Then test the stop: with
-   recovery enabled there and a plan waiting, press **Stop Shutter recovery** in Settings. The plan can no longer be
+   receiver's test endpoint: it reports what that endpoint demonstrated and enables nothing. Then test the stop. In the
+   test environment only, enable recovery as step 9 does, then replay a failure whose plan waits for approval (step 7):
+   a plan made before the enable is void already. With that plan waiting, press **Stop Shutter recovery** in Settings. The plan can no longer be
    approved and nothing is sent, and at a receiver with `engine_resend` an outage's resend can't be approved either.
-   Clearing the stop takes an approver and releases nothing: the case is reinvestigated. The pilot pack has
+   Clearing the stop takes an approver and releases nothing: reject the plan and reinvestigate the case. The pilot pack has
    [a stop drill](https://github.com/MxSalata/shutter/blob/main/docs/pilot/07-stop-and-withdraw.md).
 9. Enable recovery, as a step of its own and only once you mean Shutter to write to a receiver: an approver turns on
-   **Enable recovery** on the Site profile page (question 14), which saves `"recovery": {"mode": "enabled"}`. A plan
-   made before that save is not released: reject it and reinvestigate the case. Nor does the save send email that
-   shadow mode held: an escalation a person sent in shadow mode reads Not sent until a person sends it again. A site
+   **Enable recovery** on the Site profile page (question 14) and saves the profile through the page's review, which
+   stores `"recovery": {"mode": "enabled"}`. The switch alone changes nothing until the profile is saved. A plan
+   made before that save is not released: reject it and reinvestigate the case. Nor does the save send an escalation
+   that shadow mode held: one a person sent in shadow mode reads Not sent until a person sends it again. A site
    that wants escalation and reminder email while still in shadow mode sets
    `"notifications": {"shadow_delivery": "enabled"}` in the profile's JSON (`docs/CONTRACTS.md`, 18).
 10. Watch the first weeks on the Settings and costs page and in the Doctor report (`SELECT Shutter.Setup_Doctor()`). A
@@ -785,11 +787,13 @@ another message of a session that has already handed one to Shutter gets no case
 
 ### 9.10 Document exceptions
 
-By default a failed MDM or ORU gets the ordinary case below, with the message copied whole into Shutter's store and its first 50 OBX and NTE values into the case's snapshot, and one over 2 MB gets no case. To have a receiver's documents and reports open metadata-only cases instead, at any size and with no copy in Shutter, pass the option to the plan and the apply (9.1, 9.2), which sets both switches. "At any size" means the 2 MB limit on a forwarded message is lifted, because the forwarder then sends the metadata and not the message; it is no promise about capacity, and a whole message posted to the intake is still refused over 2 MB:
+By default a failed MDM or ORU gets the ordinary case below, with the message copied whole into Shutter's store and its first 50 OBX and NTE values into the case's snapshot, and one over 2 MB gets no case. To have a receiver's documents and reports open metadata-only cases instead, at any size and with no copy in Shutter, pass the option to the plan and the apply (9.1, 9.2), which sets both switches:
 
 ```sql
 SELECT Shutter.Setup_OnboardApply('DOCUMENTS', '{"document_receivers": "Results Out"}')
 ```
+
+"At any size" means the 2 MB limit on a forwarded message is lifted, because the forwarder then sends the metadata and not the message. It is no promise about capacity, and a whole message posted to the intake is still refused over 2 MB.
 
 Or set them by hand:
 
