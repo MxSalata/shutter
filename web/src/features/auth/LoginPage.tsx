@@ -139,7 +139,10 @@ export default function LoginPage() {
                         them and marks them handled; <b>approver</b> can also approve or reject plans and
                         change the site profile and the agent library. Their password is the installer&apos;s
                         (<code>shutter</code> unless it was changed). They are for your own instance: the
-                        online demo keeps them private.
+                        online demo keeps them private. On the online demo, scenario runs from the demo
+                        account replay the recorded agents on real IRIS, with no new inference; the
+                        judges&apos; account there calls the agents live. The trial below is neither: it plays
+                        recordings in your browser.
                       </TechDetail>
                     </>
                   ) : null}

@@ -20,13 +20,15 @@ import {
 import { notifications } from '@mantine/notifications';
 import { IconFlask2, IconPlayerPlay, IconRefresh, IconShieldX } from '@tabler/icons-react';
 import { useReducedMotion } from '@mantine/hooks';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { Link } from 'react-router';
 import { useListParams } from '@/lib/listParams';
 import {
+  isOpen,
   isPlaying,
   settlingCase,
   useCan,
+  useCasePart,
   useCases,
   useHealth,
   useResetScenarios,
@@ -36,7 +38,7 @@ import {
   useSiteProfile,
 } from '@/api/hooks';
 import { replaysOnly, scenariosHidden, showsRoleBadges } from '@/api/can';
-import type { CaseSummary, Mode, Scenario, ScenarioRun } from '@/api/types';
+import type { AgentRun, CaseSummary, Mode, Scenario, ScenarioRun } from '@/api/types';
 import { ENV, TRIAL } from '@/env/mode';
 import { byEnv } from '@/env/copy';
 import { PageHeader } from '@/components/PageHeader';
@@ -50,15 +52,19 @@ import { DispositionBadge, StateBadge } from '@/components/StateBadge';
 import { StatusBadge } from '@/components/StatusBadge';
 import { TechDetail } from '@/components/TechDetail';
 import { StackTable } from '@/components/StackTable';
-import { caseOutcome, caseState, proposedWrites, writes } from '@/lib/status';
+import { caseOutcome, caseState, PROVENANCE, proposedWrites, ranOnIris, writes } from '@/lib/status';
 import { describeError } from '@/lib/errors';
 import { formatAge, humanize } from '@/lib/format';
 import { playedFor } from '@/lib/proof';
+import { INSTALL_LINK, INSTALL_URL } from '@/lib/liveAgents';
+import { traceScreenshot } from '@/lib/screenshots';
 import { isDemoPolicy } from '@/features/site-profile/profile';
 import type { Tone } from '@/lib/tone';
 import { useTechnical } from '@/stores/appearance';
 import { HINT_EVENTS } from '@/theme';
 import { landOn } from '@/features/guide/reveal';
+import { caseOf } from '@/features/guide/places';
+import { EXECUTION, routeNext, runCase, runExecution, SINGLE_ROUTE } from './execution';
 import { MoreAbout } from './MoreAbout';
 import { ScenarioDiagram } from './ScenarioDiagram';
 import { StartHere } from './StartHere';
@@ -131,13 +137,101 @@ const LOOK_ONLY_WHY = 'scenarios-look-only';
 const PLAYER_OFF = 'The Scenario Player is switched off on a site install, which has no demo';
 
 /**
- * The run's state above the list; once done, where to look: on an instance the production carries on from the files,
- * in the trial the scenario's case is the recorded one, already in its final state.
+ * How the run executes or executed, as a badge from the provenance vocabulary and a sentence, both read from what the
+ * run records and never from the address or the account (execution.ts). A run on IRIS that the server did not mark as
+ * a replay claims nothing until its own case's agent runs say what ran, so a fallback is never called live.
  */
-function RunBanner({ run, latest }: { run: ScenarioRun; latest: string | undefined }) {
-  // A run from a sign-in without the live agents (1.4.4) says its agents answer from their recordings
-  const replayed =
-    !TRIAL && run.replay ? ' Its agents answer from their recordings, with no model call.' : '';
+function RunExecuted({ run, own }: { run: ScenarioRun; own: CaseSummary | undefined }) {
+  const ask = !TRIAL && !run.replay && !!own;
+  const runs = useCasePart<AgentRun[]>(own?.caseId ?? '', 'runs', '/runs', ask && isOpen(own?.state), ask);
+  const ofCase = ask && own && runs.data !== undefined ? ranOnIris(own.mode, runs.data) : undefined;
+  const how = runExecution(run, TRIAL, ofCase);
+  return (
+    <Group gap={6} wrap="wrap" align="center" data-testid="run-execution">
+      {how.status ? <StatusBadge {...how.status} hint={undefined} /> : null}
+      {how.words ? (
+        <Text size="sm" span>
+          {how.words}
+        </Text>
+      ) : null}
+    </Group>
+  );
+}
+
+/**
+ * Where a finished run leads: its own case, and never the Cases list or a case of an earlier run (`runCase`). Until the
+ * case has opened the banner says so and offers no link. Then what to look at there, where its trace is, and for the
+ * short route's three the step after it, as words: nothing here starts the next run.
+ */
+function RunNext({ run, cases }: { run: ScenarioRun; cases: CaseSummary[] | undefined }) {
+  const own = cases ? runCase(cases, run, TRIAL) : undefined;
+  // The trial has recordings of some modes only: a run in another says so, and names the recording there is
+  const other = TRIAL && cases && !own ? caseOf(cases, run.scenario) : undefined;
+  const route = routeNext(run.scenario, run.mode);
+  // The trial has no IRIS behind it, so a case's Message trace is a note there; its one picture of a trace is S8's
+  const picture = TRIAL && cases ? caseOf(cases, 'S8', 'board') : undefined;
+  const pictured = picture && traceScreenshot(picture) ? picture : undefined;
+  const to = (id: string) => `/cases/${encodeURIComponent(id)}`;
+  return (
+    <Stack gap={6} align="flex-start" data-testid="run-next">
+      {own ? (
+        <Button component={Link} to={to(own.caseId)} size="xs" data-tour-action="open-run-case">
+          Open its case, {own.caseId}
+        </Button>
+      ) : other ? (
+        <Text size="sm">
+          The trial has no recording of {run.scenario} in {modeLabel(run.mode)} mode. Its recorded case is{' '}
+          <Anchor component={Link} to={to(other.caseId)} inherit underline="always">
+            {other.caseId}, played in {modeLabel(other.mode as Mode)} mode
+          </Anchor>
+          .
+        </Text>
+      ) : cases ? (
+        <Text size="sm">
+          {byEnv({
+            live: 'The production does the rest: its case opens in a few seconds, and its link appears here.',
+            trial: 'The trial has no recording of its case.',
+          })}
+        </Text>
+      ) : null}
+      {own && route ? <Text size="sm">{route.look}</Text> : null}
+      {own ? (
+        <Text size="sm">
+          {byEnv({
+            live: "In IRIS: Message trace on the case opens its own session in IRIS's Visual Trace.",
+            trial:
+              pictured && pictured.caseId !== own.caseId ? (
+                <>
+                  The trial runs in your browser, so this case&apos;s Message trace is a note of what it opens
+                  on IRIS. The one trace pictured here is{' '}
+                  <Anchor component={Link} to={to(pictured.caseId)} inherit underline="always">
+                    a screenshot of an S8 Board case&apos;s trace, on {pictured.caseId}
+                  </Anchor>
+                  .
+                </>
+              ) : pictured ? (
+                "In IRIS: Message trace on this case opens a screenshot of an S8 Board case's trace, taken on a test instance, not this case's own session."
+              ) : (
+                "The trial runs in your browser, so this case's Message trace is a note of what it opens on IRIS."
+              ),
+          })}
+        </Text>
+      ) : null}
+      {route ? (
+        <Text size="sm" fw={600}>
+          {route.next}
+        </Text>
+      ) : null}
+    </Stack>
+  );
+}
+
+/**
+ * The run's state above the cards: who proposes (the mode, in its title) apart from how it executes (`RunExecuted`),
+ * and once done its own case and the next step (`RunNext`).
+ */
+function RunBanner({ run, cases }: { run: ScenarioRun; cases: CaseSummary[] | undefined }) {
+  const own = cases && run.state === 'done' ? runCase(cases, run, TRIAL) : undefined;
   if (run.state === 'queued')
     return (
       <Alert
@@ -146,7 +240,10 @@ function RunBanner({ run, latest }: { run: ScenarioRun; latest: string | undefin
         icon={<Loader size={16} />}
         title={`${run.scenario} is queued (${humanize(run.mode)})`}
       >
-        <Text size="sm">The scenario player starts it in a moment.{replayed}</Text>
+        <Stack gap={6}>
+          <Text size="sm">The scenario player starts it in a moment.</Text>
+          <RunExecuted run={run} own={undefined} />
+        </Stack>
       </Alert>
     );
   if (run.state === 'running')
@@ -157,10 +254,13 @@ function RunBanner({ run, latest }: { run: ScenarioRun; latest: string | undefin
         icon={<Loader size={16} />}
         title={`Playing ${run.scenario} (${humanize(run.mode)})`}
       >
-        <Text size="sm">
-          {run.step ? `Now ${run.step}.` : 'Starting.'} Files delivered so far:{' '}
-          {run.files.length ? run.files.join(', ') : 'none'}.{replayed}
-        </Text>
+        <Stack gap={6}>
+          <Text size="sm">
+            {run.step ? `Now ${run.step}.` : 'Starting.'} Files delivered so far:{' '}
+            {run.files.length ? run.files.join(', ') : 'none'}.
+          </Text>
+          <RunExecuted run={run} own={undefined} />
+        </Stack>
       </Alert>
     );
   if (run.state === 'done')
@@ -170,39 +270,14 @@ function RunBanner({ run, latest }: { run: ScenarioRun; latest: string | undefin
         variant="light"
         title={`${run.scenario} played (${humanize(run.mode)})${TRIAL ? '' : `, ${formatAge(run.finishedAt)}`}`}
       >
-        <Text size="sm">
-          Delivered {run.files.join(', ') || 'no files'}.
-          {run.timeouts.length ? ` The case did not reach ${run.timeouts.join(', ')} in time.` : ''}
-          {replayed}{' '}
-          {byEnv({
-            live: (
-              <>
-                The production does the rest: follow it in{' '}
-                <Anchor component={Link} to="/cases" inherit>
-                  Cases
-                </Anchor>
-                .
-              </>
-            ),
-            trial: latest ? (
-              <>
-                Its case is{' '}
-                <Anchor component={Link} to={`/cases/${encodeURIComponent(latest)}`} inherit>
-                  {latest}
-                </Anchor>
-                , replayed from the recording, as far as the recording goes.
-              </>
-            ) : (
-              <>
-                Its case is replayed from the recording: find it in{' '}
-                <Anchor component={Link} to="/cases" inherit>
-                  Cases
-                </Anchor>
-                .
-              </>
-            ),
-          })}
-        </Text>
+        <Stack gap="xs">
+          <RunExecuted run={run} own={own} />
+          <Text size="sm">
+            Delivered {run.files.join(', ') || 'no files'}.
+            {run.timeouts.length ? ` The case did not reach ${run.timeouts.join(', ')} in time.` : ''}
+          </Text>
+          <RunNext run={run} cases={cases} />
+        </Stack>
       </Alert>
     );
   return (
@@ -584,9 +659,52 @@ function PlaysBadge({ id, n, of }: { id?: string; n: number; of: number }) {
 }
 
 /**
- * The modes, once, as a choice of cards: who proposes the plan, and how many scenarios each mode plays. Where the user may
- * not run scenarios (`lookOnly`) the choice stays, since it is how the list below reads in that mode, and starts where the
- * hospital plays; only Run is greyed out.
+ * How runs execute here, under the modes and apart from them: the mode is who proposes, and this is whether a model is
+ * called. The trial plays recordings in the browser; a sign-in without the live agents replays the recorded agents on
+ * IRIS; a sign-in with them is promised nothing before the run, since only a case's own agent runs say what ran. Each
+ * also names the way to live agents where there are none, with the link to the install steps.
+ */
+function HowRunsExecute({ replayOnly }: { replayOnly: boolean }) {
+  const status = TRIAL ? PROVENANCE.recording : replayOnly ? PROVENANCE.replay : undefined;
+  const words = TRIAL ? EXECUTION.trial : replayOnly ? EXECUTION.replay : EXECUTION.live;
+  const route = TRIAL ? EXECUTION.trialRoute : replayOnly ? EXECUTION.replayRoute : '';
+  return (
+    <Stack
+      gap={4}
+      mt="sm"
+      data-testid="how-runs-execute"
+      component="section"
+      aria-labelledby="how-runs-execute"
+    >
+      <Group gap={8} wrap="wrap" align="center">
+        <Text fw={650} size="md" id="how-runs-execute" component="h3" m={0}>
+          How a run executes here
+        </Text>
+        {status ? <StatusBadge {...status} hint={undefined} /> : null}
+      </Group>
+      <Text size="sm" maw="80ch">
+        {EXECUTION.lead} {words}
+        {route ? (
+          <>
+            {' '}
+            {route}{' '}
+            <Anchor href={INSTALL_URL} target="_blank" rel="noreferrer" inherit underline="always">
+              {INSTALL_LINK}
+              <VisuallyHidden> Shutter with your own model key (opens in a new tab)</VisuallyHidden>
+            </Anchor>
+          </>
+        ) : null}
+      </Text>
+    </Stack>
+  );
+}
+
+/**
+ * The modes, once, as a choice of cards: who proposes the plan, in each card's own words (the approved descriptions,
+ * every one in view without choosing its mode), and how many scenarios each mode plays. The cards are level from a
+ * laptop up, each count at its card's foot, and stack on a phone. Where the user may not run scenarios (`lookOnly`) the
+ * choice stays, since it is how the list below reads in that mode, and starts where the hospital plays; only Run is
+ * greyed out. How a run executes is said under the cards, apart from who proposes (`HowRunsExecute`).
  */
 function RunModes({
   mode,
@@ -604,7 +722,6 @@ function RunModes({
   /** The sign-in's runs replay the recorded agents (1.4.4): a mode with no recording can't be chosen. */
   replayOnly?: boolean;
 }) {
-  const chosen = modesFor(replayOnly).find((m) => m.value === mode);
   return (
     <Box data-tour="scenarios-mode">
       <Radio.Group
@@ -616,10 +733,10 @@ function RunModes({
             {lookOnly ? 'Investigation modes' : 'Run mode'}
           </Text>
         }
-        description={`${lookOnly ? 'Pick one to read the list below in it.' : 'Every Run button below uses it.'} ${MODES_INTRO}${replayOnly ? ` ${REPLAY_ONLY.line}` : ''}`}
+        description={`${lookOnly ? 'Pick one to read the list below in it.' : 'Every Run button below uses it.'} ${MODES_INTRO}`}
         styles={{ description: { fontSize: 'var(--mantine-font-size-sm)' } }}
       >
-        <SimpleGrid cols={{ base: 1, sm: 2, md: ALL_MODES.length }} spacing="sm" mt="sm">
+        <SimpleGrid cols={{ base: 1, sm: 2, lg: ALL_MODES.length }} spacing="sm" mt="sm">
           {ALL_MODES.map((m) => {
             const n = scenarios?.filter((s) => definedFor(s, m.value)).length;
             const out = notRecorded(m.value, replayOnly);
@@ -634,11 +751,11 @@ function RunModes({
                 // Mantine's arrow keys walk the radios of one name and would stop dead on a disabled one
                 name={out ? 'run-mode-not-recorded' : undefined}
                 aria-labelledby={`mode-${m.value}-label`}
-                aria-describedby={`mode-${m.value}-hint${scenarios || out ? ` mode-${m.value}-count` : ''}`}
+                aria-describedby={`mode-${m.value}-hint${scenarios || out ? ` mode-${m.value}-count` : ''}${out ? ` mode-${m.value}-route` : ''}`}
               >
-                <Group gap="xs" wrap="nowrap" align="flex-start">
-                  <Radio.Indicator mt={2} disabled={out} />
-                  <Stack gap={4} style={{ minWidth: 0 }}>
+                <Group gap="xs" wrap="nowrap" align="stretch">
+                  <Radio.Indicator mt={2} disabled={out} style={{ flex: 'none' }} />
+                  <Stack gap={6} style={{ minWidth: 0, flex: 1 }}>
                     <Group gap={6} align="baseline">
                       <Text size="md" fw={700} id={`mode-${m.value}-label`}>
                         <ModeName mode={m.value}>{m.label}</ModeName>
@@ -649,40 +766,39 @@ function RunModes({
                         </Text>
                       ) : null}
                     </Group>
-                    {/* The line under the cards speaks only for the chosen mode, which this one can never be */}
+                    {/* Each mode's own words, in its card: read without choosing the mode, by eye and by screen reader */}
+                    <Text id={`mode-${m.value}-hint`} size="sm" className="mode-hint">
+                      {m.hint}
+                    </Text>
+                    {/* The mode that can't be chosen says the way to it, under why */}
                     {out ? (
-                      <Text id={`mode-${m.value}-hint`} size="sm">
-                        {m.hint}
+                      <Text id={`mode-${m.value}-route`} size="sm" className="mode-hint">
+                        {TRIAL ? SINGLE_ROUTE.trial : SINGLE_ROUTE.replay}
                       </Text>
-                    ) : (
-                      <VisuallyHidden id={`mode-${m.value}-hint`}>{m.hint}</VisuallyHidden>
-                    )}
-                    {out ? (
-                      <Badge
-                        id={`mode-${m.value}-count`}
-                        variant="light"
-                        color="gray"
-                        size="sm"
-                        style={{ textTransform: 'none' }}
-                      >
-                        {NOT_RECORDED}
-                      </Badge>
-                    ) : scenarios && n !== undefined ? (
-                      <PlaysBadge id={`mode-${m.value}-count`} n={n} of={scenarios.length} />
                     ) : null}
+                    <Box mt="auto">
+                      {out ? (
+                        <Badge
+                          id={`mode-${m.value}-count`}
+                          variant="light"
+                          color="gray"
+                          size="sm"
+                          style={{ textTransform: 'none' }}
+                        >
+                          {NOT_RECORDED}
+                        </Badge>
+                      ) : scenarios && n !== undefined ? (
+                        <PlaysBadge id={`mode-${m.value}-count`} n={n} of={scenarios.length} />
+                      ) : null}
+                    </Box>
                   </Stack>
                 </Group>
               </Radio.Card>
             );
           })}
         </SimpleGrid>
-        {/* The chosen mode's hint for the eye; a screen reader has each mode's own from its radio */}
-        {chosen ? (
-          <Text size="sm" mt="xs" aria-hidden data-mode-hint>
-            <ModeName mode={chosen.value}>{chosen.label}:</ModeName> {chosen.hint}
-          </Text>
-        ) : null}
       </Radio.Group>
+      {lookOnly ? null : <HowRunsExecute replayOnly={replayOnly} />}
     </Box>
   );
 }
@@ -786,6 +902,34 @@ function useJudgeLanding(ready: boolean) {
   }, [ready, reduced]);
 }
 
+/** The cards a visitor can be sent to start at: an id as the scenarios are named, so the address can name no other element. */
+const CARD_ID = /^S\d+[a-z]?$/;
+
+/**
+ * Home's way in (`?start=S2`): once the cards are drawn the page lands on that card and its Run takes the focus, so the
+ * next choice is Run itself. Nothing is pressed: arriving starts no run. The address then drops `start`, so Back from
+ * the run's case, or a reload, shows the page where the reader left it and not the card again.
+ */
+function useStartLanding(ready: boolean) {
+  const reduced = useReducedMotion();
+  const [params, change] = useListParams();
+  const start = params.get('start');
+  const landed = useRef<string | null>(null);
+  useEffect(() => {
+    if (!start || !ready) return;
+    if (landed.current !== start && CARD_ID.test(start)) {
+      const card = document.querySelector<HTMLElement>(`[data-first="${start}"]`);
+      if (card) {
+        landed.current = start;
+        card.querySelector<HTMLElement>(`[data-tour-action="run-${start}"]`)?.focus({ preventScroll: true });
+        landOn(card, reduced);
+      }
+    }
+    // `change` is made anew on every render, so this runs on each: it returns at once when the address names no start
+    change((p) => p.delete('start'));
+  }, [ready, start, reduced, change]);
+}
+
 export default function ScenariosPage() {
   const can = useCan();
   const scenarios = useScenarios();
@@ -822,7 +966,15 @@ export default function ScenariosPage() {
   const mode = picked ?? defaultMode;
   const setMode = (next: Mode) => change((p) => p.set('mode', next));
   useJudgeLanding(!!scenarios.data);
+  useStartLanding(!!scenarios.data);
   const current = scenarios.data?.run ?? null;
+  // A run that has just finished has opened its case: the cases are read again at once, so the banner's link to the
+  // run's own case does not wait for the list's next quiet poll
+  const refetchCases = cases.refetch;
+  const finished = current?.state === 'done' ? current.startedAt : '';
+  useEffect(() => {
+    if (finished) void refetchCases();
+  }, [finished, refetchCases]);
   const busy = isPlaying(current) ? `A run of ${current?.scenario} is still playing` : '';
   /** Why Reset is disabled now, or "". Reset stays on while a case settles: it is the way out of one that never does. */
   const resetWhy = playerOff ? PLAYER_OFF : !canReset ? resetNeedsWords(badges, canRun) : busy;
@@ -931,12 +1083,7 @@ export default function ScenariosPage() {
             })}
           </Text>
         ) : null}
-        {current ? (
-          <RunBanner
-            run={current}
-            latest={scenarios.data?.scenarios.find((s) => s.id === current.scenario)?.latestCase?.caseId}
-          />
-        ) : null}
+        {current ? <RunBanner run={current} cases={cases.data?.items} /> : null}
         {/* Always rendered, loading or not, so the guide's first step has its target; a site install has nothing to try,
             and the list below stands as its reference */}
         {playerOff ? null : (

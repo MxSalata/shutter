@@ -22,10 +22,11 @@ export function runNeedsWords(badges: boolean): string {
 
 /**
  * What a run from a sign-in without the live agents does (1.4.4, the online demo's account): its agents answer from their
- * recordings. Said once above the modes, in the Run buttons' tooltips and when the run starts or finishes.
+ * recordings. Said once under the modes (execution.ts), in the Run buttons' tooltips and when the run starts or finishes.
  */
 export const REPLAY_ONLY = {
-  line: 'Runs from this sign-in replay the recorded agents: no model is called, nothing is spent, and the case says it was replayed.',
+  /** Of scenario runs only: a question to Ask Shutter says of its own answer whether it was recorded or live. */
+  line: 'Scenario runs from this sign-in replay the recorded agents on this IRIS instance: no new inference, nothing is spent, and the case says it was replayed.',
   play: (id: string, mode: string) => `Play ${id} in ${mode} mode from its recordings`,
   started: 'replayed from the recordings',
   notRecorded: 'No recording to replay',

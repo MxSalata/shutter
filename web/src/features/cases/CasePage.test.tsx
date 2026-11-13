@@ -587,7 +587,7 @@ describe('CasePage', () => {
   it("names the stakes on the board's S8 case, and the top button of the rules case goes to the two runs", async () => {
     renderCase('C-000008');
     expect(await screen.findByTestId('s8-stakes')).toHaveTextContent(
-      "A resend here writes WARD-B over the bed manager's WARD-C with every check passed. The board sent nothing.",
+      "Rules only, exempted here on purpose, writes WARD-B over the bed manager's WARD-C with every check passed; on a real case the gate holds it.",
     );
     cleanup();
     renderCase('C-000021');
@@ -674,7 +674,7 @@ describe('CasePage', () => {
       renderCase('C-000008');
       const strip = await screen.findByRole('region', { name: 'What a resend would do' });
       expect(within(strip).getByTestId('s8-stakes')).toHaveTextContent(
-        "A resend here writes WARD-B over the bed manager's WARD-C with every check passed. The board sent nothing.",
+        "Rules only, exempted here on purpose, writes WARD-B over the bed manager's WARD-C with every check passed; on a real case the gate holds it.",
       );
       expect(
         await within(strip).findByRole('link', { name: 'See the two side by side in the trial' }),

@@ -71,6 +71,12 @@ describe('ScenariosPage in the trial', () => {
     const single = await screen.findByRole('radio', { name: 'Single investigator' });
     expect(single).toBeDisabled();
     expect(single).toHaveAccessibleDescription(expect.stringContaining('Not in the trial: no recording'));
+    // Why it can't be chosen, and the way to it, in the card itself
+    expect(
+      within(single).getByText(
+        "To run it: your own install with a model key, or the judges' sign-in on the online demo.",
+      ),
+    ).toBeVisible();
     expect(screen.getAllByRole('radio')).toHaveLength(4);
     const policy = screen.getByRole('radio', { name: 'Site policy' });
     await userEvent.click(policy);
@@ -144,10 +150,40 @@ describe('ScenariosPage in the trial', () => {
         "Every Run button below uses it. The mode decides who proposes the plan. In every mode the same gate checks the plan, and a person or the site's policy releases any write.",
       ),
     ).toBeInTheDocument();
-    // The exemption is said in Rules only's own hint, under the choice
-    expect(document.querySelector<HTMLElement>('[data-mode-hint]')).toHaveTextContent(
-      'Rules only: No agents: the baseline. Shutter resends the message unchanged unless the gate objects, as a plain Resend would. In S8 one gate check is lifted on purpose, to show what that writes.',
+    // The exemption is said in Rules only's own card, in view whichever mode is chosen
+    expect(
+      within(screen.getByRole('radio', { name: 'Rules only' })).getByText(
+        'No agents: the baseline. Shutter resends the message unchanged unless the gate objects, as a plain Resend would. In S8 one gate check is lifted on purpose, to show what that writes.',
+      ),
+    ).toBeVisible();
+    expect(document.querySelector('[data-mode-hint]')).toBeNull();
+  });
+
+  it('reads all four modes in their cards without choosing any, and says every run here is a recording, Board included', async () => {
+    renderTrial();
+    const modes = await screen.findByRole('radiogroup', { name: 'Run mode' });
+    for (const text of [
+      /^Four AI Hub agents\. Three specialists read the sealed evidence at once/,
+      /^How a hospital would run it\./,
+      /^One AI Hub agent with the same evidence and tools proposes the plan alone, to compare with the board\.$/,
+      /^No agents: the baseline\./,
+    ])
+      expect(within(modes).getByText(text)).toBeVisible();
+    // Who proposes is the mode; how a run executes is said apart from it, from the page's own kind
+    const how = screen.getByRole('region', { name: 'How a run executes here' });
+    expect(within(how).getByText('Browser recording')).toBeInTheDocument();
+    expect(how).toHaveTextContent(
+      'The mode says who proposes the plan, not how a run executes. Here every run plays a recording in your browser, Board included: no new inference, and nothing reaches IRIS.',
     );
+    expect(how).toHaveTextContent(
+      "Agents that call a model run on your own install with a model key, and from the judges' sign-in on the online demo.",
+    );
+    expect(within(how).getByRole('link', { name: /^how to install/ })).toHaveAttribute(
+      'href',
+      'https://github.com/MxSalata/shutter#try-it',
+    );
+    // The trial never calls itself live
+    expect(how).not.toHaveTextContent(/Live model/);
   });
 
   it("plays S8's card in the mode chosen under Run mode, and says so on its Run", async () => {
@@ -167,8 +203,9 @@ describe('ScenariosPage in the trial', () => {
     expect(
       within(card).getByRole('link', { name: 'Open C-000021, the latest S8 case in Rules only mode' }),
     ).toHaveAttribute('href', '/cases/C-000021');
-    // The other two keep their own modes, and their Run says only the scenario
+    // The other two keep Board, and the optional S20 its own mode; their Run says only the scenario
     expect(within(first).getByRole('button', { name: 'Run S2 in Board mode' })).toHaveTextContent(/^Run S2$/);
+    expect(within(first).getByRole('button', { name: 'Run S3 in Board mode' })).toHaveTextContent(/^Run S3$/);
     expect(within(first).getByRole('button', { name: 'Run S20 in Rules only mode' })).toHaveTextContent(
       /^Run S20$/,
     );
@@ -200,29 +237,89 @@ describe('ScenariosPage in the trial', () => {
     expect(screen.queryByText(/The case appears in a few seconds/)).not.toBeInTheDocument();
   });
 
-  it("says, once a run is done, that its case is the recorded one, with no age, since its times are a recording's", async () => {
-    renderTrial();
+  /** Plays a card's Run to its end: the mock plays a run over eight seconds, read as done once the clock has passed them. */
+  async function played(run: string, title: RegExp) {
     const first = await screen.findByRole('region', { name: 'Try these three first' });
-    fireEvent.click(await within(first).findByRole('button', { name: 'Run S8 in Board mode' }));
-    // The mock plays the run over eight seconds; the page reads it as done once the clock has passed them
+    fireEvent.click(await within(first).findByRole('button', { name: run }));
     const realNow = Date.now;
     Date.now = () => realNow() + 9_000;
     try {
-      const done = await screen.findByText(/^S8 played \(Board\)$/, {}, { timeout: 10_000 });
-      const alert = done.closest('[role="alert"]')!;
-      expect(alert).toHaveTextContent(
-        /Its case is C-\d{6}, replayed from the recording, as far as the recording goes\./,
-      );
-      // Its case is a link from here, wherever on the page the Run was pressed
-      expect(within(alert as HTMLElement).getByRole('link', { name: /^C-\d{6}$/ })).toHaveAttribute(
-        'href',
-        expect.stringMatching(/^\/cases\/C-\d{6}$/),
-      );
-      expect(alert).not.toHaveTextContent('below');
-      expect(alert).not.toHaveTextContent('The production does the rest');
+      const done = await screen.findByText(title, {}, { timeout: 10_000 });
+      return done.closest<HTMLElement>('[role="alert"]')!;
     } finally {
       Date.now = realNow;
     }
+  }
+
+  it("says, once a run is done, that it was a recording with no new inference, and opens the run's own case, with no age", async () => {
+    renderTrial();
+    const alert = await played('Run S8 in Board mode', /^S8 played \(Board\)$/);
+    // How it executed, from the page's own kind, never called live: the trial plays recordings in the browser
+    expect(within(alert).getByTestId('run-execution')).toHaveTextContent(
+      'Browser recordingPlayed from its recording in your browser: no new inference, and nothing reached IRIS.',
+    );
+    // The next action is the run's own case, found among the recorded cases by scenario and mode
+    expect(within(alert).getByRole('link', { name: 'Open its case, C-000008' })).toHaveAttribute(
+      'href',
+      '/cases/C-000008',
+    );
+    // Never the Cases list
+    expect(within(alert).queryByRole('link', { name: 'Cases' })).not.toBeInTheDocument();
+    expect(alert).not.toHaveTextContent('The production does the rest');
+    // S8's board case is the one whose trace the trial pictures, and the banner says what that picture is
+    expect(alert).toHaveTextContent(
+      "In IRIS: Message trace on this case opens a screenshot of an S8 Board case's trace, taken on a test instance, not this case's own session.",
+    );
+    expect(alert).toHaveTextContent(
+      'That is the short route. S20 below shows the approval boundary, and every scenario is listed under it.',
+    );
+  });
+
+  it("leads from S2's run to its own case, says its trace is a note here and links the one pictured trace as S8's", async () => {
+    renderTrial();
+    const alert = await played('Run S2 in Board mode', /^S2 played \(Board\)$/);
+    expect(within(alert).getByRole('link', { name: 'Open its case, C-000002' })).toHaveAttribute(
+      'href',
+      '/cases/C-000002',
+    );
+    // The trial has one picture of a trace, an S8 Board case's: it is labelled and linked as that, never as S2's
+    expect(alert).toHaveTextContent(
+      "The trial runs in your browser, so this case's Message trace is a note of what it opens on IRIS.",
+    );
+    expect(
+      within(alert).getByRole('link', { name: "a screenshot of an S8 Board case's trace, on C-000008" }),
+    ).toHaveAttribute('href', '/cases/C-000008');
+    // What comes next is said, and nothing is started: the next card's Run is still to be chosen
+    expect(alert).toHaveTextContent('Next on the short route: S3, in its card below.');
+    expect(screen.queryByText(/^Playing S3/)).not.toBeInTheDocument();
+  });
+
+  it("names the recording there is when the trial has none of the run's mode, and never offers it as the run's case", async () => {
+    // S20 is recorded in Rules only alone; a run that names another mode has no case of its own here
+    server.use(
+      http.get('/api/shutter/scenarios', async () => {
+        const recorded = (await import('@/mocks/fixtures.json')).default;
+        return HttpResponse.json({
+          scenarios: recorded.scenarios.map((d) => ({ ...d, latestCase: null })),
+          run: {
+            scenario: 'S20',
+            mode: 'board',
+            startedAt: new Date().toISOString(),
+            finishedAt: new Date().toISOString(),
+            state: 'done',
+            files: [],
+            timeouts: [],
+          },
+        });
+      }),
+    );
+    renderTrial();
+    const done = await screen.findByText(/^S20 played \(Board\)$/);
+    const alert = done.closest<HTMLElement>('[role="alert"]')!;
+    expect(alert).toHaveTextContent(
+      'The trial has no recording of S20 in Board mode. Its recorded case is C-000053, played in Rules only mode.',
+    );
+    expect(within(alert).queryByRole('link', { name: /^Open its case/ })).not.toBeInTheDocument();
   });
 
   it('says how many of the scenarios have recordings here, and that the rest run on an install', async () => {

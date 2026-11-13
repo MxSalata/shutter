@@ -14,7 +14,13 @@ import { useGuide } from '@/features/guide/store';
 import { GUIDE_KEY } from '@/features/guide/storage';
 import { LIVE_WELCOME_KEY } from './LiveWelcome';
 import { journal } from './journal';
-import { journalLine, TRIAL_ONLY_WORDS, TRIAL_RELOADED_WORDS, TRIAL_WORDS } from './words';
+import {
+  journalLine,
+  TRIAL_NO_INFERENCE,
+  TRIAL_ONLY_WORDS,
+  TRIAL_RELOADED_WORDS,
+  TRIAL_WORDS,
+} from './words';
 import { provideTrialChrome } from './slot';
 import { bannerForm, compactBanner, enterTrialPage, noteTrialAction } from './visit';
 
@@ -140,6 +146,16 @@ describe('the trial banner', () => {
     expect(await within(popover).findByText('Run a scenario')).toBeInTheDocument();
     expect(within(popover).getByText('Save the site profile')).toBeInTheDocument();
     expect(within(popover).getByText('Approve or reject a plan')).toBeInTheDocument();
+  });
+
+  it('says that nothing here is new inference, and tells the trial apart from the two kinds of run on real IRIS', async () => {
+    await renderShell(true);
+    await userEvent.click(screen.getByRole('button', { name: "What's different?" }));
+    const popover = await screen.findByRole('dialog', { name: 'The trial environment' });
+    expect(within(popover).getByTestId('trial-no-inference')).toHaveTextContent(TRIAL_NO_INFERENCE);
+    expect(TRIAL_NO_INFERENCE).toBe(
+      "No model is called here: scenario runs play from recordings made on IRIS, so nothing you see is new inference. On the online demo, real IRIS replays the recorded agents from the demo sign-in, and the judges' sign-in calls the model.",
+    );
   });
 
   it('says once, after a page load, that what the tab did has gone', async () => {

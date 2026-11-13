@@ -1296,12 +1296,19 @@ body {
     gap: var(--mantine-spacing-md) var(--mantine-spacing-xl);
   }
 }
+/* The run modes: each card holds its mode's own words, so the cards of a row are level and each count sits at its
+   card's foot. On a phone they stack, one a row. */
 .mode-card {
   display: flex;
-  align-items: flex-start;
+  align-items: stretch;
+  height: 100%;
+  text-align: start;
 }
 .mode-card > * {
   width: 100%;
+}
+.mode-card .mode-hint {
+  line-height: 1.45;
 }
 .mode-card[data-checked] {
   border-color: var(--mantine-primary-color-filled);

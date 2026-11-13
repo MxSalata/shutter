@@ -9,15 +9,15 @@ import type {
   PlanView,
   Snapshot,
 } from '@/api/types';
+import { TRIAL } from '@/env/mode';
 import { displayZone, humanize } from '@/lib/format';
 import { asArray, asObject } from '@/lib/json';
-import { APPROVALS, caseState, gateOutcome, PROVENANCE, type OutcomeCase } from '@/lib/status';
+import { APPROVALS, caseState, gateOutcome, PROVENANCE, ranOnIris, type OutcomeCase } from '@/lib/status';
 import type { Status } from '@/lib/tone';
 import { checksOf, failureKindInWords, orderOrResult, outageResend } from './derive';
 import { planLeader } from './follows';
 import { approvalsByPlan, WRITE_OUTCOMES, type SafetyReceipt } from './receipt';
 import { NOT_CHECKED, notCheckedAtReceiver } from './receiver';
-import { investigationRuns } from './runClock';
 import { encounterTimeline } from './timeline';
 
 /**
@@ -597,19 +597,21 @@ export function releaseStatus(f: CaseFacts): Status | undefined {
   return latest.approver === 'policy' ? { ...APPROVALS.policy, label: 'Site policy' } : APPROVALS.approved;
 }
 
-/** Where an agent's answer came from on this case: the rules, a live model, a recorded replay, or the site's policy. */
-export function provenanceOf(mode: string, runs: AgentRun[] | null | undefined): Status {
-  if (mode === 'rules') return PROVENANCE.rules;
-  if (runs === undefined) return { tone: 'neutral', label: 'Unknown' };
-  const list = investigationRuns(runs);
-  if (!list.length)
-    return {
-      ...PROVENANCE.rules,
-      label: mode === 'policy' ? "No model: the site's policy" : 'No agent run yet',
-      hint: undefined,
-    };
-  if (list.some((r) => r.mode !== 'replay')) return PROVENANCE.live;
-  return PROVENANCE.replay;
+/**
+ * Where an agent's answer came from on this case: how it executed, which the mode (who proposed the plan) does not say.
+ * On IRIS it is what the case's own runs record. In the trial the page shows a recording in the browser and runs
+ * nothing, so it says that first, and what IRIS ran when the case was recorded second: a recorded board case is never
+ * read as inference made now.
+ */
+export function provenanceOf(mode: string, runs: AgentRun[] | null | undefined, trial = TRIAL): Status {
+  const recorded = ranOnIris(mode, runs);
+  // While the runs are still being read, a case with agents says Unknown, as on IRIS
+  if (!trial || (mode !== 'rules' && runs === undefined)) return recorded;
+  return {
+    ...PROVENANCE.recording,
+    label: `${PROVENANCE.recording.label}: no new inference`,
+    hint: `${PROVENANCE.recording.hint}. When it was recorded on IRIS: ${recorded.label}.`,
+  };
 }
 
 const wordCount = (t: string) => t.trim().split(/\s+/).filter(Boolean).length;

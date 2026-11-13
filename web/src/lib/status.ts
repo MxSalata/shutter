@@ -8,6 +8,7 @@ import {
   IconClock,
   IconCode,
   IconCopyCheck,
+  IconDeviceDesktop,
   IconFileDescription,
   IconHandStop,
   IconListDetails,
@@ -31,7 +32,7 @@ import {
   IconAlertTriangle,
   IconInfoCircle,
 } from '@tabler/icons-react';
-import type { CaseState, CaseSummary, IncidentSummary, Mode, Scenario } from '@/api/types';
+import type { AgentRun, CaseState, CaseSummary, IncidentSummary, Mode, Scenario } from '@/api/types';
 import { humanize, plural } from './format';
 import type { Status, Tone } from './tone';
 
@@ -287,8 +288,13 @@ export function proposedWrites(n: number): Status {
   );
 }
 
-/** Where an answer came from: a live model call, a recorded run replayed, or the rules with no model at all. */
-export const PROVENANCE: Record<'live' | 'replay' | 'rules', Status> = {
+/**
+ * Where an answer came from, which is how a run executed and never who proposed its plan (the mode says that): a live
+ * model call on IRIS, a recorded run replayed on IRIS, the rules with no model at all, or the trial's recording, which
+ * is shown in the browser and runs nothing. Each is read from what the run or the page itself records, never from the
+ * address or the account.
+ */
+export const PROVENANCE: Record<'live' | 'replay' | 'rules' | 'recording', Status> = {
   live: s('info', 'Live model', 'A model was called for this run', IconBroadcast),
   replay: s(
     'neutral',
@@ -297,7 +303,43 @@ export const PROVENANCE: Record<'live' | 'replay' | 'rules', Status> = {
     IconPlayerPlay,
   ),
   rules: s('neutral', 'Rules only', 'No model: the deterministic rules decided', IconCode),
+  recording: s(
+    'neutral',
+    'Browser recording',
+    'A recording shown in this browser: no new inference, and nothing reached IRIS',
+    IconDeviceDesktop,
+  ),
 };
+
+/** A run a model answered: neither a replay nor one the API mimic (a test fixture, model `mock`) answered. */
+const calledAModel = (r: AgentRun) => r.mode !== 'replay' && r.model !== 'mock';
+
+/**
+ * Where an agent's answer came from on a case as IRIS ran it: the rules, a live model, a recorded replay, or the site's
+ * policy. It is read from the case's own investigation runs (Ask's left out), so a run that fell back to its recordings,
+ * or that the API mimic answered, is never called live. The case page says it through `provenanceOf`, and a scenario
+ * run's banner from the run's own case; both read this one rule.
+ */
+export function ranOnIris(mode: string, runs: AgentRun[] | null | undefined): Status {
+  if (mode === 'rules') return PROVENANCE.rules;
+  if (runs === undefined) return { tone: 'neutral', label: 'Unknown' };
+  // Ask's runs answer questions about the case, not the investigation (runClock's investigationRuns)
+  const list = (runs ?? []).filter((r) => !r.questionId);
+  if (!list.length)
+    return {
+      ...PROVENANCE.rules,
+      label: mode === 'policy' ? "No model: the site's policy" : 'No agent run yet',
+      hint: undefined,
+    };
+  if (list.some(calledAModel)) return PROVENANCE.live;
+  if (list.some((r) => r.mode !== 'replay'))
+    return {
+      ...PROVENANCE.rules,
+      label: 'API mimic',
+      hint: 'No model was called: the API mimic, a test fixture, answered',
+    };
+  return PROVENANCE.replay;
+}
 
 /** The release of a write: a person or the site's written policy releases it, after the gate. */
 export const APPROVALS: Record<string, Status> = {

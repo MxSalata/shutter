@@ -11,7 +11,7 @@ import type {
   Snapshot,
 } from '@/api/types';
 import fixtures from '@/mocks/fixtures.json';
-import { caseOutcome } from '@/lib/status';
+import { caseOutcome, ranOnIris } from '@/lib/status';
 import {
   actionHead,
   actionHeadline,
@@ -348,6 +348,51 @@ describe('provenance', () => {
     expect(provenanceOf('board', [{ mode: 'live' } as AgentRun]).label).toBe('Live model');
     expect(provenanceOf('board', undefined).label).toBe('Unknown');
     expect(provenanceOf('policy', []).label).toBe("No model: the site's policy");
+  });
+
+  it('never calls a run live that the API mimic answered, or one that fell back to its recordings', () => {
+    // The mimic is a test fixture: its runs say live and carry the model `mock`, and no model was called
+    const mimic = provenanceOf('board', [{ mode: 'live', model: 'mock' } as AgentRun]);
+    expect(mimic.label).toBe('API mimic');
+    expect(mimic.hint).toBe('No model was called: the API mimic, a test fixture, answered');
+    // One real call among replays is a live run; replays alone are not
+    expect(
+      provenanceOf('board', [{ mode: 'replay' }, { mode: 'live', model: 'claude-opus-5-5' }] as AgentRun[])
+        .label,
+    ).toBe('Live model');
+    expect(provenanceOf('board', [{ mode: 'replay' }, { mode: 'replay' }] as AgentRun[]).label).toBe(
+      'Recorded replay',
+    );
+  });
+
+  it("reads the investigation's runs only: a question asked about a replayed case does not make it live", () => {
+    const runs = [
+      { mode: 'replay' },
+      { mode: 'live', model: 'claude-opus-5-5', questionId: 'Q-1' },
+    ] as AgentRun[];
+    expect(provenanceOf('board', runs, false).label).toBe('Recorded replay');
+    expect(ranOnIris('board', runs).label).toBe('Recorded replay');
+    expect(ranOnIris('board', [{ mode: 'live', model: 'mock', questionId: 'Q-1' }] as AgentRun[]).label).toBe(
+      'No agent run yet',
+    );
+  });
+
+  it("calls the trial's case a browser recording with no new inference, and says what IRIS ran when it was recorded", () => {
+    const runs = factsOf('C-000008').runs;
+    const recorded = provenanceOf('board', runs, true);
+    expect(recorded.label).toBe('Browser recording: no new inference');
+    expect(recorded.hint).toBe(
+      'A recording shown in this browser: no new inference, and nothing reached IRIS. When it was recorded on IRIS: Recorded replay.',
+    );
+    // A recording of a live run is still a recording here: the trial never reads as inference made now
+    const live = provenanceOf('board', [{ mode: 'live', model: 'claude-opus-5-5' } as AgentRun], true);
+    expect(live.label).toBe('Browser recording: no new inference');
+    expect(live.hint).toMatch(/When it was recorded on IRIS: Live model\.$/);
+    expect(provenanceOf('rules', [], true).hint).toMatch(/When it was recorded on IRIS: Rules only\.$/);
+    // While the runs are still being read it says no more than it knows
+    expect(provenanceOf('board', undefined, true).label).toBe('Unknown');
+    // The same runs on IRIS keep their own label
+    expect(provenanceOf('board', runs, false).label).toBe('Recorded replay');
   });
 });
 

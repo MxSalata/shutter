@@ -21,7 +21,13 @@ import type { Can } from '@/api/types';
 import { TechDetail } from '@/components/TechDetail';
 import { ENV } from '@/env/mode';
 import { journal } from './journal';
-import { journalLine, TRIAL_RELOADED_WORDS, TRIAL_WORDS, TRIAL_WORDS_SHORT } from './words';
+import {
+  journalLine,
+  TRIAL_NO_INFERENCE,
+  TRIAL_RELOADED_WORDS,
+  TRIAL_WORDS,
+  TRIAL_WORDS_SHORT,
+} from './words';
 import { LeaveTrialButton } from './LeaveTrial';
 import { bannerForm, takeLostActions } from './visit';
 
@@ -74,6 +80,9 @@ export function TrialDifferences() {
   return (
     <Stack gap="xs" maw={420}>
       <Text size="sm">{TRIAL_WORDS}</Text>
+      <Text size="sm" data-testid="trial-no-inference">
+        {TRIAL_NO_INFERENCE}
+      </Text>
       <div>
         <Title order={3} fz="sm">
           Works here (replayed)

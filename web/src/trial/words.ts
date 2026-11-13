@@ -3,6 +3,12 @@ import type { JournalCounts } from './journal';
 
 /** The banner's sentences: whose data it is, that nothing leaves, and that a reload starts over (DESIGN.md 1.3, 7.1). */
 export const TRIAL_WORDS = `${HOSPITAL_NAME}: a demo hospital with made-up patients, recorded. Nothing you do here reaches a hospital system or IRIS. A reload starts the recording afresh.`;
+/**
+ * How anything here executes, in "What's different?": the trial calls no model at all, so nothing in it is new
+ * inference, and the two kinds of run on real IRIS are named beside it so the three are never taken for one another.
+ */
+export const TRIAL_NO_INFERENCE =
+  "No model is called here: scenario runs play from recordings made on IRIS, so nothing you see is new inference. On the online demo, real IRIS replays the recorded agents from the demo sign-in, and the judges' sign-in calls the model.";
 /** The one-line form's words, once the welcome has closed. */
 export const TRIAL_WORDS_SHORT = 'Recorded, made-up patients; nothing leaves this browser';
 

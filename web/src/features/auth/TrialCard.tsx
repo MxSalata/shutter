@@ -7,7 +7,8 @@ import { HOSPITAL_NAME } from '@/lib/hospital';
 /**
  * The way into the trial from the live sign-in page: a card of its own under the form, in the trial's colour (a grape
  * top edge and icon, the only grape on a live page), with two real links, so they also open in a new tab. It says what
- * the trial is in one breath: made-up patients, each action replays a recording, nothing reaches IRIS. No password:
+ * the trial is in one breath, and in no more words than before: made-up patients, each action replays a recording, so
+ * there is no new inference and nothing reaches IRIS. No password:
  * the trial opens signed in, and the card says so in a badge beside its title ("No sign-in required").
  */
 export function TrialCard() {
@@ -37,8 +38,8 @@ export function TrialCard() {
           </Badge>
         </Group>
         <Text size="sm">
-          Try it in the trial environment: {HOSPITAL_NAME}, with made-up patients, where each action replays a
-          recording. Nothing reaches IRIS.
+          Try the trial: {HOSPITAL_NAME}, with made-up patients. Each action replays a recording: no new
+          inference, and nothing reaches IRIS.
         </Text>
         <Group gap="xs" mt={4}>
           <Button component="a" href={trialHref('#/scenarios', { tour: true })} color="grape" mih={44}>

@@ -10,7 +10,7 @@ import { resetMock } from '@/mocks/handlers';
 import { useAppearance } from '@/stores/appearance';
 import { layer1Words } from '@/test/words';
 import { theme } from '@/theme';
-import HomePage from './HomePage';
+import HomePage, { START_S2 } from './HomePage';
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 afterEach(() => server.resetHandlers());
@@ -100,15 +100,30 @@ describe('HomePage', () => {
     );
   });
 
-  it('starts someone new at the scenarios', async () => {
+  it('starts someone new at S2 in Board mode, one choice from its Run, with the whole list a link away', async () => {
     renderHome();
-    const start = await screen.findByRole('link', { name: 'Open the scenarios' });
-    expect(start).toHaveAttribute('href', '/scenarios');
+    // The one prominent start: the Scenarios page in Board mode, on S2's card. It is a link, so it starts no run
+    const start = await screen.findByRole('link', { name: 'Start with S2' });
+    expect(start).toHaveAttribute('href', '/scenarios?mode=board&start=S2');
+    expect(START_S2).toBe('/scenarios?mode=board&start=S2');
+    const first = start.closest('section')!;
     expect(
-      screen.getByText(
-        /Start with S2, then S8, where a plain resend would write over the bed manager's ward with every check passed\./,
-      ),
+      within(first)
+        .getAllByRole('link')
+        .map((l) => l.textContent),
+    ).toEqual(['Start with S2', 'Open the scenarios']);
+    expect(within(first).queryByRole('button')).not.toBeInTheDocument();
+    // The full catalogue stays one link away
+    expect(within(first).getByRole('link', { name: 'Open the scenarios' })).toHaveAttribute(
+      'href',
+      '/scenarios',
+    );
+    // The route, in order. What a plain resend writes in S8 is said on S8's card and case, with its exemption beside
+    // it, and not here without it
+    expect(
+      screen.getByText(/Start with S2 in Board mode, then S3 and S8, where the board stops for a person\.$/),
     ).toBeInTheDocument();
+    expect(first).not.toHaveTextContent(/every check passed/);
   });
 
   it('offers the public demo the case where the agents disagree and one to approve', async () => {
@@ -164,7 +179,7 @@ describe('HomePage', () => {
     renderHome({ ...ALL, configure: false, scenarios: false });
     const start = await screen.findByRole('link', { name: 'Open the cases' });
     expect(start).toHaveAttribute('href', '/cases');
-    expect(screen.queryByText(/Start with S2, then S8/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Start with S2/)).not.toBeInTheDocument();
   });
 
   it('counts the cases that need a person, in words', async () => {

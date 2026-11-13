@@ -103,7 +103,11 @@ for (const width of [1280, 360])
       const list = page.getByRole('region', { name: 'Every scenario' });
       const run = list.getByRole('button', { name: 'Run S8' });
       await expect(run).toBeEnabled();
-      await expect(page.getByText(/Runs from this sign-in replay the recorded agents/)).toBeVisible();
+      await expect(
+        page.getByText(
+          /Scenario runs from this sign-in replay the recorded agents on this IRIS instance: no new inference/,
+        ),
+      ).toBeVisible();
       await expect(page.getByRole('button', { name: 'Reset' })).toBeDisabled();
       await expect(page.getByText(RESET_WHY)).toBeVisible();
       await expect(page.getByText(/plays its stories by itself/)).toHaveCount(0);

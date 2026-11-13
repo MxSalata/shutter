@@ -118,7 +118,7 @@ describe('EvaluationPage', () => {
     );
     expect(
       within(hero).getByText(
-        /^The seventh, S8, wrote over the bed manager's ward with every check passed\. The board escalated, as entry E7 says\./,
+        /^The seventh, S8, wrote over the bed manager's ward with every check passed: Rules only is exempted there on purpose, and on a real case the gate holds it\. The board escalated, as entry E7 says\./,
       ),
     ).toBeInTheDocument();
     // What the agents had to go on, carried over from the evaluation so the page doesn't overclaim
@@ -692,9 +692,10 @@ describe('EvaluationPage', () => {
     const technical = wordsAbove(tech.container);
     // At most 325 words in Plain, which includes the catalogue line beside the result, the held-out card (with the
     // baseline, both single investigator figures and release 1.1.1's) and where the single investigator was measured
-    // (245 before those); Technical at most 1.5 times that
-    expect(words.copy).toBeLessThanOrEqual(325);
-    expect(technical.copy).toBeLessThanOrEqual(487);
+    // (245 before those), and since 13 November 2026 the Rules only exemption beside the write that passed every check
+    // (15 words; 325 before it); Technical at most 1.5 times that
+    expect(words.copy).toBeLessThanOrEqual(340);
+    expect(technical.copy).toBeLessThanOrEqual(510);
     // Every visible word, the headings, the controls and the figures with it: Technical adds at most half again
     expect(technical.all).toBeGreaterThan(words.all);
     expect(technical.all).toBeLessThanOrEqual(1.5 * words.all);

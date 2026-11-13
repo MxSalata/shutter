@@ -187,10 +187,11 @@ test.describe('the page at 1280 px @scenarios', () => {
   test("lines up the three starters' Run buttons", async ({ page }) => {
     await go(page, '/scenarios');
     const first = page.getByRole('region', { name: 'Try these three first' });
+    // The short route's three, S2, S3 and S8; S20 is the optional card under them
     const runs = [
       first.getByRole('button', { name: 'Run S2 in Board mode' }),
+      first.getByRole('button', { name: 'Run S3 in Board mode' }),
       first.getByRole('button', { name: 'Run S8 in Board mode' }),
-      first.getByRole('button', { name: 'Run S20 in Rules only mode' }),
     ];
     const tops: number[] = [];
     for (const run of runs) tops.push((await run.boundingBox())!.y);
