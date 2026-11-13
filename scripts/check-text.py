@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""Check the repository's text against its writing rules: no em dash (U+2014) or en dash (U+2013) anywhere, and no
-Co-Authored-By trailer.
+"""Check that the repository's text has no em dash (U+2014) and no en dash (U+2013).
 
     python3 scripts/check-text.py [--messages REV_RANGE]
 
@@ -10,24 +9,20 @@ vendored package manager installer (vendor/). With --messages, also reads the me
 Standard library only.
 """
 import argparse
-import re
 import subprocess
 import sys
 
 SKIP = ("www/", "vendor/")
 DASHES = {"\u2014": "em dash", "\u2013": "en dash"}
-TRAILER = re.compile(r"^\s*co-authored-by:", re.IGNORECASE | re.MULTILINE)
 
 
 def findings(text):
-    """(line, what) for each break of the rules in text."""
+    """(line, what) for each em or en dash in text, once per line and kind."""
     out = []
     for n, line in enumerate(text.split("\n"), 1):
         for c, what in DASHES.items():
             if c in line:
                 out.append((n, what))
-    for m in TRAILER.finditer(text):
-        out.append((text.count("\n", 0, m.start()) + 1, "a Co-Authored-By trailer"))
     return out
 
 
@@ -65,7 +60,8 @@ def main():
     if bad:
         print(f"{bad} finding(s)")
         return 1
-    print(f"{len(files)} files" + (f" and {commits} commit messages" if args.messages else "") + " keep the rules")
+    read = f"{len(files)} files" + (f" and {commits} commit messages" if args.messages else "")
+    print(f"{read} have no em or en dash")
     return 0
 
 

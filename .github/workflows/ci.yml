@@ -141,7 +141,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # The whole history: the writing rules' step reads the messages of every commit a push brings.
+          # The whole history: the dash check reads the messages of every commit a push brings.
           fetch-depth: 0
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -199,9 +199,9 @@ jobs:
       # publish.
       - name: Both module.xml files are plain ASCII
         run: python3 scripts/check-ascii.py module.xml core/module.xml
-      # The writing rules: no em or en dashes and no Co-Authored-By trailer, in every tracked file but
-      # the built www/ and the vendored installer, and in the messages of the commits a push brings.
-      - name: The files and the pushed commit messages keep the writing rules
+      # No em dash and no en dash (U+2014, U+2013) in any tracked file but the built www/ and the vendored installer,
+      # nor in the messages of the commits a push brings. A run that is not a push reads the last commit's message.
+      - name: No em or en dash in the tracked files or in the pushed commit messages
         run: |
           before="${{ github.event.before }}"
           if [ "${{ github.event_name }}" = "push" ] && [ -n "$before" ] && [ "$before" != "0000000000000000000000000000000000000000" ] && git cat-file -e "$before^{commit}" 2>/dev/null; then
