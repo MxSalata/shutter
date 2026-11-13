@@ -62,7 +62,7 @@ There are two recovery paths, with different guarantees:
 
 Open the [trial](https://mxsalata.github.io/shutter/), choose **Explore on my own**, then **Scenarios**. Under **Run mode**, choose **Board**. Use **Run** on each scenario's row under **Every scenario**:
 
-1. **S2: recover a transfer that never arrived.** Open the case named by the banner, C-000002 in the trial. Choose **Decide on the resend**, **Review the plan and decide**, **Approve plan**, then **Approve this plan**. One conditional write, then **Verified**.
+1. **S2: recover a transfer that never arrived.** Open the case named by the banner, C-000002 in the trial. Choose **Decide on the resend**, then **Approve the resend** in the review that opens. One conditional write, then **Verified**.
 2. **S3: recognise a delivery that already arrived.** Its case, C-000003, reads the receiver's receipt. Only the acknowledgement was lost. Nothing is written.
 3. **S8: stop an ambiguous movement.** Two systems moved the same patient at the same recorded time. Its case, C-000008, escalates with **0 writes**. A person must decide. Its **In IRIS:** line opens **Message trace**, the agents' steps in IRIS's Visual Trace (a screenshot in the trial).
 

@@ -12,22 +12,22 @@ The mode decides who proposes the plan. In every mode the same gate checks the p
 
 ## On your machine or in the trial, first
 
-1. In the trial, choose **Explore on my own** on the welcome; on your machine, if a prompt offers the trial, choose **Not now**, and leave the site profile notice for later: the shipped profile serves every scenario. In **Scenarios**, run **S2** in **Board** mode. About 20 seconds later (a minute live) the case under **Latest case** on S2's row (C-000002 in the trial) is waiting for approval. There, **Decide on the resend**, **Review the plan and decide**, **Approve plan**, **Approve this plan**: one conditional write, then "Verified".
+1. In the trial, choose **Explore on my own** on the welcome; on your machine, if a prompt offers the trial, choose **Not now**, and leave the site profile notice for later: the shipped profile serves every scenario. In **Scenarios**, run **S2** in **Board** mode. About 20 seconds later (a minute live) the case under **Latest case** on S2's row (C-000002 in the trial) is waiting for approval. There, **Decide on the resend**, then **Approve the resend** in the review that opens: one conditional write, then "Verified".
 2. Run **S3** in **Board**: the receiver holds the message and only its answer was lost, so the case (C-000003 in the trial) reads the receipt and writes nothing.
 3. Run **S8** in **Board**: the case (C-000008 in the trial) escalates, writing nothing; the same gate checked all three. In the trial, **In IRIS: Message trace** on C-000008 opens a recorded screenshot.
 4. Optional: run **S8** in **Rules only**, exempted from one gate check in S8 alone, and approve (in the trial its recorded case, C-000021, is already approved and written): WARD-B overwrites the bed manager's WARD-C. The case page sets the two side by side.
 
 **Try to break it,** with S2's case waiting for approval: run S2 again for each; in the trial, reload. The first also works in the trial (under your name, choose the role); the rest need your machine:
 
-- Sign in as `operator` / `shutter`: **Approve plan** is disabled ("Deciding needs the approver role"), and the API answers 403.
-- Open the **Approve plan** dialog in two tabs and confirm in each: one write; the second answers 409 ("The case is resolved, not awaiting approval").
+- Sign in as `operator` / `shutter`: **Approve the resend** is disabled ("Deciding needs the approver role"), and the API answers 403.
+- Open the review (**Decide on the resend**) in two tabs and confirm in each: one write; the second answers 409 ("The case is resolved, not awaiting approval").
 - Sign in to the Management Portal as `approver` / `shutter`, the role's member (`_SYSTEM` is not one, so its inbox is empty), and open the Workflow inbox at http://localhost:52773/csp/healthshare/shutter/_DeepSee.UserPortal.Workflow.zen. Select the task, press **Accept**, then **Approve** with `PlanDigest` empty or wrong: the case blocks and nothing is dispatched ("The approval carried no plan digest, so it binds nothing", or "named another plan digest"). **Reinvestigate** recovers it; the digest in the new task's message then approves it: one write, verified.
 
 ## On the online demo, first
 
 1. **See the agents decide.** With the judges' account, **Convene the board** on a blocked, escalated or failed case: the board investigates it again, live, on fresh evidence. Or, on **Scenarios**, press **Run** on S8's row in **Board**: the real agents take the case, one run at a time, under the judge's 2 USD share (Reset stays with the demo's operators). With `demo`, the same **Run** plays S8 from its recordings: no model is called and nothing is spent. The banner also links the hospital's own S8 case, and S8's recorded board in the trial.
 2. Press **Break the feed** on the hospital's banner. Its bed manager goes down for a minute and eight movements for four new patients fail; a strip follows Shutter grouping them into one incident and, once the bed manager is back, releasing them in order. Unlike a Resend of each message, each item goes in event order, conditional on the version recorded when the previous one was verified, stopping at the first surprise. In the demo's rehearsal on 3 November 2026 it ended as **one incident waiting for one approval**, with no model call: this outage needed no agent to plan its chains. On **Incidents**, **Approve release** sends them in order.
-3. Open a case that **waits for approval** and press **Approve plan**: one conditional write, then "Verified" from the receiver's history.
+3. Open a case that **waits for approval**, press **Decide on the resend**, then **Approve the resend**: one conditional write, then "Verified" from the receiver's history.
 4. On any case, **In IRIS: Message trace** opens its session in the Visual Trace.
 
 ## Pilot it first
@@ -44,7 +44,7 @@ For a hospital trying Shutter beside a real production, as [the install guide](h
 
 ![The Scenarios page: the evidence, then three scenarios to try first](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/scenarios-start.png)
 
-- **S2, a transfer that never arrived.** The gate passes the board's resend, the receiver's dry run says it would apply, and the approval waits as a Workflow task. "Acknowledged" is never "Verified". The web app's **Approve plan** completes that same `EnsLib.Workflow` task as the signed-in approver; from the IRIS Workflow inbox, signed in to the portal as `approver`, press **Accept**, then copy the plan digest from the task's message (it is **Plan digest** on the case page too) into the task's `PlanDigest` field.
+- **S2, a transfer that never arrived.** The gate passes the board's resend, the receiver's dry run says it would apply, and the approval waits as a Workflow task. "Acknowledged" is never "Verified". The web app's **Approve the resend** completes that same `EnsLib.Workflow` task as the signed-in approver; from the IRIS Workflow inbox, signed in to the portal as `approver`, press **Accept**, then copy the plan digest from the task's message (it is **Plan digest** on the case page too) into the task's `PlanDigest` field.
 
 ![S2's approval as a task in the IRIS Workflow inbox, with the plan digest in its message and Approve and Reject beside it](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/workflow-inbox-s2.png)
 
