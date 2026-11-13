@@ -102,6 +102,50 @@ Method TestImpossibleDateReadsAsNoTime()
     Do $$$AssertEquals(##class(Shutter.Util.Time).MillisBetween("2026-02-30T12:00:00Z", "2026-03-01T12:00:00Z"), "", "no milliseconds from it either")
 }
 
+/// A FHIR time (FromFHIR): the stored form, UTC to the second, so it compares as a string with a case's event time;
+/// the seconds exact with the fraction; and nothing read that is not a whole time with its offset.
+Method TestFromFHIR()
+{
+    Set time = "Shutter.Util.Time"
+    // The text form: UTC, to the second, a trailing Z.
+    Do $$$AssertEquals($CLASSMETHOD(time, "FromFHIR", "2026-11-08T10:30:00Z", .z, .p), "2026-11-08T10:30:00Z", "a UTC time is itself")
+    Do $$$AssertEquals(p, "second", "written to the second")
+    Do $$$AssertEquals($CLASSMETHOD(time, "FromFHIR", "2026-11-08T11:30:00+01:00", .a), "2026-11-08T10:30:00Z", "+01:00 is an hour ahead of UTC")
+    Do $$$AssertEquals(a, z, "and the same instant in seconds")
+    Do $$$AssertEquals($CLASSMETHOD(time, "FromFHIR", "2026-11-08T10:30:00+00:00"), "2026-11-08T10:30:00Z", "+00:00 is Z")
+    Do $$$AssertEquals($CLASSMETHOD(time, "FromFHIR", "2026-11-08T10:30:00-00:00"), "2026-11-08T10:30:00Z", "-00:00 is Z")
+    Do $$$AssertEquals($CLASSMETHOD(time, "FromFHIR", "2026-11-08T05:30:00-05:00"), "2026-11-08T10:30:00Z", "a negative offset")
+    Do $$$AssertEquals($CLASSMETHOD(time, "FromFHIR", "2026-11-09T00:30:00+01:00", .d), "2026-11-08T23:30:00Z", "back across midnight")
+    Do $$$AssertEquals($CLASSMETHOD(time, "FromFHIR", "2026-12-31T20:00:00-05:00"), "2027-01-01T01:00:00Z", "forward across the year's end")
+    Do $$$AssertEquals($CLASSMETHOD(time, "FromFHIR", "2026-03-01T00:15:00+05:45"), "2026-02-28T18:30:00Z", "an offset with minutes, across the end of February")
+    Do $$$AssertEquals($CLASSMETHOD(time, "FromFHIR", "2028-02-29T12:00:00+14:00"), "2028-02-28T22:00:00Z", "the offset 14:00, on a leap day")
+    Do $$$AssertEquals($CLASSMETHOD(time, "FromFHIR", "2026-11-08T00:00:00-14:00"), "2026-11-08T14:00:00Z", "the offset -14:00")
+    // Fractions: dropped from the text, kept exactly in the seconds.
+    Do $$$AssertEquals($CLASSMETHOD(time, "FromFHIR", "2026-11-08T10:30:00.500Z", .f, .p), "2026-11-08T10:30:00Z", "the text drops the fraction")
+    Do $$$AssertEquals(f - z, .5, "the seconds keep it")
+    Do $$$AssertEquals(p, "fraction", "and the precision says there was one")
+    Do $$$AssertEquals($CLASSMETHOD(time, "FromFHIR", "2026-11-08T10:30:00.999999999Z", .n), "2026-11-08T10:30:00Z", "nine digits are not rounded up")
+    Do $$$AssertEquals(n - z, .999999999, "and are kept to the last digit")
+    Do $$$AssertEquals($CLASSMETHOD(time, "FromFHIR", "2026-11-08T10:30:00.5-00:30", .c), "2026-11-08T11:00:00Z", "a fraction and a negative offset")
+    Do $$$AssertEquals(c - z, 1800.5, "exact in seconds")
+    Do $$$AssertTrue($CLASSMETHOD(time, "FromFHIR", "2026-11-08T10:30:00.1Z", .t1) = $CLASSMETHOD(time, "FromFHIR", "2026-11-08T10:30:00.9Z", .t9), "two times in one second have one text")
+    Do $$$AssertTrue(t1 < t9, "and are still ordered by their seconds")
+    // The matcher's comparison: the text sorts after an earlier stored time and before a later one.
+    Set at = $CLASSMETHOD(time, "FromFHIR", "2026-11-08T11:30:00+01:00")
+    Do $$$AssertTrue(at ]] "2026-11-08T10:29:59Z", "after the second before, as text")
+    Do $$$AssertTrue("2026-11-08T10:30:01Z" ]] at, "before the second after, as text")
+    Do $$$AssertEquals(##class(Shutter.Util.Time).SecondsBetween("2026-11-08T10:00:00Z", at), 1800, "and SecondsBetween reads it")
+    // What is not a time with its offset.
+    For bad = "", "2026-11-08", "2026-11", "2026", "2026-11-08T10:30:00", "2026-11-08T10:30Z", "2026-11-08T10:30:00z", "2026-11-08t10:30:00Z", "2026-11-08 10:30:00Z", "2026-13-08T10:30:00Z", "2026-00-08T10:30:00Z", "2026-02-30T10:30:00Z", "2026-02-29T10:30:00Z", "2026-11-31T10:30:00Z", "2026-11-08T24:00:00Z", "2026-11-08T10:60:00Z", "2026-11-08T10:30:60Z", "2026-12-31T23:59:60Z", "2026-11-08T10:30:00.Z", "2026-11-08T10:30:00.1234567890Z", "2026-11-08T10:30:00,5Z", "2026-11-08T10:30:00+15:00", "2026-11-08T10:30:00+14:01", "2026-11-08T10:30:00+01:60", "2026-11-08T10:30:00+0100", "2026-11-08T10:30:00+01", "2026-11-08T10:30:00Z ", " 2026-11-08T10:30:00Z", "2026-11-08T10:30:00ZZ", "20261108103000", "not a time" {
+        Set s = "x", p = "x"
+        Do $$$AssertEquals($CLASSMETHOD(time, "FromFHIR", bad, .s, .p), "", "not read: [" _ bad _ "]")
+        Do $$$AssertEquals(s _ "|" _ p, "|", "with no seconds and no precision: [" _ bad _ "]")
+    }
+    // Digits of another script are not digits here.
+    Do $$$AssertEquals($CLASSMETHOD(time, "FromFHIR", "2026-11-08T10:30:0" _ $CHAR(1637) _ "Z"), "", "an Arabic-Indic digit is not read")
+    Do $$$AssertEquals($CLASSMETHOD(time, "FromFHIR", {}), "", "nor an object")
+}
+
 /// The site profile accepts any zone Shutter knows, and refuses one nobody does.
 Method TestProfileValidation()
 {

@@ -119,6 +119,48 @@ ClassMethod FromHL7(ts As %String, zone As %String = "", Output hadOffset As %Bo
     Quit $ZDATE(total \ 86400, 3) _ "T" _ $ZTIME(total # 86400, 1) _ "Z"
 }
 
+/// A FHIR instant, or a dateTime written to the second with its offset, as ISO 8601 UTC to the second with a trailing
+/// Z: the form every stored time has, so the result compares as a string with a case's event time. "" when the text is
+/// not one. The one reader of a FHIR time: the plan builder, the verifier's decision, the reader and the FHIR gate all
+/// call it, so none accepts a time another cannot read.
+/// <p>The grammar is YYYY-MM-DDThh:mm:ss[.f](Z|+hh:mm|-hh:mm): ASCII digits only; f is 1 to 9 digits; the date is a
+/// real one (no 30 February); the hour is 00 to 23, the minute and the second 00 to 59 (no second 60, no 24:00:00); the
+/// offset is at most 14:00. A date alone, a time without an offset and a time without seconds are not read.</p>
+/// <p><var>seconds</var> is the instant as seconds in UTC from the start of the internal day count, exact with the
+/// fraction, so two instants compare as numbers; the text returned drops the fraction. <var>precision</var> is
+/// "second" for a time written without a fraction and "fraction" for one written with it; both are "" when the text
+/// is not read. Pure: no global, no clock, and never an error.</p>
+ClassMethod FromFHIR(text As %String, Output seconds, Output precision As %String) As %String
+{
+    Set seconds = "", precision = ""
+    If $ISOBJECT($GET(text)) Quit ""
+    Set text = $GET(text)
+    If '$MATCH(text, "[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,9})?(Z|[+-][0-9]{2}:[0-9]{2})") Quit ""
+    Set day = $ZDATEH($EXTRACT(text, 1, 10), 3, , , , , , , -1)
+    If day < 0 Quit ""
+    Set h = +$EXTRACT(text, 12, 13), m = +$EXTRACT(text, 15, 16), s = +$EXTRACT(text, 18, 19)
+    If (h > 23) || (m > 59) || (s > 59) Quit ""
+    // What follows the seconds: the fraction, when there is one, then the offset (Z, or a sign and hh:mm).
+    Set rest = $EXTRACT(text, 20, *), digits = ""
+    If $EXTRACT(rest) = "." {
+        Set zoneAt = $LENGTH(rest) - $SELECT($EXTRACT(rest, *) = "Z": 0, 1: 5)
+        Set digits = $EXTRACT(rest, 2, zoneAt - 1), rest = $EXTRACT(rest, zoneAt, *)
+    }
+    Set offset = 0
+    If rest '= "Z" {
+        Set oh = +$EXTRACT(rest, 2, 3), om = +$EXTRACT(rest, 5, 6)
+        If (oh > 14) || (om > 59) || ((oh = 14) && (om > 0)) Quit ""
+        Set offset = ((oh * 3600) + (om * 60)) * $SELECT($EXTRACT(rest) = "-": -1, 1: 1)
+    }
+    Set whole = (day * 86400) + (h * 3600) + (m * 60) + s - offset
+    If whole < 0 Quit ""
+    Set utc = ""
+    Try { Set utc = $ZDATE(whole \ 86400, 3) _ "T" _ $ZTIME(whole # 86400, 1) _ "Z" } Catch { Set utc = "" }
+    If utc = "" Quit ""
+    Set seconds = whole + $SELECT(digits = "": 0, 1: +("0." _ digits)), precision = $SELECT(digits = "": "second", 1: "fraction")
+    Quit utc
+}
+
 /// The offset ("+HHMM" or "-HHMM") a zone gives a local time; "" for UTC. "Europe/London": +0100 in British Summer
 /// Time (an ambiguous or skipped local time at the change itself is read as summer time). A zone Shutter does not
 /// know is read as UTC, and a warning says so in the event log, once per process and zone.

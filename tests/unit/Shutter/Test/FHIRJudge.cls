@@ -140,7 +140,7 @@ Method TestInstant()
     Do $$$AssertEquals(a, b, "+01:00 is an hour ahead of UTC")
     Do $$$AssertTrue($CLASSMETHOD(judge, "Instant", "2026-11-08T10:30:00.500-00:30", .c) && (c = (b + 1800.5)), "fractions and negative offsets")
     Do $$$AssertTrue($CLASSMETHOD(judge, "Instant", "2026-11-09T00:30:00+01:00", .d) && $CLASSMETHOD(judge, "Instant", "2026-11-08T23:30:00Z", .e) && (d = e), "across midnight")
-    For bad = "2026-11-08", "2026-11-08T10:30:00", "2026-11-08T10:30Z", "2026-13-08T10:30:00Z", "2026-02-30T10:30:00Z", "2026-11-08T24:00:00Z", "2026-11-08T10:30:00+15:00", "" {
+    For bad = "2026-11-08", "2026-11-08T10:30:00", "2026-11-08T10:30Z", "2026-13-08T10:30:00Z", "2026-02-30T10:30:00Z", "2026-11-08T24:00:00Z", "2026-11-08T10:30:00+15:00", "", "2026-11-08T10:30:60Z", "2026-11-08T10:30:00.1234567890Z", "2026-11-08T10:30:00+14:30" {
         Do $$$AssertNotTrue($CLASSMETHOD(judge, "Instant", bad, .x), "unreadable: [" _ bad _ "]")
     }
 }
@@ -736,7 +736,41 @@ XData Rows [ MimeType = application/json ]
    "vids": {"V": "8"}, "outcome": "verified", "reason": "committed_current"},
   {"group": "limitation", "name": "an intermediate version after Shutter's left out of the history: Shutter's version still follows the base",
    "versions": {"W": {"from": "V", "vid": "9", "patch": {"location": ["@D", "@Ac", "@Bc", "@C"], "meta": {"tag": null}}}},
-   "history": ["W", "V", "base", "v5"], "current": "W", "outcome": "verified_continued", "reason": "committed_continued"}
+   "history": ["W", "V", "base", "v5"], "current": "W", "outcome": "verified_continued", "reason": "committed_continued"},
+  {"group": "positive", "name": "the bound Locations checked by system and value, each carrying the exact pair",
+   "ctx": {"binding": {"locations": [{"reference": "Location/ward-a", "checked_identifier": {"system": "urn:shutter:demo:ward", "value": "WARD-A"}}, {"reference": "Location/ward-b", "checked_identifier": {"system": "urn:shutter:demo:ward", "value": "WARD-B"}}, {"reference": "Location/ward-c", "checked_identifier": {"system": "urn:shutter:demo:ward", "value": "WARD-C"}}]}},
+   "outcome": "verified", "reason": "committed_current", "retry": false},
+  {"group": "positive", "name": "one bound Location checked by the pair and the others by the value alone",
+   "ctx": {"binding": {"locations": [{"reference": "Location/ward-a", "checked_identifier": "WARD-A"}, {"reference": "Location/ward-b", "checked_identifier": {"system": "urn:shutter:demo:ward", "value": "WARD-B"}}, {"reference": "Location/ward-c", "checked_identifier": "WARD-C"}]}},
+   "outcome": "verified", "reason": "committed_current"},
+  {"group": "adversarial", "adversarial": true, "name": "checked by the pair, the target Location carries the value under another system",
+   "ctx": {"binding": {"locations": [{"reference": "Location/ward-a", "checked_identifier": {"system": "urn:shutter:demo:ward", "value": "WARD-A"}}, {"reference": "Location/ward-b", "checked_identifier": {"system": "urn:shutter:demo:ward", "value": "WARD-B"}}, {"reference": "Location/ward-c", "checked_identifier": {"system": "urn:shutter:demo:ward", "value": "WARD-C"}}]}}, "location_patch": {"Location/ward-b": {"identifier": [{"system": "urn:another:ward", "value": "WARD-B"}]}},
+   "outcome": "committed_review", "reason": "location_changed", "retry": false, "detail": {"committed_version": "7"}},
+  {"group": "adversarial", "adversarial": true, "name": "checked by the pair, the prior Location carries the system with another value",
+   "ctx": {"binding": {"locations": [{"reference": "Location/ward-a", "checked_identifier": {"system": "urn:shutter:demo:ward", "value": "WARD-A"}}, {"reference": "Location/ward-b", "checked_identifier": {"system": "urn:shutter:demo:ward", "value": "WARD-B"}}, {"reference": "Location/ward-c", "checked_identifier": {"system": "urn:shutter:demo:ward", "value": "WARD-C"}}]}}, "location_patch": {"Location/ward-a": {"identifier": [{"system": "urn:shutter:demo:ward", "value": "WARD-Z"}]}},
+   "outcome": "committed_review", "reason": "location_changed"},
+  {"group": "adversarial", "adversarial": true, "name": "checked by the pair, the value in another letter case",
+   "ctx": {"binding": {"locations": [{"reference": "Location/ward-a", "checked_identifier": {"system": "urn:shutter:demo:ward", "value": "WARD-A"}}, {"reference": "Location/ward-b", "checked_identifier": {"system": "urn:shutter:demo:ward", "value": "WARD-B"}}, {"reference": "Location/ward-c", "checked_identifier": {"system": "urn:shutter:demo:ward", "value": "WARD-C"}}]}}, "location_patch": {"Location/ward-c": {"identifier": [{"system": "urn:shutter:demo:ward", "value": "ward-c"}]}},
+   "outcome": "committed_review", "reason": "location_changed"},
+  {"group": "adversarial", "adversarial": true, "name": "checked by the pair, the system and the value on two different identifiers",
+   "ctx": {"binding": {"locations": [{"reference": "Location/ward-a", "checked_identifier": {"system": "urn:shutter:demo:ward", "value": "WARD-A"}}, {"reference": "Location/ward-b", "checked_identifier": {"system": "urn:shutter:demo:ward", "value": "WARD-B"}}, {"reference": "Location/ward-c", "checked_identifier": {"system": "urn:shutter:demo:ward", "value": "WARD-C"}}]}}, "location_patch": {"Location/ward-b": {"identifier": [{"system": "urn:shutter:demo:ward", "value": "WARD-Q"}, {"system": "urn:another:ward", "value": "WARD-B"}]}},
+   "outcome": "committed_review", "reason": "location_changed"},
+  {"group": "context", "adversarial": true, "name": "a checked identifier pair with no system",
+   "ctx": {"binding": {"locations": [{"reference": "Location/ward-a", "checked_identifier": {"value": "WARD-A"}}, {"reference": "Location/ward-b", "checked_identifier": {"system": "urn:shutter:demo:ward", "value": "WARD-B"}}, {"reference": "Location/ward-c", "checked_identifier": {"system": "urn:shutter:demo:ward", "value": "WARD-C"}}]}},
+   "outcome": "unknown", "reason": "context_invalid"},
+  {"group": "context", "adversarial": true, "name": "a checked identifier pair with an empty value",
+   "ctx": {"binding": {"locations": [{"reference": "Location/ward-a", "checked_identifier": {"system": "urn:shutter:demo:ward", "value": "WARD-A"}}, {"reference": "Location/ward-b", "checked_identifier": {"system": "urn:shutter:demo:ward", "value": ""}}, {"reference": "Location/ward-c", "checked_identifier": {"system": "urn:shutter:demo:ward", "value": "WARD-C"}}]}},
+   "outcome": "unknown", "reason": "context_invalid"},
+  {"group": "context", "adversarial": true, "name": "a checked identifier that is a list",
+   "ctx": {"binding": {"locations": [{"reference": "Location/ward-a", "checked_identifier": {"system": "urn:shutter:demo:ward", "value": "WARD-A"}}, {"reference": "Location/ward-b", "checked_identifier": {"system": "urn:shutter:demo:ward", "value": "WARD-B"}}, {"reference": "Location/ward-c", "checked_identifier": ["WARD-C"]}]}},
+   "outcome": "unknown", "reason": "context_invalid"},
+  {"group": "context", "adversarial": true, "name": "applied with a usable ETag and no vread in the context (the version was never read by id)", "vread": null,
+   "outcome": "unknown", "reason": "context_invalid", "retry": false, "detail": {"committed_version": "7"}},
+  {"group": "context", "adversarial": true, "name": "a usable ETag and no vread, with a later writer's supported continuation as the current version",
+   "versions": {"W": {"from": "V", "vid": "8", "patch": {"location": ["@D", "@Ac", "@Bc", "@C"], "meta": {"tag": null}}}},
+   "history": ["W", "V", "base", "v5"], "current": "W", "vread": null, "outcome": "unknown", "reason": "context_invalid"},
+  {"group": "positive", "name": "a lost answer has no ETag, so no vread is asked for", "attempt": "lost", "seconds": 70, "vread": null,
+   "outcome": "verified", "reason": "committed_current"}
 ]
 }
 

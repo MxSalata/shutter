@@ -65,6 +65,8 @@ ClassMethod Judge(ctx As %DynamicObject, Output text As %String, Output detail A
 ///              "patient": {"reference": "Patient/demo-p1", "identifier": {"system": "...", "value": "..."}},
 ///              "prior_location": "Location/ward-a", "target_location": "Location/ward-b",
 ///              "locations": [{"reference": "Location/ward-b", "checked_identifier": "WARD-B"}, ...],
+///              (checked_identifier is a value, looked for under any system, or {"system": "...", "value": "WARD-B"},
+///              the exact pair)
 ///              "event_time": "2026-11-08T09:00:00Z", "server_owned_fields": []},
 ///  "base_body": "...", "expected_body": "...",
 ///  "attempt": {"outcome": "applied|uncertain|version_conflict|refused|error", "http_status": 200,
@@ -79,7 +81,8 @@ ClassMethod Judge(ctx As %DynamicObject, Output text As %String, Output detail A
 /// expected_body is the approved outbound text (Shutter.FHIR.Plan's Build of base_body). binding.locations must hold
 /// the prior and the target location (the dispatch's re-read set) and may hold more mapped ones; locations must hold
 /// exactly one read of each bound one, else the context is invalid (a walk that skipped a read must never verify).
-/// "Final" means attempt.seconds_since is at least settle_final_seconds: the last read of the settle window.
+/// An answer whose ETag names a version (W/"...") needs the vread of it: a version that was not read by id is never
+/// verified. "Final" means attempt.seconds_since is at least settle_final_seconds: the last read of the settle window.
 ClassMethod Decide(ctx As %DynamicObject, detail As %DynamicObject) As %String
 {
     // 1. The context.
@@ -151,6 +154,8 @@ ClassMethod Decide(ctx As %DynamicObject, detail As %DynamicObject) As %String
         If path '= "" Set detail.path = path Quit ..Out(detail, "unknown", "vread_differs")
     }
     If (retag '= "") && ('usable || (rvid '= vid)) Quit ..Out(detail, "unknown", "etag_not_version")
+    // The answer named V, so the walk must have read V by id: a context that left the vread out never verifies.
+    If usable && '$ISOBJECT(vread) Set detail.note = "the answer's ETag names a version that was not read by id" Quit ..Out(detail, "unknown", "context_invalid")
     Set loc = ..Str(attempt, "response_location")
     If (loc '= "") && '..LocationNames(loc, vid) Quit ..Out(detail, "unknown", "location_header_differs")
 
@@ -245,7 +250,7 @@ ClassMethod ContextProblem(ctx As %DynamicObject, Output base As %DynamicObject,
     If '..IsArray(locs) Quit "the binding has no locations"
     Set iter = locs.%GetIterator()
     While iter.%GetNext(.i, .l) {
-        If '..IsObject(l) || (..Str(l, "reference") = "") || (..Str(l, "checked_identifier") = "") Return "a bound location is incomplete"
+        If '..IsObject(l) || (..Str(l, "reference") = "") || '..CheckedShape(l) Return "a bound location is incomplete"
     }
     For key = "prior_location", "target_location" {
         If '..Bound(..Str(b, key), locs) Return "the bound locations leave out the " _ $PIECE(key, "_", 1) _ " " _ b.%Get(key)
@@ -287,6 +292,14 @@ ClassMethod ContextProblem(ctx As %DynamicObject, Output base As %DynamicObject,
         If count '= 1 Return "the bound location " _ l.reference _ " has " _ count _ " reads, not one"
     }
     Quit ""
+}
+
+/// Whether a bound location's checked_identifier is one this rule reads: a non-empty string (the value, under any
+/// system) or {system, value}, both non-empty strings (the exact pair).
+ClassMethod CheckedShape(l As %DynamicObject) As %Boolean [ Private ]
+{
+    If l.%GetTypeOf("checked_identifier") = "object" Quit ..IdentifierShape(l."checked_identifier")
+    Quit ..Str(l, "checked_identifier") '= ""
 }
 
 /// Whether a reference is in the bound locations.
@@ -552,8 +565,9 @@ ClassMethod PatientProblem(read As %DynamicObject, b As %DynamicObject, Output u
     Quit ""
 }
 
-/// "" when every bound Location read again is the mapped one (active, an identifier value equal to the checked one,
-/// case-sensitive), else what is wrong; unread is set when one could not be read at all.
+/// "" when every bound Location read again is the mapped one (active, carrying the checked identifier, case-sensitive:
+/// the value under any system when the binding gives a string, the exact system and value when it gives the pair),
+/// else what is wrong; unread is set when one could not be read at all.
 ClassMethod LocationsProblem(reads As %DynamicArray, b As %DynamicObject, Output unread As %Boolean) As %String [ Private ]
 {
     Set unread = 0
@@ -566,11 +580,17 @@ ClassMethod LocationsProblem(reads As %DynamicArray, b As %DynamicObject, Output
         If ($PIECE(ref, "/", 1) '= "Location") || '..ParseResource(..Str(read, "body"), "Location", $PIECE(ref, "/", 2), .loc) Set unread = 1 Return ref _ " is not the bound Location"
         If ..Str(loc, "status") '= "active" Return ref _ " is not active"
         Set found = 0, ids = loc.%Get("identifier")
+        Set pair = (want.%GetTypeOf("checked_identifier") = "object"), checked = want."checked_identifier"
+        Set value = $SELECT(pair: checked.value, 1: checked)
         If ..IsArray(ids) {
             Set it3 = ids.%GetIterator()
-            While it3.%GetNext(.k, .id) { If ..IsObject(id) && (..Str(id, "value") = want."checked_identifier") Set found = 1 }
+            While it3.%GetNext(.k, .id) {
+                Continue:'..IsObject(id)
+                Continue:(..Str(id, "value") '= value)
+                If 'pair || (..Str(id, "system") = checked.system) Set found = 1
+            }
         }
-        If 'found Return ref _ " no longer carries the identifier " _ want."checked_identifier"
+        If 'found Return ref _ " no longer carries the identifier " _ value
     }
     Quit ""
 }
@@ -650,30 +670,17 @@ ClassMethod LocationNames(loc As %String, vid As %String) As %Boolean [ Private 
     Quit $PIECE(loc, "_history/", $LENGTH(loc, "_history/")) = vid
 }
 
-/// A FHIR instant with a time and an offset (YYYY-MM-DDThh:mm:ss[.fff](Z|+hh:mm|-hh:mm)) as seconds in UTC from the
-/// start of the internal day count, so two instants compare as numbers. These are times, never version ids.
+/// A FHIR instant with a time and an offset as seconds in UTC from the start of the internal day count, so two
+/// instants compare as numbers: Shutter.Util.Time.FromFHIR's reading, the one the plan builder accepts an event time
+/// by, so no time that was written is one this rule cannot read. These are times, never version ids.
 ClassMethod Instant(text As %String, Output seconds) As %Boolean
 {
-    Set seconds = ""
-    If '$MATCH(text, "\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,9})?(Z|[+-]\d{2}:\d{2})") Quit 0
-    Set day = $ZDATEH($EXTRACT(text, 1, 10), 3, , , , , , , -1)
-    If day < 0 Quit 0
-    Set h = +$EXTRACT(text, 12, 13), m = +$EXTRACT(text, 15, 16), s = +$EXTRACT(text, 18, 19)
-    If (h > 23) || (m > 59) || (s > 59) Quit 0
-    Set rest = $EXTRACT(text, 20, *), frac = 0
-    If $EXTRACT(rest) = "." Set digits = $PIECE($EXTRACT(rest, 2, *), "Z", 1), digits = $PIECE($PIECE(digits, "+", 1), "-", 1), frac = +("0." _ digits), rest = $EXTRACT(rest, $LENGTH(digits) + 2, *)
-    Set offset = 0
-    If rest '= "Z" {
-        Set oh = +$EXTRACT(rest, 2, 3), om = +$EXTRACT(rest, 5, 6)
-        If (oh > 14) || (om > 59) Quit 0
-        Set offset = (oh * 3600 + (om * 60)) * $SELECT($EXTRACT(rest) = "-": -1, 1: 1)
-    }
-    Set seconds = (day * 86400) + (h * 3600) + (m * 60) + s + frac - offset
-    Quit 1
+    Quit ##class(Shutter.Util.Time).FromFHIR(text, .seconds) '= ""
 }
 
 /// The JSON pointer paths where two values differ (objects key by key, whatever their order; arrays element by element;
-/// scalars by type and value). An empty array means the same.
+/// scalars by type and value, a number by its JSON text as the plan builder compares it, so 1.50 and 1.5 differ). An
+/// empty array means the same.
 ClassMethod Diffs(a, b, path As %String = "", out As %DynamicArray = "") As %DynamicArray
 {
     If '$ISOBJECT(out) Set out = []
@@ -704,6 +711,7 @@ ClassMethod DiffMember(a, b, key, path As %String, out As %DynamicArray) [ Priva
     If (ta = "object") || (ta = "array") Do ..Diffs(a.%Get(key), b.%Get(key), path, out) Quit
     If ta = "unassigned" Quit
     If ta = "null" Quit
+    If ta = "number" Do:(a.%Get(key, , "json") '= b.%Get(key, , "json")) out.%Push(path) Quit
     If a.%Get(key) '= b.%Get(key) Do out.%Push(path)
 }
 

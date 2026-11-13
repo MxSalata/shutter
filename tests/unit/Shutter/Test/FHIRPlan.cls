@@ -316,7 +316,7 @@ Method TestBadInputs()
     Set e = ..Seed()
     Do e.%Remove("id")
     Do ..Expect(e.%ToJSON(), ..#SHAPE, "/id", "no id", "no_id")
-    For time = "2026-11-07", "2026-11-07T10:15:00", "2026-11-07T10:15Z", "2026-13-07T10:15:00Z", "2026-11-07 10:15:00Z", "" {
+    For time = "2026-11-07", "2026-11-07T10:15:00", "2026-11-07T10:15Z", "2026-13-07T10:15:00Z", "2026-11-07 10:15:00Z", "", "2026-11-07T10:15:60Z", "2026-11-07T10:15:00.1234567890Z", "2026-02-30T10:15:00Z", "2026-11-07T24:00:00Z", "2026-11-07T10:15:00+14:30" {
         Set code = ##class(Shutter.FHIR.Plan).Build(..Text("Seed"), ..View(), time, ..Marker(), .body, .detail)
         Do $$$AssertEquals(code, ..#SHAPE, "event time refused: '" _ time _ "'")
         Do $$$AssertEquals(detail.reason, "event_time", "named as the event time")
