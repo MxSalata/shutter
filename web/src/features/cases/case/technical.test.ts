@@ -54,7 +54,7 @@ describe("the Technical facts' words", () => {
     });
     expect(base).toBe('/csp/healthshare/shutter/');
     expect(messageContentsLink(base, '9625')).toBe(
-      '/csp/healthshare/shutter/EnsPortal.MessageContents.zen?HeaderId=9625',
+      '/csp/healthshare/shutter/EnsPortal.MessageContents.zen?HeaderClass=Ens.MessageHeader&HeaderId=9625',
     );
     expect(portalBaseOf({})).toBe('');
   });

@@ -508,7 +508,7 @@ describe('the Technical line: the message, where it came in, the trace and the p
     );
     expect(within(trace).getByRole('link', { name: 'header 9625' })).toHaveAttribute(
       'href',
-      '/csp/healthshare/shutter/EnsPortal.MessageContents.zen?HeaderId=9625',
+      '/csp/healthshare/shutter/EnsPortal.MessageContents.zen?HeaderClass=Ens.MessageHeader&HeaderId=9625',
     );
     expect(screen.getByTestId('case-receiver-class')).toHaveTextContent('Shutter.Operation.Ward');
   });

@@ -387,7 +387,7 @@ describe('ReviewPage', () => {
     ).toBeInTheDocument();
     expect(errors.getByRole('link', { name: /Latest header 4342/ })).toHaveAttribute(
       'href',
-      '/csp/healthshare/shutter/EnsPortal.MessageContents.zen?HeaderId=4342',
+      '/csp/healthshare/shutter/EnsPortal.MessageContents.zen?HeaderClass=Ens.MessageHeader&HeaderId=4342',
     );
     expect(errors.getByText('Why it matters')).toBeInTheDocument();
     await open(row('F10'));
@@ -557,7 +557,7 @@ describe('ReviewPage', () => {
       .forEach((r, i) =>
         expect(within(r).getByRole('link', { name: new RegExp(`Latest header ${900 + i}`) })).toHaveAttribute(
           'href',
-          `/csp/healthshare/shutter/EnsPortal.MessageContents.zen?HeaderId=${900 + i}`,
+          `/csp/healthshare/shutter/EnsPortal.MessageContents.zen?HeaderClass=Ens.MessageHeader&HeaderId=${900 + i}`,
         ),
       );
   });

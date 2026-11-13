@@ -2,6 +2,7 @@ import { List, Text } from '@mantine/core';
 import type { AgentRun, CaseDetail } from '@/api/types';
 import { PortalLink } from '@/components/PortalLink';
 import { humanize } from '@/lib/format';
+import { runMessageLink } from '@/lib/messageLink';
 import { traceScreenshot } from '@/lib/screenshots';
 import { NotYet, Section } from './Section';
 
@@ -53,10 +54,7 @@ export function PortalLinks({
         {withMessage.map((r, i) => (
           <List.Item key={String(r.id ?? r.ensMessageId)}>
             <PortalLink
-              href={
-                r.messageLink ||
-                `${portalBase}EnsPortal.MessageContents.zen?HeaderId=${encodeURIComponent(r.ensMessageId)}`
-              }
+              href={runMessageLink(r, portalBase)}
               what={`message ${r.ensMessageId}, the agent's request and answer`}
               quiet={i > 0 || !!c.links?.workflowTrace || (!!c.links?.visualTrace && !traceScreenshot(c))}
             >

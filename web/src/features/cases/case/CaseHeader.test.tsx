@@ -150,7 +150,7 @@ describe('the case header status and IRIS row', () => {
     expect(within(row).queryByRole('link', { name: /^Workflow trace/ })).not.toBeInTheDocument();
     expect(within(row).getByRole('link', { name: /^Source message/ })).toHaveAttribute(
       'href',
-      `/csp/shutter/EnsPortal.MessageContents.zen?HeaderId=${recorded.sourceHeaderId}`,
+      `/csp/shutter/EnsPortal.MessageContents.zen?HeaderClass=Ens.MessageHeader&HeaderId=${recorded.sourceHeaderId}`,
     );
     expect(row).toHaveTextContent(recorded.sourceMessageId!);
     // The record's other facts stay behind Details
@@ -387,7 +387,10 @@ describe("the case header's Technical facts", () => {
     );
     expect(
       within(screen.getByTestId('case-tech-header')).getByRole('link', { name: /^9625/ }),
-    ).toHaveAttribute('href', '/csp/healthshare/shutter/EnsPortal.MessageContents.zen?HeaderId=9625');
+    ).toHaveAttribute(
+      'href',
+      '/csp/healthshare/shutter/EnsPortal.MessageContents.zen?HeaderClass=Ens.MessageHeader&HeaderId=9625',
+    );
     expect(screen.getByTestId('case-tech-plan')).toHaveTextContent(/^v1f1171ecfa9a8catalogue E16$/);
     // The session's Visual Trace stays where it was, on the IRIS row
     const row = document.querySelector('[data-tour="case-iris"]') as HTMLElement;

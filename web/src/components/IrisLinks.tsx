@@ -4,6 +4,7 @@ import { useSettings } from '@/api/hooks';
 import { TRIAL } from '@/env/mode';
 import { resetsHourly } from '@/lib/budget';
 import { PORTAL_SIGN_IN } from '@/lib/hospital';
+import { messageContentsLink } from '@/lib/messageLink';
 import type { Screenshot } from '@/lib/screenshots';
 import { traceScreenshot } from '@/lib/screenshots';
 import { CodeChip } from './CodeChip';
@@ -114,7 +115,7 @@ export function caseIrisLinks(
     links.push({
       label: 'Source message',
       number: c.sourceMessageId || c.sourceHeaderId,
-      href: `${portalBase}EnsPortal.MessageContents.zen?HeaderId=${encodeURIComponent(c.sourceHeaderId)}`,
+      href: messageContentsLink(portalBase, c.sourceHeaderId),
       what: `message ${c.sourceHeaderId}, the HL7 message whose delivery failed`,
     });
   return links;

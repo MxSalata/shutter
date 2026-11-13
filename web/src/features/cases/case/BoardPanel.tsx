@@ -29,6 +29,7 @@ import { catalogueEntriesOf, EVIDENCE_REFS, evidenceSection } from '@/lib/eviden
 import { asArray, asObject } from '@/lib/json';
 import { formatDuration, formatInt, formatUsd, humanize, plural } from '@/lib/format';
 import { memberIdentity, SPECIALISTS } from '@/lib/hues';
+import { runMessageLink } from '@/lib/messageLink';
 import { PROVENANCE } from '@/lib/status';
 import { useTechnical } from '@/stores/appearance';
 import { describeEntry } from './derive';
@@ -180,10 +181,7 @@ function RunLine({ run, portalBase }: { run: AgentRun; portalBase: string }) {
         <>
           {' · '}
           <PortalLink
-            href={
-              run.messageLink ||
-              `${portalBase}EnsPortal.MessageContents.zen?HeaderId=${encodeURIComponent(run.ensMessageId)}`
-            }
+            href={runMessageLink(run, portalBase)}
             what={`message ${run.ensMessageId}, the agent's request and answer`}
             size="xs"
           >
