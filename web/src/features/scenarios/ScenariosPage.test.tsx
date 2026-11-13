@@ -963,6 +963,72 @@ describe("ScenariosPage, a finished run's own case and Home's way in", () => {
     expect(within(alert).queryByText('Live model')).not.toBeInTheDocument();
   });
 
+  it("shows a Run just pressed as starting: the last run's banner and its case link give way before the server answers", async () => {
+    // The last run, S2, has finished and its own case is open: its banner links that case
+    let run: Record<string, unknown> = finished();
+    let answer: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => (answer = resolve));
+    serve(finished(), () => [own(), earlier()]);
+    server.use(
+      http.get('/api/shutter/scenarios', () =>
+        HttpResponse.json({ scenarios: listed.map((d) => ({ ...d, latestCase: latestOf(d.id) })), run }),
+      ),
+      // The server takes its time over the new run, as the online demo does: the answer waits until the test lets it go
+      http.post('/api/shutter/scenarios/S3/run', async () => {
+        await held;
+        run = {
+          scenario: 'S3',
+          mode: 'board',
+          startedAt: '',
+          queuedAt: '2026-11-13T10:05:00Z',
+          state: 'queued',
+          files: [],
+          timeouts: [],
+        };
+        return HttpResponse.json({ scenario: 'S3', mode: 'board', startedAt: '', files: [] });
+      }),
+    );
+    renderScenarios();
+    const last = await banner();
+    expect(await within(last).findByRole('link', { name: 'Open its case, C-000070' })).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole('button', { name: 'Run S3 in Board mode' }));
+    // From the press: the new run as starting, and nothing of the last run, its case link least of all
+    const starting = await screen.findByTestId('run-starting');
+    expect(starting).toHaveTextContent('Starting S3 (Board)');
+    expect(starting).toHaveTextContent(
+      'Sent to the scenario player. Its case link appears here once the run has played and its case has opened.',
+    );
+    expect(within(starting).queryByRole('link')).not.toBeInTheDocument();
+    expect(screen.queryByText(/^S2 played \(Board\), /)).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /^Open its case/ })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('run-next')).not.toBeInTheDocument();
+    // The server answers: the banner is the new run's, queued, still with no case link
+    answer();
+    expect(await screen.findByText('S3 is queued (Board)')).toBeInTheDocument();
+    expect(screen.queryByTestId('run-starting')).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /^Open its case/ })).not.toBeInTheDocument();
+  });
+
+  it("keeps the last run's banner when the new run is refused: no run started, so nothing is shown as starting", async () => {
+    serve(finished(), () => [own(), earlier()]);
+    let asked = 0;
+    server.use(
+      http.post('/api/shutter/scenarios/S3/run', () => {
+        asked += 1;
+        return HttpResponse.json({ error: 'wrong_state', message: 'a run of S2 is queued' }, { status: 409 });
+      }),
+    );
+    renderScenarios();
+    await banner();
+    await userEvent.click(await screen.findByRole('button', { name: 'Run S3 in Board mode' }));
+    await waitFor(() => expect(asked).toBe(1));
+    await waitFor(() => expect(screen.queryByTestId('run-starting')).not.toBeInTheDocument());
+    // The banner is the last run's again, by its own name and time, with its own case
+    const last = await banner();
+    expect(last).toHaveTextContent(/^S2 played \(Board\), /);
+    expect(await within(last).findByRole('link', { name: 'Open its case, C-000070' })).toBeInTheDocument();
+  });
+
   it("lands on S2's card from Home's start with its Run focused, starts nothing, and drops the start from the address", async () => {
     const scrollTo = window.scrollTo;
     window.scrollTo = (() => undefined) as typeof window.scrollTo;
