@@ -125,7 +125,7 @@ describe('what a finding is about', () => {
 
   it('links a header to the Management Portal of its own namespace', () => {
     expect(headerLink('HOSPITAL', 66)).toBe(
-      '/csp/healthshare/hospital/EnsPortal.MessageContents.zen?HeaderId=66',
+      '/csp/healthshare/hospital/EnsPortal.MessageContents.zen?HeaderClass=Ens.MessageHeader&HeaderId=66',
     );
   });
 

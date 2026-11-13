@@ -46,7 +46,8 @@ export function portalBaseOf(c: Pick<CaseSummary, 'links'>): string {
   return at > 0 ? trace.slice(0, at) : '';
 }
 
-/** The Management Portal's page of one message, by its header id. */
-export function messageContentsLink(base: string, headerId: string): string {
-  return `${base}EnsPortal.MessageContents.zen?HeaderId=${encodeURIComponent(headerId)}`;
-}
+/**
+ * The Management Portal's page of one message, by its header id: the one helper every page builds the link with
+ * (lib/messageLink), which names the header's class in it.
+ */
+export { messageContentsLink } from '@/lib/messageLink';

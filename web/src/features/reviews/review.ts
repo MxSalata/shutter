@@ -9,6 +9,7 @@ import type {
   Severity,
 } from '@/api/types';
 import { formatInt, humanize, plural } from '@/lib/format';
+import { messageContentsLink } from '@/lib/messageLink';
 import type { Tone } from '@/lib/tone';
 
 /**
@@ -168,7 +169,7 @@ export const targetKey = (t: Pick<ReviewTarget, 'namespace' | 'production'>) =>
  * IRIS for Health a namespace's default application is /csp/healthshare/<namespace>/, and /csp/<namespace>/ is a 404.
  */
 export function headerLink(namespace: string, headerId: number | string): string {
-  return `/csp/healthshare/${namespace.toLowerCase()}/EnsPortal.MessageContents.zen?HeaderId=${encodeURIComponent(String(headerId))}`;
+  return messageContentsLink(`/csp/healthshare/${namespace.toLowerCase()}/`, headerId);
 }
 
 /**

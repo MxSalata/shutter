@@ -47,7 +47,7 @@ describe('IrisLinks', () => {
     );
     expect(screen.getByRole('link', { name: /Source message/ })).toHaveAttribute(
       'href',
-      '/csp/healthshare/shutter/EnsPortal.MessageContents.zen?HeaderId=16601',
+      '/csp/healthshare/shutter/EnsPortal.MessageContents.zen?HeaderClass=Ens.MessageHeader&HeaderId=16601',
     );
   });
 });
