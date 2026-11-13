@@ -76,10 +76,16 @@ export default function HomePage() {
   );
 }
 
+/** Where the short route starts: the Scenarios page in Board mode, on S2's card, its Run focused and not pressed. */
+export const START_S2 = '/scenarios?mode=board&start=S2';
+
 /**
  * The way in for someone new. A role that cannot run scenarios (the public demo's before 1.4.4, whose hospital plays
- * them by itself) starts from the cases already there; everyone else starts from S2, which shows the whole path, and
- * then S8, the case the agents are there for.
+ * them by itself) starts from the cases already there; everyone else has one start, S2 in Board mode, which shows the
+ * whole path, then S3 and S8 on the same cards. The start only opens the Scenarios page at S2's card: Run there is the
+ * second choice, and nothing runs before it. The whole list stays a link away. What a plain resend writes in S8 is left
+ * to S8's own card and case, where the exemption that lets it through is said beside it: the page's word budget has no
+ * room for both here.
  */
 function FirstStep() {
   const can = useCan();
@@ -97,12 +103,17 @@ function FirstStep() {
             ? 'A failed delivery your productions forward becomes a case. Open one to see the evidence, the plan and who decided.'
             : hidden
               ? "This hospital's failures are already in Cases. Open one to see the evidence, the plan and who decided."
-              : "Scenarios replay known failures: AI Hub agents propose a plan, and a deterministic gate decides whether it may write. Start with S2, then S8, where a plain resend would write over the bed manager's ward with every check passed."}
+              : 'Scenarios replay known failures: AI Hub agents propose a plan, and a deterministic gate decides whether it may write. Start with S2 in Board mode, then S3 and S8, where the board stops for a person.'}
         </Text>
-        <Group gap="xs">
-          <Button component={Link} to={hidden ? '/cases' : '/scenarios'} mih={44}>
-            {hidden ? 'Open the cases' : 'Open the scenarios'}
+        <Group gap="sm" align="center">
+          <Button component={Link} to={hidden ? '/cases' : START_S2} mih={44}>
+            {hidden ? 'Open the cases' : 'Start with S2'}
           </Button>
+          {hidden ? null : (
+            <Anchor component={Link} to="/scenarios" size="sm">
+              Open the scenarios
+            </Anchor>
+          )}
           {TRIAL ? (
             <Anchor href={trialHref('#/scenarios', { tour: true })} size="sm">
               Take the guided tour
