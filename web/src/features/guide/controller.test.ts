@@ -53,7 +53,9 @@ describe('the guide controller', () => {
   });
 
   it('skips to the next chapter on the route, leaving this one unfinished', () => {
-    expect(skipChapter(at('s2/receipt'))).toMatchObject({ at: 's8/receipt', completed: [] });
+    // The quick tour follows the short route: S3 comes after S2, and S8 after S3
+    expect(skipChapter(at('s2/receipt'))).toMatchObject({ at: 's3/receipt', completed: [] });
+    expect(skipChapter(at('s3/receipt'))).toMatchObject({ at: 's8/receipt', completed: [] });
     expect(skipChapter(at('evaluation/headline'))).toMatchObject({ at: null, dismissed: true });
   });
 

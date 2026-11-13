@@ -2,12 +2,14 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { Can } from '@/api/types';
+import { ROUTE, ROUTE_MODE } from '@/features/scenarios/execution';
 import {
   CHAPTERS,
   enabled,
   modesSay,
   pathOf,
   RANKED_REVIEW_RECORDED,
+  SCOPE_FINISH,
   SCOPES,
   stepAt,
   stepForRole,
@@ -48,10 +50,10 @@ describe('the guide registry', () => {
       's2/receipt',
       's2/decision',
       's2/verified',
+      's3/receipt',
       's8/receipt',
       's8/compare',
       's8/ask',
-      's20/receipt',
       'evaluation/headline',
     ]);
     expect(SCOPES.engineer).toEqual([
@@ -64,9 +66,42 @@ describe('the guide registry', () => {
     ]);
   });
 
+  it('walks the short route in its order on the quick tour, S2, then S3, then S8, with S20 left to the finish card', () => {
+    const chapters = [...new Set(SCOPES.quick.map((p) => p.split('/')[0]))];
+    // The Scenarios cards' own order (execution.ts, ROUTE), between the Scenarios step and the proof
+    expect(chapters).toEqual(['scenarios', ...ROUTE.map((id) => id.toLowerCase()), 'evaluation']);
+    for (const id of ROUTE) {
+      const chapter = CHAPTERS.find((c) => c.code === id && c.id === id.toLowerCase())!;
+      for (const s of chapter.steps.filter((x) => x.scopes.includes('quick')))
+        expect(s.place, `${id} ${s.id}`).toEqual({ scenario: id, mode: ROUTE_MODE });
+    }
+    // S20 is optional on the short route: a chapter of Every screen, after S8, and no step of the quick tour
+    expect(SCOPES.quick.some((p) => p.startsWith('s20/'))).toBe(false);
+    expect(SCOPES.all).toContain('s20/receipt');
+    const order = CHAPTERS.map((c) => c.id);
+    expect(order.indexOf('s2')).toBeLessThan(order.indexOf('s3'));
+    expect(order.indexOf('s3')).toBeLessThan(order.indexOf('s8'));
+    expect(order.indexOf('s8')).toBeLessThan(order.indexOf('s20'));
+    expect(SCOPE_FINISH.quick).toBe(
+      "You saw a transfer delivered and verified, one that had already arrived left unsent, and a resend that would have overwritten the bed manager's ward held back for a person.",
+    );
+    expect(SCOPE_FINISH.quick).not.toMatch(/gate stopping/);
+    expect(SCOPE_FINISH.all).toMatch(/one that had already arrived left unsent, .* the gate stopping one,/);
+  });
+
+  it('says on the S3 step that the transfer had landed and nothing was sent', () => {
+    const { chapter, step } = stepAt('s3/receipt')!;
+    expect(chapter.title).toBe('A transfer that had already arrived');
+    expect(step.title).toBe('Already there, nothing sent');
+    expect(step.say).toBe(
+      "Only the acknowledgement was lost: the bed system's own record shows the transfer landed. The board records that and sends nothing.",
+    );
+    expect(step.target).toBe('case-outcome');
+  });
+
   it("gives every screen every enabled step that is not the engineers' alone, one to four a chapter", () => {
     expect(RANKED_REVIEW_RECORDED).toBe(true);
-    expect(SCOPES.all).toHaveLength(32);
+    expect(SCOPES.all).toHaveLength(33);
     expect(SCOPES.all).toContain('review/agent');
     expect(SCOPES.all).toEqual(
       STEPS.filter(({ c, s }) => enabled(c, s) && !(s.scopes.length === 1 && s.scopes[0] === 'engineer')).map(
@@ -160,7 +195,7 @@ describe('the guide registry', () => {
       expect(approved.tryIt).toBeUndefined();
     }
     expect(stepForRole(stepAt('scenarios/start')!.step, can({})).say).toMatch(/Start with these three/);
-    expect(stepForRole(stepAt('scenarios/start')!.step, demo).say).toMatch(/follows S2, S8 and S20/);
+    expect(stepForRole(stepAt('scenarios/start')!.step, demo).say).toMatch(/follows S2, S3 and S8\./);
     expect(stepForRole(stepAt('scenarios/mode')!.step, demo).say).not.toMatch(/Choose/);
   });
 

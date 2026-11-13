@@ -147,14 +147,21 @@ const sentence = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
 
 const SCOPE_WORDS: Record<GuideScope, () => string> = {
   quick: () =>
-    `${SCOPES.quick.length} steps, about ${tourMinutes('quick')} min. A transfer delivered, a fix held back, the gate stopping one, and the proof.`,
+    `${SCOPES.quick.length} steps, about ${tourMinutes('quick')} min. S2, S3, then S8: a transfer delivered, one already there, a fix held back, and the proof.`,
   all: () =>
     `${SCOPES.all.length} steps in ${new Set(SCOPES.all.map((p) => p.split('/')[0])).size} chapters, about ${tourMinutes('all')} min.`,
   engineer: () =>
     `${SCOPES.engineer.length} steps, about ${tourMinutes('engineer')} min, technical detail on: the receipt, the gate's codes, what each agent cited, the message trace.`,
 };
 
-function Welcome({ initial }: { initial: GuideScope }) {
+/**
+ * Where the welcome's Start with S2 leads: the short route's start, as Home's own Start with S2 has it (HomePage,
+ * START_S2; Guide.test holds the two to one address). The Scenarios page opens in Board mode on S2's card with its Run
+ * focused, and nothing is pressed. Written here and not imported, so the trial's chunk does not come to depend on Home's.
+ */
+export const WELCOME_START_S2 = '/scenarios?mode=board&start=S2';
+
+function Welcome({ initial, onStartS2 }: { initial: GuideScope; onStartS2: () => void }) {
   const can = useCan();
   const begin = useGuide((s) => s.begin);
   const notNow = useGuide((s) => s.notNow);
@@ -194,10 +201,22 @@ function Welcome({ initial }: { initial: GuideScope }) {
         >
           Start the tour
         </GuideButton>
+        {/* The short route without the tour, for a role that may run a scenario: S2's Run is then the next choice */}
+        {can.scenarios ? (
+          <GuideButton variant="light" color="grape" onClick={onStartS2}>
+            Start with S2
+          </GuideButton>
+        ) : null}
         <GuideButton variant="default" onClick={notNow}>
           Explore on my own
         </GuideButton>
       </Group>
+      {can.scenarios ? (
+        <Text size="sm">
+          Start with S2 skips the tour: it opens the first scenario, a failed transfer recovered, with its Run
+          ready. Nothing runs until you press it.
+        </Text>
+      ) : null}
       <div>
         <Button variant="subtle" color="gray" size="compact-sm" onClick={dontShowAgain}>
           Don&apos;t show again
@@ -865,9 +884,10 @@ function Chapters() {
 }
 
 /**
- * The finish card, in place of the last step's card: what the route showed, and what to do next. A reader who may run
- * scenarios is pointed at Run S20; one who may not (the public demo and judge roles) is taken to S20's newest rules
- * case instead, where the gate stopped the fix.
+ * The finish card, in place of the last step's card: what the route showed, and what to do next. S20 is the short
+ * route's optional extra, so it is offered here and said to be optional, never a step of the quick tour. A reader who
+ * may run scenarios is pointed at Run S20; one who may not (the public demo and judge roles) is taken to S20's newest
+ * rules case instead, where the gate stopped the fix.
  */
 function Finish() {
   const navigate = useNavigate();
@@ -942,7 +962,9 @@ function Finish() {
               See the gate stop a fix
             </GuideButton>
           )}
-          <Text size="sm">{can.scenarios ? 'Watch the gate stop a fix.' : 'S20, as the rules ran it.'}</Text>
+          <Text size="sm">
+            {can.scenarios ? 'Optional: watch the gate stop a fix.' : 'Optional: S20, as the rules ran it.'}
+          </Text>
         </Group>
         <Group gap="sm" wrap="wrap">
           <GuideButton variant="default" onClick={exit}>
@@ -1061,6 +1083,8 @@ export function Guide() {
   // Focus goes back where the reader was when a modal or the tour closes
   const opener = useRef<HTMLElement | null>(null);
   const previous = useRef(phase);
+  // The welcome's Start with S2 hands the reader to the Scenarios page, which focuses S2's Run: no focus goes back
+  const handedOver = useRef(false);
   useEffect(() => {
     const was = previous.current;
     previous.current = phase;
@@ -1069,9 +1093,19 @@ export function Guide() {
     if (phase === 'closed' && was !== 'closed') {
       const back = opener.current?.isConnected ? opener.current : pageHeading();
       opener.current = null;
-      if (back && !pointAt) window.setTimeout(() => focusFrom(back), 0);
+      if (back && !pointAt && !handedOver.current) window.setTimeout(() => focusFrom(back), 0);
+      handedOver.current = false;
     }
   }, [phase, pointAt]);
+
+  // Start with S2: the welcome is put off for the visit, as Explore on my own puts it off, and the short route's start
+  // opens. It only opens a page: Run there is the reader's own press.
+  const navigate = useNavigate();
+  const startS2 = () => {
+    handedOver.current = true;
+    useGuide.getState().notNow();
+    navigate(WELCOME_START_S2);
+  };
 
   const modal = {
     onClose: exit,
@@ -1090,7 +1124,7 @@ export function Guide() {
         {message}
       </VisuallyHidden>
       <Modal {...modal} opened={phase === 'welcome'} title="Welcome to the Shutter trial">
-        {phase === 'welcome' ? <Welcome initial={welcomeScope} /> : null}
+        {phase === 'welcome' ? <Welcome initial={welcomeScope} onStartS2={startS2} /> : null}
       </Modal>
       <Modal {...modal} size="lg" opened={phase === 'chapters'} title="Choose a chapter">
         {phase === 'chapters' ? <Chapters /> : null}
