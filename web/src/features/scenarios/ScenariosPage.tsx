@@ -687,11 +687,12 @@ function HowRunsExecute({ replayOnly }: { replayOnly: boolean }) {
         {route ? (
           <>
             {' '}
-            {route}{' '}
+            {route} See{' '}
             <Anchor href={INSTALL_URL} target="_blank" rel="noreferrer" inherit underline="always">
               {INSTALL_LINK}
               <VisuallyHidden> Shutter with your own model key (opens in a new tab)</VisuallyHidden>
             </Anchor>
+            .
           </>
         ) : null}
       </Text>

@@ -121,7 +121,9 @@ describe('HomePage', () => {
     // The route, in order. What a plain resend writes in S8 is said on S8's card and case, with its exemption beside
     // it, and not here without it
     expect(
-      screen.getByText(/Start with S2 in Board mode, then S3 and S8, where the board stops for a person\.$/),
+      screen.getByText(
+        /Start with S2 in Board mode, then S3, then S8, where the board stops for a person\.$/,
+      ),
     ).toBeInTheDocument();
     expect(first).not.toHaveTextContent(/every check passed/);
   });

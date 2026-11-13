@@ -233,7 +233,7 @@ function ReviewBody({
             {approving ? 'Reject instead' : 'Approve instead'}
           </Button>
           <Group gap="sm">
-            <Button variant="default" onClick={onClose}>
+            <Button variant="default" onClick={onClose} disabled={decide.isPending}>
               Cancel
             </Button>
             <Button

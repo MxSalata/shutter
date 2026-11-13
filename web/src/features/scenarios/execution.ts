@@ -112,12 +112,12 @@ export function routeNext(scenario: string, mode: Mode): { look: string; next: s
     };
   if (scenario === 'S3')
     return {
-      look: "On its case: the outcome says nothing was sent, since the receiver already had the transfer, and The board has each agent's finding.",
+      look: "On its case: the outcome should say nothing was sent, since the receiver already had the transfer, and The board has each agent's finding.",
       next: 'Next on the short route: S8, in its card below.',
     };
   if (scenario === 'S8')
     return {
-      look: "On its case: the outcome says a person decides and nothing was written, and The board has each agent's finding and any dissent it kept.",
+      look: "On its case: the outcome should say a person decides and nothing was written, and The board has each agent's finding and any dissent it kept.",
       next: 'That is the short route. S20 below shows the approval boundary, and every scenario is listed under it.',
     };
   return null;
