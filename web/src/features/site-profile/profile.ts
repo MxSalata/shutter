@@ -1,5 +1,5 @@
 import type { ChainKind, ReceiverCategory, SiteProfile, SiteReceiver, SiteTeam } from '@/api/types';
-import { CATEGORY_TEXT, categoryOf, historyPolicyOf } from '@/lib/categories';
+import { CATEGORY_TEXT, ORDERS_RESULTS_BRIEF, categoryOf, historyPolicyOf } from '@/lib/categories';
 import type { GlossaryKey } from '@/lib/glossary';
 import { DETAIL_LABELS, REMINDER_DEFAULTS } from './reminderPreview';
 
@@ -40,12 +40,15 @@ export const EFFECT_WORDS = {
 export const OVERTAKEN_LINE = {
   current: 'Overtaken failure: closes, no write.',
   correct: 'Overtaken failure: asks a person to correct by hand.',
-  none: 'Cases go to a person.',
 } as const;
 
-/** The category's line for a receiver (or for a category no receiver has), from its history policy. */
-export const overtakenLine = (category: ReceiverCategory, policy: 'current' | 'correct') =>
-  category === 'orders_results' ? OVERTAKEN_LINE.none : OVERTAKEN_LINE[policy];
+/**
+ * The category's line for a receiver (or for a category no receiver has), from its history policy. Orders and results
+ * has no overtaken failure to speak of: its line is the category's own words in brief, what a case gets and the one
+ * resend there is, an outage's.
+ */
+export const overtakenLine = (category: ReceiverCategory, policy: 'current' | 'correct'): string =>
+  category === 'orders_results' ? ORDERS_RESULTS_BRIEF : OVERTAKEN_LINE[policy];
 
 /** The tiers' names, for the release matrix's row heads ("Tier 3: clinical safety"). */
 export const TIER_NAMES: Record<string, string> = {

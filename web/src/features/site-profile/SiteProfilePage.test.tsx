@@ -52,6 +52,10 @@ function renderPage(query = '') {
   );
 }
 
+/** An orders and results receiver in a card's first layer: a case's findings, no resend from it, the outage resend. */
+const ORDERS_RESULTS_LINE =
+  "A case goes to a person with its findings, and nothing is resent from the case. At a receiver set up for it, an outage's messages that never arrived are listed, and after one approval the engine sends them again.";
+
 /** The first receiver's questions: the seed lists two receivers, each asked the same ones. */
 const receiver1 = () => within(screen.getByRole('group', { name: 'Receiver 1: Downstream Out' }));
 const inReceiver1 = async () =>
@@ -88,10 +92,12 @@ describe('SiteProfilePage', () => {
     ).toBeInTheDocument();
     expect(within(records).getByText(/asks for a correction by hand/)).toBeInTheDocument();
     expect(within(cards).getByText('Orders and results')).toBeInTheDocument();
-    // The kind no receiver has says so, and no longer that it is not modelled (1.4.3: its cases get their findings)
+    // The kind no receiver has says so, and no longer that it is not modelled (1.4.3: its cases get their findings).
+    // Its card says the whole of what Shutter does at such a receiver, not only that a case goes to a person
     const orders = within(cards).getByRole('listitem', { name: 'Orders and results' });
     expect(within(orders).getByText('No receiver of this kind')).toBeInTheDocument();
-    expect(within(orders).getByText('Cases go to a person.')).toBeInTheDocument();
+    expect(within(orders).getByText(ORDERS_RESULTS_LINE)).toBeInTheDocument();
+    expect(within(orders).queryByText('Cases go to a person.')).not.toBeInTheDocument();
     expect(within(cards).queryByText(/Not modelled yet/)).not.toBeInTheDocument();
   });
 
@@ -110,7 +116,7 @@ describe('SiteProfilePage', () => {
     const cards = await screen.findByRole('list', { name: 'The receivers and what each needs' });
     const card = within(cards).getByRole('listitem', { name: 'Lab Results Out' });
     expect(within(card).getByText('No resend from a case')).toBeInTheDocument();
-    expect(within(card).getByText('Cases go to a person.')).toBeInTheDocument();
+    expect(within(card).getByText(ORDERS_RESULTS_LINE)).toBeInTheDocument();
     // The second layer says the whole of it: the findings, and the outage resend where the receiver is set up for it
     expect(
       within(card).getByText(

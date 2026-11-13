@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { SiteProfile } from '@/api/types';
+import { CATEGORY_TEXT } from '@/lib/categories';
 import { glossary } from '@/lib/glossary';
 import { RELEASES } from '@/lib/status';
 import { recordedSiteProfile } from '@/mocks/profile';
@@ -679,7 +680,26 @@ describe('the words the restyled page reads from the model', () => {
     expect(overtakenLine('current_state', 'correct')).toBe(
       'Overtaken failure: asks a person to correct by hand.',
     );
-    expect(overtakenLine('orders_results', 'current')).toBe('Cases go to a person.');
+  });
+
+  it('says in brief what an orders and results receiver gets, in the words of the whole sentence', () => {
+    const brief = overtakenLine('orders_results', 'current');
+    // No overtaken failure decides there: the line is the same whatever the policy
+    expect(overtakenLine('orders_results', 'correct')).toBe(brief);
+    expect(brief).toBe(
+      "A case goes to a person with its findings, and nothing is resent from the case. At a receiver set up for it, an outage's messages that never arrived are listed, and after one approval the engine sends them again.",
+    );
+    // The whole sentence, which the case page reads, is the brief one with what the findings are and when they come
+    const whole = CATEGORY_TEXT.orders_results.overtaken;
+    expect(whole).toBe(
+      "A case goes to a person with its findings (who holds the message, the receiver's own words and the result they name) before any model runs, and nothing is resent from the case. At a receiver set up for it, an outage's messages that never arrived are listed, and after one approval the engine sends them again.",
+    );
+    expect(
+      whole.replace(
+        " (who holds the message, the receiver's own words and the result they name) before any model runs",
+        '',
+      ),
+    ).toBe(brief);
   });
 
   it('keeps each icon’s words short enough for a tooltip', () => {
