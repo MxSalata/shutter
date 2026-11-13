@@ -339,14 +339,22 @@ function entryOfScenario(data: Evaluation, scenario: string): string {
   return data.passes.find((p) => p.scenario === scenario && p.catalogue_entry)?.catalogue_entry ?? '';
 }
 
+/**
+ * Why a recorded scenario played in Rules only can write with every check passed: the gate leaves one check out there
+ * on purpose (Operation/Gate.cls, ENTRY_NOT_NAMED_WRITE), to show what a plain resend does. Said beside every such
+ * claim, so it is never read as the gate missing the write on a real case.
+ */
+export const RULES_EXEMPTION =
+  'Rules only is exempted there on purpose, and on a real case the gate holds it';
+
 /** The line under the hero statement: the miss that wrote, which the board caught, and the entry it followed. */
 function heroSecond(proof: Proof, entryOf: (scenario: string) => string): string {
   const misses = proof.rulesMisses;
   if (!misses?.wrote.length) return '';
   // "The seventh": the one miss the gate did not stop, after the six it did
   if (misses.wrote.length === 1 && misses.total > 1 && misses.stopped.length === misses.total - 1)
-    return `The ${ordinal(misses.total)}, ${misses.wrote[0]}, wrote over the bed manager's ward with every check passed. The board escalated${entryOf(misses.wrote[0]) ? `, as entry ${entryOf(misses.wrote[0])} says` : ''}.`;
-  return `${andList(misses.wrote)} wrote with every check passed. The board caught ${misses.wrote.length === 1 ? 'it' : 'them'}.`;
+    return `The ${ordinal(misses.total)}, ${misses.wrote[0]}, wrote over the bed manager's ward with every check passed: ${RULES_EXEMPTION}. The board escalated${entryOf(misses.wrote[0]) ? `, as entry ${entryOf(misses.wrote[0])} says` : ''}.`;
+  return `${andList(misses.wrote)} wrote with every check passed: ${RULES_EXEMPTION}. The board caught ${misses.wrote.length === 1 ? 'it' : 'them'}.`;
 }
 
 /**

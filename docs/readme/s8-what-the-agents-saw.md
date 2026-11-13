@@ -2,6 +2,8 @@
 
 One board member's whole run on S8, the case in the README where a plain resend would write over the bed manager's ward with every check passed: **Encounter Integrity**, recorded live on 2026-10-25 as case C-000112 with `claude-opus-5-5`. It took 11.6 seconds, 15,356 tokens in and 895 out, and 4 tool calls.
 
+That resend passes every check only because the check that would stop it is left out on purpose. Rules only in a scenario the runner plays is the baseline, kept to show what a plain resend does, so the gate does not apply `ENTRY_NOT_NAMED_WRITE` there. Any other write, a real case or a live story in that mode included, must name the catalogue entry it follows, and the entry S8's evidence matches calls for no resend: on a real case the gate holds it.
+
 `scripts/agent_page.py` writes this page from the public file [scenario-S8-ENC-1008-transfer-encounter-1.json](https://github.com/MxSalata/shutter/blob/main/fixtures/records/scenario-S8-ENC-1008-transfer-encounter-1.json). No model was called to make it, and `scripts/evaluate.py --check` fails if the two differ. The patients are made up, and the encounter and patient appear as tokens (`ENC-T1`, `MRN-T1`), as the model received them.
 
 **Two things to read it with:**

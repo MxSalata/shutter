@@ -16,6 +16,14 @@ OUT = os.path.join(ROOT, "docs", "readme", "s8-what-the-agents-saw.md")
 BLOB = "https://github.com/MxSalata/shutter/blob/main/fixtures/records/"
 STEM = "scenario-S8-ENC-1008-transfer-{}-1.json"
 NAMES = {"conformance": "Conformance", "encounter": "Encounter Integrity", "impact": "Impact", "coordinator": "Coordinator"}
+# Why "every check passed" is true of that resend, as src/Shutter/Operation/Gate.cls has it: Rules only in a scenario the
+# runner plays is the baseline, kept to show what a plain resend does, so the gate leaves out ENTRY_NOT_NAMED_WRITE there.
+EXEMPTION = (
+    "That resend passes every check only because the check that would stop it is left out on purpose. Rules only in a "
+    "scenario the runner plays is the baseline, kept to show what a plain resend does, so the gate does not apply "
+    "`ENTRY_NOT_NAMED_WRITE` there. Any other write, a real case or a live story in that mode included, must name the "
+    "catalogue entry it follows, and the entry S8's evidence matches calls for no resend: on a real case the gate holds it."
+)
 
 
 def load(member):
@@ -71,6 +79,8 @@ def page():
         f"`{record['model']}`. It took {response['duration_ms'] / 1000:.1f} seconds, {response['prompt_tokens']:,} tokens in "
         f"and {response['completion_tokens']:,} out, and {response['tool_calls']} tool calls."
     )
+    w.append("")
+    w.append(EXEMPTION)
     w.append("")
     w.append(
         f"`scripts/agent_page.py` writes this page from the public file [{STEM.format('encounter')}]({BLOB}{STEM.format('encounter')}). "
