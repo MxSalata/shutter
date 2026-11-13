@@ -8,6 +8,7 @@ import {
   IconClock,
   IconCode,
   IconCopyCheck,
+  IconDeviceDesktop,
   IconFileDescription,
   IconHandStop,
   IconListDetails,
@@ -287,8 +288,13 @@ export function proposedWrites(n: number): Status {
   );
 }
 
-/** Where an answer came from: a live model call, a recorded run replayed, or the rules with no model at all. */
-export const PROVENANCE: Record<'live' | 'replay' | 'rules', Status> = {
+/**
+ * Where an answer came from, which is how a run executed and never who proposed its plan (the mode says that): a live
+ * model call on IRIS, a recorded run replayed on IRIS, the rules with no model at all, or the trial's recording, which
+ * is shown in the browser and runs nothing. Each is read from what the run or the page itself records, never from the
+ * address or the account.
+ */
+export const PROVENANCE: Record<'live' | 'replay' | 'rules' | 'recording', Status> = {
   live: s('info', 'Live model', 'A model was called for this run', IconBroadcast),
   replay: s(
     'neutral',
@@ -297,6 +303,12 @@ export const PROVENANCE: Record<'live' | 'replay' | 'rules', Status> = {
     IconPlayerPlay,
   ),
   rules: s('neutral', 'Rules only', 'No model: the deterministic rules decided', IconCode),
+  recording: s(
+    'neutral',
+    'Browser recording',
+    'A recording shown in this browser: no new inference, and nothing reached IRIS',
+    IconDeviceDesktop,
+  ),
 };
 
 /** The release of a write: a person or the site's written policy releases it, after the gate. */
