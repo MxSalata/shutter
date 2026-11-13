@@ -21,6 +21,7 @@ export function Section({
   id,
   title,
   note,
+  wideNote = false,
   aside,
   tour,
   children,
@@ -28,28 +29,61 @@ export function Section({
   id: string;
   title: ReactNode;
   note?: ReactNode;
+  /**
+   * The intro runs the section's whole width, under the heading and whatever sits beside it, where the content below
+   * does too (a form's fields). Otherwise it keeps the prose width, 68 ch, beside the aside.
+   */
+  wideNote?: boolean;
   aside?: ReactNode;
   /** The guide's name for the section (`data-tour`). */
   tour?: string;
   children: ReactNode;
 }) {
   const nested = useContext(Nested);
+  // Focusable from script only: a link to a section (Review the plan and decide) moves focus to its heading
+  const heading = (
+    <Title order={nested ? 3 : 2} id={`${id}-title`} tabIndex={-1}>
+      {title}
+    </Title>
+  );
   const body = (
     <Stack gap="sm">
-      <Group justify="space-between" align="flex-start" wrap="wrap" gap="xs">
-        <Stack gap={2} style={{ minWidth: 0, flex: '1 1 260px' }}>
-          {/* Focusable from script only: a link to a section (Review the plan and decide) moves focus to its heading */}
-          <Title order={nested ? 3 : 2} id={`${id}-title`} tabIndex={-1}>
-            {title}
-          </Title>
+      {wideNote ? (
+        // The heading and the aside share the first row; the intro, next after the heading in the page, has the second
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: aside ? 'minmax(0, 1fr) auto' : 'minmax(0, 1fr)',
+            columnGap: 'var(--mantine-spacing-xs)',
+            rowGap: 2,
+            alignItems: 'start',
+          }}
+        >
+          {heading}
           {note ? (
-            <Text size={nested ? 'sm' : 'md'} c="dimmed" maw="68ch">
+            <Text size={nested ? 'sm' : 'md'} c="dimmed" style={{ gridColumn: '1 / -1', gridRow: 2 }}>
               {note}
             </Text>
           ) : null}
-        </Stack>
-        {aside ? <Group gap={6}>{aside}</Group> : null}
-      </Group>
+          {aside ? (
+            <Group gap={6} style={{ gridColumn: 2, gridRow: 1 }}>
+              {aside}
+            </Group>
+          ) : null}
+        </div>
+      ) : (
+        <Group justify="space-between" align="flex-start" wrap="wrap" gap="xs">
+          <Stack gap={2} style={{ minWidth: 0, flex: '1 1 260px' }}>
+            {heading}
+            {note ? (
+              <Text size={nested ? 'sm' : 'md'} c="dimmed" maw="68ch">
+                {note}
+              </Text>
+            ) : null}
+          </Stack>
+          {aside ? <Group gap={6}>{aside}</Group> : null}
+        </Group>
+      )}
       {children}
     </Stack>
   );
