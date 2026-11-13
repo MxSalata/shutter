@@ -48,6 +48,10 @@ There are two recovery paths, with different guarantees:
 - **Case recovery:** a conditional write through the receiver's API, verified in its receipt and history.
 - **Outage recovery:** stored HL7 messages resent through the engine, completed in the engine and settled by the receiver's declared duplicate handling. This is not receiver-side verification.
 
+![S8 played twice on the same evidence: Rules only, exempted on purpose from one gate check, writes WARD-B over the bed manager's WARD-C; the board escalates and writes nothing](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/s8-rules-and-board.png)
+
+*S8, the same failure played twice on the same evidence. The Rules only run is exempted on purpose from one gate check, `ENTRY_NOT_NAMED_WRITE`, to show what a plain resend writes: WARD-B over the bed manager's WARD-C. The board escalates and writes nothing. On a real case the whole gate runs and holds that resend, so "pass every check" in the picture means every check but the one lifted.*
+
 ## For judges
 
 **Start here: about three minutes, nothing to install and no key.**
