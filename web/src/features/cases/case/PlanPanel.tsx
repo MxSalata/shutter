@@ -1,10 +1,11 @@
 import { Accordion, Group, List, Stack, Table, Text } from '@mantine/core';
 import { IconCircleCheck, IconCircleX } from '@tabler/icons-react';
-import type { GateDecision, PlanView } from '@/api/types';
+import type { GateDecision, PlanView, Snapshot } from '@/api/types';
 import { Digest } from '@/components/Digest';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { DispositionBadge } from '@/components/StateBadge';
 import { StatusBadge } from '@/components/StatusBadge';
+import { TechDetail } from '@/components/TechDetail';
 import { Timestamp } from '@/components/Timestamp';
 import { checkCounts, CHECK_STATES, checkState, gateOutcome } from '@/lib/status';
 import { asArray, asObject } from '@/lib/json';
@@ -14,6 +15,8 @@ import { humanize } from '@/lib/format';
 import { KeyValueList } from '@/components/KeyValueList';
 import { StackTable } from '@/components/StackTable';
 import { NotYet, Section } from './Section';
+import { PlanHeadline } from './PlanHeadline';
+import { planWords, type ActionCase } from './planAction';
 import { capitalReceiverNoun, receiverNoun } from './receiver';
 import { useDetail } from '@/stores/appearance';
 
@@ -95,17 +98,25 @@ function GateTable({ d }: { d: GateDecision }) {
   );
 }
 
+/**
+ * The plan, led by what it does: the action in plain words as the section's headline, with the conditions the write
+ * goes on beside it, then why. Its exact terms (the operation key, the digests, the catalogue entry, its version and
+ * the preconditions as its author wrote them) are one click away under "Plan details", open in Technical.
+ */
 export function PlanPanel({
   view,
   loading,
   error,
   onRetry,
-  receiver,
+  c,
+  snapshot,
 }: {
   view: PlanView | null | undefined;
   loading: boolean;
-  /** The case's receiver (its production item), named where the plan says what it writes. */
-  receiver?: string;
+  /** The case, for its own operation and its receiver: the headline names both. */
+  c: ActionCase;
+  /** The case's evidence, once read: the mapped operation and what the route calls the receiver. */
+  snapshot?: Snapshot | null;
   /** The plan's read error: shown in place of the panel's body. */
   error?: unknown;
   onRetry?: () => void;
@@ -120,7 +131,7 @@ export function PlanPanel({
     <Section
       id="plan"
       title="The plan"
-      note="One plan, bound by its digest, a fingerprint of its exact content that any change alters: what the gate checks, and what a release names."
+      note="One plan, bound by its digest: what the gate checks, and what a release names."
       aside={p ? <DispositionBadge disposition={p.disposition} /> : null}
     >
       {!p && error ? <ErrorAlert error={error} title="The plan could not be read" onRetry={onRetry} /> : null}
@@ -129,78 +140,95 @@ export function PlanPanel({
       ) : null}
       {p ? (
         <Stack gap="sm">
-          <Text size="sm" fw={500}>
-            {p.summary}
-          </Text>
-          <KeyValueList
-            rows={[
-              [
-                'Exact action',
-                write
-                  ? `${humanize(p.actionType || String(action.type ?? 'resend'))} the case's operation`
-                  : `Nothing is written to ${receiverNoun(receiver)}`,
-              ],
-              [
-                'Conditional on receiver version',
-                write ? String(p.expectedVersion ?? action.expected_version ?? '') : '',
-              ],
-              [
-                'Operation key',
-                write ? <Digest key="k" value={p.operationKey} label="operation key" length={80} /> : '',
-              ],
-              [
-                'Payload digest',
-                p.payloadDigest ? <Digest key="pd" value={p.payloadDigest} label="payload digest" /> : '',
-              ],
-              ['Plan digest', <Digest key="d" value={p.digest} label="plan digest" />],
-              [
-                'Catalogue entry',
-                p.catalogueEntry ? (
-                  <Stack key="c" gap={0}>
-                    <Text size="sm">
-                      {`${p.catalogueEntry}, ${p.outcome === 'preferred' || !p.outcome ? 'the preferred outcome' : humanize(p.outcome).toLowerCase()}${p.why ? `: ${p.why}` : ''}`}
-                    </Text>
-                    <Text size="xs" c="dimmed">
-                      The scenario catalogue lists the failures Shutter knows and the safe outcome of each.
-                    </Text>
-                  </Stack>
-                ) : (
-                  ''
-                ),
-              ],
-              [
-                'Plan version',
-                `v${p.version}, by ${
-                  p.createdBy?.startsWith('run:')
-                    ? 'the coordinator'
-                    : p.createdBy === 'rules'
-                      ? 'the rules'
-                      : p.createdBy?.startsWith('policy:')
-                        ? `the site's policy for ${p.createdBy.slice('policy:'.length)}`
-                        : planLeader(p.createdBy)
-                          ? `the board of case ${planLeader(p.createdBy)}`
-                          : p.createdBy
-                }`,
-              ],
-            ]}
-          />
-          {preconditions.length ? (
-            <Stack gap={2}>
-              <Text size="xs" fw={600} c="dimmed">
-                Preconditions as the plan's author wrote them, when it ran
+          <PlanHeadline words={planWords(p, c, snapshot)} />
+          {p.why || p.summary ? (
+            <Text size="sm" maw="75ch" data-testid="plan-why">
+              <Text span inherit fw={600}>
+                {'Why: '}
               </Text>
-              <List size="sm" spacing={2}>
-                {preconditions.map((x, i) => (
-                  <List.Item key={i}>{x}</List.Item>
-                ))}
-              </List>
-            </Stack>
+              {p.why || p.summary}
+            </Text>
           ) : null}
-          <Text size="xs" c="dimmed">
-            {disagreements.length
-              ? `${disagreements.length} disagreement(s) kept in the plan.`
-              : 'No disagreements were recorded.'}
-          </Text>
+          {disagreements.length ? (
+            <Text size="sm">{`${disagreements.length} disagreement(s) kept in the plan.`}</Text>
+          ) : null}
+          <TechDetail label="Plan details" kind="data">
+            <Stack gap="sm">
+              <KeyValueList
+                rows={[
+                  ["The author's summary", p.why ? p.summary : ''],
+                  [
+                    'Conditional on receiver version',
+                    write ? String(p.expectedVersion ?? action.expected_version ?? '') : '',
+                  ],
+                  [
+                    'Operation key',
+                    write ? <Digest key="k" value={p.operationKey} label="operation key" length={80} /> : '',
+                  ],
+                  [
+                    'Payload digest',
+                    p.payloadDigest ? <Digest key="pd" value={p.payloadDigest} label="payload digest" /> : '',
+                  ],
+                  [
+                    'Plan digest',
+                    <Stack key="d" gap={0}>
+                      <Digest value={p.digest} label="plan digest" />
+                      <Text size="xs" c="dimmed">
+                        A fingerprint of the exact plan: any change to it gives another digest.
+                      </Text>
+                    </Stack>,
+                  ],
+                  [
+                    'Catalogue entry',
+                    p.catalogueEntry ? (
+                      <Stack key="c" gap={0}>
+                        <Text size="sm">
+                          {`${p.catalogueEntry}, ${p.outcome === 'preferred' || !p.outcome ? 'the preferred outcome' : humanize(p.outcome).toLowerCase()}`}
+                        </Text>
+                        <Text size="xs" c="dimmed">
+                          The scenario catalogue lists the failures Shutter knows and the safe outcome of
+                          each.
+                        </Text>
+                      </Stack>
+                    ) : (
+                      ''
+                    ),
+                  ],
+                  [
+                    'Plan version',
+                    `v${p.version}, by ${
+                      p.createdBy?.startsWith('run:')
+                        ? 'the coordinator'
+                        : p.createdBy === 'rules'
+                          ? 'the rules'
+                          : p.createdBy?.startsWith('policy:')
+                            ? `the site's policy for ${p.createdBy.slice('policy:'.length)}`
+                            : planLeader(p.createdBy)
+                              ? `the board of case ${planLeader(p.createdBy)}`
+                              : p.createdBy
+                    }`,
+                  ],
+                ]}
+              />
+              {preconditions.length ? (
+                <Stack gap={2}>
+                  <Text size="xs" fw={600} c="dimmed">
+                    Preconditions as the plan&apos;s author wrote them, when it ran
+                  </Text>
+                  <List size="sm" spacing={2}>
+                    {preconditions.map((x, i) => (
+                      <List.Item key={i}>{x}</List.Item>
+                    ))}
+                  </List>
+                </Stack>
+              ) : null}
+              {disagreements.length ? null : (
+                <Text size="xs" c="dimmed">
+                  No disagreements were recorded.
+                </Text>
+              )}
+            </Stack>
+          </TechDetail>
         </Stack>
       ) : null}
     </Section>

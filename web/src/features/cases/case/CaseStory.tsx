@@ -100,7 +100,6 @@ export function CaseStory({
     loading: plan === undefined && !facts.planError,
     error: facts.planError,
     onRetry: facts.retryPlan,
-    receiver: c.receiver,
   };
   // A case with no receipt reads what the engine and the site say, and that nobody read the receiver
   const notChecked = notCheckedAtReceiver(c, facts.snapshot, facts.attempts);
@@ -172,7 +171,7 @@ export function CaseStory({
             portalBase={portalBase}
           />
         )}
-        <PlanPanel {...planRead} />
+        <PlanPanel {...planRead} c={c} snapshot={facts.snapshot} />
       </Step>
       <Step value="decision" n={4} title="Gate and decision" summary={decisionSummary(facts)}>
         <GatePanel {...planRead} />
