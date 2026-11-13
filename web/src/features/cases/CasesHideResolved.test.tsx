@@ -235,8 +235,21 @@ describe('Hide resolved', () => {
     expect(asked).toContain('?resolved=0&limit=25&offset=0');
     expect(asked.filter((q) => q.includes('open='))).toEqual([]);
     await userEvent.selectOptions(screen.getByLabelText('State', { exact: true }), 'Escalated');
-    await waitFor(() => expect(router.state.location.search).toBe('?state=escalated&resolved=0'));
+    await waitFor(() => expect(router.state.location.search).toBe('?resolved=0&state=escalated'));
     expect(await hideResolved()).toBeChecked();
+  });
+
+  it("keeps the switch on when 1.4.5's address changes its scenario or its page, and off when it is turned off", async () => {
+    const router = renderList('/cases?open=1');
+    await screen.findByText('25 cases not resolved');
+    await userEvent.selectOptions(screen.getByLabelText('Scenario', { exact: true }), 'S8');
+    await waitFor(() => expect(router.state.location.search).toBe('?resolved=0&scenario=S8'));
+    expect(await hideResolved()).toBeChecked();
+    await router.navigate('/cases?open=1&scenario=S8');
+    expect(await hideResolved()).toBeChecked();
+    await userEvent.click(await hideResolved());
+    await waitFor(() => expect(router.state.location.search).toBe('?scenario=S8'));
+    expect(await hideResolved()).not.toBeChecked();
   });
 
   it('is kept by Back from a case', async () => {

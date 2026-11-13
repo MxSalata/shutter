@@ -560,7 +560,8 @@ export default function CasesPage() {
   // the person made. A blocked, escalated or failed case still needs a person, so those states stay beside it
   const hideAsked = params.get('resolved') === '0' || params.get('open') === '1';
   const hideResolved = hideAsked && state !== 'resolved' && outcome === null;
-  // One write for all of them; 1.4.5's open=1 goes with the first, so the address says what the list now shows
+  // One write for all of them. 1.4.5's open=1 becomes resolved=0 at the first, whatever it changes (a page, a
+  // scenario), so the switch stays as it reads and the address says what the list shows
   const setList = (patch: {
     state?: string | null;
     outcome?: string | null;
@@ -569,6 +570,7 @@ export default function CasesPage() {
     page?: number;
   }) => {
     change((next) => {
+      if (next.get('open') === '1' && !next.has('resolved')) next.set('resolved', '0');
       next.delete('open');
       for (const [k, v] of Object.entries(patch)) {
         if (v && !(k === 'page' && v === 1)) next.set(k, String(v));
