@@ -292,7 +292,7 @@ Install in a dedicated namespace with `-Ddemo=0`, without the demo users or rece
 
 **Start on captured synthetic traffic in a sandbox.** Onboarding edits the watched production: it renames the site's `Ens.Alert`, adds items and maps classes. That production then depends on Shutter's database to start. The module's `Hospital` and `Downstream` packages can also collide with a site's classes; a dedicated namespace matters.
 
-A non-demo installation starts in **shadow mode**. It investigates and records proposals but sends no rehearsal, recovery write, blind-resend preview, outage resend or escalation email until recovery is enabled.
+A non-demo installation starts in **shadow mode**. It investigates and records proposals but sends no rehearsal, recovery write, blind-resend preview, outage resend or escalation email until recovery is enabled. Email has one exception: `notifications.shadow_delivery: "enabled"` in the site profile lets escalation emails go out in shadow mode. Enabling recovery does not send the emails that shadow mode held back.
 
 Before enabling it:
 
