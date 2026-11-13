@@ -1168,6 +1168,12 @@ describe('CasePage', () => {
     );
     expect(within(dialog).getByRole('rowheader', { name: 'Plan digest' })).toBeInTheDocument();
     expect(within(dialog).getByRole('rowheader', { name: 'Case version' })).toBeInTheDocument();
+    // The binding again beside the controls, so it is in view at the confirming press
+    expect(within(dialog).getByTestId('review-binding')).toHaveTextContent(
+      new RegExp(
+        `^Bound to plan v1 \\(digest ${plan.plan.digest.slice(0, 10)}.*\\) and case version ${detail.version}: a change to either stops it\\.$`,
+      ),
+    );
     expect(within(dialog).getByRole('button', { name: 'Reject instead' })).toBeEnabled();
     expect(sent).toHaveLength(0);
     // Press two: the approval, of the plan and the case version the review opened on

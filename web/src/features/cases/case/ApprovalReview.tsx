@@ -11,6 +11,7 @@ import { Digest } from '@/components/Digest';
 import { KeyValueList } from '@/components/KeyValueList';
 import { Timestamp } from '@/components/Timestamp';
 import { describeError, isApiError } from '@/lib/errors';
+import { shortDigest } from '@/lib/format';
 import { ApprovalChangeRows } from './ApprovalChangeRows';
 import { PlanHeadline } from './PlanHeadline';
 import { decisionLabels, planWords } from './planAction';
@@ -197,6 +198,10 @@ function ReviewBody({
       />
       {/* The decision's controls stay in view while the review scrolls, with whatever stops them said beside them */}
       <Stack gap="sm" className="review-actions">
+        {/* What the decision is bound to, in view beside its controls however far the facts above are scrolled */}
+        <Text size="xs" c="dimmed" data-testid="review-binding">
+          {`Bound to plan v${opened.view.plan.version} (digest ${shortDigest(opened.view.plan.digest) || 'none'}) and case version ${opened.c.version}: a change to either stops it.`}
+        </Text>
         {moved ? (
           <Alert color="red" variant="light" role="alert">
             The plan or the case changed since you opened this, so this decision can&apos;t be recorded. Close
