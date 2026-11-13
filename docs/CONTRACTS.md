@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.59, 13 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.60, 13 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -448,18 +448,24 @@ escalation), the case's `outcome` ("Handled by hand, recorded by <who>: <reason>
 **Abandoning a case the workflow left behind** (v1.21). A case can be left in a working state (detected, collecting, investigating, grouped, proposed, gated, rehearsing, awaiting_approval, approved, executing or verifying) when the answer its workflow instance waits for never comes: a container killed in the middle of a scenario, an alarm or a delivered request lost with it. `POST /cases/{id}/abandon` with `{reason, expectedVersion?}` (`Shutter_Approve` only, whatever the site profile says; `X-Requested-With`; an `Idempotency-Key`) answers 202 `{caseId, state: "abandoning", requestedBy, reason}` and sends `Shutter.Msg.CaseAbandon` to the Case Workflow item, as `/close` and `/reinvestigate` go through it, so the abandon shows in the trace. There a fresh instance fails the case (`Shutter.Store.Case.Abandon`): state `failed`, disposition `abandoned`, headline "Abandoned by <who>. <reason>" (the reason clipped to 200), outcome "Abandoned, recorded by <who>: <reason>. The workflow stopped in <state>; nothing more is sent", the current approval revoked, every draft or queued escalation email cancelled, and an open approval task completed as cancelled (an `approval` event "Approval task <id> cancelled: the case was abandoned"). The record is the state event: its actor is the approver, its time when, its text "Abandoned from <state>: <reason>" (with "; N pending emails cancelled" when any were). The case keeps its `workflowSessionId`, so the trace link still shows where it stopped; the old instance, if it ever answers, finds the case closed and ignores the answer. A failed case reopens with `/reinvestigate`, so a wrong abandon is recoverable. Errors: 400 `bad_request` when the body is not a JSON object or `reason` is empty; 404 `not_found`; 409 `wrong_state` for a closed case (resolved, blocked, escalated or failed), whose detail says a closed case is marked handled (`/close`) or reopened (`/reinvestigate`); 409 `stale_version` with `currentVersion` when `expectedVersion` is not the case's version; 409 `busy` with `{state, inFlight, newestAt, deferred}` while the case's workflow has a message in flight. The in-flight rule (`Shutter.Store.Case.InFlight`): the case's workflow session (for a grouped case, its incident's) is busy while any `Ens.MessageHeader` of the session is Created, Queued or Deferred, or Delivered with `TimeCreated` within the last N minutes; a case with no session yet is busy while its last state event is younger than N minutes. `inFlight` is the count, `newestAt` the newest header's time (the state event's for a case with no session), and `deferred: true` means an approval task is waiting for a person: the case is not stuck, reject the plan through `POST /cases/{id}/approvals` instead (the detail says so). N is `^Shutter.Config("abandonAfterMinutes")`, 15 by default; a value of 10 or less reads as 11, since N must exceed the 600 s board timeout, the longest wait the workflow arms. Age is never judged by `updatedAt`, which a note writes (the start sweep's note, below, would make every stranded case look fresh). The 202 is given before the transition: when the instance moves the case between the route's check and the workflow's transition, the version check refuses the abandon (logged, case unchanged) and the approver re-reads the case and tries again.
 
 
-**The cases list's query** (`open` since v1.59). `GET /cases?state=&scenario=&open=&limit=&offset=` answers `{items, total}`, newest
-first: `state` keeps the cases in that one state, `scenario` those a scenario opened, and `open=1` leaves out the closed
-cases, those whose state is `resolved`, `blocked`, `escalated` or `failed` (what `Shutter.Store.Case.IsClosed` and the
-app's `CLOSED_STATES` call closed), so what is left is still being worked on or waits for an approval. The three combine
-with AND, so `open=1` beside a closed `state` matches nothing; any other value of `open` filters nothing. Every filter is
-part of the query itself (`Shutter.API.Dispatch.CasesWhere`), so `total` counts the filter's rows and `limit` (50; 1 to
-500) and `offset` (0 to 100000) page through the same rows. The Cases page's **Hide closed** switch sends `open=1` and
-keeps it in its own address, as it keeps `state`, `scenario` and `page`; choosing a closed outcome's tile or a closed
-state there turns it off. The list's closed-outcome tiles are counted in the browser over the 100 newest cases
+**The cases list's query** (`open` since v1.59, `resolved` since v1.60). `GET /cases?state=&scenario=&open=&resolved=&limit=&offset=`
+answers `{items, total}`, newest first: `state` keeps the cases in that one state, `scenario` those a scenario opened,
+`open=1` leaves out the closed cases, those whose state is `resolved`, `blocked`, `escalated` or `failed` (what
+`Shutter.Store.Case.IsClosed` and the app's `CLOSED_STATES` call closed), so what is left is still being worked on or
+waits for an approval, and `resolved=0` leaves out the cases whose state is `resolved` and no other, so the blocked,
+escalated and failed ones, which are closed and still need a person, stay with the ones being worked on. The four
+combine with AND, so `open=1` beside a closed `state`, or `resolved=0` beside `state=resolved`, matches nothing, and
+`open=1` with `resolved=0` is `open=1`; any other value of `open` or of `resolved` filters nothing (`resolved=1` does not
+list the resolved cases alone: `state=resolved` does). Every filter is part of the query itself
+(`Shutter.API.Dispatch.CasesWhere`), so `total` counts the filter's rows and `limit` (50; 1 to 500) and `offset` (0 to
+100000) page through the same rows. The Cases page's **Hide resolved** switch sends `resolved=0` and keeps it in its own
+address, as it keeps `state`, `scenario` and `page`; choosing a closed outcome's tile or the resolved state there turns
+it off, and a blocked, escalated or failed state stays beside it. The page reads 1.4.5's address, `open=1`, as the switch
+on, and never sends `open=1` itself. The list's closed-outcome tiles are counted in the browser over the 100 newest cases
 (`limit=100`), which the page says when there are more ("7 matches among the 100 most recent cases. Older cases have not
 been searched."); its Failed tile takes the abandoned cases off among the 100 newest failed ones, and reads "at most"
-when more than that failed.
+when more than that failed, as do the count of cases that need a person beside Cases in the navigation and on Home,
+which add that figure.
 
 **What an empty list says** (v1.59; no new field). With no filter on and no case, the Cases page chooses its words from
 what the install says of itself, never from its hostname or the signed-in name: the trial (the build, or `?trial`) offers a
@@ -2772,6 +2778,16 @@ then null, never 0, with the reason in `sourceError`. `incomplete` for any of th
 No message content is copied: the rows hold ids, codes, the body's class and the HL7 structure's family (ADT, ORU).
 
 ## Changes
+
+- v1.60, 13 Nov 2026 (the Cases list hides the resolved cases only): `GET /cases` takes `resolved=0`, which leaves out
+  the cases whose state is `resolved` and no other, in the query itself (`Shutter.API.Dispatch.CasesWhere`), so `total`
+  and the pages count the same rows; any other value filters nothing, and it combines with `state`, `scenario` and
+  `open` with AND (5; `tests/unit/Shutter/Test/CasesOpen.cls`). `open=1` keeps its v1.59 meaning. The Cases page's switch
+  is now **Hide resolved**: it sends `resolved=0` and keeps it in its address, since a blocked, an escalated and a
+  failed case are closed and still need a person; a closed outcome's tile or the resolved state turns it off, the other
+  states stay beside it, and an address with 1.4.5's `open=1` reads as the switch on. The page no longer sends
+  `open=1`; the trial's API takes both parameters. The count of cases that need a person, beside Cases in the
+  navigation and on Home, reads "at most" when more than 100 cases failed, as the Failed tile does (5).
 
 - v1.59, 13 Nov 2026 (the Cases list: hiding the closed cases, and saying what it searched): `GET /cases` takes
   `open=1`, which leaves out the cases that are resolved, blocked, escalated or failed, in the query itself

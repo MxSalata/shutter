@@ -487,16 +487,18 @@ ClassMethod ScenarioReset() As %Status
 // ---- cases ----
 
 /// The cases list's filter (GET /cases, CONTRACTS 5): what follows "WHERE 1=1", with its arguments in args, for the
-/// query's state, scenario and open. open "1" leaves out the closed cases (resolved, blocked, escalated or failed, as
-/// Shutter.Store.Case.IsClosed reads a state and the app's CLOSED_STATES lists them), in the query itself, so the
-/// total and every page count the same rows. Any other value of open filters nothing.
-ClassMethod CasesWhere(state As %String = "", scenario As %String = "", open As %String = "", Output args) As %String
+/// query's state, scenario, open and resolved. open "1" leaves out the closed cases (resolved, blocked, escalated or
+/// failed, as Shutter.Store.Case.IsClosed reads a state and the app's CLOSED_STATES lists them). resolved "0" leaves out
+/// the resolved cases only, so the blocked, escalated and failed ones, which still need a person, stay. Both are in the
+/// query itself, so the total and every page count the same rows. Any other value of either filters nothing.
+ClassMethod CasesWhere(state As %String = "", scenario As %String = "", open As %String = "", resolved As %String = "", Output args) As %String
 {
     Kill args
     Set where = "", args = 0
     If state '= "" Set where = where _ " AND State = ?", args = args + 1, args(args) = state
     If scenario '= "" Set where = where _ " AND Scenario = ?", args = args + 1, args(args) = scenario
     If open = "1" Set where = where _ " AND State NOT IN ('resolved', 'blocked', 'escalated', 'failed')"
+    If resolved = "0" Set where = where _ " AND State <> 'resolved'"
     Quit where
 }
 
@@ -509,7 +511,7 @@ ClassMethod Cases() As %Status
     If limit > 500 Set limit = 500
     If offset < 0 Set offset = 0
     If offset > 100000 Set offset = 100000
-    Set where = ..CasesWhere(state, scenario, $GET(%request.Data("open", 1)), .args)
+    Set where = ..CasesWhere(state, scenario, $GET(%request.Data("open", 1)), $GET(%request.Data("resolved", 1)), .args)
     Set total = 0
     Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT COUNT(*) AS N FROM Shutter_Store.""Case"" WHERE 1=1" _ where, args...)
     If rs.%Next() Set total = rs.%Get("N")
