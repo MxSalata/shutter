@@ -123,7 +123,7 @@ The board is four `%AI.Agent` business operations inside the production, not an 
 | Impact specialist | The effect on the receiver |
 | Coordinator | The specialists' findings, combined into one plan with reasons and recorded dissent |
 
-The specialists run in parallel. Their typed tools read the sealed evidence and search interface knowledge, and each run ends with a submit tool that returns a finding or a plan; no tool writes to a receiver. Case-scoped authorisation, a pinned tool catalogue and evidence-reference checks constrain each run. Every tool call is audited in the production's **Visual Trace**.
+The specialists run in parallel. Their typed tools read the sealed evidence and search interface knowledge, and each run ends with a submit tool that returns a finding or a plan; no tool writes to a receiver. Case-scoped authorisation, a pinned list of tool names and evidence-reference checks constrain each run. Every tool call is audited in the production's **Visual Trace**.
 
 **Four modes make the comparison explicit:**
 
