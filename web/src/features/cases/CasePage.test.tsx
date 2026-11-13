@@ -277,7 +277,7 @@ describe('CasePage', () => {
     expect(within(board).queryByText(/No disagreements to keep/)).not.toBeInTheDocument();
     // The investigation was replayed; the question's live runs do not make it a live one
     await userEvent.click(screen.getByRole('button', { name: 'Details' }));
-    expect(await screen.findByText('Recorded replay')).toBeInTheDocument();
+    expect(await screen.findByText('Recorded replay: no new inference')).toBeInTheDocument();
     expect(screen.queryByText('Live model')).not.toBeInTheDocument();
   });
 
@@ -588,7 +588,7 @@ describe('CasePage', () => {
   it("names the stakes on the board's S8 case, and the top button of the rules case goes to the two runs", async () => {
     renderCase('C-000008');
     expect(await screen.findByTestId('s8-stakes')).toHaveTextContent(
-      "Rules only, exempted here on purpose, writes WARD-B over the bed manager's WARD-C with every check passed; on a real case the gate holds it.",
+      "The board sent nothing. Rules only, exempted here on purpose, writes WARD-B over the bed manager's WARD-C with every check passed; on a real case the gate holds it.",
     );
     cleanup();
     renderCase('C-000021');
@@ -675,7 +675,7 @@ describe('CasePage', () => {
       renderCase('C-000008');
       const strip = await screen.findByRole('region', { name: 'What a resend would do' });
       expect(within(strip).getByTestId('s8-stakes')).toHaveTextContent(
-        "Rules only, exempted here on purpose, writes WARD-B over the bed manager's WARD-C with every check passed; on a real case the gate holds it.",
+        "The board sent nothing. Rules only, exempted here on purpose, writes WARD-B over the bed manager's WARD-C with every check passed; on a real case the gate holds it.",
       );
       expect(
         await within(strip).findByRole('link', { name: 'See the two side by side in the trial' }),
@@ -720,7 +720,7 @@ describe('CasePage', () => {
   it('links an S8 board case to its rules-only run near the top, and opens the side by side from there', async () => {
     renderCase('C-000008');
     const strip = await screen.findByRole('region', { name: 'Same failure, two runs' });
-    expect(within(strip).getByText('Rules only played it as')).toBeInTheDocument();
+    expect(within(strip).getByText('The same failure in Rules only:')).toBeInTheDocument();
     expect(within(strip).getByRole('link', { name: 'C-000021' })).toHaveAttribute('href', '/cases/C-000021');
     expect(strip.compareDocumentPosition(await outcome()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     await userEvent.click(within(strip).getByRole('button', { name: 'Compare the two runs' }));
@@ -1524,7 +1524,7 @@ describe('CasePage', () => {
     expect(details).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByText('Case version')).toBeInTheDocument();
     expect(await screen.findByText('Provenance')).toBeInTheDocument();
-    expect(await screen.findByText('Recorded replay')).toBeInTheDocument();
+    expect(await screen.findByText('Recorded replay: no new inference')).toBeInTheDocument();
     expect(screen.getByText('Investigated by')).toBeInTheDocument();
     expect(screen.getByText('Board')).toBeInTheDocument();
     expect(screen.getByText('Case opened')).toBeInTheDocument();
@@ -1764,7 +1764,9 @@ describe('the case page for both audiences', () => {
   // where the receiver had the patient, the receiver by name) and took out the inline expansion and the scenario:
   // 653 measured, Technical 939. The header's Technical facts of 8 Nov (MSH-9 and the control id, the receiver's class,
   // the source item and production, the failure's kind and time, the header id, the plan's version, digest and
-  // catalogue entry) take Technical to 954, within the spec's own 1.5 times the 653 measured in Plain
+  // catalogue entry) take Technical to 954, within the spec's own 1.5 times the 653 measured in Plain. The S8 strip's
+  // stakes line says "The board sent nothing." again (4 words) and its first line is three words shorter to make the
+  // room: 659 measured in Plain and 960 in Technical on 13 Nov, both budgets as they were
   it('keeps the Summary tab, steps closed, within 660 words in Plain', async () => {
     const plain = await summaryWords('plain');
     expect(plain).toBeLessThanOrEqual(660);

@@ -344,7 +344,10 @@ describe("the story steps' summaries", () => {
 describe('provenance', () => {
   it('tells rules, replays and live runs apart', () => {
     expect(provenanceOf('rules', []).label).toBe('Rules only');
-    expect(provenanceOf('board', factsOf('C-000008').runs).label).toBe('Recorded replay');
+    // A replay says in the label itself, not only in its hint, that nothing was inferred now
+    const replayed = provenanceOf('board', factsOf('C-000008').runs);
+    expect(replayed.label).toBe('Recorded replay: no new inference');
+    expect(replayed.hint).toBe('Replayed from a recorded live run: no model was called now');
     expect(provenanceOf('board', [{ mode: 'live' } as AgentRun]).label).toBe('Live model');
     expect(provenanceOf('board', undefined).label).toBe('Unknown');
     expect(provenanceOf('policy', []).label).toBe("No model: the site's policy");
@@ -361,7 +364,7 @@ describe('provenance', () => {
         .label,
     ).toBe('Live model');
     expect(provenanceOf('board', [{ mode: 'replay' }, { mode: 'replay' }] as AgentRun[]).label).toBe(
-      'Recorded replay',
+      'Recorded replay: no new inference',
     );
   });
 
@@ -370,7 +373,8 @@ describe('provenance', () => {
       { mode: 'replay' },
       { mode: 'live', model: 'claude-opus-5-5', questionId: 'Q-1' },
     ] as AgentRun[];
-    expect(provenanceOf('board', runs, false).label).toBe('Recorded replay');
+    expect(provenanceOf('board', runs, false).label).toBe('Recorded replay: no new inference');
+    // The run banner's badge sits beside a sentence that says it, so the shared label stays short
     expect(ranOnIris('board', runs).label).toBe('Recorded replay');
     expect(ranOnIris('board', [{ mode: 'live', model: 'mock', questionId: 'Q-1' }] as AgentRun[]).label).toBe(
       'No agent run yet',
@@ -391,8 +395,8 @@ describe('provenance', () => {
     expect(provenanceOf('rules', [], true).hint).toMatch(/When it was recorded on IRIS: Rules only\.$/);
     // While the runs are still being read it says no more than it knows
     expect(provenanceOf('board', undefined, true).label).toBe('Unknown');
-    // The same runs on IRIS keep their own label
-    expect(provenanceOf('board', runs, false).label).toBe('Recorded replay');
+    // The same runs on IRIS keep their own label, which says no new inference too
+    expect(provenanceOf('board', runs, false).label).toBe('Recorded replay: no new inference');
   });
 });
 
