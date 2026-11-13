@@ -32,7 +32,7 @@ import {
   IconAlertTriangle,
   IconInfoCircle,
 } from '@tabler/icons-react';
-import type { CaseState, CaseSummary, IncidentSummary, Mode, Scenario } from '@/api/types';
+import type { AgentRun, CaseState, CaseSummary, IncidentSummary, Mode, Scenario } from '@/api/types';
 import { humanize, plural } from './format';
 import type { Status, Tone } from './tone';
 
@@ -310,6 +310,36 @@ export const PROVENANCE: Record<'live' | 'replay' | 'rules' | 'recording', Statu
     IconDeviceDesktop,
   ),
 };
+
+/** A run a model answered: neither a replay nor one the API mimic (a test fixture, model `mock`) answered. */
+const calledAModel = (r: AgentRun) => r.mode !== 'replay' && r.model !== 'mock';
+
+/**
+ * Where an agent's answer came from on a case as IRIS ran it: the rules, a live model, a recorded replay, or the site's
+ * policy. It is read from the case's own investigation runs (Ask's left out), so a run that fell back to its recordings,
+ * or that the API mimic answered, is never called live. The case page says it through `provenanceOf`, and a scenario
+ * run's banner from the run's own case; both read this one rule.
+ */
+export function ranOnIris(mode: string, runs: AgentRun[] | null | undefined): Status {
+  if (mode === 'rules') return PROVENANCE.rules;
+  if (runs === undefined) return { tone: 'neutral', label: 'Unknown' };
+  // Ask's runs answer questions about the case, not the investigation (runClock's investigationRuns)
+  const list = (runs ?? []).filter((r) => !r.questionId);
+  if (!list.length)
+    return {
+      ...PROVENANCE.rules,
+      label: mode === 'policy' ? "No model: the site's policy" : 'No agent run yet',
+      hint: undefined,
+    };
+  if (list.some(calledAModel)) return PROVENANCE.live;
+  if (list.some((r) => r.mode !== 'replay'))
+    return {
+      ...PROVENANCE.rules,
+      label: 'API mimic',
+      hint: 'No model was called: the API mimic, a test fixture, answered',
+    };
+  return PROVENANCE.replay;
+}
 
 /** The release of a write: a person or the site's written policy releases it, after the gate. */
 export const APPROVALS: Record<string, Status> = {

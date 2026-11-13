@@ -12,13 +12,12 @@ import type {
 import { TRIAL } from '@/env/mode';
 import { displayZone, humanize } from '@/lib/format';
 import { asArray, asObject } from '@/lib/json';
-import { APPROVALS, caseState, gateOutcome, PROVENANCE, type OutcomeCase } from '@/lib/status';
+import { APPROVALS, caseState, gateOutcome, PROVENANCE, ranOnIris, type OutcomeCase } from '@/lib/status';
 import type { Status } from '@/lib/tone';
 import { checksOf, failureKindInWords, orderOrResult, outageResend } from './derive';
 import { planLeader } from './follows';
 import { approvalsByPlan, WRITE_OUTCOMES, type SafetyReceipt } from './receipt';
 import { NOT_CHECKED, notCheckedAtReceiver } from './receiver';
-import { investigationRuns } from './runClock';
 import { encounterTimeline } from './timeline';
 
 /**
@@ -596,34 +595,6 @@ export function releaseStatus(f: CaseFacts): Status | undefined {
   // Revoked once its write was sent, the approval still released that write; revoked before, it released nothing
   if (latest.revoked && !f.receipt.writes) return APPROVALS.revoked;
   return latest.approver === 'policy' ? { ...APPROVALS.policy, label: 'Site policy' } : APPROVALS.approved;
-}
-
-/** A run a model answered: neither a replay nor one the API mimic (a test fixture, model `mock`) answered. */
-const calledAModel = (r: AgentRun) => r.mode !== 'replay' && r.model !== 'mock';
-
-/**
- * Where an agent's answer came from on this case as IRIS ran it: the rules, a live model, a recorded replay, or the
- * site's policy. It is read from the case's own agent runs, so a run that fell back to its recordings, or that the API
- * mimic answered, is never called live.
- */
-function ranOnIris(mode: string, runs: AgentRun[] | null | undefined): Status {
-  if (mode === 'rules') return PROVENANCE.rules;
-  if (runs === undefined) return { tone: 'neutral', label: 'Unknown' };
-  const list = investigationRuns(runs);
-  if (!list.length)
-    return {
-      ...PROVENANCE.rules,
-      label: mode === 'policy' ? "No model: the site's policy" : 'No agent run yet',
-      hint: undefined,
-    };
-  if (list.some(calledAModel)) return PROVENANCE.live;
-  if (list.some((r) => r.mode !== 'replay'))
-    return {
-      ...PROVENANCE.rules,
-      label: 'API mimic',
-      hint: 'No model was called: the API mimic, a test fixture, answered',
-    };
-  return PROVENANCE.replay;
 }
 
 /**

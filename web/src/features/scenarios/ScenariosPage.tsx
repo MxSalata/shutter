@@ -52,7 +52,7 @@ import { DispositionBadge, StateBadge } from '@/components/StateBadge';
 import { StatusBadge } from '@/components/StatusBadge';
 import { TechDetail } from '@/components/TechDetail';
 import { StackTable } from '@/components/StackTable';
-import { caseOutcome, caseState, PROVENANCE, proposedWrites, writes } from '@/lib/status';
+import { caseOutcome, caseState, PROVENANCE, proposedWrites, ranOnIris, writes } from '@/lib/status';
 import { describeError } from '@/lib/errors';
 import { formatAge, humanize } from '@/lib/format';
 import { playedFor } from '@/lib/proof';
@@ -64,7 +64,6 @@ import { useTechnical } from '@/stores/appearance';
 import { HINT_EVENTS } from '@/theme';
 import { landOn } from '@/features/guide/reveal';
 import { caseOf } from '@/features/guide/places';
-import { provenanceOf } from '@/features/cases/case/outcome';
 import { EXECUTION, routeNext, runCase, runExecution, SINGLE_ROUTE } from './execution';
 import { MoreAbout } from './MoreAbout';
 import { ScenarioDiagram } from './ScenarioDiagram';
@@ -145,7 +144,7 @@ const PLAYER_OFF = 'The Scenario Player is switched off on a site install, which
 function RunExecuted({ run, own }: { run: ScenarioRun; own: CaseSummary | undefined }) {
   const ask = !TRIAL && !run.replay && !!own;
   const runs = useCasePart<AgentRun[]>(own?.caseId ?? '', 'runs', '/runs', ask && isOpen(own?.state), ask);
-  const ofCase = ask && own && runs.data !== undefined ? provenanceOf(own.mode, runs.data, false) : undefined;
+  const ofCase = ask && own && runs.data !== undefined ? ranOnIris(own.mode, runs.data) : undefined;
   const how = runExecution(run, TRIAL, ofCase);
   return (
     <Group gap={6} wrap="wrap" align="center" data-testid="run-execution">
@@ -211,7 +210,7 @@ function RunNext({ run, cases }: { run: ScenarioRun; cases: CaseSummary[] | unde
                   .
                 </>
               ) : pictured ? (
-                'In IRIS: Message trace on this case opens a screenshot of an S8 Board trace taken on a test instance, not a live session.'
+                "In IRIS: Message trace on this case opens a screenshot of an S8 Board case's trace, taken on a test instance, not this case's own session."
               ) : (
                 "The trial runs in your browser, so this case's Message trace is a note of what it opens on IRIS."
               ),

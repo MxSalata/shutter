@@ -10,7 +10,7 @@ import { REPLAY_ONLY } from './scenarioText';
  *
  * - the trial's page answers every call from a recording in the browser, so nothing runs there at all;
  * - on IRIS, a run the server marks `replay` had its agents answer from their recordings;
- * - any other run on IRIS is labelled from its own case's agent runs once they exist (`provenanceOf`), so a run that
+ * - any other run on IRIS is labelled from its own case's agent runs once they exist (`ranOnIris`), so a run that
  *   fell back to recordings is never called live, and until then nothing is claimed.
  */
 export const EXECUTION = {
@@ -21,7 +21,7 @@ export const EXECUTION = {
     'Here every run plays a recording in your browser, Board included: no new inference, and nothing reaches IRIS.',
   /** The way to live agents from the trial. */
   trialRoute:
-    "Live agents run on your own install with a model key, and from the judges' sign-in on the online demo.",
+    "Agents that call a model run on your own install with a model key, and from the judges' sign-in on the online demo.",
   /** A sign-in without the live agents, on IRIS (1.4.4, the online demo's account): scenario runs only, not every feature. */
   replay: REPLAY_ONLY.line,
   /** The way to live agents from such a sign-in. */

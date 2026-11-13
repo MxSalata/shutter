@@ -11,7 +11,7 @@ import type {
   Snapshot,
 } from '@/api/types';
 import fixtures from '@/mocks/fixtures.json';
-import { caseOutcome } from '@/lib/status';
+import { caseOutcome, ranOnIris } from '@/lib/status';
 import {
   actionHead,
   actionHeadline,
@@ -362,6 +362,18 @@ describe('provenance', () => {
     ).toBe('Live model');
     expect(provenanceOf('board', [{ mode: 'replay' }, { mode: 'replay' }] as AgentRun[]).label).toBe(
       'Recorded replay',
+    );
+  });
+
+  it("reads the investigation's runs only: a question asked about a replayed case does not make it live", () => {
+    const runs = [
+      { mode: 'replay' },
+      { mode: 'live', model: 'claude-opus-5-5', questionId: 'Q-1' },
+    ] as AgentRun[];
+    expect(provenanceOf('board', runs, false).label).toBe('Recorded replay');
+    expect(ranOnIris('board', runs).label).toBe('Recorded replay');
+    expect(ranOnIris('board', [{ mode: 'live', model: 'mock', questionId: 'Q-1' }] as AgentRun[]).label).toBe(
+      'No agent run yet',
     );
   });
 
