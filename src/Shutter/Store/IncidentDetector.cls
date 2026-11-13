@@ -8,6 +8,8 @@ Class Shutter.Store.IncidentDetector
 ClassMethod Register(case As Shutter.Store.Case, receiver As %String, Output incident As Shutter.Store.Incident, Output openedNow As %Boolean) As %Status
 {
     Set incident = "", openedNow = 0, sc = $$$OK
+    // A FHIR R4 receiver's case never joins an incident: its one update is proposed and judged alone.
+    If ##class(Shutter.Store.SiteProfile).ReceiverKind(receiver) = "fhir_r4" Quit sc
     If (case.FailureKind '= "delivery_failed") && (case.FailureKind '= "rejected") Quit sc
     Set incident = ##class(Shutter.Store.Incident).OpenFor(receiver)
     If $ISOBJECT(incident) {
