@@ -404,6 +404,94 @@ function remindersProblem(r: unknown, domains: string[]): string {
   return '';
 }
 
+/** Whether a key of an object holds a non-empty string. */
+const isText = (o: Record<string, unknown>, key: string): boolean =>
+  typeof o[key] === 'string' && o[key] !== '';
+
+const FHIR_KEYS = [
+  'base',
+  'recovery_enabled',
+  'encounter_identifier',
+  'patient_identifier',
+  'marker',
+  'location_map',
+];
+const FHIR_LOCATION = /^Location\/[A-Za-z0-9.-]{1,64}$/;
+const FHIR_MIN_WARDS = 2;
+const FHIR_MAX_WARDS = 25;
+
+/** An object of the block that holds only the named keys, each a non-empty string: "" or the problem. */
+function fhirKeysProblem(f: Record<string, unknown>, name: string, keys: string[]): string {
+  const at = `.${name}`;
+  const o = f[name];
+  if (!isPlainObject(o)) return `${at}.${keys[0]}: required`;
+  for (const k of Object.keys(o)) if (!keys.includes(k)) return `${at}.${k}: unknown setting`;
+  for (const k of keys) if (!isText(o, k)) return `${at}.${k}: required`;
+  return '';
+}
+
+/** The location map: 2 to 25 wards, each with its own ward code, its own Location and the Location's identifier. */
+function fhirMapProblem(f: Record<string, unknown>): string {
+  const whole = `.location_map: must be an array of ${FHIR_MIN_WARDS} to ${FHIR_MAX_WARDS} wards`;
+  const map = f.location_map;
+  if (!Array.isArray(map) || map.length < FHIR_MIN_WARDS || map.length > FHIR_MAX_WARDS) return whole;
+  if (!map.every(isPlainObject)) return whole;
+  const wards = new Set<string>();
+  const locations = new Set<string>();
+  for (const [j, e] of (map as Record<string, unknown>[]).entries()) {
+    const at = `.location_map[${j}]`;
+    for (const k of Object.keys(e))
+      if (!['ward', 'location', 'identifier'].includes(k)) return `${at}.${k}: unknown setting`;
+    if (!isText(e, 'ward')) return `${at}.ward: required`;
+    if (wards.has(e.ward as string)) return `${at}.ward: must be unique`;
+    wards.add(e.ward as string);
+    if (!isText(e, 'location')) return `${at}.location: required`;
+    if (!FHIR_LOCATION.test(e.location as string)) return `${at}.location: must be Location/{id}`;
+    if (locations.has(e.location as string)) return `${at}.location: must be unique`;
+    locations.add(e.location as string);
+    const problem = fhirKeysProblem(e, 'identifier', ['system', 'value']);
+    if (problem) return `${at}${problem}`;
+  }
+  return '';
+}
+
+/**
+ * What is wrong with a receiver entry that has a fhir key, the port of Shutter.FHIR.Profile.SettingsProblem: "" or the
+ * problem as a suffix starting with a dot, to go after "receivers[index]". One FHIR receiver per install in this version.
+ */
+export function fhirSettingsProblem(r: Record<string, unknown>, receivers: unknown[], index: number): string {
+  const f = r.fhir;
+  if (!isPlainObject(f)) return '.fhir: must be an object';
+  for (const k of Object.keys(f)) if (!FHIR_KEYS.includes(k)) return `.fhir.${k}: unknown setting`;
+  if (typeof f.base !== 'string' || !f.base.startsWith('/'))
+    return '.fhir.base: must be a path starting with /';
+  // Absent reads false: a site turns recovery on by saying so.
+  if ('recovery_enabled' in f && typeof f.recovery_enabled !== 'boolean')
+    return '.fhir.recovery_enabled: must be true or false';
+  for (const [name, keys] of [
+    ['encounter_identifier', ['system']],
+    ['patient_identifier', ['system', 'hl7_authority']],
+    ['marker', ['system']],
+  ] as const) {
+    const problem = fhirKeysProblem(f, name, [...keys]);
+    if (problem) return `.fhir${problem}`;
+  }
+  const map = fhirMapProblem(f);
+  if (map) return `.fhir${map}`;
+  // Beside a fhir block: one read route and one write route, both the FHIR server's own.
+  if ('api' in r) return '.fhir: an entry with a fhir block has no api';
+  if ('features' in r) return '.fhir: capability is read from the server, so features is refused';
+  if (r.engine_resend === true) return '.engine_resend: refused beside fhir, one write route per receiver';
+  if ('category' in r && r.category !== 'current_state')
+    return '.category: must be current_state beside fhir';
+  if (r.strict_answers === false) return '.strict_answers: refused beside fhir';
+  if ('documents' in r) return '.documents: refused beside fhir';
+  if (r.history_policy === 'correct') return '.history_policy: refused beside fhir';
+  for (const earlier of receivers.slice(0, index))
+    if (isObject(earlier) && 'fhir' in earlier) return '.fhir: one FHIR receiver per install in this version';
+  return '';
+}
+
 export function validateProfile(p: unknown): string {
   if (!isObject(p)) return 'the profile must be a JSON object';
   const top = [
@@ -456,6 +544,12 @@ export function validateProfile(p: unknown): string {
       if (problem) return `${at}.manual_check.${problem}`;
     }
     if ('cancels' in r && typeof r.cancels !== 'boolean') return `${at}.cancels: must be true or false`;
+    // A FHIR R4 receiver (DESIGN 2.1): the block's own rules, checked only when the key is present.
+    if ('fhir' in r) {
+      const list = members(rcv).map(([, v]) => v);
+      const problem = fhirSettingsProblem(r, list, list.indexOf(r));
+      if (problem) return `${at}${problem}`;
+    }
     if ('merges' in r && typeof r.merges !== 'boolean') return `${at}.merges: must be true or false`;
     if ('api' in r) {
       if (!isObject(r.api)) return `${at}.api: must be an object`;

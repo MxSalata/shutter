@@ -1073,6 +1073,199 @@ export interface SiteReceiver {
   features?: Record<string, boolean>;
   /** The site's one line on where to look at this receiver, shown as a hint on a stopped case; never evidence. */
   manual_check?: { runbook?: string };
+  /** A FHIR R4 receiver's block (DESIGN 2.1): an entry with one has no api and no features. */
+  fhir?: FhirReceiverSettings;
+  [key: string]: unknown;
+}
+
+/** The kind of a receiver as the sealed route names it; absent on every case that is not a FHIR one. */
+export type ReceiverKind = 'fhir_r4';
+
+/** One ward of a FHIR receiver's location map: the site's ward code and the server's Location for it. */
+export interface FhirLocationMapEntry {
+  ward: string;
+  /** Location/{id} */
+  location: string;
+  identifier: { system: string; value: string };
+}
+
+/**
+ * The fhir block of a receiver entry (DESIGN 2.1). The server, port, TLS and credential are adapter settings of the
+ * FHIR items, never of the profile; base is the path in front of every request.
+ */
+export interface FhirReceiverSettings {
+  base: string;
+  /** Absent reads false. */
+  recovery_enabled?: boolean;
+  encounter_identifier: { system: string };
+  patient_identifier: { system: string; hl7_authority: string };
+  marker: { system: string };
+  location_map: FhirLocationMapEntry[];
+}
+
+/**
+ * The route item of a snapshot (and summary.route), as far as the page reads it. kind is "fhir_r4" on a FHIR case and
+ * absent on every other: the page's per-case kind signal (DESIGN 2.4, 2.10).
+ */
+export interface SnapshotRoute {
+  kind?: ReceiverKind;
+  connector?: string;
+  receiver?: string;
+  category?: string;
+  history_policy?: string;
+  capabilities_source?: string;
+  capabilities_http_status?: number;
+  conditional_writes?: boolean;
+  receipts?: boolean;
+  history?: boolean;
+  dry_run?: boolean;
+  note?: string;
+  [key: string]: unknown;
+}
+
+/** One Location entry of the Encounter read, in the body's order; ward is "" for an unmapped reference. */
+export interface FhirEncounterLocation {
+  reference: string;
+  ward: string;
+  status: string;
+  start: string;
+  start_utc: string;
+  end: string;
+}
+
+/** summary.fhir of a FHIR case's snapshot (DESIGN 2.4): identifiers, statuses, references and version ids, never a body. */
+export interface FhirSummary {
+  kind: ReceiverKind;
+  base: string;
+  mapping_digest: string;
+  message: { prior_ward: string; target_ward: string; event_time: string };
+  capability: {
+    http_status: number;
+    software?: { name: string; version: string };
+    fhir_version?: string;
+    versioning?: string;
+    interactions?: string[];
+    read_history?: boolean;
+    update_create?: boolean;
+  };
+  search?: { http_status: number; matches: number; next: boolean };
+  encounter: {
+    http_status: number;
+    id: string;
+    /** The ETag verbatim, such as W/"1". */
+    etag: string;
+    version_id: string;
+    etag_usable: boolean;
+    status: string;
+    subject: string;
+    identifier_ok: boolean;
+    subsetted: boolean;
+    modifier_extension: boolean;
+    narrative: boolean;
+    security: boolean;
+    body_digest: string;
+    locations: FhirEncounterLocation[];
+  };
+  patient: {
+    http_status: number;
+    reference: string;
+    etag: string;
+    identifier_ok: boolean;
+    link: boolean;
+    active: boolean;
+  };
+  locations: {
+    reference: string;
+    ward: string;
+    http_status: number;
+    etag: string;
+    status: string;
+    identifier_ok: boolean;
+  }[];
+  history: {
+    http_status: number;
+    next: boolean;
+    entries: number;
+    head_version_id: string;
+    sent_marker_version: string;
+  };
+}
+
+/** summary.ward_state of a FHIR case read whole (DESIGN 2.4): main's fields plus the Encounter's logical id. */
+export interface FhirWardState {
+  encounter_id: string;
+  /** The Encounter's logical id on the FHIR server. */
+  fhir_id: string;
+  patient_id: string;
+  patient_id_authority: string;
+  state: string;
+  ward: string;
+  /** meta.versionId, a string, never read as a number. */
+  version: string;
+  epoch: string;
+  history: {
+    event: 'transfer';
+    event_time: string;
+    ward: string;
+    operation_key: string;
+    applied_at: string;
+    version: string;
+  }[];
+}
+
+/**
+ * summary.receipt of a FHIR case's evidence (DESIGN 2.4). A 404 with error "no_receipt" means only that no version in
+ * the history read carries the marker of a write this case sent, never that nothing was committed (2.10 row 6).
+ */
+export type FhirEvidenceReceipt =
+  | { kind: 'fhir'; error: 'no_receipt'; note: string }
+  | { kind: 'fhir'; operation_key: string; version_after: string };
+
+/** The receipt of a FHIR case's execution attempt (DESIGN 2.3): the update's ETags verbatim. */
+export interface FhirReceipt {
+  kind: 'fhir';
+  /** Encounter/{id} */
+  encounter: string;
+  /** The version the update was conditional on (If-Match). */
+  expected_etag: string;
+  response_etag: string;
+  response_location: string;
+  body_digest: string;
+  operation_id: string;
+  marker_system: string;
+}
+
+/** What a FHIR update came to (DESIGN 2.3, FHIR Out's Outcome). */
+export type FhirWriteOutcome = 'applied' | 'version_conflict' | 'refused' | 'uncertain' | 'error';
+
+/** The response of a FHIR case's execution attempt (DESIGN 2.3). */
+export interface FhirAttemptResponse {
+  kind: 'fhir';
+  sent: boolean;
+  reason_code: string;
+  diagnostics: string;
+  receipt: FhirReceipt;
+}
+
+/** The FHIR Judge's own outcome word (DESIGN 2.8), kept beside the mapped Verification outcome. */
+export type FhirJudgeOutcome =
+  'verified' | 'verified_continued' | 'committed_review' | 'unknown' | 'not_found' | 'failed';
+
+/** The FHIR code of a verification that did not end the case (DESIGN 2.8); "" when it did. */
+export type FhirCaseCode =
+  | ''
+  | 'FHIR_COMMITTED_NEEDS_REVIEW'
+  | 'FHIR_WRITE_OUTCOME_UNKNOWN'
+  | 'FHIR_WRITE_NOT_FOUND'
+  | 'FHIR_WRITE_CONTRADICTED';
+
+/** The detail of a FHIR case's Verification (DESIGN 2.3, 2.8): the Judge's detail plus these keys, never a verdict. */
+export interface FhirVerificationDetail {
+  kind: 'fhir';
+  judge_outcome: FhirJudgeOutcome;
+  disposition: 'resend';
+  case_code: FhirCaseCode;
+  retry?: boolean;
   [key: string]: unknown;
 }
 

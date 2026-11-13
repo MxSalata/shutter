@@ -1,7 +1,7 @@
 import { Badge, Card, Group, List, SimpleGrid, Stack, Text, Title } from '@mantine/core';
 import { IconCircleDashed, IconX } from '@tabler/icons-react';
 import type { ReactNode } from 'react';
-import type { ReceiverCategory, SiteProfile, SiteReceiver } from '@/api/types';
+import type { FhirReceiverSettings, ReceiverCategory, SiteProfile, SiteReceiver } from '@/api/types';
 import { CodeChip } from '@/components/CodeChip';
 import { StatusBadge } from '@/components/StatusBadge';
 import { TechDetail } from '@/components/TechDetail';
@@ -114,6 +114,49 @@ function capabilities(r: SiteReceiver, withTerms: boolean): Capability[] {
   ];
 }
 
+/** The entry's fhir block when it is one the card can read, else null: a FHIR R4 receiver (DESIGN 2.1). */
+function fhirOf(r: SiteReceiver): FhirReceiverSettings | null {
+  const f = r.fhir as unknown;
+  return typeof f === 'object' && f !== null && !Array.isArray(f) ? (f as FhirReceiverSettings) : null;
+}
+
+/** What a FHIR R4 receiver takes, its switch and its ward map, in place of the declared features. */
+function FhirReceiverLines({ fhir }: { fhir: FhirReceiverSettings }) {
+  const on = fhir.recovery_enabled === true;
+  const map = Array.isArray(fhir.location_map)
+    ? fhir.location_map.filter((e) => typeof e === 'object' && e !== null)
+    : [];
+  return (
+    <Stack gap={4} data-receiver-kind="fhir_r4">
+      <Group gap={6}>
+        <StatusBadge tone="neutral" label="FHIR R4 server" />
+        <StatusBadge tone="neutral" label={on ? 'Recovery on' : 'Recovery off'} />
+      </Group>
+      <Text size="sm">
+        Base: <CodeChip>{typeof fhir.base === 'string' ? fhir.base : ''}</CodeChip>
+      </Text>
+      <Text size="sm">One ward move on an existing Encounter.</Text>
+      <Text size="sm" c="dimmed">
+        {on
+          ? 'Recovery on: after a person approves, Shutter may send the one update.'
+          : 'Recovery off: Shutter reads this receiver and sends nothing until the site turns recovery on.'}
+      </Text>
+      <Text size="sm" fw={600}>
+        Ward map
+      </Text>
+      <List size="sm" spacing={2} aria-label="Ward map">
+        {map.map((e, j) => (
+          <List.Item key={j}>
+            <Text span size="sm">
+              {String(e.ward ?? '')}: <CodeChip>{String(e.location ?? '')}</CodeChip>
+            </Text>
+          </List.Item>
+        ))}
+      </List>
+    </Stack>
+  );
+}
+
 function ReceiverCard({
   r,
   profile,
@@ -132,7 +175,8 @@ function ReceiverCard({
   // An entry with neither a category nor its own policy is read as current state, with the deprecated site-wide policy
   const unanswered = !r.history_policy && (r.category === undefined || r.category === '');
   const titleId = `site-receiver-card-${i}`;
-  const caps = capabilities(r, withTerms);
+  const fhir = fhirOf(r);
+  const caps = fhir ? [] : capabilities(r, withTerms);
   const takes = caps.filter((c) => c.yes);
   const cannot = caps.filter((c) => !c.yes);
   // The long sentence is what the case page and the tests have always read; the line above it is the plain form. An
@@ -144,11 +188,13 @@ function ReceiverCard({
       : policy === 'correct'
         ? CATEGORY_TEXT.history_of_record.overtaken
         : CATEGORY_TEXT.current_state.overtaken;
-  const endpoints = r.api
-    ? Object.entries(r.api)
-        .map(([k, v]) => `${k} ${v}`)
-        .join(' · ')
-    : 'the downstream system’s defaults';
+  const endpoints = fhir
+    ? `base ${typeof fhir.base === 'string' ? fhir.base : ''}`
+    : r.api
+      ? Object.entries(r.api)
+          .map(([k, v]) => `${k} ${v}`)
+          .join(' · ')
+      : 'the downstream system’s defaults';
   return (
     <Card
       withBorder
@@ -201,12 +247,13 @@ function ReceiverCard({
             {`Read from the site-wide history policy (${HISTORY_POLICY_TEXT[policy]}), since no category is answered for this receiver.`}
           </Text>
         ) : null}
-        {category === 'orders_results' ? null : (
+        {fhir ? <FhirReceiverLines fhir={fhir} /> : null}
+        {category === 'orders_results' || fhir ? null : (
           <Text size="sm">
             Takes: {takes.length ? takes.map((c) => c.short).join(', ') : 'nothing declared'}.
           </Text>
         )}
-        {category !== 'orders_results' && cannot.length ? (
+        {category !== 'orders_results' && !fhir && cannot.length ? (
           <TechDetail label="What it cannot take" kind="explain">
             <List size="sm" spacing={2} listStyleType="none" ml={0} pl={0}>
               {cannot.map((c) => (
