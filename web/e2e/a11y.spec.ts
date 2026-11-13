@@ -61,7 +61,7 @@ for (const { colorScheme, contrast, palette } of MODES) {
       await guide.getByRole('button', { name: 'Next' }).click();
       await guide.getByRole('button', { name: 'Next' }).click();
       await expect(guide).toContainText('Step 3 of 9');
-      await expect(guide.getByRole('button', { name: 'Try it: press Approve plan' })).toBeVisible();
+      await expect(guide.getByRole('button', { name: 'Try it: press Approve the resend' })).toBeVisible();
       await expect(page.getByRole('status')).toHaveCount(0);
       expect(await audit(page)).toEqual([]);
       await page.getByRole('button', { name: 'Tour' }).click();

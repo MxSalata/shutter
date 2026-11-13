@@ -61,7 +61,7 @@ async function openTrial(page: Page, path = '/scenarios', query = 'trial') {
   await expect(page.getByRole('region', { name: 'Trial environment' })).toBeVisible();
 }
 
-/** The held S2 case, approved in the trial through its own Approve plan and the confirm. */
+/** The held S2 case, approved in the trial through its own Approve the resend and the confirm. */
 async function approveHeldCase(page: Page, query = 'trial') {
   await page.goto(`./?${query}#/cases/C-000002?open=decision`);
   const approve = page.locator('[data-tour-action="approve-plan"]');

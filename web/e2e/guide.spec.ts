@@ -80,7 +80,7 @@ test.describe('the guide', () => {
         await expect(page.locator('[data-tour-action="approve-plan"]')).toBeVisible();
       }
       if (n === 4) {
-        // Next on the decision approved the held case for the reader, through Approve plan's own call
+        // Next on the decision approved the held case for the reader, through Approve the resend's own call
         await expect(guide).toContainText('Approved for you, in the trial.');
         await expect(page.locator('[data-tour-action="approve-plan"]')).toHaveCount(0);
         // The case page played out the recording after that approval
@@ -114,7 +114,7 @@ test.describe('the guide', () => {
     ['laptop', { width: 1280, height: 800 }],
     ['phone', { width: 390, height: 844 }],
   ] as const) {
-    test(`on step 3 the card is beside Approve plan and the pointer covers nothing, at ${name} width`, async ({
+    test(`on step 3 the card is beside Approve the resend and the pointer covers nothing, at ${name} width`, async ({
       page,
     }) => {
       await page.setViewportSize(viewport);

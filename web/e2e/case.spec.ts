@@ -32,7 +32,11 @@ test.describe('the guided path', () => {
     await expect(outcome.getByTestId('outcome-line')).toHaveText('Waiting for approval');
     await expect(outcome).toContainText('Tested the fix at the receiver; sent nothing yet');
     await expect(outcome.getByRole('heading', { name: 'What needs you now' })).toBeVisible();
-    await expect(outcome).toContainText('Approve or reject plan v1');
+    await expect(outcome).toContainText('Approve or reject the resend');
+    // What an approval would do is said at the top, before anything is opened
+    await expect(page.getByTestId('case-proposal')).toHaveText(
+      'Proposed: Resend the PAS transfer to WARD-B, once, only if the bed-management system is still at version 1.',
+    );
     await expect(page.getByRole('region', { name: 'Approval', exact: true })).toContainText(
       'Waiting for approval',
     );
@@ -159,13 +163,13 @@ test.describe('the S2 approval in the trial', () => {
           window.addEventListener('shutter:replay-done', () => resolve(true), { once: true }),
         ),
     );
-    await page.getByRole('button', { name: 'Approve plan' }).click();
-    const dialog = page.getByRole('dialog', { name: 'Approve plan v1' });
+    await page.getByRole('button', { name: 'Approve the resend' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Approve the resend: plan v1' });
     await expect(dialog).toContainText(
       'Nothing leaves this browser, and a reload starts the recording afresh.',
     );
     await expect(dialog.getByText('Trial only')).toBeVisible();
-    await dialog.getByRole('button', { name: 'Approve this plan' }).click();
+    await dialog.getByRole('button', { name: 'Approve the resend' }).click();
     await expect(outcome.getByTestId('outcome-line')).toHaveText('Delivered: verified at the receiver');
     expect(await replayed).toBe(true);
     await expect(outcome).toHaveAttribute('data-tone', 'positive');
@@ -278,13 +282,13 @@ test.describe('the case page made easier to read', () => {
   test('keeps the approve dialog in its own words while it closes', async ({ page }) => {
     await signIn(page);
     await go(page, '/cases/C-000002');
-    await page.getByRole('button', { name: 'Approve plan' }).click();
-    const dialog = page.getByRole('dialog', { name: 'Approve plan v1' });
+    await page.getByRole('button', { name: 'Approve the resend' }).click();
+    const dialog = page.getByRole('dialog', { name: 'Approve the resend: plan v1' });
     await expect(dialog).toBeVisible();
     // Watches the whole closing animation for what a screenshot could miss between frames
     await page.evaluate(() => {
       new MutationObserver(() => {
-        if (document.body.textContent?.includes('Reject this plan'))
+        if (document.body.textContent?.includes('Reject the resend: plan v1'))
           (window as unknown as { flashed: boolean }).flashed = true;
       }).observe(document.body, { subtree: true, childList: true, characterData: true });
     });
@@ -293,13 +297,55 @@ test.describe('the case page made easier to read', () => {
     expect(await page.evaluate(() => (window as unknown as { flashed?: boolean }).flashed)).toBeUndefined();
   });
 
-  test('takes the approver from the action button to Approve and Reject', async ({ page }) => {
+  test('takes the approver from the action button straight to the review, and back on Cancel', async ({
+    page,
+  }) => {
     await signIn(page);
     await go(page, '/cases/C-000002');
-    await page.getByTestId('case-action').click();
-    await expect(page.getByRole('heading', { name: 'Approval', exact: true })).toBeFocused();
-    await expect(page.getByRole('button', { name: 'Approve plan' })).toBeInViewport();
+    const action = page.getByTestId('case-action');
+    await expect(page.getByTestId('case-proposal')).toBeVisible();
+    await action.click();
+    // One press: the review of the exact plan, its action first, with Approve, the way to reject and Cancel in view
+    const dialog = page.getByRole('dialog', { name: 'Approve the resend: plan v1' });
+    await expect(dialog.getByTestId('plan-action')).toHaveText(
+      'Resend the PAS transfer to WARD-B, once, only if the bed-management system is still at version 1.',
+    );
+    await expect(dialog.getByRole('button', { name: 'Approve the resend' })).toBeInViewport();
+    await expect(dialog.getByRole('button', { name: 'Reject instead' })).toBeInViewport();
+    expect(
+      await dialog.evaluate((el) => el.contains(document.activeElement)),
+      'focus is inside the review',
+    ).toBe(true);
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(dialog).toBeHidden();
+    await expect(action).toBeFocused();
+    await expect(page.getByRole('region', { name: 'Outcome' }).getByTestId('outcome-line')).toHaveText(
+      'Waiting for approval',
+    );
   });
+
+  for (const [name, viewport] of [
+    ['laptop', { width: 1280, height: 800 }],
+    ['phone', { width: 360, height: 740 }],
+  ] as const) {
+    test(`completes an approval in two presses from the waiting case, at ${name} width`, async ({ page }) => {
+      await page.setViewportSize(viewport);
+      await signIn(page);
+      await go(page, '/cases/C-000002');
+      await expect(page.getByTestId('case-proposal')).toBeVisible();
+      await page.getByTestId('case-action').click();
+      const confirm = page
+        .getByRole('dialog', { name: 'Approve the resend: plan v1' })
+        .getByRole('button', { name: 'Approve the resend' });
+      // The confirming press is in view as the review opens: no scroll stands between the two presses
+      await expect(confirm).toBeInViewport();
+      await confirm.click();
+      await expect(page.getByRole('region', { name: 'Outcome' }).getByTestId('outcome-line')).toHaveText(
+        'Delivered: verified at the receiver',
+        { timeout: 20_000 },
+      );
+    });
+  }
 
   test('opens a closed case with its band closed, the outcome still said', async ({ page }) => {
     await signIn(page);
@@ -357,7 +403,7 @@ test.describe('the live hospital, as the public role sees it', () => {
     await expect(page.getByRole('heading', { name: 'Case C-000002', exact: true })).toBeVisible();
     for (const step of await page.getByRole('button', { name: /^\d\. / }).all())
       if ((await step.getAttribute('aria-expanded')) !== 'true') await step.click();
-    await expect(page.getByRole('button', { name: 'Approve plan' })).toBeEnabled();
-    await expect(page.getByRole('button', { name: 'Reject plan' })).toBeEnabled();
+    await expect(page.getByRole('button', { name: 'Approve the resend' })).toBeEnabled();
+    await expect(page.getByRole('button', { name: 'Reject the resend' })).toBeEnabled();
   });
 });
