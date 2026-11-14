@@ -316,6 +316,7 @@ Per member, over all passes:
 - S19 A failed transfer forwarded from the hospital's own production: played in policy mode only.
 - S20 A nurse moves the patient by hand while the plan awaits approval: played in rules mode only.
 - S26 A transfer held until its schema is imported: played in rules and policy modes only.
+- S35 A failed transfer to a ward system that takes FHIR R4: played in policy mode only.
 
 ## What the agents see, and a question that tries to act
 

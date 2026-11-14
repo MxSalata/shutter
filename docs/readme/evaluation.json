@@ -4085,6 +4085,11 @@
    "scenario": "S26",
    "title": "A transfer held until its schema is imported",
    "why": "played in rules and policy modes only"
+  },
+  {
+   "scenario": "S35",
+   "title": "A failed transfer to a ward system that takes FHIR R4",
+   "why": "played in policy mode only"
   }
  ],
  "not_used": [],
