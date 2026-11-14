@@ -31,9 +31,10 @@ import {
   useFailedCount,
   useHealth,
   useScenarios,
+  useSiteProfile,
   type CaseFilters,
 } from '@/api/hooks';
-import type { CaseSummary, Scenario } from '@/api/types';
+import type { CaseSummary, Scenario, SiteProfile } from '@/api/types';
 import { ApiSource } from '@/components/ApiSource';
 import { CodeChip } from '@/components/CodeChip';
 import { EmptyState } from '@/components/EmptyState';
@@ -248,12 +249,24 @@ function WhatHappened({ c }: { c: CaseSummary }) {
  * The list's cases; on a phone each case is a compact card: its id and outcome, what happened, then one line of facts.
  * `scenarios` are the cases' scenarios, for the outcome that compares a case with what its scenario expects.
  */
+/**
+ * The receivers whose site profile entry carries a fhir object, as the server reads a receiver's kind
+ * (SiteProfile.ReceiverKind): a case summary carries no kind, so the list takes it from the profile the app already
+ * reads. None while the profile is not read.
+ */
+export function fhirReceiversOf(profile: SiteProfile | undefined): ReadonlySet<string> {
+  return new Set((profile?.receivers ?? []).filter((r) => r.fhir).map((r) => r.name));
+}
+
 export function CasesTable({
   items,
   scenarios = [],
+  fhirReceivers,
 }: {
   items: CaseSummary[];
   scenarios?: ExpectedScenario[];
+  /** The receivers whose cases are FHIR cases (fhirReceiversOf); without them every case reads as it always has. */
+  fhirReceivers?: ReadonlySet<string>;
 }) {
   const byId = new Map(scenarios.map((s) => [s.id, s]));
   return (
@@ -297,7 +310,11 @@ export function CasesTable({
                   <OutcomeBadge c={c} scenario={scenario} focusable={false} />
                 </StackTable.Td>
                 <StackTable.Td data-label="Proposed action" data-label-hidden className="case-last">
-                  <DispositionBadge disposition={c.disposition} focusable={false} />
+                  <DispositionBadge
+                    disposition={c.disposition}
+                    focusable={false}
+                    kind={c.receiver && fhirReceivers?.has(c.receiver) ? 'fhir_r4' : undefined}
+                  />
                   {proposalNote(c) ? (
                     <Text size="xs" c="dimmed" mt={2}>
                       {proposalNote(c)}
@@ -595,6 +612,8 @@ export default function CasesPage() {
   const scenarios = useScenarios();
   const scenarioList: Scenario[] = useMemo(() => scenarios.data?.scenarios ?? [], [scenarios.data]);
   const byId = useMemo(() => new Map(scenarioList.map((s) => [s.id, s])), [scenarioList]);
+  const siteProfile = useSiteProfile().data?.profile;
+  const fhirReceivers = useMemo(() => fhirReceiversOf(siteProfile), [siteProfile]);
   const scenarioOf = (c: CaseSummary) => byId.get(c.scenario);
 
   const newestItems = newest.data?.items;
@@ -770,7 +789,7 @@ export default function CasesPage() {
             )
           ) : null}
           {read.data && !scenarios.isPending && items && items.length > 0 ? (
-            <CasesTable items={items} scenarios={scenarioList} />
+            <CasesTable items={items} scenarios={scenarioList} fhirReceivers={fhirReceivers} />
           ) : null}
           {total > PAGE ? (
             <Group justify="flex-end" mt="sm">

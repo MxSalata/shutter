@@ -8,7 +8,8 @@ import { server } from '@/mocks/node';
 import { resetMock, writesOf } from '@/mocks/handlers';
 import recording from '@/mocks/fixtures.json';
 import { ToneLegend } from '@/components/ToneLegend';
-import type { CaseSummary, Scenario } from '@/api/types';
+import type { CaseSummary, FhirReceiverSettings, Scenario, SiteProfile, SiteReceiver } from '@/api/types';
+import { recordedSiteProfile } from '@/mocks/profile';
 import { layer1WordCount } from '@/test/words';
 import { renderUi } from '@/test/render';
 import { theme } from '@/theme';
@@ -18,6 +19,7 @@ import CasesPage, {
   casesOfGroup,
   CasesTable,
   closedCounts,
+  fhirReceiversOf,
   ForwardedBadge,
   InvestigatedBy,
   investigatedBy,
@@ -189,6 +191,44 @@ describe('CasesTable', () => {
     expect(cells[3]).toHaveTextContent('Effect verified at the receiver');
     // When it was opened sits under the case id
     expect(within(cells[0]).getByRole('time')).toHaveAttribute('datetime', '2026-10-25T08:00:00Z');
+  });
+});
+
+describe("a FHIR receiver's case in the list", () => {
+  const fhir = { base: '/fhir/r4' } as FhirReceiverSettings;
+  const profile = (receivers: SiteReceiver[]) => ({ receivers, policy: {} }) as unknown as SiteProfile;
+  const proposed = (caseId: string, receiver?: string) =>
+    ({ ...base, caseId, receiver, state: 'awaiting_approval', disposition: 'resend' }) as CaseSummary;
+
+  it('names the receivers whose site profile entry carries a fhir object, and none while the profile is not read', () => {
+    const names = fhirReceiversOf(
+      profile([
+        { name: 'FHIR Encounters', tier: 1, fhir },
+        { name: 'Bed Manager', tier: 2 },
+      ]),
+    );
+    expect([...names]).toEqual(['FHIR Encounters']);
+    expect(fhirReceiversOf(undefined).size).toBe(0);
+  });
+
+  it('badges it as one FHIR update, never as a resend after rehearsal; any other case is unchanged', () => {
+    renderUi(
+      <CasesTable
+        items={[proposed('C-F1', 'FHIR Encounters'), proposed('C-B1', 'Bed Manager'), proposed('C-N1')]}
+        fhirReceivers={new Set(['FHIR Encounters'])}
+      />,
+    );
+    const row = (id: string) => screen.getByRole('link', { name: id }).closest('tr')!;
+    expect(within(row('C-F1')).getByText('One FHIR update')).toBeInTheDocument();
+    expect(within(row('C-F1')).queryByText('Resend')).not.toBeInTheDocument();
+    expect(within(row('C-B1')).getByText('Resend')).toBeInTheDocument();
+    expect(within(row('C-N1')).getByText('Resend')).toBeInTheDocument();
+  });
+
+  it('shows what it shows today while it has no FHIR receivers to go by', () => {
+    renderUi(<CasesTable items={[proposed('C-F1', 'FHIR Encounters')]} />);
+    expect(within(screen.getByRole('table')).getByText('Resend')).toBeInTheDocument();
+    expect(screen.queryByText('One FHIR update')).not.toBeInTheDocument();
   });
 });
 
@@ -670,6 +710,38 @@ describe('the page', () => {
     renderPage();
     const need = await screen.findByRole('region', { name: 'Needs a person' });
     expect(await within(need).findByRole('button', { name: /^1 Failed Show these$/ })).toBeVisible();
+  });
+
+  it("takes a case's receiver kind from the site profile the app already reads: a FHIR case is one FHIR update", async () => {
+    const view = recordedSiteProfile()!;
+    view.profile.receivers = [
+      ...view.profile.receivers,
+      { name: 'FHIR Encounters', tier: 1, fhir: { base: '/fhir/r4' } as FhirReceiverSettings },
+    ];
+    server.use(
+      http.get('/api/shutter/site-profile', () => HttpResponse.json(view)),
+      http.get('/api/shutter/cases', ({ request }) => {
+        if (new URL(request.url).searchParams.get('state')) return undefined;
+        return HttpResponse.json({
+          items: [
+            {
+              caseId: 'C-F1',
+              state: 'awaiting_approval',
+              disposition: 'resend',
+              receiver: 'FHIR Encounters',
+            },
+            { caseId: 'C-B1', state: 'awaiting_approval', disposition: 'resend', receiver: 'Bed Manager' },
+          ],
+          total: 2,
+        });
+      }),
+    );
+    renderPage();
+    const fhirRow = (await screen.findByRole('link', { name: 'C-F1' })).closest('tr')!;
+    expect(await within(fhirRow).findByText('One FHIR update')).toBeInTheDocument();
+    expect(within(fhirRow).queryByText('Resend')).not.toBeInTheDocument();
+    const otherRow = screen.getByRole('link', { name: 'C-B1' }).closest('tr')!;
+    expect(within(otherRow).getByText('Resend')).toBeInTheDocument();
   });
 
   it('shows no Failed tile while no case failed', async () => {
