@@ -63,12 +63,35 @@ test.describe('the keyboard walk on the trial', () => {
     await expect(
       page.getByRole('alert').filter({ hasText: "Shutter is running on the demo's answers" }),
     ).toHaveCount(0);
+    // What the polite line says while the run plays, and every alert that appears: recorded from before the press
+    await page.evaluate(() => {
+      const w = window as unknown as { walkSaid: string[]; walkAlerts: string[] };
+      w.walkSaid = [];
+      w.walkAlerts = [];
+      const said = document.querySelector('[data-testid="run-said"]')!;
+      new MutationObserver(() => {
+        const text = said.textContent ?? '';
+        if (text && text !== w.walkSaid.at(-1)) w.walkSaid.push(text);
+        for (const alert of document.querySelectorAll('[role="alert"]'))
+          if (!w.walkAlerts.includes(alert.textContent ?? '')) w.walkAlerts.push(alert.textContent ?? '');
+      }).observe(document.body, { childList: true, subtree: true, characterData: true });
+    });
     await page.keyboard.press('Enter');
     // The pressed Run turns into a spinner: the focus is on the run's status, not dropped to the page
     const status = page.getByRole('region', { name: 'Scenario run' });
     await expect(status).toBeFocused();
     await expect(status).toContainText('S2 played (Board)', { timeout: 30_000 });
     await expect(status).toBeFocused();
+    // Said once as it starts, plays and has played, never at each step; the playing banner is no alert
+    await expect
+      .poll(() => page.evaluate(() => (window as unknown as { walkSaid: string[] }).walkSaid))
+      .toEqual([
+        'S2 is starting in Board mode.',
+        'S2 is playing in Board mode.',
+        'S2 has played in Board mode.',
+      ]);
+    const alerts = await page.evaluate(() => (window as unknown as { walkAlerts: string[] }).walkAlerts);
+    expect(alerts.filter((a) => /Playing S2|Now delivering/.test(a))).toEqual([]);
     const open = status.getByRole('link', { name: /C-000002/ });
     await expect(open).toBeVisible();
     for (let i = 0; i < 6 && !(await open.evaluate((el) => el === document.activeElement)); i++)
