@@ -47,7 +47,13 @@ export function PortalLink({
         </Anchor>
         <Modal opened={shown} onClose={() => setShown(false)} title={screenshot.alt} size="auto" centered>
           <Stack gap="xs">
-            <Image src={screenshot.src} alt={screenshot.alt} maw="min(1880px, 90vw)" />
+            {/* The picture is wider than most screens: a press opens it at full size in a tab of its own */}
+            <Anchor href={screenshot.src} target="_blank" rel="noopener">
+              <Image src={screenshot.src} alt={screenshot.alt} maw="min(1880px, 90vw)" />
+            </Anchor>
+            <Anchor href={screenshot.src} target="_blank" rel="noopener" size="sm" underline="always">
+              Open full size <IconExternalLink size={12} aria-hidden />
+            </Anchor>
             <Text size="sm" c="dimmed" maw={900}>
               {screenshot.caption} On an IRIS instance this link opens {what} in the Management Portal.
             </Text>
