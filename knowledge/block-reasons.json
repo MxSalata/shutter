@@ -1180,7 +1180,7 @@
       "code": "FHIR_VERSIONING_UNPROVEN",
       "title": "This server software is not proved to refuse a stale write",
       "prerequisite": "A conformance proof for this server's software name and version, with its three measurements true, and versioned-update in its CapabilityStatement",
-      "next_action": "Run tests/conformance/fhir_conformance.py against a test instance of the same InterSystems IRIS for Health FHIR server software and import its proof file. No other FHIR server can pass that file in this release.",
+      "next_action": "Run tests/conformance/fhir_conformance.py against a test instance of the same InterSystems IRIS for Health FHIR server software and import its proof file. No other FHIR server can pass that file in this release, except Shutter's own test server, which is held to those answers.",
       "owner": "Integration team",
       "reevaluate_when": "A proof for this software and version is imported",
       "text": "No conformance run recorded for this server software shows that it refuses a stale and an unknown If-Match and keeps a version's tags on that version, or the server now names other software or another version than the run measured."

@@ -2,7 +2,7 @@
 
 ## What it does
 
-In this release the receiver must be InterSystems IRIS for Health's own FHIR R4 server. The capability check reads a proof document as `tests/conformance/fhir_conformance.py` writes it after a run with no differing exchange, and the conformance file holds that server's answers. The document is not signed: whoever imports one vouches that the run took place. No other FHIR server can pass it.
+In this release the receiver must be InterSystems IRIS for Health's own FHIR R4 server. The capability check reads a proof document as `tests/conformance/fhir_conformance.py` writes it after a run with no differing exchange, and the conformance file holds that server's answers. The document is not signed: whoever imports one vouches that the run took place. No other FHIR server can pass it, except Shutter's own test server, which is held to those answers. A run compares the status, the headers and the fields the file records for each exchange, not the whole answer.
 
 What this profile does: for a receiver entry that carries a `fhir` object, a failed A02 (transfer) that names no bed, whose HL7 delivery a stock `EnsLib.HL7.Operation.TCPOperation` gave up on before a connection opened, becomes at most one person-approved `PUT Encounter/{id}` with `If-Match`. Before closing the case Shutter finds the version carrying its marker in the Encounter's history as the receiver returned it, reads that version back by its version id when the receiver's answer named one, checks it against the approved base, and checks that the current record has not undone the move.
 
