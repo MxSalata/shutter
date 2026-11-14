@@ -13,6 +13,15 @@ export interface GlossaryEntry {
 }
 
 export const GLOSSARY = {
+  case: {
+    term: 'Case',
+    definition: 'One failed delivery under review: its evidence, the plan, who decided and what was sent.',
+  },
+  'decision-receipt': {
+    term: 'Decision receipt',
+    definition:
+      "Shutter's own record of this decision: who proposed the plan, the gate, who released it, what was written. Not the receiver's receipt.",
+  },
   gate: {
     term: 'Gate',
     definition:
