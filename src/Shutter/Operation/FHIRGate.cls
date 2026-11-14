@@ -439,7 +439,8 @@ ClassMethod Intent(checks As %DynamicArray, case As Shutter.Store.Case, plan As 
 /// found. No source header, an item that is no stock HL7 TCP operation and a subclass of one are each unknown here,
 /// where the gate passes or reads on. Otherwise the row is EngineCheck's Judge, with two refusals laid over a pass,
 /// because the FHIR update is a second route to a system the engine can still reach: a header the engine delivered,
-/// and a header it holds suspended, which anyone can send again after the update. Settle is never called.
+/// and a header it holds suspended, which anyone can send again after the update. Settle is never called, so a case
+/// blocked because the engine is still trying does not wait for it, and the row says so.
 ClassMethod EngineRow(engine As %DynamicObject) As %DynamicObject
 {
     Set json = "Shutter.Util.Json"
@@ -455,6 +456,9 @@ ClassMethod EngineRow(engine As %DynamicObject) As %DynamicObject
     }
     If '..IsObject(judged) Quit ..Row("ordering", "unknown", "ENGINE_UNREADABLE", "The engine's record of this message could not be read, so whether it is still trying it is not known. Nothing is sent")
     Set result = $CLASSMETHOD(json, "Str", judged, "result"), code = $CLASSMETHOD(json, "Str", judged, "reason_code"), detail = $CLASSMETHOD(json, "Str", judged, "detail")
+    // The engine check's words for a header still in the engine's hands end with a wait that Settle arranges. Here
+    // nothing arranges one, so the row says what does happen to a case of a FHIR receiver.
+    If code = "ENGINE_STILL_TRYING" Set detail = $PIECE(detail, ": a resend now", 1) _ ": it may still deliver the move over HL7, and an update over FHIR now would be a second one. Nothing is sent. Over FHIR the case does not wait for the engine: it stops for a person, who can reinvestigate it once the engine has finished"
     If result '= "pass" Quit ..Row("ordering", $SELECT(result = "block": "block", 1: "unknown"), code, detail)
     Set headers = engine.%Get("headers"), delivered = "", suspended = ""
     If $ISOBJECT(headers) && headers.%IsA("%Library.DynamicArray") {
@@ -472,7 +476,9 @@ ClassMethod EngineRow(engine As %DynamicObject) As %DynamicObject
 
 /// The ordering rows the feed gives a write: further messages for the patient, a newer message of the encounter still
 /// pending, and a later event. Copied from Shutter.Operation.Gate, lines 132-149 and 155-165 of version 1.4.4, whose
-/// class is not edited; <var>further</var> and <var>pending</var> come from the facts in place of its reads.
+/// class is not edited; <var>further</var> and <var>pending</var> come from the facts in place of its reads. One
+/// sentence is this gate's own: a pending newer message holds no case of a FHIR receiver until it is delivered, so
+/// its row promises no wait.
 ClassMethod Feed(checks As %DynamicArray, stage As %String, case As Shutter.Store.Case, view As %DynamicObject, further, pending, chainKind As %String) [ Private ]
 {
     If ##class(Shutter.Util.FurtherMessages).Unreadable(further) {
@@ -488,7 +494,7 @@ ClassMethod Feed(checks As %DynamicArray, stage As %String, case As Shutter.Stor
     } ElseIf $ISOBJECT(further) {
         Do ..Check(checks, "ordering", "pass", "NO_FURTHER_MOVEMENT", $SELECT(##class(Shutter.Util.FurtherMessages).Count(further, "shows") > 0: "No further message stops this write for this patient; " _ ##class(Shutter.Util.FurtherMessages).Count(further, "shows") _ " other message(s) on file, shown on the plan", 1: "No further in-patient movement for this patient"))
     }
-    If $ISOBJECT(pending) && (pending.%Size() > 0) Do ..Check(checks, "ordering", "block", "NEWER_MESSAGE_PENDING", "A newer message of this encounter is pending in Shutter: " _ ##class(Shutter.Util.ResendGuard).Describe(pending) _ ". The resend waits for its delivery and the case is planned again on fresh evidence")
+    If $ISOBJECT(pending) && (pending.%Size() > 0) Do ..Check(checks, "ordering", "block", "NEWER_MESSAGE_PENDING", "A newer message of this encounter is pending in Shutter: " _ ##class(Shutter.Util.ResendGuard).Describe(pending) _ ". Nothing is sent. Over FHIR the case does not wait for that message: it stops for a person, who can reinvestigate it once the message has been delivered")
 
     // The event's time and the later events, by the matcher's own reading and with the chain kind the evidence used.
     Set cat = view.%Get("catalogue"), conds = $SELECT($ISOBJECT(cat): cat.%Get("conditions"), 1: "")

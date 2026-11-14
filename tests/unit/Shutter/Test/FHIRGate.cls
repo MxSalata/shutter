@@ -127,6 +127,44 @@ Method TestADeliveredOrSuspendedHeaderBlocks()
     Do $$$AssertEquals(row.%GetTypeOf("engine"), "unassigned", "and carries nothing for Settle, which this gate never calls")
 }
 
+/// A case of a FHIR receiver waits for nothing: its flow sets no wait on a blocked case, and nothing judges it again
+/// by itself. So neither row that elsewhere holds a case until the engine or a newer message has finished says that
+/// this one waits, and the reason a person reads for such a case says to reinvestigate. A case of another receiver
+/// keeps the catalogue's words.
+Method TestNoRowPromisesAWait()
+{
+    Set row = ##class(Shutter.Operation.FHIRGate).EngineRow(..Engine({"headers": [{"headerId": "17", "custody": "engine", "status": "Delivered", "itemStatus": "Retry", "completedAt": "", "why": "", "attempts": ""}]}))
+    Do $$$AssertEquals(row.result _ " " _ row."reason_code", "block ENGINE_STILL_TRYING", "the engine still trying is a block")
+    Do $$$AssertTrue(row.detail [ "The engine is still trying this message at the receiver (status Delivered, operation Retry)", "in the engine check's own words for what it found: " _ row.detail)
+    Do $$$AssertTrue((row.detail '[ "waits") && (row.detail '[ "judged again when") && (row.detail [ "stops for a person") && (row.detail [ "reinvestigate"), "and no wait is promised: " _ row.detail)
+
+    Set detail = ""
+    Set iter = ..Rows().%GetIterator()
+    While iter.%GetNext(.i, .r) {
+        Continue:(r.name '= "ordering: a newer message of the encounter is pending in Shutter")
+        Set detail = ..Detail(..Run(r).checks, "ordering", "NEWER_MESSAGE_PENDING")
+    }
+    Do $$$AssertTrue(detail [ "A newer message of this encounter is pending in Shutter", "the pending message's row: " _ detail)
+    Do $$$AssertTrue((detail '[ "waits") && (detail '[ "planned again") && (detail [ "stops for a person") && (detail [ "reinvestigate"), "promises no wait either: " _ detail)
+
+    // The reason a person reads.
+    Do ..AddReceiver(..Entry())
+    Set case = ..NewCase({}), adt = ..NewCase({}, 0)
+    For code = "ENGINE_STILL_TRYING", "NEWER_MESSAGE_PENDING" {
+        Set stored = ##class(Shutter.Store.BlockReason).ByCode(code)
+        If '$ISOBJECT(stored) Do $$$AssertTrue(0, "the reason " _ code _ " is in the store") Continue
+        Set action = stored.NextAction, text = stored.Text
+        Do $$$AssertTrue((action _ text) [ "waits", code _ ": the catalogue's words speak of a wait")
+        Set mine = ##class(Shutter.Store.BlockReason).ForCase(code, case)
+        Set words = mine.NextAction _ " " _ mine.ReevaluateWhen _ " " _ mine.Text
+        Do $$$AssertTrue((words '[ "waits") && (words '[ "Wait") && (words '[ "Nothing to do yet") && (words [ "reinvestigate"), code _ ": for a FHIR case they say to reinvestigate, and promise no wait: " _ words)
+        Do $$$AssertEquals(mine.Code _ "|" _ mine.Title _ "|" _ mine.Owner, code _ "|" _ stored.Title _ "|" _ stored.Owner, code _ ": under the same code, title and owner")
+        Set theirs = ##class(Shutter.Store.BlockReason).ForCase(code, adt)
+        Do $$$AssertEquals(theirs.NextAction _ "|" _ theirs.Text, action _ "|" _ text, code _ ": a case of another receiver reads the catalogue's own words")
+        Do $$$AssertEquals(stored.NextAction _ "|" _ stored.Text, action _ "|" _ text, code _ ": and the stored row is as it was")
+    }
+}
+
 Method TestNoProofOtherSoftwareOrAFailedMeasurementBlocks()
 {
     Do ..RunRows("proof")
