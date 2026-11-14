@@ -3,8 +3,9 @@
 
     python3 tests/conformance/embed.py [--check]
 
-The unit runner on a stock-install container cannot read the repository, so Shutter.Test.FHIRFacadeConformance carries
-the exchanges in its XData Cases block, one exchange to a line. Shutter.Store.FHIRProof carries what a proof document
+A stock-install container cannot read the repository, so the kit's in-process runner FHIRFacade.Kit (which the unit
+test Shutter.Test.FHIRFacadeConformance and a demo install's proof run use) carries the exchanges in its XData Cases block,
+one exchange to a line. Shutter.Store.FHIRProof carries what a proof document
 must name to be imported: the file's name, the SHA-256 of its bytes and the number of exchanges for each target, in its
 four KIT parameters. Without --check both are rewritten from tests/conformance/fhir-facade-v1.json; with it, nothing is
 written and the exit status is 1 when either differs. Standard library only.
@@ -18,7 +19,7 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "tests/conformance/fhir-facade-v1.json"
-TARGET = ROOT / "tests/unit/Shutter/Test/FHIRFacadeConformance.cls"
+TARGET = ROOT / "src/FHIRFacade/Kit.cls"
 PROOF = ROOT / "src/Shutter/Store/FHIRProof.cls"
 OPEN = "XData Cases [ MimeType = application/json ]\n{\n"
 PARAMETER = re.compile(r"^Parameter (KITNAME|KITSHA256|KITFACADE|KITIRIS) = (.*);$", re.MULTILINE)
