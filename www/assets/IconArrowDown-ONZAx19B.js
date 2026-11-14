@@ -1,1 +1,0 @@
-import{c as o}from"./index-TMqd33T6.js";const t=[["path",{d:"M12 5l0 14",key:"svg-0"}],["path",{d:"M18 13l-6 6",key:"svg-1"}],["path",{d:"M6 13l6 6",key:"svg-2"}]],n=o("outline","arrow-down","ArrowDown",t);export{n as I};
