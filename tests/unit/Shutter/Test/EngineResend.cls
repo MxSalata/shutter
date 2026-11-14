@@ -13,6 +13,9 @@ Property ProfileBefore As %String(MAXLEN = "");
 /// The recovery control and the profile as they were before the test (Shutter.Test.RecoveryState).
 Property RecoveryBefore As %List;
 
+/// The outages whose row lock the test holds (Offered), given back once OnAfterOneTest has deleted them.
+Property Held As %String [ MultiDimensional ];
+
 Method OnBeforeOneTest(testname As %String) As %Status
 {
     // Each test starts with recovery enabled and not stopped, as a site that resends has it; its own steps change that.
@@ -32,6 +35,13 @@ Method OnAfterOneTest(testname As %String) As %Status
         Set id = "" For { Set id = $ORDER(..Made(class, id)) Quit:id=""  Do $CLASSMETHOD(class, "%DeleteId", id) }
     }
     Kill ..Made
+    // The outages are gone, so a poll waiting on one of their locks finds nothing once it is given back.
+    Set id = ""
+    For {
+        Set id = $ORDER(..Held(id)) Quit:id=""
+        Lock -^Shutter.Outage(id)
+    }
+    Kill ..Held
     &sql(DELETE FROM Shutter_Store.ResendRecord WHERE RunId %STARTSWITH 'H' AND Item = 'EngineResend Test Out')
     If ..ProfileBefore '= "" {
         Set row = ##class(Shutter.Store.SiteProfile).Row()
@@ -328,10 +338,19 @@ Method TestRunThatMustNotSend()
 
 /// An offered outage with a set of two (headers 41 and 44, or the two given), or three with a third given, digest d1,
 /// approvable.
+/// The test holds the outage's row lock until OnAfterOneTest has deleted it. The tests act as the sender themselves, while
+/// the running production's Engine Resend takes every outage that reads sending every 2 seconds and, on this test's item,
+/// which has no settings to read, would stop the run between the test's own steps. Its first change to the row, which
+/// binds the settings to the approval, waits for the lock and gives up after 5 seconds, and its run ends there with nothing
+/// changed (Shutter.Store.Outage, Advance); this process's own changes take the lock it already holds.
 Method Offered(a As %String = "41", b As %String = "44", c As %String = "") As Shutter.Store.Outage
 {
     Do ##class(Shutter.Store.Outage).Open({"name": (..#RECEIVER), "watch": {"namespace": ($NAMESPACE), "item": (..#ITEM)}}, "cant_tell", "a test", "unit", .o)
     Set ..Made("Shutter.Store.Outage", o.%Id()) = ""
+    Lock +^Shutter.Outage(o.%Id()):5
+    Set held = $TEST
+    Set:held ..Held(o.%Id()) = ""
+    Do $$$AssertTrue(held, "the test holds outage " _ o.%Id() _ "'s row lock")
     Set ca = $SELECT(a = "41": "CA", 1: ..ControlOf(a)), cb = $SELECT(b = "44": "CF", 1: ..ControlOf(b))
     Set list = [{"headerId": (a), "controlId": (ca)}, {"headerId": (b), "controlId": (cb)}]
     Do:c'="" list.%Push({"headerId": (c), "controlId": (..ControlOf(c))})
