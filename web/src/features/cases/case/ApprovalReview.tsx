@@ -2,7 +2,7 @@ import { Alert, Button, Group, Paper, Stack, Text, Textarea, VisuallyHidden } fr
 import { notifications } from '@mantine/notifications';
 import { IconArrowDown } from '@tabler/icons-react';
 import { useEffect, useId, useRef, useState } from 'react';
-import { useDecideApproval, useReadCurrentReview } from '@/api/hooks';
+import { useDecideApproval } from '@/api/hooks';
 import { newIdempotencyKey } from '@/api/client';
 import type { CaseDetail, PlanView, Snapshot } from '@/api/types';
 import { TRIAL } from '@/env/mode';
@@ -18,6 +18,7 @@ import { fhirSummary, kindOfPlan, receiverKind } from './derive';
 import { PlanHeadline } from './PlanHeadline';
 import { decisionLabels, planWords } from './planAction';
 import { receiverNoun } from './receiver';
+import { useReadCurrentReview } from './readCurrent';
 import { readBehind, replacedWords, whatChanged, type ReviewedState } from './staleReview';
 import { WhatChanged } from './WhatChanged';
 
