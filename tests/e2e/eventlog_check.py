@@ -20,8 +20,9 @@ from iris_query import query  # noqa: E402
 RUNTIME = re.compile(r"<(UNDEFINED|PARAMETER|METHOD DOES NOT EXIST|CLASS DOES NOT EXIST|PROPERTY DOES NOT EXIST|"
                      r"INVALID OREF|SUBSCRIPT|SYNTAX|LIST|COMMAND|DIVIDE|MAXSTRING|STORE|FRAMESTACK|ZSOAP|"
                      r"OBJECT DISPATCH|NOLINE|ILLEGAL VALUE)>|ERROR #5002\b")
-# Items whose errors the scenarios cause on purpose: a routing process ends when its delivery fails (a case is opened)
-EXPECTED = {"ADT to Downstream", "ADT to Records", "PAS to Downstream", "PAS to Records"}
+# Items whose errors the scenarios cause on purpose: a routing process ends when its delivery fails (a case is opened),
+# and S35's HL7 link to the demo hospital's FHIR ward system never opens a connection
+EXPECTED = {"ADT to Downstream", "ADT to Records", "PAS to Downstream", "PAS to Records", "FHIR Ward Out"}
 
 
 def main():
