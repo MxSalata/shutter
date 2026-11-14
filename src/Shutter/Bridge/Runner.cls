@@ -10,7 +10,8 @@ Method Run(spec As Shutter.Bridge.RunSpec, ByRef response As Shutter.Bridge.Msg.
 
 /// A diagnostic run outside the production (AIHub.TestRun, R145-04), held by the day's budget as the Agent item's runs are:
 /// admitted by Shutter.Util.Budget.Admit (the estimate counted, check and reservation in one locked step) before the runner
-/// is made, so a refusal contacts no provider and answers with the status budget_exhausted; run by spec.RunnerClass; then
+/// is made, so a refusal contacts no provider and answers with the status budget_exhausted (budget_busy when the budget
+/// could not be checked in time, Budget.RefusalStatus); run by spec.RunnerClass; then
 /// recorded as an AgentRun row with Purpose "diagnostic" and no case (AgentRun.FromDiagnostic), charged to user, and only
 /// then settled, so its cost is counted somewhere throughout. A row that cannot be saved leaves the reservation to lapse
 /// after twenty minutes, and the error is returned. runId gets the row's id, "" when refused or not saved.
@@ -20,7 +21,7 @@ ClassMethod Diagnostic(spec As Shutter.Bridge.RunSpec, user As %String, Output r
     Set response.RequestedBy = user
     Set key = "diagnostic|" _ spec.MemberCode _ "|" _ $JOB _ "|" _ $ZHOROLOG
     If '##class(Shutter.Util.Budget).Admit(key, user, .budget) {
-        Set response.Status = "budget_exhausted", response.Error = ##class(Shutter.Util.Budget).Refusal(budget)
+        Set response.Status = ##class(Shutter.Util.Budget).RefusalStatus(budget), response.Error = ##class(Shutter.Util.Budget).Refusal(budget)
         Do ..Stamp(spec, response)
         Quit $$$OK
     }

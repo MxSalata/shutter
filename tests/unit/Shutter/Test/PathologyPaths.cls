@@ -77,6 +77,22 @@ Method TestThePathsAreKeptApart()
     Do $$$AssertNotTrue(##class(Shutter.Scenarios.Runner).WaitsForOutage(paths.%Get(0)), "P1 does not")
 }
 
+/// A start of P2 sent again with its Idempotency-Key gets the first start's answer (R146-04): the route looks the key up
+/// before the outage refusal, whose answer the first start's own run changes, and before the recording check. Read from
+/// the route's code; tests/e2e/demo_pathology_check.py (P2.f2) sends the retry over HTTP.
+Method TestARetriedStartIsAnsweredFromItsKey()
+{
+    Set m = ##class(%Dictionary.MethodDefinition).%OpenId("Shutter.API.Dispatch||ScenarioRun")
+    Do $$$AssertTrue($ISOBJECT(m), "the route's definition is here")
+    If '$ISOBJECT(m) Quit
+    Do m.Implementation.Rewind()
+    Set code = m.Implementation.Read(1000000)
+    Set replay = $FIND(code, "..Idempotent(bodyText"), refusal = $FIND(code, "PathologyRefusal("), recorded = $FIND(code, "NotRecorded(")
+    Do $$$AssertTrue((replay > 0) && (refusal > 0) && (recorded > 0), "the route looks up the key, refuses an outage and checks the recordings")
+    Do $$$AssertTrue(replay < refusal, "the key is looked up before the outage refusal")
+    Do $$$AssertTrue(replay < recorded, "and before the recording check")
+}
+
 /// The runner says each new step in words, and counts its time.
 Method TestTheRunnerKnowsTheSteps()
 {

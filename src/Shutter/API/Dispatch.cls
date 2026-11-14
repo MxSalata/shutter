@@ -461,6 +461,10 @@ ClassMethod ScenarioRun(id As %String) As %Status
     // answers from its recording, with no model call and nothing counted against the budget or a share. The single
     // investigator was never recorded, so that mode is refused here before anything is queued or reset.
     Set live = $SYSTEM.Security.Check("Shutter_LiveAgents", "USE")
+    // A start sent again with its Idempotency-Key gets the first start's answer (R146-04), before the checks below: the
+    // outage refusal's answer changes with the first start's own run.
+    Set r = ..Idempotent(bodyText, .replayed)
+    If replayed Quit $$$OK
     // A pathology path (1.4.6) runs no agent, so its mode needs no recording; the outage path is refused here, before
     // anything is queued or reset, while the last run's outage is open or its results are still in the window.
     Set pathology = ##class(Shutter.Scenarios.Runner).FindPathology(id)
@@ -471,8 +475,6 @@ ClassMethod ScenarioRun(id As %String) As %Status
         Set notRecorded = ##class(Shutter.Scenarios.Runner).NotRecorded(mode, live)
         If notRecorded '= "" Quit ..Fail("409 Conflict", "not_recorded", notRecorded)
     }
-    Set r = ..Idempotent(bodyText, .replayed)
-    If replayed Quit $$$OK
     If ..PlayerEnabled() {
         // The production's own player plays the steps (one run at a time); the run record says queued
         // until it starts, then running, done or failed (GET /scenarios).

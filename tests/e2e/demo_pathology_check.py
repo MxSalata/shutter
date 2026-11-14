@@ -32,6 +32,7 @@ import json
 import os
 import sys
 import time
+import uuid
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -124,10 +125,11 @@ class Check:
         _, r = self.operator.call("GET", "/scenarios")
         return {p["id"]: p for p in (r or {}).get("pathology", [])}, (r or {}).get("run")
 
-    def run(self, who, scenario, mode="board", seconds=420):
-        """Starts a run and waits for it to end. Returns (start status, start body, the run record)."""
+    def run(self, who, scenario, mode="board", seconds=420, key=True):
+        """Starts a run and waits for it to end. Returns (start status, start body, the run record). key: the start's
+        Idempotency-Key, a fresh one unless given."""
         sc.wait("the last run to finish", lambda: (self.paths()[1] or {}).get("state") not in ("queued", "running"), 600)
-        code, started = who.call("POST", f"/scenarios/{scenario}/run", {"mode": mode}, idempotent=True)
+        code, started = who.call("POST", f"/scenarios/{scenario}/run", {"mode": mode}, idempotent=key)
         if code != 202:
             return code, started, None
         end = time.time() + seconds
@@ -185,7 +187,8 @@ def play(c):
     heard0 = len(c.heard())
     header0 = c.last_header()
     runner = c.judge or c.operator
-    code, started, run = c.run(runner, "P2")
+    p2_key = str(uuid.uuid4())
+    code, started, run = c.run(runner, "P2", key=p2_key)
     check("P2.a the run starts and plays to an offered outage", code == 202 and run and run.get("state") == "done" and not run.get("timeouts"), (code, started, run))
     sent = c.lab_headers(header0)
     check("P2.b three results went to Lab Results Out and each ended in Error", len(sent) == 3 and all(str(h["Status"]) in ("Error", "8") for h in sent), sent)
@@ -200,6 +203,12 @@ def play(c):
     check("P2.f GET /scenarios names the outage on P2", (paths["P2"].get("latestOutage") or {}).get("id") == int(o["id"]) and paths["P2"]["latestOutage"]["state"] == "offered", paths["P2"].get("latestOutage"))
     first = c.snapshot(o)
     c.store_counts()
+
+    # The first start sent again with its key (a client that lost the answer) gets the first answer, though the outage
+    # its own run opened now refuses a fresh start.
+    code, again = runner.call("POST", "/scenarios/P2/run", {"mode": "board"}, idempotent=p2_key)
+    check("P2.f2 the first start sent again with its Idempotency-Key gets its first answer, not the outage's refusal", code == 202 and again == started, (code, again, started))
+    check("P2.f3 and the replay moved nothing", c.snapshot(c.outage()) == first, (c.snapshot(c.outage()), first))
 
     code, r = runner.call("POST", "/scenarios/P2/run", {"mode": "board"}, idempotent=True)
     check("P2.g P2 again is refused while its outage is open, with words that say where to finish it", code == 409 and "still open on the Incidents page" in (r or {}).get("detail", ""), (code, r))

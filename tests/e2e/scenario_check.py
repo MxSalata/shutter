@@ -95,7 +95,8 @@ class Session:
         if method != "GET":
             request.add_header("X-Requested-With", "Shutter")
         if idempotent:
-            request.add_header("Idempotency-Key", str(uuid.uuid4()))
+            # A key of the caller's own (a string) sends a request again; True makes a fresh one.
+            request.add_header("Idempotency-Key", idempotent if isinstance(idempotent, str) else str(uuid.uuid4()))
         try:
             with self.opener.open(request, timeout=300) as response:
                 text = response.read().decode()

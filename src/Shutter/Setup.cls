@@ -2658,7 +2658,8 @@ ClassMethod ModelProvider() As %String
 /// <var>provider</var> says openai) and the model (default claude-opus-5-5, or gpt-4.1 on OpenAI). Replaces an earlier
 /// key, and removes the other provider's secret once the new configuration is written, so the wallet holds one
 /// provider's key at a time. A provider the install does not configure, and a model that is plainly the other
-/// provider's (ModelFits), are refused before anything is changed. Returns a short status; never the key.
+/// provider's (ModelFits), are refused before anything is changed. Returns a short status; never the key. A model with no
+/// price row (OpenAI's) adds UnpricedNote to it, which the install prints and the production's start logs.
 ClassMethod ConfigureProvider(key As %String, model As %String = "", provider As %String = "") As %String [ SqlProc ]
 {
     Set provider = $ZCONVERT($ZSTRIP(provider, "<>WC"), "L")
@@ -2701,10 +2702,19 @@ ClassMethod ConfigureProvider(key As %String, model As %String = "", provider As
         // A digest of the key, never the key: a later start compares the environment's key against it.
         Set ^Shutter.Config("aihub", "keyDigest") = ##class(Shutter.Util.Digest).SHA256Hex(key)
         Set ^Shutter.Config("aihub", "providerConfiguredAt") = ##class(Shutter.Util.Time).NowUTC()
-        Return "ok: AI.LLM.Shutter, " _ provider _ ", model " _ model
+        Return "ok: AI.LLM.Shutter, " _ provider _ ", model " _ model _ ..UnpricedNote(model)
     } Catch ex {
         Return "error: " _ ex.DisplayString()
     }
+}
+
+/// What ConfigureProvider's status adds for a model with no price row in Shutter.Store.ModelPrice (R146-02), "" for one
+/// that has a row: its runs record no cost, so the day's cap and the users' shares (CONTRACTS 9) do not limit what they
+/// spend. The seeded price list holds Anthropic's models only, so this is said of OpenAI's.
+ClassMethod UnpricedNote(model As %String) As %String
+{
+    If $ISOBJECT(##class(Shutter.Store.ModelPrice).ByModel(model)) Quit ""
+    Quit "; unpriced: Shutter has no price for " _ ##class(Shutter.Util.Secret).CleanModel(model) _ ", so SHUTTER_DAILY_BUDGET_USD and SHUTTER_JUDGE_BUDGET_USD do not limit what its runs spend until it has one: keep a spending limit at the provider"
 }
 
 /// The Config Store configuration ConfigureProvider writes as AI.LLM.Shutter: the provider as AI Hub names it, the
