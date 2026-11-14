@@ -1094,6 +1094,7 @@ Write ##class(Shutter.FHIR.Install).PlaceItems("<host>", "<port>", "FHIRServer",
 FHIR_PASSWORD=<password> python3 tests/conformance/fhir_conformance.py --base https://<test host>/<base> --target iris --user <user> --proof proof.json
 Do $SYSTEM.Status.DisplayError(##class(Shutter.Store.FHIRProof).ImportFile("<receiver name>", "<path>/proof.json"))
 # 4. Confirm (items_problem empty, endpoints_agree true, proof "matches"), then PUT the entry again with "recovery_enabled": true.
+#    Before any case has read the server, "matches" says only that a proof is on record; the gate compares the server's own statement with it at every decision.
 Write ##class(Shutter.FHIR.Install).Doctor().%ToJSON()
 ```
 
