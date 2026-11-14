@@ -430,18 +430,19 @@ test.describe('the case page made easier to read', () => {
     const heading = page.getByRole('heading', { name: 'Evidence', exact: true, level: 2 });
     await expect(heading).toBeInViewport();
     await expect(heading).toBeFocused();
-    // A stage the case did not reach is text, not a button
-    await expect(page.getByRole('button', { name: /^Dispatch/ })).toHaveCount(0);
+    // A stage the case did not reach is text, not a button (Plain names the dispatch Sending)
+    await expect(page.getByRole('button', { name: /^Sending/ })).toHaveCount(0);
+    await expect(page.locator('#case-lifecycle').getByText('Sending', { exact: true })).toBeVisible();
   });
 
-  test('opens the gate and decision step from Plan and gate, on a phone with 44 px targets', async ({
+  test('opens the gate and decision step from Plan and checks, on a phone with 44 px targets', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await signIn(page);
     await go(page, '/cases/C-000064');
     const stage = page.getByRole('button', {
-      name: 'Plan and gate: stopped here, show the plan and the gate',
+      name: 'Plan and checks: stopped here, show the plan and its checks',
     });
     expect(Math.round((await stage.boundingBox())!.height * 100) / 100).toBeGreaterThanOrEqual(44);
     const compact = page.getByTestId('case-action-compact');

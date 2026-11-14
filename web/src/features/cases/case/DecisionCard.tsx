@@ -35,6 +35,7 @@ import { Digest } from '@/components/Digest';
 import { KeyValueList } from '@/components/KeyValueList';
 import { StatusBadge } from '@/components/StatusBadge';
 import { TechDetail } from '@/components/TechDetail';
+import { Term } from '@/components/Term';
 import { Timestamp } from '@/components/Timestamp';
 import { humanize } from '@/lib/format';
 import {
@@ -50,6 +51,7 @@ import { SHOW_NEXT_ACTION } from '@/lib/events';
 import { useGuideTarget } from '@/lib/guideDock';
 import { usePrefersReducedMotion } from '@/lib/motion';
 import { TONE_COLOURS, TONE_ICONS, toneText, type Tone } from '@/lib/tone';
+import { useTechnical } from '@/stores/appearance';
 import { Reinvestigate } from './Closure';
 import { checksOf, shownFailureText } from './derive';
 import { EvidenceChips } from './EvidenceChips';
@@ -85,7 +87,7 @@ import { AT_THE_RECEIVER, caseReceiver, correctionStepsOf, notCheckedAtReceiver 
 
 /** The gate's outcome in a word on the badge; the counts are written beside it. */
 /** One labelled fact of the receipt: its name, a status badge when it has one, and the words. */
-function Fact({ label, children }: { label: string; children: ReactNode }) {
+function Fact({ label, children }: { label: ReactNode; children: ReactNode }) {
   return (
     <Stack gap={4} className="receipt-fact" style={{ minWidth: 0 }}>
       <Text component="dt" size="xs" c="dimmed" fw={600}>
@@ -215,13 +217,15 @@ export function DecisionCard({
   onSeeFindings?: () => void;
 }) {
   const { c, receipt: r } = facts;
+  // Plain names the safety checks (the gate) in the outcome's sentences; Technical keeps "the gate"
+  const technical = useTechnical();
   const verdict = outcome ?? caseOutcome(outcomeCaseOf(facts));
   const OutcomeIcon = verdict.icon ?? TONE_ICONS[verdict.tone];
   const gate = facts.plan?.gateDecisions?.at(-1);
   const checks = gate ? checksOf(gate) : [];
   const gateStatus = gate ? gateOutcome(gate.outcome, checks) : undefined;
   const writesNothing = !!facts.plan?.plan && facts.plan.plan.disposition !== 'resend';
-  const laterLine = gate?.outcome === 'pass' && !writesNothing ? laterChecksLine(checks) : '';
+  const laterLine = gate?.outcome === 'pass' && !writesNothing ? laterChecksLine(checks, technical) : '';
   const release = releaseStatus(facts);
   const next = nextAction(facts);
   const b = facts.blocked;
@@ -393,7 +397,7 @@ export function DecisionCard({
               style={{ alignItems: why ? 'start' : 'stretch' }}
             >
               <StoryCard label="What happened" title={failedTitle(c)}>
-                <Text size="sm">{evidenceSummary(facts.snapshot)}</Text>
+                <Text size="sm">{evidenceSummary(facts.snapshot, technical)}</Text>
                 {/* The evidence those facts were read from, each a link to its section of the Evidence tab */}
                 {behind.length ? (
                   <Group
@@ -413,7 +417,7 @@ export function DecisionCard({
                   </Group>
                 ) : null}
               </StoryCard>
-              <StoryCard label="What Shutter did" title={actionHeadline(facts)}>
+              <StoryCard label="What Shutter did" title={actionHeadline(facts, technical)}>
                 {/* The receiver the case is about, and its category as the evidence recorded it */}
                 <Group gap={6} wrap="wrap" data-testid="case-receiver">
                   <Text size="sm">At {receiver.name}</Text>
@@ -432,7 +436,7 @@ export function DecisionCard({
                     {`${category.gist}.`}
                   </Text>
                 ) : null}
-                <Text size="sm">{outcomeReason(facts)}</Text>
+                <Text size="sm">{outcomeReason(facts, technical)}</Text>
                 {round > 1 ? (
                   <Text size="sm">
                     {/* Reinvestigate starts a round too, on a case nobody may have approved */}
@@ -590,8 +594,9 @@ export function DecisionCard({
             >
               <Stack gap="sm">
                 <Group justify="space-between" align="center" wrap="wrap" gap="xs">
+                  {/* Shutter's own record, named apart from the receiver's receipt that What happened cites */}
                   <Title order={3} id="receipt-title">
-                    Decision receipt
+                    <Term term="decision-receipt" />
                   </Title>
                   <CopyButton value={JSON.stringify(r, null, 2)} timeout={1500}>
                     {({ copied, copy }) => (
@@ -701,7 +706,7 @@ export function DecisionCard({
                       </Stack>
                     </Box>
                   ) : null}
-                  <Fact label="Gate">
+                  <Fact label={<Term term="gate">Gate</Term>}>
                     {gate && gateStatus ? (
                       <>
                         <StatusBadge

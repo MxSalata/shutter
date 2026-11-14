@@ -176,12 +176,20 @@ function stoppedWrites(f: CaseFacts, event: string): string {
 }
 
 /**
+ * The gate as a sentence names it: Plain says what it is, "the safety checks (the gate)", as the guided tour does (the
+ * deterministic checks every plan meets before a write), so a first-time reader needs no glossary; Technical keeps
+ * "the gate".
+ */
+const theGate = (technical: boolean) => (technical ? 'the gate' : 'the safety checks (the gate)');
+
+/**
  * What Shutter did, leading with the action, since the outcome band above it says what came of it: "Sent the transfer
  * again, once, after a test run", "Asked a person to decide; sent nothing", "Sent nothing: a later event already moved
  * the patient on", "Sent the transfer again, once, and the answer was lost; a person decides". Built from the
- * disposition, the writes and whether the rehearsal passed; a write count not read yet is never guessed.
+ * disposition, the writes and whether the rehearsal passed; a write count not read yet is never guessed. Plain
+ * (`technical` false) says what the gate is where it names it, "the safety checks (the gate)".
  */
-export function actionHeadline(f: CaseFacts): string {
+export function actionHeadline(f: CaseFacts, technical = true): string {
   const { c, receipt } = f;
   const event = humanize(c.event).toLowerCase() || 'message';
   const disposition = f.plan?.plan?.disposition || c.disposition;
@@ -215,7 +223,7 @@ export function actionHeadline(f: CaseFacts): string {
       const why = rejected
         ? 'a person rejected the plan'
         : gateStopped(f)
-          ? 'the gate stopped the plan'
+          ? `${theGate(technical)} stopped the plan`
           : 'the case was stopped';
       if (unknown) return `Stopped: ${why}; what it sent is not read yet`;
       return sent > 0 ? `${stoppedWrites(f, event)}; then ${why}` : `Sent nothing: ${why}`;
@@ -249,8 +257,11 @@ export function recordedApprovalTime(events: CaseEvent[] | null | undefined): st
   return `${day}, ${d.toISOString().slice(11, 16)} UTC`;
 }
 
-/** The short reason under What Shutter did. */
-export function outcomeReason(f: CaseFacts): string {
+/**
+ * The short reason under What Shutter did; Plain names the safety checks (the gate), as `actionHeadline` does, and a
+ * plan they blocked reads "Blocked: <reason>", since the headline above it has already said what stopped it.
+ */
+export function outcomeReason(f: CaseFacts, technical = true): string {
   const { c } = f;
   const target = `${humanize(c.event)}${c.ward ? ` to ${c.ward}` : ''}`;
   const sameTime = sameTimeFact(f.snapshot);
@@ -292,7 +303,7 @@ export function outcomeReason(f: CaseFacts): string {
           : f.blocked?.title || f.blocked?.code || 'reason unknown';
       return sentence([
         c.state === 'blocked' && f.blocked && gateStopped(f)
-          ? `blocked by the gate: ${lowerFirst(reason)}`
+          ? `${technical ? 'blocked by the gate' : 'blocked'}: ${lowerFirst(reason)}`
           : reason,
         sameTime,
       ]);
@@ -306,7 +317,7 @@ export function outcomeReason(f: CaseFacts): string {
       ]);
     case 'awaiting_approval':
       return sentence([
-        'the plan passed the gate and waits for a person with the approver role to approve or reject it',
+        `the plan passed ${theGate(technical)} and waits for a person with the approver role to approve or reject it`,
         sameTime,
       ]);
     default:
@@ -465,7 +476,7 @@ export function headerSentence(c: CaseDetail): string {
  * What the evidence says in a few facts, each with the section of the Evidence tab it was read from: what the receiver
  * holds, whether it has a receipt for this operation, and the facts that complicate it.
  */
-function evidenceFacts(snapshot: Snapshot): { text: string; ref: EvidenceRef }[] {
+function evidenceFacts(snapshot: Snapshot, technical = true): { text: string; ref: EvidenceRef }[] {
   const item = (kind: string) => snapshot.items.find((x) => x.kind === kind);
   const facts: { text: string; ref: EvidenceRef }[] = [];
   const fhir = receiverKind(snapshot) === 'fhir_r4';
@@ -491,7 +502,7 @@ function evidenceFacts(snapshot: Snapshot): { text: string; ref: EvidenceRef }[]
       ref: 'receipt',
       text:
         status === 200
-          ? `it committed this operation, version ${str(b.version_before)} to ${str(b.version_after)}`
+          ? `${technical ? '' : 'its receipt shows '}it committed this operation, version ${str(b.version_before)} to ${str(b.version_after)}`
           : status === 404
             ? fhir || b.kind === 'fhir'
               ? lowerFirst(NO_MARKER)
@@ -511,10 +522,13 @@ function evidenceFacts(snapshot: Snapshot): { text: string; ref: EvidenceRef }[]
   return facts;
 }
 
-/** What the receiver holds, whether it has a receipt for this operation, and the facts that complicate it. */
-export function evidenceSummary(snapshot: Snapshot | null | undefined): string {
+/**
+ * What the receiver holds, whether it has a receipt for this operation, and the facts that complicate it. Plain says a
+ * committed operation is read from the receiver's receipt ("its receipt shows"), never Shutter's decision receipt.
+ */
+export function evidenceSummary(snapshot: Snapshot | null | undefined, technical = true): string {
   if (!snapshot) return 'No evidence yet.';
-  const facts = evidenceFacts(snapshot);
+  const facts = evidenceFacts(snapshot, technical);
   return sentence(
     facts.length ? facts.map((f) => f.text) : [`${plural(snapshot.items.length, 'observation')} recorded`],
   );

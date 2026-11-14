@@ -22,7 +22,7 @@ const CASES = [
     reason: 'Why: Not delivered, still current',
     words: /^E2 preferred \(RP-2\.1\): the transfer was not committed \(no receipt\)/,
     gate: 'Eligible for approval',
-    evidence: ['Encounter', 'Receipt'],
+    evidence: ['Encounter', "Receiver's receipt"],
   },
   {
     id: 'C-000003',
@@ -31,7 +31,7 @@ const CASES = [
     reason: 'Why: Committed after all',
     words: /^Under RP-3\.1 the receipt decides whether a movement was committed\./,
     gate: 'Passed: no write',
-    evidence: ['Encounter', 'Receipt'],
+    evidence: ['Encounter', "Receiver's receipt"],
   },
   {
     id: 'C-000008',
@@ -40,7 +40,7 @@ const CASES = [
     reason: 'Why: Two sources at the same time',
     words: /^E7 matches: another source system \(BEDMGR\) applied a movement with the same event time/,
     gate: 'Passed: no write',
-    evidence: ['Encounter', 'Receipt', 'Timeline'],
+    evidence: ['Encounter', "Receiver's receipt", 'Timeline'],
   },
 ] as const;
 
@@ -55,9 +55,9 @@ async function openCase(page: Page, id: string) {
   return page.getByRole('region', { name: 'Decision receipt' });
 }
 
-/** A fact of the receipt, by its name. */
+/** A fact of the receipt, by its name: a name that is a term (Gate) has its definition after it, for screen readers. */
 const fact = (page: Page, name: string) =>
-  page.locator('.receipt-fact').filter({ has: page.locator('dt', { hasText: new RegExp(`^${name}$`) }) });
+  page.locator('.receipt-fact').filter({ has: page.locator('dt', { hasText: new RegExp(`^${name}`) }) });
 
 for (const width of [1280, 360])
   for (const colorScheme of ['light', 'dark'] as const)
@@ -106,7 +106,7 @@ test.describe('the links from the receipt', () => {
     await openCase(page, 'C-000008');
     await page
       .getByRole('group', { name: 'The evidence this was read from' })
-      .getByRole('button', { name: 'Receipt' })
+      .getByRole('button', { name: "Receiver's receipt" })
       .click();
     await expect(page.getByRole('tab', { name: 'Evidence' })).toHaveAttribute('aria-selected', 'true');
     await expect(page).toHaveURL(/#\/cases\/C-000008\?tab=evidence/);
@@ -140,7 +140,7 @@ test.describe('the links from the receipt', () => {
     await receipt.getByRole('button', { name: 'Why: Committed after all' }).click();
     const body = page.locator('#proposal-reason');
     await expect(body.getByRole('button', { name: /^Catalogue entry/ })).toHaveCount(0);
-    await body.getByRole('button', { name: 'Receipt' }).click();
+    await body.getByRole('button', { name: "Receiver's receipt" }).click();
     await expect(page.getByRole('tab', { name: 'Evidence' })).toHaveAttribute('aria-selected', 'true');
     await expect(
       page.getByRole('heading', { name: "Downstream Out's receipt for this operation" }),
