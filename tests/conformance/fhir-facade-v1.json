@@ -1711,8 +1711,7 @@
   {
    "id": "m9-type-history",
    "targets": [
-    "facade",
-    "iris"
+    "facade"
    ],
    "request": {
     "method": "GET",
@@ -1736,13 +1735,12 @@
      }
     }
    },
-   "note": "as 154 and 109 answer; 2026.2 says InteractionsNotSupported"
+   "note": "as 154 and 109 answer; 2026.2 says InteractionsNotSupported. Shutter never lists a type's history, so this is measured on the test server only"
   },
   {
    "id": "m9-system-history",
    "targets": [
-    "facade",
-    "iris"
+    "facade"
    ],
    "request": {
     "method": "GET",
@@ -1766,7 +1764,7 @@
      }
     }
    },
-   "note": "as 154 and 109 answer; 2026.2 answers 500"
+   "note": "as 154 and 109 answer; 2026.2 answers 500. Shutter never lists the system's history, so this is measured on the test server only"
   },
   {
    "id": "m10-create",

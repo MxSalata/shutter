@@ -7,11 +7,11 @@ Class Shutter.Store.FHIRProof Extends (%Persistent, %JSON.Adaptor)
 
 Parameter KITNAME = "fhir-facade-v1.json";
 
-Parameter KITSHA256 = "95d86920df7365ecd5464124de743c46e4fb18467e817a13036a4fe5c74dda0c";
+Parameter KITSHA256 = "14a131e5872006d158e2f409052607264276f6426b0424ee7817b8a472728318";
 
 Parameter KITFACADE = 244;
 
-Parameter KITIRIS = 236;
+Parameter KITIRIS = 234;
 
 Property Receiver As %String(%JSONFIELDNAME = "receiver", MAXLEN = 128) [ Required ];
 
