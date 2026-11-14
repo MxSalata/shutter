@@ -404,7 +404,7 @@ function HeldOutCard() {
     <Paper withBorder p="sm" component="section" aria-labelledby="held-out-title" data-testid="held-out-card">
       <Stack gap={6}>
         <Title order={3} size="h5" id="held-out-title">
-          {`Held-out cases F01 to F12: ${h.cases} cases, ${h.runs} runs in each mode `}
+          {`Cases F01 to F12 (held out at ${h.release}; ${r.release} is a regression rerun): ${h.cases} cases, ${h.runs} runs in each mode `}
           <Text span inherit fw={400} c="dimmed">
             (strict mean loss, lower is better)
           </Text>
@@ -524,6 +524,9 @@ function Headline({
       statement={heroStatement(proof)}
       tour="evaluation-headline"
     >
+      {/* The rerun of the held-out cases follows the hero statement; the catalogue demonstration comes after it */}
+      <HeldOutCard />
+
       {second ? (
         <Text size="md">
           {second}{' '}
@@ -543,8 +546,6 @@ function Headline({
           {`The agents are given the catalogue's matching entry and preferred outcome. The coordinator took that outcome in ${t.plans_taking_the_preferred_outcome ?? 0} of ${t.plans_with_a_catalogue_outcome} plans, S8 included: policy applied to evidence, not answers reached unaided.`}
         </Text>
       ) : null}
-
-      <HeldOutCard />
 
       {/* The cohort again where its figures resume under the held-out card, with where they were recorded */}
       <Text size="sm">{`${provenance} Nothing on this page was measured on this instance.`}</Text>

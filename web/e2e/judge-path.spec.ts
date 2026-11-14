@@ -122,7 +122,7 @@ for (const width of [1280, 390])
       await expect(page.getByRole('heading', { name: 'Evaluation', exact: true })).toBeVisible();
       await expect(welcome(page)).toHaveCount(0);
       const card = page.getByRole('region', {
-        name: /^Held-out cases F01 to F12: 12 cases, 36 runs in each mode/,
+        name: /^Cases F01 to F12 \(held out at 1\.0\.0; 1\.4\.3 is a regression rerun\): 12 cases, 36 runs in each mode/,
       });
       // Each line with its release, the latest rerun first
       await expect(card).toContainText(
