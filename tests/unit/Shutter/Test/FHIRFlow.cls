@@ -540,6 +540,26 @@ Method TestTheSixOutcomes()
     Do $$$AssertEquals(case.State _ "|" _ ..Code(case), "escalated|FHIR_WRITE_OUTCOME_UNKNOWN", "an answer of another verifier's shape is no verification of a FHIR update")
 }
 
+/// The case's reason is the code a stop of the flow closes its own text with, never a code quoted inside other
+/// words: an approver's comment that names one, on any case, is still a rejection, and an earlier round's failing
+/// row of the gate stays the reason where it was.
+Method TestAQuotedCodeIsNotTheReason()
+{
+    Set d = "Shutter.API.Dispatch"
+    Set rows = 0
+    Set rows($INCREMENT(rows)) = $LISTBUILD("Rejected by ut.approver: not like (FHIR_ALREADY_THERE) last week", "blocked", "REJECTED_BY_APPROVER", 0)
+    Set rows($INCREMENT(rows)) = $LISTBUILD("Rejected by ut.approver: as it was last week (FHIR_ALREADY_THERE)", "blocked", "REJECTED_BY_APPROVER", 0)
+    Set rows($INCREMENT(rows)) = $LISTBUILD("The gate did not pass the dispatch: we saw (FHIR_ALREADY_THERE) once, and the record moved on", "blocked", "BLOCKED", 0)
+    Set rows($INCREMENT(rows)) = $LISTBUILD("The receiver refused the update: the Encounter changed after it was read (HTTP 412). The approval is void and nothing is sent again without fresh evidence and a new approval (FHIR_WRITE_CONFLICT)", "blocked", "FHIR_WRITE_CONFLICT", 1)
+    Set rows($INCREMENT(rows)) = $LISTBUILD("The plan asks for a person: Over FHIR an update is proposed only where the catalogue's one matching entry says resend; here no catalogue entry matches this evidence, so a person decides (FHIR_PLAN_NEEDS_PERSON) (the gate noted: Blocked: identity FHIR_PATIENT_MISMATCH (policy fhir-1, stage proposal))", "escalated", "FHIR_PLAN_NEEDS_PERSON", 1)
+    Set rows($INCREMENT(rows)) = $LISTBUILD("The update could not be sealed for approval: the update could not be built (bed, PV1-3) (FHIR_BED_MOVE_UNSUPPORTED)", "blocked", "FHIR_BED_MOVE_UNSUPPORTED", 1)
+    For i = 1:1:rows {
+        Set text = $LIST(rows(i), 1)
+        Do $$$AssertEquals($CLASSMETHOD(d, "ReasonFromEvent", text, $LIST(rows(i), 2)), $LIST(rows(i), 3), "the reason of: " _ $EXTRACT(text, 1, 70))
+        Do $$$AssertEquals(''$CLASSMETHOD(d, "StoppedAfterTheGate", text), $LIST(rows(i), 4), "whether it stopped after the gate: " _ $EXTRACT(text, 1, 70))
+    }
+}
+
 /// A convened board sends no agent request for a FHIR case, in any mode: the case is planned as every FHIR case is,
 /// and says so.
 Method TestAConvenedBoardSendsNoAgentRequest()

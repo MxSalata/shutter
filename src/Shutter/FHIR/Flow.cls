@@ -680,7 +680,7 @@ ClassMethod HttpWords(status As %Integer) As %String
 }
 
 /// Words taken into an event's text from somewhere else (an error, a diagnostic): they never carry what reads as a
-/// reason code of the flow's own, since the case's reason is read from the first one in the text.
+/// reason code of the flow's own, since the case's reason is read from the code the text closes with.
 ClassMethod Plain(text As %String) As %String
 {
     Quit $REPLACE(text, "(FHIR_", "(fhir_")
