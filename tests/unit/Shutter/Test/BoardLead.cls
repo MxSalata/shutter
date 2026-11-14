@@ -616,6 +616,55 @@ Method TestPolicyDecisionKeepsTheRulesPath()
     Do ##class(Shutter.Store.Case).PurgeCase(id)
 }
 
+/// A case no catalogue entry matches keeps the rules path as well when no member can answer, outside Rules only: the plain
+/// resend from the rules with no entry named, and a note that says why. The gate blocks that write as a new pattern, so
+/// nothing is sent. With that as the gate's only objection the case goes to a person, flagged as a candidate entry;
+/// with another objection beside it, a patient mismatch here, the case ends blocked and is not flagged. Either way the
+/// gate's checks are on the case for the person who looks.
+Method TestANewPatternWithNoBoardAnswerKeepsTheRulesPath()
+{
+    Set passed = {"check": "intent", "result": "pass", "reason_code": "EXACT_OPERATION", "detail": "The plan resends the case's own operation, unchanged"}
+    Set unmatched = {"check": "catalogue", "result": "block", "reason_code": "NEW_PATTERN", "detail": "No catalogue entry matches this evidence: a candidate entry for a reviewer"}
+    Set mismatch = {"check": "identity", "result": "block", "reason_code": "PATIENT_MISMATCH", "detail": "The receiver's encounter belongs to another patient"}
+    For mode = "board", "policy", "single" {
+        Set c = ..NoAnswerCase("C-TEST-LEAD-N", mode, {"decision": "new_pattern", "matches": []}, $LISTBUILD("no_record", "no_record"))
+        Set wf = ..QuietInstance()
+        Set wf.CaseId = "C-TEST-LEAD-N", wf.Mode = mode
+        Do $$$AssertStatusOK(wf.AfterBoard(c), mode _ ": the rules path plans")
+        Set after = ##class(Shutter.Store.Case).ByCaseId("C-TEST-LEAD-N")
+        Set id = after.%Id(), disposition = "", entry = "x", by = "", notes = 0
+        &sql(SELECT TOP 1 Disposition, CatalogueEntry, CreatedBy INTO :disposition, :entry, :by FROM Shutter_Store.Plan WHERE "Case" = :id ORDER BY ID DESC)
+        Do $$$AssertEquals(disposition, "resend", mode _ ": the plain resend")
+        Do $$$AssertEquals(entry, "", mode _ ": naming no entry")
+        Do $$$AssertEquals(by, "rules", mode _ ": from the rules")
+        Do $$$AssertEquals(after.State, "proposed", mode _ ": the plan goes to the gate, and the case is not escalated yet")
+        &sql(SELECT COUNT(*) INTO :notes FROM Shutter_Store.CaseEvent WHERE "Case" = :id AND Text %STARTSWITH 'No board answered')
+        Do $$$AssertEquals(+notes, 1, mode _ ": a note says nobody answered and the rules path proposes")
+        // The gate's answer to that plan when the new pattern is its only objection.
+        Set result = ##class(Shutter.Msg.GateResult).%New()
+        Set result.Outcome = "block", result.Summary = "Blocked: catalogue NEW_PATTERN", result.ChecksJSON = [(passed), (unmatched)].%ToJSON()
+        Do $$$AssertStatusOK(wf.OnGateProposal(c, result), mode _ ": the gate's block is taken")
+        Set after = ##class(Shutter.Store.Case).ByCaseId("C-TEST-LEAD-N")
+        Do $$$AssertEquals(after.State, "escalated", mode _ ": a person decides")
+        Do $$$AssertEquals(+after.CandidateEntry, 1, mode _ ": flagged as a candidate entry")
+        Do $$$AssertTrue(after.Headline [ "New pattern, a person decides", mode _ ": the headline: " _ after.Headline)
+        Do ##class(Shutter.Store.Case).PurgeCase(id)
+    }
+    // The gate finds another objection beside the new pattern: the case ends blocked, with both codes in its headline.
+    Set c = ..NoAnswerCase("C-TEST-LEAD-N", "board", {"decision": "new_pattern", "matches": []}, $LISTBUILD("no_record", "no_record"))
+    Set wf = ..QuietInstance()
+    Set wf.CaseId = "C-TEST-LEAD-N", wf.Mode = "board"
+    Do $$$AssertStatusOK(wf.AfterBoard(c), "the rules path plans")
+    Set result = ##class(Shutter.Msg.GateResult).%New()
+    Set result.Outcome = "block", result.Summary = "Blocked: identity PATIENT_MISMATCH, catalogue NEW_PATTERN", result.ChecksJSON = [(mismatch), (passed), (unmatched)].%ToJSON()
+    Do $$$AssertStatusOK(wf.OnGateProposal(c, result), "the gate's block is taken")
+    Set after = ##class(Shutter.Store.Case).ByCaseId("C-TEST-LEAD-N")
+    Do $$$AssertEquals(after.State, "blocked", "two objections: the case is blocked")
+    Do $$$AssertEquals(+after.CandidateEntry, 0, "and is not flagged as a candidate entry")
+    Do $$$AssertTrue((after.Headline [ "PATIENT_MISMATCH") && (after.Headline [ "NEW_PATTERN"), "the headline names both: " _ after.Headline)
+    Do ##class(Shutter.Store.Case).PurgeCase(after.%Id())
+}
+
 /// A death on the message goes to a person in Site policy mode and in Board mode too, with no board asked: an escalate plan
 /// naming the entry. Rules only is the baseline and stays as it is.
 Method TestADeathOnTheMessageAsksAPersonInEveryModeButRules()
