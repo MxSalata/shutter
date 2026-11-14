@@ -16,7 +16,7 @@ the productions a hospital already runs; the README's `docker compose up` is the
 | An API with state, receipt, capabilities and conditional writes, described in the site profile | ADT: a case, the evidence, a plan and the gate, then a resend once its checks pass, verified in the receiver's receipt and history (case recovery). Orders, results and documents: a case and a drafted email |
 | MLLP or TCP with no API | Any message type: a case, the evidence, a diagnosis where the agents can run, and a drafted email. Never a resend from the case |
 | An HL7 TCP receiver with a `watch` block and `engine_resend`, during an outage | Outage recovery (1.4.0): the messages that never arrived, any type, resent unchanged by the engine after one approval. Completed in the engine, as far as the declared `ack_level` and duplicate handling say; not verified at the receiver (section 11) |
-| FHIR, or anything else that isn't HL7 | A warning in the event log and no case |
+| FHIR, or anything else that isn't HL7 | No case. The Shutter Forwarder logs a warning in the event log; the alert route passes the alert on and leaves a trace line only |
 | Any receiver, a message over 2 MB | A warning in the event log and no case, except a document exception (section 9.10): the forwarder sends a qualifying MDM or report-carrying ORU as metadata only, so the 2 MB limit on a forwarded message doesn't apply to it and no copy is kept in Shutter. That limit is lifted and no more: a whole message posted to the intake is still refused over 2 MB |
 | Any receiver, a transport ACK and then lost downstream | Nothing: Shutter doesn't hear of it (section 10) |
 
