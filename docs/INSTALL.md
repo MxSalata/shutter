@@ -198,8 +198,9 @@ second opinion on a message IRIS cannot read. The Docker image builds it (`pex/b
 pinned SHA-256 checks, compiled against the IRIS image's own PEX framework jar and JDK into the manager directory's
 `pex/`, outside the data volume; the step never fails the image, it skips with the reason where something is missing). On an instance you
 install by hand, run `pex/build.sh` once on the server, as a user who can write to `<mgr>/pex`, with a JDK 11 or later (`javac`
-and `jar`, not only a Java runtime), `python3`, `sha256sum` and a route to Maven Central; where IRIS isn't in `/usr/irissys`,
-set `IRIS_HOME` and give the script `<mgr>/pex` as its one argument. It exits without an error and says why when it skips, so
+and `jar`, not only a Java runtime), `python3`, `sha256sum`, a route to Maven Central and an IRIS that carries its PEX Java framework under `IRIS_HOME/dev/java`;
+where IRIS isn't in `/usr/irissys`, set `IRIS_HOME` (where the script looks for that framework) and give the script `<mgr>/pex`
+as its one argument. By default it exits without an error and says why when it skips (`PEX_STRICT=1` makes a skip exit 1), so
 a missing tool leaves no jar and no failure. Then run the install again or enable the item;
 without the jar the install leaves the item disabled, the evidence carries no second opinion and the Doctor's `second_parser`
 says so. Nothing else depends on it.
@@ -207,12 +208,12 @@ says so. Nothing else depends on it.
 ## 3. Shape A: Shutter in its own namespace
 
 **3.1 The namespace.** Before the module is loaded nothing of Shutter's is on the instance, so load the one class that makes
-a namespace first, from any namespace, and make it there (`$SYSTEM.OBJ.Load("<module>/src/Shutter/Setup.cls", "ck")`, then
+a namespace first, from a namespace that has no Shutter in it (USER on a stock instance), and make it there (`$SYSTEM.OBJ.Load("<module>/src/Shutter/Setup.cls", "ck")`, then
 `Write ##class(Shutter.Setup).CreateNamespace("SHUTTER")`): its database goes under `<mgr>/shutter/`; a site that wants the
 data on storage the trust backs up makes the namespace and its database in the Management Portal instead, with
 Interoperability on. `src/Shutter/Installer.cls`, as the image uses it, also makes the demo's namespaces, so it is not for a
 site. `Shutter.Setup` is needed there only to make the namespace, so the block below deletes the copy in the namespace you
-started from (the install puts its own in `SHUTTER`). IPM (`zpm`) is per namespace, and a stock IRIS for Health image has no
+started from (the install puts its own in `SHUTTER`); started from a namespace that already holds a Shutter install, it would delete that install's setup class. IPM (`zpm`) is per namespace, and a stock IRIS for Health image has no
 `zpm` command and IPM's classes only in `HSLIB` and `HSSYS`: load `vendor/ipm/zpm-0.10.10.xml` in the new namespace with
 `$SYSTEM.OBJ.Load`. Load the module with `-Ddemo=0`: `Shutter.Production` starts with its feed, records and scenario items
 disabled (the six named in section 1), so it has no feed of its own until the intake route or the site's own items bring it

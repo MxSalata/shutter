@@ -256,7 +256,7 @@ zpm "repo -reset-defaults"
 zpm "install iris-shutter"
 ```
 
-`Shutter.Setup` is needed only to make the namespace, so its copy in the namespace you started from is deleted. `repo -reset-defaults` prints IPM's own warning about `-password`; the command passes none and the public registry needs none. The last command installs the registry's latest version, which can lag this repository; `zpm "list"` shows the version installed. For the exact clone, replace the last two lines with `zpm "load <module>"`.
+`Shutter.Setup` is needed only to make the namespace, so its copy in the namespace you started from is deleted: start from a namespace that has no Shutter in it (USER on a stock instance), or the delete removes that install's setup class. `repo -reset-defaults` prints IPM's own warning about `-password`; the command passes none and the public registry needs none. The last command installs the registry's latest version, which can lag this repository; `zpm "list"` shows the version installed. For the exact clone, replace the last two lines with `zpm "load <module>"`.
 
 [Installation, upgrades and uninstall](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md)
 
