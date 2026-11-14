@@ -55,9 +55,14 @@ async function openCase(page: Page, id: string) {
   return page.getByRole('region', { name: 'Decision receipt' });
 }
 
-/** A fact of the receipt, by its name: a name that is a term (Gate) has its definition after it, for screen readers. */
+/**
+ * A fact of the receipt, by its name: a name that is a term (Gate) has its definition after it, for screen readers, so
+ * the name ends where a lower-case letter or a space does not follow it.
+ */
 const fact = (page: Page, name: string) =>
-  page.locator('.receipt-fact').filter({ has: page.locator('dt', { hasText: new RegExp(`^${name}`) }) });
+  page
+    .locator('.receipt-fact')
+    .filter({ has: page.locator('dt', { hasText: new RegExp(`^${name}(?![a-z ])`) }) });
 
 for (const width of [1280, 360])
   for (const colorScheme of ['light', 'dark'] as const)
