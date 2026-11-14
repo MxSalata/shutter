@@ -13,6 +13,9 @@ Parameter INSTALL = "Shutter.FHIR.Install";
 
 Parameter SERVICE = "FHIRFacade.Service";
 
+/// The Encounter a scratch case read, kept as its sealed read.
+Parameter BASEBODY = "{""resourceType"":""Encounter"",""id"":""enc-1035"",""meta"":{""versionId"":""1""},""status"":""in-progress""}";
+
 Property Made As %String [ MultiDimensional ];
 
 Property Kept As %String [ MultiDimensional ];
@@ -256,6 +259,7 @@ Method NewCase(state As %String) As Shutter.Store.Case
     Set snapshot = ##class(Shutter.Store.Snapshot).Begin(case)
     Do $$$AssertStatusOK(snapshot.Seal({"fhir": {"kind": "fhir_r4"}}), "its snapshot is sealed")
     Do $$$AssertStatusOK(case.SetSnapshot(snapshot), "and is its current one")
+    Do $$$AssertStatusOK(##class(Shutter.Store.FHIRSealedRead).Keep(case, snapshot.%Id(), ..#BASEBODY), "its Encounter body is kept")
     Quit case
 }
 
@@ -268,7 +272,7 @@ Method Approved(case As Shutter.Store.Case, Output fence As Shutter.Store.FHIRAt
     Do a.CaseSetObjectId(case.%Id()), a.PlanSetObjectId(plan.%Id())
     Set a.Approver = "approver", a.Decision = "approved", a.DecidedAt = ##class(Shutter.Util.Time).NowUTC()
     Do $$$AssertStatusOK(a.%Save(), "a person's approval is saved")
-    Set body = "{""resourceType"":""Encounter"",""id"":""enc-1035"",""meta"":{""versionId"":""1""},""status"":""in-progress""}"
+    Set body = ..#BASEBODY
     Set digest = "Shutter.FHIR.Plan", etag = "W/""1"""
     Set operation = $EXTRACT($CLASSMETHOD(digest, "BodyDigest", case.CaseId _ "|" _ plan.%Id() _ "|" _ etag), 1, 32)
     Set prepared = {"view": {"prior_location": "Location/ward-a", "target_location": "Location/ward-b"}, "detail": {},
