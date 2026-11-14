@@ -1397,9 +1397,161 @@ describe('CasePage', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Approve the resend: plan v1' });
     await userEvent.click(within(dialog).getByRole('button', { name: 'Approve the resend' }));
     expect(await within(dialog).findByRole('alert')).toHaveTextContent(
-      /^Approval no longer valid: .* Close this and review the new plan\.$/,
+      /^Approval no longer valid: .* Review the current plan to decide again\.$/,
     );
-    expect(within(dialog).getByRole('button', { name: 'Approve the resend' })).toBeDisabled();
+    // The stopped review offers no decision, only the way to the current plan, where keyboard focus now is
+    expect(within(dialog).queryByRole('button', { name: 'Approve the resend' })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole('button', { name: 'Reject instead' })).not.toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Review current plan' })).toHaveFocus();
+  });
+
+  it('opens a fresh review of the current plan after a stale refusal: its own press, nothing carried over', async () => {
+    const view = (await (await fetch('/api/shutter/cases/C-000002/plan')).json()) as {
+      plan: Record<string, unknown>;
+    };
+    const detail = (await (await fetch('/api/shutter/cases/C-000002')).json()) as { version: number };
+    // Another tab re-plans the case while this one reads plan v1: plan v2, on the receiver at version 2
+    let replanned = false;
+    const current = () =>
+      replanned
+        ? { ...view, plan: { ...view.plan, version: 2, digest: 'sha256:another', expectedVersion: 2 } }
+        : view;
+    const sent: { planDigest: string; expectedVersion: number; comment: string; key: string | null }[] = [];
+    server.use(
+      http.get('/api/shutter/cases/C-000002/plan', () => HttpResponse.json(current())),
+      http.get('/api/shutter/cases/C-000002', () =>
+        HttpResponse.json(replanned ? { ...detail, version: detail.version + 3 } : detail),
+      ),
+      http.post('/api/shutter/cases/C-000002/approvals', async ({ request }) => {
+        const body = (await request.clone().json()) as (typeof sent)[number];
+        sent.push({ ...body, key: request.headers.get('Idempotency-Key') });
+        if (body.planDigest !== current().plan.digest)
+          return HttpResponse.json(
+            { error: 'stale_version', detail: "planDigest is not the current plan's digest" },
+            { status: 409 },
+          );
+        return HttpResponse.json({ approver: 'approver' }, { status: 202 });
+      }),
+    );
+    renderCase('C-000002');
+    const approval = await screen.findByRole('region', { name: 'Approval' });
+    await userEvent.click(await within(approval).findByRole('button', { name: 'Approve the resend' }));
+    const stopped = await screen.findByRole('dialog', { name: 'Approve the resend: plan v1' });
+    await userEvent.type(within(stopped).getByRole('textbox', { name: /Comment/ }), 'Read plan one');
+    replanned = true;
+    await userEvent.click(within(stopped).getByRole('button', { name: 'Approve the resend' }));
+    expect(await within(stopped).findByTestId('review-refusal')).toHaveTextContent(
+      /^Approval no longer valid: /,
+    );
+    // Once the page has read the case again, the refusal says what changed, beside the plan the person read
+    const changed = await within(stopped).findByTestId('what-changed');
+    const row = (label: string) => within(changed).getByRole('rowheader', { name: label }).closest('tr')!;
+    expect(row('Plan')).toHaveTextContent('v2 (was v1)');
+    expect(row('Receiver version')).toHaveTextContent('2 (was 1)');
+    expect(row('Action')).toHaveTextContent('Unchanged: Resend the PAS transfer to WARD-B, once');
+    expect(row('Case version')).toHaveTextContent(`${detail.version + 3} (was ${detail.version})`);
+    expect(within(stopped).getByTestId('plan-action')).toHaveTextContent(/version 1\.$/);
+    // By keyboard: the press that reads the case again has focus
+    const again = within(stopped).getByRole('button', { name: 'Review current plan' });
+    expect(again).toHaveFocus();
+    await userEvent.keyboard('{Enter}');
+    const fresh = await screen.findByRole('dialog', { name: 'Approve the resend: plan v2' });
+    const note = within(fresh).getByTestId('review-replaces');
+    expect(note).toHaveFocus();
+    expect(note).toHaveAccessibleName('Now reviewing the current plan, v2');
+    expect(note).toHaveTextContent(
+      'Your decision on plan v1 was not recorded: the plan changed, and this is plan v2. Nothing is decided until you confirm it.',
+    );
+    expect(within(fresh).getByTestId('review-status')).toHaveTextContent(
+      'Plan v2 is open for review. Nothing is decided until you confirm it.',
+    );
+    expect(within(fresh).getByTestId('plan-action')).toHaveTextContent(/version 2\.$/);
+    expect(within(fresh).getByRole('textbox', { name: /Comment/ })).toHaveValue('');
+    // Nothing more was sent by reading it: the new review waits for its own confirming press
+    expect(sent).toHaveLength(1);
+    await userEvent.click(within(fresh).getByRole('button', { name: 'Approve the resend' }));
+    await waitFor(() => expect(sent).toHaveLength(2));
+    expect(sent[1]).toMatchObject({
+      planDigest: 'sha256:another',
+      expectedVersion: detail.version + 3,
+      comment: '',
+    });
+    expect(sent[1].key).toBeTruthy();
+    expect(sent[1].key).not.toBe(sent[0].key);
+  });
+
+  it('says when the current plan cannot be read, with no decision to press, and reads it again on request', async () => {
+    let failing = false;
+    const snapshot = await (await fetch('/api/shutter/cases/C-000002/snapshot')).json();
+    server.use(
+      http.post('/api/shutter/cases/C-000002/approvals', () =>
+        HttpResponse.json(
+          { error: 'stale_version', detail: "expectedVersion is not the case's version" },
+          { status: 409 },
+        ),
+      ),
+      http.get('/api/shutter/cases/C-000002/snapshot', () =>
+        failing
+          ? HttpResponse.json(
+              { error: 'unavailable', detail: 'The evidence could not be read' },
+              { status: 503 },
+            )
+          : HttpResponse.json(snapshot),
+      ),
+    );
+    renderCase('C-000002');
+    await screen.findByTestId('case-proposal');
+    await userEvent.click(screen.getByTestId('case-action'));
+    const dialog = await screen.findByRole('dialog', { name: 'Approve the resend: plan v1' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Approve the resend' }));
+    await within(dialog).findByTestId('review-refusal');
+    failing = true;
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Review current plan' }));
+    expect(await within(dialog).findByTestId('review-current-failed')).toHaveTextContent(
+      /^The current plan could not be read: .*\. Nothing was decided; try again, or cancel\.$/,
+    );
+    // No decision is offered on a read that failed, and the refusal's words stay
+    expect(within(dialog).queryByRole('button', { name: 'Approve the resend' })).not.toBeInTheDocument();
+    expect(within(dialog).getByTestId('review-refusal')).toHaveTextContent(/^Approval no longer valid: /);
+    expect(within(dialog).getByRole('button', { name: 'Review current plan' })).toHaveFocus();
+    failing = false;
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Review current plan' }));
+    // Nothing on the page changed, so the new review says the refusal alone stopped the last one
+    const fresh = await screen.findByRole('dialog', { name: 'Approve the resend: plan v1' });
+    expect(await within(fresh).findByTestId('review-replaces')).toHaveTextContent(
+      /it was refused as stale, though nothing this page reads has changed\./,
+    );
+    expect(within(fresh).getByRole('button', { name: 'Approve the resend' })).toBeEnabled();
+  });
+
+  it('offers no review once the case no longer waits for a decision', async () => {
+    const detail = (await (await fetch('/api/shutter/cases/C-000002')).json()) as { version: number };
+    let decided = false;
+    server.use(
+      http.get('/api/shutter/cases/C-000002', () =>
+        HttpResponse.json(decided ? { ...detail, state: 'blocked', version: detail.version + 1 } : detail),
+      ),
+      http.post('/api/shutter/cases/C-000002/approvals', () =>
+        HttpResponse.json(
+          { error: 'stale_version', detail: "expectedVersion is not the case's version" },
+          { status: 409 },
+        ),
+      ),
+    );
+    renderCase('C-000002');
+    await screen.findByTestId('case-proposal');
+    await userEvent.click(screen.getByTestId('case-action'));
+    const dialog = await screen.findByRole('dialog', { name: 'Approve the resend: plan v1' });
+    // Another tab rejected the plan first
+    decided = true;
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Approve the resend' }));
+    await userEvent.click(await within(dialog).findByRole('button', { name: 'Review current plan' }));
+    expect(await within(dialog).findByTestId('review-current-gone')).toHaveTextContent(
+      'The case is no longer waiting for a decision: it is blocked now. Nothing was decided in this review.',
+    );
+    expect(within(dialog).queryByRole('button', { name: 'Review current plan' })).not.toBeInTheDocument();
+    expect(within(dialog).queryByRole('button', { name: 'Approve the resend' })).not.toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus();
   });
 
   it('shows a duplicate approval refused as the server words it, sent once and never again by itself', async () => {
@@ -1427,6 +1579,45 @@ describe('CasePage', () => {
     // Answered, the review can be closed again
     expect(within(dialog).getByRole('button', { name: 'Close' })).toBeEnabled();
     expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeEnabled();
+  });
+
+  it('keeps the server words when another tab decided first, and says the case no longer waits', async () => {
+    const detail = (await (await fetch('/api/shutter/cases/C-000002')).json()) as { version: number };
+    let decided = false;
+    server.use(
+      http.get('/api/shutter/cases/C-000002', () =>
+        HttpResponse.json(decided ? { ...detail, state: 'blocked', version: detail.version + 1 } : detail),
+      ),
+      http.post('/api/shutter/cases/C-000002/approvals', () =>
+        HttpResponse.json(
+          { error: 'wrong_state', detail: 'The case is blocked, not awaiting approval' },
+          { status: 409 },
+        ),
+      ),
+    );
+    renderCase('C-000002');
+    await screen.findByTestId('case-proposal');
+    await userEvent.click(screen.getByTestId('case-action'));
+    const dialog = await screen.findByRole('dialog', { name: 'Approve the resend: plan v1' });
+    decided = true;
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Approve the resend' }));
+    // The page reads the case again after the refusal: the review stops, in the server's words, with no word of
+    // deciding again, and the state leads what changed
+    const refusal = await within(dialog).findByTestId('review-refusal');
+    expect(refusal).toHaveTextContent(
+      /^The case is blocked, not awaiting approval \(wrong_state\)\. The case was no longer waiting for a decision when this page last read it\.$/,
+    );
+    const changed = within(dialog).getByTestId('what-changed');
+    expect(within(changed).getByRole('rowheader', { name: 'State' }).closest('tr')).toHaveTextContent(
+      'Blocked (was Waiting for approval)',
+    );
+    expect(within(dialog).queryByRole('button', { name: 'Approve the resend' })).not.toBeInTheDocument();
+    // A fresh read is still one press away: the page stops reading a closed case, so only it can say what is current
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Review current plan' }));
+    expect(await within(dialog).findByTestId('review-current-gone')).toHaveTextContent(
+      'The case is no longer waiting for a decision: it is blocked now.',
+    );
+    expect(refusal).toHaveTextContent(/^The case is blocked, not awaiting approval \(wrong_state\)\.$/);
   });
 
   it('holds the review open while a decision is being sent, so its answer is always announced', async () => {
@@ -1488,7 +1679,7 @@ describe('CasePage', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Approve the resend: plan v1' });
     await userEvent.click(within(dialog).getByRole('button', { name: 'Approve the resend' }));
     expect(await within(dialog).findByRole('alert')).toHaveTextContent(/^Approval no longer valid: /);
-    expect(within(dialog).getByRole('button', { name: 'Approve the resend' })).toBeDisabled();
+    expect(within(dialog).queryByRole('button', { name: 'Approve the resend' })).not.toBeInTheDocument();
     expect(sent).toEqual([expect.objectContaining({ decision: 'approve', planDigest: '' })]);
     server.events.removeAllListeners();
     expect(screen.getByTestId('outcome-line')).toHaveTextContent('Waiting for approval');
@@ -1516,11 +1707,17 @@ describe('CasePage', () => {
         HttpResponse.json({ ...view, plan: { ...view.plan, version: 2, digest: 'sha256:another' } }),
       ),
     );
-    const confirm = within(dialog).getByRole('button', { name: 'Approve the resend' });
-    await waitFor(() => expect(confirm).toBeDisabled(), { timeout: 10_000 });
-    expect(within(dialog).getByRole('alert')).toHaveTextContent(
-      /^The plan or the case changed since you opened this, so this decision can't be recorded\. Close this and review the new plan\.$/,
+    await waitFor(
+      () =>
+        expect(within(dialog).queryByRole('button', { name: 'Approve the resend' })).not.toBeInTheDocument(),
+      { timeout: 10_000 },
     );
+    expect(within(dialog).getByRole('alert')).toHaveTextContent(
+      /^The plan or the case changed since you opened this, so this decision can't be recorded\. Review the current plan to decide again\.$/,
+    );
+    // The comment's box went with the decision: keyboard focus moves to the way on, and the change is said
+    expect(within(dialog).getByRole('button', { name: 'Review current plan' })).toHaveFocus();
+    expect(within(dialog).getByTestId('what-changed')).toHaveTextContent(/Planv2 \(was v1\)/);
     // The dialog still says what the person read, so its words can't sit over a plan they didn't
     expect(screen.getByRole('dialog', { name: 'Approve the resend: plan v1' })).toBeInTheDocument();
     expect(within(dialog).getByTestId('plan-action')).toHaveTextContent(
@@ -1540,9 +1737,13 @@ describe('CasePage', () => {
         HttpResponse.json({ ...detail, version: detail.version + 1 }),
       ),
     );
-    const confirm = within(dialog).getByRole('button', { name: 'Reject the resend' });
-    await waitFor(() => expect(confirm).toBeDisabled(), { timeout: 10_000 });
+    await waitFor(
+      () =>
+        expect(within(dialog).queryByRole('button', { name: 'Reject the resend' })).not.toBeInTheDocument(),
+      { timeout: 10_000 },
+    );
     expect(within(dialog).getByRole('alert')).toHaveTextContent(/changed since you opened this/);
+    expect(within(dialog).getByTestId('what-changed')).toHaveTextContent(/Case version\d+ \(was \d+\)/);
   });
 
   it('names the case, the patient, the time, the bed and why it is still due in the dialog', async () => {
