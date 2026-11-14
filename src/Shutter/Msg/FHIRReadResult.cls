@@ -1,4 +1,6 @@
-/// What FHIR Receiver read: every part asked for, each with its trusted status, or one error and no parts.
+/// What FHIR Receiver read: every part asked for, each with its trusted status, or one error and no parts. The body
+/// of a Patient or a Location part holds only the fields the checks read; the Encounter, its history and a version
+/// read by id are whole.
 Class Shutter.Msg.FHIRReadResult Extends Ens.Response
 {
 

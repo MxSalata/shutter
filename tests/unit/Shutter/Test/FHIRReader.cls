@@ -455,6 +455,49 @@ Method TestNoReadFollowsARedirect()
     Do $$$AssertEquals(##class(Shutter.Catalogue.Matcher).Conditions(case, ..Summary(case, view))."encounter_state", "unknown", "the matcher reads it as unknown")
 }
 
+/// What the reads carry of a Patient and of a Location is what the checks read and nothing else: no name, birth
+/// date, address or telecom reaches the answer, which the production keeps as a message body. A read of either that is
+/// not the receiver's own 200 carries no body at all.
+Method TestAPatientAndALocationAreCarriedWithoutTheirText()
+{
+    Quit:'..Ready()
+    // The seed's Patient again, as a real server holds one.
+    Set pat = {"resourceType": "Patient", "id": "demo-p1", "identifier": [{"system": (..#MRNSYS), "value": (..#MRN), "assigner": {"display": "Tilly's Hospital Trust"}}, {"system": "urn:other", "value": "X-77", "period": {"start": "1999-09-09"}}], "active": true, "name": [{"family": "TESTER", "given": ["TILLY"]}], "birthDate": "1980-01-01", "gender": "female", "address": [{"line": ["1 Test Street"], "postalCode": "ZZ99 9ZZ"}], "telecom": [{"system": "phone", "value": "0000 000000"}]}
+    Do $$$AssertEquals($CLASSMETHOD(..#SERVICE, "Seed", [(pat)]).%Get(0).status, 200, "the Patient is written again")
+    Set case = ..Case()
+    Set parts = ..Parts(case)
+    Set json = parts.%ToJSON(), found = ""
+    For word = "TESTER", "TILLY", "Tilly's", "1980-01-01", "1999-09-09", "female", "Test Street", "ZZ99", "0000 000000", "Ward A", "Ward B" {
+        If json [ word Set found = found _ $SELECT(found = "": "", 1: ", ") _ word
+    }
+    Do $$$AssertEquals(found, "", "nothing of the Patient's or the Locations' own text is carried")
+    Set want = {"resourceType": "Patient", "id": "demo-p1", "meta": {"versionId": "2"}, "identifier": [{"system": (..#MRNSYS), "value": (..#MRN)}, {"system": "urn:other", "value": "X-77"}], "active": true}
+    Do $$$AssertEquals(parts.patient.body, want.%ToJSON(), "the Patient: its id, version, identifiers and active flag")
+    Set want = {"resourceType": "Location", "id": "ward-a", "meta": {"versionId": "1"}, "status": "active", "identifier": [{"system": "urn:shutter:ward", "value": "WARD-A"}]}
+    Do $$$AssertEquals(parts.locations.%Get(0).body, want.%ToJSON(), "a Location: its id, version, status and identifiers")
+    Set view = ..View(parts, case)
+    Set want = {"http_status": 200, "reference": "Patient/demo-p1", "etag": "W/\"2\"", "identifier_ok": true, "link": false, "active": true}
+    Do $$$AssertEquals(view.fhir.patient.%ToJSON(), want.%ToJSON(), "and the checks read the Patient as before")
+    Do $$$AssertEquals(view.fhir.locations.%Get(0)."identifier_ok" _ view.fhir.locations.%Get(1)."identifier_ok" _ " " _ view.fhir.locations.%Get(0).status, "11 active", "and the Locations")
+
+    // A link and an inactive flag are still read, the link without the Patient it names.
+    Do pat.%Set("active", 0, "boolean")
+    Set pat.link = [{"other": {"reference": "Patient/demo-p9", "display": "TESTER, TILLY (merged)"}, "type": "replaced-by"}]
+    Do $$$AssertEquals($CLASSMETHOD(..#SERVICE, "Seed", [(pat)]).%Get(0).status, 200, "the Patient is linked and inactive")
+    Set parts = ..Parts(case)
+    Do $$$AssertTrue(parts.%ToJSON() '[ "demo-p9", "the link is carried without what it names")
+    Set view = ..View(parts, case)
+    Do $$$AssertEquals(view.fhir.patient.link _ " " _ view.fhir.patient.active, "1 0", "linked, and not active")
+
+    // Another Patient behind the address, and a refusal: no body is carried.
+    Set op = ..Op(.http)
+    Set http.Canned("GET", "Patient/demo-p1") = $LISTBUILD(200, ..#FHIRJSON, "W/""1""", "", {"resourceType": "Patient", "id": "someone-else", "name": [{"family": "OTHER"}]}.%ToJSON())
+    Set http.Canned("GET", "Location/ward-b") = $LISTBUILD(404, ..#FHIRJSON, "", "", {"resourceType": "OperationOutcome", "issue": [{"severity": "error", "code": "not-found", "diagnostics": "no such ward"}]}.%ToJSON())
+    Set parts = ..Parts(case, op)
+    Do $$$AssertEquals(parts.patient."http_status" _ " [" _ parts.patient.body _ "]", "0 []", "a Patient that is not the one asked for")
+    Do $$$AssertEquals(parts.locations.%Get(1)."http_status" _ " [" _ parts.locations.%Get(1).body _ "]", "404 []", "a Location the receiver does not hold")
+}
+
 // ---- the collector ----
 
 /// The fhir item of a snapshot is the digest, the ETag and the version id of the Encounter read, and nothing else:

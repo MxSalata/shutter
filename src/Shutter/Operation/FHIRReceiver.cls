@@ -3,7 +3,9 @@
 /// (<class>Shutter.FHIR.Trust</class>).
 /// A request names no receiver: the case is opened by its id and the address comes from the fhir block of the case's
 /// own receiver in the site profile, so a request can borrow no other entry's settings. The server, port, TLS and
-/// credential are this item's adapter settings.
+/// credential are this item's adapter settings. The answer is kept as a message body of the production, so of a
+/// Patient and of a Location it carries only what the checks read (<method>Keep</method>): no name, birth date,
+/// address or telecom. The Encounter, its history and a version read by id are carried whole.
 Class Shutter.Operation.FHIRReceiver Extends Ens.BusinessOperation
 {
 
@@ -247,8 +249,64 @@ Method Get(path As %String, kind As %String, type As %String = "", id As %String
         }
     }
     Do ##class(Shutter.FHIR.Trust).Part(kind, part, type, id)
+    If (kind = "patient") || (kind = "location") Do ..Keep(part, kind)
     Set ..Carried = ..Carried + $LENGTH(part.body)
     Quit part
+}
+
+/// What a Patient or a Location part carries on from here, once it has been judged: the fields the checks read and
+/// nothing else of the resource, because the answer is kept as a message body of the production. That is the type,
+/// the id, the version id, the system and value of each identifier, and then a Patient's active flag and its links
+/// as a count, or a Location's status. A part that is not the receiver's own 200 carries no body.
+ClassMethod Keep(part As %DynamicObject, kind As %String) [ Private ]
+{
+    Set body = $SELECT(part."http_status" = 200: ##class(Shutter.FHIR.Trust).Parsed(part.body), 1: "")
+    If '$ISOBJECT(body) {
+        Do part.%Set("body", "", "string")
+        Quit
+    }
+    Set kept = {}
+    Do kept.%Set("resourceType", ..Str(body, "resourceType"), "string")
+    Do kept.%Set("id", ..Str(body, "id"), "string")
+    Set version = ..Str(body.%Get("meta"), "versionId")
+    If version '= "" {
+        Set kept.meta = {}
+        Do kept.meta.%Set("versionId", version, "string")
+    }
+    If (kind = "location") && (body.%GetTypeOf("status") = "string") Do kept.%Set("status", body.status, "string")
+    Set ids = body.%Get("identifier")
+    If $ISOBJECT(ids) && ids.%IsA("%DynamicArray") {
+        Set list = []
+        Set it = ids.%GetIterator()
+        While it.%GetNext(.i, .id) {
+            Continue:'..IsObject(id)
+            Set one = {}
+            For key = "system", "value" {
+                If id.%GetTypeOf(key) = "string" Do one.%Set(key, id.%Get(key), "string")
+            }
+            Do list.%Push(one)
+        }
+        Set kept.identifier = list
+    }
+    If kind = "patient" {
+        // A link says the record was merged or replaced; which record it names is not carried. One that is not a
+        // list, and an active flag that is not true or false, stay unreadable.
+        Set links = body.%Get("link"), type = body.%GetTypeOf("link")
+        If $ISOBJECT(links) && links.%IsA("%DynamicArray") {
+            Set list = []
+            For i = 1:1:links.%Size() { Do list.%Push({}) }
+            Set kept.link = list
+        } ElseIf type '= "unassigned" {
+            Do kept.%Set("link", "not a list", "string")
+        }
+        Set type = body.%GetTypeOf("active")
+        If type = "boolean" {
+            Do kept.%Set("active", ''body.%Get("active"), "boolean")
+        } ElseIf type '= "unassigned" {
+            Do kept.%Set("active", "not true or false", "string")
+        }
+    }
+    Do part.%Set("body", kept.%ToJSON(), "string")
 }
 
 /// Stops the reads when the bodies carried so far are together too large.

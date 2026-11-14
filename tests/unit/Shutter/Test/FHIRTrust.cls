@@ -345,16 +345,18 @@ Method TestMetadataCarriesNoBody()
     Do $$$AssertEquals(##class(Shutter.Operation.FHIRReceiver).Statement("{""resourceType"":""CapabilityStatement""}").%ToJSON(), "{""software"":{""name"":"""",""version"":""""},""fhir_version"":"""",""versioning"":"""",""interactions"":[],""read_history"":false,""update_create"":false}", "a statement that says nothing")
 }
 
-/// A body arrives as UTF-8 bytes and is carried as characters.
+/// A body arrives as UTF-8 bytes and is carried as characters. Of a Location only what the checks read is carried,
+/// so the text above ASCII is in an identifier's value: its name is not carried at all.
 Method TestADisplayAboveAsciiIsDecoded()
 {
     Quit:'..Ready()
     Set name = "Zo" _ $CHAR(235) _ " " _ $CHAR(321) _ "uk Ward"
-    Do $CLASSMETHOD(..#SERVICE, "Seed", [{"resourceType": "Location", "id": "ward-a", "identifier": [{"system": "urn:shutter:ward", "value": "WARD-A"}], "status": "active", "name": (name)}])
+    Do $CLASSMETHOD(..#SERVICE, "Seed", [{"resourceType": "Location", "id": "ward-a", "identifier": [{"system": "urn:shutter:ward", "value": "WARD-A"}, {"system": "urn:shutter:ward-name", "value": (name)}], "status": "active", "name": (name)}])
     Set op = ..Op(.http)
     Set parts = ..Run(op, ..NewCase(), "evidence")
     Set location = parts.locations.%Get(0)
-    Do $$$AssertEquals(location."http_status" _ " " _ ..J(location.body).name, "200 " _ name, "the name is read as its characters")
+    Do $$$AssertEquals(location."http_status" _ " " _ ..J(location.body).identifier.%Get(1).value, "200 " _ name, "the value is read as its characters")
+    Do $$$AssertEquals(..J(location.body).%GetTypeOf("name"), "unassigned", "and the Location's name is not carried")
     Do $$$AssertEquals(location.etag, "W/""2""", "of the version that holds it")
 }
 
