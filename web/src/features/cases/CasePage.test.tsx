@@ -1045,9 +1045,11 @@ describe('CasePage', () => {
     renderCase('C-000009');
     const board = await screen.findByRole('region', { name: 'The board' });
     const card = await within(board).findByRole('region', { name: 'Encounter Integrity' });
-    // Its citations are counted on the card, and listed one click away, each a chip to its section
+    // Its citations are counted on the card, in the name of the detail that lists them, each a chip to its section
     expect(within(card).getByText(/^Cited \d+ evidence sections$/)).toBeInTheDocument();
-    await userEvent.click(within(card).getByRole('button', { name: /^Which ones\s?, Encounter Integrity$/ }));
+    await userEvent.click(
+      within(card).getByRole('button', { name: /^Cited \d+ evidence sections\s?, Encounter Integrity$/ }),
+    );
     const cites = await within(card).findAllByRole('button', { name: 'Encounter' });
     expect(cites[0]).not.toHaveAttribute('href');
     await userEvent.click(cites[0]);
@@ -1711,10 +1713,9 @@ describe('the case page for both audiences', () => {
     const board = await screen.findByRole('region', { name: 'The board' });
     const conformance = await within(board).findByRole('region', { name: 'Conformance' });
     expect(conformance).toHaveTextContent('Replay · claude-opus-5-5 · 14.7 s · 3 iterations · 5 tool calls');
-    expect(within(conformance).getByRole('button', { name: /^Which ones\s?, Conformance$/ })).toHaveAttribute(
-      'aria-expanded',
-      'true',
-    );
+    expect(
+      within(conformance).getByRole('button', { name: /^Cited 8 evidence sections\s?, Conformance$/ }),
+    ).toHaveAttribute('aria-expanded', 'true');
     // The receipt's versions stay a click away in Technical too, so the Outcome band stays short (review, 2 Nov)
     const top = await outcome();
     expect(within(top).getByRole('button', { name: 'Versions, keys and times' })).toHaveAttribute(
