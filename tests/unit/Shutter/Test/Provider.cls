@@ -211,6 +211,18 @@ Method TestOpenAIIsConfigured()
     Do ..RoundTrip("openai")
 }
 
+/// A model with no price row (R146-02): ConfigureProvider's status, which the install prints and the production's start
+/// logs, says its runs are unpriced and that the day's cap and the users' shares do not limit what they spend. A priced
+/// model's status says nothing more. OpenAI's default model has no price row.
+Method TestAnUnpricedModelIsSaid()
+{
+    Do $$$AssertTrue($ISOBJECT(##class(Shutter.Store.ModelPrice).ByModel("claude-opus-5-5")), "Anthropic's default model has a price row")
+    Do $$$AssertEquals(##class(Shutter.Setup).UnpricedNote("claude-opus-5-5"), "", "and its status says nothing more")
+    Do $$$AssertNotTrue($ISOBJECT(##class(Shutter.Store.ModelPrice).ByModel("gpt-4.1")), "OpenAI's default model has none")
+    Set note = ##class(Shutter.Setup).UnpricedNote("gpt-4.1")
+    Do $$$AssertTrue((note [ "unpriced") && (note [ "gpt-4.1") && (note [ "SHUTTER_DAILY_BUDGET_USD") && (note [ "SHUTTER_JUDGE_BUDGET_USD") && (note [ "do not limit"), "its status says the cap and the shares do not limit it: " _ note)
+}
+
 /// A refusal changes nothing: the record a refused call leaves is the record it found.
 Method TestARefusalChangesNothing()
 {
@@ -288,7 +300,9 @@ Method RoundTrip(provider As %String)
         Do $$$AssertEquals(##class(Shutter.Setup).WalletSecretState(-1, other), 1, "the other provider's secret is there first")
         // Anthropic by the two-argument call, as every caller made it before the install took a second provider.
         If provider = "anthropic" { Set r = ##class(Shutter.Setup).ConfigureProvider(..#PLACEHOLDER) } Else { Set r = ##class(Shutter.Setup).ConfigureProvider(..#PLACEHOLDER, "", provider) }
-        Do $$$AssertEquals(r, "ok: AI.LLM.Shutter, " _ provider _ ", model " _ model, "the status names the provider and the model, never the key")
+        // A model with no price row (OpenAI's) is said to be unpriced, so whoever configured it learns that the day's cap
+        // and the shares do not limit what its runs spend (R146-02).
+        Do $$$AssertEquals(r, "ok: AI.LLM.Shutter, " _ provider _ ", model " _ model _ $SELECT(provider = "openai": ##class(Shutter.Setup).UnpricedNote(model), 1: ""), "the status names the provider and the model, never the key")
         Do $$$AssertStatusOK($CLASSMETHOD("%ConfigStore.Configuration", "GetDetails", "AI.LLM.Shutter", .details, 0, 0), "the Config Store holds AI.LLM.Shutter")
         Do $$$AssertEquals(details.%Get("model_provider"), provider, "with the provider")
         Do $$$AssertEquals(details.%Get("model"), model, "its default model")

@@ -357,6 +357,15 @@ describe("a question's failure read from its error", () => {
     expect(liveRefusalInText('No answer: the run timed out', s)).toBeNull();
     expect(liveRefusalInText('', s)).toBeNull();
   });
+
+  it('does not read a busy admission as the budget spent: it is an ordinary failure to try again', () => {
+    expect(
+      liveRefusalInText(
+        "The agent answered budget_busy: The day's model budget could not be checked in time (another run was being admitted); the run was not sent. Try again in a moment.",
+        settings({ demo: true }),
+      ),
+    ).toBeNull();
+  });
 });
 
 describe("the banner's line about the live budget", () => {

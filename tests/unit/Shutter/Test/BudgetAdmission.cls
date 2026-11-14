@@ -40,6 +40,14 @@ ClassMethod CapAbove(extra As %Numeric) As %Numeric
     Quit ##class(Shutter.Util.Budget).Configure($FNUMBER(spent + extra, "", 6))
 }
 
+/// Another run in flight for the test: a reservation of amount under the key ut-adm-held, which the test settles. With
+/// something held against the cap, the estimate counts (with nothing spent or reserved, one run is admitted whatever its
+/// estimate: TestALimitBelowOneEstimateStillAdmitsARun).
+ClassMethod Hold(amount As %Numeric)
+{
+    Set ^Shutter.Budget("reserve", "ut-adm-held") = $LISTBUILD(+amount, ##class(Shutter.Util.Time).EpochSeconds(), "ut-adm-holder")
+}
+
 /// Well under the cap, admission behaves as before: admitted, the estimate reserved for the asker, the day not exhausted;
 /// with no cap at all, admitted too. Settling the key releases the reservation.
 Method TestWellUnderTheCapIsAdmittedAsBefore()
@@ -71,7 +79,9 @@ Method TestNearTheCapTheEstimateCounts()
     Kill ^Shutter.Budget("reserve")
     Set ^Shutter.Config("budgetReserveUsd") = "0.50"
     Do $CLASSMETHOD(b, "ConfigureShare", "0")
-    Do ..CapAbove(.1)
+    // Another run is in flight, 0.10 of it, and the cap is 0.20 above the day's spend: 0.10 left.
+    Do ..Hold(.1)
+    Do ..CapAbove(.2)
     Set s = $CLASSMETHOD(b, "Status")
     Do $$$AssertNotTrue(s.exhausted, "0.10 left: the day is not spent")
     Do $$$AssertNotTrue($CLASSMETHOD(b, "Admit", "ut-adm-near", "approver", .st), "but a run estimated at 0.50 is refused")
@@ -80,13 +90,13 @@ Method TestNearTheCapTheEstimateCounts()
     Do $$$AssertTrue((words [ "has 0.10 USD left") && (words [ "less than a run's estimate of 0.50 USD") && (words [ "not sent"), "the refusal says what is left and the estimate: " _ words)
     Do $$$AssertNotTrue($CLASSMETHOD(b, "AllowsFor", "approver", .st2), "the check ahead of a run refuses it too")
     Do $$$AssertNotTrue($CLASSMETHOD(b, "Allows", .st3), "and so does Allows")
-    Do ..CapAbove(.5)
+    Do ..CapAbove(.6)
     Do $$$AssertTrue($CLASSMETHOD(b, "Admit", "ut-adm-fit", "approver", .st), "an estimate that just fits is admitted")
     Do $$$AssertNotTrue($CLASSMETHOD(b, "Admit", "ut-adm-next", "operator", .st), "and the next run is refused on its reservation")
-    Do $$$AssertTrue($CLASSMETHOD(b, "Refusal", st) [ "1 run(s) in flight, 0.50 USD reserved", "the refusal names the run in flight: " _ $CLASSMETHOD(b, "Refusal", st))
+    Do $$$AssertTrue($CLASSMETHOD(b, "Refusal", st) [ "2 run(s) in flight, 0.60 USD reserved", "the refusal names the runs in flight: " _ $CLASSMETHOD(b, "Refusal", st))
     Do $CLASSMETHOD(b, "Settle", "ut-adm-fit")
     Do $$$AssertTrue($CLASSMETHOD(b, "Admit", "ut-adm-next", "operator"), "once it settles, the next is admitted")
-    Do $CLASSMETHOD(b, "Settle", "ut-adm-next")
+    Do $CLASSMETHOD(b, "Settle", "ut-adm-next"), $CLASSMETHOD(b, "Settle", "ut-adm-held")
     Do $$$AssertEquals($CLASSMETHOD(b, "Reserved", "", .n) _ "|" _ n, "0|0", "all settled")
     // The review's own figures, with the spend recorded: a 5.00 cap above what the day had, 4.90 spent in a row, 0.50
     // estimated. Before admission counted the estimate, this run was admitted.
@@ -107,7 +117,9 @@ Method TestNearTheCapTheEstimateCounts()
     Do ##class(Shutter.Store.AgentRun).%DeleteId(row.%Id())
 }
 
-/// The asker's share counts the estimate too, per user; the feed's own runs ("system") have no share.
+/// The asker's share counts the estimate too, per user, once the user has anything spent or in flight; the feed's own runs
+/// ("system") have no share. A share below one run's estimate still admits the user's first run (R146-01): refusing it
+/// would refuse every run of theirs for good, as the estimate moves only when live runs land.
 Method TestAShareCountsTheEstimate()
 {
     Set b = "Shutter.Util.Budget"
@@ -117,11 +129,13 @@ Method TestAShareCountsTheEstimate()
     Set user = "ut-adm-share-" _ $JOB, other = "ut-adm-other-" _ $JOB
     Do $CLASSMETHOD(b, "ConfigureShare", "0.30")
     Do $$$AssertNotTrue($CLASSMETHOD(b, "StatusFor", user).shareExhausted, "a share of 0.30 with nothing spent is not spent")
-    Do $$$AssertNotTrue($CLASSMETHOD(b, "Admit", "ut-share-a", user, .st), "but a run estimated at 0.50 does not fit it")
+    Do $$$AssertTrue($CLASSMETHOD(b, "AllowsFor", user, .st), "with nothing of the user's spent or in flight, a run estimated at 0.50 may start")
+    Do $$$AssertTrue($CLASSMETHOD(b, "Admit", "ut-share-a", user, .st), "and is admitted, though its estimate is over the share")
+    Do $$$AssertNotTrue($CLASSMETHOD(b, "Admit", "ut-share-b", user, .st), "the user's next run is refused while the first is in flight")
     Set words = $CLASSMETHOD(b, "Refusal", st)
-    Do $$$AssertTrue((words [ "Your share") && (words [ "has 0.30 USD left") && (words [ "less than a run's estimate of 0.50 USD"), "named as the user's share: " _ words)
+    Do $$$AssertTrue((words [ "Your share") && (words [ "0.30 USD"), "named as the user's share: " _ words)
     Do $$$AssertTrue($CLASSMETHOD(b, "Admit", "ut-share-sys", "system"), "the feed's own runs have no share")
-    Do $CLASSMETHOD(b, "Settle", "ut-share-sys")
+    Do $CLASSMETHOD(b, "Settle", "ut-share-sys"), $CLASSMETHOD(b, "Settle", "ut-share-a")
     Do $CLASSMETHOD(b, "ConfigureShare", "0.50")
     Do $$$AssertTrue($CLASSMETHOD(b, "Admit", "ut-share-a", user), "a share of 0.50 takes one run")
     Do $$$AssertNotTrue($CLASSMETHOD(b, "Admit", "ut-share-b", user, .st), "and refuses the user's second")
@@ -129,6 +143,40 @@ Method TestAShareCountsTheEstimate()
     Do $CLASSMETHOD(b, "Settle", "ut-share-a"), $CLASSMETHOD(b, "Settle", "ut-share-c")
     Do $CLASSMETHOD(b, "ConfigureShare", "0")
     Do $$$AssertEquals($CLASSMETHOD(b, "Reserved", "", .n) _ "|" _ n, "0|0", "all settled")
+}
+
+/// A cap or a share below one run's estimate (R146-01): with nothing spent or reserved under that limit, one run is
+/// admitted whatever its estimate, so such a limit does not refuse every run for good; once anything is spent or in flight
+/// under it, the estimate counts again, and the refusal names the limit that stopped the run. Read on day states made by
+/// hand (Fits is what Admit and AllowsFor decide with), so the arithmetic holds on any instance.
+Method TestALimitBelowOneEstimateStillAdmitsARun()
+{
+    Set b = "Shutter.Util.Budget"
+    Set day = {"dailyUsd": 0.3, "spentTodayUsd": 0, "reservedUsd": 0, "estimateUsd": 0.5, "since": "2026-11-15T00:00:00Z", "resetsAt": "2026-11-16T00:00:00Z"}
+    Do $$$AssertTrue($CLASSMETHOD(b, "Fits", day, ""), "a cap of 0.30 with nothing spent or reserved admits a run estimated at 0.50")
+    Do $$$AssertTrue($CLASSMETHOD(b, "Fits", day, "approver"), "for a user with no share too")
+    Set day.spentTodayUsd = 0.01
+    Do $$$AssertNotTrue($CLASSMETHOD(b, "Fits", day, ""), "with 0.01 spent, the estimate counts and the run is refused")
+    Set words = $CLASSMETHOD(b, "Refusal", day)
+    Do $$$AssertTrue((words [ "has 0.29 USD left") && (words [ "less than a run's estimate of 0.50 USD"), "and the refusal says what is left: " _ words)
+    Set day.spentTodayUsd = 0, day.reservedUsd = 0.5
+    Do $$$AssertNotTrue($CLASSMETHOD(b, "Fits", day, ""), "with a run in flight and nothing spent, refused too")
+    Set day.reservedUsd = 0, day.dailyUsd = 1
+    Do $$$AssertTrue($CLASSMETHOD(b, "Fits", day, ""), "well within a cap, admitted as before")
+    Set day.spentTodayUsd = 0.6
+    Do $$$AssertNotTrue($CLASSMETHOD(b, "Fits", day, ""), "0.40 left of 1.00: an estimate of 0.50 does not fit, as before")
+    // The share, per user, with the day's cap out of play.
+    Set mine = {"dailyUsd": 0, "spentTodayUsd": 2, "reservedUsd": 0, "perUserUsd": 0.3, "spentByMeUsd": 0, "reservedByMeUsd": 0, "estimateUsd": 0.5, "shareExhausted": false, "since": "2026-11-15T00:00:00Z", "resetsAt": "2026-11-16T00:00:00Z"}
+    Do $$$AssertTrue($CLASSMETHOD(b, "Fits", mine, "judge"), "a share of 0.30 with nothing of the user's spent or reserved admits their run")
+    Set mine.reservedByMeUsd = 0.5
+    Do $$$AssertNotTrue($CLASSMETHOD(b, "Fits", mine, "judge"), "their next, while the first is in flight, is refused")
+    Set mine.reservedByMeUsd = 0, mine.spentByMeUsd = 0.12
+    Do $$$AssertNotTrue($CLASSMETHOD(b, "Fits", mine, "judge"), "once they have spent, the estimate counts")
+    Do $$$AssertTrue($CLASSMETHOD(b, "Fits", mine, "system"), "the feed's own runs have no share")
+    // A day with room in its cap: the share is what stopped the run, and the words say so.
+    Set mine.dailyUsd = 5
+    Set words = $CLASSMETHOD(b, "Refusal", mine)
+    Do $$$AssertTrue((words [ "Your share") && (words [ "has 0.18 USD left") && (words [ "less than a run's estimate of 0.50 USD"), "the refusal names the user's share: " _ words)
 }
 
 /// Two admissions race on the last allowance: two jobs wait on the admission's lock, the lock is let go, and exactly one is
@@ -192,8 +240,9 @@ Method TestDiagnosticRunsAreAdmittedAndRecorded()
     Set spec.AgentClass = "Shutter.Agent.Conformance", spec.Role = "specialist", spec.MemberCode = "conformance"
     Set spec.Mode = "live", spec.RunnerClass = "Shutter.Test.FakeRunner", spec.MockConfig = "", spec.EnsMessageId = "test:ut:conformance:1"
     Set before = ..Counts()
-    // Spent: refused before the runner is made.
-    Do ..CapAbove(.1)
+    // Short: another run in flight and 0.10 left, refused before the runner is made.
+    Do ..Hold(.1)
+    Do ..CapAbove(.2)
     Set sc = ##class(Shutter.Bridge.Runner).Diagnostic(spec, user, .response, .runId)
     Do $$$AssertStatusOK(sc, "a refusal is an answer, not an error")
     Do $$$AssertEquals(response.Status, "budget_exhausted", "refused when the allowance is spent")
@@ -202,6 +251,7 @@ Method TestDiagnosticRunsAreAdmittedAndRecorded()
     Do $$$AssertEquals(runId, "", "nothing recorded")
     Do $$$AssertEquals(..Counts(), before, "no row of any kind written")
     // Room for it: admitted, run, recorded, settled.
+    Do $CLASSMETHOD(b, "Settle", "ut-adm-held")
     Do ..CapAbove(100)
     Set spentBefore = $CLASSMETHOD(b, "SpentBy", user, $CLASSMETHOD(b, "Status").since)
     Set sc = ##class(Shutter.Bridge.Runner).Diagnostic(spec, user, .response, .runId)
@@ -251,7 +301,76 @@ Method TestTestRunGoesThroughAdmission()
     Set at = $FIND(code, "##class(Shutter.Bridge.Runner).Diagnostic(spec, $USERNAME")
     Do $$$AssertTrue(at > 0, "TestRun calls the diagnostic path, charged to the caller")
     Do $$$AssertNotTrue(code [ "runner.Run(", "and makes no runner of its own")
-    Do $$$AssertTrue(code [ "If response.Status = ""budget_exhausted"" Return", "a refusal answers before anything else")
+    Do $$$AssertTrue(code [ "If $LISTFIND($LISTBUILD(""budget_exhausted"", ""budget_busy""), response.Status) Return", "a refusal, spent or busy, answers before anything else")
+}
+
+/// A busy admission (R146-05, R146-07): while another process holds the admission's lock past ADMITLOCKSECONDS, the SQL
+/// diagnostic is refused budget_busy, not budget_exhausted, with words that say to try again, before any runner is made
+/// and with nothing recorded; Reserve() writes nothing and says so. With the lock free again, Reserve reserves. No cap or
+/// share is in play, so only the lock can refuse.
+Method TestABusyAdmissionIsNotASpentBudget()
+{
+    Set b = "Shutter.Util.Budget"
+    Kill ^Shutter.Budget("reserve"), ^Shutter.Test.FakeRunner, ^Shutter.Test.BudgetRace
+    Set ^Shutter.Config("budgetReserveUsd") = "0.50"
+    Do $CLASSMETHOD(b, "Configure", "0"), $CLASSMETHOD(b, "ConfigureShare", "0")
+    Set user = "ut-busy-" _ $JOB
+    Try {
+        Job ##class(Shutter.Test.BudgetAdmission).HoldLock(90)::5
+        Do $$$AssertTrue($TEST, "a job started to hold the admission's lock")
+        For i = 1:1:100 { Quit:$DATA(^Shutter.Test.BudgetRace("holder", "held"))  Hang .1 }
+        Do $$$AssertEquals($GET(^Shutter.Test.BudgetRace("holder", "held")), 1, "and holds it")
+        Set spec = ##class(Shutter.Bridge.RunSpec).%New()
+        Set spec.AgentClass = "Shutter.Agent.Conformance", spec.Role = "specialist", spec.MemberCode = "conformance"
+        Set spec.Mode = "live", spec.RunnerClass = "Shutter.Test.FakeRunner", spec.MockConfig = "", spec.EnsMessageId = "test:ut:conformance:busy"
+        Set sc = ##class(Shutter.Bridge.Runner).Diagnostic(spec, user, .response, .runId)
+        Do $$$AssertStatusOK(sc, "a busy refusal is an answer, not an error")
+        Do $$$AssertEquals(response.Status, "budget_busy", "refused as busy, not as a spent budget")
+        Do $$$AssertTrue((response.Error [ "could not be checked in time") && (response.Error [ "Try again"), "with words that say to try again: " _ response.Error)
+        Do $$$AssertEquals(+$GET(^Shutter.Test.FakeRunner("calls")), 0, "no runner was made")
+        Do $$$AssertEquals(runId, "", "and nothing recorded")
+        Set est = $CLASSMETHOD(b, "Reserve", "ut-busy-reserve", user)
+        Do $$$AssertEquals(est, "", "Reserve says it reserved nothing")
+        Do $$$AssertEquals($DATA(^Shutter.Budget("reserve", "ut-busy-reserve")), 0, "and wrote nothing while the lock was another's")
+    } Catch ex {
+        Do $$$AssertTrue(0, "error: " _ ex.DisplayString())
+    }
+    Set ^Shutter.Test.BudgetRace("holder", "release") = 1
+    For i = 1:1:100 { Quit:$DATA(^Shutter.Test.BudgetRace("holder", "done"))  Hang .1 }
+    Do $$$AssertEquals($CLASSMETHOD(b, "Reserve", "ut-busy-reserve", user), .5, "with the lock free, Reserve reserves the estimate")
+    Do $CLASSMETHOD(b, "Settle", "ut-busy-reserve")
+    Do $$$AssertEquals($CLASSMETHOD(b, "Reserved", "", .n) _ "|" _ n, "0|0", "all settled")
+    Kill ^Shutter.Test.BudgetRace, ^Shutter.Test.FakeRunner
+}
+
+/// Holds the admission's lock, run as a job, until the test writes release or seconds pass; writes held, then done.
+ClassMethod HoldLock(seconds As %Integer = 60)
+{
+    Lock +^Shutter.Budget("admit"):5
+    Set ^Shutter.Test.BudgetRace("holder", "held") = $TEST
+    If '^Shutter.Test.BudgetRace("holder", "held") Quit
+    For i = 1:1:(seconds * 10) { Quit:$DATA(^Shutter.Test.BudgetRace("holder", "release"))  Hang .1 }
+    Lock -^Shutter.Budget("admit")
+    Set ^Shutter.Test.BudgetRace("holder", "done") = 1
+}
+
+/// The status a refused admission ends a run with comes from the budget (R146-05): budget_busy when the lock was not
+/// free in time, budget_exhausted when the figures refused it. The Agent item takes it from there (read from its code: a
+/// business operation is not made outside the production), as the SQL diagnostic does.
+Method TestARefusalNamesItsOwnStatus()
+{
+    Set b = "Shutter.Util.Budget"
+    Do $$$AssertEquals($CLASSMETHOD(b, "RefusalStatus", {"busy": true, "dailyUsd": 1, "spentTodayUsd": 0}), "budget_busy", "a busy refusal has its own status")
+    Do $$$AssertEquals($CLASSMETHOD(b, "RefusalStatus", {"dailyUsd": 1, "spentTodayUsd": 1}), "budget_exhausted", "a spent budget keeps budget_exhausted")
+    For pair = $LISTBUILD("Shutter.Bridge.Operation.Agent", "OnAgentRequest"), $LISTBUILD("Shutter.Bridge.Runner", "Diagnostic") {
+        Set m = ##class(%Dictionary.MethodDefinition).%OpenId($LIST(pair, 1) _ "||" _ $LIST(pair, 2))
+        Do $$$AssertTrue($ISOBJECT(m), $LIST(pair, 1) _ "." _ $LIST(pair, 2) _ " is here")
+        Continue:'$ISOBJECT(m)
+        Do m.Implementation.Rewind()
+        Set code = m.Implementation.Read(1000000)
+        Do $$$AssertTrue(code [ "##class(Shutter.Util.Budget).RefusalStatus(budget)", $LIST(pair, 1) _ " takes the refusal's status from the budget")
+        Do $$$AssertNotTrue(code [ "Status = ""budget_exhausted""", "and never sets budget_exhausted whatever the refusal")
+    }
 }
 
 /// Rows of AgentRun with a case, case events, and AgentRun rows with no case and no question.
