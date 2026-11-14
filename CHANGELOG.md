@@ -4,9 +4,9 @@ Versions follow `major.minor.patch`: a minor release for new features, a patch r
 updates. The version in both `module.xml` files (the one the package manager publishes) is always the version of the
 GitHub tag on the same commit; `scripts/check-versions.py` checks every place the version is written.
 
-## Unreleased
+## 1.4.7 (14 November 2026)
 
-The release and its CONTRACTS version are named when this is merged.
+A FHIR R4 receiver, proved against InterSystems IRIS for Health's own FHIR server and playable on the online demo as S35, with the fixes from two reviews of 1.4.6 and FHIR (CONTRACTS 1.63 to 1.65).
 
 - **A FHIR R4 receiver, one profile.** A failed A02 that names no bed can be repaired as one ward-location update to an existing Encounter at InterSystems IRIS for Health's FHIR R4 server, off until a site turns it on.
 - **Its own gate, and capability that is measured, never declared.** The gate needs the server's CapabilityStatement and a recorded conformance run against the same software.
@@ -29,6 +29,13 @@ The release and its CONTRACTS version are named when this is merged.
   whatever Case Workflow's `MaxRefreshes` is, so the last read falls where the settle window ends.
 - **A mapped Location is held to its identifier after the write too.** That value and no other under its system, as the
   gate asks; a Location that no longer carries it sends the case to a person, who checks at the receiver.
+- **Budget.** A cap or a share below one run's estimate admits a run while nothing is spent or in flight under it,
+  instead of refusing every run for good; an admission that cannot get the budget's lock in time is refused
+  `budget_busy` (try again), not `budget_exhausted`. A retried scenario start is answered from its Idempotency-Key
+  before the P2 outage refusal. The install's provider line and INSTALL say that the day's cap and the users' shares
+  do not limit OpenAI runs, which are unpriced.
+- **Tests.** Two unit tests no longer race the running production: the Engine Resend tests hold their outage's row
+  lock, and the scenario guard test proves its refusals on a folder no file service watches.
 
 ## 1.4.6 (14 November 2026)
 
