@@ -1,10 +1,10 @@
 # FHIR R4: one profile, proved on a test server
 
-## What is supported
+## What it does
 
 In this release the receiver must be InterSystems IRIS for Health's own FHIR R4 server. The capability check accepts only a conformance run with no differing exchange, and the conformance file holds that server's answers. No other FHIR server can pass it.
 
-"Supported" means: for a receiver entry that carries a `fhir` object, a failed A02 (transfer) that names no bed, whose HL7 delivery a stock `EnsLib.HL7.Operation.TCPOperation` gave up on before a connection opened, becomes at most one person-approved `PUT Encounter/{id}` with `If-Match`. Before closing the case Shutter finds the version carrying its marker in the Encounter's history as the receiver returned it, reads that version back by its version id when the receiver's answer named one, checks it against the approved base, and checks that the current record has not undone the move.
+What this profile does: for a receiver entry that carries a `fhir` object, a failed A02 (transfer) that names no bed, whose HL7 delivery a stock `EnsLib.HL7.Operation.TCPOperation` gave up on before a connection opened, becomes at most one person-approved `PUT Encounter/{id}` with `If-Match`. Before closing the case Shutter finds the version carrying its marker in the Encounter's history as the receiver returned it, reads that version back by its version id when the receiver's answer named one, checks it against the approved base, and checks that the current record has not undone the move.
 
 The one operation: complete the open ward-level `location` entry at the event time, append one active entry for the target ward, add Shutter's marker tag. Nothing else in the body changes.
 
