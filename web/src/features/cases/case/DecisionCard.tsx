@@ -1,4 +1,5 @@
 import {
+  Anchor,
   Box,
   Button,
   Code,
@@ -12,6 +13,7 @@ import {
   Text,
   Title,
   UnstyledButton,
+  VisuallyHidden,
 } from '@mantine/core';
 import {
   IconArrowsLeftRight,
@@ -19,12 +21,15 @@ import {
   IconChevronDown,
   IconCircleCheck,
   IconCopy,
+  IconFileSearch,
   IconHandStop,
+  IconUsers,
   IconProgress,
   IconUserQuestion,
   type Icon,
 } from '@tabler/icons-react';
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
+import { Link } from 'react-router';
 import { CheckStrip } from '@/components/CheckStrip';
 import { Digest } from '@/components/Digest';
 import { KeyValueList } from '@/components/KeyValueList';
@@ -40,7 +45,16 @@ import { usePrefersReducedMotion } from '@/lib/motion';
 import { TONE_COLOURS, TONE_ICONS, toneText, type Tone } from '@/lib/tone';
 import { Reinvestigate } from './Closure';
 import { checksOf, shownFailureText } from './derive';
+import { EvidenceChips } from './EvidenceChips';
 import { NotCheckedWords } from './NotCheckedWords';
+import {
+  planReason,
+  proposalLabel,
+  proposerOf,
+  reasonLabel,
+  reasonSource,
+  specialistsLine,
+} from './contribution';
 import { gateFactLabel, laterChecksLine } from './gateWords';
 import { NextActionPrecedents } from './Precedents';
 import { bandKind, bandStartsOpen, rememberBand } from './outcomeBand';
@@ -48,6 +62,7 @@ import {
   actionHead,
   actionHeadline,
   evidenceSummary,
+  evidenceSummaryRefs,
   failedTitle,
   nextAction,
   outcomeCaseOf,
@@ -153,6 +168,12 @@ const VERIFIER_OUTCOMES = ['verified', 'unresolved', 'not_committed', 'failed'];
  * in both modes, to keep the band short). Every line is put together from the case's structured facts. The receipt
  * copies as JSON.
  *
+ * The receipt tells three things apart, in its facts' order: what was proposed and by whom (an agent's run only when
+ * the plan names one of the case's own runs, else the rules, the site's policy or nobody), what the gate's checks and
+ * the release decided, and what was written and verified. The proposal's recorded reason opens under it, word for word,
+ * with the evidence it cites as links to the Evidence tab and the way to each agent's finding; the facts under "What
+ * happened" link to the evidence they were read from.
+ *
  * The band starts open on a case a person may still act on and closed on a closed one, and remembers a reader's choice
  * in this browser (`outcomeBand.ts`); it opens while the guide points at it or at the receipt, and when the case's
  * action button asks for "What needs you now".
@@ -166,6 +187,7 @@ export function DecisionCard({
   onSeePrecedents,
   onCompare,
   comparable = false,
+  onSeeFindings,
 }: {
   facts: CaseFacts;
   /** The case's round of evidence and planning: a re-plan after the receiver changed starts another. */
@@ -182,6 +204,8 @@ export function DecisionCard({
   onCompare?: () => void;
   /** Both of S8's runs are here to compare. */
   comparable?: boolean;
+  /** Shows the investigation: the board's cards, or the one agent's finding. */
+  onSeeFindings?: () => void;
 }) {
   const { c, receipt: r } = facts;
   const verdict = outcome ?? caseOutcome(outcomeCaseOf(facts));
@@ -280,6 +304,19 @@ export function DecisionCard({
   const planned = facts.plan?.plan;
   const words = planned ? planWords(planned, c, facts.snapshot) : undefined;
   const proposal = words?.write ? words.action : proposalCaption(r);
+  // Who proposed it and why, from what the case stores: an agent only when the plan names one of the case's own runs
+  const proposer = proposerOf(facts.plan, facts.runs);
+  const reason = planReason(facts.plan, facts.snapshot);
+  const [reasonOpen, setReasonOpen] = useState(false);
+  const stood = specialistsLine(proposer, facts.runs);
+  const apart =
+    proposer.kind === 'agent' || proposer.kind === 'lead'
+      ? "An agent only proposes. The gate's checks and the release, in this receipt, decide whether anything is sent."
+      : proposer.kind === 'rules' || proposer.kind === 'policy'
+        ? 'No agent proposed this plan.'
+        : '';
+  // The sections of the Evidence tab that "What happened" was read from
+  const behind = evidenceSummaryRefs(facts.snapshot);
   return (
     <Paper
       component="section"
@@ -350,6 +387,24 @@ export function DecisionCard({
             >
               <StoryCard label="What happened" title={failedTitle(c)}>
                 <Text size="sm">{evidenceSummary(facts.snapshot)}</Text>
+                {/* The evidence those facts were read from, each a link to its section of the Evidence tab */}
+                {behind.length ? (
+                  <Group
+                    gap={6}
+                    wrap="nowrap"
+                    align="center"
+                    role="group"
+                    aria-label="The evidence this was read from"
+                    data-testid="evidence-links"
+                  >
+                    <IconFileSearch
+                      size={14}
+                      aria-hidden
+                      style={{ flex: 'none', color: 'var(--mantine-color-dimmed)' }}
+                    />
+                    <EvidenceChips refs={behind} receiver={c.receiver} />
+                  </Group>
+                ) : null}
               </StoryCard>
               <StoryCard label="What Shutter did" title={actionHeadline(facts)}>
                 {/* The receiver the case is about, and its category as the evidence recorded it */}
@@ -555,12 +610,90 @@ export function DecisionCard({
                   spacing="md"
                   verticalSpacing="sm"
                   m={0}
+                  // The proposal's reason, once opened, takes a row of its own under the facts it follows
+                  style={{ gridAutoFlow: 'dense' }}
                 >
-                  <Fact label="Proposal">
+                  <Fact label={proposalLabel(proposer)}>
                     <Text size="md" fw={700}>
                       {proposal}
                     </Text>
+                    {reason ? (
+                      <UnstyledButton
+                        className="tech-detail-toggle"
+                        aria-expanded={reasonOpen}
+                        aria-controls="proposal-reason"
+                        onClick={() => setReasonOpen((o) => !o)}
+                        style={{ textAlign: 'left' }}
+                      >
+                        <IconChevronDown size={14} aria-hidden style={{ flex: 'none' }} />
+                        {reasonLabel(reason)}
+                      </UnstyledButton>
+                    ) : null}
                   </Fact>
+                  {/* Why it was proposed, as the plan records it: the proposer's own words, what it cites and, for
+                      an agent's plan, where each agent's finding is. Nothing here is written for the page. */}
+                  {reason ? (
+                    <Box
+                      id="proposal-reason"
+                      className="receipt-reason"
+                      hidden={!reasonOpen}
+                      data-tech-detail={reasonOpen ? 'open' : 'closed'}
+                      style={{ gridColumn: '1 / -1', minWidth: 0 }}
+                    >
+                      <VisuallyHidden component="dt">Why it was proposed</VisuallyHidden>
+                      <Stack component="dd" gap={6} m={0} maw="80ch">
+                        <Text size="xs" c="dimmed" fw={600}>
+                          {reasonSource(proposer)}
+                        </Text>
+                        <Text size="sm" data-testid="proposal-reason-words">
+                          {reason.why ||
+                            (reason.entry
+                              ? `The plan follows catalogue entry ${reason.entry.code}; it records no reason of its own.`
+                              : 'The plan records no reason of its own.')}
+                        </Text>
+                        {reason.refs.length || reason.entries.length ? (
+                          <Group gap={6} wrap="wrap" align="center">
+                            <Text size="sm">It cites</Text>
+                            <EvidenceChips
+                              refs={reason.refs}
+                              entries={reason.entries}
+                              receiver={c.receiver}
+                            />
+                          </Group>
+                        ) : null}
+                        {stood ? <Text size="sm">{stood}</Text> : null}
+                        {onSeeFindings && proposer.kind === 'agent' ? (
+                          <Group gap="xs">
+                            <Button
+                              size="xs"
+                              variant="default"
+                              leftSection={<IconUsers size={14} aria-hidden />}
+                              onClick={onSeeFindings}
+                            >
+                              {proposer.role === 'coordinator'
+                                ? "See each agent's finding"
+                                : "See the agent's finding"}
+                            </Button>
+                          </Group>
+                        ) : null}
+                        {proposer.kind === 'lead' ? (
+                          <Anchor
+                            component={Link}
+                            to={`/cases/${encodeURIComponent(proposer.leader)}`}
+                            size="sm"
+                          >
+                            {`See the board on case ${proposer.leader}`}
+                          </Anchor>
+                        ) : null}
+                        {/* Whose decision the rest is: an agent proposes, and never releases or sends */}
+                        {apart ? (
+                          <Text size="xs" c="dimmed">
+                            {apart}
+                          </Text>
+                        ) : null}
+                      </Stack>
+                    </Box>
+                  ) : null}
                   <Fact label="Gate">
                     {gate && gateStatus ? (
                       <>

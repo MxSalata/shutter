@@ -11,6 +11,7 @@ import type {
 } from '@/api/types';
 import { TRIAL } from '@/env/mode';
 import { displayZone, humanize } from '@/lib/format';
+import type { EvidenceRef } from '@/lib/evidenceRefs';
 import { asArray, asObject } from '@/lib/json';
 import { APPROVALS, caseState, gateOutcome, PROVENANCE, ranOnIris, type OutcomeCase } from '@/lib/status';
 import type { Status } from '@/lib/tone';
@@ -435,43 +436,65 @@ export function headerSentence(c: CaseDetail): string {
   return `The ${system ? summary : summary.charAt(0).toLowerCase() + summary.slice(1)}`;
 }
 
-/** What the receiver holds, whether it has a receipt for this operation, and the facts that complicate it. */
-export function evidenceSummary(snapshot: Snapshot | null | undefined): string {
-  if (!snapshot) return 'No evidence yet.';
+/**
+ * What the evidence says in a few facts, each with the section of the Evidence tab it was read from: what the receiver
+ * holds, whether it has a receipt for this operation, and the facts that complicate it.
+ */
+function evidenceFacts(snapshot: Snapshot): { text: string; ref: EvidenceRef }[] {
   const item = (kind: string) => snapshot.items.find((x) => x.kind === kind);
-  const parts: string[] = [];
+  const facts: { text: string; ref: EvidenceRef }[] = [];
   const ward = asObject(item('ward_state')?.data);
   if (ward && !ward.not_applicable) {
     const status = Number(ward.http_status);
     const b = asObject(ward.body) ?? {};
-    parts.push(
-      status === 200
-        ? `when Shutter looked, the receiver held the encounter ${humanize(str(b.state)).toLowerCase()}${b.ward ? ` in ${str(b.ward)}` : ''} at version ${str(b.version)}`
-        : status === 404
-          ? 'the receiver has no such encounter'
-          : "the receiver's state is unknown",
-    );
+    facts.push({
+      ref: 'ward_state',
+      text:
+        status === 200
+          ? `when Shutter looked, the receiver held the encounter ${humanize(str(b.state)).toLowerCase()}${b.ward ? ` in ${str(b.ward)}` : ''} at version ${str(b.version)}`
+          : status === 404
+            ? 'the receiver has no such encounter'
+            : "the receiver's state is unknown",
+    });
   }
   const receipt = asObject(item('receipt')?.data);
   if (receipt && !receipt.not_applicable) {
     const status = Number(receipt.http_status);
     const b = asObject(receipt.body) ?? {};
-    parts.push(
-      status === 200
-        ? `it committed this operation, version ${str(b.version_before)} to ${str(b.version_after)}`
-        : status === 404
-          ? 'no receipt for this operation'
-          : 'whether it committed this operation is unknown',
-    );
+    facts.push({
+      ref: 'receipt',
+      text:
+        status === 200
+          ? `it committed this operation, version ${str(b.version_before)} to ${str(b.version_after)}`
+          : status === 404
+            ? 'no receipt for this operation'
+            : 'whether it committed this operation is unknown',
+    });
   }
   const later = asObject(item('later_event')?.data);
   if (later)
-    parts.push(
-      `a later ${humanize(str(later.event)).toLowerCase()}${later.ward ? ` to ${str(later.ward)}` : ''}`,
-    );
+    facts.push({
+      ref: 'later_event',
+      text: `a later ${humanize(str(later.event)).toLowerCase()}${later.ward ? ` to ${str(later.ward)}` : ''}`,
+    });
   const systems = sameTimeSystems(snapshot);
-  if (systems.length > 1) parts.push(`${systems.join(' and ')} have the same event time`);
-  return sentence(parts.length ? parts : [`${plural(snapshot.items.length, 'observation')} recorded`]);
+  if (systems.length > 1)
+    facts.push({ ref: 'timeline', text: `${systems.join(' and ')} have the same event time` });
+  return facts;
+}
+
+/** What the receiver holds, whether it has a receipt for this operation, and the facts that complicate it. */
+export function evidenceSummary(snapshot: Snapshot | null | undefined): string {
+  if (!snapshot) return 'No evidence yet.';
+  const facts = evidenceFacts(snapshot);
+  return sentence(
+    facts.length ? facts.map((f) => f.text) : [`${plural(snapshot.items.length, 'observation')} recorded`],
+  );
+}
+
+/** The sections of the Evidence tab that the evidence's summary was read from, in the summary's order, each once. */
+export function evidenceSummaryRefs(snapshot: Snapshot | null | undefined): EvidenceRef[] {
+  return snapshot ? [...new Set(evidenceFacts(snapshot).map((f) => f.ref))] : [];
 }
 
 /**

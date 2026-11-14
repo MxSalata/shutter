@@ -445,9 +445,12 @@ describe('CasePage', () => {
     expect(
       within(top).getByRole('heading', { name: 'What needs you now' }).closest('[data-tone]'),
     ).toHaveAttribute('data-tone', 'attention');
-    // The receipt's facts are labelled, as a description list
-    for (const label of ['Proposal', 'Gate', 'Released by', 'Writes', 'Verification'])
+    // The receipt's facts are labelled, as a description list; the first names who proposed, once the runs are read
+    for (const label of ['Gate', 'Released by', 'Writes', 'Verification'])
       expect(within(top).getByText(label, { selector: 'dt' })).toBeInTheDocument();
+    expect(
+      await within(top).findByText("Coordinator agent's proposal", { selector: 'dt' }),
+    ).toBeInTheDocument();
     const tabs = screen.getByRole('tablist', { name: 'The case in detail' });
     expect(top.compareDocumentPosition(tabs) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });

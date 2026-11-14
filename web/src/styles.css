@@ -1153,6 +1153,13 @@ body {
   border: calc(0.0625rem * var(--mantine-scale)) solid var(--mantine-color-default-border);
   border-left: 4px solid var(--mantine-primary-color-filled);
 }
+/* The proposal's recorded reason, opened under the receipt's facts: a row of its own, on the page's own surface. */
+.receipt-reason {
+  background: var(--mantine-color-body);
+  border: calc(0.0625rem * var(--mantine-scale)) solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-sm);
+  padding: var(--mantine-spacing-xs) var(--mantine-spacing-sm);
+}
 /*
  * The plan's action as a headline (`PlanHeadline`), at the top of The plan, of the Approval section and of the review
  * dialog: the same tinted surface and primary edge as the receipt, so the one thing an approval releases stands apart
