@@ -3,7 +3,8 @@
 /// <code>FHIRFacade.Service.Handle</code>. The exchanges are the S0 measurements of IRIS for Health's own FHIR server, so a
 /// pass says the test server answers as IRIS was measured to. The cases are embedded below (XData Cases, written from the
 /// file by <code>tests/conformance/embed.py</code>), because a stock-install container does not mount the repository.
-/// <code>Shutter.Test.FHIRFacadeConformance</code> runs it as a unit test; <code>tests/conformance/fhir_conformance.py</code>
+/// <code>Shutter.Test.FHIRFacadeConformance</code> runs it as a unit test, and <method>Measure</method> runs it at a demo
+/// install for the proof of the demo's FHIR receiver (scenario S35); <code>tests/conformance/fhir_conformance.py</code>
 /// runs the same file over HTTP, against IRIS or the test server.
 Class FHIRFacade.Kit [ Abstract ]
 {
@@ -16,10 +17,82 @@ Parameter BASE = "http://facade.test/fhir/r4";
 /// The time the test server's clock is fixed at for a run.
 Parameter CLOCK = "2026-11-08T02:31:53Z";
 
+/// The proof file's name and digest, as the proof store must find them (written there by embed.py).
+Parameter PROOF = "Shutter.Store.FHIRProof";
+
 ClassMethod Cases() As %DynamicObject
 {
     Set xdata = ##class(%Dictionary.CompiledXData).%OpenId($CLASSNAME() _ "||Cases")
     Quit {}.%FromJSON(xdata.Data)
+}
+
+/// The kit's whole list for the test FHIR server run in process, as a proof of this instance's own test server: the
+/// server reset and its clock fixed, every exchange whose targets include it in order, the CapabilityStatement the run
+/// read (or one read after it), and then, on every path, the server reset again and its clock freed. <var>doc</var> is
+/// the document <code>tests/conformance/fhir_conformance.py --proof</code> writes, with "in-process:FHIRFacade.Service" as
+/// its base, for <code>Shutter.Store.FHIRProof.Import</code>. An error status when any exchange differs (the document
+/// then counts them under differ) or the run read no statement naming the software.
+ClassMethod Measure(Output doc As %DynamicObject) As %Status
+{
+    Set doc = "", sc = $$$OK
+    Try {
+        If '##class(%Dictionary.CompiledClass).%ExistsId(..#SERVICE) Set sc = $$$ERROR($$$GeneralError, "The test FHIR server is not compiled here") Quit
+        If '$CLASSMETHOD(..#SERVICE, "Reset") Set sc = $$$ERROR($$$GeneralError, "The test FHIR server could not be reset: a write did not end in 10 seconds") Quit
+        Do $CLASSMETHOD(..#SERVICE, "SetClock", ..#CLOCK)
+        Set vars = {}, ran = 0, differ = 0, first = "", metadata = ""
+        Set iter = ..Cases().exchanges.%GetIterator()
+        While iter.%GetNext(, .x) {
+            Continue:'..Targets(x, "facade")
+            Set ran = ran + 1
+            Set got = ..Send(x.request, vars)
+            Set problems = ..Check(x.expect, got, vars)
+            Do ..Capture(x, got, vars)
+            Set passed(x.id) = (problems.%Size() = 0)
+            If 'passed(x.id) Set differ = differ + 1 Set:first="" first = x.id _ ": " _ problems.%Get(0)
+            If (x.request.method = "GET") && (x.request.path = "metadata") && (got.status = 200) Set metadata = got.body
+        }
+        If metadata = "" {
+            Set got = ..Send({"method": "GET", "path": "metadata", "headers": {}}, vars)
+            Set:got.status=200 metadata = got.body
+        }
+        Set statement = ""
+        Try { Set statement = {}.%FromJSON(metadata) } Catch { Set statement = "" }
+        Set software = $SELECT($ISOBJECT(statement): statement.%Get("software"), 1: "")
+        Set name = $SELECT($ISOBJECT(software): software.%Get("name"), 1: ""), version = $SELECT($ISOBJECT(software): software.%Get("version"), 1: "")
+        Set fhirVersion = $SELECT($ISOBJECT(statement): statement.%Get("fhirVersion"), 1: "")
+        Set measurements = {}
+        For pair = $LISTBUILD("if_match_stale_refused", "m3-update-stale"), $LISTBUILD("if_match_unknown_id_refused", "m5-if-match-unknown-id"), $LISTBUILD("tags_kept", "m8-history-tags") {
+            Set exchange = $LIST(pair, 2)
+            If '$DATA(passed(exchange)) Set sc = $$$ERROR($$$GeneralError, "The run did not include the exchange " _ exchange) Quit
+            Set m = {"exchange": (exchange)}
+            Do m.%Set("passed", passed(exchange), "boolean")
+            Do measurements.%Set($LIST(pair, 1), m)
+        }
+        Quit:$$$ISERR(sc)
+        Set doc = {"kit": ($PARAMETER(..#PROOF, "KITNAME")), "kit_sha256": ($PARAMETER(..#PROOF, "KITSHA256")), "target": "facade", "base": "in-process:FHIRFacade.Service", "measured_at": (..NowUTC()), "software": {"name": (name), "version": (version)}, "fhir_version": (fhirVersion)}
+        Do doc.%Set("exchanges", ran, "number"), doc.%Set("differ", differ, "number")
+        Do doc.%Set("measurements", measurements)
+        If differ {
+            Set sc = $$$ERROR($$$GeneralError, "Exchanges that differ: " _ differ _ " of " _ ran _ "; the first, " _ first)
+        } ElseIf (name = "") || (version = "") || (fhirVersion = "") {
+            Set sc = $$$ERROR($$$GeneralError, "The run read no CapabilityStatement naming the software and its FHIR version")
+        }
+    } Catch ex {
+        Set sc = ex.AsStatus()
+    }
+    Try {
+        Do $CLASSMETHOD(..#SERVICE, "Reset")
+        Do $CLASSMETHOD(..#SERVICE, "SetClock", "")
+    } Catch ex {
+        Set:$$$ISOK(sc) sc = ex.AsStatus()
+    }
+    Quit sc
+}
+
+/// The time now, in UTC, as YYYY-MM-DDThh:mm:ssZ.
+ClassMethod NowUTC() As %String [ Private ]
+{
+    Quit $TRANSLATE($ZDATETIME($ZTIMESTAMP, 3, 1), " ", "T") _ "Z"
 }
 
 ClassMethod Targets(x As %DynamicObject, target As %String) As %Boolean
