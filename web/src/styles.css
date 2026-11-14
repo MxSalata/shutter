@@ -1762,6 +1762,20 @@ main[data-assistant='beside'] .stack-scroll {
 .stat-tile[aria-pressed='true']:focus-visible {
   box-shadow: 0 0 0 1px var(--mantine-color-text);
 }
+/* The scenario run's status takes the focus from a Run that turns into a spinner: a ring for the keyboard only */
+.run-status {
+  border-radius: var(--mantine-radius-default);
+}
+.run-status:focus {
+  outline: none;
+}
+.run-status:focus-visible {
+  outline: 2px solid var(--mantine-primary-color-filled);
+  outline-offset: 3px;
+}
+:root[data-mantine-color-scheme='dark'] .run-status:focus-visible {
+  outline-color: var(--mantine-primary-color-3);
+}
 .stat-figure {
   font-size: 1.75rem;
   line-height: 1.1;

@@ -253,7 +253,7 @@ test.describe('the page at 1280 px @scenarios', () => {
           .filter((t) => t.startsWith('Open its case'));
         const banner = document.querySelector('[data-testid="run-starting"]')
           ? 'starting'
-          : (document.querySelector('[role="alert"] .mantine-Alert-title')?.textContent ?? 'none');
+          : (document.querySelector('.run-status .mantine-Alert-title')?.textContent ?? 'none');
         seen.push(`${banner} | ${links.join(', ') || 'no case link'}`);
       }).observe(document.body, { childList: true, subtree: true, characterData: true });
     });

@@ -20,7 +20,7 @@ import {
 import { notifications } from '@mantine/notifications';
 import { IconFlask2, IconPlayerPlay, IconRefresh, IconShieldX } from '@tabler/icons-react';
 import { useReducedMotion } from '@mantine/hooks';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { useListParams } from '@/lib/listParams';
 import {
@@ -242,6 +242,7 @@ function RunStarting({ scenario, mode }: { scenario: string; mode: Mode }) {
       icon={<Loader size={16} />}
       title={`Starting ${scenario} (${humanize(mode)})`}
       data-testid="run-starting"
+      role="group"
     >
       <Text size="sm">
         {byEnv({
@@ -266,6 +267,7 @@ function RunBanner({ run, cases }: { run: ScenarioRun; cases: CaseSummary[] | un
         variant="light"
         icon={<Loader size={16} />}
         title={`${run.scenario} is queued (${humanize(run.mode)})`}
+        role="group"
       >
         <Stack gap={6}>
           <Text size="sm">The scenario player starts it in a moment.</Text>
@@ -280,6 +282,7 @@ function RunBanner({ run, cases }: { run: ScenarioRun; cases: CaseSummary[] | un
         variant="light"
         icon={<Loader size={16} />}
         title={`Playing ${run.scenario} (${humanize(run.mode)})`}
+        role="group"
       >
         <Stack gap={6}>
           <Text size="sm">
@@ -296,6 +299,7 @@ function RunBanner({ run, cases }: { run: ScenarioRun; cases: CaseSummary[] | un
         color="blue"
         variant="light"
         title={`${run.scenario} played (${humanize(run.mode)})${TRIAL ? '' : `, ${formatAge(run.finishedAt)}`}`}
+        role="group"
       >
         <Stack gap="xs">
           <RunExecuted run={run} own={own} />
@@ -671,9 +675,11 @@ function InductionPrompt({ below = false }: { below?: boolean }) {
   const profile = useSiteProfile().data;
   if (!profile || profile.source === 'api') return null;
   return (
+    // A standing note, not news: as an alert it was announced over whatever the reader was on when it arrived
     <Alert
       color="blue"
       variant="light"
+      role="note"
       mb={below ? 0 : 'md'}
       title={
         isDemoPolicy(profile.source)
@@ -1028,7 +1034,8 @@ export default function ScenariosPage() {
   const runBusy =
     busy || (settling ? `${settling.caseId} is still settling: a new run now would abandon it` : '');
 
-  const start = (s: Scenario, m: Mode = mode) =>
+  const start = (s: Scenario, m: Mode = mode) => {
+    setOwnRun(true);
     run.mutate(
       { id: s.id, mode: m },
       {
@@ -1047,13 +1054,40 @@ export default function ScenariosPage() {
           notifications.show({ color: 'red', title: `${s.id} did not start`, message: describeError(e) }),
       },
     );
+  };
   const pending = run.isPending ? 'Starting…' : '';
   // The run being asked for, from the press until the server's answer and the list read after it (useRunScenario
   // waits for that read): by then `current` is the new run, queued or playing, so the last run is never shown as this one
   const pressed = run.isPending ? run.variables : undefined;
+  // A pressed Run turns into a spinner, and a button that is disabled drops the focus to the page: the focus goes to
+  // the run's status above the cards instead, where the run plays out and its case link appears. A focus the reader
+  // has put elsewhere is left where it is.
+  const runStatus = useRef<HTMLDivElement>(null);
+  const pressedRun = pressed ? `${pressed.id} ${pressed.mode}` : '';
+  // What a screen reader is told of a run started here: that it starts, plays and has played, once each, and never
+  // each step the banner shows as it is read again; a failed run's banner is an alert of its own
+  const [ownRun, setOwnRun] = useState(false);
+  const inMode = (id: string, m: Mode) =>
+    pathology.some((p) => p.id === id) ? '' : ` in ${humanize(m)} mode`;
+  const runSaid = !ownRun
+    ? ''
+    : pressed
+      ? `${pressed.id} is starting${inMode(pressed.id, pressed.mode)}.`
+      : current && isPlaying(current)
+        ? `${current.scenario} is playing${inMode(current.scenario, current.mode)}.`
+        : current?.state === 'done'
+          ? `${current.scenario} has played${inMode(current.scenario, current.mode)}.`
+          : '';
+  useEffect(() => {
+    if (!pressedRun) return;
+    const active = document.activeElement;
+    if (!active || active === document.body || (active instanceof HTMLButtonElement && active.disabled))
+      runStatus.current?.focus();
+  }, [pressedRun]);
   /** A pathology path runs no agent, so its mode is never the question: only who may run, and whether a run plays. */
   const pathWhy = playerOff ? PLAYER_OFF : hidden || !canRun ? runNeeds : runBusy || pending;
-  const startPath = (p: PathologyPath) =>
+  const startPath = (p: PathologyPath) => {
+    setOwnRun(true);
     run.mutate(
       { id: p.id, mode: 'board' },
       {
@@ -1069,6 +1103,7 @@ export default function ScenariosPage() {
           notifications.show({ color: 'red', title: `${p.id} did not start`, message: describeError(e) }),
       },
     );
+  };
   /** Why a featured scenario cannot be played in its own mode now, or "". */
   const whyNot = (s: Scenario, m: Mode) =>
     playerOff
@@ -1152,18 +1187,26 @@ export default function ScenariosPage() {
         ) : null}
         {/* A Run just pressed shows as starting at once: the last run's banner and its case link give way to it. A
             pathology path's press says what it is, with no mode and no agent */}
-        {pressed ? (
-          pathology.some((p) => p.id === pressed.id) ? (
-            <PathologyRunStarting id={pressed.id} />
-          ) : (
-            <RunStarting scenario={pressed.id} mode={pressed.mode} />
-          )
-        ) : current ? (
-          isPathologyRun(current, pathology) ? (
-            <PathologyRunBanner run={current} path={pathology.find((p) => p.id === current.scenario)} />
-          ) : (
-            <RunBanner run={current} cases={cases.data?.items} />
-          )
+        {/* Polite, and not a status region, which the pages keep for loading */}
+        <VisuallyHidden aria-live="polite" data-testid="run-said">
+          {runSaid}
+        </VisuallyHidden>
+        {pressed || current ? (
+          <div ref={runStatus} tabIndex={-1} role="region" aria-label="Scenario run" className="run-status">
+            {pressed ? (
+              pathology.some((p) => p.id === pressed.id) ? (
+                <PathologyRunStarting id={pressed.id} />
+              ) : (
+                <RunStarting scenario={pressed.id} mode={pressed.mode} />
+              )
+            ) : current ? (
+              isPathologyRun(current, pathology) ? (
+                <PathologyRunBanner run={current} path={pathology.find((p) => p.id === current.scenario)} />
+              ) : (
+                <RunBanner run={current} cases={cases.data?.items} />
+              )
+            ) : null}
+          </div>
         ) : null}
         {/* Always rendered, loading or not, so the guide's first step has its target; a site install has nothing to try,
             and the list below stands as its reference */}

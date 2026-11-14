@@ -773,7 +773,7 @@ describe('ScenariosPage, as each role has it', () => {
     // The run plays, and the banner says how it executes, from the run's own mark: recorded agents, no new inference
     await userEvent.click(run);
     const banner = (await screen.findByText(/^Playing S2 \(Board\)$/)).closest<HTMLElement>(
-      '[role="alert"]',
+      '[role="group"]',
     )!;
     expect(within(banner).getByTestId('run-execution')).toHaveTextContent(
       'Recorded replayIts agents answer from their recordings on this IRIS instance: no new inference.',
@@ -793,7 +793,7 @@ describe('ScenariosPage, as each role has it', () => {
     // A run the server did not mark as a replay claims nothing while it plays: only its case's agent runs can say
     await userEvent.click(run);
     const banner = (await screen.findByText(/^Playing S2 \(Board\)$/)).closest<HTMLElement>(
-      '[role="alert"]',
+      '[role="group"]',
     )!;
     expect(within(banner).getByTestId('run-execution')).toHaveTextContent(
       /^Its case says what ran: live only when a model was called\.$/,
@@ -850,7 +850,7 @@ describe('ScenariosPage, as each role has it', () => {
     renderScenarios();
     expect(await screen.findByRole('button', { name: 'Run S5' })).toBeDisabled();
     expect(screen.getAllByText('A run of S2 is still playing').length).toBeGreaterThan(0);
-    expect(screen.getByRole('alert')).toHaveTextContent(
+    expect(screen.getByRole('group', { name: 'Playing S2 (Board)' })).toHaveTextContent(
       'Now delivering S2-01-A01.hl7. Files delivered so far: none.',
     );
   });
@@ -905,7 +905,7 @@ describe("ScenariosPage, a finished run's own case and Home's way in", () => {
   }
 
   const banner = async () =>
-    (await screen.findByText(/^S2 played \(Board\), /)).closest<HTMLElement>('[role="alert"]')!;
+    (await screen.findByText(/^S2 played \(Board\), /)).closest<HTMLElement>('[role="group"]')!;
 
   it("offers no case until the run's own has opened: never the previous run's, never the Cases list", async () => {
     let cases = [earlier()];
