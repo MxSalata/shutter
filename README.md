@@ -325,7 +325,7 @@ No other recovery writes over FHIR: no create, no admission or discharge, no mer
 
 | Scope | Recorded checks |
 | --- | --- |
-| **Release 1.4.7** | CI on the tagged commit ([run 49](https://github.com/MxSalata/shutter/actions/runs/43624412267)): the web and browser suites and three IRIS shards, 1,276 unit tests, every scenario including FHIR's S35, the FHIR conformance kit (244 exchanges) and the pathology check. The same IRIS job ran 13 full rounds on the tag with no failure. A fresh install on AI Hub build 154 is recorded step by step in [its receipt](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt-1.4.7.md) |
+| **Release 1.4.7** | CI on the tagged commit ([run 49](https://github.com/MxSalata/shutter/actions/runs/43624412267)): the web and browser suites and three IRIS shards, 1,276 unit tests, the scenario checks with FHIR's S35 among them, the FHIR conformance kit (244 exchanges) and the pathology check. The same IRIS job ran 13 full rounds on the tag with no failure. A fresh install on AI Hub build 154 is recorded step by step in [its receipt](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt-1.4.7.md) |
 | **Release 1.4.3** | 1,083 unit tests passed on AI Hub build 154 and 1,074 on IRIS 2026.2, none failed. Role checks covered judges running but not resetting, upgraded permissions and attribution of scenario runs. Web and relevant browser suites included accessibility checks |
 | **Pathology, release 1.4.0** | All 56 pathology-rig rows passed on build 154. An end-to-end check counted receiver sends under shadow mode and the recovery stop |
 | **Replay CI, figures at 1.1.0** | Full installation on IRIS 2026.2, 37 receiver-contract tests, 26 scenarios end to end and approval-boundary attacks over HTTP |
