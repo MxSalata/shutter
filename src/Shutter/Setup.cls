@@ -2010,8 +2010,9 @@ ClassMethod Doctor(refresh As %Boolean = 0) As %String [ SqlProc ]
     Set r.edition = $SELECT(r."ai_hub_present" && r."aihub_runner": "aihub", 'r."ai_hub_present" && 'r."aihub_runner": "core", r."ai_hub_present": "broken: AI Hub is present but the aihub module is not loaded", 1: "broken: the aihub module is loaded on an image without AI Hub")
     // The API mimic's switch as set (tests/mock), "" when off; it counts on a demo instance only (MockConfig).
     Set r."mock_config" = $GET(^Shutter.Config("aihub", "mock"))
-    // The provider the record names, and whether the instance still holds what it names (v1.39): the wallet secret and
-    // the Config Store configuration, each true or false, or null where its class is absent (the core edition) or this
+    // The provider the record names, and whether the instance still holds what it names (v1.39): the wallet secret
+    // (the recorded provider's own: Shutter.Anthropic, or Shutter.OpenAI when the install configured OpenAI) and the
+    // Config Store configuration, each true or false, or null where its class is absent (the core edition) or this
     // process may not read it (the wallet's Shutter_Secrets, the Config Store's %Admin_ConfigStore: an operator or a
     // judge without them is told nothing, not "gone"). A recorded provider with a missing secret is what a container
     // recreated on the same volume shows until the production's next start writes the key again (ProviderNeedsRewrite).
@@ -2436,7 +2437,8 @@ ClassMethod OnboardCredential(ns As %String, user As %String = "shutter-fwd", pa
 // ---- the aihub module ----
 
 /// Installs the aihub module's runtime pieces: the provider configuration from the environment
-/// when ANTHROPIC_API_KEY is set (the model from SHUTTER_MODEL), and the knowledge bases from
+/// when ANTHROPIC_API_KEY or OPENAI_API_KEY is set (EnvironmentProvider: the provider SHUTTER_PROVIDER names, else the
+/// one whose key is set, Anthropic when both are; the model from SHUTTER_MODEL), and the knowledge bases from
 /// the module's knowledge/ folder. Returns JSON. Prints no secret.
 ClassMethod InstallAIHub(root As %String = "") As %String [ SqlProc ]
 {
@@ -2445,9 +2447,12 @@ ClassMethod InstallAIHub(root As %String = "") As %String [ SqlProc ]
         If root '= "" Set root = ##class(%File).NormalizeDirectory(root)
         Do out.%Set("ai_hub_present", ''##class(%Dictionary.CompiledClass).%ExistsId("%AI.Agent"), "boolean")
         Do out.%Set("descriptor_registry", ..RebuildDescriptorRegistry(), "boolean")
-        Set key = $SYSTEM.Util.GetEnviron("ANTHROPIC_API_KEY")
-        If key '= "" {
-            Set out.provider = ..ConfigureProvider(key, $SYSTEM.Util.GetEnviron("SHUTTER_MODEL"))
+        Set provider = ..EnvironmentProvider(.key, .model, .problem)
+        If provider '= "" {
+            Set out.provider = ..ConfigureProvider(key, model, provider)
+        } ElseIf problem '= "" {
+            // A key is set and no provider can be taken from it: said here, and InstallAIHubStatus fails the install on it.
+            Set out.provider = "not configured: " _ problem
         } Else {
             Set out.provider = $SELECT(..ProviderConfigured(): "configured earlier", 1: "no key in the environment: the agents replay recordings")
         }
@@ -2512,9 +2517,11 @@ ClassMethod EnsurePublishApp(ns As %String = "") As %String
 
 /// InstallAIHub as a %Status: what the aihub module's manifest invokes (the Invoke checks the status, so an install
 /// that stopped at an error stops the load, and the image build with it). Writes InstallAIHub's JSON, which holds no
-/// secret. What fails the install: an error InstallAIHub caught, and a key in the environment (ANTHROPIC_API_KEY) whose
-/// provider could not be configured (a provider line not starting "ok"). A knowledge base that did not build, and an
-/// environment with no key (the agents replay), are reported there and do not fail it.
+/// secret. What fails the install: an error InstallAIHub caught, and a key in the environment (ANTHROPIC_API_KEY or
+/// OPENAI_API_KEY) whose provider could not be configured (a provider line not starting "ok": the provider refused the
+/// configuration, or SHUTTER_PROVIDER names a provider whose key is empty or one the install does not configure). A
+/// knowledge base that did not build, and an environment with no key (the agents replay), are reported there and do
+/// not fail it.
 ClassMethod InstallAIHubStatus(root As %String = "") As %Status
 {
     Set sc = $$$OK
@@ -2523,20 +2530,94 @@ ClassMethod InstallAIHubStatus(root As %String = "") As %Status
         Write !, "aihub install: ", json, !
         Set out = ##class(%DynamicObject).%FromJSON(json)
         If out.error '= "" Set sc = $$$ERROR($$$GeneralError, "The aihub install: " _ out.error)
-        If $$$ISOK(sc) && ($SYSTEM.Util.GetEnviron("ANTHROPIC_API_KEY") '= "") && ($EXTRACT(out.provider, 1, 2) '= "ok") Set sc = $$$ERROR($$$GeneralError, "The aihub install: the provider was not configured from ANTHROPIC_API_KEY: " _ out.provider)
+        // A key is in the environment when a provider was chosen from it, or when the choice says why it could not be.
+        Set provider = ..EnvironmentProvider(.key, .model, .problem)
+        If $$$ISOK(sc) && ((provider '= "") || (problem '= "")) && ($EXTRACT(out.provider, 1, 2) '= "ok") Set sc = $$$ERROR($$$GeneralError, "The aihub install: the provider was not configured from " _ $SELECT(provider '= "": ..ProviderFact(provider, "variable"), 1: "the environment") _ ": " _ out.provider)
     } Catch ex {
         Set sc = ex.AsStatus()
     }
     Quit sc
 }
 
-/// Puts the provider key in the IRIS wallet (collection Shutter, secret Anthropic) and writes the
-/// Config Store configuration AI.LLM.Shutter that the agents name, with the model (default
-/// claude-opus-5-5). Replaces an earlier key. Returns a short status; never the key.
-ClassMethod ConfigureProvider(key As %String, model As %String = "") As %String [ SqlProc ]
+/// The model providers the install configures, in the order it prefers them when the environment carries a key for
+/// more than one. Each is the name AI Hub knows the provider by (the configuration's model_provider).
+Parameter PROVIDERS = "anthropic,openai";
+
+/// What the install knows of a provider it configures: the environment variable that carries its key (variable), its
+/// secret in the IRIS wallet (secret, in the collection Shutter) and the model taken when none is named (model). ""
+/// for a name that is not one of PROVIDERS. OpenAI's default is the model the board was run on by hand
+/// (docs/readme/another-provider.md): the runner opens each session with max_tokens, which OpenAI's newer models refuse.
+ClassMethod ProviderFact(provider As %String, what As %String) As %String
 {
-    If model = "" Set model = "claude-opus-5-5"
+    If provider = "anthropic" Quit $CASE(what, "variable": "ANTHROPIC_API_KEY", "secret": "Shutter.Anthropic", "model": "claude-opus-5-5", : "")
+    If provider = "openai" Quit $CASE(what, "variable": "OPENAI_API_KEY", "secret": "Shutter.OpenAI", "model": "gpt-4.1", : "")
+    Quit ""
+}
+
+/// Which provider an environment asks for, from SHUTTER_PROVIDER (<var>wanted</var>) and the two keys: the one
+/// SHUTTER_PROVIDER names (anthropic or openai, in any case) when its key is set; with none named, the provider whose
+/// key is set, Anthropic when both are. Returns the provider, with its key in <var>key</var>. Returns "" with no
+/// <var>problem</var> when neither key is set (the agents replay), and "" with the problem in words when a key is set
+/// and no provider can be taken from it: SHUTTER_PROVIDER names a provider whose key is empty, or something the install
+/// does not configure. The other provider's key is never used in place of the one named.
+ClassMethod ProviderChoice(wanted As %String, anthropicKey As %String, openaiKey As %String, Output key As %String, Output problem As %String) As %String
+{
+    Set key = "", problem = ""
+    If (anthropicKey = "") && (openaiKey = "") Quit ""
+    Set wanted = $ZCONVERT($ZSTRIP(wanted, "<>WC"), "L")
+    If wanted = "" Set wanted = $SELECT(anthropicKey '= "": "anthropic", 1: "openai")
+    // The name is repeated only when it does not look like a key put in the wrong variable.
+    If '$LISTFIND($LISTFROMSTRING(..#PROVIDERS, ","), wanted) Set problem = "SHUTTER_PROVIDER names " _ ##class(Shutter.Util.Secret).Clean(wanted) _ ", which the install does not configure (" _ $REPLACE(..#PROVIDERS, ",", " or ") _ ")" Quit ""
+    Set key = $SELECT(wanted = "anthropic": anthropicKey, 1: openaiKey)
+    If key = "" Set problem = "SHUTTER_PROVIDER names " _ wanted _ " and " _ ..ProviderFact(wanted, "variable") _ " is empty" Quit ""
+    Quit wanted
+}
+
+/// ProviderChoice on this process's environment (SHUTTER_PROVIDER, ANTHROPIC_API_KEY, OPENAI_API_KEY), with what
+/// SHUTTER_MODEL names in <var>model</var> ("" leaves ConfigureProvider to take the provider's own default). The aihub
+/// module's install and the production's start both read the environment here, so they choose alike.
+ClassMethod EnvironmentProvider(Output key As %String, Output model As %String, Output problem As %String) As %String
+{
+    Set model = $SYSTEM.Util.GetEnviron("SHUTTER_MODEL")
+    Quit ..ProviderChoice($SYSTEM.Util.GetEnviron("SHUTTER_PROVIDER"), $SYSTEM.Util.GetEnviron("ANTHROPIC_API_KEY"), $SYSTEM.Util.GetEnviron("OPENAI_API_KEY"), .key, .problem)
+}
+
+/// Whether a model's name can be the provider's. No for a name that is plainly the other provider's (claude... on
+/// openai, gpt... on anthropic), which every live run would fail on: a SHUTTER_MODEL left from the other provider is
+/// the likely cause. Yes for anything else, since the install keeps no list of either provider's models.
+ClassMethod ModelFits(provider As %String, model As %String) As %Boolean
+{
+    Set name = $ZCONVERT(model, "L")
+    If (provider = "openai") && ($EXTRACT(name, 1, 6) = "claude") Quit 0
+    If (provider = "anthropic") && ($EXTRACT(name, 1, 3) = "gpt") Quit 0
+    Quit 1
+}
+
+/// The model provider ConfigureProvider recorded (anthropic or openai), "" when no provider is configured. A record
+/// written before the install took a second provider names none, and is Anthropic's.
+ClassMethod ModelProvider() As %String
+{
+    If '..ProviderConfigured() Quit ""
+    Set provider = $GET(^Shutter.Config("aihub", "modelProvider"))
+    Quit $SELECT(provider = "": "anthropic", 1: provider)
+}
+
+/// Puts the provider key in the IRIS wallet (collection Shutter; the secret Anthropic, or OpenAI for that provider) and
+/// writes the Config Store configuration AI.LLM.Shutter that the agents name, with the provider (anthropic unless
+/// <var>provider</var> says openai) and the model (default claude-opus-5-5, or gpt-4.1 on OpenAI). Replaces an earlier
+/// key, and removes the other provider's secret once the new configuration is written, so the wallet holds one
+/// provider's key at a time. A provider the install does not configure, and a model that is plainly the other
+/// provider's (ModelFits), are refused before anything is changed. Returns a short status; never the key.
+ClassMethod ConfigureProvider(key As %String, model As %String = "", provider As %String = "") As %String [ SqlProc ]
+{
+    Set provider = $ZCONVERT($ZSTRIP(provider, "<>WC"), "L")
+    If provider = "" Set provider = "anthropic"
+    Set secret = ..ProviderFact(provider, "secret")
+    If secret = "" Quit "no such provider: " _ ##class(Shutter.Util.Secret).Clean(provider) _ " (" _ $REPLACE(..#PROVIDERS, ",", " or ") _ ")"
+    Set model = $ZSTRIP(model, "<>WC")
+    If model = "" Set model = ..ProviderFact(provider, "model")
     If $ZSTRIP(key, "<>W") = "" Quit "no key given"
+    If '..ModelFits(provider, model) Quit "the model " _ ##class(Shutter.Util.Secret).CleanModel(model) _ " is not one of " _ provider _ "'s: name one of its models in SHUTTER_MODEL, or leave it empty for " _ ..ProviderFact(provider, "model")
     Set key = $ZSTRIP(key, "<>W")
     Try {
         Set sc = ..EnsureSecretResource()
@@ -2549,26 +2630,50 @@ ClassMethod ConfigureProvider(key As %String, model As %String = "") As %String 
         } Catch {
         }
         Try {
-            Do $CLASSMETHOD("%Wallet.KeyValue", "Delete", "Shutter.Anthropic")
+            Do $CLASSMETHOD("%Wallet.KeyValue", "Delete", secret)
         } Catch {
         }
-        Set sc = $CLASSMETHOD("%Wallet.KeyValue", "Create", "Shutter.Anthropic", {"Usage": "CUSTOM", "Secret": {"key": (key)}})
+        Set sc = $CLASSMETHOD("%Wallet.KeyValue", "Create", secret, {"Usage": "CUSTOM", "Secret": {"key": (key)}})
         If $$$ISERR(sc) Return "wallet: " _ $SYSTEM.Status.GetErrorText(sc)
         Try {
             Do $CLASSMETHOD("%ConfigStore.Configuration", "Delete", "AI.LLM.Shutter")
         } Catch {
         }
-        Set config = {"model_provider": "anthropic", "model": (model), "api_key": "secret://Shutter.Anthropic#key"}
+        Set config = ..ProviderConfiguration(provider, model)
         Set sc = $CLASSMETHOD("%ConfigStore.Configuration", "Create", "AI", "LLM", "", "Shutter", config)
         If $$$ISERR(sc) Return "config store: " _ $SYSTEM.Status.GetErrorText(sc)
+        // The configuration names the new secret from here on: the other provider's key leaves the wallet.
+        Do ..DeleteSecrets(provider)
         Set ^Shutter.Config("aihub", "provider") = "AI.LLM.Shutter"
+        Set ^Shutter.Config("aihub", "modelProvider") = provider
         Set ^Shutter.Config("aihub", "model") = model
         // A digest of the key, never the key: a later start compares the environment's key against it.
         Set ^Shutter.Config("aihub", "keyDigest") = ##class(Shutter.Util.Digest).SHA256Hex(key)
         Set ^Shutter.Config("aihub", "providerConfiguredAt") = ##class(Shutter.Util.Time).NowUTC()
-        Return "ok: AI.LLM.Shutter, model " _ model
+        Return "ok: AI.LLM.Shutter, " _ provider _ ", model " _ model
     } Catch ex {
         Return "error: " _ ex.DisplayString()
+    }
+}
+
+/// The Config Store configuration ConfigureProvider writes as AI.LLM.Shutter: the provider as AI Hub names it, the
+/// model, and the key by reference to the provider's own wallet secret, never the key.
+ClassMethod ProviderConfiguration(provider As %String, model As %String) As %DynamicObject
+{
+    Quit {"model_provider": (provider), "model": (model), "api_key": ("secret://" _ ..ProviderFact(provider, "secret") _ "#key")}
+}
+
+/// Removes the wallet secrets of the providers the install configures, all of them or all but <var>keep</var>'s. One
+/// that is not there, and an instance with no wallet class, are passed over.
+ClassMethod DeleteSecrets(keep As %String = "") [ Private ]
+{
+    For i = 1:1:$LENGTH(..#PROVIDERS, ",") {
+        Set provider = $PIECE(..#PROVIDERS, ",", i)
+        Continue:provider=keep
+        Try {
+            Do $CLASSMETHOD("%Wallet.KeyValue", "Delete", ..ProviderFact(provider, "secret"))
+        } Catch {
+        }
     }
 }
 
@@ -2637,29 +2742,36 @@ ClassMethod ProviderKeyMatches(key As %String) As %Boolean
 /// provider. Each probe (WalletSecretState, ProviderConfigState) says nothing where its class is absent (the core
 /// edition) or this process may not read it (the production's own process may: it wrote them), and the answer then
 /// comes from the record alone; <var>probe</var> 0 skips them, which is what a core edition's answer amounts to.
-ClassMethod ProviderNeedsRewrite(key As %String, Output reason As %String, probe As %Boolean = 1) As %Boolean
+/// <var>provider</var>, when the caller names the one the environment asks for, adds a reason: the record is of the
+/// other provider (SHUTTER_PROVIDER or the keys changed).
+ClassMethod ProviderNeedsRewrite(key As %String, Output reason As %String, probe As %Boolean = 1, provider As %String = "") As %Boolean
 {
     Set reason = ""
     If '..ProviderConfigured() Set reason = "no provider is configured" Quit 1
+    If (provider '= "") && (provider '= ..ModelProvider()) Set reason = "the provider was configured for " _ ..ModelProvider() _ ", and the environment asks for " _ provider Quit 1
     If '..ProviderKeyMatches(key) Set reason = "the provider was configured from another key" Quit 1
     If probe {
-        If ..WalletSecretState() = 0 Set reason = "the wallet secret Shutter.Anthropic is gone" Quit 1
+        If ..WalletSecretState() = 0 Set reason = "the wallet secret " _ ..ProviderFact(..ModelProvider(), "secret") _ " is gone" Quit 1
         If ..ProviderConfigState() = 0 Set reason = "the Config Store configuration AI.LLM.Shutter is gone" Quit 1
     }
     Quit 0
 }
 
-/// Whether the wallet holds the secret Shutter.Anthropic: 1 or 0, or "" where the wallet class is absent (the core
-/// edition) or this process may not read the wallet. The collection's use resource is Shutter_Secrets, and the wallet
+/// Whether the wallet holds the provider's secret (Shutter.Anthropic, or Shutter.OpenAI for openai): the recorded
+/// provider's unless <var>provider</var> names one, and Anthropic's where none is recorded. 1 or 0, or "" where the
+/// wallet class is absent (the core edition) or this process may not read the wallet. The collection's use resource is Shutter_Secrets, and the wallet
 /// answers a caller without it as if the secret were not there (0 from Exists, no error; AI Hub build 109), so the
 /// resource is checked first: a signed-in reader of the Doctor without it is told nothing rather than "gone".
 /// <var>mayRead</var> stands in for that check in a test; -1 reads the process's own right.
-ClassMethod WalletSecretState(mayRead As %Integer = -1) As %String
+ClassMethod WalletSecretState(mayRead As %Integer = -1, provider As %String = "") As %String
 {
     If mayRead = -1 Set mayRead = $SYSTEM.Security.Check("Shutter_Secrets", "USE")
     If 'mayRead Return ""
+    If provider = "" Set provider = ..ModelProvider()
+    Set secret = ..ProviderFact($SELECT(provider = "": "anthropic", 1: provider), "secret")
+    If secret = "" Return ""
     Try {
-        Return ''$CLASSMETHOD("%Wallet.KeyValue", "Exists", "Shutter.Anthropic")
+        Return ''$CLASSMETHOD("%Wallet.KeyValue", "Exists", secret)
     } Catch ex {
         Return ""
     }
@@ -2797,19 +2909,16 @@ ClassMethod MockConfig() As %String
     Quit $GET(^Shutter.Config("aihub", "mock"))
 }
 
-/// Forgets the provider configuration: removes AI.LLM.Shutter and the wallet secret, and the record.
-/// The agents replay recordings again. Returns a short status.
+/// Forgets the provider configuration, whichever provider it was for: removes AI.LLM.Shutter, the wallet secrets
+/// (Shutter.Anthropic and Shutter.OpenAI) and the record. The agents replay recordings again. Returns a short status.
 ClassMethod ClearProvider() As %String [ SqlProc ]
 {
     Try {
         Do $CLASSMETHOD("%ConfigStore.Configuration", "Delete", "AI.LLM.Shutter")
     } Catch {
     }
-    Try {
-        Do $CLASSMETHOD("%Wallet.KeyValue", "Delete", "Shutter.Anthropic")
-    } Catch {
-    }
-    Kill ^Shutter.Config("aihub", "provider"), ^Shutter.Config("aihub", "model"), ^Shutter.Config("aihub", "providerConfiguredAt"), ^Shutter.Config("aihub", "keyDigest")
+    Do ..DeleteSecrets()
+    Kill ^Shutter.Config("aihub", "provider"), ^Shutter.Config("aihub", "modelProvider"), ^Shutter.Config("aihub", "model"), ^Shutter.Config("aihub", "providerConfiguredAt"), ^Shutter.Config("aihub", "keyDigest")
     Quit "ok: no provider configured; the agents replay recordings"
 }
 

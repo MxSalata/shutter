@@ -102,6 +102,7 @@ def snapshot(namespaces):
         rows("%SYS", "application", "SELECT Name||'='||Resource||'='||MatchRoles FROM Security.Applications"),
         rows("%SYS", "task", "SELECT Name FROM %SYS.Task"),
         'Set w=$SELECT(##class(%Dictionary.CompiledClass).%ExistsId("%Wallet.KeyValue"):$CLASSMETHOD("%Wallet.KeyValue","Exists","Shutter.Anthropic"),1:0) If w Write !,"<<<wallet|%SYS|Shutter.Anthropic>>>"',
+        'Set w=$SELECT(##class(%Dictionary.CompiledClass).%ExistsId("%Wallet.KeyValue"):$CLASSMETHOD("%Wallet.KeyValue","Exists","Shutter.OpenAI"),1:0) If w Write !,"<<<wallet|%SYS|Shutter.OpenAI>>>"',
     ]
     out = session("%SYS", "\n".join(code + [mention_scan("%SYS")]), 900)
     for ns in namespaces:

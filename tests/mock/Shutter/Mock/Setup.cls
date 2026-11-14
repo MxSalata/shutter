@@ -137,7 +137,7 @@ ClassMethod Status() As %String [ SqlProc ]
         // What the production's start applies (Shutter.Production OnStart): the mode the environment names, and
         // whether it carries a key (never the key).
         Set o."env_agent_mode" = $SYSTEM.Util.GetEnviron("SHUTTER_AGENT_MODE")
-        Do o.%Set("env_key_set", $SYSTEM.Util.GetEnviron("ANTHROPIC_API_KEY") '= "", "boolean")
+        Do o.%Set("env_key_set", ($SYSTEM.Util.GetEnviron("ANTHROPIC_API_KEY") '= "") || ($SYSTEM.Util.GetEnviron("OPENAI_API_KEY") '= ""), "boolean")
         Set o."log_lines" = +$GET(^Shutter.MockLog)
         Do o.%Set("replay", $GET(^Shutter.Config("aihub", "mockReplay"), 1) '= 0, "boolean")
         Do o.%Set("strict", ''$GET(^Shutter.Config("aihub", "mockStrict")), "boolean")
