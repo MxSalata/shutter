@@ -11,7 +11,7 @@ import {
   IconSettings,
   IconStack2,
 } from '@tabler/icons-react';
-import { useCases, useFailedForAPerson, useHealth } from '@/api/hooks';
+import { useCases, useFailedCount, useHealth } from '@/api/hooks';
 import { TRIAL } from '@/env/mode';
 import type { Hue } from '@/lib/hues';
 import { useTechnical } from '@/stores/appearance';
@@ -156,14 +156,24 @@ export function useSections(): SectionGroup[] {
 /** The cases that need a person: waiting for an approval, escalated, blocked or failed, as the Cases page's tiles count them. */
 const NEED_A_PERSON = ['awaiting_approval', 'escalated', 'blocked'] as const;
 
+export interface NeedAPerson {
+  /** The cases that need a person, as far as the reads can tell. */
+  count: number;
+  /**
+   * True when the failed part is an upper bound (more cases failed than the count read, `useFailedCount`): the sum is
+   * one too, and is shown as "at most", as the Cases page's Failed tile is.
+   */
+  atMost: boolean;
+}
+
 /** How many cases need a person, from the same queries as the Cases page's tiles; null while any is still loading. */
-export function useNeedAPerson(): number | null {
+export function useNeedAPerson(): NeedAPerson | null {
   const a = useCases({ state: NEED_A_PERSON[0], limit: 1 });
   const b = useCases({ state: NEED_A_PERSON[1], limit: 1 });
   const c = useCases({ state: NEED_A_PERSON[2], limit: 1 });
-  const failed = useFailedForAPerson();
+  const failed = useFailedCount();
   if (!a.data || !b.data || !c.data || failed === undefined) return null;
-  return a.data.total + b.data.total + c.data.total + failed;
+  return { count: a.data.total + b.data.total + c.data.total + failed.count, atMost: failed.atMost };
 }
 
 /**

@@ -210,10 +210,10 @@ export interface CaseFilters {
   state?: string;
   scenario?: string;
   /**
-   * 1 leaves out the closed cases (CLOSED_STATES: resolved, blocked, escalated, failed). The server filters and counts
-   * them, so `total` and every page are of the open cases only (CONTRACTS 5).
+   * 0 leaves out the resolved cases and no other: a blocked, an escalated and a failed case still need a person. The
+   * server filters and counts them, so `total` and every page are of the cases left (CONTRACTS 5).
    */
-  open?: 1;
+  resolved?: 0;
   limit?: number;
   offset?: number;
 }
@@ -253,11 +253,6 @@ export function useFailedCount(): FailedForAPerson | undefined {
     count: data.total - data.items.filter((c) => c.disposition === 'abandoned').length,
     atMost: data.total > data.items.length,
   };
-}
-
-/** The count alone, for a sum of what needs a person (the navigation, Home): an upper bound past 100 failed cases. */
-export function useFailedForAPerson(): number | undefined {
-  return useFailedCount()?.count;
 }
 
 /**

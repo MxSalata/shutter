@@ -720,7 +720,7 @@
           "cases"
         ],
         "summary": "List the cases",
-        "description": "Each item carries writes, verification and, when the case has a plan, planCreatedBy (v1.18, v1.24). The state, scenario and open filters combine, and the total counts the filter's rows (v1.59).\n\nNeeds Shutter_Operate.\n\nCONTRACTS 5.",
+        "description": "Each item carries writes, verification and, when the case has a plan, planCreatedBy (v1.18, v1.24). The state, scenario, open and resolved filters combine, and the total counts the filter's rows (v1.59, v1.60).\n\nNeeds Shutter_Operate.\n\nCONTRACTS 5.",
         "x-contract": "docs/CONTRACTS.md section 5",
         "x-required-resource": "Shutter_Operate",
         "x-writes": false,
@@ -753,6 +753,15 @@
               "type": "string"
             },
             "description": "1 leaves out the closed cases (resolved, blocked, escalated or failed), so the total and the pages are of the open cases; any other value filters nothing (v1.59)."
+          },
+          {
+            "name": "resolved",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "0 leaves out the resolved cases and no other, so the blocked, escalated and failed cases stay, and the total and the pages are of the cases left; any other value filters nothing (v1.60)."
           },
           {
             "name": "limit",

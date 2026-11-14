@@ -32,8 +32,8 @@
 .cases-tiles .stat-tile .mantine-Group-root {
   flex-wrap: wrap;
 }
-/* Hide closed stands level with the selects' inputs beside it, and is as tall as they are to press */
-.cases-hide-closed .mantine-Switch-body {
+/* Hide resolved stands level with the selects' inputs beside it, and is as tall as they are to press */
+.cases-hide-resolved .mantine-Switch-body {
   min-height: 36px;
   align-items: center;
 }
