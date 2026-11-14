@@ -1765,6 +1765,7 @@ main[data-assistant='beside'] .stack-scroll {
 /* The scenario run's status takes the focus from a Run that turns into a spinner: a ring for the keyboard only */
 .run-status {
   border-radius: var(--mantine-radius-default);
+  scroll-margin-top: calc(var(--shutter-header-h) + 16px);
 }
 .run-status:focus {
   outline: none;
