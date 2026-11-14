@@ -33,6 +33,14 @@ Parameter DECISIONAGE = 120;
 /// A body of more characters than this is not read as the receiver's answer.
 Parameter MAXBODY = 1000000;
 
+/// An answer to the item's own read that is still arriving after this many seconds is no read, and an answer to the
+/// update still arriving after <property>WriteSeconds</property> is never read as applied. Either answer goes into a
+/// bounded stream (<class>Shutter.FHIR.BoundedStream</class>), which ends the read of a body over the limit; neither
+/// number shortens a wait on a receiver that keeps sending.
+Property ReadSeconds As %Numeric [ InitialExpression = 30 ];
+
+Property WriteSeconds As %Numeric [ InitialExpression = 60 ];
+
 /// True once this request took its fence row from unsent to sent.
 Property Marked As %Boolean [ InitialExpression = 0, Internal ];
 
@@ -156,6 +164,10 @@ Method Write(request As Shutter.Msg.FHIRWrite, response As Shutter.Msg.FHIRWrite
 
     // ---- 7. One request ----
     Set http = ..Request(binding)
+    // What comes back is bounded while it is read. An answer cut short is still an answer to an update that left:
+    // its status and headers stand, and it is never read as applied.
+    Set bounded = ##class(Shutter.FHIR.BoundedStream).Within(..Limit(), ..WriteSeconds)
+    Set http.ResponseStream = bounded
     Set sc = $$$OK, answer = ""
     Try {
         Set sc = ..Adapter.SendFormDataArray(.answer, "PUT", http, "", "", path)
@@ -173,6 +185,8 @@ Method Write(request As Shutter.Msg.FHIRWrite, response As Shutter.Msg.FHIRWrite
         Set body = ..Text(..Bytes(answer, .over))
     }
     Set outcome = ..Classify(sc, status, etag, location, contentType, body, id, .reason, .diagnostics)
+    // An answer whose body was cut short shows its status, never that what was applied is the update.
+    If (bounded.Refused '= "") && (outcome = "applied") Set outcome = "uncertain", diagnostics = "HTTP " _ status _ " whose body was " _ $SELECT(bounded.Refused = "size": "over the limit", 1: "still arriving when its time ran out")
     // An ETag or a Location longer than its column is recorded as empty: a cut one would read as another version.
     Set response.Outcome = outcome, response.HttpStatus = status, response.Sent = (outcome '= "error")
     Set response.ResponseEtag = $SELECT($LENGTH(etag) > 200: "", 1: etag), response.ResponseLocation = $SELECT($LENGTH(location) > 500: "", 1: location)
@@ -393,6 +407,8 @@ Method Read(path As %String, id As %String) As %DynamicObject [ Private ]
     // stand as this item's own read.
     Set http.FollowRedirect = 0
     Do http.SetHeader("Accept", "application/fhir+json")
+    Set bounded = ##class(Shutter.FHIR.BoundedStream).Within(..Limit(), ..ReadSeconds)
+    Set http.ResponseStream = bounded
     Set sc = $$$OK, answer = ""
     Try {
         Set sc = ..Adapter.SendFormDataArray(.answer, "GET", http, "", "", path)
@@ -400,6 +416,10 @@ Method Read(path As %String, id As %String) As %DynamicObject [ Private ]
         Set sc = ex.AsStatus(), answer = ""
     }
     Set ..Retry = 0
+    If bounded.Refused '= "" {
+        Do part.%Set("error", $SELECT(bounded.Refused = "size": "the answer's body is over " _ ..#MAXBODY _ " characters", 1: "the answer was still arriving when the read ran out of time"), "string")
+        Quit part
+    }
     If '$ISOBJECT($GET(answer)) {
         Do part.%Set("error", $EXTRACT("no answer" _ $SELECT($$$ISERR(sc): ": " _ $SYSTEM.Status.GetErrorText(sc), 1: ""), 1, 400), "string")
         Quit part
@@ -436,9 +456,7 @@ Method Read(path As %String, id As %String) As %DynamicObject [ Private ]
 /// there were more, and then what is returned is only the start.
 ClassMethod Bytes(answer As %Net.HttpResponse, Output over As %Boolean) As %String [ Private ]
 {
-    // Three bytes are the most one character takes here, so more bytes than that are more characters than the limit.
-    Set limit = 3 * ..#MAXBODY
-    If limit > 3600000 Set limit = 3600000
+    Set limit = ..Limit()
     Set bytes = "", over = 0
     If $ISOBJECT(answer.Data) {
         Do answer.Data.Rewind()
@@ -453,6 +471,14 @@ ClassMethod Bytes(answer As %Net.HttpResponse, Output over As %Boolean) As %Stri
         Set bytes = answer.Data
     }
     Quit bytes
+}
+
+/// The most bytes of an answer's body that are read: three are the most one character takes here, so more bytes
+/// than that are more characters than MAXBODY.
+ClassMethod Limit() As %Integer [ Private ]
+{
+    Set limit = 3 * ..#MAXBODY
+    Quit $SELECT(limit > 3600000: 3600000, 1: limit)
 }
 
 /// Bytes as characters when they are UTF-8, and as they came when they are not.

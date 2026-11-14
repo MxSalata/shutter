@@ -11,6 +11,11 @@
 /// <li><property>Follow</property>: <code>Follow(n)</code> is what the n-th request said of redirects (its
 /// <code>FollowRedirect</code>): 0 for never, "" when it left that to the connection, which follows one for a
 /// GET.</li>
+/// <li><property>Handed</property>: <code>Handed(n)</code> is how many bytes of the n-th answer's body its stream
+/// took. The body goes into the request's own response stream when it has one, as the connection writes it, and a
+/// stream that refuses ends the answer there with an error status, as a read that fails does.
+/// <code>Bound(n)</code> is that stream's limit in bytes, "" when the request brought no bounded stream.</li>
+/// <li><property>Slow</property>: <code>Slow(verb, path)</code> seconds pass before that answer's body arrives.</li>
 /// <li><property>Canned</property>: <code>Canned(verb, path) = $LISTBUILD(status, contentType, etag, location,
 /// body)</code> answers that request instead of the server, every time: a page behind a 200, a plain 404, and with
 /// status 0 no answer at all.</li>
@@ -28,6 +33,12 @@ Property Requests As %String [ MultiDimensional ];
 Property Follow As %String [ MultiDimensional ];
 
 Property Canned As %String [ MultiDimensional ];
+
+Property Handed As %String [ MultiDimensional ];
+
+Property Bound As %String [ MultiDimensional ];
+
+Property Slow As %String [ MultiDimensional ];
 
 Method SendFormDataArray(Output pHttpResponse As %Net.HttpResponse, pOp As %String, pHttpRequest As %Net.HttpRequest, pFormVarNames As %String = "", ByRef pData, pURL As %String = "") As %Status
 {
@@ -87,10 +98,26 @@ Method SendFormDataArray(Output pHttpResponse As %Net.HttpResponse, pOp As %Stri
         Set pHttpResponse.Headers($ZCONVERT(name, "U")) = value
         Set:$ZCONVERT(name, "U")="CONTENT-TYPE" pHttpResponse.ContentType = value
     }
-    Set stream = ##class(%Stream.GlobalBinary).%New()
-    Do stream.Write($ZCONVERT(answer.body, "O", "UTF8"))
+    Set stream = ##class(%Stream.GlobalBinary).%New(), n = ..Requests
+    Set ..Bound(n) = ""
+    If $ISOBJECT($GET(pHttpRequest)) && $ISOBJECT(pHttpRequest.ResponseStream) {
+        Set stream = pHttpRequest.ResponseStream
+        If stream.%IsA("Shutter.FHIR.BoundedStream") Set ..Bound(n) = stream.Limit
+    }
+    Set bytes = $ZCONVERT(answer.body, "O", "UTF8"), ..Handed(n) = 0, refused = ""
+    If +$GET(..Slow(verb, path)) > 0 Hang ..Slow(verb, path)
+    Try {
+        For i = 1:4000:$LENGTH(bytes) {
+            Set chunk = $EXTRACT(bytes, i, i + 3999)
+            $$$ThrowOnError(stream.Write(chunk))
+            Set ..Handed(n) = ..Handed(n) + $LENGTH(chunk)
+        }
+    } Catch ex {
+        Set refused = ex.DisplayString()
+    }
     Do stream.Rewind()
     Set pHttpResponse.Data = stream
+    If refused '= "" Quit $$$ERROR($$$ObjectScriptError, refused)
     If answer.status '?1"2"2N Quit $$$ERROR($$$EnsErrHTTPStatus, pHttpResponse.StatusCode, pHttpResponse.StatusLine)
     Quit $$$OK
 }

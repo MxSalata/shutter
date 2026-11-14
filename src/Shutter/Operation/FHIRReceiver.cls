@@ -22,7 +22,9 @@ Property MaxBody As %Integer [ InitialExpression = 1000000 ];
 /// long can reach the event log.
 Property MaxTotal As %Integer [ InitialExpression = 1500000 ];
 
-/// One request gives up reading after this many seconds: the parts not yet read say so.
+/// One request gives up reading after this many seconds: the parts not yet read say so, and an answer still
+/// arriving then is not read as the receiver's. A receiver that keeps sending a byte now and then can still hold a
+/// read beyond it (<class>Shutter.FHIR.BoundedStream</class>).
 Property Budget As %Numeric [ InitialExpression = 45 ];
 
 /// When this request's reads began ($ZHOROLOG), and the characters of the bodies carried so far.
@@ -182,7 +184,9 @@ Method ReadParts(request As Shutter.Msg.FHIRRead, Output error As %String) As %D
 
 /// One GET, as a part: the status as it came and as it can be trusted, the ETag and Location verbatim, the content
 /// type, and the body as characters. The body is read as bytes and decoded here: UTF-8 when the content type names it
-/// or names no charset; any other charset, bytes that are not UTF-8 and a body over the limit are not trusted.
+/// or names no charset; any other charset, bytes that are not UTF-8 and a body over the limit are not trusted. The
+/// body is read into a bounded stream (<class>Shutter.FHIR.BoundedStream</class>), so a body over the limit, or one
+/// still arriving when the request's time is up, is not the receiver read.
 Method Get(path As %String, kind As %String, type As %String = "", id As %String = "") As %DynamicObject
 {
     Set left = ..Budget - ($ZHOROLOG - ..Started)
@@ -194,6 +198,12 @@ Method Get(path As %String, kind As %String, type As %String = "", id As %String
     // the receiver's. A 3xx is carried as it came.
     Set http.FollowRedirect = 0
     Do http.SetHeader("Accept", "application/fhir+json")
+    // The body is bounded while it is read: three bytes are the most one character takes, so more bytes than that are
+    // more characters than the limit and end the read, and nothing is taken once the request's time is up.
+    Set limit = 3 * ..MaxBody
+    If limit > 3600000 Set limit = 3600000
+    Set bounded = ##class(Shutter.FHIR.BoundedStream).Within(limit, left)
+    Set http.ResponseStream = bounded
     // The adapter waits no longer for this answer than the request has left.
     Set wait = ..Adapter.ResponseTimeout
     If (wait < 0) || (wait > left) Set ..Adapter.ResponseTimeout = $SELECT(left < 1: 1, 1: left \ 1)
@@ -205,6 +215,11 @@ Method Get(path As %String, kind As %String, type As %String = "", id As %String
     }
     Set ..Adapter.ResponseTimeout = wait
     Set ..Retry = 0
+    If bounded.Refused '= "" {
+        Do part.%Set("raw_status", $SELECT($ISOBJECT($GET(answer)): +answer.StatusCode, 1: 0), "number")
+        Do ##class(Shutter.FHIR.Trust).Fail(part, $SELECT(bounded.Refused = "size": "the answer's body is over " _ ..MaxBody _ " characters", 1: "the answer was still arriving when the request ran out of time"))
+        Quit part
+    }
     If '$ISOBJECT($GET(answer)) {
         Do part.%Set("error", $EXTRACT("no answer" _ $SELECT($$$ISERR(sc): ": " _ $SYSTEM.Status.GetErrorText(sc), 1: ""), 1, 400), "string")
         Quit part
@@ -217,9 +232,6 @@ Method Get(path As %String, kind As %String, type As %String = "", id As %String
     Set contentType = answer.GetHeader("Content-Type")
     If contentType = "" Set contentType = answer.ContentType
     Do part.%Set("content_type", contentType, "string")
-    // Three bytes are the most one character takes, so more bytes than that are more characters than the limit.
-    Set limit = 3 * ..MaxBody
-    If limit > 3600000 Set limit = 3600000
     Set bytes = "", over = 0
     If $ISOBJECT(answer.Data) {
         Do answer.Data.Rewind()

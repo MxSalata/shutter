@@ -498,6 +498,35 @@ Method TestAPatientAndALocationAreCarriedWithoutTheirText()
     Do $$$AssertEquals(parts.locations.%Get(1)."http_status" _ " [" _ parts.locations.%Get(1).body _ "]", "404 []", "a Location the receiver does not hold")
 }
 
+/// An answer is bounded while it is read, not after: its body goes into a stream that takes no more than three bytes
+/// for each character of the limit, so a receiver cannot make the item hold an endless body, and nothing after the
+/// request's time is up, so an answer that outlasts the request is not read as the receiver's.
+Method TestAnAnswerIsBoundedWhileItIsRead()
+{
+    Quit:'..Ready()
+    Set case = ..Case()
+    // Too large: refused at the first bytes past the limit.
+    Set op = ..Op(.http)
+    Set op.MaxBody = 1000
+    Set big = {"resourceType": "Encounter", "id": "enc-1", "status": "in-progress", "class": {"display": ($TRANSLATE($JUSTIFY("", 100000), " ", "x"))}}.%ToJSON()
+    Set http.Canned("GET", "Encounter/enc-1") = $LISTBUILD(200, ..#FHIRJSON, "W/""1""", "", big)
+    Set parts = ..Parts(case, op, "dispatch", "enc-1", "Patient/demo-p1", "[""Location/ward-a""]")
+    Set n = 0
+    For i = 1:1:+$GET(http.Requests) { If $LIST(http.Requests(i), 2) = "Encounter/enc-1" Set n = i }
+    Do $$$AssertTrue(n > 0, "the Encounter was asked for: " _ ..Log(http))
+    Do $$$AssertEquals(parts.encounter."http_status" _ "|" _ parts.encounter.error _ "|" _ parts.encounter.body, "0|the answer's body is over 1000 characters|", "a body over the limit is not the receiver read")
+    Do $$$AssertEquals($GET(http.Bound(n)), 3000, "the request brought a stream that takes three bytes for each character of the limit")
+    Do $$$AssertTrue($GET(http.Handed(n), $LENGTH(big)) <= 3000, "and it took no more: " _ $GET(http.Handed(n)) _ " of " _ $LENGTH(big) _ " bytes")
+
+    // Too slow: the body is still arriving when the request's time is up.
+    Set op = ..Op(.http)
+    Set op.Budget = 1
+    Set http.Slow("GET", "Encounter/enc-1/_history") = 1.5
+    Set parts = ..Parts(case, op, "dispatch", "enc-1", "Patient/demo-p1", "[""Location/ward-a""]")
+    Do $$$AssertEquals(parts.encounter."http_status", 200, "the reads before it were made")
+    Do $$$AssertEquals(parts.history."http_status" _ "|" _ parts.history.error _ "|" _ parts.history.body, "0|the answer was still arriving when the request ran out of time|", "an answer that outlasts the request is not the receiver read")
+}
+
 // ---- the collector ----
 
 /// The fhir item of a snapshot is the digest, the ETag and the version id of the Encounter read, and nothing else:

@@ -431,6 +431,37 @@ Method TestNoRequestFollowsARedirect()
     Do $$$AssertEquals($GET(http.Follow(1)) _ "|" _ $GET(http.Follow(2)), "0|0", "neither follows a redirect")
 }
 
+/// The item's own read and the answer to the update are bounded while they are read: each goes into a stream that
+/// takes no more bytes than three for each character of the limit, and nothing after its time is up. A late read is
+/// no read, and a late answer to the update is never read as applied.
+Method TestBothAnswersAreBoundedWhileTheyAreRead()
+{
+    Quit:'..Ready()
+    Set request = ..Fixture()
+    Set op = ..Op(.http)
+    Set response = ..Run(op, request)
+    Do $$$AssertEquals(..Answer(response) _ " " _ ..Verbs(http), "applied|200|1| GET PUT", "the read and the one update")
+    Do $$$AssertEquals($GET(http.Bound(1)) _ "|" _ $GET(http.Bound(2)), "3000000|3000000", "each answer goes into a bounded stream")
+    // An own read whose body is still arriving when its time is up is no read: nothing is sent.
+    Set request = ..Fixture()
+    Set op = ..Op(.http)
+    Set op.ReadSeconds = 1
+    Set http.Slow("GET", ..#ENC) = 1.5
+    Set response = ..Run(op, request)
+    Do $$$AssertEquals(..Answer(response) _ " " _ ..Verbs(http), "refused|0|0|fhir_endpoint_differs GET", "a read that outlasts its time refuses, with no PUT")
+    Do $$$AssertTrue(response.Error [ "ran out of time", "and says why (" _ response.Error _ ")")
+    Do $$$AssertEquals(##class(Shutter.Store.FHIRAttempt).ForApproval(request.ApprovalId).State, "unsent", "the fence row stays unsent")
+    // An answer to the update that outlasts its time: the update left, so nobody knows.
+    Set request = ..Fixture()
+    Set op = ..Op(.http)
+    Set op.WriteSeconds = 1
+    Set http.Slow("PUT", ..#ENC) = 1.5
+    Set http.Canned("PUT", ..#ENC) = $LISTBUILD(200, ..#FHIRJSON, "W/""2""", "", "{""resourceType"":""Encounter"",""id"":""enc-1"",""meta"":{""versionId"":""2""}}")
+    Set response = ..Run(op, request)
+    Do $$$AssertEquals(response.Outcome _ "|" _ response.Sent, "uncertain|1", "an answer that outlasts its time is an outcome nobody knows (" _ response.Error _ ")")
+    Do ..NoneAdmitted()
+}
+
 /// Shadow mode and the stop refuse at the admission: nothing is read or sent, and the fence row stays unsent.
 Method TestShadowAndTheStopSendNothing()
 {
