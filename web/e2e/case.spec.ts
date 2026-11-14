@@ -391,7 +391,8 @@ test.describe('the case page made easier to read', () => {
         }
         if (at.controlsTop >= at.foot + 1) await expect(dialog.getByTestId('review-more')).toHaveCount(1);
         if (at.controlsTop <= at.foot - 1) await expect(dialog.getByTestId('review-more')).toHaveCount(0);
-        if (at.pressBottom <= at.foot) break;
+        // Wholly in view: inside the dialog's own edge, which clips a pixel above its foot
+        if (at.pressBottom <= at.foot - 2) break;
         await dialog.evaluate((el) => el.closest('.mantine-Modal-content')?.scrollBy(0, 12));
       }
       // Still two presses in all: the press, now in view with its binding beside it, approves the plan
