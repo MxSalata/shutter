@@ -156,15 +156,25 @@ Method TestTwoAdmissionsRaceForTheLastAllowance()
     Set a = $GET(^Shutter.Test.BudgetRace("a", "admitted"), "none"), bb = $GET(^Shutter.Test.BudgetRace("b", "admitted"), "none")
     Do $$$AssertTrue((a _ bb = "10") || (a _ bb = "01"), "exactly one of the two is admitted: a " _ a _ ", b " _ bb)
     Do $$$AssertEquals($CLASSMETHOD(b, "Reserved", "", .n) _ "|" _ n, ".5|1", "and one reservation holds the last allowance")
+    // The other was refused on the figures, not because the lock was busy: it read the first one's reservation.
+    Set loser = $SELECT(a = 1: "b", 1: "a")
+    Do $$$AssertEquals($GET(^Shutter.Test.BudgetRace(loser, "busy")), 0, "the one refused was not refused as busy")
+    Set words = $GET(^Shutter.Test.BudgetRace(loser, "words"))
+    Do $$$AssertTrue(words [ "less than a run's estimate of 0.50 USD", "the one refused says the estimate does not fit: " _ words)
+    Do $$$AssertTrue(words [ "1 run(s) in flight, 0.50 USD reserved", "and names the first one's reservation: " _ words)
     Do $CLASSMETHOD(b, "Settle", "ut-race-a"), $CLASSMETHOD(b, "Settle", "ut-race-b")
     Kill ^Shutter.Test.BudgetRace
 }
 
-/// One racer, run as a job: says it is ready, asks for admission (waiting on the lock), and writes the answer.
+/// One racer, run as a job: says it is ready, asks for admission (waiting on the lock), and writes whether it was refused
+/// as busy, the refusal's words, and last the answer.
 ClassMethod RaceOne(tag As %String)
 {
     Set ^Shutter.Test.BudgetRace(tag, "go") = 1
-    Set ^Shutter.Test.BudgetRace(tag, "admitted") = ##class(Shutter.Util.Budget).Admit("ut-race-" _ tag, "ut-race")
+    Set ok = ##class(Shutter.Util.Budget).Admit("ut-race-" _ tag, "ut-race", .status)
+    Set ^Shutter.Test.BudgetRace(tag, "busy") = +status.%Get("busy")
+    Set ^Shutter.Test.BudgetRace(tag, "words") = $SELECT(ok: "", 1: ##class(Shutter.Util.Budget).Refusal(status))
+    Set ^Shutter.Test.BudgetRace(tag, "admitted") = ok
 }
 
 /// The SQL diagnostic's path (Runner.Diagnostic, which AIHub.TestRun calls): refused when the allowance is spent, before
