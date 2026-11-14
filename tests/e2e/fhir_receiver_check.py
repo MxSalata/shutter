@@ -68,6 +68,8 @@ TERMINAL = ('blocked', 'escalated', 'failed', 'resolved', 'closed')
 CLINICIAN = 'Zo\u00eb'
 # How long a terminal session waits for a connection: the web application's session timeout and a margin.
 LICENSE_WAIT = 1020
+# How long a case that is awaiting approval may take to list its approval task.
+TASK_WAIT = 60
 
 
 def entry(enabled, base=FHIR_BASE, wards=('Location/ward-a', 'Location/ward-b')):
@@ -378,6 +380,17 @@ def approvals(api, cid):
     return view.get('approvals') or [], view.get('tasks') or []
 
 
+def task_listed(api, cid, seconds=TASK_WAIT):
+    """The case is awaiting approval a moment before its task is listed; waits for the task, at most the seconds given."""
+    deadline = time.time() + seconds
+    while True:
+        if approvals(api, cid)[1]:
+            return True
+        if time.time() >= deadline:
+            return False
+        time.sleep(1)
+
+
 def attempts(api, cid):
     """The case's write attempts, each with its verification."""
     return [pair for pair in api.get(f'/cases/{urllib.parse.quote(cid)}/attempts') or [] if pair.get('attempt')]
@@ -430,6 +443,9 @@ def to_approval(api, r, failures, expected_mode=''):
     print(f'  {cid}: {case["state"]}, mode {case.get("mode")}; {case.get("headline")}')
     ok = case['state'] == 'awaiting_approval'
     check(failures, ok, 'the case waits for a person\'s approval' if ok else f'the case waits for a person\'s approval; it is {case["state"]}: {reason(api, cid)}')
+    if ok:
+        # What follows counts the task or approves it: neither may run ahead of the workflow raising it.
+        task_listed(api, cid)
     if expected_mode:
         check(failures, case.get('mode') == expected_mode, f'the case runs in mode {expected_mode} ({case.get("mode")})')
     return case if ok else None
