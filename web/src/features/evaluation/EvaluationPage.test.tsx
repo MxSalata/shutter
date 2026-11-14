@@ -12,7 +12,7 @@ import { layer1Words } from '@/test/words';
 import { theme } from '@/theme';
 import type { DetailLevel } from '@/env/mode';
 import { BOUNDARY_DISPLAY, outweighedIn, passName, type BoundaryChecks, type Evaluation } from './evaluation';
-import EvaluationPage from './EvaluationPage';
+import EvaluationPage, { heroSecond, RULES_EXEMPTION } from './EvaluationPage';
 import { HELD_OUT } from './heldOut';
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
@@ -85,7 +85,7 @@ describe('EvaluationPage', () => {
     expect(screen.getByText('How the board decides, measured on recorded runs.')).toBeInTheDocument();
     expect(
       within(headline()).getByText(
-        'From 100 runs recorded with the real agents on IRIS AI Hub (build 2026.3.0AI.154.0), 25 Oct to 1 Nov 2026; CI replays them on every push. Nothing on this page was measured on this instance.',
+        'Catalogue demonstration: 100 runs recorded with the real agents on IRIS AI Hub (build 2026.3.0AI.154.0), 25 Oct to 1 Nov 2026; CI replays them on every push. Nothing on this page was measured on this instance.',
       ),
     ).toBeInTheDocument();
     // The evaluation's own provenance, word for word, behind "Where these figures come from"
@@ -112,7 +112,13 @@ describe('EvaluationPage', () => {
     renderPage();
     const hero = headline();
     expect(hero).toHaveAttribute('data-tour', 'evaluation-headline');
-    expect(within(hero).getByRole('heading', { name: 'The board against the expected outcome', level: 2 }));
+    // The band's heading names the cohort and the release its figures come from
+    expect(
+      within(hero).getByRole('heading', {
+        name: 'Catalogue demonstration, recorded before release 1.0.0',
+        level: 2,
+      }),
+    ).toHaveClass('overline');
     expect(visible(hero.querySelector('.hero-statement'))).toBe(
       "On the same 11 failures, played end to end: the board 11, Rules only 4. Of Rules only's 7 misses, the gate stopped 6.",
     );
@@ -134,30 +140,127 @@ describe('EvaluationPage', () => {
     );
   });
 
-  it("puts the held-out fair test above the board's own score, its figures fair-test.md's", () => {
+  it("puts the held-out cases above the board's own score, each line with its release, the latest first", () => {
     renderPage();
     const card = within(headline()).getByRole('region', {
-      name: "Held out: 12 sealed cases, 3 runs each, on release 1.0.0's code",
+      name: 'Held-out cases F01 to F12: 12 cases, 36 runs in each mode (strict mean loss, lower is better)',
     });
-    expect(visible(card.querySelector('p')!)).toBe(
-      'Strict mean loss, lower is better: the board 0.167, the single investigator 0.167 with two F08 runs settled (0.500 as graded), Site policy with no model 3.500, always escalating 1.250; with no model, F09 was written wrongly in every run. fair-test.md',
+    const lines = [...card.querySelectorAll(':scope > div > p')].map(visible);
+    expect(lines).toEqual([
+      'Release 1.4.3, regression rerun: the board 0.167, the single investigator 0.167 as settled (0.667 as graded), Rules only 4.000; no mode executed a wrong write.',
+      'Release 1.0.0, the original test: the board 0.167, the single investigator 0.167 as settled (0.500 as graded); with no model, F09 was written wrongly in every run.',
+      "Evaluation evidence, same gate, release 1.4.3: on F03 the board reconciled, Rules only's resend was blocked; neither wrote.",
+    ]);
+    expect(within(card).getByRole('link', { name: 'Release 1.4.3' })).toHaveAttribute(
+      'href',
+      'https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#release-143-all-12-cases-rerun',
     );
-    expect(within(card).getByRole('link', { name: 'fair-test.md' })).toHaveAttribute(
+    expect(within(card).getByRole('link', { name: 'Release 1.0.0' })).toHaveAttribute(
       'href',
       'https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md',
     );
-    // Release 1.1.1's own figure for the board, so the 1.0.0 figure is not read as the trial's release
-    const later = card.querySelectorAll('p')[1]!;
-    expect(visible(later)).toBe(
-      "On 1.1.1's code the board proposed the same and the gate also held F03 and F07: 0.667 as graded. Release 1.1.x",
+    // Above the self-graded tile (the board's proposals on its own recorded scenarios), with the cohort said again
+    // where the catalogue demonstration's figures resume
+    const resumes = within(headline()).getByText(/^Catalogue demonstration: 100 runs recorded/);
+    const own = within(headline()).getByText('recorded failures, the expected action chosen');
+    expect(card.compareDocumentPosition(resumes) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(resumes.compareDocumentPosition(own) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('shows F03 as evaluation evidence under the same gate: its release, both outcomes and no write, never as S3', () => {
+    renderPage();
+    const card = within(headline()).getByRole('region', { name: /^Held-out cases F01 to F12/ });
+    const example = within(card).getByTestId('same-gate-example');
+    expect(example).toHaveTextContent(/^Evaluation evidence, same gate, release 1\.4\.3:/);
+    // One press away in Plain (the opened content is found as hidden while its transition runs): the case, the release, what each mode proposed and what the gate did, and the writes
+    const toggle = within(card).getByRole('button', { name: 'F03 in detail' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    const detail = card.querySelector('[data-tech-detail="open"]')!;
+    const rows = Object.fromEntries(
+      [...detail.querySelectorAll('tr')].map((tr) => [
+        visible(tr.querySelector('th')),
+        visible(tr.querySelector('td')),
+      ]),
     );
-    expect(within(later as HTMLElement).getByRole('link', { name: 'Release 1.1.x' })).toHaveAttribute(
+    expect(rows).toEqual({
+      'The case': 'F03: committed, and the patient has moved on',
+      Release: '1.4.3, one site profile and the same gate for every mode, nothing exempted',
+      'The board, the single investigator':
+        'proposed reconcile in 3 of 3 runs each; the gate passed it and the case resolved, verified',
+      'Rules only':
+        'proposed resend in 3 of 3 runs; the gate blocked it at proposal: ALREADY_COMMITTED, SUPERSEDED_BY_LATER_EVENT',
+      'Writes to the receiver': '0 in every run of the three modes',
+      'What this is': 'A held-out case, not a scenario: nothing in the app runs it',
+      'Every run': 'results-r143-all.json',
+    });
+    expect(within(card).getByRole('link', { name: 'results-r143-all.json', hidden: true })).toHaveAttribute(
+      'href',
+      HELD_OUT.r143.sameGate.url,
+    );
+    // Evidence, not something to run: the card names no scenario and links no case or scenario page
+    expect(card).not.toHaveTextContent(/\bS\d+\b/);
+    const links = within(card).getAllByRole('link', { hidden: true });
+    expect(links).toHaveLength(5);
+    for (const link of links)
+      expect(link.getAttribute('href')).toMatch(
+        /^https:\/\/github\.com\/MxSalata\/shutter\/blob\/main\/docs\//,
+      );
+    expect(within(card).queryByRole('button', { name: /run/i })).toBeNull();
+  });
+
+  it('keeps the baselines and release 1.1.1 one press away, labelled with their releases', () => {
+    renderPage(undefined, { detail: 'technical' });
+    const card = within(headline()).getByRole('region', { name: /^Held-out cases F01 to F12/ });
+    // An explanation, so Technical leaves it closed; the same-gate detail is data, which Technical opens
+    expect(within(card).getByRole('button', { name: 'F03 in detail' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    const toggle = within(card).getByRole('button', { name: 'Baselines and release 1.1.1' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(toggle);
+    const earlier = document.getElementById(toggle.getAttribute('aria-controls')!)!;
+    expect([...earlier.querySelectorAll('p')].map(visible)).toEqual([
+      "On 1.0.0, Site policy with no model scored 3.500 and always escalating 1.250, a computed baseline that is the same on 1.4.3; the single investigator's 0.167 has two F08 runs settled. fair-test.md",
+      "On 1.1.1's code the board proposed the same and the gate also held F03 and F07: 0.667 as graded. Release 1.1.x",
+    ]);
+    expect(within(earlier).getByRole('link', { name: 'Release 1.1.x', hidden: true })).toHaveAttribute(
       'href',
       'https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#release-11x',
     );
-    // Above the self-graded tile: the board's proposals on its own recorded scenarios
-    const own = within(headline()).getByText('recorded failures, the expected action chosen');
-    expect(card.compareDocumentPosition(own) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('says the exemption, the ward and every check passed only of S8, whatever else Rules only wrote', () => {
+    const entryOf = (id: string) => (id === 'S8' ? 'E7' : '');
+    const exemption = 'Rules only is exempted there on purpose, and on a real case the gate holds it';
+    expect(RULES_EXEMPTION).toBe(exemption);
+    // The recorded evaluation: the seventh miss, S8
+    expect(
+      heroSecond(
+        { rulesMisses: { total: 7, stopped: ['S1', 'S3', 'S6', 'S7', 'S10', 'S13'], wrote: ['S8'] } },
+        entryOf,
+      ),
+    ).toBe(
+      `The seventh, S8, wrote over the bed manager's ward with every check passed: ${exemption}. The board escalated, as entry E7 says.`,
+    );
+    // S8 and another: the other is only said to have written
+    expect(
+      heroSecond({ rulesMisses: { total: 4, stopped: ['S1', 'S3'], wrote: ['S8', 'S9'] } }, entryOf),
+    ).toBe(`S8 and S9 wrote. S8 wrote with every check passed: ${exemption}. The board caught them.`);
+    // S8 alone, when the gate stopped none of the others
+    expect(heroSecond({ rulesMisses: { total: 1, stopped: [], wrote: ['S8'] } }, entryOf)).toBe(
+      `S8 wrote with every check passed: ${exemption}. The board caught it.`,
+    );
+    // Other scenarios alone: no ward, no exemption and nothing about their checks
+    const others = heroSecond({ rulesMisses: { total: 3, stopped: ['S1'], wrote: ['S4', 'S9'] } }, entryOf);
+    expect(others).toBe('S4 and S9 wrote. The board caught them.');
+    const one = heroSecond({ rulesMisses: { total: 2, stopped: ['S1'], wrote: ['S9'] } }, entryOf);
+    expect(one).toBe('S9 wrote. The board caught it.');
+    for (const said of [others, one]) expect(said).not.toMatch(/exempt|every check|ward/);
+    expect(heroSecond({ rulesMisses: null }, entryOf)).toBe('');
+    expect(heroSecond({ rulesMisses: { total: 2, stopped: ['S1', 'S3'], wrote: [] } }, entryOf)).toBe('');
   });
 
   it('sets Rules only beside the board on one base, apart from the proposed action', () => {
@@ -262,7 +365,7 @@ describe('EvaluationPage', () => {
     expect(within(hero).queryByRole('link', { name: 'Compare the two cases' })).toBeNull();
     expect(
       within(hero).getByText(
-        'From 100 runs recorded with the real agents, 25 Oct to 1 Nov 2026; CI replays them on every push. Nothing on this page was measured on this instance.',
+        'Catalogue demonstration: 100 runs recorded with the real agents, 25 Oct to 1 Nov 2026; CI replays them on every push. Nothing on this page was measured on this instance.',
       ),
     ).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'How the specialists differed' })).not.toHaveTextContent(
@@ -287,10 +390,13 @@ describe('EvaluationPage', () => {
       within(why).getByText('Who proposed the expected action, of 24 scored passes'),
     ).toBeInTheDocument();
     const single = within(why).getByText(/^Each specialist answers from its own view\./);
+    // Its figures are the held-out cases', in the card above with their releases, so they are not said twice
     expect(visible(single)).toBe(
-      'Each specialist answers from its own view. The single investigator was measured with the real model on the 12 held-out cases (fair-test.md); it has no recording in the trial.',
+      'Each specialist answers from its own view. The single investigator has no recording in the trial; its figures are above.',
     );
-    expect(within(single).getByRole('link', { name: 'fair-test.md' })).toHaveAttribute('href', HELD_OUT.url);
+    const card = screen.getByRole('region', { name: /^Held-out cases F01 to F12/ });
+    expect(card).toHaveTextContent('the single investigator 0.167 as settled');
+    expect(card.compareDocumentPosition(single) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(why).not.toHaveTextContent('No single-agent run was recorded');
     expect(why).toHaveTextContent(
       'The gate alone catches S1, S3, S6, S7, S10 and S13. The board catches S8.',
@@ -693,7 +799,9 @@ describe('EvaluationPage', () => {
     // At most 325 words in Plain, which includes the catalogue line beside the result, the held-out card (with the
     // baseline, both single investigator figures and release 1.1.1's) and where the single investigator was measured
     // (245 before those), and since 13 November 2026 the Rules only exemption beside the write that passed every check
-    // (15 words; 325 before it); Technical at most 1.5 times that
+    // (15 words; 325 before it); Technical at most 1.5 times that. The held-out card's lines by release and its
+    // same-gate example fit the same 340: the baselines and release 1.1.1 went one press away, and the single
+    // investigator's figures are said once, in the card
     expect(words.copy).toBeLessThanOrEqual(340);
     expect(technical.copy).toBeLessThanOrEqual(510);
     // Every visible word, the headings, the controls and the figures with it: Technical adds at most half again
