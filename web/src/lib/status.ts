@@ -294,6 +294,14 @@ export const FHIR_ATTEMPTS: Record<string, Status> = {
 
 export const fhirAttempt = (outcome: string): Status => FHIR_ATTEMPTS[outcome] ?? attempt(outcome);
 
+/** A FHIR update that Shutter's own last check before the socket stopped: nothing reached the FHIR server. */
+export const FHIR_NOT_SENT: Status = s(
+  'blocking',
+  "Not sent: Shutter's last check stopped it",
+  'Shutter checked once more just before sending and stopped; nothing reached the FHIR server',
+  IconHandStop,
+);
+
 /** What the verifier found at the receiver; the two last are what a case without a verification says. */
 export const VERIFICATIONS: Record<string, Status> = {
   verified: s('positive', 'Effect verified at the receiver', undefined, IconCircleCheck),

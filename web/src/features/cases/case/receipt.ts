@@ -8,6 +8,7 @@ import type {
   Snapshot,
 } from '@/api/types';
 import { humanize } from '@/lib/format';
+import { asObject } from '@/lib/json';
 import { fhirSummary, receiverKind } from './derive';
 
 /**
@@ -187,7 +188,10 @@ export function safetyReceipt({
   const p = plan?.plan;
   const byPlan = approvalsByPlan(approvals, plan);
   const approval = approvalOf(byPlan.current);
-  const tried = (attempts ?? []).filter((x) => x.attempt);
+  // A FHIR update that Shutter's own last check stopped before the socket is not an attempt the receiver did not take
+  const tried = (attempts ?? []).filter(
+    (x) => x.attempt && (asObject(x.attempt.response) ?? {}).sent !== false,
+  );
   const sent = tried.filter((x) => WRITE_OUTCOMES.includes(str(x.attempt?.outcome)));
   const acknowledged = sent.filter((x) => ['applied', 'already_committed'].includes(str(x.attempt?.outcome)));
   const last =

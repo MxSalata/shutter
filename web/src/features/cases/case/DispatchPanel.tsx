@@ -7,7 +7,7 @@ import { KeyValueList } from '@/components/KeyValueList';
 import { Digest } from '@/components/Digest';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Timestamp } from '@/components/Timestamp';
-import { attempt, caseState, fhirAttempt, verification } from '@/lib/status';
+import { attempt, caseState, fhirAttempt, FHIR_NOT_SENT, verification } from '@/lib/status';
 import { asObject } from '@/lib/json';
 import { kindOfAttempts, receiverKind } from './derive';
 import { NotCheckedWords } from './NotCheckedWords';
@@ -35,6 +35,21 @@ function writeKind(
 function FhirAttemptCard({ a, receipt }: { a: Attempt; receipt: Record<string, unknown> }) {
   const s = fhirAttempt(a.outcome);
   const responseEtag = String(receipt.response_etag ?? '');
+  const response = asObject(a.response);
+  // Refused by Shutter's own last check before the socket: nothing went, so nothing reads as sent or as the server's
+  if (response?.sent === false)
+    return (
+      <Stack gap={6}>
+        <StatusBadge {...FHIR_NOT_SENT} w="fit-content" />
+        <KeyValueList
+          rows={[
+            ['Stopped', <Timestamp key="t" iso={a.at} />],
+            ['Reason', String(response.reason_code ?? '')],
+            ['Error', a.error],
+          ]}
+        />
+      </Stack>
+    );
   return (
     <Stack gap={6}>
       <StatusBadge

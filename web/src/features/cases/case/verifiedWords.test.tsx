@@ -343,4 +343,53 @@ describe('the words of a FHIR case', () => {
     expect(verification).toHaveTextContent(FHIR_VERIFIED_NOTE);
     expect(within(verification).getByText(/^Verified in Encounter version "2"/)).toBeInTheDocument();
   });
+
+  /** A FHIR attempt of the recorded case's shape: its outcome, its answer and its response. */
+  const fhirAttempt = (outcome: string, httpStatus: number, response: Record<string, unknown>) => {
+    const [view] = structuredClone(fixtures.cases['C-000002'].attempts) as unknown as AttemptView[];
+    return {
+      ...view.attempt,
+      expectedVersion: '',
+      httpStatus,
+      outcome,
+      receipt: {
+        kind: 'fhir',
+        encounter: 'Encounter/enc-1',
+        expected_etag: 'W/"3"',
+        response_etag: '',
+        response_location: '',
+        body_digest: 'sha256:abc123',
+        operation_id: 'op-1',
+        marker_system: 'urn:shutter',
+      },
+      response: { kind: 'fhir', diagnostics: '', ...response },
+    };
+  };
+
+  it("shows an update Shutter's last check stopped as not sent, never as sent or refused by the server", async () => {
+    const x = fixtures.cases['C-000002'];
+    const attempts = [
+      {
+        attempt: fhirAttempt('refused', 0, { sent: false, reason_code: 'fhir_endpoint_differs' }),
+        verification: null,
+      },
+    ];
+    serve(
+      { ...x.detail, caseId: ID, state: 'blocked', disposition: 'resend', outcome: '' },
+      { kind: 'fhir_r4' },
+      attempts,
+      x.closure,
+    );
+    renderCase();
+    await openStep('What was written');
+    const dispatch = await screen.findByRole('region', { name: 'Dispatch' });
+    expect(
+      await within(dispatch).findByText("Not sent: Shutter's last check stopped it"),
+    ).toBeInTheDocument();
+    expect(within(dispatch).getByText('fhir_endpoint_differs')).toBeInTheDocument();
+    expect(within(dispatch).queryByText('Sent with If-Match')).not.toBeInTheDocument();
+    expect(within(dispatch).queryByText('Sent')).not.toBeInTheDocument();
+    expect(dispatch.textContent).not.toMatch(/FHIR server refused/);
+    expect(document.body.textContent).not.toMatch(/did not take/);
+  });
 });
