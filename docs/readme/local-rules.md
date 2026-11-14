@@ -20,7 +20,9 @@ Today, read from the entries and not run, this case matches E2, "Not delivered, 
 
 ### Why a trust needs this
 
-[Author's note: ...]
+At one trust we would have daily checks for all interfaces to review failed messages. I wrote a 30-page document on handling failures.
+
+For results back into ICE from WinPath, one order can have multiple results; we would have checks to see the current state of ICE against the message, otherwise we could overwrite history for unfinalised results. Something to highlight is that not every clinical application has safety checks on its interface, so even if a message is old, the downstream system could treat it as current. NerveCentre is a PAS with a bed management module. A real case is where clinicians make bed transfers in I.PM (Inpatient Manager by Dedalus), the transfer fails to be sent to NerveCentre, and clinicians correct the history in NerveCentre by hand. Now if you resend your failed messages in order, you risk displacing multiple patients while you are correcting the history of a single patient, because in NerveCentre you couldn't have two patients in the same bed, so they'd be automatically displaced into the waiting area. For demographic updates, you run the risk of sending out-of-date demographics, which is why checking for future A31s is vital. In the interface I built between NerveCentre and System C's Careflow, if you blindly resent patients' coding messages from NerveCentre, it would falsely overwrite the coding, adding an end date of today to the coding. With older PAS systems, if you resent an A02 for a previous visit (spell), it could re-open the visit, meaning that the patient has two active spells; this is behaviour that I saw with multiple systems at various trusts.
 
 ## The proposed rule
 
