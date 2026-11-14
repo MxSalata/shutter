@@ -363,6 +363,20 @@ function handoff(f: CaseFacts): string {
   return 'Not sent';
 }
 
+/**
+ * What Shutter is doing while no person is needed, as a verb: a state's label ("Detected", "Gated") says where the case
+ * is, not what happens to it next. A state not named keeps its label.
+ */
+const DOING: Record<string, string> = {
+  detected: 'collecting evidence',
+  collecting: 'collecting evidence',
+  investigating: 'investigating',
+  proposed: 'checking the plan',
+  gated: 'checking the plan',
+  rehearsing: 'rehearsing',
+  grouped: 'holding it with its incident',
+};
+
 export function nextAction(f: CaseFacts): NextAction {
   const { c } = f;
   const none = { blocking: '', lookAgain: '', handoff: '', escalate: false };
@@ -408,7 +422,7 @@ export function nextAction(f: CaseFacts): NextAction {
     };
   return {
     kind: 'shutter',
-    action: `No action needed now: Shutter is ${caseState(c.state).label.toLowerCase()}`,
+    action: `No action needed now: Shutter is ${DOING[c.state] ?? caseState(c.state).label.toLowerCase()}`,
     role: '',
     ...none,
   };
