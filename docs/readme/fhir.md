@@ -39,6 +39,23 @@ Do $SYSTEM.Status.DisplayError(##class(Shutter.Store.FHIRProof).ImportFile("<rec
 Write ##class(Shutter.FHIR.Install).Doctor().%ToJSON()
 ```
 
+## Try it: S35
+
+A demo install sets the profile up against the test FHIR server it serves at `/fhir-facade/r4`, so that scenario S35 plays it on the Scenarios page. It adds the entry above, as `FHIR Ward Out`, to the demo's stored site profile as one new version (never to a profile a person saved), places the four FHIR items with the `FHIRFacade` credential, and records a proof for that receiver, measured in process while the demo is installed: every exchange of the conformance file for the test server (244), run against the test server inside the instance, in the document `fhir_conformance.py --proof` writes over HTTP. The demo hospital's production gains `FHIR Ward In`, a file feed, and `FHIR Ward Out`, a stock HL7 TCP operation on a loopback port where nothing listens. A site install does none of this.
+
+Run **S35** in **Site policy** mode, the only mode it is defined for: a failure from the hospital's production runs in the site's watched mode.
+
+1. The run resets the test FHIR server and seeds it: the Locations `ward-a` and `ward-b`, the Patient `pat-1035` and the Encounter `enc-1035`, in progress on Ward A since 09:00, at version `"1"`.
+2. The 09:20 transfer from Ward A to Ward B, with no bed named, fails at `FHIR Ward Out` before a connection opens. The hospital's alert intake hands it to Shutter, and the case names `HOSPITAL`, `Hospital.Production` and `FHIR Ward In` as its source.
+3. Shutter reads the server's CapabilityStatement, finds the Encounter by its visit number over FHIR, and checks its patient, the ward the patient came from and the ward the message moves them to against the entry's map. The read is sealed with the case's evidence.
+4. The catalogue's one matching entry settles on a resend, which for this receiver can only be the one operation: complete the open Ward A entry at the transfer's time, append an active Ward B entry, add Shutter's marker tag. No agent plans or reviews it.
+5. The FHIR gate (`fhir-2026-11-14.1`) passes capability on the proof recorded at install, and its rehearsal row says that no dry run exists for this receiver (`FHIR_NO_DRY_RUN_SUBSTITUTED`) and what stands in its place. The site's policy releases nothing here: the case waits for a person's approval.
+6. Signed in as `approver`, open the case. The plan shows the version it was read at (`W/"1"`), and the approval says that the update goes with `If-Match` on that version, that this server software refused a changed version when it was measured, that no dry run exists, and not to resend the original HL7 message from the engine afterwards. Approve it.
+7. `FHIR Out` reads the Encounter again and sends one `PUT Encounter/enc-1035` with `If-Match: W/"1"`. The server answers with version `"2"`.
+8. `FHIR Verifier` finds version `"2"`, carrying Shutter's marker, in the Encounter's history, reads it back by its version id, checks it against the approved base and checks that the current record has not undone the move. The case resolves "verified". The engine's message is never resent.
+
+Every scenario run, by anyone, resets and seeds the test FHIR server again and revokes the approval of an S35 case that is still open. The online demo plays S35 once it runs an image built from a release that has it.
+
 ## What stops it
 
 Every stop names its reason, and an unknown blocks. The FHIR gate (policy `fhir-2026-11-14.1`) decides at the proposal and again at dispatch; the codes below are the FHIR profile's own, grouped by what they guard, with the words a case shows. The gate also keeps main's rows where they apply (the message's conformance, the plan's intent, further and pending messages, the approval, fresh evidence, the catalogue), with main's codes and meanings. Over FHIR a case whose message the engine is still trying, or that has a newer message pending, does not wait: it stops for a person.
@@ -170,6 +187,7 @@ On IRIS for Health (2026.2, 2026.3.0AI.154, 2027.1.0AI.109) the tag stays on Shu
 ## How it was proved
 
 - **Unit classes,** all green in the whole unit suite on IRIS for Health 2026.2 (1261 passed, 0 failed): `Shutter.Test.FHIRProfile` (the entry and its validator), `FHIRReader` and `FHIRTrust` (the reads, the projection and what counts as the receiver's own answer), `FHIRStores` (the binding, the one-write fence, the sealed read, the proof), `FHIRPlan`, `FHIRPlanJudge` and `FHIRProposal` (the one body), `FHIRGate` (every row, at both stages), `FHIRExecute` (the write, its classifier, the fence and the admission), `FHIRVerify` and `FHIRJudge` (the walk and the six verdicts), `FHIRFlow` (the case's path and its every stop), `FHIRInstall` (the four items), `FHIRFacade` and `FHIRFacadeConformance` (the test server), and `SnapshotMaterial` (every recorded snapshot's material digest unchanged).
+- **Scenario S35:** `tests/e2e/scenario_check.py --modes policy --approve S35` plays it on a demo install and judges it at the test FHIR server, read as the FHIR client user: the Encounter's open location `Location/ward-b`, two versions in its history, Shutter's marker on version `"2"` alone, and a person's approval. CI runs that line in the policy shard and on the built image.
 - **End to end:** `tests/e2e/fhir_receiver_check.py` on a demo install against the test server, variants 0, A, B, C and D: no proof yet blocks, the move is approved by a person and verified, a lost answer is verified from the history, Shutter's update is refused with a 412 after another writer's change and is not retried, and a switched-off entry sends nothing.
 - **The conformance file:** 245 exchanges in the conformance file, 244 for the test server and 234 for IRIS for Health. Two listings of history that Shutter never asks for, a type's and the whole system's, are measured on the test server only. The test server's 244 were run over HTTP on 2026.2 with none differing, and that run wrote the proof file the gate reads.
 - **IRIS for Health's own FHIR server:** on 14 November 2026 its 234 exchanges were run over HTTP on 2026.2 and on 2026.3.0AI Build 154 with none differing, and each run wrote a proof; with that proof the end-to-end check's variants A and D passed on both builds. Build 109 was not run. The record is [receipt-fhir.md](receipt-fhir.md).
@@ -208,7 +226,7 @@ On IRIS for Health (2026.2, 2026.3.0AI.154, 2027.1.0AI.109) the tag stays on Shu
 - An automatic new plan after a 412: a person reinvestigates the case, which reads fresh evidence and asks for a new approval.
 - A Receiver check variant for a FHIR update, and a FHIR panel on the case page.
 - Further faults in the test server: a second writer making the same change, a history that answers 503, a dropped tag.
-- A FHIR demo receiver in the seed, and a playable scenario on the Scenarios page and the online demo.
+- A FHIR demo receiver in the seed file: a demo install adds S35's entry to the demo's stored profile instead.
 - Evaluation rows for FHIR cases, and precedents for FHIR approvals.
 - A later automatic settle of an unknown write.
 - OpenAPI schema notes.

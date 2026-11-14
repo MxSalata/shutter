@@ -168,24 +168,28 @@ jobs:
           python3 tests/privacy_check.py --self-test
           python3 tests/knowledge_check.py --self-test
           python3 tests/e2e/lineage_check.py --self-test
-      # The HL7 folders and scenarios.json are made by fixtures/generate.py, so a rerun must write the committed files
-      # byte for byte: a scenario edited by hand instead of in the script would otherwise be lost at the next rerun. The
-      # copy runs next to a copy of scenarios.json, which keeps S22 (written by hand) as the script does.
-      - name: fixtures/generate.py writes the committed HL7 fixtures and scenarios.json
+          python3 tests/e2e/scenario_check.py --self-test
+      # The HL7 folders, scenarios.json and the test FHIR server's seed for S35 (fixtures/fhir) are made by
+      # fixtures/generate.py, so a rerun must write the committed files byte for byte: a scenario edited by hand instead
+      # of in the script would otherwise be lost at the next rerun. The copy runs next to a copy of scenarios.json, which
+      # keeps S22 (written by hand) as the script does.
+      - name: fixtures/generate.py writes the committed HL7 fixtures, scenarios.json and the FHIR seed
         run: |
           out=$(mktemp -d)
           cp fixtures/generate.py fixtures/scenarios.json "$out"/
           python3 "$out/generate.py"
           cmp "$out/scenarios.json" fixtures/scenarios.json
           for folder in "$out"/S*/; do diff -r "$folder" "fixtures/$(basename "$folder")"; done
+          diff -r "$out/fhir" fixtures/fhir
       - name: The scenario catalogue keeps to the condition vocabulary, and catalogue.json is built from it
         run: python3 scripts/build-catalogue.py knowledge/catalogue --check
       # The Explain agent searches the explain collection for the plain meaning of a gate check, so every reason code
       # of block-reasons.json is written there as that file gives it (scripts/build-explain.py rebuilds the section)
       - name: Every reason code of the gate is explained in plain words, as block-reasons.json gives it
         run: python3 tests/knowledge_check.py
-      # The FHIR conformance file is carried in two classes (the unit test's exchanges, and the name, digest and counts a
-      # proof must give to be imported): neither copy may differ from tests/conformance/fhir-facade-v1.json
+      # The FHIR conformance file is carried in two classes (FHIRFacade.Kit's exchanges, which the unit test and a demo
+      # install's in-process proof run, and the name, digest and counts a proof must give to be imported): neither copy
+      # may differ from tests/conformance/fhir-facade-v1.json
       - name: The classes that carry the FHIR conformance file hold the file as it is
         run: python3 tests/conformance/embed.py --check
       # The model gets tokens (MRN-T1, ENC-T1) for the patient's identifiers and never their name, date of birth,
@@ -427,6 +431,12 @@ jobs:
       - name: A message with the site's own segment (S25) in site-policy mode
         if: matrix.shard == 'policy'
         run: python3 tests/e2e/scenario_check.py --url "$IRIS_URL" --modes policy --approve S25
+      # A transfer fails in the demo hospital's own production at a stock HL7 TCP operation that never connects; the demo's
+      # site profile describes its receiver as a FHIR R4 server (the test FHIR server the demo serves), so the case waits
+      # for a person's approval, sends one update with If-Match and is verified from the Encounter's history (S35)
+      - name: S35, a failed transfer to a FHIR R4 ward system, in site-policy mode
+        if: matrix.shard == 'policy'
+        run: python3 tests/e2e/scenario_check.py --url "$IRIS_URL" --modes policy --approve S35
       # The roles over HTTP: the library is the approver's to change, an operator escalates a case and closes it by hand,
       # and under the site profile's two-person rule only an approver closes it. It closes two of the cases the
       # scenarios left escalated or blocked, so it runs after them.
@@ -748,6 +758,9 @@ jobs:
       # The image installs the demo hospital at build time (iris.script) and starts its production with the instance
       - name: Scenario S19 through the built image's demo hospital
         run: python3 tests/e2e/scenario_check.py --url "$IRIS_URL" --modes policy --approve S19
+      # The image's demo install places S35's FHIR receiver and measures its proof in process while the image is built
+      - name: Scenario S35, a failed transfer to a FHIR R4 ward system, on the built image
+        run: python3 tests/e2e/scenario_check.py --url "$IRIS_URL" --modes policy --approve S35
       # The six settings a public demo sets in .env reach a running container as its environment, never as build args,
       # and the production's start applies them (CONTRACTS 4.4, 9 and 12): the same image started again with them must
       # have the judge and demo users, the day's cap and the judge's share, and the live hospital on. A separate start,

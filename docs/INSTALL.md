@@ -145,8 +145,10 @@ reads without privilege checks, but a cached query that has to be compiled again
 as the caller. Once the demo hospital is installed, the operator and approver roles also read its databases. With `demo=1` it also creates the demo users, the demo receiver's resource, role, user and
 `/downstream/api`, the `DownstreamAPI` credential and the feed and demo items, and the test FHIR server: the resources
 `FHIRFacade_API` and `FHIRFacade_Admin`, the role `Shutter_FHIRFacadeClient`, the user `fhir-client`, the web application
-`/fhir-facade/r4` and the `FHIRFacade` credential. No install places the FHIR items; a site places them with the steps of
-section 12.
+`/fhir-facade/r4` and the `FHIRFacade` credential. For scenario S35 a demo install also places the four FHIR items with
+that credential, adds the receiver entry `FHIR Ward Out` to the demo's stored site profile, and records a proof for it,
+measured in process against the test FHIR server while the demo is installed. A site install (`demo=0`) does none of
+these: a site places the FHIR items with the steps of section 12.
 
 Environment variables read when the installer runs. Eleven of them, `SHUTTER_LIVE`, `SHUTTER_LIVE_SCENARIOS`, `SHUTTER_DEMO_PORTAL`,
 `SHUTTER_DAILY_BUDGET_USD`, `SHUTTER_JUDGE_BUDGET_USD`, `SHUTTER_DEMO_BUDGET_USD`, `SHUTTER_DEMO_BUDGET_PERIOD`,
@@ -300,7 +302,10 @@ nothing. They talk over one port on the loopback interface, 7650 by default (`^H
 default setting), where the stand-in listens on 127.0.0.1 only and which nothing publishes. On a demo install whose site profile is still the seed's, the hospital's install adds the
 receiver `Lab Results Out` to the profile (`orders_results`, watched for outages, `engine_resend`, `ack_level` commit,
 `duplicates` unknown) as one new version. The Scenarios page's two pathology paths play through it (CONTRACTS 4.5): two
-more production jobs, and no new user, role, resource, credential or environment variable.
+more production jobs, and no new user, role, resource, credential or environment variable. For scenario S35 it also
+carries a ward feed whose HL7 link is down: `FHIR Ward In`, a file service, and `FHIR Ward Out`, a stock HL7 TCP
+operation on a loopback port where nothing listens, which `Ens.Alert` hands to Shutter; the demo's site profile describes
+that receiver as a FHIR R4 server (section 12).
 
 ## 4. Shape B: Shutter's items inside an existing production
 
@@ -1083,7 +1088,8 @@ listeners on the loopback address of a test instance:
 
 One FHIR R4 receiver per install can be repaired over FHIR: one ward move on an existing, in-progress Encounter at
 InterSystems IRIS for Health's own FHIR R4 server, off until the entry's `recovery_enabled` is set. The entry, what stops a
-case and the limits are in [fhir.md](readme/fhir.md). The site steps:
+case and the limits are in [fhir.md](readme/fhir.md). A demo install comes with the profile set up against its test FHIR
+server, for scenario S35 ([fhir.md](readme/fhir.md#try-it-s35)); a site install comes with none of it. The site steps:
 
 ```
 # 1. The entry: GET /api/shutter/site-profile, add the receiver entry of fhir.md with "recovery_enabled": false, PUT it back.
