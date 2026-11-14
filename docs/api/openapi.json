@@ -10353,16 +10353,23 @@
               {
                 "type": "string"
               }
-            ]
+            ],
+            "description": "The receiver version the write was conditional on. Empty for a FHIR case, whose update is conditional on an ETag sealed in its binding (CONTRACTS 20.3)."
           },
           "httpStatus": {
-            "type": "number"
+            "type": "number",
+            "description": "The receiver's HTTP status; 0 when there was no answer."
           },
           "outcome": {
-            "type": "string"
+            "type": "string",
+            "description": "applied, already_committed, version_conflict, refused, uncertain or error; a FHIR case's attempt is never already_committed (CONTRACTS 5.1)."
           },
-          "receipt": {},
-          "response": {},
+          "receipt": {
+            "description": "What the receiver returned as a receipt. A FHIR case's attempt carries {kind: \"fhir\", encounter, expected_etag, response_etag, response_location, body_digest, operation_id, marker_system} (CONTRACTS 5.1)."
+          },
+          "response": {
+            "description": "The receiver's answer as stored. A FHIR case's carries {kind: \"fhir\", sent, reason_code, diagnostics, receipt} (CONTRACTS 5.1)."
+          },
           "error": {
             "type": "string"
           }
@@ -16429,6 +16436,111 @@
             "additionalProperties": {
               "type": "boolean"
             }
+          },
+          "fhir": {
+            "type": "object",
+            "description": "A FHIR R4 receiver (CONTRACTS 6.4, 20): recovery goes through its FHIR API and no other way. An entry with a fhir object has no api and no features, and only one entry of a profile may have it.",
+            "properties": {
+              "base": {
+                "type": "string",
+                "description": "The path in front of every request; starts with /."
+              },
+              "recovery_enabled": {
+                "type": "boolean",
+                "description": "The site's switch for recovery through this receiver; absent reads false."
+              },
+              "encounter_identifier": {
+                "type": "object",
+                "description": "The identifier system the visit number is searched under.",
+                "properties": {
+                  "system": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "system"
+                ],
+                "additionalProperties": false
+              },
+              "patient_identifier": {
+                "type": "object",
+                "description": "The identifier system the Patient carries the message's patient id under, and the assigning authority of the message that maps to it.",
+                "properties": {
+                  "system": {
+                    "type": "string"
+                  },
+                  "hl7_authority": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "system",
+                  "hl7_authority"
+                ],
+                "additionalProperties": false
+              },
+              "marker": {
+                "type": "object",
+                "description": "The system of the tag the update adds to the Encounter.",
+                "properties": {
+                  "system": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "system"
+                ],
+                "additionalProperties": false
+              },
+              "location_map": {
+                "type": "array",
+                "description": "2 to 25 wards: each ward code, its Location resource and the identifier that resource must carry. A ward and a location each appear once.",
+                "minItems": 2,
+                "maxItems": 25,
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "ward": {
+                      "type": "string"
+                    },
+                    "location": {
+                      "type": "string",
+                      "description": "Location/{id}, the id letters, digits, . and -, 1 to 64 characters."
+                    },
+                    "identifier": {
+                      "type": "object",
+                      "properties": {
+                        "system": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "system",
+                        "value"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "ward",
+                    "location",
+                    "identifier"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            },
+            "required": [
+              "base",
+              "encounter_identifier",
+              "patient_identifier",
+              "marker",
+              "location_map"
+            ],
+            "additionalProperties": false
           }
         },
         "required": [

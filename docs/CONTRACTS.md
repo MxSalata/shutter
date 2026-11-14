@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.62, 14 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.63, 14 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -566,6 +566,8 @@ them with the Detail switch on Technical, beside the failure's `failureHttpStatu
 
 **The blind-resend preview** (v1.21). `POST /cases/{id}/preview-blind-resend` answers 409 `dry_run_unsupported`, and sends nothing, when the case's evidence shows no readable capability profile or `dry_run` false (a case with no snapshot yet gets the same answer); otherwise 200 `{wouldApply, outcome, reason, encounterAfter, checkedAgainst: {version, epoch}, expectedVersion: null, applied, note}`. `checkedAgainst` is the receiver version and epoch the dry run was checked against (null when the receiver reported none); `expectedVersion` is null because a preview is conditional on nothing; `applied` true means the receiver wrote during the preview and does not honour `dry_run`: the case then carries an `execution` event saying so, an alert is logged, the note says it, and, since nobody released that write, the write goes on the record as an attempt and the case blocks for a person (`WRITE_NOT_RELEASED`; the answer's `state` says so). The preview is not stored as a rehearsal and never satisfies the gate's rehearsal check (6.5); the case keeps a note with the outcome and what it was checked against.
 
+**A FHIR case** (v1.63). A case whose receiver's entry in the site profile carries a `fhir` object (6.4) has `kind: "fhir_r4"` in the `route` item of its evidence, beside the capability flags that item took from the server's CapabilityStatement and not from the profile (20). The route reports no dry run, so `POST /cases/{id}/preview-blind-resend` answers 409 `dry_run_unsupported` and sends nothing. The plan, the approval and the attempt of a FHIR case carry no numeric `expectedVersion` (it reads empty): the version its one update is conditional on is the Encounter's ETag, a string, sealed with the plan in a `Shutter.Store.FHIRBinding` and tied to the approval when a person gives it (20.1, 20.3). The case's `reason` is the code its stopping event ends with (20.2). No route, request body or status code changes.
+
 ### 5.1 Attempts and verification (v1.21)
 
 **The attempt.** One `Shutter.Store.ExecutionAttempt` per dispatch of an approved plan: the operation key, the version the write was conditional on (`expectedVersion`), the HTTP status, the receipt the receiver returned and the outcome: `applied` (201), `already_committed` (200 with the receipt; a 200 with no receipt and no `applied: true` is not a delivery, so it reads as `uncertain`, on the feed too, and the case reads the receipt and the history), `version_conflict` (409; the approval is void and the case is planned once more on fresh evidence), `refused` (any other refusal; the case blocks), `uncertain` (no HTTP answer other than a refused connection, a 504, or another 5xx: the answer was lost and the write may or may not have landed), `error` (nothing was sent; the case blocks with "outcome is unknown"). `GET /cases/{id}/attempts` pairs each attempt with its verification; a verification without an attempt belongs to a non-write disposition (reconcile, superseded).
@@ -580,6 +582,30 @@ them with the Detail switch on Technical, beside the failure's `failureHttpStatu
 `verdict` is what holds of the operation at the receiver: `committed`, `not_committed` or `unknown`; the words "not committed" are written only when they are the verdict.
 
 **What the case does.** The first verification runs at once after the attempt (a lost answer whose write landed, as S3's 504, resolves on the first read). `verified` resolves the case, unless the attempt has no approval, which is a write the receiver made during a rehearsal: nobody released it, so the case escalates with the headline "Escalated: the receiver wrote during a rehearsal, with no release" (`WRITE_NOT_RELEASED`). While `detail.retry` is true the case workflow verifies again after 10, 20 and 40 s (`MaxRefreshes`, 3: reads at about 0, 10, 30 and 70 s after the attempt, the 70 s read being the first past the default settle window). `not_committed` escalates the case: the approval is revoked (it authorised one write, and that write is spent), the headline is "Escalated: the resend was not committed", and the state event reads "Not verified (not_committed): <summary>. The approval is revoked, and nothing is resent without a person: a reinvestigation plans again on fresh evidence" (block reason `WRITE_NOT_COMMITTED`). `unresolved` with `verdict: unknown` after the last read, for a resend, revokes the approval too and escalates with the headline "Escalated: the resend's outcome is unknown" and "Not verified (unknown): <summary>. Whether the receiver applied the resend is unknown; a person must check at the receiver before anything is resent" (`WRITE_OUTCOME_UNKNOWN`). Any other outcome escalates as "Not verified (<outcome>): <summary>". Nothing is ever dispatched or re-planned from a verification: a person reinvestigates, which collects fresh evidence, makes a new plan and asks for a new approval. The settle window applies to every receiver the site profile describes, with or without a receipt endpoint (6.4).
+
+**A FHIR case's attempt and verification** (v1.63; the flow is section 20). The attempt is written by `Shutter.FHIR.Flow` once per fence row (20.3), as `ExecutionAttempt.Create(case, plan, approval, "", httpStatus, outcome, response, error, .e)`: `outcome` is one of `applied`, `version_conflict`, `refused`, `uncertain` and `error` (never `already_committed`), `httpStatus` the answer's status or 0 when there was none, `expectedVersion` empty because the plan has none, no rehearsal because no dry run exists, and `response`
+
+```json
+{"kind": "fhir", "sent": true, "reason_code": "", "diagnostics": "",
+ "receipt": {"kind": "fhir", "encounter": "Encounter/<id>", "expected_etag": "...", "response_etag": "...",
+             "response_location": "...", "body_digest": "...", "operation_id": "...", "marker_system": "..."}}
+```
+
+`Create` copies `response.receipt` into the attempt's `receipt`. `sent` is whether the update left, and `reason_code` and `diagnostics` are the write's (20.3). A fence row that already names its attempt gets no second one. A fence row marked sent whose case stopped before its attempt was written gets one afterwards (`Shutter.FHIR.Flow.Backfill`): the outcome and answer the fence kept, or `uncertain` when it kept none, with an `error` that says it was recorded afterwards.
+
+The verification is written by `Shutter.Operation.FHIRVerify` from `Shutter.FHIR.Judge` (20.4), as `Verification.Create(case, attempt, outcome, summary, detail, .v)`: `summary` is the Judge's sentence unchanged, and `detail` is the Judge's detail with `kind` "fhir", `judge_outcome` (the Judge's own word), `disposition` "resend" and `case_code` replaced by the FHIR code in the table ("" for none). A FHIR verification has no `verdict` key, which the case workflow and the case page read as the other receivers' verdict.
+
+| Judge | `Verification.Outcome` | Case ends | Code (in `detail.case_code` and the event's text) |
+| --- | --- | --- | --- |
+| `verified` | `verified` | resolved | none |
+| `verified_continued` | `verified` | resolved | none |
+| `committed_review` | `unresolved` | escalated | `FHIR_COMMITTED_NEEDS_REVIEW` |
+| `unknown`, another read asked for | `unresolved` | verifying (read again) | none |
+| `unknown`, final | `unresolved` | escalated | `FHIR_WRITE_OUTCOME_UNKNOWN` |
+| `not_found` | `not_committed` | escalated | `FHIR_WRITE_NOT_FOUND` |
+| `failed` | `failed` | escalated | `FHIR_WRITE_CONTRADICTED` |
+
+Only `verified` and `verified_continued` resolve the case. A result whose `detail.retry` is true is read again before it ends the case, whatever its word (20.4). The Judge's own `case_code` (`WRITE_NOT_COMMITTED`, `WRITE_OUTCOME_UNKNOWN`) is replaced in the stored detail, so nothing keyed on the ADT codes sees a FHIR case.
 
 ### 5.2 What to check at the receiver
 
@@ -979,6 +1005,48 @@ keeps `further_messages.in_patient_movement: stop`, which a demo install writes 
 - A receiver entry's `strict_answers` (boolean, default true): whether Shutter checks that receiver's answers against this contract. A read counts only with the kind's own field or error (1.3), a 200 is a delivery only with its receipt or `applied: true` (5.1), and a receipt or history entry closes a case only if it holds the operation's own payload digest, ward and bed; a receipt that names none of them has nothing to compare, and passes. A site whose receiver answers another way, having looked at what it sends, sets it to false: its answers are then read on their status alone, so a gateway's page or a corrected message can read as delivered or committed. A cancel since the receipt (the gate's `RECEIPT_THEN_CANCELLED`) is the feed's own record, and counts either way.
 - `merges` (v1.14): `forbidden` (the default when absent) or `allowed`, the only values the validator accepts. A receiver entry's `merges` and `cancels` (booleans, default false) say what it takes (1.1). A merge is delivered only under `allowed` to a receiver with `merges: true`; the gate's `MERGE_WITHHELD` blocks any write of a merge otherwise, so the exact repeat of a merge the receiver already holds (a receipt present) is E3's reconcile, and no other merge is ever resent by Shutter. `Shutter.Store.SiteProfile.MergesAllowed()` and `ReceiverFlag(name, flag)` read them.
 
+**A FHIR R4 receiver's entry** (v1.63). A receiver entry may carry a `fhir` object, and an entry without one validates exactly as before. Such a receiver is reached for recovery through its FHIR R4 API and no other way (20). The entry is named after the production item that delivered the failed message, as every entry is:
+
+```json
+{"name": "FHIR Ward Out", "system": "the ward system (FHIR R4)", "category": "current_state", "tier": 3,
+ "applies": "arrival_order", "resend_timestamp": "original", "cancels": false, "merges": false,
+ "fhir": {"base": "/fhir-facade/r4", "recovery_enabled": true,
+          "encounter_identifier": {"system": "urn:oid:2.16.840.1.113883.2.1.3.2.4.18.49"},
+          "patient_identifier": {"system": "urn:shutter:demo:mrn", "hl7_authority": "HOSP"},
+          "marker": {"system": "urn:shutter:recovery"},
+          "location_map": [
+            {"ward": "WARD-A", "location": "Location/ward-a", "identifier": {"system": "urn:shutter:ward", "value": "WARD-A"}},
+            {"ward": "WARD-B", "location": "Location/ward-b", "identifier": {"system": "urn:shutter:ward", "value": "WARD-B"}}]}}
+```
+
+`base` is the path in front of every request; the server, port, TLS configuration and credential are adapter settings of the FHIR items (12), never of the profile. `recovery_enabled` is the site's switch (absent reads false). `encounter_identifier.system` is the identifier system the visit number is searched under. `patient_identifier` maps the message's patient: the Patient must carry the case's patient id under `system`, and the case's assigning authority must be `hl7_authority`. `marker.system` is the system of the tag the update adds. `location_map` maps each ward code to its Location resource and to the identifier that resource must carry, 2 to 25 wards. One FHIR receiver per install in this version.
+
+**Validation.** `Shutter.FHIR.Profile.SettingsProblem(r, receivers, index)` answers "" or the problem as a suffix that starts with a dot, and `SiteProfile.Validate` calls it for an entry that has a `fhir` key, after the `documents` check, and answers `receivers[i]` followed by the suffix (`PUT /site-profile` then answers 400 `bad_request`):
+
+| Rule | Message after `receivers[i]` |
+| --- | --- |
+| `fhir` is an object | `.fhir: must be an object` |
+| the keys of `fhir` are `base`, `recovery_enabled`, `encounter_identifier`, `patient_identifier`, `marker` and `location_map` only | `.fhir.<key>: unknown setting` |
+| `base` is a string that starts with `/` | `.fhir.base: must be a path starting with /` |
+| `recovery_enabled`, when present, is a boolean | `.fhir.recovery_enabled: must be true or false` |
+| `encounter_identifier` is an object with `system` only, a non-empty string | `.fhir.encounter_identifier.system: required`, or `.fhir.encounter_identifier.<key>: unknown setting` |
+| `patient_identifier` is an object with `system` and `hl7_authority` only, non-empty strings | `.fhir.patient_identifier.<key>: required`, or `.fhir.patient_identifier.<key>: unknown setting` |
+| `marker` is an object with `system` only, a non-empty string | `.fhir.marker.system: required`, or `.fhir.marker.<key>: unknown setting` |
+| `location_map` is an array of 2 to 25 objects | `.fhir.location_map: must be an array of 2 to 25 wards` |
+| each map entry j has `ward`, `location` and `identifier` only; `ward` is non-empty and unique; `location` matches `Location/{id}` (letters, digits, `.` and `-`, 1 to 64 characters) and is unique; `identifier` is an object with `system` and `value` only, non-empty strings | `.fhir.location_map[j].ward: required` or `: must be unique`; `.location: required`, `: must be Location/{id}` or `: must be unique`; `.identifier.system: required` or `.identifier.value: required`; `.<key>: unknown setting` (also under `.identifier`) |
+| beside `fhir`: no `api` | `.fhir: an entry with a fhir block has no api` |
+| no `features` | `.fhir: capability is read from the server, so features is refused` |
+| `engine_resend` is not true | `.engine_resend: refused beside fhir, one write route per receiver` |
+| `category` is absent or `current_state` | `.category: must be current_state beside fhir` |
+| `strict_answers` is not false | `.strict_answers: refused beside fhir` |
+| no `documents` | `.documents: refused beside fhir` |
+| `history_policy` is not `correct` | `.history_policy: refused beside fhir` |
+| no earlier entry of `receivers` has `fhir` | `.fhir: one FHIR receiver per install in this version` |
+
+**What the rest of the profile code reads from it.** `SiteProfile.ReceiverKind(name)` answers `fhir_r4` for an entry with a `fhir` object and "" otherwise. Such an entry has no paths of its own and its label names no address (`HasNoApi`), declares none of the four features (`ReceiverFeatures` answers all false: what it can do is read from the server and recorded in the route), and has the history policy `current` whatever else the profile says. The incident detector never groups its cases (7.1).
+
+`Shutter.FHIR.Profile` also holds `Parameter POLICYVERSION = "fhir-2026-11-14.1"` (the FHIR gate's policy version, which the gate, the flow, the write and the Doctor all read there) and `Parameter ITEMS = "FHIR Receiver,FHIR Out,FHIR Gate,FHIR Verifier"`, and its readers, class methods that are pure over the stored profile: `Block(name)` (the entry's `fhir` object, or ""), `Enabled(name)` (`recovery_enabled` is true), `LocationOf(block, ward)` (the map entry, or ""), `WardOf(block, reference)` (the ward code of a `Location/{id}`, or "") and `MappingDigest(block)` (`Shutter.Util.Digest.OfObject(block)`).
+
 **Precedents** (v1.35). What approvers decided before on the same evidence at the same receiver, and whether it held.
 When a person's approval is verified at the receiver (the case resolves), and when an approver rejects a plan, the case
 writes a precedent (`Shutter.Store.Precedent`): the receiver; the signature, the SHA-256 of the snapshot's condition
@@ -1026,6 +1094,8 @@ established), `RECEIVER_MAY_HOLD_IT` (block, a person), `ENGINE_UNREADABLE` (unk
 `ENGINE_SETTLED` (pass). The reason codes are in `knowledge/block-reasons.json`, with `HOLD_EXPIRED`, `ENGINE_ROUTE`,
 `ENGINE_ROUTE_ABSENT`, `ENGINE_ROUTE_REFUSED` and `ENGINE_ROUTE_NO_API`, which this build does not emit. The Case Releaser
 judges a case waiting on the engine again (8.1).
+
+**A FHIR case** (v1.63). A case whose receiver has a `fhir` object (6.4) is judged by the FHIR gate of section 20 (`Shutter.Operation.FHIRGate`), never by this one: none of the checks above runs for it, and `Shutter.Operation.Gate` is unchanged. The FHIR gate copies this gate's conformance, intent, further-message, later-event, engine and `catalogue` reads where they still apply, and adds its own (20.1).
 
 ### 6.6 The board and the catalogue
 
@@ -1483,6 +1553,8 @@ the three counters AI Hub's session returns on build 154 when it does: `llmMs` (
 (time inside the tools) and `reasoningTokens`; a replay or a build that gives none leaves them empty, never zero. With the
 tool-call rows' `at` and `durationMs`, the case page can draw a run as a timeline (the run bar, the tool bars, the model's
 turns as the gaps between them) from stored rows alone, and the DPI-I-689 queries can split a run's time.
+
+**A FHIR case** (v1.63). No agent plans or reviews a FHIR plan: `Shutter.FHIR.Flow.Plan` makes it, from the catalogue's one matching entry when that says resend (Rules only proposes the update whatever the catalogue matched), and asks for a person otherwise; a board that was asked for is declined with a note on the case (20). A question about a FHIR case (14) may still run. In its model view the summary's `fhir` object is left out, since the summary allowlist (`ModelView.SUMMARYKEEP`) does not name it, and `ward_state` is the projection of the Encounter in the shape every reader of a receiver's state takes (visit number, patient, state, ward, version).
 
 ## 10. Escalation by email (v1.11)
 
@@ -2060,6 +2132,40 @@ too. The Doctor reports `prevent_failures` and `held_messages: {count, categorie
 (the open `unreadable` cases by category), `GET /settings` the same as `preventFailures` and `heldMessages`. A watched
 production's refused messages reach the same hold through the forwarder (11). Scenario S25 (a message with a site Z segment,
 PARSE_FAILED) is unchanged: it plays with the setting off.
+
+**The FHIR items** (v1.63; the receiver is section 20). The four production items of a FHIR receiver are placed by a call and are not part of `Shutter.Production`: an install whose site never made the call has no FHIR item, no new job, and no change to `Production.cls`, `Setup.INSTALLITEMS` or the Doctor's item check. `Shutter.FHIR.Install` (abstract) does it, on the pattern of `Shutter.Util.Onboard`'s receiver items:
+
+- `PlaceItems(host = "127.0.0.1", port = "", credential = "", ssl = "")` answers `{ok, added, updated, warnings, error}`. An empty port is the instance's own web port (`Shutter.Util.Onboard.WebPort()`). A port that is not a number from 1 to 65535, or one of the four classes not compiled here, ends with `error` and changes nothing. Otherwise it records `^Shutter.Config("fhirItems") = $LISTBUILD(host, port, credential, ssl)`, places the items, and warns (it does not refuse) when no credential is named, the named credential is not in the namespace, the site profile has no entry with a `fhir` object yet, or `Problem` is not empty.
+- `RestoreItems(.added, production = "")` does nothing while that record is absent. Otherwise, in `production` (default `Shutter.Setup.ProductionName()`), it adds each missing item (pool size 1, enabled, category `Recovery`) and rewrites the four server settings of `FHIR Receiver` and `FHIR Out` when those are there already on Shutter's class, so a second call cannot leave the two on different servers; a setting with no value is not written. Then it saves the production and its class and, only when that production is the one running, updates it. The install calls it after compiling the production, so a load or an upgrade puts the items back.
+
+| Item | Class | Settings |
+| --- | --- | --- |
+| `FHIR Receiver` | `Shutter.Operation.FHIRReceiver` | adapter `HTTPServer`, `HTTPPort`, `Credentials`, `SSLConfig`, `ResponseTimeout` 15, `ConnectTimeout` 5; host `FailureTimeout` 0 |
+| `FHIR Out` | `Shutter.Operation.FHIRExecute` | the same |
+| `FHIR Gate` | `Shutter.Operation.FHIRGate` | none |
+| `FHIR Verifier` | `Shutter.Operation.FHIRVerify` | none |
+
+- `Problem(production = "")` answers "" when all four items are in the production, on their classes and enabled, and `FHIR Receiver` and `FHIR Out` have the same `HTTPServer`, `HTTPPort`, `SSLConfig` and `Credentials`. Otherwise it answers sentences joined by full stops: `Missing from <production>: <items>`, `Not on Shutter's class: <items>`, `Disabled: <items>`, `FHIR Receiver and FHIR Out name different servers` (or `No production <name>`). The flow stops a case on it (20.2, stop 1).
+- `RemoveItems(production = "")` takes out the items that are on Shutter's class for their names; a site's own item under one of the names stays. From Shutter's own production it also forgets the record, so the next load does not place them again.
+- `KillStores()` empties the three stores that hang on a case (`Shutter.Store.FHIRAttempt`, `FHIRSealedRead` and `FHIRBinding`) for the demo's whole-store purge; a receiver's proof (`FHIRProof`) stays. A case's own purge (`Case.PurgeCase`) removes its rows.
+- `Doctor()` answers `{"receivers": []}` when the stored profile has no entry with a `fhir` object, and otherwise `{policy_version, items_problem, endpoints_agree, receivers: [{receiver, recovery_enabled, proof, proof_measured_at, credential}]}`, from what is stored and with no call to the server. `policy_version` is `Shutter.FHIR.Profile`'s, `items_problem` is `Problem`'s, `endpoints_agree` says whether the two items name the same server, `proof` is `none` (no conformance run on record), `other_software` (the server has since named software other than the one measured) or `matches` (a run is on record; before any case has read the server that is all it says), and `credential` says whether the credential the reader is set to use exists in the namespace. An error reads `{"receivers": [], "error": <text>}`. The Doctor reports it as `fhir`.
+
+A site stores the entry (with `recovery_enabled` false), saves the credential (`Ens.Config.Credentials.SetCredential`), calls `PlaceItems`, runs the conformance run (`tests/conformance/fhir_conformance.py`) against a test instance of the server software and imports its proof document with `Shutter.Store.FHIRProof.ImportFile(receiver, path)`, then sets `recovery_enabled`. The import is refused unless the document is a whole run of this release's kit in which nothing differed and each of the three measurements passed on its own exchange; it is not signed, so whoever imports one vouches that the run took place. The end-to-end check (`tests/e2e/fhir_receiver_check.py`) does the same on the demo. The unit test of `Shutter.FHIR.Install` works on a scratch `Ens.Config.Production` that never runs, since the suite never places an item into the running production; the live placement is proved by the end-to-end check.
+
+**The test FHIR server on a demo install** (v1.63). `FHIRFacade.Installer.Install(ns)` (and `InstallSql(ns)` for scripts that reach IRIS through SQL), called by the install of a demo namespace only and safe to run again, serves the test FHIR R4 server (`FHIRFacade.Service` behind `FHIRFacade.API`) that the demo's FHIR items read and write. It creates what is missing and brings the rest to this definition:
+
+- the resources `FHIRFacade_API` (`READ` to read, `WRITE` to write) and `FHIRFacade_Admin` (`USE` for the demo controls), the names `FHIRFacade.API` checks; the controls' resource is granted to no role, and an administrator holds it through `%All`;
+- the role `Shutter_FHIRFacadeClient` with `FHIRFacade_API:RW`, and the user `fhir-client` (comment "Used by the production's HTTP operation") with that role and the one that carries the namespace's databases, `Shutter_DownstreamClient` (`Shutter_Operator` when that role is absent), and the password `SHUTTER_DEMO_PASSWORD` or `shutter`, set on every run so that the credential always matches the user; never `FHIRFacade_Admin`;
+- the credential `FHIRFacade` in `ns` for that user;
+- the web application `/fhir-facade/r4`: namespace `ns`, enabled, password authentication (`AutheEnabled` 32), dispatch class `FHIRFacade.API`, no resource and no matching roles (the class checks the resources itself and answers a caller without them with an empty 403, as IRIS's own FHIR server does), `UseCookies` 2 and `CookiePath` `/fhir-facade/r4/`; then `^Shutter.Config("webapp", "/fhir-facade/r4") = 1` in `ns`.
+
+The test server also takes controls for a client's tests (v1.63), behind `FHIRFacade_Admin` `USE`, on routes ahead of the catch-all ones in `FHIRFacade.API`:
+
+- `POST /admin/fault`, body `{"modes": [..], "times": 1}` (`Service.SetFault(modes, times = 1)`: a comma list, "" clears; a name that is not a mode, or a `times` that is not a whole number from 1, is refused with 400 and leaves the fault as it was), and `GET /admin/stats` (`Service.Stats()`), both answering `{puts_received, puts_refused, fault, fault_left}`: every PUT of a resource counts as received (the seed's included), one that wrote nothing also as refused, `fault` is the comma list still set and `fault_left` the times it still fires. The state is under `^FHIRFacade.Data("fault")` and `("stats")`, so a reset clears both, and `Store.Reset` takes `Lock +^FHIRFacade.Data:10`.
+- The fault modes, each firing once per request on an Encounter PUT that carries a well-formed `If-Match` and a body the server would store, `times` times, and combining: `ignore_if_match` (the version in `If-Match` is not compared, so a stale or unknown one is written; a malformed one is still the 405); `commit_drop_response` (the version is written, and the answer is a 500 with an empty `text/html` body and no ETag, Location or Last-Modified); `second_writer_between_read_and_write` (before the comparison another writer puts the stored current body again, which makes a new version, so the request's ETag is stale and the answer is the 412). No other mode is built.
+- `Shutter.Test.FakeFhir` (`tests/unit/Shutter/Test/FakeFhir.cls`) extends `EnsLib.HTTP.OutboundAdapter` and overrides `SendFormDataArray` so that the FHIR operations can be driven in process: it hands the verb, the address less its `Base` property, the request's `If-Match`, `Accept`, `Prefer`, content type and entity body to `FHIRFacade.Service.Handle`, and answers a `%Net.HttpResponse` with the status, the headers and the body as UTF-8 bytes. It logs each request in `Requests(n) = $LISTBUILD(verb, path, ifMatch, body)`, with the request's redirect setting in `Follow(n)`, the bytes its response stream took in `Handed(n)` and that stream's limit in `Bound(n)`; `Canned(verb, path) = $LISTBUILD(status, contentType, etag, location, body)` answers that request instead of the server (a page behind a 200, a plain 404, and with status 0 no answer), and `Slow(verb, path)` delays the body.
+
+**The uninstall** (v1.63). `Shutter.Util.Uninstall` also takes what a FHIR receiver's set-up and the test FHIR server leave: the user `fhir-client` and the credential `FHIRFacade` (`USERNAMES`, `CREDENTIALS`), and the resources `FHIRFacade_API` and `FHIRFacade_Admin` (`OwnSecurityName`); the role `Shutter_FHIRFacadeClient` is covered by its `Shutter_` prefix, the web application by the node it records, and the data by the `^FHIRFacade.` global prefix. `OwnItem` asks a new `FHIRItem(name, className)` first, which is true only where `^Shutter.Config("fhirItems")` is set and the item has the name and the class `PlaceItems` gives it; elsewhere an item called `FHIR Out` is the site's. The four items are on Shutter's classes and in no production of Shutter's own, so without that they would be neither taken nor tolerated on a site's own production; `TakeItemsFrom` and the refusal both read `OwnItem`. Proof: `Shutter.Test.Uninstall`, `Shutter.Test.FHIRInstall`.
 
 ## 13. The production review (v1.22)
 
@@ -2769,7 +2875,10 @@ Two different things. **Shadow mode** is a setting: the site profile's `recovery
 | Recovery write | `CaseWorkflow.OnGateDispatch` | Refused at the connector, and the case blocks |
 | Blind-resend preview | `POST /cases/{id}/preview-blind-resend` | 409, and refused at the connector if it gets that far |
 | Outage resend (v1.54) | `POST /outages/:id/approvals`, then `Shutter.Operation.EngineResend` | The approval 409, nothing recorded; a run under way halts before its next message (17.8) |
+| FHIR update (v1.63) | `Shutter.FHIR.Flow` (`OnGateProposal`), then `Shutter.Operation.FHIRExecute` | Not sent. The flow escalates before it asks for an approval (`ShadowObservation.Words`), and FHIR Out refuses with the admission's code if it gets that far (20.3) |
 | Any other kind | | Refused always: `unknown_action` |
+
+A FHIR update (v1.63) passes the same admission, `RecoveryControl.Admit`, in `Shutter.Operation.FHIRExecute`: after its fence row is open and before its first request to the receiver (its own read of the Encounter). The entry's switch, shadow mode and the stop are asked once more after that read, before the fence row goes to sent, and the permit is finished on every path (20.3).
 
 The outage resend doesn't pass through `Shutter.Operation.Ward`: the engine sends the stored message itself. Its check is
 the same control under the same lock (`HoldForResend`), held from the read until the engine has the message, and its
@@ -2778,7 +2887,7 @@ nothing and stays allowed.
 
 The refusal is `Outcome` `refused` with `ReasonCode` `recovery_shadow`, `recovery_stopped`, `plan_predates_control`, `plan_unbound`, `control_unavailable` (no lock within 5 s), `control_unreadable` or `unknown_action`. `POST /cases/{id}/approvals` answers 409 with that code to an approve, or `plan_predates_control` when the plan is at or below the floor, once its own state, digest and version checks have passed, so nothing goes on the record. Such a plan stays void, so the words say to reject it and reinvestigate: a case waiting for approval can't be reinvestigated until it is rejected. The incident approvals answer the same codes while shadow or stopped, and say only that it waits: an incident holds no plan row, and each item gathers fresh evidence and makes its plan when released. A reject still goes.
 
-**What it does not cover.** The hospital's ordinary feed and its retries, other systems or people writing to a receiver, Shutter's own records, and reads: preflight, evidence and verification go on, so an earlier attempt's outcome can still be read back. A feed message passes only when it is purpose `normal` with a source header and no case, from an item whose class is `Shutter.Process.ADTToWard` or extends it; the purpose alone isn't enough (`not_original_feed`), and a site's own process that calls the connector directly must extend that class. This pass reads nothing of the control, so nothing that happens to it reaches the feed. A connector other than `Shutter.Operation.Ward` isn't covered: none ships.
+**What it does not cover.** The hospital's ordinary feed and its retries, other systems or people writing to a receiver, Shutter's own records, and reads: preflight, evidence and verification go on, so an earlier attempt's outcome can still be read back. A feed message passes only when it is purpose `normal` with a source header and no case, from an item whose class is `Shutter.Process.ADTToWard` or extends it; the purpose alone isn't enough (`not_original_feed`), and a site's own process that calls the connector directly must extend that class. This pass reads nothing of the control, so nothing that happens to it reaches the feed. A connector other than `Shutter.Operation.Ward` and, since v1.63, `Shutter.Operation.FHIRExecute` isn't covered: none ships.
 
 **What it promises.** No recovery call is admitted after a stop commits, and no outage message is handed to the engine after it (17.8). `Stop` and `Admit` take one short lock, never held across a network call. A call admitted before the stop may still reach the receiver and may still complete; stopping doesn't cancel it. It is listed as outstanding, in the stop's event too.
 
@@ -2856,7 +2965,145 @@ then null, never 0, with the reason in `sourceError`. `incomplete` for any of th
 
 No message content is copied: the rows hold ids, codes, the body's class and the HL7 structure's family (ADT, ORU).
 
+## 20. The FHIR R4 receiver profile (v1.63)
+
+A receiver whose site profile entry carries a `fhir` object (6.4) is reached for recovery through its FHIR R4 API and no other way. Shutter makes one change there: on an existing Encounter that is in progress it completes the open ward-level `location` entry at the failed transfer's event time and appends an active entry for the target ward, with a marker tag naming the operation. The FHIR gate (policy `fhir-2026-11-14.1`) decides at the proposal and again at dispatch, and an unknown blocks. A write goes only on a person's approval of that one case, bound to the version read (its ETag), the exact body (its digest) and the Patient and Location versions; the dispatch gate reads them all again and compares them as strings. No dry run exists for this receiver, and the rehearsal row of every decision says so and says what stands in its place. At most one PUT is sent per approval, with `If-Match`; a second request for the same approval sends nothing. The verifier reads the history, the current record, the Patient and every bound Location, and the committed version by id when the receiver's answer named it, and only 'verified' and 'verified, a later change followed' resolve the case. A FHIR case is planned by `Shutter.FHIR.Flow` and never by an agent (9), never joins an incident, and is released only by a person's approval of that case.
+
+**What is read.** `FHIR Receiver` (`Shutter.Operation.FHIRReceiver`) only reads. Every request is a GET with `Accept: application/fhir+json` that follows no redirect, and each answer is carried as a part with the status it can be trusted with (`Shutter.FHIR.Trust`: a gateway's page behind a 200, a plain 404, a body of another kind or a media type other than FHIR JSON reads as no answer). A request names a case and a purpose, not a server: the path in front of every request is the `base` of the case's own receiver, so a request can borrow no other entry's settings. By purpose, `evidence` reads the CapabilityStatement, the search by visit number under the entry's identifier system, the Encounter, its Patient, every Location of the map and the Encounter's history; `dispatch` (the read just before the write) the same without the search, for the Encounter and the Patient and Locations the binding names; `verify` the Encounter, the Patient, the bound Locations and the history, and the version the answer to the update named, by id. Of a Patient and a Location only what the checks read is kept: no name, birth date, address or telecom. One request reads for at most 45 seconds, and a body of more than a million characters is not trusted. The case's evidence keeps the projection of these reads (`Shutter.FHIR.Reader`): the summary's `fhir` view holds identifiers, statuses, references and version ids and never a body, the snapshot item `fhir` holds the Encounter's body digest, ETag and version id, and the Encounter as read is kept beside the snapshot (`Shutter.Store.FHIRSealedRead`) for the gate and the binding to build from. The snapshot's material digest includes the view's ETags, so the same evidence read twice gives one digest and a changed version gives another.
+
+### 20.1 The FHIR gate's rows
+
+`Shutter.Operation.FHIRGate` (item `FHIR Gate`, request `Shutter.Msg.FHIRGateRequest` with stage `proposal` or `dispatch`) stands beside `Shutter.Operation.Gate` and is not a subclass of it. `Facts` makes every read and `Decide` gives the rows from those facts alone. The decision is stored as any gate decision, its outcome the worst row. A read the gate cannot make (no case, plan or snapshot, or a failed read before the write) answers an error with no decision, which the flow treats as an item's failure (stops 12 and 13 below) and not as a verdict.
+
+**Rows, in order.** "w" = only for a plan that writes (`plan.IsWrite()`); otherwise the row is `pass NOT_APPLICABLE`. Codes without the `FHIR_` prefix are the main gate's, with its meaning.
+
+| Check | Pass | Block (b) or unknown (u) |
+| --- | --- | --- |
+| `identity` | `FHIR_IDENTITY_MATCHES` | b `FHIR_ENCOUNTER_NOT_FOUND` (the evidence has no `fhir` view, the words saying that the message names no visit number when the case has none; or the search found no match; or the Encounter read was a 404); u `FHIR_RECEIVER_UNREADABLE` (the search or the Encounter read has no status or one other than 200 and 404); b `FHIR_ENCOUNTER_AMBIGUOUS` (several matches; u when the search came in pages); b `FHIR_IDENTIFIER_UNMAPPED` (the case's patient assigning authority is not `hl7_authority`, or `encounter.identifier_ok` is false: the Encounter does not carry the visit number under the mapped system); b `FHIR_SUBJECT_UNRESOLVED` (the subject is not a literal `Patient/{id}`; u when that Patient could not be read, or the Patient read is not the subject); b `FHIR_PATIENT_MISMATCH` (the Patient does not carry the case's patient id); b `FHIR_PATIENT_LINKED` (a `link`, or `active` false) |
+| `conformance` | `PARSED` | as the main gate's: `UNMAPPABLE`, `SCHEMA_UNKNOWN`, `PARSE_FAILED` |
+| `intent` | `EXACT_OPERATION` (detail "The plan makes the one change the failed message asked for; the HL7 message is not sent again"), `NO_WRITE` | as the main gate's, without its two lines about a receiver the profile does not describe or does not model: `MERGE_WITHHELD`, `CANCEL_UNSUPPORTED`, `UNKNOWN_DISPOSITION`, `DIFFERENT_OPERATION`, `PAYLOAD_CHANGED`; and for a write b `FHIR_EVENT_UNSUPPORTED` (`case.Event` is not `transfer`), b `FHIR_FAILURE_KIND_UNSUPPORTED` (`case.FailureKind` is neither `delivery_failed` nor `uncertain_outcome`) |
+| `enablement` w | `FHIR_RECOVERY_ENABLED` | b `FHIR_RECOVERY_DISABLED` (`Profile.Enabled` is false) |
+| `representation` w | `FHIR_REPRESENTATION_WHOLE` | the first that applies of b `FHIR_REPRESENTATION_PARTIAL` (marked SUBSETTED), `FHIR_MODIFIER_EXTENSION` (a `modifierExtension` or `implicitRules`), `FHIR_NARRATIVE_PRESENT`, `FHIR_RESTRICTED` (`meta.security` present), `FHIR_NO_ETAG` (`etag_usable` false: no ETag, or one that does not name the version read) |
+| `state_transition` w | `TRANSITION_ALLOWED` | b `FHIR_STATUS_NOT_IN_PROGRESS`, `FHIR_ALREADY_THERE` (an open entry is already on the target ward) |
+| `ordering` w, several rows | `ENGINE_SETTLED`, `NO_FURTHER_MOVEMENT`, `FURTHER_MOVEMENT_RELEASED`, `NO_LATER_EVENT`, `FHIR_ORDER_HOLDS` | the engine row (below); the further-message rows as the main gate gives them, b `PATIENT_UNREADABLE`, `FURTHER_MOVEMENT`, `FURTHER_NOT_READ`, and u `FURTHER_MOVEMENT_NEW` at dispatch only; b `NEWER_MESSAGE_PENDING` (its words promise no wait); b `EVENT_TIME_IMPLAUSIBLE`, `SUPERSEDED_BY_LATER_EVENT` (the later-event reads of the main gate, copied); then the receiver's own record: u `FHIR_TIME_UNREADABLE` (the event time, or a `location` entry's start, that `Shutter.Util.Time.FromFHIR` cannot read), b `FHIR_LATER_MOVE_AT_RECEIVER` (an entry whose start, as `FromFHIR` seconds, is at or after the event time's), `FHIR_PRIOR_LOCATION_DIFFERS` (b when there is not exactly one open entry or its ward is not `prior_ward`; u when `prior_ward` is ""); `FHIR_ORDER_HOLDS` when none of those three applied |
+| `mapping` w | `FHIR_LOCATIONS_CHECKED` | b `FHIR_LOCATION_UNMAPPED` (the prior or the target ward is not in the map); u `FHIR_LOCATION_UNREADABLE` (a mapped Location's read is not 200); b `FHIR_LOCATION_MISMATCH` (a mapped Location is not `active`, or `identifier_ok` is false) |
+| `plan_shape` w | `FHIR_PLAN_BOUNDED` | `Shutter.FHIR.Proposal.Prepare`'s code, b `FHIR_BED_MOVE_UNSUPPORTED`, `FHIR_LOCATION_UNMAPPED`, `FHIR_SHAPE_UNSUPPORTED`, `FHIR_DIFF_OUT_OF_BOUNDS` (a code another row already gave is not repeated); u `FHIR_RECEIVER_UNREADABLE` (the Encounter as read is not on file with the evidence); at dispatch b `FHIR_BODY_CHANGED` when the body built from the read just before the write has not the binding's digest |
+| `concurrency` w | `NOT_YET_REQUIRED` at proposal; `FHIR_VERSION_MATCHES` | at dispatch, strings compared as strings: b `FHIR_NO_BINDING`; u `FHIR_RECEIVER_UNREADABLE` (the Encounter, the Patient or a bound Location was not read, or the Patient or a Location came with no ETag, which is no version); b `FHIR_RECEIVER_CHANGED` (the Encounter's ETag), `FHIR_PATIENT_CHANGED`, `FHIR_LOCATION_CHANGED` (any bound Location's ETag) |
+| `earlier_write` w | `FHIR_NO_EARLIER_WRITE` | at both stages u `FHIR_EARLIER_WRITE_UNRESOLVED` when an update of this case that was sent, conditional on this same ETag, has a recorded outcome that is none, `uncertain` or `applied`: it may yet land, or its answer was wrong about the version. Not refreshable |
+| `capability` w | `FHIR_CAPABLE` | u `FHIR_CAPABILITIES_UNREADABLE`; b `FHIR_NO_HISTORY` (`interactions` lack `read`, `vread`, `update` or `history-instance`, or `read_history` is false); b `FHIR_VERSIONING_UNPROVEN` (`versioning` is not `versioned-update`; or no `FHIRProof` row for the receiver; or `Matches(software.name, software.version)` is false; or any of its three measurements is false) |
+| `history` w | `FHIR_HISTORY_READ` | u `FHIR_HISTORY_UNAVAILABLE` (not 200, or a `next` link); b `FHIR_HISTORY_HEAD_DIFFERS` (the newest version is not the version read); b `FHIR_ALREADY_WRITTEN` (`sent_marker_version` is not "": a version carries the marker of an update this case sent) |
+| `authorization` | `NOT_YET_REQUIRED` at proposal; `APPROVAL_VALID` | at dispatch: b `NO_APPROVAL`; b `FHIR_APPROVAL_NOT_PERSONAL` (`approval.Approver = "policy"`, or `approval.IncidentPlanDigest` is not "": the named line that refuses automatic, tier and incident release); b `APPROVAL_<REASON>` from `approval.InvalidReason(plan, case.CurrentSnapshot, policyVersion, "", "")`; b `FHIR_NO_BINDING` (the binding's `ApprovalId` is not this approval) |
+| `evidence` | `FRESH` | u `STALE_EVIDENCE`: at proposal `snapshot.IsFresh()` is false; at dispatch the read's `observed_at` is older than 120 seconds, or missing |
+| `catalogue` | as the main gate's | exactly the main gate's rows, with its `OutcomeConsistency` copied |
+| `rehearsal` | `FHIR_NO_DRY_RUN_SUBSTITUTED` on every decision, at both stages, written or not | none. For a write the detail is "No dry run exists for this receiver. Substituted: a complete versioned read, a bounded change, If-Match on the version read, this case's own approval by a person, and a search of the returned history for the marked version, read back by id when the answer named it."; otherwise "No dry run exists for this receiver. This plan sends nothing." |
+
+When `identity` read no Encounter, the rows that need one (`representation`, `state_transition`, the receiver rows of `ordering`, `plan_shape` and `history`) are each u with the code `identity` gave, and say so.
+
+**The engine row.** The engine's reads are `Shutter.Util.EngineCheck.Read`. `facts("engine")` is "" (the case has no source header): u `FHIR_ENGINE_NOT_IN_SCOPE` ("no source header to read the engine by"; not refreshable, since it can never clear). Else its `scope` of `"no"` gives u `FHIR_ENGINE_NOT_IN_SCOPE`; `"base"` gives u `FHIR_ENGINE_SUBCLASS_UNPROVEN`; otherwise the row is `##class(Shutter.Util.EngineCheck).Judge(<those facts>)` (`ENGINE_STILL_TRYING`, `ENGINE_DELIVERED`, `RECEIVER_MAY_HOLD_IT`, `ENGINE_UNREADABLE`, `ENGINE_SETTLED`), with two refusals laid over a pass, because the FHIR write is a second route to a system the engine can still reach: any header of custody `delivered` gives b `FHIR_ENGINE_DELIVERED` (the main gate passes it on the acknowledgement route), and any header whose `status` is `Suspended` gives b `FHIR_ENGINE_HOLDS_SUSPENDED` (the main gate reads Suspended as settled, and a suspended message can be resubmitted after the FHIR write). The gate never calls `EngineCheck.Settle`: a case blocked because the engine is still trying, or because a newer message is pending, does not wait, and its words (`Shutter.Store.BlockReason`) say to reinvestigate once the engine has finished or the message has been delivered.
+
+**Unknowns a fresh read can answer.** `STALE_EVIDENCE`, `FHIR_RECEIVER_UNREADABLE`, `FHIR_CAPABILITIES_UNREADABLE`, `FHIR_HISTORY_UNAVAILABLE`, `FHIR_LOCATION_UNREADABLE` and `ENGINE_UNREADABLE`. When every row that did not pass is one of these, the flow waits 10, 20 and 40 s and reads again, up to three times (`MaxRefreshes`): at the proposal it collects the evidence again and plans afresh, at dispatch it repeats the read before the write. Any other row that did not pass ends the stage (stops 3 and 8).
+
+### 20.2 The stops of the flow
+
+**Every stop of the flow, with its exact text.** The case's reason is read from the newest stopping event's text (`Shutter.API.Dispatch.ReasonFromEvent`, which the escalation draft also reads): a trailing " (FHIR_...)" is the reason, except in a rejection's words and after an escalated plan's " (the gate noted: ...)". So a stop that no failing gate row explains ends " (CODE)", and a stop that a gate row explains carries no code in its text. Words taken into a text from somewhere else (an error, a diagnostic) never carry a code of the flow's own: "(FHIR_" in them is written "(fhir_". "Revoke" = `approval.Revoke("system: <why>")` on the approval of `p.ApprovalId` when there is one.
+
+| # | When | Revoke | State | Headline | Transition text |
+| --- | --- | --- | --- | --- | --- |
+| 1 | `Install.Problem()` is not "" (at either stage) | | `blocked` | "Blocked: the FHIR items are missing or disagree" | "The production cannot reach this FHIR receiver: <problem>. Nothing was read or sent (FHIR_ITEMS_MISSING)" |
+| 2 | an `escalate` or `more_evidence` plan, after the proposal gate | | `escalated` | the headline the plan was adopted with | "The plan asks for a person: <plan.Summary>", then " (the gate noted: <summary>)" when the gate did not pass; the summary carries "(FHIR_PLAN_NEEDS_PERSON)" |
+| 3 | the proposal gate did not pass (after the refreshes of 20.1) | | `blocked` | "Blocked by the FHIR gate: <result.Summary>" | "The FHIR gate did not pass the plan; a person must decide" |
+| 4 | a pass on a plan that writes nothing | | `escalated` | "Escalated: over FHIR nothing closes by itself" | "Over FHIR Shutter closes no case without a person or a verified update; a person decides (FHIR_PLAN_NEEDS_PERSON)" |
+| 5 | shadow mode or the stop | | `escalated` | `ShadowObservation.Words` | the same words |
+| 6 | the update could not be sealed for approval: `SealBinding` failed, the approval could not be tied to the seal, or the seal is missing when the read before the write or the dispatch needs it | when an approval stands | `blocked` | "Blocked: the update could not be sealed for approval" | "The update could not be sealed for approval: <reason> (<Prepare's code, or FHIR_NO_BINDING>)" |
+| 7 | the read before the write failed after its retries | yes | `blocked` | "Blocked at dispatch: the receiver could not be read" | "The receiver could not be read just before the write, in <n> tries. The approval is void and nothing was sent (FHIR_RECEIVER_UNREADABLE)" |
+| 8 | the dispatch gate did not pass (after the refreshes of 20.1) | yes | `blocked` | "Blocked at dispatch: <result.Summary>" | "The FHIR gate did not pass the plan at dispatch. The approval is void; a reinvestigation reads fresh evidence and asks again" |
+| 9 | the write answered `version_conflict` | yes | `blocked` | "Blocked: the Encounter changed before the update" | "The receiver refused the update: the Encounter changed after it was read (HTTP <n>). The approval is void and nothing is sent again without fresh evidence and a new approval (FHIR_WRITE_CONFLICT)" |
+| 10 | the write answered `refused` or `error`, or the call to FHIR Out failed with the fence not `sent` | yes | `blocked` | "Blocked: the update was not applied" | "The update was not applied: <reason code, or the outcome>, HTTP <n> or 'no HTTP answer' (FHIR_WRITE_REFUSED)" |
+| 11 | a verification that does not resolve | 20.4 | `escalated` | 20.4 | the Judge's sentence, then " (<code of 20.4>)" |
+| 12 | an error from a FHIR item other than FHIR Out, or inside the flow, before anything was sent (fence absent or `unsent`) | yes | `blocked` | "Blocked: a FHIR item failed" | "A FHIR item answered with an error before anything was sent: <text> (FHIR_ITEM_ERROR)" |
+| 13 | an error from the verifier, from any FHIR item other than FHIR Out, or inside the flow, with the fence `sent` | yes | `escalated` | "Escalated: the update's outcome is unknown" | "A FHIR item failed after the update was sent: <text>. Whether the receiver applied it is unknown; a person checks at the receiver (FHIR_WRITE_OUTCOME_UNKNOWN)" |
+
+A failed call to FHIR Out with the fence `sent` is no stop: the flow records an `uncertain` attempt (reason `fhir_item_error`) and goes to the verification, like any answer that was lost. Rejection, a missing or another plan digest, the approval timeout, abandon and close are the workflow's own handlers and words, unchanged.
+
+### 20.3 The write
+
+The binding, the fence row and the proof are stores of their own. `Shutter.Store.FHIRBinding` is sealed when the proposal gate passes a plan that writes (one per plan) and tied to the approval when a person gives it: the Encounter id and ETag read, the Patient and every mapped Location with their ETags, the Encounter as read and the approved body with its digest, the operation id, the marker system, the digest of the `fhir` block, and the profile and policy versions. The body is the Encounter as read with one change (`Shutter.FHIR.Plan.Build`, through `Shutter.FHIR.Proposal.Prepare`): the open `location` entry gets `status` `completed` and `period.end` the event time, an entry `{"location": {"reference": <target>}, "status": "active", "period": {"start": <event time>}}` is appended, and `meta.tag` gains `{"system": <marker.system>, "code": <operation id>}`, the operation id being the first 32 hex characters of the SHA-256 of `<case id>|<plan digest>|<ETag read>`. `Plan.Diff` refuses any other changed path (`FHIR_DIFF_OUT_OF_BOUNDS`), and a message that names a bed is never written (`FHIR_BED_MOVE_UNSUPPORTED`). `Shutter.Store.FHIRAttempt` is the fence: one row per approval (unique), `unsent` until the update is about to leave, then `sent`, with the answer recorded on it. `Shutter.Store.FHIRProof` holds a receiver's conformance run (12).
+
+**`Shutter.Operation.FHIRExecute`** (item `FHIR Out`): `Ens.BusinessOperation` on `EnsLib.HTTP.OutboundAdapter`, `Method OnWrite(request As Shutter.Msg.FHIRWrite, Output response As Shutter.Msg.FHIRWriteResult) As %Status`, never an error status for a refusal. `FHIRWrite` carries `CaseId`, `PlanId`, `ApprovalId`, `BindingId` and `DecisionId`; `FHIRWriteResult` carries `Outcome`, `HttpStatus`, `Sent`, `ResponseEtag`, `ResponseLocation`, `ReasonCode`, `Diagnostics` and `Error`. It trusts nothing of the gate's moment: a request can wait in its queue across a disabled item or a production stop. In order:
+
+1. Open the case, the binding (`request.BindingId`), the approval, the plan and the decision (`request.DecisionId`). Refuse (`Outcome = "refused"`, `Sent = 0`, `Error` beginning "Not sent:") with `ReasonCode`:
+   - `fhir_binding_missing`: no such case or binding; the binding is not this case's; its `ApprovalId` is not `request.ApprovalId`; the approval is not this case's; its `PlanId` is not the case's current plan's id (or `request.PlanId` names another);
+   - then, if the fence row of this binding is already `sent`, answer it as step 3 does, before the checks that follow;
+   - `fhir_recovery_disabled`: `ReceiverKind(case.Receiver)` is not `fhir_r4`, or `Profile.Enabled` is false;
+   - `fhir_endpoint_differs`: the receiver's `fhir` block no longer has the `MappingDigest` the approval was given against (its base, map, marker and identifier systems);
+   - `fhir_approval_not_personal` (`approval.Approver = "policy"` or `approval.IncidentPlanDigest` is not ""), asked before the next so that a policy's or an incident's approval is named as what it is;
+   - `fhir_approval_void` (`approval.InvalidReason(plan, case.CurrentSnapshot, policyVersion, "", "")` is not "");
+   - `fhir_dispatch_stale` (no such decision, or it is not this case's and plan's `dispatch` decision with outcome `pass`, or its `At` is more than 120 seconds old);
+   - `fhir_body_changed` (`Plan.BodyDigest(binding.ApprovedBody)` is not `binding.ApprovedBodyDigest`).
+2. The two last lines of `Shutter.Operation.Ward`'s write, copied and read at the moment of the write: `newer_message_pending`, `further_movement`.
+3. The fence: `FHIRAttempt.Open(case, binding, .a, .created)`. An existing row in state `sent` sends nothing and is answered as what it is, a write that may have landed: with `AnsweredAt` empty, `Outcome = "uncertain"`, `Sent = 1`, `HttpStatus = 0`; with an answer, the recorded outcome, status, ETag, Location and diagnostics again; `ReasonCode = "fhir_already_sent"` either way. Never `refused`.
+4. `Shutter.Util.RecoveryControl.Admit("recovery", case.CaseId, case.Receiver, plan.OperationKey, "sha256:" _ binding.ApprovedBodyDigest, .permit, .code, .text)`; not admitted: refuse with `ReasonCode = code`, `Error = text`.
+5. Its own read, through its own adapter, because the checks read through `FHIR Receiver` and the write leaves through this item, each with its own server settings: `GET <base>/Encounter/<id>`, bounded to 30 seconds and a million characters, no redirect, judged by `Shutter.FHIR.Trust.Part`. Refuse (`Sent = 0`, `fhir_endpoint_differs`) unless the answer is a trusted 200 whose ETag equals `binding.ExpectedEtag` byte for byte and whose body has the `Plan.BodyDigest` of `binding.BaseBody`. On the main route the item that writes is the item that read; this step keeps that. Then the entry's switch (`fhir_recovery_disabled`) and `RecoveryControl.Refusal` (shadow mode or the stop; its code) are asked once more, since the read can take a while.
+6. `a.MarkSent()` (a synchronous commit, so that the row reads `sent` after a crash too); false: if the row is not `sent` the item fails (`Outcome = "error"`, `Sent = 0`, reason `fhir_item_error`), otherwise answer as step 3.
+7. One request: `PUT <base>/Encounter/<id>` with `If-Match: <binding.ExpectedEtag>` byte for byte, `Content-Type: application/fhir+json`, `Accept: application/fhir+json`, `Prefer: return=minimal`, no redirect, the body `$ZCONVERT(binding.ApprovedBody, "O", "UTF8")`, through `..Adapter.SendFormDataArray(.resp, "PUT", http, "", "", path)`, with `http.ReadRawMode = 1` and `http.WriteRawMode = 1` (so the bytes are not translated a second time), then `Set ..Retry = 0`. The answer goes into a bounded stream (60 seconds, three bytes for each of a million characters): an answer cut short is still an answer to an update that left, so its status and headers stand, and it is never read as applied.
+8. Classify, `a.Answer(...)` (an ETag longer than 200 characters or a Location longer than 500 is recorded as empty, since a cut one would read as another version), then `RecoveryControl.Finish(permit, adapter)` where `adapter` is an unsaved `Shutter.Msg.WardResult` carrying only `Outcome` and `HttpStatus`. Every path after step 4 reaches `Finish`: a permit left `admitted` latches the stop for the whole deployment (18).
+
+Something that fails inside the item is answered by the fence row: `sent` is the step 3 answer with reason `fhir_item_error` (and the row answered `uncertain` if it was marked and had no answer), anything else `Outcome = "error"`, `Sent = 0`, reason `fhir_item_error`.
+
+**The classifier**, `ClassMethod Classify(sc As %Status, status As %Integer, etag As %String, location As %String, contentType As %String, body As %String, encounterId As %String, Output reason As %String, Output diagnostics As %String) As %String`. The default is `uncertain`: the main connector's default for an answer nobody named is `refused`, which here would say "not applied" of a write that may have landed.
+
+| Answer | Outcome |
+| --- | --- |
+| no response and the error says the connection never opened (status code 6059, or the message says refused, unable to connect, connect failed, no route or unable to open the socket) | `error` |
+| no response otherwise (a timeout, a dropped connection) | `uncertain` |
+| 200 with an ETag that names a version, and a body that is empty or a FHIR JSON Encounter with this id whose `meta.versionId` is the ETag's version, and a `Location` that is absent or ends `_history/<that version>` | `applied` |
+| any other 200 (no ETag, a page, an OperationOutcome) | `uncertain` |
+| 201 with an ETag that names a version | `applied`, reason `update_created` (the Judge fails it) |
+| 201 without one | `uncertain`, reason `update_created` |
+| any other 2xx (202, 204), any 3xx | `uncertain` |
+| 412, 409 | `version_conflict` |
+| 405 | `refused`, reason `invalid_if_match` when the body is an OperationOutcome |
+| 400, 404, 410, 422 with a FHIR JSON OperationOutcome | `refused`, the first issue's `diagnostics` to 300 characters |
+| 404 without one | `uncertain`, reason `credentials_or_proxy` |
+| 401, 403 | `refused`, reason `credentials` |
+| any other 4xx | `refused` |
+| any 5xx, and any answer no row names | `uncertain` |
+
+Nothing retries. The content type of a 200 is never read (IRIS answers an empty `text/html`).
+
+### 20.4 The verifier
+
+**The settle schedule** is the flow's: a result whose `detail.retry` is true, while `p.Refreshes < p.MaxRefreshes` (3), raises `Refreshes` and arms `fhir:verify:retry` after `10 * (2 ** (p.Refreshes - 1))` seconds, so the walks are at about 0, 10, 30 and 70 s after the update was sent (70 s is where the Judge's settle window ends and a read is final); `Refreshes` was set to 0 when the dispatch gate passed. A `retry` with no retries left is final, and ends as the unknown below, in the event's text; the stored verification of that walk keeps no code.
+
+**The Judge's six outcomes.**
+
+| Judge | `Verification.Outcome` | The flow | Case ends | Code (in `detail.case_code` and the event's text) |
+| --- | --- | --- | --- | --- |
+| `verified` | `verified` | `case.Outcome` = the sentence; `resolved` with the sentence as it is | resolved | none |
+| `verified_continued` | `verified` | the same | resolved | none |
+| `committed_review` | `unresolved` | the approval stands; `escalated`, headline "Escalated: the update is present, the current record needs review". When `detail.retry` is true (the current record could not be read inside the settle window) it is read again first | escalated | `FHIR_COMMITTED_NEEDS_REVIEW` |
+| `unknown`, retry left | `unresolved` | the retry alarm | verifying | none |
+| `unknown`, final | `unresolved` | the approval revoked ("system: the update's outcome is unknown, and its one write is spent"); `escalated`, headline "Escalated: the update's outcome is unknown" | escalated | `FHIR_WRITE_OUTCOME_UNKNOWN` |
+| `not_found` | `not_committed` | the approval revoked; `escalated`, headline "Escalated: the update is not in the history read"; nothing automatic follows | escalated | `FHIR_WRITE_NOT_FOUND` |
+| `failed` | `failed` | the approval revoked; `escalated`, headline "Escalated: the receiver's record contradicts the update"; nothing automatic follows | escalated | `FHIR_WRITE_CONTRADICTED` |
+
+The case's `Outcome` is the Judge's sentence on every final result. Every stop's transition text is the Judge's sentence followed by " (<code>)" (stop 11 of 20.2). `Judge.Words` is not edited. The Judge's own `case_code` (the ADT words `WRITE_NOT_COMMITTED`, `WRITE_OUTCOME_UNKNOWN`) is replaced in the stored detail by the FHIR code, so nothing keyed on the ADT codes sees a FHIR case. A reinvestigation after an unknown or not-found outcome meets the gate's `earlier_write` row (20.1): while the Encounter is still at the version the earlier update was conditional on, nothing more is sent, which keeps the Judge's own promise ("Shutter will not repeat it until its committed history can be established").
+
+### 20.5 Never claimed
+
+That `If-Match` or an approval makes the write idempotent; that a verified version proves where the patient is or that any downstream saw the change; that an AuditEvent, a Provenance, a 200, a newer ETag or `meta.lastUpdated` is a receipt; that `$validate` or any pre-check is a dry run; that version ids are numbers, increase by one or can be ordered; "conditional update" for the `If-Match` write, "FHIR support", "idempotent"; that the proof holds on any server but the one named; that the test server's run shows any server's behaviour; that the ADT path changed, or that leaving `Gate.cls` unedited means no change or risk to it; that no `next` link proves an intact history, or that "the whole history" was read; that adjacent history entries prove adjacent commits; that the Patient and Location reads are an atomic precondition; that a Location ETag prevents another Encounter taking a bed; that different ETags alone prove one version later than another; that an ignored normalisation path means nothing clinically relevant changed; that a settled engine proves the receiver holds no queued work, or that nobody will resend the HL7 message later; that the marker proves who wrote; that a surviving entry proves the move was not corrected; that a build string proves the endpoint passed Shutter's checks; that a fence row or a permit alone guarantees one PUT; that the receiver will refuse a changed version (it did when measured); that a repository update proves the ward application accepted the move; that Shutter's FHIR credentials can change only Encounters; that the board reviewed a FHIR plan; that any FHIR R4 server is supported; that a branch is the released application.
+
 ## Changes
+
+- v1.63, 14 Nov 2026 (the FHIR R4 receiver profile): section 20, one ward move on an existing, in-progress Encounter at
+  InterSystems IRIS for Health's FHIR R4 server, off until a site's receiver entry carries a `fhir` object that turns it on
+  (6.4); its own gate (`Shutter.Operation.FHIRGate`, policy `fhir-2026-11-14.1`), at most one person-approved update with
+  `If-Match` per approval, no dry run and said so on every decision, verified from the receiver's history. 5: a FHIR
+  case's route `kind`, and no numeric `expectedVersion`. 5.1: the FHIR attempt, its receipt and the verdict mapping. 6.4:
+  the `fhir` entry, its validation and what else the profile reads from it. 6.5: a FHIR case is not judged here. 9: no
+  agent plans or reviews a FHIR plan. 12: the four FHIR items placed by a call, the test FHIR server on a demo install, the
+  uninstall's additions. 18: the same admission before a FHIR write, and FHIR Out as a second connector it covers. No
+  route and no OpenAPI path changed; the receiver schema documents the `fhir` object and an attempt's FHIR receipt.
 
 - v1.62, 14 Nov 2026 (the pathology paths on the demo): section 4.5, P1 and P2 on the demo hospital's results route, with
   the runner's three steps, P2's refusals, the reset's `lab` and `GET /scenarios`'s `pathology`. Whether the stand-in runs
