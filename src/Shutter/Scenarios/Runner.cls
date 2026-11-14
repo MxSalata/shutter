@@ -387,6 +387,8 @@ ClassMethod ReplayOnly() As %Boolean
 ClassMethod Play(found As %DynamicObject, scenario As %String, mode As %String, started As %String, inbound As %String, track As %Boolean = 0) As %DynamicObject
 {
     Set files = [], timeouts = [], error = ""
+    // A pathology path's waits read only the cases this run opens (1.4.6)
+    Set after = $SELECT($ISOBJECT(..FindPathology(scenario)): ..LastCaseRow(), 1: 0)
     Set steps = found.steps.%GetIterator()
     While steps.%GetNext(.j, .step) {
         Set:track ^Shutter.Scenarios("run", "step") = ..Describe(step)
@@ -450,7 +452,7 @@ ClassMethod Play(found As %DynamicObject, scenario As %String, mode As %String, 
             Do:'..WaitForOutage(receiver, step."wait_for_outage", timeout) timeouts.%Push("outage " _ step."wait_for_outage")
         } ElseIf step.%IsDefined("wait_for_state") {
             Set timeout = $SELECT(step.%IsDefined("timeout"): +step.timeout, 1: ..#WAITTIMEOUT)
-            Set reached = ..WaitForState(scenario, step."wait_for_state", timeout, .problem)
+            Set reached = ..WaitForState(scenario, step."wait_for_state", timeout, .problem, after)
             Set:problem'="" error = "the runner could not read the case store: " _ problem
             Quit:error'=""
             Do:'reached timeouts.%Push(step."wait_for_state")
@@ -527,14 +529,16 @@ ClassMethod Manual(entry As %DynamicObject, Output status As %Integer) As %Dynam
 }
 
 /// Waits until the newest case of <var>scenario</var> reaches <var>state</var> (CONTRACTS 4.1). Returns 1 when it
-/// did, 0 when <var>timeout</var> seconds passed; <var>problem</var> says why the case store couldn't be read.
-ClassMethod WaitForState(scenario As %String, state As %String, timeout As %Integer = {..#WAITTIMEOUT}, Output problem As %String) As %Boolean
+/// did, 0 when <var>timeout</var> seconds passed; <var>problem</var> says why the case store couldn't be read. With
+/// <var>after</var>, only a case whose row id is above it counts: a pathology path's run waits for its own case, not the
+/// last run's (its cases keep the path's tag from one run to the next).
+ClassMethod WaitForState(scenario As %String, state As %String, timeout As %Integer = {..#WAITTIMEOUT}, Output problem As %String, after As %Integer = 0) As %Boolean
 {
     Set problem = ""
     Set deadline = $ZHOROLOG + timeout
     While $ZHOROLOG < deadline {
         // Without privilege checks: the caller may be the app's user, which has no SQL privileges on the store
-        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT TOP 1 State FROM Shutter_Store.""Case"" WHERE Scenario = ? ORDER BY ID DESC", scenario)
+        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT TOP 1 State FROM Shutter_Store.""Case"" WHERE Scenario = ? AND ID > ? ORDER BY ID DESC", scenario, +after)
         If rs.%SQLCODE < 0 {
             Set problem = rs.%Message
             Return 0
@@ -545,6 +549,13 @@ ClassMethod WaitForState(scenario As %String, state As %String, timeout As %Inte
         Hang 1
     }
     Quit 0
+}
+
+/// The row id of the newest case in the store, 0 when there is none.
+ClassMethod LastCaseRow() As %Integer
+{
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT MAX(ID) AS M FROM Shutter_Store.""Case""")
+    Quit $SELECT(rs.%Next(): +rs.%Get("M"), 1: 0)
 }
 
 /// Whether a case's state is the one a wait names, or one of several separated by "|" (S26: awaiting_approval|resolved).
