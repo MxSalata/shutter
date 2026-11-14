@@ -935,10 +935,12 @@ ClassMethod ReceiverKind(name As %String) As %String
 
 /// The receiver's history policy, current or correct (v1.23): the entry's own history_policy when it has one, else
 /// derived from its category (history_of_record keeps the history straight: correct; the others: current), else, for
-/// an entry with neither, the profile's site-wide history_policy (deprecated since v1.23), else current.
+/// an entry with neither, the profile's site-wide history_policy (deprecated since v1.23), else current. An entry with
+/// a fhir block is current whatever else is said: the site-wide flag never reaches it.
 ClassMethod ReceiverHistoryPolicy(name As %String) As %String
 {
     Set r = ..Receiver(name)
+    If $ISOBJECT(r) && $ISOBJECT(r.%Get("fhir")) Quit "current"
     Set own = $SELECT($ISOBJECT(r): ##class(Shutter.Util.Json).Str(r, "history_policy"), 1: "")
     If $LISTFIND($LISTBUILD("current", "correct"), own) Quit own
     If $ISOBJECT(r) && (##class(Shutter.Util.Json).Str(r, "category") '= "") Quit $SELECT(..ReceiverCategory(name) = "history_of_record": "correct", 1: "current")

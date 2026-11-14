@@ -180,6 +180,19 @@ Method TestTheReaders()
     Do $$$AssertTrue($ISOBJECT($CLASSMETHOD(c, "Block", name)), "and the block is still read")
 }
 
+/// A FHIR receiver's history policy is current, always: the site-wide flag an older profile may still carry never
+/// reaches an entry with a fhir block, whether or not the entry names its category.
+Method TestTheSiteWideHistoryPolicyNeverReachesAFhirEntry()
+{
+    Set list = ..Json("Plain"), entry = ..Json("Entry")
+    Do entry.%Remove("category")
+    Do list.%Push(entry)
+    Do ..ChangeProfile({"history_policy": "correct", "receivers": (list)})
+    Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).Flag("history_policy", "current"), "correct", "the profile carries the site-wide flag")
+    Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).ReceiverKind(..#NAME) _ " [" _ ##class(Shutter.Util.Json).Str(##class(Shutter.Store.SiteProfile).Receiver(..#NAME), "category") _ "]", "fhir_r4 []", "and the FHIR entry names no category")
+    Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).ReceiverHistoryPolicy(..#NAME), "current", "its history policy is current all the same")
+}
+
 /// With an incident open and taking cases, a failure to a FHIR receiver stays outside it; the same failure to a
 /// receiver of another kind is handed that receiver's incident. All of it in a transaction that is rolled back.
 Method TestRegisterJoinsNoIncident()
