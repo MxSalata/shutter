@@ -1094,9 +1094,11 @@ Write ##class(Shutter.FHIR.Install).PlaceItems("<host>", "<port>", "FHIRServer",
 FHIR_PASSWORD=<password> python3 tests/conformance/fhir_conformance.py --base https://<test host>/<base> --target iris --user <user> --proof proof.json
 Do $SYSTEM.Status.DisplayError(##class(Shutter.Store.FHIRProof).ImportFile("<receiver name>", "<path>/proof.json"))
 # 4. Confirm (items_problem empty, endpoints_agree true, proof "matches"), then PUT the entry again with "recovery_enabled": true.
-#    Before any case has read the server, "matches" says only that a proof is on record; the gate compares the server's own statement with it at every decision.
+#    "matches" means a measurement is on record for this server software, as the last statement Shutter read names it (before any case has read the server, only that one is on record); the gate compares it with the server's own statement at every decision.
 Write ##class(Shutter.FHIR.Install).Doctor().%ToJSON()
 ```
+
+Once it is on, an edit of the receiver's `fhir` block between a person's approval and the write ends that case "not applied" (`fhir_endpoint_differs`). The host and port of FHIR Receiver and FHIR Out are the site's settings and are not tied to the approval: changed after it, the write goes to the new address. A server or gateway that sends no ETag on a Patient or Location read stops every case at dispatch. One answer has no overall time bound: the size cap ends a read, and each wait ends on the adapter's response timeout (at most 15 seconds with no byte), so a receiver that keeps sending slowly holds the item and the cases behind it wait.
 
 ## The publisher: Shutter's read-only tools for an MCP client
 
