@@ -19,6 +19,8 @@
   <a href="https://youtu.be/oGW7u9RKf9M">Video</a>
 </p>
 <p align="center"><sub>
+  <a href="https://github.com/MxSalata/shutter/blob/main/docs/readme/how-shutter-works.md">How Shutter works (guide)</a> ·
+  <a href="https://github.com/MxSalata/shutter/blob/main/docs/readme/integrating-at-your-trust.md">At your trust (guide)</a> ·
   <a href="https://github.com/MxSalata/shutter#try-it">Install (Docker or IPM)</a> ·
   <a href="https://github.com/MxSalata/shutter#limits-plainly">Limits</a> ·
   <a href="https://openexchange.intersystems.com/package/Shutter">Open Exchange</a> ·
@@ -49,6 +51,7 @@ There are two recovery paths, with different guarantees:
 - **What the agents decide:** resend a failed HL7 delivery, close it as already delivered, or stop and escalate with nothing written. Four `%AI.Agent` business operations, three specialists and a coordinator, read sealed evidence through typed tools; the coordinator submits the plan.
 - **What permits a write:** a deterministic gate, then an approval bound to the plan's digest and the case's version. The receiver is read again just before a conditional write, and its own history confirms the result. IRIS Workflow carries the approval, `%AI.Policy` authorisation holds each run to its own case and its audit logs every tool call, and Visual Trace shows every agent's lane.
 - **What the test found:** on release 1.4.3, twelve held-out synthetic cases with three runs of each per mode, the board's mean loss was 0.167 against 4.000 for rules only, and no mode executed a wrong write: the gate stopped the bad proposals. A single investigator matched the board as settled (0.667 by the unchanged grader) at about a quarter of the cost per run, and both modes ship. [The results](https://github.com/MxSalata/shutter#what-has-been-measured)
+- **The whole mechanism:** [How Shutter works](https://github.com/MxSalata/shutter/blob/main/docs/readme/how-shutter-works.md), from a failed delivery to a verified recovery, with every gate check and its source; [How to integrate Shutter at your trust](https://github.com/MxSalata/shutter/blob/main/docs/readme/integrating-at-your-trust.md) for an integration team planning a pilot.
 - **Why I built it:** the failures above are the ones I met in my interoperability work with 28 NHS hospitals. While building Shutter I filed AI Hub bug reports [#11](https://github.com/intersystems-community/ai-hub-eap-bugreports/issues/11), [#12](https://github.com/intersystems-community/ai-hub-eap-bugreports/issues/12), [#22](https://github.com/intersystems-community/ai-hub-eap-bugreports/issues/22) and [#23](https://github.com/intersystems-community/ai-hub-eap-bugreports/issues/23).
 
 ![S8 in the Visual Trace: case workflow, evidence, board members and gate](https://raw.githubusercontent.com/MxSalata/shutter/main/web/public/s8-visual-trace.png)
