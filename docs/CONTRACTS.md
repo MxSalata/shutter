@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.59, 13 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.61, 14 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -1887,9 +1887,22 @@ demo items, switched off on a site install with the others.
   since the case counter starts again at `C-000001` and their rows would name cases that never existed; since v1.1.0 the three outage stores too (17.7); and it sets
   `^Shutter.Config("resetAt")` to the time of the purge, as a scenario reset does, so nothing from before it is read as
   this instance's history.
-- **The aihub module's install** (v1.21) fails when the environment carries a provider key (`ANTHROPIC_API_KEY`) and the
-  provider could not be configured from it, so a live edition is never built on a key that does not work; the image
-  build has no key and is unaffected.
+- **The aihub module's install** (v1.21) fails when the environment carries a provider key (`ANTHROPIC_API_KEY`, or
+  since v1.61 `OPENAI_API_KEY`) and the provider could not be configured from it, so a live edition is never built on a
+  key that does not work; the image build has no key and is unaffected.
+- **The provider the install configures** (v1.61): Anthropic or OpenAI, one at a time, as the one configuration
+  `AI.LLM.Shutter`. `Shutter.Setup.ProviderChoice` decides from `SHUTTER_PROVIDER` and the two keys: the provider named
+  (`anthropic` or `openai`) when its key is set; with none named, the one whose key is set, Anthropic when both are. A
+  provider named with its key empty, or a name that is neither, configures nothing while a key is set, and the other
+  provider's key is never used in its place: the install fails as above, and the production's start logs a warning and
+  leaves the instance as it was. `ConfigureProvider(key, model, provider)` writes the wallet secret (`Shutter.Anthropic`,
+  or `Shutter.OpenAI`), then `AI.LLM.Shutter` with `model_provider`, the model (`SHUTTER_MODEL`, else
+  `claude-opus-5-5`, or `gpt-4.1` on OpenAI) and the key by reference, removes the other provider's secret and records
+  the provider in `^Shutter.Config("aihub", "modelProvider")`; a record without it is Anthropic's. It refuses, before
+  changing anything, a provider it does not configure and a model whose name is plainly the other provider's
+  (`claude...` on OpenAI, `gpt...` on Anthropic). The two-argument call is Anthropic's, as it was. `ClearProvider`
+  removes the configuration, both secrets and the record. The price list (`Shutter.Store.ModelPrice`) holds Anthropic's
+  models only, so a run on another model has no cost and the budgets (9) do not count it.
 - **Shape B: Shutter's items inside a site's own production.** `Shutter.Setup.InstallInto(production, root)`
   (`SELECT Shutter.Setup_InstallInto('Your.Production', '/path/to/module/')`, or `zpm "load <dir> -Ddemo=0
   -Dproduction=Your.Production"`), in that production's namespace with the core classes loaded: refuses an empty name or a
@@ -1952,7 +1965,7 @@ survives a restart that does not name it. The install reads the same variables (
 cap), so the image's build arguments stay the two the installer alone reads, with the demo password as a build secret
 (INSTALL.md section 3). The call returns JSON
 naming what was applied, with `errors` when a step failed, and the event log carries it; `SELECT Shutter.Setup_ApplyEnvironment()`
-runs it by hand. `ApplyRuntime(...)` is the same on given values, for the tests. At every start (v1.39) the production checks that the wallet secret and the Config Store entry still exist, not only the key's digest, and writes them again from `ANTHROPIC_API_KEY` when either is missing (`Shutter.Setup.ProviderNeedsRewrite`; a container recreated on the same volume loses both, since they live in IRISSYS while the record lives in the volume); the Doctor reports `provider`, `wallet_secret` and `provider_config`, each true, false or null where the edition has no such class or this process may not read it: the wallet answers a reader without `Shutter_Secrets` as if the secret were gone and the Config Store refuses one without `%Admin_ConfigStore`, so each probe checks its resource first and a signed-in operator or judge is told nothing rather than "gone" (the v0.2.6 rehearsal); the production's own process, which wrote them, reads them. `SHUTTER_DEMO_PORTAL` is read with them (v1.39): `1` applies `HardenPortal` (14.5's read-only portal) at every start of the production, since that hardening lives in IRISSYS and a recreated container would come back with the portal open, and records the time as `^Shutter.Config("portalHardened")`. The record stands for the latest start alone: it is cleared before each attempt, and a start whose hardening fails leaves no stamp and records its errors as `^Shutter.Config("portalHardeningErrors")`. The Doctor reports `portal_hardened` and `portal_hardened_at` from the stamp and `portal_hardening_errors` from the errors node ("" when the latest start's hardening succeeded or was never asked for). Never from the demo flag alone: a local demo keeps the portal as IRIS made it. Since 1.2.0 `HardenPortal` also sets the `/api/shutter` application's session timeout to `Shutter.Setup.#DEMOAPISESSIONSECONDS`, 120 s in place of IRIS's 900: every signed-in web session holds one licence connection until it ends, and the Community licence refuses every new login, Management Portal and terminal included, once the instance holds 8, which the demo reached at its 8th sign-in. The shorter timeout shortens the lock rather than preventing it: 8 or more sign-ins within 120 s without signing out (the 8th of 10 back-to-back sign-ins, or of 14 visitors 12 s apart, on 8 Nov 2026) still refuse the portal, until 120 s after the last of them; the operator waits that out or restarts the container (troubleshooting.md). A visible tab with the live hospital on, as on the public demo, keeps its session by the live banner's poll (every 30 s at most, on every page). A hidden tab polls nothing, so a tab hidden, or idle on a page that polls nothing, for more than 120 s is signed out: its next request sends it to sign in, and anything not yet sent, such as an approval being written, is lost. A closed tab's session ends 120 s after its last request. `PortalState` reports `api_session_timeout` and is `hardened` only when it is set and no longer than that.
+runs it by hand. `ApplyRuntime(...)` is the same on given values, for the tests. At every start (v1.39) the production checks that the wallet secret and the Config Store entry still exist, not only the key's digest, and writes them again from the environment's key (`ANTHROPIC_API_KEY`, or `OPENAI_API_KEY`; since v1.61 also when the environment asks for the other provider than the one recorded, and `wallet_secret` is of the recorded provider's own secret) when either is missing (`Shutter.Setup.ProviderNeedsRewrite`; a container recreated on the same volume loses both, since they live in IRISSYS while the record lives in the volume); the Doctor reports `provider`, `wallet_secret` and `provider_config`, each true, false or null where the edition has no such class or this process may not read it: the wallet answers a reader without `Shutter_Secrets` as if the secret were gone and the Config Store refuses one without `%Admin_ConfigStore`, so each probe checks its resource first and a signed-in operator or judge is told nothing rather than "gone" (the v0.2.6 rehearsal); the production's own process, which wrote them, reads them. `SHUTTER_DEMO_PORTAL` is read with them (v1.39): `1` applies `HardenPortal` (14.5's read-only portal) at every start of the production, since that hardening lives in IRISSYS and a recreated container would come back with the portal open, and records the time as `^Shutter.Config("portalHardened")`. The record stands for the latest start alone: it is cleared before each attempt, and a start whose hardening fails leaves no stamp and records its errors as `^Shutter.Config("portalHardeningErrors")`. The Doctor reports `portal_hardened` and `portal_hardened_at` from the stamp and `portal_hardening_errors` from the errors node ("" when the latest start's hardening succeeded or was never asked for). Never from the demo flag alone: a local demo keeps the portal as IRIS made it. Since 1.2.0 `HardenPortal` also sets the `/api/shutter` application's session timeout to `Shutter.Setup.#DEMOAPISESSIONSECONDS`, 120 s in place of IRIS's 900: every signed-in web session holds one licence connection until it ends, and the Community licence refuses every new login, Management Portal and terminal included, once the instance holds 8, which the demo reached at its 8th sign-in. The shorter timeout shortens the lock rather than preventing it: 8 or more sign-ins within 120 s without signing out (the 8th of 10 back-to-back sign-ins, or of 14 visitors 12 s apart, on 8 Nov 2026) still refuse the portal, until 120 s after the last of them; the operator waits that out or restarts the container (troubleshooting.md). A visible tab with the live hospital on, as on the public demo, keeps its session by the live banner's poll (every 30 s at most, on every page). A hidden tab polls nothing, so a tab hidden, or idle on a page that polls nothing, for more than 120 s is signed out: its next request sends it to sign in, and anything not yet sent, such as an approval being written, is lost. A closed tab's session ends 120 s after its last request. `PortalState` reports `api_session_timeout` and is `hardened` only when it is set and no longer than that.
 
 **Prevent failures** (v1.34; decided on 1 Nov 2026: an interface deployed without its schema would read every field from the
 wrong place, so Shutter "would actually stop an incident waiting to happen until the schema is imported"). With the site
@@ -2773,6 +2786,18 @@ No message content is copied: the rows hold ids, codes, the body's class and the
 
 ## Changes
 
+- v1.61, 14 Nov 2026 (OpenAI as a second provider the install configures): the install and the production's start
+  read `OPENAI_API_KEY` and `SHUTTER_PROVIDER` beside `ANTHROPIC_API_KEY` and `SHUTTER_MODEL`
+  (`Shutter.Setup.EnvironmentProvider`, `ProviderChoice`): the provider named, else the one whose key is set, Anthropic
+  when both are; a named provider with no key, or an unknown name, configures nothing and is said, never replaced by the
+  other key. `ConfigureProvider` takes the provider as a third argument (the two-argument call stays Anthropic's),
+  keeps each provider's key in a wallet secret of its own (`Shutter.Anthropic`, `Shutter.OpenAI`), writes
+  `AI.LLM.Shutter` with that provider's `model_provider`, removes the other provider's secret, and refuses a model that
+  is plainly the other provider's. The record names its provider (`modelProvider`; none means Anthropic), so
+  `ProviderNeedsRewrite`, the Doctor's `wallet_secret` and `ClearProvider` follow whichever was configured. The status
+  line is `ok: AI.LLM.Shutter, <provider>, model <model>` (it named no provider before). No prompt, agent, tool or gate
+  changed, and no evaluation has run on OpenAI through the install yet (12;
+  `tests/unit/Shutter/Test/Provider.cls`).
 - v1.59, 13 Nov 2026 (the Cases list: hiding the closed cases, and saying what it searched): `GET /cases` takes
   `open=1`, which leaves out the cases that are resolved, blocked, escalated or failed, in the query itself
   (`Shutter.API.Dispatch.CasesWhere`), so `total` and the pages are of the open cases; any other value filters nothing,
