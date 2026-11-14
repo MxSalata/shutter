@@ -100,9 +100,11 @@ export function asCategory(v: unknown): ReceiverCategory | undefined {
 /**
  * The receiver's history policy: its entry's own when it sets one, else derived from its category (history of record
  * keeps the history straight; the others keep what is current), else, for an entry with neither, the deprecated
- * site-wide answer, else current.
+ * site-wide answer, else current. An entry with a fhir block is current whatever else is said, as the server reads it
+ * (SiteProfile.ReceiverHistoryPolicy): the site-wide flag never reaches it.
  */
 export function historyPolicyOf(r: SiteReceiver | undefined, p?: SiteProfile): 'current' | 'correct' {
+  if (r?.fhir) return 'current';
   if (r?.history_policy === 'current' || r?.history_policy === 'correct') return r.history_policy;
   if (r?.category !== undefined && r.category !== '')
     return categoryOf(r) === 'history_of_record' ? 'correct' : 'current';
