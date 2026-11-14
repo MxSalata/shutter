@@ -13,9 +13,9 @@ import {
   Title,
 } from '@mantine/core';
 import { IconEye, IconLock } from '@tabler/icons-react';
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { Link } from 'react-router';
-import { isAnswering, useAskPageQuestion, useMe, usePageQuestion, useSettings } from '@/api/hooks';
+import { isAnswering, useAskPageQuestion, usePageQuestion, useSettings } from '@/api/hooks';
 import type { PageQuestion } from '@/api/types';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { LiveUnavailableNotice } from '@/components/LiveUnavailableNotice';
@@ -30,7 +30,11 @@ import { AnswerText, focusSoon } from '@/features/cases/ask/AskPanel';
 import { guideFor } from './guides';
 import { PAGE_ANSWERS_RECORDED } from './recorded';
 import { summariseScreen } from './screen';
-import { useAssistant, type PageAsked } from './store';
+import { NO_ASKED, PAGE_JUDGES_ONLY, turnId, usePageAccess } from './access';
+import { useAssistant } from './store';
+
+// The question "Ask Shutter about this" opened the panel on: loaded with it, the first time a page's button is pressed
+const FocusAsk = lazy(() => import('./FocusAsk').then((m) => ({ default: m.FocusAsk })));
 
 /** The label of a trial answer that is not a recording (features/assistant/recorded.ts). */
 export const PAGE_SAMPLE_LABEL = 'Example (sample data)';
@@ -39,14 +43,8 @@ export const PAGE_SAMPLE_LABEL = 'Example (sample data)';
 export const PAGE_TRIAL_NO_ANSWER =
   'The trial answers its suggested questions only. On a system with a model, any question about the page goes to the Explain agent.';
 
-/** Why a page question cannot be asked live, as the server refuses it (403 live_agents_only). */
-export const PAGE_JUDGES_ONLY =
-  "Questions about a page are answered live only, and that needs the judges' account. The guide below says what this page is and what to try.";
-
-const turnId = (qid: string) => `ask-page-${qid}`;
-
-/** A page with nothing asked yet: one array, so the store's selector returns the same value each time. */
-const NO_ASKED: PageAsked[] = [];
+/** Why a page question cannot be asked live (access.ts), as the panel says it. */
+export { PAGE_JUDGES_ONLY };
 
 // In UTC, the zone the API carries times in, so a recording reads as made on the same day wherever it is read
 const day = new Intl.DateTimeFormat('en-GB', {
@@ -56,10 +54,13 @@ const day = new Intl.DateTimeFormat('en-GB', {
   timeZone: 'UTC',
 });
 
+/** The agent that answers a question about a page, as an answer names it. */
+export const PAGE_AGENT = 'the Explain agent on IRIS AI Hub';
+
 /**
  * Where a page answer came from, in a sentence: sample data in the trial until its answers are recordings; the API mimic
- * (model `mock`, a test fixture that calls no model); otherwise the live run and its model. In the trial the word "live"
- * is kept for the live system alone.
+ * (model `mock`, a test fixture that calls no model); otherwise the live run, the agent that ran (Shutter.Agent.ExplainPage,
+ * an AI Hub agent) and its model. In the trial the word "live" is kept for the live system alone.
  */
 export function pageProvenance(
   q: Pick<PageQuestion, 'mode' | 'model' | 'answeredAt' | 'recordedAt'>,
@@ -72,7 +73,7 @@ export function pageProvenance(
       : 'Recorded answer';
   }
   if (q.model === 'mock') return 'Answered by the API mimic: no model was called';
-  return q.model ? `Answered live with ${q.model}` : 'Answered live';
+  return q.model ? `Answered live by ${PAGE_AGENT}, with ${q.model}` : `Answered live by ${PAGE_AGENT}`;
 }
 
 /** A cited id as a link into the app: a case, an incident, a review or a scenario; `page` is this page itself. */
@@ -124,8 +125,20 @@ function Cites({ cites }: { cites: string[] }) {
   );
 }
 
-/** One question and its answer, read every 2 s until it is answered or refused. */
-function Turn({ questionId, question }: { questionId: string; question: string }) {
+/**
+ * One question and its answer, read every 2 s until it is answered or refused. Off the trial, an answer with its run's
+ * message names it, the agent's request and answer in the production's own record (the Management Portal's messages).
+ */
+export function Turn({
+  questionId,
+  question,
+  order = 4,
+}: {
+  questionId: string;
+  question: string;
+  /** The question's heading level: 4 in the panel's conversation, 3 where it stands under a page's section. */
+  order?: 3 | 4;
+}) {
   const q = usePageQuestion(questionId);
   const settings = useSettings().data;
   const a = q.data;
@@ -133,7 +146,7 @@ function Turn({ questionId, question }: { questionId: string; question: string }
   return (
     <Box component="article" aria-labelledby={turnId(questionId)} className="ask-turn">
       <Stack gap="xs">
-        <Title order={4} id={turnId(questionId)} tabIndex={-1}>
+        <Title order={order} id={turnId(questionId)} tabIndex={-1}>
           {question}
         </Title>
         {q.isError ? (
@@ -149,6 +162,9 @@ function Turn({ questionId, question }: { questionId: string; question: string }
             <Cites cites={a.answer.cites ?? []} />
             <Text size="xs" c="dimmed">
               {pageProvenance(a)}.
+              {!TRIAL && a.ensMessageId
+                ? ` Its run is message ${a.ensMessageId} in the Management Portal.`
+                : ''}
             </Text>
           </Stack>
         ) : refused ? (
@@ -170,7 +186,7 @@ function Turn({ questionId, question }: { questionId: string; question: string }
  * spend the budget (403 live_agents_only), no model answers here (409 no_model), or the trial has no sample answer
  * (503 no_service, worded in the trial's own words).
  */
-function AskError({ error }: { error: unknown }) {
+export function AskError({ error }: { error: unknown }) {
   const settings = useSettings().data;
   const refused = liveRefusal(error, settings);
   if (refused) return <LiveUnavailableNotice state={refused} role="status" />;
@@ -193,42 +209,6 @@ function AskError({ error }: { error: unknown }) {
       </Alert>
     );
   return <ErrorAlert error={error} title="The question was not asked" />;
-}
-
-/** Whether the person may ask about the page, and if not, why. */
-interface PageAccess {
-  /** A question goes to the server (live, or the trial's mock for its suggested questions). */
-  open: boolean;
-  /** The free text box takes a question of one's own. */
-  free: boolean;
-  why: string;
-  badge?: string;
-  trial?: boolean;
-}
-
-/**
- * Who may ask: in the trial, the suggested questions (the mock answers them) and no question of one's own; elsewhere the
- * operator role and the live agents' resource (the server answers 403 to anyone else, so the panel says so first) and a
- * model to answer (a configured provider, or the API mimic on a test instance).
- */
-function usePageAccess(): PageAccess {
-  const me = useMe().data;
-  const s = useSettings().data;
-  // The trial's demo role is the live demo's public user, who has no live agents: as on the live demo, where a page has no
-  // recorded answers and the server answers 403, its suggested questions are not offered
-  if (TRIAL && me?.can?.liveAgents === false)
-    return { open: false, free: false, why: PAGE_JUDGES_ONLY, badge: 'Judges only' };
-  if (TRIAL) return { open: true, free: false, trial: true, why: 'Needs a real model: not in the trial.' };
-  if (!me?.operator) return { open: false, free: false, why: 'Asking needs the operator role.' };
-  if (me.can?.liveAgents === false)
-    return { open: false, free: false, why: PAGE_JUDGES_ONLY, badge: 'Judges only' };
-  if (s && !s.providerConfigured && !s.mock)
-    return {
-      open: false,
-      free: false,
-      why: 'Live answers need a model key, and none is configured here. The guide below says what this page is and what to try.',
-    };
-  return { open: true, free: true, why: '' };
 }
 
 /** The written guide to the page: what it is and what to try next, with links. */
@@ -263,6 +243,9 @@ export function PageChat({ page }: { page: string }) {
   const guide = guideFor(page);
   const ask = useAskPageQuestion();
   const asked = useAssistant((s) => s.threads[page]) ?? NO_ASKED;
+  // "Ask Shutter about this" on one of the page's questions: shown first, its own question and answer with it
+  const focus = useAssistant((s) => (s.focus?.page === page ? s.focus : null));
+  const thread = focus ? asked.filter((a) => a.question !== focus.question) : asked;
   const addAsked = useAssistant((s) => s.addAsked);
   const [text, setText] = useState('');
   const settings = useSettings().data;
@@ -292,6 +275,11 @@ export function PageChat({ page }: { page: string }) {
           Answers explain what is on this page. They never change a case, a setting or a receiver.
         </Text>
       </Group>
+      {focus ? (
+        <Suspense fallback={<Loader size="sm" aria-label="Opening the question" />}>
+          <FocusAsk key={`${focus.id} ${focus.question}`} focus={focus} />
+        </Suspense>
+      ) : null}
       <Stack gap="sm">
         <Text size="sm" fw={600} id="ask-page-chips">
           Suggested questions about {guide.title}
@@ -326,12 +314,12 @@ export function PageChat({ page }: { page: string }) {
       </Stack>
       {ask.isError ? <AskError error={ask.error} /> : null}
       <div aria-live="polite">
-        {asked.length ? (
+        {thread.length ? (
           <Stack gap="md" component="section" aria-labelledby="ask-page-thread" className="ask-thread" p="md">
             <Title order={3} id="ask-page-thread">
               Conversation
             </Title>
-            {asked.map((a) => (
+            {thread.map((a) => (
               <Turn key={a.questionId} questionId={a.questionId} question={a.question} />
             ))}
           </Stack>

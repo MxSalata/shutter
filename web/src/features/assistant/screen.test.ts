@@ -8,6 +8,7 @@ import {
   pageNameOf,
   summariseScreen,
   summarySize,
+  withFocus,
 } from './screen';
 
 /** A page as the main region holds it. */
@@ -131,5 +132,58 @@ describe('the summary of the screen', () => {
 
   it('is empty, but for the page, with no page to read', () => {
     expect(summariseScreen(null, 'home')).toEqual({ page: 'home', title: '', headings: [], items: [] });
+  });
+});
+
+describe('the question "Ask Shutter about this" was pressed on', () => {
+  const focus = {
+    page: 'site-profile',
+    id: 'site-recovery-mode',
+    title: 'Enable recovery',
+    question: 'What would enabling recovery here change, and what stays the same?',
+    answer: 'Off: shadow mode',
+    consequence: 'x'.repeat(300),
+    written: 'Not sent: the written explanation stays in the page.',
+  };
+
+  it('goes in the summary as its title, the answer and what it does, each cut at the limit, and nothing else of it', () => {
+    const s = withFocus(
+      summariseScreen(page('<h1>Site profile</h1><h2>Recovery</h2>'), 'site-profile'),
+      focus,
+    );
+    expect(s.focus).toEqual({
+      question: 'Enable recovery',
+      answer: 'Off: shadow mode',
+      consequence: 'x'.repeat(MAX_TEXT),
+      chosenBy:
+        'A person, with the control on the page. Ask Shutter explains the answer and does not choose it.',
+    });
+    expect(JSON.stringify(s)).not.toContain('written explanation');
+    expect(s.headings).toEqual(['Recovery']);
+  });
+
+  it('stays when a full page is fitted: items and headings give way first', () => {
+    const links = Array.from(
+      { length: 40 },
+      (_, i) => `<a href="#/cases/C-${String(i).padStart(6, '0')}">Case ${'y'.repeat(150)}</a>`,
+    );
+    const s = withFocus(
+      summariseScreen(page(`<h1>Site profile</h1>${links.join('')}`), 'site-profile'),
+      focus,
+    );
+    expect(summarySize(s)).toBeLessThanOrEqual(CONTEXT_MAX_CHARS);
+    expect(s.focus?.question).toBe('Enable recovery');
+    expect(s.items.length).toBeLessThan(40);
+  });
+
+  it('leaves out what Ask Shutter shows under a question in the page', () => {
+    const s = summariseScreen(
+      page(
+        '<h1>Site profile</h1><h2>Recovery</h2><section data-ask-inline><h3>What would enabling recovery change?</h3><a href="#/cases/C-000001">Case C-000001</a></section>',
+      ),
+      'site-profile',
+    );
+    expect(s.headings).toEqual(['Recovery']);
+    expect(s.items).toEqual([]);
   });
 });

@@ -18,6 +18,7 @@ import { SHOW_EVIDENCE } from '@/features/cases/case/evidenceLinks';
 import { ASSISTANT_BUTTON_ID } from './HeaderAssistantButton';
 import {
   ASSISTANT_PANEL_ID,
+  askAboutButtonId,
   assistantTitle,
   useAssistantContext,
   useAssistantWide,
@@ -133,21 +134,26 @@ function Sheet({ title, onClose, children }: { title: string; onClose: () => voi
   );
 }
 
-/** Focus on the button that opens the panel: a case's own, else the header's. */
-function focusOpener() {
+/**
+ * Focus on the button that opened the panel: a page question's "Ask Shutter about this" (`from`, its question's id) while
+ * it is on the page, else a case's own, else the header's.
+ */
+function focusOpener(from?: string) {
+  const asked = from ? document.getElementById(askAboutButtonId(from)) : null;
   const own = document.querySelector<HTMLElement>('[data-tour-action="ask-open"]');
-  (own ?? document.getElementById(ASSISTANT_BUTTON_ID))?.focus();
+  (asked ?? own ?? document.getElementById(ASSISTANT_BUTTON_ID))?.focus();
 }
 
 /**
- * Closes the panel; focus goes back to the button that opens it once it has closed. The drawer does the same again when
+ * Closes the panel; focus goes back to the button that opened it once it has closed. The drawer does the same again when
  * its closing transition ends, since its focus trap holds focus until then.
  */
 function useClosePanel() {
   const setOpen = useAssistant((s) => s.setOpen);
   return useCallback(() => {
+    const from = useAssistant.getState().focus?.id;
     setOpen(false);
-    window.setTimeout(focusOpener, 0);
+    window.setTimeout(() => focusOpener(from), 0);
   }, [setOpen]);
 }
 

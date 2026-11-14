@@ -273,8 +273,8 @@ describe('Ask Shutter about a page', () => {
     const q = { mode: 'live', model: 'claude-opus-5-5', answeredAt: '2026-11-08T10:00:00Z' };
     expect(pageProvenance(q)).toBe(PAGE_SAMPLE_LABEL);
     env.trial = false;
-    expect(pageProvenance(q)).toBe('Answered live with claude-opus-5-5');
+    expect(pageProvenance(q)).toBe('Answered live by the Explain agent on IRIS AI Hub, with claude-opus-5-5');
     expect(pageProvenance({ ...q, model: 'mock' })).toBe('Answered by the API mimic: no model was called');
-    expect(pageProvenance({ ...q, model: null })).toBe('Answered live');
+    expect(pageProvenance({ ...q, model: null })).toBe('Answered live by the Explain agent on IRIS AI Hub');
   });
 });
