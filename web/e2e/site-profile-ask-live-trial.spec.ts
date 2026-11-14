@@ -17,7 +17,8 @@ const ME = {
   can: { operate: true, approve: true, configure: true, scenarios: true, liveAgents: true },
 };
 
-const QUESTION = 'What does tier 2 mean for Downstream Out, and what would another tier change?';
+const QUESTION =
+  'What does tier 2 mean for Downstream Out, and what would each other tier change? Explain each; do not recommend one.';
 const ANSWER =
   "Tier 2 is operations: the policy's tier 2 row decides who releases a write to Downstream Out. Tier 3 would follow the clinical safety row instead.";
 
@@ -86,11 +87,18 @@ test('asks the tier’s question live, attributes the answer to the AI Hub agent
   const panel = page.getByRole('region', { name: 'Ask Shutter', exact: true });
   const card = panel.getByRole('region', { name: 'The tier of Downstream Out' });
   await expect(card.getByText(ANSWER)).toBeVisible();
+  // The trace: the run's message, one click into the Management Portal, as a case's agent runs are
+  const run = card.getByRole('link', { name: 'message 4321' });
+  await expect(run).toHaveAttribute(
+    'href',
+    '/csp/healthshare/shutter/EnsPortal.MessageContents.zen?HeaderClass=Ens.MessageHeader&HeaderId=4321',
+  );
+  await expect(run).toHaveAttribute('target', '_blank');
   await expect(
-    card.getByText(
-      'Answered live by the Explain agent on IRIS AI Hub, with claude-opus-5-5. Its run is message 4321 in the Management Portal.',
-    ),
-  ).toBeVisible();
+    card.getByText(/^Answered live by the Explain agent on IRIS AI Hub, with claude-opus-5-5\./),
+  ).toHaveText(
+    'Answered live by the Explain agent on IRIS AI Hub, with claude-opus-5-5. Its run is message 4321 in the Management Portal.',
+  );
   await expect(card.getByText(/Live questions and the agent's trace are logged/)).toBeVisible();
   await expect(card.getByRole('button', { name: 'Written explanation' })).toHaveAttribute(
     'aria-expanded',
@@ -114,4 +122,10 @@ test('asks the tier’s question live, attributes the answer to the AI Hub agent
   await expect(receiver.getByRole('radio', { name: /2, operations/ })).toBeChecked();
   await expect(page.getByRole('region', { name: 'Unsaved changes' })).toHaveCount(0);
   expect(await audit(page)).toEqual([]);
+  // A changed answer shows in the panel and is asked about only when the person presses
+  await receiver.getByRole('radio', { name: /3, clinical safety/ }).check();
+  await expect(card).toContainText('On the page: Tier 3, clinical safety');
+  await expect(card.getByRole('button', { name: 'Ask about this answer' })).toBeVisible();
+  await expect(button).toHaveAttribute('aria-expanded', 'true');
+  expect(sent).toHaveLength(1);
 });
