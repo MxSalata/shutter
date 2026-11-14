@@ -177,6 +177,8 @@ ClassMethod InstallStatus(root As %String = "", demo As %Boolean = 1, production
         // The compile above rewrote the definition from the package: the receivers' connector items go back (v1.42).
         If 'demo Set sc = ##class(Shutter.Util.Onboard).RestoreReceiverItems() Quit:$$$ISERR(sc)
         Set sc = ##class(Shutter.FHIR.Install).RestoreItems() Quit:$$$ISERR(sc)
+        // Scenario S35: the demo's FHIR receiver entry, its four items and the proof of an in-process conformance run.
+        If demo && ##class(%Dictionary.CompiledClass).%ExistsId("FHIRFacade.Kit") Set sc = ##class(Shutter.FHIR.Install).Demo(root _ "knowledge/site/profile.json") Quit:$$$ISERR(sc)
         If demo Set sc = ..InstallDemoHospital(ns) Quit:$$$ISERR(sc)
     } Catch ex {
         Set sc = ex.AsStatus()

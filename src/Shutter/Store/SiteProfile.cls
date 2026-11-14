@@ -85,7 +85,7 @@ ClassMethod DemoInstall() As %Boolean
 /// empty gets one draft to fill in, and a draft is never written to. Changes p and returns it.
 ClassMethod ForSite(p As %DynamicObject) As %DynamicObject
 {
-    Set demoNames = $LISTBUILD($PARAMETER("Shutter.Production", "RECEIVER"), "Records Out")
+    Set demoNames = $LISTBUILD($PARAMETER("Shutter.Production", "RECEIVER"), "Records Out", "FHIR Ward Out")
     Set json = "Shutter.Util.Json"
     Set keep = [], list = p.%Get("receivers")
     If $ISOBJECT(list) {
