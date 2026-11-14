@@ -7,6 +7,7 @@ import {
   cohortLabel,
   FIRST_RELEASE,
   PROOF,
+  recordedBefore,
   playedFor,
   playedResult,
   proofFrom,
@@ -147,10 +148,12 @@ describe('the cohort and release said beside the figures', () => {
   it("names the catalogue demonstration as recorded before release 1.0.0, from the runs' own dates", () => {
     expect(PROOF.recordedFrom! < PROOF.recordedTo!).toBe(true);
     expect(PROOF.recordedTo!.slice(0, 10) < FIRST_RELEASE.day).toBe(true);
+    expect(recordedBefore(PROOF)).toBe('before release 1.0.0');
     expect(cohortLabel(PROOF)).toBe('Catalogue demonstration, recorded before release 1.0.0');
   });
 
   it('gives the cohort alone when the runs are not dated, or one is as late as the release', () => {
+    expect(recordedBefore({})).toBe('');
     expect(cohortLabel({})).toBe(CATALOGUE_COHORT);
     expect(cohortLabel({ recordedTo: null })).toBe(CATALOGUE_COHORT);
     expect(cohortLabel({ recordedTo: `${FIRST_RELEASE.day}T00:00:00Z` })).toBe(CATALOGUE_COHORT);

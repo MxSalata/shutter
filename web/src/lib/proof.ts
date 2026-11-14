@@ -111,15 +111,21 @@ export const CATALOGUE_COHORT = 'Catalogue demonstration';
 export const FIRST_RELEASE = { version: '1.0.0', day: '2026-11-06' } as const;
 
 /**
- * The cohort with its release: "Catalogue demonstration, recorded before release 1.0.0" when the evaluation's last run
- * started before that release's day, so the release is read from the runs' own dates, never typed. An evaluation that
- * does not date its runs, or dates one later, gets the cohort's name alone.
+ * "before release 1.0.0" when the evaluation's last run started before that release's day, so the release is read from
+ * the runs' own dates, never typed; nothing for an evaluation that does not date its runs, or dates one later.
+ */
+export function recordedBefore(proof: { recordedTo?: string | null }): string {
+  const last = proof.recordedTo ? proof.recordedTo.slice(0, 10) : '';
+  return last && last < FIRST_RELEASE.day ? `before release ${FIRST_RELEASE.version}` : '';
+}
+
+/**
+ * The cohort with its release: "Catalogue demonstration, recorded before release 1.0.0", or the cohort's name alone
+ * when the runs' dates do not give the release.
  */
 export function cohortLabel(proof: { recordedTo?: string | null }): string {
-  const last = proof.recordedTo ? proof.recordedTo.slice(0, 10) : '';
-  return last && last < FIRST_RELEASE.day
-    ? `${CATALOGUE_COHORT}, recorded before release ${FIRST_RELEASE.version}`
-    : CATALOGUE_COHORT;
+  const before = recordedBefore(proof);
+  return before ? `${CATALOGUE_COHORT}, recorded ${before}` : CATALOGUE_COHORT;
 }
 
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
