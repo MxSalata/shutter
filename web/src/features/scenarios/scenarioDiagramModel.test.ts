@@ -33,7 +33,10 @@ function expectedWrites(e: ScenarioExpected): number {
 /** An HL7 file as text: a fault with an operation_key covers the message that names its patient, and no other. */
 const fileOf = (file: string) => files[Object.keys(files).find((path) => path.endsWith(`/${file}`))!];
 
-/** The deliveries that fail with no fault covering them: the receiver is up and said no. */
+/**
+ * The deliveries that fail with no fault covering them: the receiver is up and said no. A delivery on the demo
+ * hospital's FHIR ward feed is not one: its HL7 link never opens a connection, so nothing said no (S35).
+ */
 function refusedSteps(s: Scenario) {
   let on = false;
   let key = '';
@@ -42,13 +45,18 @@ function refusedSteps(s: Scenario) {
       on = step.fault !== 'off';
       key = step.operation_key?.split('^')[2] ?? '';
     }
+    if (step.route === 'fhir_ward') return false;
     return step.expect === 'delivery_fails' && !(on && (!key || fileOf(step.file!).includes(key)));
   });
 }
 
+/** The deliveries on the FHIR ward feed that fail: each is drawn after a link that is down. */
+const linkDownSteps = (s: Scenario) =>
+  s.steps.filter((step) => step.route === 'fhir_ward' && step.expect === 'delivery_fails');
+
 describe('scenarioDiagram', () => {
-  it('covers all 36 scenarios', () => {
-    expect(scenarios).toHaveLength(36);
+  it('covers all 37 scenarios', () => {
+    expect(scenarios).toHaveLength(37);
     for (const s of scenarios) expect(diagram(s.id), s.id).not.toBeNull();
   });
 
@@ -68,7 +76,14 @@ describe('scenarioDiagram', () => {
         else if (e.disposition === 'escalate' || e.final_reason === 'OCCUPANT_CASE_FAILED')
           expect(end.kind, at).toBe('person');
         else expect(end.kind, at).toBe('none');
-        if (writes) {
+        if (writes && e.fhir) {
+          // A FHIR receiver takes one version-aware update, and a person approves it in every mode
+          expect(end.label, at).toBe('1 update with If-Match');
+          expect(end.caption, at).toBe('after gate checks and approval');
+          expect(end.words, at).toMatch(/If-Match/);
+          expect(end.words, at).toMatch(/a person's approval$/);
+          expect(end.words, at).not.toMatch(/conditional/);
+        } else if (writes) {
           expect(end.label, at).toBe(`${writes} conditional write${writes === 1 ? '' : 's'}`);
           // A write waits for the gate's checks and a release; only Site policy's table may release it with no person
           const release =
@@ -146,12 +161,37 @@ describe('scenarioDiagram', () => {
       const capability = s.steps.some((step) => step.capabilities) ? 1 : 0;
       if (nodes.length && diagram(s.id).nodes.some((n) => n.kind === 'messages'))
         expect(nodes, s.id).toHaveLength(1);
-      else expect(nodes, s.id).toHaveLength(faults.length + capability);
+      else expect(nodes, s.id).toHaveLength(faults.length + capability + linkDownSteps(s).length);
       for (const n of nodes) expect(n.kind === 'fault' && n.caption, s.id).not.toBe('fault');
     }
     expect(diagram('S11').nodes[0]).toMatchObject({ kind: 'fault', caption: 'down ×2' });
     expect(diagram('S10').nodes.at(-1)).toMatchObject({ kind: 'fault', caption: 'no guard' });
     expect(diagram('S22').nodes[1]).toMatchObject({ kind: 'fault', caption: '2 down' });
+  });
+
+  it("draws S35's move as failing after a link that is down, and ends it with one update with If-Match", () => {
+    const nodes = diagram('S35', 'policy').nodes;
+    expect(nodes).toEqual([
+      {
+        kind: 'fault',
+        caption: 'link down',
+        words: 'the HL7 link to the ward system never opens a connection',
+      },
+      { kind: 'message', event: 'A02', plain: 'Move', count: 1, mark: 'fails' },
+    ]);
+    expect(diagram('S35', 'policy').label).toBe(
+      "S35, Site policy mode, in a diagram: the HL7 link to the ward system never opens a connection; move fails. Expected: one version-aware update (If-Match), after the gate's checks and a person's approval.",
+    );
+    for (const mode of MODES)
+      expect(endOf(byId('S35'), mode)).toEqual({
+        kind: 'write',
+        writes: 1,
+        label: '1 update with If-Match',
+        caption: 'after gate checks and approval',
+        words: "one version-aware update (If-Match), after the gate's checks and a person's approval",
+      });
+    // Only S35 plays on the FHIR ward feed today
+    expect(scenarios.filter((s) => linkDownSteps(s).length).map((s) => s.id)).toEqual(['S35']);
   });
 
   it("draws a person's own change at the receiver only where a step makes one", () => {

@@ -436,6 +436,25 @@ describe('ScenariosPage', () => {
     expect(within(s2).getByText(/^Ends /)).toBeInTheDocument();
   });
 
+  it("says S35 ends in one update with If-Match, found in the Encounter's history by Shutter's marker", async () => {
+    const s35 = scenarioDefs.find((d) => d.id === 'S35')!;
+    server.use(
+      http.get('/api/shutter/scenarios', () =>
+        HttpResponse.json({ scenarios: [{ ...s35, latestCase: null }], run: null }),
+      ),
+    );
+    renderScenarios();
+    await userEvent.click(await screen.findByRole('radio', { name: 'Site policy' }));
+    const row = await card('S35');
+    expect(within(row).getAllByText('1 update with If-Match').length).toBeGreaterThan(0);
+    expect(
+      within(row).getByText(
+        "Ends with the Encounter at WARD-B (Location/ward-b), found in its history by Shutter's marker.",
+      ),
+    ).toBeInTheDocument();
+    expect(within(row).queryByText(/conditional/)).not.toBeInTheDocument();
+  });
+
   it('offers runs on a demo instance', async () => {
     const client = renderScenarios();
     await waitFor(() => expect(client.getQueryState(keys.health)?.status).toBe('success'));
