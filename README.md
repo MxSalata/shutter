@@ -9,31 +9,22 @@
   <a href="https://github.com/MxSalata/shutter/tags"><img src="https://img.shields.io/github/v/tag/MxSalata/shutter?label=version&color=0e7299" alt="Version" /></a>
   <a href="https://mxsalata.github.io/shutter/"><img src="https://img.shields.io/badge/trial-try%20it-45acd1" alt="Trial" /></a>
   <a href="https://shutter.mxsalata.com"><img src="https://img.shields.io/badge/online%20demo-live-2f9e6b" alt="Online demo" /></a>
-  <a href="https://github.com/MxSalata/shutter#try-it"><img src="https://img.shields.io/badge/docker-compose%20up-2496ed?logo=docker&logoColor=white" alt="Docker" /></a>
-  <a href="https://github.com/MxSalata/shutter#ipm-on-a-stock-ai-hub-image"><img src="https://img.shields.io/badge/IPM-iris--shutter-095c7c" alt="IPM package" /></a>
-  <a href="https://github.com/MxSalata/shutter/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT licence" /></a>
 </p>
 <p align="center">
   <a href="https://mxsalata.github.io/shutter/"><b>Trial</b> (no IRIS)</a> ·
   <a href="https://shutter.mxsalata.com"><b>Online demo</b> (real IRIS)</a> ·
   <a href="https://github.com/MxSalata/shutter#for-judges">For judges</a> ·
-  <a href="https://github.com/MxSalata/shutter#try-it">Install</a> ·
-  <a href="https://github.com/MxSalata/shutter#how-it-works">How it works</a> ·
-  <a href="https://github.com/MxSalata/shutter#where-the-agents-sit">The agents</a> ·
   <a href="https://github.com/MxSalata/shutter#what-has-been-measured">Results</a> ·
-  <a href="https://github.com/MxSalata/shutter#documents">Documents</a> ·
-  <a href="https://github.com/MxSalata/shutter#pathology">Pathology</a> ·
-  <a href="https://github.com/MxSalata/shutter#how-it-is-tested">Testing</a> ·
+  <a href="https://github.com/MxSalata/shutter#where-the-agents-sit">The agents</a> ·
+  <a href="https://youtu.be/oGW7u9RKf9M">Video</a>
+</p>
+<p align="center"><sub>
+  <a href="https://github.com/MxSalata/shutter#try-it">Install (Docker or IPM)</a> ·
   <a href="https://github.com/MxSalata/shutter#limits-plainly">Limits</a> ·
-  <a href="https://github.com/MxSalata/shutter#technology-bonuses">Bonuses</a>
-</p>
-<p align="center">
   <a href="https://openexchange.intersystems.com/package/Shutter">Open Exchange</a> ·
-  <a href="https://github.com/MxSalata/shutter#technology-bonuses">Articles</a> ·
   <a href="https://github.com/MxSalata/shutter/blob/main/CHANGELOG.md">What's new</a> ·
-  <a href="https://github.com/MxSalata/shutter/releases">Releases</a> ·
-  <a href="https://youtu.be/oGW7u9RKf9M">Video</a> (<a href="https://github.com/MxSalata/shutter/releases/download/v1.4.4/shutter-demo.mp4">MP4</a>)
-</p>
+  <a href="https://github.com/MxSalata/shutter/releases/download/v1.4.4/shutter-demo.mp4">Video (MP4)</a>
+</sub></p>
 
 **When a hospital's HL7 delivery fails, the usual fix is Resend, and when two systems move a patient at the same moment, that resend can write over the bed manager's newer ward. Shutter's IRIS AI Hub agents decide how to put the failure right; a deterministic gate decides whether anything is written.**
 
@@ -51,6 +42,18 @@ There are two recovery paths, with different guarantees:
 ![S8 played twice on the same evidence: Rules only, exempted on purpose from one gate check, writes WARD-B over the bed manager's WARD-C; the board escalates and writes nothing](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/s8-rules-and-board.png)
 
 *S8, the same failure played twice on the same evidence. The Rules only run is exempted on purpose from one gate check, `ENTRY_NOT_NAMED_WRITE`, to show what a plain resend writes: WARD-B over the bed manager's WARD-C. The board escalates and writes nothing. On a real case the whole gate runs and holds that resend, so "pass every check" in the picture means every check but the one lifted.*
+
+
+### In 60 seconds
+
+- **What the agents decide:** resend a failed HL7 delivery, close it as already delivered, or stop and escalate with nothing written. Four `%AI.Agent` business operations, three specialists and a coordinator, read sealed evidence through typed tools; the coordinator submits the plan.
+- **What permits a write:** a deterministic gate, then an approval bound to the plan's digest and the case's version. The receiver is read again just before a conditional write, and its own history confirms the result. IRIS Workflow carries the approval, `%AI.Policy` authorisation holds each run to its own case and its audit logs every tool call, and Visual Trace shows every agent's lane.
+- **What the test found:** on release 1.4.3, twelve held-out synthetic cases with three runs of each per mode, the board's mean loss was 0.167 against 4.000 for rules only, and no mode executed a wrong write: the gate stopped the bad proposals. A single investigator matched the board as settled (0.667 by the unchanged grader) at about a quarter of the cost per run, and both modes ship. [The results](https://github.com/MxSalata/shutter#what-has-been-measured)
+- **Why I built it:** the failures above are the ones I met in my interoperability work with 28 NHS hospitals. While building Shutter I filed AI Hub bug reports [#11](https://github.com/intersystems-community/ai-hub-eap-bugreports/issues/11), [#12](https://github.com/intersystems-community/ai-hub-eap-bugreports/issues/12), [#22](https://github.com/intersystems-community/ai-hub-eap-bugreports/issues/22) and [#23](https://github.com/intersystems-community/ai-hub-eap-bugreports/issues/23).
+
+![S8 in the Visual Trace: case workflow, evidence, board members and gate](https://raw.githubusercontent.com/MxSalata/shutter/main/web/public/s8-visual-trace.png)
+
+*S8's case in IRIS's Visual Trace: each board member has its own lane and each tool call its own step.*
 
 ## For judges
 
@@ -335,8 +338,6 @@ Each technology has a job in the workflow.
 | **Video** | [Demo video on YouTube](https://youtu.be/oGW7u9RKf9M); the [MP4 with captions](https://github.com/MxSalata/shutter/releases/download/v1.4.4/shutter-demo.mp4) is attached to the [1.4.4 release](https://github.com/MxSalata/shutter/releases/tag/v1.4.4) |
 
 **See the tracing idea in one case:** run S8 in Board mode, then choose **In IRIS: Message trace**. Each agent has its own lane, each tool call its own step, and the response records model, mode, tokens and tool calls. Replay is explicitly marked. In the trial this opens a screenshot; on an installed instance it opens the session's Visual Trace.
-
-![S8 in the Visual Trace: case workflow, evidence, board members and gate](https://raw.githubusercontent.com/MxSalata/shutter/main/web/public/s8-visual-trace.png)
 
 [AI Hub features, constraints and implementation experience](https://github.com/MxSalata/shutter/blob/main/docs/readme/building-on-ai-hub.md)
 
