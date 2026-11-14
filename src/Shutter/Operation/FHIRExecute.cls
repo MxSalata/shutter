@@ -10,7 +10,8 @@
 /// <li>the admission (<class>Shutter.Util.RecoveryControl</class>): shadow mode and the stop refuse here;</li>
 /// <li>its own read of the Encounter through its own adapter, which must give the ETag and the body the approval
 /// rests on;</li>
-/// <li>the fence row goes from unsent to sent, before the socket;</li>
+/// <li>the entry's switch, shadow mode and the stop asked once more, since that read can take a while; then the
+/// fence row goes from unsent to sent, before the socket;</li>
 /// <li>one PUT with If-Match, the approved body as UTF-8 bytes;</li>
 /// <li>the answer is classified and recorded, and the permit of the admission is finished on every path.</li>
 /// </ol>
@@ -133,6 +134,12 @@ Method Write(request As Shutter.Msg.FHIRWrite, response As Shutter.Msg.FHIRWrite
     }
     If part.etag '= binding.ExpectedEtag Do ..Refuse(response, "fhir_endpoint_differs", "this item's own read gives the Encounter at " _ $SELECT(part.etag = "": "no ETag", 1: "ETag " _ part.etag) _ ", not at the version that was approved") Return
     If ##class(Shutter.FHIR.Plan).BodyDigest(part.body) '= ##class(Shutter.FHIR.Plan).BodyDigest(binding.BaseBody) Do ..Refuse(response, "fhir_endpoint_differs", "this item's own read gives another body than the one the approval rests on, under the same ETag") Return
+
+    // The admission came before that read, and the read takes as long as the receiver takes. The entry's switch,
+    // shadow mode and the stop are asked once more here, where nothing has left yet.
+    If '##class(Shutter.FHIR.Profile).Enabled(case.Receiver) Do ..Refuse(response, "fhir_recovery_disabled", "the receiver's entry in the site profile turned FHIR recovery off while the Encounter was read") Return
+    Set late = ##class(Shutter.Util.RecoveryControl).Refusal(.code)
+    If late '= "" Do ..Refuse(response, $EXTRACT(code, 1, 64), late) Return
 
     // ---- 6. Unsent to sent, once, before the socket ----
     If 'fence.MarkSent() {

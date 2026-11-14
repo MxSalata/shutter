@@ -43,6 +43,10 @@ Property Watched As %String;
 
 Property Moments As %String(MAXLEN = "");
 
+/// What changes while the item's own read is on its way (TestAStopDuringItsOwnReadSendsNothing): stop, shadow or
+/// switch, or "" for nothing.
+Property During As %String;
+
 Method OnBeforeOneTest(testname As %String) As %Status
 {
     If ..Loaded() Do $CLASSMETHOD(..#SERVICE, "Reset")
@@ -532,6 +536,31 @@ Method TestTheStepsInTheirOrder()
     Do ..NoneAdmitted()
 }
 
+/// The admission comes before this item's own read, and that read takes as long as the receiver takes. A stop,
+/// shadow mode or the entry's switch that comes while it waits still holds the update: nothing is sent, the fence
+/// row stays unsent, and the permit is finished.
+Method TestAStopDuringItsOwnReadSendsNothing()
+{
+    Quit:'..Ready()
+    For what = "stop", "shadow", "switch" {
+        Do ..ChangeEntry("", "enabled")
+        Set request = ..Fixture()
+        Set op = ..Op(.http)
+        Set ..Inner = http, ..Watched = request.ApprovalId, ..Moments = "", ..During = what
+        Set op.Adapter = $THIS
+        Set response = ..Run(op, request)
+        Set op.Adapter = http, ..Inner = "", ..During = ""
+        Do $$$AssertEquals(..Answer(response), "refused|0|0|" _ $CASE(what, "stop": "recovery_stopped", "shadow": "recovery_shadow", : "fhir_recovery_disabled"), what _ " during the read refuses (" _ response.Error _ ")")
+        Do $$$AssertEquals(..Verbs(http), "GET", what _ ": the read and no PUT")
+        Do $$$AssertEquals(##class(Shutter.Store.FHIRAttempt).ForApproval(request.ApprovalId).State, "unsent", what _ ": the fence row stays unsent")
+        Set c = ##class(Shutter.Util.RecoveryControl).Control()
+        Set c.StopLatched = 0, c.StoppedAt = "", c.StoppedBy = "", c.StopReason = ""
+        Do $$$AssertStatusOK(c.%Save(), what _ ": no stop is left")
+    }
+    Do $$$AssertEquals(..Permits().%Size() _ " " _ ..Permits("answered").%Size(), "3 3", "each refusal finished its permit as answered")
+    Do ..NoneAdmitted()
+}
+
 /// The connector's last line for further messages for the patient, read at the moment of the write: a message that
 /// reached the engine after the plan refuses the update with nothing sent.
 Method TestTheConnectorsLastLineSendsNothing()
@@ -562,14 +591,25 @@ Method TestTheConnectorsLastLineSendsNothing()
 
 // ---- helpers ----
 
-/// The test as the operation's adapter (TestTheStepsInTheirOrder): notes the watched approval's fence row and the
-/// permits still admitted at the moment of the request, then hands the request to the adapter that answers.
+/// The test as the operation's adapter (TestTheStepsInTheirOrder, TestAStopDuringItsOwnReadSendsNothing): notes the
+/// watched approval's fence row and the permits still admitted at the moment of the request, makes the change a
+/// test asked for during the read, then hands the request to the adapter that answers.
 Method SendFormDataArray(Output pHttpResponse As %Net.HttpResponse, pOp As %String, pHttpRequest As %Net.HttpRequest, pFormVarNames As %String = "", ByRef pData, pURL As %String = "") As %Status
 {
     Set state = "none"
     Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT State FROM Shutter_Store.FHIRAttempt WHERE ApprovalId = ?", ..Watched)
     If rs.%Next() Set state = rs.%Get("State")
     Set ..Moments = ..Moments _ $SELECT(..Moments = "": "", 1: " | ") _ pOp _ ": fence " _ state _ ", permits admitted " _ ..Permits("admitted").%Size()
+    // What a person does while the read is on its way.
+    If (pOp = "GET") && (..During = "stop") {
+        Set c = ##class(Shutter.Util.RecoveryControl).Control()
+        Set c.StopLatched = 1, c.StoppedAt = ##class(Shutter.Util.Time).NowUTC(), c.StoppedBy = "ut.approver", c.StopReason = "unit test"
+        Do c.%Save()
+    } ElseIf (pOp = "GET") && (..During = "shadow") {
+        Do ..ChangeEntry("", "shadow")
+    } ElseIf (pOp = "GET") && (..During = "switch") {
+        Do ..ChangeEntry({"recovery_enabled": false}, "enabled")
+    }
     Quit ..Inner.SendFormDataArray(.pHttpResponse, pOp, pHttpRequest, pFormVarNames, .pData, pURL)
 }
 
