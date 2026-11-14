@@ -54,15 +54,15 @@ the case page (`POST /api/shutter/cases/{id}/escalations` through the API); unti
 - **Goal:** see what a failed delivery gives your team as a case, before anything is installed. About ten minutes, in the
   [trial](https://mxsalata.github.io/shutter/), which opens signed in as an approver and sends nothing to IRIS.
 - **Steps:**
-  1. Open the trial, choose **Explore on my own**, then **Technical** in the header: codes and UTC times appear beside the
-     plain words.
+  1. Open the trial, choose **Explore on my own**, then **Technical** in the header (on a phone, **Detail: Plain**, then
+     **Technical**): codes and UTC times appear beside the plain words.
   2. Open **Health**: the checks an installed Shutter runs on itself, as the recorded instance passed them.
-  3. Open **Site profile**, then **Receivers** and **Show the receivers**: each receiver the production feeds, with the
-     category and the tier that decide what Shutter may do there.
+  3. Open **Site profile**: under **Receivers**, each receiver the production feeds, with the category and the tier that
+     decide what Shutter may do there.
   4. Open **Cases**, press **Waiting for approval**, then open **C-000002**.
   5. Open **1. What failed**: the operation and what the receiver answered (HTTP 503, `ward_unavailable`).
-  6. Under **4. Gate and decision**, already open, press **At proposal, before the rehearsal**: each check of the plan,
-     with its result and reason code.
+  6. Under **4. Gate and decision**, **At proposal, before the rehearsal** is already open in Technical: each check of the
+     plan, with its result and reason code.
   7. Open the **Audit trail** tab: each step of the case, with its time.
 - **Done when:** Health says every core check passed (7 of 7), and the gate at proposal says "Passed 10 of 10 applicable
   checks".
