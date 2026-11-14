@@ -368,6 +368,18 @@ describe('ScenariosPage', () => {
     expect(within(s).getByText('Nothing written')).toBeInTheDocument();
   });
 
+  it("names the mode a featured card's latest case ran in when none ran in the card's mode", async () => {
+    server.use(withLatest('S8', 'C-000021'));
+    renderScenarios();
+    await userEvent.click(await screen.findByRole('radio', { name: 'Single investigator' }));
+    const first = screen.getByRole('region', { name: 'Try these three first' });
+    expect(
+      await within(first).findByText(
+        'C-000021 ran in Rules only; no Single investigator case is among the newest.',
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("keeps Run off while the last run's case is still working, and on once it waits on a person", async () => {
     const s2 = scenarioDefs.find((d) => d.id === 'S2')!;
     const run = { scenario: 'S2', mode: 'rules', startedAt: '', state: 'done', files: [], timeouts: [] };
@@ -608,7 +620,7 @@ describe('ScenariosPage, as each role has it', () => {
     expect(within(first).getAllByText('What it shows')).toHaveLength(3);
     expect(within(s15.closest('[data-first]')!).getByText('Board')).toBeInTheDocument();
     expect(within(first).queryByText(/Not played since the last reset/)).not.toBeInTheDocument();
-    expect(within(first).queryByText(/none in .* mode among the newest cases/)).not.toBeInTheDocument();
+    expect(within(first).queryByText(/case is among the newest/)).not.toBeInTheDocument();
     expect(within(first).queryByText(/S8|S20/)).not.toBeInTheDocument();
     // The catalogue entry S2's plan cites comes from the case, not from the page
     const cases = recording.cases as unknown as Record<

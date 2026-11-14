@@ -285,7 +285,8 @@ function SeeWithEntry({
 type Shown = Featured & {
   s: Scenario;
   inMode: CaseSummary | undefined;
-  latest: { caseId: string; state: string } | undefined;
+  /** Its mode when the case is among the newest cases read, so a card can say which mode its latest case ran in. */
+  latest: { caseId: string; state: string; mode?: string } | undefined;
   /** The card follows the mode chosen under Run mode, and names it on its Run. */
   follows?: boolean;
 };
@@ -373,7 +374,9 @@ function FirstActions({
       )}
       {latest && !inMode ? (
         <Text size="sm" c="dimmed">
-          Its latest case, in any mode: none in {modeName} mode among the newest cases.
+          {latest.mode && latest.mode in MODE_NAMES
+            ? `${latest.caseId} ran in ${MODE_NAMES[latest.mode as Mode]}; no ${modeName} case is among the newest.`
+            : `${latest.caseId} is its latest case; no ${modeName} case is among the newest.`}
         </Text>
       ) : null}
     </Stack>
@@ -433,8 +436,17 @@ export function TryFirst({
       .filter((f): f is Featured & { follows?: boolean; s: Scenario } => !!f.s)
       .map((f) => {
         const inMode = caseOf(cases, f.s.id, f.mode);
+        const recorded = f.s.latestCase;
         if (!demo)
-          return { ...f, inMode, latest: inMode ?? (f.s.latestCase ? { ...f.s.latestCase } : undefined) };
+          return {
+            ...f,
+            inMode,
+            latest:
+              inMode ??
+              (recorded
+                ? { ...recorded, mode: cases.find((c) => c.caseId === recorded.caseId)?.mode }
+                : undefined),
+          };
         // The demo: the case in the mode, else the latest in any mode as the card's own; none, the card in its own mode
         const found = inMode ?? caseOf(cases, f.s.id);
         return found
