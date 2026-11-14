@@ -212,6 +212,10 @@ ClassMethod Open(op As %DynamicObject, failureKind As %String, failureText As %S
         // An open case from before the last scenario reset belongs to an earlier run: close it.
         Set resetAt = $GET(^Shutter.Config("resetAt"))
         If (resetAt '= "") && (resetAt ]] case.OpenedAt) {
+            // Labelled as Abandon labels a case, so it reads as given up, not as a workflow failure; nothing else changes
+            Set case.Disposition = "abandoned"
+            Set case.Headline = "Abandoned: another scenario run reset the receiver"
+            Set case.Outcome = "Abandoned: a new scenario run reset the downstream system after this case was opened; nothing more is sent"
             Do case.Transition("failed", "Abandoned: a new scenario run reset the downstream system after this case was opened", "system")
             Set case = ""
         } Else {
