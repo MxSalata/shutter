@@ -263,6 +263,19 @@ describe('EvaluationPage', () => {
     expect(heroSecond({ rulesMisses: { total: 2, stopped: ['S1', 'S3'], wrote: [] } }, entryOf)).toBe('');
   });
 
+  it('names the cohort on the sections under the band too: the specialists and the table of passes', () => {
+    renderPage();
+    const why = screen.getByRole('region', { name: 'How the specialists differed' });
+    expect(
+      within(why).getByRole('figure', {
+        name: 'Catalogue demonstration: who proposed the expected action, of 24 scored passes',
+      }),
+    ).toBeInTheDocument();
+    expect(table()).toHaveTextContent(
+      "One row per pass of the catalogue demonstration: each agent's view, the plan, and how it ended.",
+    );
+  });
+
   it('sets Rules only beside the board on one base, apart from the proposed action', () => {
     renderPage();
     const hero = headline();
@@ -387,12 +400,12 @@ describe('EvaluationPage', () => {
     ] as const)
       expect(within(why).getByRole('img', { name: `${who}: ${n} of 24 scored passes` })).toBeInTheDocument();
     expect(
-      within(why).getByText('Who proposed the expected action, of 24 scored passes'),
+      within(why).getByText('Catalogue demonstration: who proposed the expected action, of 24 scored passes'),
     ).toBeInTheDocument();
     const single = within(why).getByText(/^Each specialist answers from its own view\./);
     // Its figures are the held-out cases', in the card above with their releases, so they are not said twice
     expect(visible(single)).toBe(
-      'Each specialist answers from its own view. The single investigator has no recording in the trial; its figures are above.',
+      'Each specialist answers from its own view. The single investigator has no recording; its figures are above.',
     );
     const card = screen.getByRole('region', { name: /^Held-out cases F01 to F12/ });
     expect(card).toHaveTextContent('the single investigator 0.167 as settled');
@@ -800,8 +813,8 @@ describe('EvaluationPage', () => {
     // baseline, both single investigator figures and release 1.1.1's) and where the single investigator was measured
     // (245 before those), and since 13 November 2026 the Rules only exemption beside the write that passed every check
     // (15 words; 325 before it); Technical at most 1.5 times that. The held-out card's lines by release and its
-    // same-gate example fit the same 340: the baselines and release 1.1.1 went one press away, and the single
-    // investigator's figures are said once, in the card
+    // same-gate example fit the same 340, as does the cohort in the specialists' caption: the baselines and release
+    // 1.1.1 went one press away, and the single investigator's figures are said once, in the card
     expect(words.copy).toBeLessThanOrEqual(340);
     expect(technical.copy).toBeLessThanOrEqual(510);
     // Every visible word, the headings, the controls and the figures with it: Technical adds at most half again

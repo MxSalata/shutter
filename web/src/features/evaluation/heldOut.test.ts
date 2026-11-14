@@ -158,6 +158,16 @@ describe('the held-out card', () => {
     expect(g.url).toBe(HELD_OUT.url.replace('fair-test.md', 'fair-test/results-r143-all.json'));
   });
 
+  it('has the twelve cases the card names, F01 to F12, in the per-case table', () => {
+    const ids = doc
+      .slice(doc.indexOf('\n## Per case\n'), doc.indexOf('\n## The one disagreement'))
+      .split('\n')
+      .map((l) => /^\| (F\d\d) \|/.exec(l)?.[1])
+      .filter(Boolean);
+    expect(ids).toHaveLength(HELD_OUT.cases);
+    expect([ids[0], ids[ids.length - 1]]).toEqual(['F01', 'F12']);
+  });
+
   it('links the published document', () => {
     expect(HELD_OUT.url).toBe('https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md');
   });

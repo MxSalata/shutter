@@ -806,7 +806,9 @@ function Sources({ data }: { data: Evaluation }) {
 
 /**
  * Why a board: who proposed the expected action of the scored passes (the board, then each specialist alone, on one
- * base), and which of rules alone's misses the gate stops by itself and which the board catches.
+ * base), and which of rules alone's misses the gate stops by itself and which the board catches. The bars' caption
+ * names their cohort, since the section stands outside the band that does; the single investigator, which has no
+ * recording to draw a bar from, is pointed to the held-out card.
  */
 function WhyABoard({
   proof,
@@ -843,12 +845,12 @@ function WhyABoard({
             bar('conformance', sp.conformance),
           ]}
           of={base}
-          caption={`Who proposed the expected action, of ${base} scored passes`}
+          caption={`${CATALOGUE_COHORT}: who proposed the expected action, of ${base} scored passes`}
         />
       ) : null}
       <Text size="sm">
-        Each specialist answers from its own view. The single investigator has no recording in the trial; its
-        figures are above.
+        Each specialist answers from its own view. The single investigator has no recording; its figures are
+        above.
       </Text>
       {misses && (misses.stopped.length || misses.wrote.length) ? (
         <Text size="sm">
@@ -1018,7 +1020,7 @@ function PassesTable({
           Per scenario
         </Title>
         <Text c="dimmed" maw="68ch" mb="sm">
-          One row per pass: each agent&apos;s view, the plan, and how it ended.
+          One row per pass of the catalogue demonstration: each agent&apos;s view, the plan, and how it ended.
         </Text>
         <Stack gap="xs">
           <Filters filters={filters} total={data.passes.length} shown={passes.length} set={set} />
