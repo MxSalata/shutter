@@ -5,12 +5,15 @@
 
 For each case, from Ens.MessageHeader in its workflow session (the order of the message ids is the order of events):
 the board's first agent request, the gate's first request, the first rehearsal, the approval task's response, the first
-recovery write and their count, and the verification. Holds, for every case:
+recovery write and their count, the verification, and for a FHIR receiver the FHIR gate's first request, the first FHIR
+write and their count. Holds, for every case:
   1. a write comes after the gate and after a rehearsal (gate < rehearsal < write);
   2. an approval, when there is one, comes before the write (judged where the session holds one case only: an
      incident's chains share a session, and one chain may be released by policy while another waits for a person);
   3. on the board, the agents decide before the gate judges (board < gate);
-  4. a case resolved by a resend wrote at least once and was verified after it.
+  4. a case resolved by a resend wrote at least once and was verified after it; the write may be a FHIR write;
+  5. a FHIR write comes after the FHIR gate and after an approval (FHIR gate < approval < FHIR write), and there is
+     exactly one: no policy releases it, and one approval allows one update.
 Several cases can share one session (one message at two receivers, S22 and S23b); the checks hold per session then.
 A blocked case may have written: the receiver refused the write (S23c's occupied bed). Exit status 1 when any fails.
 """
@@ -34,7 +37,10 @@ LINEAGE = """SELECT
  (SELECT COUNT(*) FROM Ens.MessageHeader h JOIN Shutter_Msg.WardOperation w ON w.ID = h.MessageBodyId
    AND h.MessageBodyClassName = 'Shutter.Msg.WardOperation'
    WHERE h.SessionId = ? AND w.Purpose = 'recovery') AS WriteCount,
- (SELECT MIN(ID) FROM Ens.MessageHeader WHERE SessionId = ? AND MessageBodyClassName = 'Shutter.Msg.VerifyRequest') AS Verify"""
+ (SELECT MIN(ID) FROM Ens.MessageHeader WHERE SessionId = ? AND MessageBodyClassName = 'Shutter.Msg.VerifyRequest') AS Verify,
+ (SELECT MIN(ID) FROM Ens.MessageHeader WHERE SessionId = ? AND MessageBodyClassName = 'Shutter.Msg.FHIRGateRequest') AS FhirGate,
+ (SELECT MIN(ID) FROM Ens.MessageHeader WHERE SessionId = ? AND MessageBodyClassName = 'Shutter.Msg.FHIRWrite') AS FhirWrite,
+ (SELECT COUNT(*) FROM Ens.MessageHeader WHERE SessionId = ? AND MessageBodyClassName = 'Shutter.Msg.FHIRWrite') AS FhirWriteCount"""
 
 
 def problems(case, ln, shared):
@@ -47,13 +53,22 @@ def problems(case, ln, shared):
             out.append(f"a write ({g['FirstWrite']}) without the gate ({g['Gate']}) and a rehearsal ({g['Rehearsal']}) before it")
         if not shared and g["Approval"] and not g["Approval"] < g["FirstWrite"]:
             out.append(f"the approval ({g['Approval']}) comes after the write ({g['FirstWrite']})")
+    if g["FhirWriteCount"]:
+        if not g["FhirGate"] or not g["Approval"] or not (g["FhirGate"] < g["Approval"] < g["FhirWrite"]):
+            out.append(f"a FHIR write ({g['FhirWrite']}) without the FHIR gate ({g['FhirGate']}) and an approval ({g['Approval']}) before it")
+        if g["FhirWriteCount"] != 1:
+            out.append(f"{g['FhirWriteCount']} FHIR writes in a session where one approval allows one")
     if case["Mode"] == "board" and g["Board"] and g["Gate"] and not g["Board"] < g["Gate"]:
         out.append(f"the gate ({g['Gate']}) judged before the board's first run ({g['Board']})")
     if case["State"] == "resolved" and case["Disposition"] == "resend":
-        if not g["WriteCount"]:
+        if g["WriteCount"]:
+            if not g["Verify"] or not g["Verify"] > g["FirstWrite"]:
+                out.append(f"resolved by a resend with no verification after the write ({g['FirstWrite']}, verify {g['Verify']})")
+        elif g["FhirWriteCount"]:
+            if not g["Verify"] or not g["Verify"] > g["FhirWrite"]:
+                out.append(f"resolved by a FHIR write with no verification after it ({g['FhirWrite']}, verify {g['Verify']})")
+        else:
             out.append("resolved by a resend with no write")
-        elif not g["Verify"] or not g["Verify"] > g["FirstWrite"]:
-            out.append(f"resolved by a resend with no verification after the write ({g['FirstWrite']}, verify {g['Verify']})")
     return out
 
 
@@ -78,12 +93,13 @@ def main():
         if not s:
             continue
         checked += 1
-        found = problems(c, query(args.url, args.ns, LINEAGE, [s] * 7)[0], per_session.get(s, 0) > 1)
+        found = problems(c, query(args.url, args.ns, LINEAGE, [s] * LINEAGE.count("?"))[0], per_session.get(s, 0) > 1)
         if found:
             failed += 1
             print(f"FAIL {c['CaseId']} ({c['Mode']}, {c['State']}, {c['Disposition']}): " + "; ".join(found))
     print(f"{checked} cases checked, {failed} with a lineage problem" if failed else
-          f"{checked} cases checked: every write came after the gate and a rehearsal, and every resolved resend was verified")
+          f"{checked} cases checked: every write came after the gate and a rehearsal, or for a FHIR case after its gate and "
+          "its own approval, and every resolved resend was verified")
     return 1 if failed else 0
 
 
