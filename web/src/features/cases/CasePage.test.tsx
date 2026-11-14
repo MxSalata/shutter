@@ -1768,7 +1768,10 @@ describe('the case page for both audiences', () => {
   // where the receiver had the patient, the receiver by name) and took out the inline expansion and the scenario:
   // 653 measured, Technical 939. The header's Technical facts of 8 Nov (MSH-9 and the control id, the receiver's class,
   // the source item and production, the failure's kind and time, the header id, the plan's version, digest and
-  // catalogue entry) take Technical to 954, within the spec's own 1.5 times the 653 measured in Plain
+  // catalogue entry) take Technical to 954, within the spec's own 1.5 times the 653 measured in Plain. The clarity
+  // review of 13 Nov names the proposer in the receipt, with the plan's reason one press under it and the evidence
+  // behind What happened as chips, and pays for them on the board (the citations and a kept dissent open from their
+  // own lines): 658 measured before and after, Technical 960 (959 before), with nothing added to either cap
   it('keeps the Summary tab, steps closed, within 660 words in Plain', async () => {
     const plain = await summaryWords('plain');
     expect(plain).toBeLessThanOrEqual(660);
