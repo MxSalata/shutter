@@ -25,11 +25,24 @@ the proof file:
 
 The approver's password is SHUTTER_PASSWORD (default "shutter"); the test FHIR server's controls and reads go as
 _SYSTEM with FHIR_PASSWORD (default "SYS").
+
+The same profile against IRIS for Health's own FHIR server, served by the same instance at --fhir-base:
+
+  python3 tests/e2e/fhir_receiver_check.py --ctr CONTAINER --url http://127.0.0.1:PORT --proof FILE --server iris
+                                           --fhir-base /fhir/r4 --fhir-user USER [--record FILE]
+
+FHIR_PASSWORD is then USER's password. That server has no controls, so the check seeds each variant by PUT under fresh
+ids, places the items with that server's credential (FHIRServer, set from USER and FHIR_PASSWORD), imports the proof of
+the conformance run against that server, plays variants A and D only, and counts the versions the Encounter's history
+gained in place of the test server's count of PUTs. Without --proof it plays variant 0 in place of A against that
+server and fails, since A was not played. --record writes what the run read: the server's CapabilityStatement (its size
+and software), the build, and variant A's case, attempt, verification, current Encounter and history.
 """
 import argparse
 import base64
 import json
 import os
+import secrets
 import sys
 import time
 import urllib.error
@@ -44,6 +57,8 @@ FEED = 'FHIR Ward In'
 FOLDER = '/tmp/fhirward'
 PORT = 6662
 FHIR_BASE = '/fhir-facade/r4'
+# The credential the items use at IRIS for Health's own FHIR server, the name the install guide gives a site.
+IRIS_CREDENTIAL = 'FHIRServer'
 POLICY = 'fhir-2026-11-14.1'
 MARKER = 'urn:shutter:recovery'
 VISIT_SYSTEM = 'urn:oid:2.16.840.1.113883.2.1.3.2.4.18.49'
@@ -55,39 +70,45 @@ CLINICIAN = 'Zo\u00eb'
 LICENSE_WAIT = 1020
 
 
-def entry(enabled):
+def entry(enabled, base=FHIR_BASE, wards=('Location/ward-a', 'Location/ward-b')):
     """The receiver as a site describes it (DESIGN 2.1), on a tier the demo's policy releases without a person."""
     return {'name': RECEIVER, 'system': 'the ward system (FHIR R4)', 'category': 'current_state', 'tier': 1,
             'applies': 'arrival_order', 'resend_timestamp': 'original', 'cancels': False, 'merges': False,
-            'fhir': {'base': FHIR_BASE, 'recovery_enabled': enabled,
+            'fhir': {'base': base, 'recovery_enabled': enabled,
                      'encounter_identifier': {'system': VISIT_SYSTEM},
                      'patient_identifier': {'system': MRN_SYSTEM, 'hl7_authority': 'HOSP'},
                      'marker': {'system': MARKER},
                      'location_map': [
-                         {'ward': 'WARD-A', 'location': 'Location/ward-a', 'identifier': {'system': WARD_SYSTEM, 'value': 'WARD-A'}},
-                         {'ward': 'WARD-B', 'location': 'Location/ward-b', 'identifier': {'system': WARD_SYSTEM, 'value': 'WARD-B'}}]}}
+                         {'ward': 'WARD-A', 'location': wards[0], 'identifier': {'system': WARD_SYSTEM, 'value': 'WARD-A'}},
+                         {'ward': 'WARD-B', 'location': wards[1], 'identifier': {'system': WARD_SYSTEM, 'value': 'WARD-B'}}]}}
 
 
 class Rig(Api):
-    """The approver's calls to Shutter, and the system account's to the test FHIR server."""
+    """The approver's calls to Shutter, and the FHIR client's to the FHIR server: the system account at the test
+    server; at IRIS for Health's own server (server "iris") its own client user, with fresh ids under a prefix."""
 
-    def __init__(self, url, password, fhir_password):
+    def __init__(self, url, password, fhir_password, server='facade', fhir_base=FHIR_BASE, fhir_user='_SYSTEM', prefix=''):
         super().__init__(url, password)
-        self.fhir_auth = 'Basic ' + base64.b64encode(f'_SYSTEM:{fhir_password}'.encode()).decode()
+        self.server, self.fhir_base, self.prefix = server, fhir_base, prefix
+        self.fhir_auth = 'Basic ' + base64.b64encode(f'{fhir_user}:{fhir_password}'.encode()).decode()
+        self.wards = (f'Location/{prefix}ward-a', f'Location/{prefix}ward-b')
+        self.seeded = False
+        self.last_size = 0
 
     def fhir(self, path, method='GET', body=None):
-        """One request to the test FHIR server: the status, and the body as JSON when it is JSON."""
-        request = urllib.request.Request(self.url + FHIR_BASE + path, method=method,
+        """One request to the FHIR server: the status, and the body as JSON when it is JSON."""
+        request = urllib.request.Request(self.url + self.fhir_base + path, method=method,
                                          data=None if body is None else json.dumps(body).encode('utf-8'))
         request.add_header('Authorization', self.fhir_auth)
         request.add_header('Accept', 'application/fhir+json')
         if body is not None:
-            request.add_header('Content-Type', 'application/json; charset=utf-8')
+            request.add_header('Content-Type', 'application/json; charset=utf-8' if self.server == 'facade' else 'application/fhir+json; charset=utf-8')
         try:
             with urllib.request.urlopen(request, timeout=30) as r:
                 status, raw = r.status, r.read()
         except urllib.error.HTTPError as e:
             status, raw = e.code, e.read()
+        self.last_size = len(raw)
         text = raw.decode('utf-8', 'replace')
         try:
             return status, json.loads(text)
@@ -164,10 +185,16 @@ def add_items(ctr):
     return True
 
 
-def place_items(ctr, ns):
-    """The four FHIR items, as a site places them: on this instance's own web port, with the demo's credential."""
+def place_items(ctr, ns, credential='FHIRFacade', user='', password=''):
+    """The four FHIR items, as a site places them: on this instance's own web port, with the demo's credential, or
+    with a credential set here from user and password."""
+    if user:
+        ask(ctr, ns, [
+            f'Set sc = ##class(Ens.Config.Credentials).SetCredential("{credential}", "{user}", "{password.replace(chr(34), chr(34) * 2)}", 1)',
+            'Write !,"RESULT: ",$SELECT(sc: "ok", 1: $SYSTEM.Status.GetErrorText(sc)),!',
+        ], f'setting the credential {credential}')
     out = result(terminal(ctr, ns, [
-        'Set r = ##class(Shutter.FHIR.Install).PlaceItems("127.0.0.1", "", "FHIRFacade", "")',
+        f'Set r = ##class(Shutter.FHIR.Install).PlaceItems("127.0.0.1", "", "{credential}", "")',
         'Write !,"RESULT: ",r.%ToJSON(),!',
     ]), 'placing the FHIR items')
     try:
@@ -187,7 +214,7 @@ def store_entry(api, enabled):
     """The entry through the route a site uses, in place of an earlier one of the same name."""
     current = api.get('/site-profile')
     profile = current['profile']
-    profile['receivers'] = [r for r in profile.get('receivers', []) if r.get('name') != RECEIVER] + [entry(enabled)]
+    profile['receivers'] = [r for r in profile.get('receivers', []) if r.get('name') != RECEIVER] + [entry(enabled, api.fhir_base, api.wards)]
     profile['expectedVersion'] = str(current['version'])
     status, answer = api.call('/api/shutter/site-profile', 'PUT', profile)
     if status != 200:
@@ -247,29 +274,43 @@ def hl7_time(seconds):
 
 
 class Round:
-    """One variant's own patient, visit and Encounter, and the test server's PUT count once they were seeded."""
+    """One variant's own patient, visit and Encounter, and the server's count once they were seeded: the test
+    server's PUT count, or at IRIS for Health's own server the versions in the Encounter's history."""
 
-    def __init__(self, n):
+    def __init__(self, n, prefix=''):
         self.n = n
         self.visit = f'FHV-{n}'
         self.mrn = f'MRN{n}'
-        self.encounter = f'enc-{n}'
-        self.patient = f'pat-{n}'
+        self.encounter = f'{prefix}enc-{n}'
+        self.patient = f'{prefix}pat-{n}'
         self.puts = 0
 
     def sent(self, api):
+        """The PUTs Shutter sent since the seed. A server with no counter shows them as the versions the Encounter's
+        history gained (each update makes one there; a refused one makes none, and variants A and D meet none)."""
+        if api.server == 'iris':
+            return len(history(api, self)) - self.puts
         return api.stats().get('puts_received', 0) - self.puts
 
 
+def seed_by_put(api, resources):
+    """Each resource by PUT under its own fresh id, as a client creates one at IRIS for Health's server: 201 each."""
+    for res in resources:
+        path = f'/{res["resourceType"]}/{res["id"]}'
+        status, answer = api.fhir(path, 'PUT', res)
+        if status != 201:
+            sys.exit(f'PUT {api.fhir_base}{path} under a fresh id: HTTP {status}: {str(answer)[:300]}')
+
+
 def begin(ctr, api, n, faults=()):
-    """Seeds the test FHIR server, sets the fault, and drops the transfer the stock operation cannot deliver."""
-    r = Round(n)
+    """Seeds the FHIR server, sets the fault, and drops the transfer the stock operation cannot deliver."""
+    r = Round(n, api.prefix)
     now = time.time()
     since = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(now - 7200))
     seed = [
-        {'resourceType': 'Location', 'id': 'ward-a', 'status': 'active', 'name': 'Ward A',
+        {'resourceType': 'Location', 'id': api.wards[0].split('/', 1)[1], 'status': 'active', 'name': 'Ward A',
          'identifier': [{'system': WARD_SYSTEM, 'value': 'WARD-A'}]},
-        {'resourceType': 'Location', 'id': 'ward-b', 'status': 'active', 'name': 'Ward B',
+        {'resourceType': 'Location', 'id': api.wards[1].split('/', 1)[1], 'status': 'active', 'name': 'Ward B',
          'identifier': [{'system': WARD_SYSTEM, 'value': 'WARD-B'}]},
         {'resourceType': 'Patient', 'id': r.patient, 'active': True, 'identifier': [{'system': MRN_SYSTEM, 'value': r.mrn}]},
         {'resourceType': 'Encounter', 'id': r.encounter, 'status': 'in-progress',
@@ -277,18 +318,28 @@ def begin(ctr, api, n, faults=()):
          'class': {'system': 'http://terminology.hl7.org/CodeSystem/v3-ActCode', 'code': 'IMP'},
          'subject': {'reference': f'Patient/{r.patient}'},
          'participant': [{'individual': {'display': CLINICIAN}}],
-         'location': [{'location': {'reference': 'Location/ward-a'}, 'status': 'active', 'period': {'start': since}}]},
+         'location': [{'location': {'reference': api.wards[0]}, 'status': 'active', 'period': {'start': since}}]},
     ]
-    status, answer = api.fhir('/admin/reset', 'POST', seed)
-    seeded = answer.get('seeded', []) if isinstance(answer, dict) else []
-    if status != 200 or len(seeded) != len(seed) or any(s.get('status') not in (200, 201) for s in seeded):
-        sys.exit(f'POST {FHIR_BASE}/admin/reset with the seed: HTTP {status}: {answer}')
-    if faults:
-        status, answer = api.fhir('/admin/fault', 'POST', {'modes': list(faults), 'times': 1})
-        if status != 200:
-            sys.exit(f'POST {FHIR_BASE}/admin/fault {list(faults)}: HTTP {status}: {answer}')
-    # The seed's own PUTs are counted by the server, so what Shutter sent is the count from here on.
-    r.puts = api.stats().get('puts_received', 0)
+    if api.server == 'iris':
+        if faults:
+            sys.exit(f'the faults {list(faults)} need the test FHIR server')
+        # The two Locations once per run; the Patient and the Encounter per variant.
+        seed_by_put(api, seed[2:] if api.seeded else seed)
+        api.seeded = True
+        r.puts = len(history(api, r))
+        if r.puts != 1:
+            sys.exit(f'the seeded Encounter {r.encounter} has {r.puts} versions in its history, not 1')
+    else:
+        status, answer = api.fhir('/admin/reset', 'POST', seed)
+        seeded = answer.get('seeded', []) if isinstance(answer, dict) else []
+        if status != 200 or len(seeded) != len(seed) or any(s.get('status') not in (200, 201) for s in seeded):
+            sys.exit(f'POST {FHIR_BASE}/admin/reset with the seed: HTTP {status}: {answer}')
+        if faults:
+            status, answer = api.fhir('/admin/fault', 'POST', {'modes': list(faults), 'times': 1})
+            if status != 200:
+                sys.exit(f'POST {FHIR_BASE}/admin/fault {list(faults)}: HTTP {status}: {answer}')
+        # The seed's own PUTs are counted by the server, so what Shutter sent is the count from here on.
+        r.puts = api.stats().get('puts_received', 0)
     t, admitted = hl7_time(now), hl7_time(now - 7200)
     pv1 = [''] * 45
     pv1[0], pv1[1], pv1[2], pv1[3], pv1[6], pv1[19], pv1[44] = 'PV1', '1', 'I', 'WARD-B', 'WARD-A', r.visit, admitted
@@ -352,7 +403,7 @@ def marked(resource):
     return [t.get('code') for t in ((resource.get('meta') or {}).get('tag') or []) if t.get('system') == MARKER]
 
 
-def stopped_without_asking(api, r, label, code, words):
+def stopped_without_asking(api, r, label, code, words, record=None):
     """Variants 0 and D: the case stops at the proposal gate with one reason, nobody is asked, nothing is sent."""
     print(label)
     failures = []
@@ -360,6 +411,9 @@ def stopped_without_asking(api, r, label, code, words):
     cid = case['caseId']
     got, failing = reason(api, cid)
     print(f'  {cid}: {case["state"]}, {got} ({failing}); {case.get("headline")}')
+    if record is not None:
+        record.update({'case': cid, 'encounter': r.encounter, 'visit': r.visit, 'state': case['state'], 'reason': got,
+                       'failing': failing, 'headline': case.get('headline')})
     check(failures, case['state'] == 'blocked', 'the case is blocked')
     check(failures, got == code, f'its reason is {code}: {words}')
     stored, tasks = approvals(api, cid)
@@ -394,7 +448,7 @@ def decided(api, r, failures, cid):
     return case
 
 
-def variant_a(ctr, api, n):
+def variant_a(ctr, api, n, record=None):
     print('A, the move:')
     failures = []
     r = begin(ctr, api, n)
@@ -432,7 +486,7 @@ def variant_a(ctr, api, n):
     status, current = api.fhir(f'/Encounter/{r.encounter}')
     locations = current.get('location', []) if status == 200 and isinstance(current, dict) else []
     is_open = [(e.get('location') or {}).get('reference') for e in locations if not (e.get('period') or {}).get('end')]
-    check(failures, is_open == ['Location/ward-b'], f'over HTTP the Encounter\'s open location is Location/ward-b ({is_open})')
+    check(failures, is_open == [api.wards[1]], f'over HTTP the Encounter\'s open location is {api.wards[1]} ({is_open})')
     versions = history(api, r)
     check(failures, sorted(versions) == ['1', '2'], f'its history has exactly two versions ({sorted(versions)})')
     second = versions.get('2') or {}
@@ -441,6 +495,11 @@ def variant_a(ctr, api, n):
     names = [(p.get('individual') or {}).get('display') for p in second.get('participant') or []]
     check(failures, names == [CLINICIAN], f'its participant still reads {CLINICIAN} ({names})')
     check(failures, r.sent(api) == 1, f'the server received one PUT ({r.sent(api)})')
+    if record is not None:
+        record.update({'case': cid, 'encounter': r.encounter, 'patient': r.patient, 'visit': r.visit, 'state': case['state'],
+                       'approvals': stored, 'attempt': attempt, 'verification': verification, 'current': current,
+                       'history': api.fhir(f'/Encounter/{r.encounter}/_history')[1],
+                       'vread_2': api.fhir(f'/Encounter/{r.encounter}/_history/2')[1]})
     return failures
 
 
@@ -563,13 +622,42 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument('--ctr', required=True)
     parser.add_argument('--url', required=True)
-    parser.add_argument('--proof', required=True, help='the proof file tests/conformance/fhir_conformance.py --proof wrote')
+    parser.add_argument('--proof', help='the proof file tests/conformance/fhir_conformance.py --proof wrote')
     parser.add_argument('--ns', default='SHUTTER')
     parser.add_argument('--extended', action='store_true', help='also play variants C2 and D2')
+    parser.add_argument('--server', choices=('facade', 'iris'), default='facade',
+                        help='the test FHIR server (default), or IRIS for Health\'s own FHIR server on the same instance')
+    parser.add_argument('--fhir-base', help=f'the FHIR server\'s path (default {FHIR_BASE}; /fhir/r4 with --server iris)')
+    parser.add_argument('--fhir-user', help='with --server iris: the FHIR server\'s client user, whose password is FHIR_PASSWORD')
+    parser.add_argument('--record', metavar='FILE', help='with --server iris: write what the run read here, as JSON')
     args = parser.parse_args()
-    if not os.path.isfile(args.proof):
+    iris = args.server == 'iris'
+    if not iris and not args.proof:
+        parser.error('the following arguments are required: --proof')
+    if iris and (not args.fhir_user or not os.environ.get('FHIR_PASSWORD')):
+        parser.error('--server iris needs --fhir-user and that user\'s password in FHIR_PASSWORD')
+    if iris and args.extended:
+        parser.error('--extended needs the test FHIR server\'s faults')
+    if args.proof and not os.path.isfile(args.proof):
         sys.exit(f'no proof file at {args.proof}: run tests/conformance/fhir_conformance.py with --proof first')
-    api = Rig(args.url.rstrip('/'), os.environ.get('SHUTTER_PASSWORD', 'shutter'), os.environ.get('FHIR_PASSWORD', 'SYS'))
+    if iris:
+        api = Rig(args.url.rstrip('/'), os.environ.get('SHUTTER_PASSWORD', 'shutter'), os.environ['FHIR_PASSWORD'], 'iris',
+                  (args.fhir_base or '/fhir/r4').rstrip('/'), args.fhir_user, 'e2e' + secrets.token_hex(3) + '-')
+    else:
+        api = Rig(args.url.rstrip('/'), os.environ.get('SHUTTER_PASSWORD', 'shutter'), os.environ.get('FHIR_PASSWORD', 'SYS'),
+                  fhir_base=(args.fhir_base or FHIR_BASE).rstrip('/'))
+
+    record = {}
+    if iris:
+        status, statement = api.fhir('/metadata')
+        statement = statement if isinstance(statement, dict) else {}
+        record['capability'] = {'http_status': status, 'bytes': api.last_size, 'software': statement.get('software'),
+                                'fhir_version': statement.get('fhirVersion')}
+        record['build'] = result(terminal(args.ctr, args.ns, ['Write !,"RESULT: ",$ZVERSION,!']), 'reading the build')
+        print(f'IRIS for Health\'s own FHIR server at {api.fhir_base}: GET metadata HTTP {status}, {api.last_size} bytes, '
+              f'software {statement.get("software")}, FHIR {statement.get("fhirVersion")}; build {record["build"]}; ids under {api.prefix}')
+        if status != 200:
+            sys.exit(f'GET {api.fhir_base}/metadata as {args.fhir_user}: HTTP {status}')
 
     before = api.get('/site-profile')
     made = docker(args.ctr, 'mkdir', '-p', f'{FOLDER}/in')
@@ -578,26 +666,41 @@ def main():
     latched = []
     failures = []
     try:
-        placed = place_items(args.ctr, args.ns)
+        if iris:
+            placed = place_items(args.ctr, args.ns, IRIS_CREDENTIAL, args.fhir_user, os.environ['FHIR_PASSWORD'])
+        else:
+            placed = place_items(args.ctr, args.ns)
         add_items(args.ctr)
         store_entry(api, True)
         print(f'placed the FHIR items ({placed.get("added")} added), added {RECEIVER}, a stock TCP operation on port {PORT} with nothing '
-              f'listening, to Hospital.Production, and stored it in the site profile as a FHIR R4 receiver at {FHIR_BASE}')
+              f'listening, to Hospital.Production, and stored it in the site profile as a FHIR R4 receiver at {api.fhir_base}')
         time.sleep(5)
         n = int(time.time()) % 800000 * 10 + 1000000
 
-        r = begin(args.ctr, api, n)
-        failures += stopped_without_asking(api, r, '0, no proof yet:', 'FHIR_VERSIONING_UNPROVEN', 'no conformance run is recorded for this server software')
-        import_proof(args.ctr, args.ns, args.proof)
-        print(f'imported the proof {args.proof} for {RECEIVER}')
+        if iris:
+            if args.proof:
+                import_proof(args.ctr, args.ns, args.proof)
+                print(f'imported the proof {args.proof} for {RECEIVER}')
+                failures += variant_a(args.ctr, api, n + 1, record.setdefault('a', {}))
+            else:
+                r = begin(args.ctr, api, n)
+                failures += stopped_without_asking(api, r, '0, no proof (the conformance run wrote none):', 'FHIR_VERSIONING_UNPROVEN',
+                                                   'no conformance run is recorded for this server software', record.setdefault('0', {}))
+                check(failures, False, 'variant A was played (it needs the proof of a conformance run against this server)')
+        else:
+            r = begin(args.ctr, api, n)
+            failures += stopped_without_asking(api, r, '0, no proof yet:', 'FHIR_VERSIONING_UNPROVEN', 'no conformance run is recorded for this server software')
+            import_proof(args.ctr, args.ns, args.proof)
+            print(f'imported the proof {args.proof} for {RECEIVER}')
 
-        failures += variant_a(args.ctr, api, n + 1)
-        failures += variant_b(args.ctr, api, args.ns, n + 2)
-        failures += variant_c(args.ctr, api, n + 3)
+            failures += variant_a(args.ctr, api, n + 1)
+            failures += variant_b(args.ctr, api, args.ns, n + 2)
+            failures += variant_c(args.ctr, api, n + 3)
 
         store_entry(api, False)
         r = begin(args.ctr, api, n + 4)
-        failures += stopped_without_asking(api, r, 'D, recovery switched off in the entry:', 'FHIR_RECOVERY_DISABLED', 'fhir.recovery_enabled is false')
+        failures += stopped_without_asking(api, r, 'D, recovery switched off in the entry:', 'FHIR_RECOVERY_DISABLED', 'fhir.recovery_enabled is false',
+                                           record.setdefault('d', {}) if iris else None)
 
         if args.extended:
             store_entry(api, True)
@@ -605,12 +708,21 @@ def main():
             failures += variant_d2(args.ctr, api, n + 6, latched)
     finally:
         left = leave(args.ctr, args.ns, api, before, latched)
+        if args.record:
+            record.update({'server': args.server, 'base': api.fhir_base, 'prefix': api.prefix, 'proof': args.proof or '',
+                           'failures': failures + (['the instance was not left as it was found'] if left else [])})
+            with open(args.record, 'w', encoding='utf-8') as f:
+                json.dump(record, f, indent=1, ensure_ascii=False)
     if left:
         failures.append('the instance was not left as it was found')
 
     if failures:
         print(f'{len(failures)} check(s) failed')
         return 1
+    if iris:
+        print(f'The FHIR R4 receiver profile against IRIS for Health\'s own FHIR server at {api.fhir_base}: one update after this '
+              f'case\'s own approval, verified from the history; stopped when switched off. As designed.')
+        return 0
     print('The FHIR R4 receiver profile: one update after this case\'s own approval, verified from the history; stopped when '
           'unproven, switched off or overtaken. As designed.')
     return 0
