@@ -1,6 +1,6 @@
 # Running the board on another provider, by hand
 
-Shutter's install configures one model provider, Anthropic, from `ANTHROPIC_API_KEY`. AI Hub's Config Store holds others, and each board item names the configuration it runs on in its `ProviderConfig` setting, so a site can point the board at another provider by hand, with no change to Shutter's code. This page is the record of doing that once, with OpenAI: the steps as tested, what came out, what differs from Anthropic, and what the install doesn't do for you. It is one afternoon on one instance, not a supported configuration.
+When this was tested, Shutter's install configured one model provider, Anthropic, from `ANTHROPIC_API_KEY`. It now also takes `OPENAI_API_KEY` ([INSTALL.md](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md), section 2) and writes the secret and the settings of steps 1 and 2 below as Shutter's own `AI.LLM.Shutter`; that path has not been measured yet. AI Hub's Config Store holds others, and each board item names the configuration it runs on in its `ProviderConfig` setting, so a site can point the board at another provider by hand, with no change to Shutter's code. This page is the record of doing that once, with OpenAI: the steps as tested, what came out, what differs from Anthropic, and what the install doesn't do for you. It is one afternoon on one instance, not a supported configuration.
 
 **When and what:** 8 November 2026, 15:01 to 15:15 UTC, on IRIS for Health with AI Hub `2027.1.0AI.109.0` (build 109U), with Shutter 1.1.1 at commit `4e5ab015`, the demo install in namespace `SHUTTER`. The provider was OpenAI's API through AI Hub's `openai` provider, model `gpt-4.1`. Nothing in Shutter's code was changed; the settings below were put back afterwards.
 
@@ -82,7 +82,7 @@ That applies to every agent item set to `auto`, Agent Board included, which has 
 
 ## What Shutter's install doesn't do for you
 
-It configures Anthropic only, and these are the places that assume it, at commit `4e5ab015`:
+At commit `4e5ab015` it configured Anthropic only, and these were the places that assumed it. With `OPENAI_API_KEY` the install now does the first four for OpenAI, and the Health page's check and `ClearProvider` follow the provider it configured; the price list, the budget and `max_tokens` are as they were.
 
 - The install and the container read one key, `ANTHROPIC_API_KEY` (`.env.example` line 11, `docker-compose.yml` line 40); whatever key is set there is written as Anthropic's, since `ConfigureProvider` doesn't check which provider it is for.
 - `Shutter.Setup.ConfigureProvider` ([Setup.cls](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Setup.cls), line 2354) writes the secret `Shutter.Anthropic` and `AI.LLM.Shutter` with `model_provider` anthropic; nothing writes another provider's configuration, so steps 1 and 2 are by hand.
