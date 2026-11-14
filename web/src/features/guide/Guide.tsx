@@ -116,7 +116,7 @@ const toTry = (action: string) => {
 
 /** The filters a list keeps in its address: choosing one during a step leaves the reader on the step's page. */
 const LIST_FILTERS: Record<string, string[]> = {
-  '/cases': ['state', 'outcome', 'scenario', 'page'],
+  '/cases': ['state', 'outcome', 'scenario', 'page', 'open', 'resolved'],
   '/scenarios': ['mode', 'outcome'],
 };
 
