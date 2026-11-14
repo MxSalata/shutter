@@ -1906,7 +1906,7 @@ demo items, switched off on a site install with the others.
   `claude-opus-5-5`, or `gpt-4.1` on OpenAI) and the key by reference, removes the other provider's secret and records
   the provider in `^Shutter.Config("aihub", "modelProvider")`; a record without it is Anthropic's. It refuses, before
   changing anything, a provider it does not configure and a model whose name is plainly the other provider's
-  (`claude...` on OpenAI, `gpt...` on Anthropic). The two-argument call is Anthropic's, as it was. `ClearProvider`
+  (one beginning with the family of the other provider's default model, `claude-opus-5-5` on OpenAI, `gpt-4.1` on Anthropic). The two-argument call is Anthropic's, as it was. `ClearProvider`
   removes the configuration, both secrets and the record. The price list (`Shutter.Store.ModelPrice`) holds Anthropic's
   models only, so a run on another model has no cost and the budgets (9) do not count it.
 - **Shape B: Shutter's items inside a site's own production.** `Shutter.Setup.InstallInto(production, root)`

@@ -2582,15 +2582,17 @@ ClassMethod EnvironmentProvider(Output key As %String, Output model As %String, 
     Quit ..ProviderChoice($SYSTEM.Util.GetEnviron("SHUTTER_PROVIDER"), $SYSTEM.Util.GetEnviron("ANTHROPIC_API_KEY"), $SYSTEM.Util.GetEnviron("OPENAI_API_KEY"), .key, .problem)
 }
 
-/// Whether a model's name can be the provider's. No for a name that is plainly the other provider's (claude... on
-/// openai, gpt... on anthropic), which every live run would fail on: a SHUTTER_MODEL left from the other provider is
-/// the likely cause. Yes for anything else, since the install keeps no list of either provider's models.
+/// Whether a model's name can be the provider's. No for a name that is plainly the other provider's, one that begins
+/// with the family of the other provider's default model (claude-opus-5-5 on openai, gpt-4.1 on anthropic), which every
+/// live run would fail on: a SHUTTER_MODEL left from the other provider is the likely cause. Yes for anything else,
+/// since the install keeps no list of either provider's models.
 ClassMethod ModelFits(provider As %String, model As %String) As %Boolean
 {
-    Set name = $ZCONVERT(model, "L")
-    If (provider = "openai") && ($EXTRACT(name, 1, 6) = "claude") Quit 0
-    If (provider = "anthropic") && ($EXTRACT(name, 1, 3) = "gpt") Quit 0
-    Quit 1
+    Set other = $CASE(provider, "openai": "anthropic", "anthropic": "openai", : "")
+    If other = "" Quit 1
+    Set family = $PIECE(..ProviderFact(other, "model"), "-")
+    If family = "" Quit 1
+    Quit $EXTRACT($ZCONVERT(model, "L"), 1, $LENGTH(family)) '= family
 }
 
 /// The model provider ConfigureProvider recorded (anthropic or openai), "" when no provider is configured. A record
