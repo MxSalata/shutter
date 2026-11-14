@@ -122,6 +122,7 @@ def snapshot(namespaces):
             'Do ##class(Ens.Director).GetProductionStatus(.n,.s) If $GET(s)=1 Write !,"<<<running|' + ns + '|",$GET(n),">>>"',
             'Write !,"<<<autostart|' + ns + '|",$GET(^Ens.AutoStart),">>>"',
             mention_scan(ns),
+            dependency_scan(ns),
         ]
         out += session(ns, "\n".join(code), 900)
     lines = set(re.findall(r"<<<(.*?)>>>", out))
@@ -136,6 +137,16 @@ def mention_scan(ns):
             'Set c=0,k=0,q=g Try { If $DATA(@q)#2,$GET(@q)["Shutter" { Set c=1 } For { Set q=$QUERY(@q) Quit:q=""  Set k=k+1 Quit:k>400000  If (q\'["""HistoryD"""),(q\'["""NSMAPSUB"""),(q["Shutter")||($GET(@q)["Shutter") Set c=c+1 } } Catch e { Set c=-1 } If c Write !,"<<<mentions|' + ns + '|",g,">>>" }')
 
 
+def dependency_scan(ns):
+    """A line per row of the class compiler's dependency index that names the product. One kind of row is left out: a row
+    of its reverse index (first subscript 0) whose class is gone, with no definition, no compiled class and no row of its
+    own. The compiler can write such a row for a class it compiles beside others, and its delete, which follows the class's
+    own rows, never takes it; a stock instance holds some for the package manager's classes. They are the engine's."""
+    return ('Try { Set q="^oddDEP" For { Set q=$QUERY(@q) Quit:q=""  Continue:(q\'["Shutter")&&($GET(@q)\'["Shutter")  '
+            'If $QLENGTH(q)=4,$QSUBSCRIPT(q,1)=0,$QSUBSCRIPT(q,2)\'["Shutter" { Set c=$QSUBSCRIPT(q,4) Continue:(\'$DATA(^oddDEP(c)))&&(\'$DATA(^oddDEF(c)))&&(\'$DATA(^oddCOM(c))) } '
+            'Write !,"<<<dependency|' + ns + '|",q,">>>" } } Catch e { Write !,"<<<dependency|' + ns + '|ERROR ",e.DisplayString(),">>>" }')
+
+
 def compare(before, after, allowed_new=(), allowed_gone=()):
     # The engine's own working globals appear wherever a production has run. A row in one that names Shutter is still caught,
     # by the mentions line for that global and by the rows read above.
@@ -143,7 +154,8 @@ def compare(before, after, allowed_new=(), allowed_gone=()):
     # IRIS for Health sets these up once, the first time a namespace is enabled for Interoperability. They are the engine's.
     # The engine's own records of what ran, which keep a name as a log does: the event log, the audit log, its interface
     # metrics, the SQL statement and catalogue indexes (no table shows: the sql_table rows), the source journal, its temporary globals and a package's name.
-    engine += [r"^mentions\|[^|]*\|\^(Ens\.Util\.LogD|IRIS\.AuditD|IRIS\.Metrics\.|IRIS\.Temp|rINDEXSQL|rINDEXEXT|ISC\.Src\.Jrn|oddPKG|IPM\.General\.History)"]
+    # The class compiler's dependency index is read row by row instead (dependency_scan), so its mentions line is not counted.
+    engine += [r"^mentions\|[^|]*\|\^(Ens\.Util\.LogD|IRIS\.AuditD|IRIS\.Metrics\.|IRIS\.Temp|rINDEXSQL|rINDEXEXT|ISC\.Src\.Jrn|oddPKG|oddDEP|IPM\.General\.History)"]
     engine += [r"^(database|namespace)\|%SYS\|FHIR_Validation_Server$", r"^resource\|%SYS\|%HS(Admin_|_BFC_|_FHIRServer_)", r"^role\|%SYS\|%HS_BFC_", r"^task\|%SYS\|FHIR Purge "]
     new = sorted(x for x in after - before if not any(re.search(p, x) for p in list(allowed_new) + engine))
     gone = sorted(x for x in before - after if not any(re.search(p, x) for p in list(allowed_gone) + engine))
@@ -481,6 +493,7 @@ def site_shape():
     step("The comparison can see Shutter: the same record, while it is installed")
     during = snapshot(namespaces)
     check("the record finds the name in Shutter's own globals", "mentions|SHUTTER|^Shutter.Config" in during, sorted(x for x in during if x.startswith("mentions"))[:40])
+    check("and in the class compiler's dependency index", any(x.startswith("dependency|SHUTTER|") for x in during))
     check("and the role, the item and the mapping", {"role|%SYS|Shutter_Operator", "mapping|%SYS|PATHOLOGY/Shutter.Intake", "item|PATHOLOGY|OnbPath.Production/Shutter Forwarder/Shutter.Intake.Forwarder"} <= during, sorted(x for x in during - before)[:60])
     if args.module == ".":
         check("and the key in the wallet", "wallet|%SYS|Shutter.Anthropic" in during)
