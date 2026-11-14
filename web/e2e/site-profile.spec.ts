@@ -116,7 +116,8 @@ test.describe('the trial, as the approver of the recorded runs', () => {
       const at = await section.evaluate((sec) => {
         const box = (e: Element) => e.getBoundingClientRect();
         const questions = [...sec.querySelectorAll('[data-question]')];
-        const folds = [...sec.querySelectorAll('fieldset button[aria-expanded]')];
+        // The folds, not a question's "Ask Shutter about this", which ends its question's row
+        const folds = [...sec.querySelectorAll('fieldset button[aria-expanded]:not([data-ask-about])')];
         const intro = sec.querySelector('h2')!.nextElementSibling!;
         return {
           inGroup: questions.filter((q) => q.closest('fieldset')).length,
