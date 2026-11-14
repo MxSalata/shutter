@@ -21,7 +21,7 @@ import {
   IconTool,
   type Icon as TablerIcon,
 } from '@tabler/icons-react';
-import { useId, useMemo, type ReactNode } from 'react';
+import { useId, useMemo, useRef, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { useListParams } from '@/lib/listParams';
 import {
@@ -663,6 +663,9 @@ export default function CasesPage() {
       : 'No cases match these filters.';
   const scenarioIds = scenarioList.map((s) => s.id);
   if (scenario && !scenarioIds.includes(scenario)) scenarioIds.push(scenario);
+  // "Show every case" and "Try again" go from the page as they are pressed: the focus goes to the first filter, above
+  // the list, and the count beside the filters says what the list now holds
+  const firstFilter = useRef<HTMLSelectElement>(null);
 
   return (
     <>
@@ -721,6 +724,7 @@ export default function CasesPage() {
         <Card padding="md" data-tour="cases-list">
           <Group gap="sm" mb="sm" wrap="wrap" align="flex-end">
             <NativeSelect
+              ref={firstFilter}
               label="State"
               value={state ?? ''}
               onChange={(e) => choose({ state: e.currentTarget.value || null })}
@@ -743,11 +747,11 @@ export default function CasesPage() {
               onChange={(e) => setHideResolved(e.currentTarget.checked)}
               className="cases-hide-resolved"
             />
-            {read.data && !bounded ? (
-              <Text size="sm" c="dimmed" pb={6} ml="auto" aria-live="polite">
-                {`${plural(total, 'case')}${hideResolved ? ' not resolved' : ''}`}
-              </Text>
-            ) : null}
+            {/* Always on the page, empty while the list is read: a region put on the page with its words is not
+                announced, so a list that filters down to none, or arrives after Try again, would say nothing */}
+            <Text size="sm" c="dimmed" pb={6} ml="auto" aria-live="polite" data-testid="cases-count">
+              {read.data && !bounded ? `${plural(total, 'case')}${hideResolved ? ' not resolved' : ''}` : ''}
+            </Text>
           </Group>
           {bounded && read.data && total > 0 ? (
             <Text size="sm" mb="sm" aria-live="polite">
@@ -762,7 +766,10 @@ export default function CasesPage() {
             <ErrorAlert
               error={read.error}
               title="The cases could not be read"
-              onRetry={() => void read.refetch()}
+              onRetry={() => {
+                firstFilter.current?.focus();
+                void read.refetch();
+              }}
             />
           ) : null}
           {read.data && !scenarios.isPending && items && items.length === 0 ? (
@@ -774,9 +781,10 @@ export default function CasesPage() {
                   <Button
                     size="xs"
                     variant="default"
-                    onClick={() =>
-                      setList({ state: null, outcome: null, scenario: null, resolved: null, page: 1 })
-                    }
+                    onClick={() => {
+                      firstFilter.current?.focus();
+                      setList({ state: null, outcome: null, scenario: null, resolved: null, page: 1 });
+                    }}
                   >
                     Show every case
                   </Button>
