@@ -1,4 +1,5 @@
 import { MantineProvider } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -277,7 +278,7 @@ describe('CasePage', () => {
     expect(within(board).queryByText(/No disagreements to keep/)).not.toBeInTheDocument();
     // The investigation was replayed; the question's live runs do not make it a live one
     await userEvent.click(screen.getByRole('button', { name: 'Details' }));
-    expect(await screen.findByText('Recorded replay')).toBeInTheDocument();
+    expect(await screen.findByText('Recorded replay: no new inference')).toBeInTheDocument();
     expect(screen.queryByText('Live model')).not.toBeInTheDocument();
   });
 
@@ -445,9 +446,12 @@ describe('CasePage', () => {
     expect(
       within(top).getByRole('heading', { name: 'What needs you now' }).closest('[data-tone]'),
     ).toHaveAttribute('data-tone', 'attention');
-    // The receipt's facts are labelled, as a description list
-    for (const label of ['Proposal', 'Gate', 'Released by', 'Writes', 'Verification'])
+    // The receipt's facts are labelled, as a description list; the first names who proposed, once the runs are read
+    for (const label of ['Gate', 'Released by', 'Writes', 'Verification'])
       expect(within(top).getByText(label, { selector: 'dt' })).toBeInTheDocument();
+    expect(
+      await within(top).findByText("Coordinator agent's proposal", { selector: 'dt' }),
+    ).toBeInTheDocument();
     const tabs = screen.getByRole('tablist', { name: 'The case in detail' });
     expect(top.compareDocumentPosition(tabs) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
@@ -588,7 +592,7 @@ describe('CasePage', () => {
   it("names the stakes on the board's S8 case, and the top button of the rules case goes to the two runs", async () => {
     renderCase('C-000008');
     expect(await screen.findByTestId('s8-stakes')).toHaveTextContent(
-      "Rules only, exempted here on purpose, writes WARD-B over the bed manager's WARD-C with every check passed; on a real case the gate holds it.",
+      "The board sent nothing. Rules only, deliberately exempted here, writes WARD-B over the bed manager's WARD-C with every check passed; on a real case the gate holds it.",
     );
     cleanup();
     renderCase('C-000021');
@@ -675,7 +679,7 @@ describe('CasePage', () => {
       renderCase('C-000008');
       const strip = await screen.findByRole('region', { name: 'What a resend would do' });
       expect(within(strip).getByTestId('s8-stakes')).toHaveTextContent(
-        "Rules only, exempted here on purpose, writes WARD-B over the bed manager's WARD-C with every check passed; on a real case the gate holds it.",
+        "The board sent nothing. Rules only, deliberately exempted here, writes WARD-B over the bed manager's WARD-C with every check passed; on a real case the gate holds it.",
       );
       expect(
         await within(strip).findByRole('link', { name: 'See the two side by side in the trial' }),
@@ -720,7 +724,7 @@ describe('CasePage', () => {
   it('links an S8 board case to its rules-only run near the top, and opens the side by side from there', async () => {
     renderCase('C-000008');
     const strip = await screen.findByRole('region', { name: 'Same failure, two runs' });
-    expect(within(strip).getByText('Rules only played it as')).toBeInTheDocument();
+    expect(within(strip).getByText('The same failure in Rules only:')).toBeInTheDocument();
     expect(within(strip).getByRole('link', { name: 'C-000021' })).toHaveAttribute('href', '/cases/C-000021');
     expect(strip.compareDocumentPosition(await outcome()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     await userEvent.click(within(strip).getByRole('button', { name: 'Compare the two runs' }));
@@ -1045,9 +1049,11 @@ describe('CasePage', () => {
     renderCase('C-000009');
     const board = await screen.findByRole('region', { name: 'The board' });
     const card = await within(board).findByRole('region', { name: 'Encounter Integrity' });
-    // Its citations are counted on the card, and listed one click away, each a chip to its section
+    // Its citations are counted on the card, in the name of the detail that lists them, each a chip to its section
     expect(within(card).getByText(/^Cited \d+ evidence sections$/)).toBeInTheDocument();
-    await userEvent.click(within(card).getByRole('button', { name: /^Which ones\s?, Encounter Integrity$/ }));
+    await userEvent.click(
+      within(card).getByRole('button', { name: /^Cited \d+ evidence sections\s?, Encounter Integrity$/ }),
+    );
     const cites = await within(card).findAllByRole('button', { name: 'Encounter' });
     expect(cites[0]).not.toHaveAttribute('href');
     await userEvent.click(cites[0]);
@@ -1149,7 +1155,10 @@ describe('CasePage', () => {
     const plan = (await (await fetch('/api/shutter/cases/C-000002/plan')).json()) as {
       plan: { digest: string };
     };
-    const detail = (await (await fetch('/api/shutter/cases/C-000002')).json()) as { version: number };
+    const detail = (await (await fetch('/api/shutter/cases/C-000002')).json()) as {
+      version: number;
+      encounterId: string;
+    };
     // The header says what an approval would do before anything is opened
     expect(await screen.findByTestId('case-proposal')).toHaveTextContent(
       /^Proposed: Resend the PAS transfer to WARD-B, once, only if the bed-management system is still at version 1\.$/,
@@ -1168,12 +1177,31 @@ describe('CasePage', () => {
     );
     expect(within(dialog).getByRole('rowheader', { name: 'Plan digest' })).toBeInTheDocument();
     expect(within(dialog).getByRole('rowheader', { name: 'Case version' })).toBeInTheDocument();
-    // The binding again beside the controls, so it is in view at the confirming press
+    // The binding again beside the controls, with the encounter it is for, so it is in view at the confirming press
+    expect(detail.encounterId).toMatch(/^ENC-/);
     expect(within(dialog).getByTestId('review-binding')).toHaveTextContent(
       new RegExp(
-        `^Bound to plan v1 \\(digest ${plan.plan.digest.slice(0, 10)}.*\\) and case version ${detail.version}: a change to either stops it\\.$`,
+        `^Bound to plan v1 for encounter ${detail.encounterId} \\(digest ${plan.plan.digest.slice(0, 10)}.*\\) and case version ${detail.version}: a change to either stops it\\.$`,
       ),
     );
+    // Read in this order: the action, what releasing it is expected to leave, what the press does, then the controls,
+    // which sit in the block after those three and so can't come into view before them
+    const inOrder = [
+      within(dialog).getByTestId('plan-headline'),
+      within(dialog).getByTestId('approval-change'),
+      within(dialog).getByTestId('confirm-consequence'),
+      within(dialog).getByTestId('review-binding'),
+      within(dialog).getByRole('button', { name: 'Approve the resend' }),
+    ];
+    inOrder
+      .slice(1)
+      .forEach((el, i) =>
+        expect(inOrder[i].compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy(),
+      );
+    const rest = dialog.querySelector('.review-rest');
+    expect(rest).toContainElement(within(dialog).getByTestId('review-binding'));
+    expect(rest).not.toContainElement(within(dialog).getByTestId('approval-change'));
+    expect(rest).not.toContainElement(within(dialog).getByTestId('confirm-consequence'));
     expect(within(dialog).getByRole('button', { name: 'Reject instead' })).toBeEnabled();
     expect(sent).toHaveLength(0);
     // Press two: the approval, of the plan and the case version the review opened on
@@ -1392,6 +1420,47 @@ describe('CasePage', () => {
     );
     expect(posted).toBe(1);
     expect(screen.getByRole('dialog', { name: 'Approve the resend: plan v1' })).toBeInTheDocument();
+    // Answered, the review can be closed again
+    expect(within(dialog).getByRole('button', { name: 'Close' })).toBeEnabled();
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeEnabled();
+  });
+
+  it('holds the review open while a decision is being sent, so its answer is always announced', async () => {
+    const sent: unknown[] = [];
+    let answer!: () => void;
+    const held = new Promise<void>((resolve) => (answer = resolve));
+    server.use(
+      http.post('/api/shutter/cases/C-000002/approvals', async ({ request }) => {
+        sent.push(await request.clone().json());
+        await held;
+        return HttpResponse.json({ approver: 'approver' }, { status: 202 });
+      }),
+    );
+    const announced = vi.spyOn(notifications, 'show');
+    renderCase('C-000002');
+    await screen.findByTestId('case-proposal');
+    await userEvent.click(screen.getByTestId('case-action'));
+    const dialog = await screen.findByRole('dialog', { name: 'Approve the resend: plan v1' });
+    // Before the press the review closes as any dialog does
+    expect(within(dialog).getByRole('button', { name: 'Close' })).toBeEnabled();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Approve the resend' }));
+    await waitFor(() => expect(sent).toHaveLength(1));
+    // On its way: Cancel, the close button, Escape and the way to the other decision all do nothing
+    expect(within(dialog).getByRole('button', { name: 'Close' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Reject instead' })).toBeDisabled();
+    await userEvent.keyboard('{Escape}');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+    expect(screen.getByRole('dialog', { name: 'Approve the resend: plan v1' })).toBeInTheDocument();
+    expect(announced).not.toHaveBeenCalled();
+    // Answered: the notice says who approved, and only then the review closes
+    answer();
+    await waitFor(() =>
+      expect(announced).toHaveBeenCalledWith(expect.objectContaining({ title: 'Approved by approver' })),
+    );
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(sent).toHaveLength(1);
+    announced.mockRestore();
   });
 
   it('sends the digest the review read, even an empty one, and the server refuses it as stale', async () => {
@@ -1524,7 +1593,7 @@ describe('CasePage', () => {
     expect(details).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByText('Case version')).toBeInTheDocument();
     expect(await screen.findByText('Provenance')).toBeInTheDocument();
-    expect(await screen.findByText('Recorded replay')).toBeInTheDocument();
+    expect(await screen.findByText('Recorded replay: no new inference')).toBeInTheDocument();
     expect(screen.getByText('Investigated by')).toBeInTheDocument();
     expect(screen.getByText('Board')).toBeInTheDocument();
     expect(screen.getByText('Case opened')).toBeInTheDocument();
@@ -1711,10 +1780,9 @@ describe('the case page for both audiences', () => {
     const board = await screen.findByRole('region', { name: 'The board' });
     const conformance = await within(board).findByRole('region', { name: 'Conformance' });
     expect(conformance).toHaveTextContent('Replay · claude-opus-5-5 · 14.7 s · 3 iterations · 5 tool calls');
-    expect(within(conformance).getByRole('button', { name: /^Which ones\s?, Conformance$/ })).toHaveAttribute(
-      'aria-expanded',
-      'true',
-    );
+    expect(
+      within(conformance).getByRole('button', { name: /^Cited 8 evidence sections\s?, Conformance$/ }),
+    ).toHaveAttribute('aria-expanded', 'true');
     // The receipt's versions stay a click away in Technical too, so the Outcome band stays short (review, 2 Nov)
     const top = await outcome();
     expect(within(top).getByRole('button', { name: 'Versions, keys and times' })).toHaveAttribute(
@@ -1764,7 +1832,13 @@ describe('the case page for both audiences', () => {
   // where the receiver had the patient, the receiver by name) and took out the inline expansion and the scenario:
   // 653 measured, Technical 939. The header's Technical facts of 8 Nov (MSH-9 and the control id, the receiver's class,
   // the source item and production, the failure's kind and time, the header id, the plan's version, digest and
-  // catalogue entry) take Technical to 954, within the spec's own 1.5 times the 653 measured in Plain
+  // catalogue entry) take Technical to 954, within the spec's own 1.5 times the 653 measured in Plain. The S8 strip's
+  // stakes line says "The board sent nothing." again (4 words) and its first line is three words shorter to make the
+  // room: 659 measured in Plain and 960 in Technical on 13 Nov, both budgets as they were.
+  // The clarity
+  // review of 13 Nov names the proposer in the receipt, with the plan's reason one press under it and the evidence
+  // behind What happened as chips, and pays for them on the board (the citations and a kept dissent open from their
+  // own lines): 658 measured before and after, Technical 960 (959 before), with nothing added to either cap
   it('keeps the Summary tab, steps closed, within 660 words in Plain', async () => {
     const plain = await summaryWords('plain');
     expect(plain).toBeLessThanOrEqual(660);

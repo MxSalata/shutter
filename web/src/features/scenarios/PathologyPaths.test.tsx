@@ -1,6 +1,7 @@
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -84,6 +85,31 @@ describe('The pathology paths on the demo (1.4.6)', () => {
     const p2 = within(group).getByRole('article', { name: paths[1].title });
     expect(within(p2).getByRole('button', { name: 'Run P2' })).toBeEnabled();
     expect(within(p2).queryByText(PATHOLOGY_WORDS.outageOpen)).not.toBeInTheDocument();
+  });
+
+  it('a press of Run says the path is starting, with no mode, no agent and no link, until the server answers', async () => {
+    mockPathology(listed());
+    let answer: () => void = () => {};
+    const held = new Promise<void>((resolve) => {
+      answer = resolve;
+    });
+    server.use(
+      http.post('/api/shutter/scenarios/P1/run', async () => {
+        await held;
+        return HttpResponse.json({ scenario: 'P1', mode: 'board', startedAt: '', files: [] });
+      }),
+    );
+    renderPage();
+    const group = await screen.findByRole('region', { name: PATHOLOGY_WORDS.title });
+    await userEvent.click(within(group).getByRole('button', { name: 'Run P1' }));
+    const starting = await screen.findByTestId('pathology-run-starting');
+    expect(starting).toHaveTextContent('Starting P1');
+    expect(starting).toHaveTextContent(PATHOLOGY_WORDS.starting);
+    expect(starting).not.toHaveTextContent('Board');
+    expect(within(starting).queryByRole('link')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('run-starting')).not.toBeInTheDocument();
+    answer();
+    await waitFor(() => expect(screen.queryByTestId('pathology-run-starting')).not.toBeInTheDocument());
   });
 
   it('shows nothing where the server lists no paths: the trial, a site, a demo without the results route', async () => {

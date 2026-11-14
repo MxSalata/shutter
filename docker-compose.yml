@@ -36,11 +36,14 @@ services:
       - "127.0.0.1:${SHUTTER_WEB_PORT:-52773}:52773"
       - "127.0.0.1:${SHUTTER_SUPERSERVER_PORT:-1972}:1972"
     environment:
-      # Empty: the agents replay recorded runs. Set it for live agents (the aihub module).
+      # Both empty: the agents replay recorded runs. Set one for live agents (the aihub module): Anthropic's key, or OpenAI's.
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      # anthropic or openai; empty takes the provider whose key is set, Anthropic when both are.
+      - SHUTTER_PROVIDER=${SHUTTER_PROVIDER:-}
       # live, record or replay; empty keeps a mode set on the instance, else the instance decides (live when a key is set, else replay).
       - SHUTTER_AGENT_MODE=${SHUTTER_AGENT_MODE:-}
-      # The model for live agents (default claude-opus-5-5).
+      # The model for live agents (default claude-opus-5-5, or gpt-4.1 on OpenAI).
       - SHUTTER_MODEL=${SHUTTER_MODEL:-}
       # Applied when Shutter's production starts (Shutter.Setup.ApplyEnvironment), so they need no build argument and a
       # change takes effect on the next `docker compose up`; empty leaves the instance's setting as it is. See .env.example.

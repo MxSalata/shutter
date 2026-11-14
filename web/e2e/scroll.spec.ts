@@ -229,13 +229,13 @@ test.describe('at a laptop size', () => {
     await page.getByRole('button', { name: 'Resume tour' }).click();
     await page.getByRole('menuitem', { name: 'Resume the tour' }).click();
     const guide = page.getByRole('region', { name: 'Guide' });
-    await expect(guide).toContainText('Step 6 of 9');
+    await expect(guide).toContainText('Step 7 of 9');
     await page.waitForTimeout(1500);
     await atRest(page);
     expect(await scrollY(page)).toBeGreaterThan(0);
     await watchTop(page);
     await guide.getByRole('button', { name: 'Next' }).click();
-    await expect(guide).toContainText('Step 7 of 9');
+    await expect(guide).toContainText('Step 8 of 9');
     await page.waitForTimeout(1500);
     await atRest(page);
     expect(await highest(page)).toBeGreaterThan(0);

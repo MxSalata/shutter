@@ -436,7 +436,11 @@ ClassMethod Probe(agentClass As %String = "Shutter.Agent.Conformance") As %Strin
 /// live by mistake) and returns the response as JSON. For checks over SQL once a provider is configured.
 /// The tool calls are keyed test:<case>:<member>:<n>, one key per run (run_key in the answer; a member's
 /// runs are found with LIKE 'test:<case>:<member>:%'), so two runs of one member never share a list; mock
-/// says whether the API mimic answered. No AgentRun row is written: a test run is not the case's.
+/// says whether the API mimic answered. The day's budget holds it as it holds the Agent item's runs (R145-04,
+/// Shutter.Bridge.Runner.Diagnostic): it is admitted before any provider is contacted (the day's spend, the reservations
+/// and its estimate within the cap and the caller's share), refused with status budget_exhausted otherwise, and charged to
+/// the caller. What it spent, or that it failed, is recorded as an AgentRun row with Purpose "diagnostic" and no case
+/// (run_id in the answer), which the day's spend and GET /costs count; no case's runs, events or counts read it.
 ClassMethod TestRun(caseId As %String, memberCode As %String = "conformance", mode As %String = "live", tokenBudget As %Integer = 60000) As %String [ SqlProc ]
 {
     // A live run costs money: only a caller who may operate Shutter gets one.
@@ -466,12 +470,12 @@ ClassMethod TestRun(caseId As %String, memberCode As %String = "conformance", mo
         // One key per run: a second run of the same member must not append to the first one's tool calls.
         Set n = $INCREMENT(^Shutter.Counter("testrun"))
         Set spec.RecordKey = "", spec.EnsMessageId = "test:" _ caseId _ ":" _ memberCode _ ":" _ n, spec.EnsSessionId = ""
-        Set response = ##class(Shutter.Bridge.Msg.AgentResponse).%New()
-        Set runner = ..%New()
-        Set sc = runner.Run(spec, .response)
-        Do ##class(Shutter.Bridge.Runner).Stamp(spec, response)
+        // Admitted by the day's budget before the runner is made, run, recorded and settled (R145-04).
+        Set sc = ##class(Shutter.Bridge.Runner).Diagnostic(spec, $USERNAME, .response, .runId)
+        If response.Status = "budget_exhausted" Return {"error": (response.Error), "status": "budget_exhausted"}.%ToJSON()
         Set out = response.ToObject()
         If $$$ISERR(sc) Set out."run_error" = $SYSTEM.Status.GetErrorText(sc)
+        Set out."run_id" = runId
         Set out."tool_calls_detail" = ##class(Shutter.Bridge.ToolCall).ForRun(spec.EnsMessageId)
         Set out."run_key" = spec.EnsMessageId
         Do out.%Set("mock", spec.MockConfig '= "", "boolean")

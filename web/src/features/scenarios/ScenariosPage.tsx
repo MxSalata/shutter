@@ -66,7 +66,7 @@ import { landOn } from '@/features/guide/reveal';
 import { caseOf } from '@/features/guide/places';
 import { EXECUTION, routeNext, runCase, runExecution, SINGLE_ROUTE } from './execution';
 import { MoreAbout } from './MoreAbout';
-import { PathologyLink, PathologyPaths, PathologyRunBanner } from './PathologyPaths';
+import { PathologyLink, PathologyPaths, PathologyRunBanner, PathologyRunStarting } from './PathologyPaths';
 import { isPathologyRun } from './pathologyText';
 import { ScenarioDiagram } from './ScenarioDiagram';
 import { StartHere } from './StartHere';
@@ -225,6 +225,31 @@ function RunNext({ run, cases }: { run: ScenarioRun; cases: CaseSummary[] | unde
         </Text>
       ) : null}
     </Stack>
+  );
+}
+
+/**
+ * From the press of Run until the server answers: the run just asked for, as starting, in place of the last run's
+ * banner. That banner's "Open its case" link is the earlier run's, and it stayed in view for the seconds the answer
+ * takes; a reader who pressed Run and then that link opened the wrong case. Nothing is claimed about the new run
+ * before the server has it, and there is no case link until its own case exists (`runCase`, once it is done).
+ */
+function RunStarting({ scenario, mode }: { scenario: string; mode: Mode }) {
+  return (
+    <Alert
+      color="blue"
+      variant="light"
+      icon={<Loader size={16} />}
+      title={`Starting ${scenario} (${humanize(mode)})`}
+      data-testid="run-starting"
+    >
+      <Text size="sm">
+        {byEnv({
+          live: 'Asking the scenario player to start it. Its case link appears here once the run has played and its case has opened.',
+          trial: 'Its recording starts in a moment. Its case link appears here once it has played.',
+        })}
+      </Text>
+    </Alert>
   );
 }
 
@@ -909,9 +934,10 @@ function useJudgeLanding(ready: boolean) {
 const CARD_ID = /^S\d+[a-z]?$/;
 
 /**
- * Home's way in (`?start=S2`): once the cards are drawn the page lands on that card and its Run takes the focus, so the
- * next choice is Run itself. Nothing is pressed: arriving starts no run. The address then drops `start`, so Back from
- * the run's case, or a reload, shows the page where the reader left it and not the card again.
+ * Home's way in, and the trial welcome's (`?start=S2`): once the cards are drawn the page lands on that card and its
+ * Run takes the focus, so the next choice is Run itself. Nothing is pressed: arriving starts no run. The address then
+ * drops `start`, so Back from the run's case, or a reload, shows the page where the reader left it and not the card
+ * again. A later arrival with `start` lands again: the welcome can be opened from the Tour menu on this very page.
  */
 function useStartLanding(ready: boolean) {
   const reduced = useReducedMotion();
@@ -919,6 +945,8 @@ function useStartLanding(ready: boolean) {
   const start = params.get('start');
   const landed = useRef<string | null>(null);
   useEffect(() => {
+    // The address has dropped it: the landing is over, and the next arrival is a new one
+    if (!start) landed.current = null;
     if (!start || !ready) return;
     if (landed.current !== start && CARD_ID.test(start)) {
       const card = document.querySelector<HTMLElement>(`[data-first="${start}"]`);
@@ -1007,6 +1035,9 @@ export default function ScenariosPage() {
       },
     );
   const pending = run.isPending ? 'Starting…' : '';
+  // The run being asked for, from the press until the server's answer and the list read after it (useRunScenario
+  // waits for that read): by then `current` is the new run, queued or playing, so the last run is never shown as this one
+  const pressed = run.isPending ? run.variables : undefined;
   /** A pathology path runs no agent, so its mode is never the question: only who may run, and whether a run plays. */
   const pathWhy = playerOff ? PLAYER_OFF : hidden || !canRun ? runNeeds : runBusy || pending;
   const startPath = (p: PathologyPath) =>
@@ -1106,7 +1137,15 @@ export default function ScenariosPage() {
             })}
           </Text>
         ) : null}
-        {current ? (
+        {/* A Run just pressed shows as starting at once: the last run's banner and its case link give way to it. A
+            pathology path's press says what it is, with no mode and no agent */}
+        {pressed ? (
+          pathology.some((p) => p.id === pressed.id) ? (
+            <PathologyRunStarting id={pressed.id} />
+          ) : (
+            <RunStarting scenario={pressed.id} mode={pressed.mode} />
+          )
+        ) : current ? (
           isPathologyRun(current, pathology) ? (
             <PathologyRunBanner run={current} path={pathology.find((p) => p.id === current.scenario)} />
           ) : (

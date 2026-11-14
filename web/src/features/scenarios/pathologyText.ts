@@ -18,6 +18,9 @@ export const PATHOLOGY_WORDS = {
   /** P2 is refused while the last run's outage is open: each run opens its own (Shutter.Scenarios.Runner, PathologyRefusal). */
   outageOpen: 'P2 runs again once this outage is closed: approve its resend or close it on Incidents.',
   noAgent: 'No agent runs on this path and no model is called.',
+  /** Between the press of Run and the server's answer. */
+  starting:
+    'Asking the scenario player to start it. No agent runs and no model is called. A link to what it opens, its case or its outage, appears here once it has played.',
 } as const;
 
 /** Where the group starts, for the link after the main route. */

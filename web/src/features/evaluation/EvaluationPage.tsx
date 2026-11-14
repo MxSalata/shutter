@@ -44,7 +44,14 @@ import { Term } from '@/components/Term';
 import { formatDuration, formatInt, formatUsd, formatUtc, humanize, plural } from '@/lib/format';
 import { hueVar, MEMBERS } from '@/lib/hues';
 import { usePrefersReducedMotion } from '@/lib/motion';
-import { proofFrom, type PlayedResult, type Proof, type ProofSource } from '@/lib/proof';
+import {
+  CATALOGUE_COHORT,
+  cohortLabel,
+  proofFrom,
+  type PlayedResult,
+  type Proof,
+  type ProofSource,
+} from '@/lib/proof';
 import type { Tone } from '@/lib/tone';
 import { useTechnical } from '@/stores/appearance';
 import { HINT_EVENTS } from '@/theme';
@@ -347,41 +354,123 @@ function entryOfScenario(data: Evaluation, scenario: string): string {
 export const RULES_EXEMPTION =
   'Rules only is exempted there on purpose, and on a real case the gate holds it';
 
-/** The line under the hero statement: the miss that wrote, which the board caught, and the entry it followed. */
-function heroSecond(proof: Proof, entryOf: (scenario: string) => string): string {
+/** The scenario Rules only is exempted on: the one whose plain resend the recording shows writing (S8, the bed manager's ward). */
+const EXEMPTED = 'S8';
+
+/**
+ * The line under the hero statement: the miss that wrote, which the board caught, and the entry it followed. The
+ * exemption, the bed manager's ward and "every check passed" are S8's alone, so they are said only of S8: another
+ * scenario that wrote is named as having written, with no claim about its checks.
+ */
+export function heroSecond(proof: Pick<Proof, 'rulesMisses'>, entryOf: (scenario: string) => string): string {
   const misses = proof.rulesMisses;
   if (!misses?.wrote.length) return '';
+  const exempted = `wrote with every check passed: ${RULES_EXEMPTION}.`;
   // "The seventh": the one miss the gate did not stop, after the six it did
-  if (misses.wrote.length === 1 && misses.total > 1 && misses.stopped.length === misses.total - 1)
-    return `The ${ordinal(misses.total)}, ${misses.wrote[0]}, wrote over the bed manager's ward with every check passed: ${RULES_EXEMPTION}. The board escalated${entryOf(misses.wrote[0]) ? `, as entry ${entryOf(misses.wrote[0])} says` : ''}.`;
-  return `${andList(misses.wrote)} wrote with every check passed: ${RULES_EXEMPTION}. The board caught ${misses.wrote.length === 1 ? 'it' : 'them'}.`;
+  if (
+    misses.wrote.length === 1 &&
+    misses.wrote[0] === EXEMPTED &&
+    misses.total > 1 &&
+    misses.stopped.length === misses.total - 1
+  )
+    return `The ${ordinal(misses.total)}, ${EXEMPTED}, wrote over the bed manager's ward with every check passed: ${RULES_EXEMPTION}. The board escalated${entryOf(EXEMPTED) ? `, as entry ${entryOf(EXEMPTED)} says` : ''}.`;
+  const caught = `The board caught ${misses.wrote.length === 1 ? 'it' : 'them'}.`;
+  if (!misses.wrote.includes(EXEMPTED)) return `${andList(misses.wrote)} wrote. ${caught}`;
+  if (misses.wrote.length === 1) return `${EXEMPTED} ${exempted} ${caught}`;
+  return `${andList(misses.wrote)} wrote. ${EXEMPTED} ${exempted} ${caught}`;
+}
+
+/** A link to the published document, underlined: it stands in a line of text. */
+function DocLink({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <Anchor href={href} target="_blank" rel="noreferrer" underline="always">
+      {children}
+    </Anchor>
+  );
 }
 
 /**
- * The held-out fair test, in one compact card above the board's own recorded scores: twelve sealed cases nobody wrote
- * the catalogue for, where the board and the single investigator scored alike and the mode with no model wrote wrongly.
- * Its figures are fair-test.md's (heldOut.ts, checked against the document).
+ * The held-out cases, in one compact card above the board's own recorded scores, each line with its release: the
+ * latest rerun first (1.4.3, a regression rerun), then the original test (1.0.0), then one case of the rerun where the
+ * same gate met two proposals (F03: evaluation evidence, not a scenario and not S3), with its detail and the earlier
+ * figures one press away. Every figure is fair-test.md's or the run records' (heldOut.ts, checked against both).
  */
 function HeldOutCard() {
   const h = HELD_OUT;
+  const r = h.r143;
+  const g = r.sameGate;
+  const each = `${g.runs} of ${g.runs} runs`;
   return (
     <Paper withBorder p="sm" component="section" aria-labelledby="held-out-title" data-testid="held-out-card">
-      <Stack gap={4}>
+      <Stack gap={6}>
         <Title order={3} size="h5" id="held-out-title">
-          {`Held out: ${h.cases} sealed cases, ${h.repeats} runs each, on release ${h.release}'s code`}
+          {`Held-out cases F01 to F12: ${h.cases} cases, ${h.runs} runs in each mode `}
+          <Text span inherit fw={400} c="dimmed">
+            (strict mean loss, lower is better)
+          </Text>
         </Title>
         <Text size="sm">
-          {`Strict mean loss, lower is better: the board ${h.board}, the single investigator ${h.single} with two ${h.disputed} runs settled (${h.singleGraded} as graded), Site policy with no model ${h.policy}, always escalating ${h.escalate}; with no model, ${h.wroteWrongly} was written wrongly in every run.`}{' '}
-          <Anchor href={h.url} target="_blank" rel="noreferrer" underline="always">
-            fair-test.md
-          </Anchor>
+          <DocLink href={r.url}>{`Release ${r.release}`}</DocLink>
+          {`, regression rerun: the board ${r.board}, the single investigator ${r.single} as settled (${r.singleGraded} as graded), Rules only ${r.rules}; no mode executed a wrong write.`}
         </Text>
         <Text size="sm">
-          {`On ${h.v111.release}'s code the board proposed the same and the gate also held ${h.v111.held.join(' and ')}: ${h.v111.boardGraded} as graded.`}{' '}
-          <Anchor href={h.v111.url} target="_blank" rel="noreferrer" underline="always">
-            Release 1.1.x
-          </Anchor>
+          <DocLink href={h.url}>{`Release ${h.release}`}</DocLink>
+          {`, the original test: the board ${h.board}, the single investigator ${h.single} as settled (${h.singleGraded} as graded); with no model, ${h.wroteWrongly} was written wrongly in every run.`}
         </Text>
+        <Text size="sm" data-testid="same-gate-example">
+          <Text span inherit fw={600}>
+            {`Evaluation evidence, same gate, release ${r.release}:`}
+          </Text>
+          {` on ${g.case} the board reconciled, Rules only's resend was blocked; neither wrote.`}
+        </Text>
+        <TechDetail kind="data" label={`${g.case} in detail`}>
+          <KeyValueList
+            labelWidth={170}
+            rows={[
+              ['The case', `${g.case}: ${g.what.charAt(0).toLowerCase()}${g.what.slice(1)}`],
+              [
+                'Release',
+                `${r.release}, one site profile and the same gate for every mode, nothing exempted`,
+              ],
+              [
+                'The board, the single investigator',
+                `proposed ${g.agents.proposal} in ${each} each; the gate passed it and the case ${g.agents.state}, verified`,
+              ],
+              [
+                'Rules only',
+                <Text size="sm" key="rules">
+                  {`proposed ${g.rules.proposal} in ${each}; the gate ${g.rules.state} it at proposal: `}
+                  {g.rules.codes.map((code, i) => (
+                    <span key={code}>
+                      {i ? ', ' : ''}
+                      <CodeChip>{code}</CodeChip>
+                    </span>
+                  ))}
+                </Text>,
+              ],
+              ['Writes to the receiver', `${g.writes} in every run of the three modes`],
+              ['What this is', 'A held-out case, not a scenario: nothing in the app runs it'],
+              [
+                'Every run',
+                <DocLink key="runs" href={g.url}>
+                  results-r143-all.json
+                </DocLink>,
+              ],
+            ]}
+          />
+        </TechDetail>
+        <TechDetail kind="explain" label={`Baselines and release ${h.v111.release}`}>
+          <Stack gap={4}>
+            <Text size="sm">
+              {`On ${h.release}, Site policy with no model scored ${h.policy} and always escalating ${h.escalate}, a computed baseline that is the same on ${r.release}; the single investigator's ${h.single} has two ${h.disputed} runs settled.`}{' '}
+              <DocLink href={h.url}>fair-test.md</DocLink>
+            </Text>
+            <Text size="sm">
+              {`On ${h.v111.release}'s code the board proposed the same and the gate also held ${h.v111.held.join(' and ')}: ${h.v111.boardGraded} as graded.`}{' '}
+              <DocLink href={h.v111.url}>Release 1.1.x</DocLink>
+            </Text>
+          </Stack>
+        </TechDetail>
       </Stack>
     </Paper>
   );
@@ -418,7 +507,7 @@ function Headline({
   const on = proof.recordedOn;
   const provenance =
     proof.runs && range
-      ? `From ${plural(proof.runs, 'run')} recorded with the real agents${on ? ` on IRIS AI Hub (build ${on.build})` : ''}, ${range}; CI replays them on every push.`
+      ? `${CATALOGUE_COHORT}: ${plural(proof.runs, 'run')} recorded with the real agents${on ? ` on IRIS AI Hub (build ${on.build})` : ''}, ${range}; CI replays them on every push.`
       : 'No runs have been recorded with the real agents yet.';
   const rulesCaption = pl
     ? `${pl.rules} of ${pl.of} scored passes played end to end in Rules only mode, no agents, ended as expected; played the same way, the board ended as expected in ${pl.board} of the same ${pl.of}`
@@ -430,7 +519,7 @@ function Headline({
     <HeroBand
       tone={allMatched ? 'positive' : 'info'}
       label="The board against the expected outcome"
-      overline="The board against the expected outcome"
+      overline={cohortLabel(proof)}
       overlineOrder={2}
       statement={heroStatement(proof)}
       tour="evaluation-headline"
@@ -457,6 +546,8 @@ function Headline({
 
       <HeldOutCard />
 
+      {/* The cohort again where its figures resume under the held-out card, with where they were recorded */}
+      <Text size="sm">{`${provenance} Nothing on this page was measured on this instance.`}</Text>
       <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md" style={{ alignItems: 'start' }}>
         <StatTile
           size="hero"
@@ -583,7 +674,6 @@ function Headline({
         </StatTile>
       </SimpleGrid>
 
-      <Text size="sm">{`${provenance} Nothing on this page was measured on this instance.`}</Text>
       <Sources data={data} />
 
       <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md" style={{ alignItems: 'start' }}>
@@ -716,7 +806,9 @@ function Sources({ data }: { data: Evaluation }) {
 
 /**
  * Why a board: who proposed the expected action of the scored passes (the board, then each specialist alone, on one
- * base), and which of rules alone's misses the gate stops by itself and which the board catches.
+ * base), and which of rules alone's misses the gate stops by itself and which the board catches. The bars' caption
+ * names their cohort, since the section stands outside the band that does; the single investigator, which has no
+ * recording to draw a bar from, is pointed to the held-out card.
  */
 function WhyABoard({
   proof,
@@ -753,16 +845,12 @@ function WhyABoard({
             bar('conformance', sp.conformance),
           ]}
           of={base}
-          caption={`Who proposed the expected action, of ${base} scored passes`}
+          caption={`${CATALOGUE_COHORT}: who proposed the expected action, of ${base} scored passes`}
         />
       ) : null}
       <Text size="sm">
-        Each specialist answers from its own view. The single investigator was measured with the real model on
-        the {HELD_OUT.cases} held-out cases (
-        <Anchor href={HELD_OUT.url} target="_blank" rel="noreferrer" underline="always">
-          fair-test.md
-        </Anchor>
-        ); it has no recording in the trial.
+        Each specialist answers from its own view. The single investigator has no recording; its figures are
+        above.
       </Text>
       {misses && (misses.stopped.length || misses.wrote.length) ? (
         <Text size="sm">
@@ -932,7 +1020,7 @@ function PassesTable({
           Per scenario
         </Title>
         <Text c="dimmed" maw="68ch" mb="sm">
-          One row per pass: each agent&apos;s view, the plan, and how it ended.
+          One row per pass of the catalogue demonstration: each agent&apos;s view, the plan, and how it ended.
         </Text>
         <Stack gap="xs">
           <Filters filters={filters} total={data.passes.length} shown={passes.length} set={set} />

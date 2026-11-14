@@ -1,6 +1,7 @@
 import { Alert, Button, Group, Stack, Text, Textarea } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { useRef, useState } from 'react';
+import { IconArrowDown } from '@tabler/icons-react';
+import { useEffect, useRef, useState } from 'react';
 import { useDecideApproval } from '@/api/hooks';
 import { newIdempotencyKey } from '@/api/client';
 import type { CaseDetail, PlanView, Snapshot } from '@/api/types';
@@ -37,10 +38,13 @@ export interface OpenedReview {
 /**
  * The review of the exact plan, and the one place a decision on it is sent from: the case's action button, "What needs
  * you now" and the Approval section's own buttons all open this dialog. It leads with the plan's action in plain
- * words, says what the decision does (for real on a live system, in this browser only in the trial), shows what the
- * evidence read at the receiver and what releasing this plan is expected to leave, and names the case, the patient and
- * what the decision binds (the plan digest and the case version). The other decision is one press away ("Reject
- * instead"), and still needs its own confirming press. Opening, switching and cancelling send nothing.
+ * words, then shows what the evidence read at the receiver and what releasing this plan is expected to leave, says
+ * what the decision does (for real on a live system, in this browser only in the trial), and names the case, the
+ * patient and what the decision binds (the plan digest and the case version). The controls never come into view before
+ * the action, its expected effect and what the decision does: on a screen too short for all of them, the controls
+ * follow those three (`.review-rest` in styles.css). The other decision is one press away ("Reject instead"), and still
+ * needs its own confirming press. Opening, switching and cancelling send nothing, and while a decision is being sent
+ * the dialog can't be closed, so its answer is always shown.
  */
 export function ApprovalReview({
   c,
@@ -61,11 +65,14 @@ export function ApprovalReview({
   // The dialog keeps the last review's words while it animates closed: approve must not flash as a red Reject
   const [shown, setShown] = useState<OpenedReview | null>(review);
   if (review && review !== shown) setShown(review);
+  // A decision on its way holds the dialog open: closed, it could not say "Approved by ..." or why it was refused
+  const [sending, setSending] = useState(false);
   const labels = decisionLabels(shown?.view.plan);
   return (
     <ConfirmModal
       opened={review !== null}
       onClose={onClose}
+      locked={sending}
       title={
         shown
           ? `${shown.decision === 'reject' ? labels.reject : labels.approve}: plan v${shown.view.plan.version}`
@@ -83,6 +90,7 @@ export function ApprovalReview({
           live={review !== null}
           onClose={onClose}
           onSwitch={onSwitch}
+          onSending={setSending}
         />
       ) : null}
     </ConfirmModal>
@@ -96,6 +104,7 @@ function ReviewBody({
   live,
   onClose,
   onSwitch,
+  onSending,
 }: {
   c: CaseDetail;
   view: PlanView | null | undefined;
@@ -104,6 +113,8 @@ function ReviewBody({
   live: boolean;
   onClose: () => void;
   onSwitch: (decision: Decision) => void;
+  /** Says when a decision is on its way, and when it has been answered: the dialog stays open in between. */
+  onSending: (sending: boolean) => void;
 }) {
   const decide = useDecideApproval(c.caseId);
   const [comment, setComment] = useState('');
@@ -118,8 +129,30 @@ function ReviewBody({
     !decide.isPending &&
     !decide.isSuccess &&
     (view?.plan?.digest !== opened.view.plan.digest || c.version !== opened.c.version);
+  // The dialog is held open from the confirming press (said there, before the request is even pending) until the
+  // answer: a decision that lands with the dialog closed would land unannounced
+  useEffect(() => {
+    onSending(decide.isPending);
+    return () => onSending(false);
+  }, [decide.isPending, onSending]);
+  // Whether the controls are still wholly below the dialog's foot (a short screen, a plan with notes): a line at the
+  // foot then says the decision is further down, so a screen that happens to end on a whole sentence never reads as
+  // a dialog without one
+  const controls = useRef<HTMLDivElement>(null);
+  const [below, setBelow] = useState(false);
+  useEffect(() => {
+    const el = controls.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return undefined;
+    const watch = new IntersectionObserver(([entry]) => setBelow(!entry.isIntersecting), {
+      root: el.closest('.mantine-Modal-content'),
+    });
+    watch.observe(el);
+    return () => watch.disconnect();
+  }, []);
+  const encounter = opened.c.encounterId && opened.c.encounterId !== '-' ? opened.c.encounterId : '';
   const submit = () => {
     if (moved) return;
+    onSending(true);
     decide.mutate(
       {
         decision: {
@@ -148,6 +181,8 @@ function ReviewBody({
                 : 'The receiver is read again and the gate checks the dispatch.',
           });
         },
+        // Answered either way, the dialog can be closed again
+        onSettled: () => onSending(false),
       },
     );
   };
@@ -158,6 +193,8 @@ function ReviewBody({
     <Stack gap="sm" ref={body}>
       {/* What is decided, first: the plan's own action, as every other place on the page names it */}
       <PlanHeadline words={planWords(opened.view.plan, opened.c, opened.snapshot)} />
+      {/* Then what releasing it is expected to leave at the receiver, with what the reader should know of it */}
+      {approving ? <ApprovalChangeRows view={opened.view} c={opened.c} snapshot={opened.snapshot} /> : null}
       {/* Then what this decision does: for real on a live system, in this browser only in the trial */}
       <Text size="sm" fw={600} data-testid="confirm-consequence">
         {approving
@@ -172,81 +209,92 @@ function ReviewBody({
                 'Nothing is sent. The case stops as blocked, in this browser only, until a reload starts the recording afresh.',
             })}
       </Text>
-      {approving ? <ApprovalChangeRows view={opened.view} c={opened.c} snapshot={opened.snapshot} /> : null}
-      <KeyValueList
-        rows={[
-          ['Case', opened.c.caseId],
-          [
-            'Patient',
-            `${opened.c.patientId}${opened.c.patientIdAuthority ? ` (${opened.c.patientIdAuthority})` : ''}`,
-          ],
-          ['Encounter', opened.c.encounterId && opened.c.encounterId !== '-' ? opened.c.encounterId : ''],
-          ['Event time', <Timestamp key="t" iso={opened.c.eventTime} />],
-          ['Bed', opened.c.bed ?? ''],
-          ['Why it is still due', opened.view.plan.why || opened.view.plan.summary],
-          ['Plan digest', <Digest key="p" value={opened.view.plan.digest} label="plan digest" />],
-          ['Case version', String(opened.c.version)],
-        ]}
-      />
-      <Textarea
-        label="Comment"
-        description="Recorded with your decision"
-        autosize
-        minRows={2}
-        value={comment}
-        onChange={(e) => setComment(e.currentTarget.value)}
-      />
-      {/* The decision's controls stay in view while the review scrolls, with whatever stops them said beside them */}
-      <Stack gap="sm" className="review-actions">
-        {/* What the decision is bound to, in view beside its controls however far the facts above are scrolled */}
-        <Text size="xs" c="dimmed" data-testid="review-binding">
-          {`Bound to plan v${opened.view.plan.version} (digest ${shortDigest(opened.view.plan.digest) || 'none'}) and case version ${opened.c.version}: a change to either stops it.`}
-        </Text>
-        {moved ? (
-          <Alert color="red" variant="light" role="alert">
-            The plan or the case changed since you opened this, so this decision can&apos;t be recorded. Close
-            this and review the new plan.
-          </Alert>
-        ) : decide.error ? (
-          <Alert color="red" variant="light" role="alert">
-            {stale
-              ? 'Approval no longer valid: the plan or the case changed since you opened this, so this decision was not recorded. Close this and review the new plan.'
-              : describeError(decide.error)}
-          </Alert>
-        ) : null}
-        <Group justify="space-between" gap="sm" wrap="wrap">
-          {/* The other decision, one press away and never sent by this press: it turns the review, which then asks
-              for its own confirming press */}
-          <Button
-            variant="subtle"
-            color={approving ? 'red' : undefined}
-            disabled={decide.isPending}
-            onClick={() => {
-              // Another decision is another request: it never rides on a key the first one may have used
-              decide.reset();
-              setKey(newIdempotencyKey());
-              onSwitch(approving ? 'reject' : 'approve');
-              // The turned review is read from its top: its title, the action and what this decision does
-              body.current?.closest('.mantine-Modal-content')?.scrollTo?.({ top: 0 });
-            }}
-          >
-            {approving ? 'Reject instead' : 'Approve instead'}
-          </Button>
-          <Group gap="sm">
-            <Button variant="default" onClick={onClose} disabled={decide.isPending}>
-              Cancel
-            </Button>
+      {/* The rest scrolls under the controls, which are sticky inside this block and so never rise over the three
+          above: the confirming press comes into view only after them */}
+      <Stack gap="sm" className="review-rest">
+        <KeyValueList
+          rows={[
+            ['Case', opened.c.caseId],
+            [
+              'Patient',
+              `${opened.c.patientId}${opened.c.patientIdAuthority ? ` (${opened.c.patientIdAuthority})` : ''}`,
+            ],
+            ['Encounter', encounter],
+            ['Event time', <Timestamp key="t" iso={opened.c.eventTime} />],
+            ['Bed', opened.c.bed ?? ''],
+            ['Why it is still due', opened.view.plan.why || opened.view.plan.summary],
+            ['Plan digest', <Digest key="p" value={opened.view.plan.digest} label="plan digest" />],
+            ['Case version', String(opened.c.version)],
+          ]}
+        />
+        <Textarea
+          label="Comment"
+          description="Recorded with your decision"
+          autosize
+          minRows={2}
+          value={comment}
+          onChange={(e) => setComment(e.currentTarget.value)}
+        />
+        {/* The decision's controls stay in view while the review scrolls, with whatever stops them said beside them */}
+        <Stack gap="sm" className="review-actions" ref={controls}>
+          {/* What the decision is bound to, in view beside its controls however far the facts above are scrolled */}
+          <Text size="xs" c="dimmed" data-testid="review-binding">
+            {`Bound to plan v${opened.view.plan.version}${encounter ? ` for encounter ${encounter}` : ''} (digest ${shortDigest(opened.view.plan.digest) || 'none'}) and case version ${opened.c.version}: a change to either stops it.`}
+          </Text>
+          {moved ? (
+            <Alert color="red" variant="light" role="alert">
+              The plan or the case changed since you opened this, so this decision can&apos;t be recorded.
+              Close this and review the new plan.
+            </Alert>
+          ) : decide.error ? (
+            <Alert color="red" variant="light" role="alert">
+              {stale
+                ? 'Approval no longer valid: the plan or the case changed since you opened this, so this decision was not recorded. Close this and review the new plan.'
+                : describeError(decide.error)}
+            </Alert>
+          ) : null}
+          <Group justify="space-between" gap="sm" wrap="wrap">
+            {/* The other decision, one press away and never sent by this press: it turns the review, which then asks
+                for its own confirming press */}
             <Button
-              color={approving ? undefined : 'red'}
-              loading={decide.isPending}
-              onClick={submit}
-              disabled={!!stale || moved}
+              variant="subtle"
+              color={approving ? 'red' : undefined}
+              disabled={decide.isPending}
+              onClick={() => {
+                // Another decision is another request: it never rides on a key the first one may have used
+                decide.reset();
+                setKey(newIdempotencyKey());
+                onSwitch(approving ? 'reject' : 'approve');
+                // The turned review is read from its top: its title, the action and what this decision does
+                body.current?.closest('.mantine-Modal-content')?.scrollTo?.({ top: 0 });
+              }}
             >
-              {approving ? labels.approve : labels.reject}
+              {approving ? 'Reject instead' : 'Approve instead'}
             </Button>
+            <Group gap="sm">
+              <Button variant="default" onClick={onClose} disabled={decide.isPending}>
+                Cancel
+              </Button>
+              <Button
+                color={approving ? undefined : 'red'}
+                loading={decide.isPending}
+                onClick={submit}
+                disabled={!!stale || moved}
+              >
+                {approving ? labels.approve : labels.reject}
+              </Button>
+            </Group>
           </Group>
-        </Group>
+        </Stack>
       </Stack>
+      {below ? (
+        <div className="review-more" aria-hidden data-testid="review-more">
+          <Text size="sm" fw={600}>
+            <IconArrowDown size={16} stroke={2} />
+            The decision is below
+          </Text>
+        </div>
+      ) : null}
     </Stack>
   );
 }

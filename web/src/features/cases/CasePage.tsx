@@ -388,6 +388,7 @@ function CaseBody({ c }: { c: CaseDetail }) {
         onSeePrecedents={seePrecedents}
         onCompare={showCompare}
         comparable={comparable}
+        onSeeFindings={() => showStage('investigation')}
       />
       {placing ? <PageSkeleton label="Loading the investigation…" /> : null}
       {placing ? null : (

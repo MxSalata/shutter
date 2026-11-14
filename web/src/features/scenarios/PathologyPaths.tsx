@@ -179,6 +179,24 @@ export function PathologyLink() {
   );
 }
 
+/**
+ * From the press of Run until the server answers, for a pathology path: what is starting, in place of the last run's
+ * banner, with no mode (no agent runs) and no link until the path has played and opened its case or its outage.
+ */
+export function PathologyRunStarting({ id }: { id: string }) {
+  return (
+    <Alert
+      color="blue"
+      variant="light"
+      icon={<Loader size={16} />}
+      title={`Starting ${id}`}
+      data-testid="pathology-run-starting"
+    >
+      <Text size="sm">{PATHOLOGY_WORDS.starting}</Text>
+    </Alert>
+  );
+}
+
 /** A pathology run's banner: what it is doing, that no agent runs, and where its result is once it has played. */
 export function PathologyRunBanner({ run, path }: { run: ScenarioRun; path: PathologyPath | undefined }) {
   if (run.state === 'queued' || run.state === 'running')

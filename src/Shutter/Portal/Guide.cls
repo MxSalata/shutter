@@ -183,6 +183,7 @@ ClassMethod Items(production As %String = "") As %DynamicObject
         Set last = ..LastRunByItem()
         Set mock = ##class(Shutter.Setup).MockConfig()
         Set instanceConfig = $GET(^Shutter.Config("aihub", "provider")), instanceModel = $GET(^Shutter.Config("aihub", "model"))
+        Set instanceProvider = $GET(^Shutter.Config("aihub", "modelProvider"))
         Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID, Name, ClassName, Enabled, PoolSize FROM Ens_Config.Item WHERE Production = ? ORDER BY ID", production)
         If rs.%SQLCODE '= 0 Quit
         While rs.%Next() {
@@ -199,7 +200,7 @@ ClassMethod Items(production As %String = "") As %DynamicObject
                 Do ..ItemSettings(rs.%Get("ID"), .s)
                 If kind = "agent" {
                     Set a = {"model": ($GET(s("Host", "Model"))), "providerConfig": ($GET(s("Host", "ProviderConfig"))), "agentClass": ($GET(s("Host", "AgentClass")))}
-                    Set runs = ..Runs(a, mock, instanceConfig, instanceModel)
+                    Set runs = ..Runs(a, mock, instanceConfig, instanceModel, , instanceProvider)
                     Set row.model = runs.model, row.modelFrom = runs.from, row.config = runs.config, row.provider = runs.provider
                     Set setting = $ZCONVERT($GET(s("Host", "Mode")), "L")
                     If setting = "" Set setting = "auto"
@@ -282,9 +283,12 @@ ClassMethod LastRunByItem() As %DynamicObject
 /// model (the item's ProviderConfig, else the instance's configuration AI.LLM.Shutter, whose model is SHUTTER_MODEL),
 /// then the agent class's MODEL. Returns {model, from, config, provider}, provider being the configuration's
 /// model_provider. <var>mayRead</var> stands in for the Config Store's right in a test; -1 reads the process's own.
-ClassMethod Runs(item As %DynamicObject, mock As %String, instanceConfig As %String, instanceModel As %String, mayRead As %Integer = -1) As %DynamicObject
+/// <var>instanceProvider</var> is the provider the instance's record names (anthropic or openai); a record that names
+/// none was written before the install took a second provider, and is Anthropic's.
+ClassMethod Runs(item As %DynamicObject, mock As %String, instanceConfig As %String, instanceModel As %String, mayRead As %Integer = -1, instanceProvider As %String = "anthropic") As %DynamicObject
 {
     Set out = {"model": "", "from": "", "config": "", "provider": ""}
+    If instanceProvider = "" Set instanceProvider = "anthropic"
     If mock '= "" {
         Set out.model = "mock", out.from = "from the API mimic, a test fixture that answers with no model", out.config = $SELECT(..LooksSecret(mock): "hidden", 1: ..Clean(..ConfigName(mock))), out.provider = "the API mimic"
         Quit out
@@ -310,9 +314,9 @@ ClassMethod Runs(item As %DynamicObject, mock As %String, instanceConfig As %Str
         If readable {
             Set out.provider = ..Clean(cprovider)
         } ElseIf fqn = instance {
-            // Shutter's own configuration, as ConfigureProvider wrote it: its record holds the model, and the
-            // configuration names the anthropic provider. Read so for a caller the Config Store refuses.
-            Set cmodel = instanceModel, out.provider = "anthropic, as Shutter's setup writes it"
+            // Shutter's own configuration, as ConfigureProvider wrote it: its record holds the model and the
+            // provider the configuration names. Read so for a caller the Config Store refuses.
+            Set cmodel = instanceModel, out.provider = ..Clean(instanceProvider) _ ", as Shutter's setup writes it"
             Set readable = 1
         } Else {
             Set out.provider = "not readable"

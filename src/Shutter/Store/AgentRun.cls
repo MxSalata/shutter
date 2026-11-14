@@ -80,6 +80,11 @@ Property ToolMs As %Integer(%JSONFIELDNAME = "toolMs");
 
 Property ReasoningTokens As %Integer(%JSONFIELDNAME = "reasoningTokens");
 
+/// Why the run was made when it was not for a case or a question: "diagnostic" for the SQL diagnostic AIHub.TestRun
+/// (R145-04), which has no case and no question, so no case's runs, events or counts read it while the day's budget and
+/// GET /costs count its cost. Empty for every other run. Not in the JSON: no route lists such a row as a case's run.
+Property Purpose As %String(%JSONINCLUDE = "none", MAXLEN = 16);
+
 Index QuestionIdx On QuestionId;
 
 /// Record a run from the bridge's response. A run that answered a question names it (questionId).
@@ -94,6 +99,26 @@ ClassMethod LastLive() As %DynamicObject
     Set o = {}
     Set o.at = at, o.status = status, o.member = member, o.model = ##class(Shutter.Util.Secret).CleanModel(model), o.mode = mode
     Quit o
+}
+
+/// Record a diagnostic run (R145-04, Shutter.Bridge.Runner.Diagnostic): who asked, the member, mode, model, status,
+/// tokens, time and cost, with Purpose "diagnostic" and no case, no snapshot and no question, so the day's spend and the
+/// asker's share count it and no case reads it. The answer itself is not kept: the caller has it.
+ClassMethod FromDiagnostic(memberCode As %String, response As Shutter.Bridge.Msg.AgentResponse, Output run As Shutter.Store.AgentRun) As %Status
+{
+    Set run = ..%New()
+    Set run.Purpose = "diagnostic", run.MemberCode = memberCode
+    Set run.AgentClass = response.AgentClass, run.ConfigVersion = response.ConfigVersion
+    Set run.Mode = response.Mode, run.Model = ##class(Shutter.Util.Secret).CleanModel(response.Model), run.ProviderConfig = ##class(Shutter.Util.Secret).Clean(response.ProviderConfig)
+    Set run.Status = response.Status, run.StartedAt = response.StartedAt, run.StartedAtMs = response.StartedAtMs, run.DurationMs = response.DurationMs
+    Set run.PromptTokens = response.PromptTokens, run.CompletionTokens = response.CompletionTokens
+    Set run.CacheReadTokens = response.CacheReadTokens, run.CacheCreationTokens = response.CacheCreationTokens
+    Set run.Iterations = response.Iterations, run.ToolCallCount = response.ToolCalls, run.SessionId = response.SessionId
+    Set run.RequestedBy = response.RequestedBy, run.LlmMs = response.LlmMs, run.ToolMs = response.ToolMs, run.ReasoningTokens = response.ReasoningTokens
+    Set run.Error = $EXTRACT(response.Error, 1, 2000)
+    // Priced as every run is: a replay or a run the API mimic answered costs 0.
+    Set run.CostUSD = $SELECT(response.Mode = "replay": 0, response.Model = "mock": 0, 1: ##class(Shutter.Store.ModelPrice).Cost(response.Model, response.PromptTokens, response.CompletionTokens, response.CacheReadTokens, response.CacheCreationTokens))
+    Quit run.%Save()
 }
 
 ClassMethod FromResponse(case As Shutter.Store.Case, snapshot As Shutter.Store.Snapshot, role As %String, memberCode As %String, response As Shutter.Bridge.Msg.AgentResponse, ensMessageId As %String, Output run As Shutter.Store.AgentRun, questionId As %String = "") As %Status
@@ -225,6 +250,9 @@ Storage Default
 </Value>
 <Value name="31">
 <Value>ReasoningTokens</Value>
+</Value>
+<Value name="32">
+<Value>Purpose</Value>
 </Value>
 </Data>
 <DataLocation>^Shutter.Store.AgentRunD</DataLocation>

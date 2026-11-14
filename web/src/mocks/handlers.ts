@@ -843,8 +843,10 @@ export const handlers = [
     const url = new URL(request.url);
     const state = url.searchParams.get('state');
     const scenario = url.searchParams.get('scenario');
-    // open=1 leaves out the closed cases, as the server does in its query; any other value filters nothing
+    // open=1 leaves out the closed cases and resolved=0 the resolved ones only, as the server does in its query; any
+    // other value of either filters nothing
     const open = url.searchParams.get('open') === '1';
+    const unresolved = url.searchParams.get('resolved') === '0';
     // A page of the list, as the API serves it: `total` counts every match, the items are the page's
     const count = (name: string) => {
       if (!url.searchParams.has(name)) return undefined;
@@ -858,6 +860,7 @@ export const handlers = [
       .map((c) => ({ ...c.summary, ...planOrigin(c), ...writesOf(c) }))
       .filter((c) => (!state || c.state === state) && (!scenario || c.scenario === scenario))
       .filter((c) => !open || !(CLOSED_STATES as readonly string[]).includes(c.state))
+      .filter((c) => !unresolved || c.state !== 'resolved')
       .sort((a, b) => b.openedAt.localeCompare(a.openedAt));
     return HttpResponse.json({
       items: items.slice(offset, limit === undefined ? undefined : offset + limit),

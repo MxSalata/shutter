@@ -33,7 +33,7 @@ import {
   useScenarios,
   type CaseFilters,
 } from '@/api/hooks';
-import { CLOSED_STATES, type CaseSummary, type Scenario } from '@/api/types';
+import type { CaseSummary, Scenario } from '@/api/types';
 import { ApiSource } from '@/components/ApiSource';
 import { CodeChip } from '@/components/CodeChip';
 import { EmptyState } from '@/components/EmptyState';
@@ -72,10 +72,6 @@ const PAGE = 25;
 
 /** How many of the newest cases the Closed tiles count over (the API filters by state only). */
 const NEWEST = 100;
-
-/** Whether a state is one of the closed ones (resolved, blocked, escalated, failed), which Hide closed leaves out. */
-const isClosedState = (state: string | null | undefined) =>
-  !!state && (CLOSED_STATES as readonly string[]).includes(state);
 
 /** The states a case is in before anyone has made its plan. */
 const BEFORE_PLAN = new Set(['detected', 'collecting', 'investigating', 'grouped']);
@@ -559,19 +555,23 @@ export default function CasesPage() {
   // A link from the Scenarios page names its scenario (S22: one case per receiver)
   const scenario = params.get('scenario');
   const page = Math.max(1, Math.floor(Number(params.get('page'))) || 1);
-  // Hide closed, kept as open=1 like the rest. A closed state or a closed outcome in the same address wins: the list
-  // never shows nothing for a choice the person made
-  const closedState = isClosedState(state);
-  const hideClosed = params.get('open') === '1' && !closedState && outcome === null;
-  // One write for all of them
+  // Hide resolved, kept as resolved=0 like the rest; an address from 1.4.5, whose switch kept open=1, turns it on
+  // too. The resolved state or a closed outcome in the same address wins: the list never shows nothing for a choice
+  // the person made. A blocked, escalated or failed case still needs a person, so those states stay beside it
+  const hideAsked = params.get('resolved') === '0' || params.get('open') === '1';
+  const hideResolved = hideAsked && state !== 'resolved' && outcome === null;
+  // One write for all of them. 1.4.5's open=1 becomes resolved=0 at the first, whatever it changes (a page, a
+  // scenario), so the switch stays as it reads and the address says what the list shows
   const setList = (patch: {
     state?: string | null;
     outcome?: string | null;
     scenario?: string | null;
-    open?: string | null;
+    resolved?: string | null;
     page?: number;
   }) => {
     change((next) => {
+      if (next.get('open') === '1' && !next.has('resolved')) next.set('resolved', '0');
+      next.delete('open');
       for (const [k, v] of Object.entries(patch)) {
         if (v && !(k === 'page' && v === 1)) next.set(k, String(v));
         else next.delete(k);
@@ -581,7 +581,7 @@ export default function CasesPage() {
   const filters: CaseFilters = {
     state: state ?? undefined,
     scenario: scenario ?? undefined,
-    open: hideClosed ? 1 : undefined,
+    resolved: hideResolved ? 0 : undefined,
     limit: PAGE,
     offset: (page - 1) * PAGE,
   };
@@ -617,29 +617,30 @@ export default function CasesPage() {
   const items = outcome ? matching?.slice((page - 1) * PAGE, page * PAGE) : paged.data?.items;
   const total = outcome ? (matching?.length ?? 0) : (paged.data?.total ?? 0);
   // A page past the end, from an old address, offers the way back as a filter does
-  const filtered = state !== null || outcome !== null || scenario !== null || hideClosed || page > 1;
+  const filtered = state !== null || outcome !== null || scenario !== null || hideResolved || page > 1;
   // A closed outcome is looked for among the newest cases only: with more cases than that, the list says so
   const bounded = outcome !== null && overBase;
 
-  // A closed tile or a closed state is the newer choice, so it turns Hide closed off; any other leaves it as it is
+  // A Closed tile or the resolved state is the newer choice, so it turns Hide resolved off; any other state (blocked,
+  // escalated and failed among them) leaves it as it is
   const choose = (next: { state?: string | null; outcome?: ClosedGroupId | null }) =>
     setList({
       state: next.state ?? null,
       outcome: next.outcome ?? null,
-      open: hideClosed && !next.outcome && !isClosedState(next.state) ? '1' : null,
+      resolved: hideResolved && !next.outcome && next.state !== 'resolved' ? '0' : null,
       page: 1,
     });
-  // Turned on over a closed tile or a closed state, the switch is the newer choice, and that one gives way
-  const setHideClosed = (on: boolean) =>
+  // Turned on over a Closed tile or the resolved state, the switch is the newer choice, and that one gives way
+  const setHideResolved = (on: boolean) =>
     setList({
-      open: on ? '1' : null,
-      ...(on ? { outcome: null, ...(closedState ? { state: null } : {}) } : {}),
+      resolved: on ? '0' : null,
+      ...(on ? { outcome: null, ...(state === 'resolved' ? { state: null } : {}) } : {}),
       page: 1,
     });
   const emptyWords = bounded
     ? `No matches in the ${NEWEST} most recent cases. Older cases have not been searched.`
-    : hideClosed && total === 0
-      ? `No open cases${state !== null || scenario !== null ? ' match these filters' : ''}. Closed cases are hidden.`
+    : hideResolved && total === 0
+      ? `No cases ${state !== null || scenario !== null ? 'match these filters' : 'to show'}. Resolved cases are hidden.`
       : 'No cases match these filters.';
   const scenarioIds = scenarioList.map((s) => s.id);
   if (scenario && !scenarioIds.includes(scenario)) scenarioIds.push(scenario);
@@ -718,22 +719,17 @@ export default function CasesPage() {
               w={170}
             />
             <Switch
-              label="Hide closed"
-              checked={hideClosed}
-              onChange={(e) => setHideClosed(e.currentTarget.checked)}
-              className="cases-hide-closed"
+              label="Hide resolved"
+              checked={hideResolved}
+              onChange={(e) => setHideResolved(e.currentTarget.checked)}
+              className="cases-hide-resolved"
             />
             {read.data && !bounded ? (
               <Text size="sm" c="dimmed" pb={6} ml="auto" aria-live="polite">
-                {plural(total, hideClosed ? 'open case' : 'case')}
+                {`${plural(total, 'case')}${hideResolved ? ' not resolved' : ''}`}
               </Text>
             ) : null}
           </Group>
-          {hideClosed ? (
-            <Text size="sm" c="dimmed" mb="sm">
-              Hiding closed cases: resolved, blocked, escalated and failed.
-            </Text>
-          ) : null}
           {bounded && read.data && total > 0 ? (
             <Text size="sm" mb="sm" aria-live="polite">
               {plural(total, 'match')} among the {NEWEST} most recent cases. Older cases have not been
@@ -760,7 +756,7 @@ export default function CasesPage() {
                     size="xs"
                     variant="default"
                     onClick={() =>
-                      setList({ state: null, outcome: null, scenario: null, open: null, page: 1 })
+                      setList({ state: null, outcome: null, scenario: null, resolved: null, page: 1 })
                     }
                   >
                     Show every case

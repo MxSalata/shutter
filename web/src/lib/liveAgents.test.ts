@@ -195,6 +195,50 @@ describe('whether the live agents can run, from live.agents (v1.37)', () => {
     ).toBe('Your share of the live budget is used up until 00:00 GMT.');
   });
 
+  it("reads the caller's share from the server's sentence when the next run's estimate no longer fits it", () => {
+    // 1.60 of a 2.00 share spent and a 0.50 estimate: refused, while neither figure says spent
+    const short: Budget = {
+      ...share,
+      exhausted: false,
+      shareExhausted: false,
+      perUserUsd: 2,
+      spentByMeUsd: 1.6,
+    };
+    const detail =
+      "Your share of the day's model budget, 2.00 USD, has 0.40 USD left (1.60 USD spent since 2026-11-02T00:00:00Z), less than a run's estimate of 0.50 USD; the run was not sent. It resets at 2026-11-03T00:00:00Z.";
+    expect(budgetLimit(short)).toBeNull();
+    const u = liveUnavailable(
+      settings({
+        budget: short,
+        agents: { available: false, reason: 'budget', until: MIDNIGHT, detail },
+        demo: true,
+      }),
+    )!;
+    expect(u.reason).toBe('share');
+    expect(liveUnavailableWords(u, NOW).lead).toBe(
+      'Your share of the live budget is used up until 00:00 GMT.',
+    );
+    expect(u.detail).toBe(detail);
+    // The cap's own estimate refusal stays the budget
+    const cap = liveUnavailable(
+      settings({
+        budget: { ...short, perUserUsd: 0, spentByMeUsd: 0 },
+        agents: {
+          available: false,
+          reason: 'budget',
+          until: MIDNIGHT,
+          detail:
+            "The day's model budget of 2.00 USD has 0.10 USD left (1.90 USD spent since 2026-11-02T00:00:00Z), less than a run's estimate of 0.50 USD; the run was not sent.",
+        },
+        demo: true,
+      }),
+    )!;
+    expect(cap.reason).toBe('budget');
+    expect(liveUnavailableWords(cap, NOW).lead).toBe(
+      'The live AI budget for this demo is used up until 00:00 GMT.',
+    );
+  });
+
   it("keeps the server's sentence for Technical", () => {
     const u = liveUnavailable(
       settings({

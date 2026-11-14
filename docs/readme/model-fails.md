@@ -33,7 +33,7 @@ Every agent run ends with one status (`Shutter.Bridge.Msg.AgentResponse`), store
 | `refused` | Record mode while the API mimic is on. No model call. |
 | `error` | The agent class or the runner isn't installed, the agent replaced the runner's provider (no model call), or the runner itself failed. |
 | `no_record` | Replay, with no recording for this case. |
-| `budget_exhausted` | The day's model budget is spent. No call. |
+| `budget_exhausted` | The day's model budget, or the user's share of it, has no room for the run: spent, or less left than the run's estimate (1.4.6). No call. |
 | `provider_auth` | A live run failed with an authentication error in the last 15 minutes. No call. See [what isn't covered](#what-isnt-covered). |
 
 ## What the case does

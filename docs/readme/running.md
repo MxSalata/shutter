@@ -53,7 +53,7 @@ What you make stays: the cases, approvals, incidents, the site profile and Shutt
 
 Other settings are in `.env.example`: the published ports, the agents' mode and model, and the installer's demo password and message purge.
 
-**Spend, in full.** A storm of one kind convenes one board: the cases with the same failure signature within ten minutes follow its lead, each through its own gate and approval. `BoardsPerMinute` (6) spreads the others out, a token budget limits each run, and `SHUTTER_DAILY_BUDGET_USD` stops new live runs once the recorded spend and reservations reach a day's live spend. After that a case the catalogue gives to the board or a person goes to a person with no plan, and others take the rules path: set it on any instance with a key.
+**Spend, in full.** A storm of one kind convenes one board: the cases with the same failure signature within ten minutes follow its lead, each through its own gate and approval. `BoardsPerMinute` (6) spreads the others out, a run over its token budget is not used (the budget is judged after the run), and `SHUTTER_DAILY_BUDGET_USD` stops new live runs once the recorded spend and reservations reach a day's live spend, or the next run's estimate no longer fits what is left. After that a case the catalogue gives to the board or a person goes to a person with no plan, and others take the rules path: set it on any instance with a key.
 
 ### The knowledge in IRIS vector tables
 

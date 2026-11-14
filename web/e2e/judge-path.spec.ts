@@ -121,13 +121,29 @@ for (const width of [1280, 390])
       await page.goto('./?trial#/evaluation');
       await expect(page.getByRole('heading', { name: 'Evaluation', exact: true })).toBeVisible();
       await expect(welcome(page)).toHaveCount(0);
-      const card = page.getByRole('region', { name: /^Held out: 12 sealed cases/ });
+      const card = page.getByRole('region', {
+        name: /^Held-out cases F01 to F12: 12 cases, 36 runs in each mode/,
+      });
+      // Each line with its release, the latest rerun first
       await expect(card).toContainText(
-        'the board 0.167, the single investigator 0.167 with two F08 runs settled (0.500 as graded), Site policy with no model 3.500, always escalating 1.250',
+        'Release 1.4.3, regression rerun: the board 0.167, the single investigator 0.167 as settled (0.667 as graded), Rules only 4.000; no mode executed a wrong write.',
       );
       await expect(card).toContainText(
-        "On 1.1.1's code the board proposed the same and the gate also held F03 and F07",
+        'Release 1.0.0, the original test: the board 0.167, the single investigator 0.167 as settled (0.500 as graded); with no model, F09 was written wrongly in every run.',
       );
+      // One case under the same gate, as evaluation evidence, with its detail one press away
+      await expect(card.getByTestId('same-gate-example')).toHaveText(
+        "Evaluation evidence, same gate, release 1.4.3: on F03 the board reconciled, Rules only's resend was blocked; neither wrote.",
+      );
+      await card.getByRole('button', { name: 'F03 in detail' }).click();
+      await expect(card.getByText('0 in every run of the three modes')).toBeVisible();
+      await expect(
+        card.getByText('A held-out case, not a scenario: nothing in the app runs it'),
+      ).toBeVisible();
+      await card.getByRole('button', { name: 'Baselines and release 1.1.1' }).click();
+      await expect(
+        card.getByText("On 1.1.1's code the board proposed the same and the gate also held F03 and F07"),
+      ).toBeVisible();
       await card.scrollIntoViewIfNeeded();
       await shot(page, `evaluation-held-out-${width}`);
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);

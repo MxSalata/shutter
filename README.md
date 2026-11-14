@@ -9,31 +9,25 @@
   <a href="https://github.com/MxSalata/shutter/tags"><img src="https://img.shields.io/github/v/tag/MxSalata/shutter?label=version&color=0e7299" alt="Version" /></a>
   <a href="https://mxsalata.github.io/shutter/"><img src="https://img.shields.io/badge/trial-try%20it-45acd1" alt="Trial" /></a>
   <a href="https://shutter.mxsalata.com"><img src="https://img.shields.io/badge/online%20demo-live-2f9e6b" alt="Online demo" /></a>
-  <a href="https://github.com/MxSalata/shutter#try-it"><img src="https://img.shields.io/badge/docker-compose%20up-2496ed?logo=docker&logoColor=white" alt="Docker" /></a>
-  <a href="https://github.com/MxSalata/shutter#ipm-on-a-stock-ai-hub-image"><img src="https://img.shields.io/badge/IPM-iris--shutter-095c7c" alt="IPM package" /></a>
-  <a href="https://github.com/MxSalata/shutter/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT licence" /></a>
 </p>
 <p align="center">
   <a href="https://mxsalata.github.io/shutter/"><b>Trial</b> (no IRIS)</a> ·
   <a href="https://shutter.mxsalata.com"><b>Online demo</b> (real IRIS)</a> ·
   <a href="https://github.com/MxSalata/shutter#for-judges">For judges</a> ·
-  <a href="https://github.com/MxSalata/shutter#try-it">Install</a> ·
-  <a href="https://github.com/MxSalata/shutter#how-it-works">How it works</a> ·
-  <a href="https://github.com/MxSalata/shutter#where-the-agents-sit">The agents</a> ·
   <a href="https://github.com/MxSalata/shutter#what-has-been-measured">Results</a> ·
-  <a href="https://github.com/MxSalata/shutter#documents">Documents</a> ·
-  <a href="https://github.com/MxSalata/shutter#pathology">Pathology</a> ·
-  <a href="https://github.com/MxSalata/shutter#how-it-is-tested">Testing</a> ·
+  <a href="https://github.com/MxSalata/shutter#where-the-agents-sit">The agents</a> ·
+  <a href="https://youtu.be/ZBnAqKTfdvM">Two-minute video</a>
+</p>
+<p align="center"><sub>
+  <a href="https://github.com/MxSalata/shutter/blob/main/docs/readme/how-shutter-works.md">How Shutter works (guide)</a> ·
+  <a href="https://github.com/MxSalata/shutter/blob/main/docs/readme/integrating-at-your-trust.md">At your trust (guide)</a> ·
+  <a href="https://github.com/MxSalata/shutter#try-it">Install (Docker or IPM)</a> ·
   <a href="https://github.com/MxSalata/shutter#limits-plainly">Limits</a> ·
-  <a href="https://github.com/MxSalata/shutter#technology-bonuses">Bonuses</a>
-</p>
-<p align="center">
   <a href="https://openexchange.intersystems.com/package/Shutter">Open Exchange</a> ·
-  <a href="https://github.com/MxSalata/shutter#technology-bonuses">Articles</a> ·
   <a href="https://github.com/MxSalata/shutter/blob/main/CHANGELOG.md">What's new</a> ·
-  <a href="https://github.com/MxSalata/shutter/releases">Releases</a> ·
-  <a href="https://youtu.be/oGW7u9RKf9M">Video</a> (<a href="https://github.com/MxSalata/shutter/releases/download/v1.4.4/shutter-demo.mp4">MP4</a>)
-</p>
+  <a href="https://github.com/MxSalata/shutter/releases/download/v1.4.5/shutter-overview.mp4">Two-minute video (MP4)</a> ·
+  <a href="https://youtu.be/oGW7u9RKf9M">Full demo video (13 minutes, recorded on 1.4.4)</a>
+</sub></p>
 
 **When a hospital's HL7 delivery fails, the usual fix is Resend, and when two systems move a patient at the same moment, that resend can write over the bed manager's newer ward. Shutter's IRIS AI Hub agents decide how to put the failure right; a deterministic gate decides whether anything is written.**
 
@@ -50,7 +44,20 @@ There are two recovery paths, with different guarantees:
 
 ![S8 played twice on the same evidence: Rules only, exempted on purpose from one gate check, writes WARD-B over the bed manager's WARD-C; the board escalates and writes nothing](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/s8-rules-and-board.png)
 
-*S8, the same failure played twice on the same evidence. The Rules only run is exempted on purpose from one gate check, `ENTRY_NOT_NAMED_WRITE`, to show what a plain resend writes: WARD-B over the bed manager's WARD-C. The board escalates and writes nothing. On a real case the whole gate runs and holds that resend, so "pass every check" in the picture means every check but the one lifted.*
+*S8, the same failure played twice on the same evidence. The Rules only run is exempted on purpose from one gate check, `ENTRY_NOT_NAMED_WRITE`, to show what a plain resend writes: WARD-B over the bed manager's WARD-C. The board escalates and writes nothing. On a real case the whole gate runs and holds that resend, so "every check passed" in the picture means every check but the one lifted.*
+
+
+### In 60 seconds
+
+- **What the agents decide:** resend a failed HL7 delivery, close it as already delivered, or stop and escalate with nothing written. Four `%AI.Agent` business operations, three specialists and a coordinator, read sealed evidence through typed tools; the coordinator submits the plan.
+- **What permits a write:** a deterministic gate, then an approval bound to the plan's digest and the case's version. The receiver is read again just before a conditional write, and its own history confirms the result. IRIS Workflow carries the approval, `%AI.Policy` authorisation holds each run to its own case and its audit logs every tool call, and Visual Trace shows every agent's lane.
+- **What the test found:** on release 1.4.3, twelve held-out synthetic cases with three runs of each per mode, the board's mean loss was 0.167 against 4.000 for rules only, and no mode executed a wrong write: the gate stopped the bad proposals. A single investigator matched the board as settled (0.667 by the unchanged grader) at about a quarter of the cost per run, and both modes ship. [The results](https://github.com/MxSalata/shutter#what-has-been-measured)
+- **The whole mechanism:** [How Shutter works](https://github.com/MxSalata/shutter/blob/main/docs/readme/how-shutter-works.md), from a failed delivery to a verified recovery, with every gate check and its source; [How to integrate Shutter at your trust](https://github.com/MxSalata/shutter/blob/main/docs/readme/integrating-at-your-trust.md) for an integration team planning a pilot.
+- **Why I built it:** the failures above are the ones I met in my interoperability work with 28 NHS hospitals. At one trust we checked every interface daily for failed messages, and I wrote a 30-page guide to handling them. Not every clinical system checks what it receives. When a bed transfer from I.PM failed to reach NerveCentre and clinicians corrected the history there by hand, resending the failures in order could displace several patients, because NerveCentre won't put two patients in one bed and moves the other to the waiting area. Blindly resending coding messages from NerveCentre to Careflow would overwrite a patient's coding and end-date it as of today, and on older PAS systems a resent A02 for a past spell could reopen it, leaving two active spells. That is why Shutter reads the receiver before it writes. While building Shutter I filed AI Hub bug reports [#11](https://github.com/intersystems-community/ai-hub-eap-bugreports/issues/11), [#12](https://github.com/intersystems-community/ai-hub-eap-bugreports/issues/12), [#22](https://github.com/intersystems-community/ai-hub-eap-bugreports/issues/22) and [#23](https://github.com/intersystems-community/ai-hub-eap-bugreports/issues/23).
+
+![S8 in the Visual Trace: case workflow, evidence, board members and gate](https://raw.githubusercontent.com/MxSalata/shutter/main/web/public/s8-visual-trace.png)
+
+*S8's case in IRIS's Visual Trace: each board member has its own lane and each tool call its own step.*
 
 ## For judges
 
@@ -58,11 +65,11 @@ There are two recovery paths, with different guarantees:
 
 **Know the mode:** the trial plays recordings in your browser; the online demo runs on real IRIS, where the `demo` account replays the recorded agents and the judges' account calls them live; your machine runs either ([Try it](https://github.com/MxSalata/shutter#try-it)).
 
-Open the [trial](https://mxsalata.github.io/shutter/), choose **Explore on my own**, then **Scenarios**. Under **Run mode**, choose **Board**. Use **Run** on each scenario's row under **Every scenario**:
+Open the [trial](https://mxsalata.github.io/shutter/), choose **Explore on my own**, then **Start with S2** on Home. It opens **Scenarios** in Board mode, where **Try these three first** has a card for each, with its own **Run** button:
 
-1. **S2: recover a transfer that never arrived.** Open the case named by the banner, C-000002 in the trial. Choose **Decide on the resend**, then **Approve the resend** in the review that opens. One conditional write, then **Verified**.
-2. **S3: recognise a delivery that already arrived.** Its case, C-000003, reads the receiver's receipt. Only the acknowledgement was lost. Nothing is written.
-3. **S8: stop an ambiguous movement.** Two systems moved the same patient at the same recorded time. Its case, C-000008, escalates with **0 writes**. A person must decide. Its **In IRIS:** line opens **Message trace**, the agents' steps in IRIS's Visual Trace (a screenshot in the trial).
+1. **S2: recover a transfer that never arrived.** Press **Run S2**, then open the case named by the banner, C-000002 in the trial. Choose **Decide on the resend**, then **Approve the resend** in the review that opens. One conditional write, then **Delivered: verified at the receiver**.
+2. **S3: recognise a delivery that already arrived.** Press **Run S3**. Its case, C-000003, reads the receiver's receipt. Only the acknowledgement was lost. Nothing is written.
+3. **S8: stop an ambiguous movement.** Press **Run S8 in Board**. Two systems moved the same patient at the same recorded time. Its case, C-000008, escalates with **0 writes**. A person must decide. Its **In IRIS:** line opens **Message trace**, the agents' steps in IRIS's Visual Trace (a screenshot in the trial).
 
 **The browser trial replays recorded workflow and gate outcomes; on IRIS the gate runs on the server.** There, the same gate checks all three. The [trial](https://mxsalata.github.io/shutter/) makes no model call and sends nothing to IRIS, so it leaves out what needs a live instance: the Single investigator, receiver outages, convening the board or reinvestigating a case, free-text questions (the suggested ones are answered from recordings), and the Management Portal, where only S8's **Message trace** has a screenshot. A reload starts the recording afresh.
 
@@ -73,14 +80,14 @@ Then visit the [online demo](https://shutter.mxsalata.com), a fictional hospital
 | `demo` / `shutter` | Read, ask questions, approve waiting cases, and run scenarios from their recordings (no model call, no spend); no reset |
 | Judges' account, supplied by the organisers | Run scenarios with live agents or **Convene the board**, one run at a time |
 
-The demo resets hourly. Live spending is capped at 5 USD an hour and 15 USD a day. All judges sign in to the one judges' account, so they share its 2 USD an hour. When that is spent, live runs are refused until the next hour, and the `demo` account still plays the scenarios from their recordings. Shutter checks its caps as a run starts, against the recorded spend plus an estimate for every run in flight, so runs started at the same moment can pass a cap a little.
+The demo resets hourly. Live spending is capped at 5 USD an hour and 15 USD a day. All judges sign in to the one judges' account, so they share its 2 USD an hour. When that is spent, live runs are refused until the next hour, and the `demo` account still plays the scenarios from their recordings. Shutter admits a live run only when the recorded spend, the estimates reserved for the runs in flight and the new run's own estimate fit within its caps, checking and reserving in one locked step. That bounds estimates, not the bill: a run can cost more than its estimate, and a reservation older than 20 minutes is released, so these caps are no ceiling on the provider's invoice.
 
-**Optional comparison:** run S8 in **Rules only**. In a recorded scenario played in Rules only, the gate deliberately lifts one check, `ENTRY_NOT_NAMED_WRITE`, which blocks a write that names no catalogue entry where the matched entry calls for no resend. S8 is built to show what that lets through: WARD-B overwrites WARD-C. Every other check still runs. The trial's recorded case, C-000021, is already approved and written. A real case gets the whole gate, which holds that resend. This is a demonstration of a plain resend's consequence, not evidence that AI alone prevents it.
+**Optional comparison:** under **Run mode**, choose **Rules only**, then press **Run S8 in Rules only** on S8's card. In a recorded scenario played in Rules only, the gate deliberately lifts one check, `ENTRY_NOT_NAMED_WRITE`, which blocks a write that names no catalogue entry where the matched entry calls for no resend. S8 is built to show what that lets through: WARD-B overwrites WARD-C. Every other check still runs. The trial's recorded case, C-000021, is already approved and written. A real case gets the whole gate, which holds that resend. **Compare the two runs** on either case sets them side by side, as in the picture above. This is a demonstration of a plain resend's consequence, not evidence that AI alone prevents it.
 
 **Then, to judge the complete workflow, as time allows:**
 
 - **Watch:** the [13-minute demo video](https://youtu.be/oGW7u9RKf9M) on YouTube, or [download the MP4](https://github.com/MxSalata/shutter/releases/download/v1.4.4/shutter-demo.mp4) (captioned, no sign-in): recorded live on the online demo, from an escalated case to an approved resend verified at the receiver.
-- **Inspect:** S2's receipt and history on its case, then S8's **Message trace**, the agents' steps in IRIS's Visual Trace. In the trial that trace is a screenshot of S8's; on IRIS every case opens its own session.
+- **Inspect:** on S2's case, the **Decision receipt** and **What was verified**, which quotes the receiver's receipt; then S8's **Message trace**, the agents' steps in IRIS's Visual Trace. In the trial that trace is a screenshot of S8's; on IRIS every case opens its own session.
 - **The contest's workflow in code:** [CaseWorkflow](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Process/CaseWorkflow.cls) runs the case; the [AI Hub agents](https://github.com/MxSalata/shutter/tree/main/src/Shutter/Agent), three specialists and a [coordinator](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Agent/Coordinator.cls), read the sealed evidence; the coordinator calls [SubmitPlan](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Tools/SubmitPlan.cls); the [gate](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Operation/Gate.cls) checks the plan; an IRIS Workflow task takes the approval; one conditional write follows, and the [verifier](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Operation/Verify.cls) reads the receiver's receipts and history.
 
 ## How it works
@@ -99,7 +106,7 @@ A **catalogue** entry describes a known failure and its safe outcome. The **site
 
 For an API-recovery incident, one approval binds the incident's plan. Its cases become chains per encounter, released in order, each item's own evidence, dry run and dispatch checks completed before the next proceeds.
 
-![S2 waiting for approval: completed checks and the exact plan to approve or reject](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/case-s2-approval.png)
+![S2 waiting for approval: the proposed resend in plain words, the completed stages, and what needs the approver](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/case-s2-approval.png)
 
 ### Two recovery contracts
 
@@ -302,7 +309,7 @@ The case shows the document's identity, status and chain for a person to review,
 
 ## How it is tested
 
-**Release-specific checks and historical evaluations are different evidence.** The latest unit-suite totals given here are release 1.4.3's. Release 1.4.4 changed who may run scenarios on the online demo, and its changelog gives no separate totals.
+**Release-specific checks and historical evaluations are different evidence.** The latest unit-suite totals given here are release 1.4.3's. Release 1.4.4 changed who may run scenarios on the online demo and release 1.4.5 how a case leads to its review; their changelogs give no separate totals.
 
 | Scope | Recorded checks |
 | --- | --- |
@@ -338,8 +345,6 @@ Each technology has a job in the workflow.
 
 **See the tracing idea in one case:** run S8 in Board mode, then choose **In IRIS: Message trace**. Each agent has its own lane, each tool call its own step, and the response records model, mode, tokens and tool calls. Replay is explicitly marked. In the trial this opens a screenshot; on an installed instance it opens the session's Visual Trace.
 
-![S8 in the Visual Trace: case workflow, evidence, board members and gate](https://raw.githubusercontent.com/MxSalata/shutter/main/web/public/s8-visual-trace.png)
-
 [AI Hub features, constraints and implementation experience](https://github.com/MxSalata/shutter/blob/main/docs/readme/building-on-ai-hub.md)
 
 ## Limits, plainly
@@ -357,7 +362,9 @@ Each technology has a job in the workflow.
 
 ## How Shutter was developed
 
-Shutter was developed with substantial AI assistance. I set the requirements and the design direction, reviewed the work and decided what shipped. Coding assistants wrote much of the code and documentation under my direction, and I also used model-based reviewer workflows. I take responsibility for the published project.
+I set Shutter's requirements and made its architectural and safety decisions, including the deterministic gate, approval tied to the exact plan and verification at the receiver. I tested the trial and the online demo myself, sent back the changes I wanted, and decided each release.
+
+Shutter was built with substantial AI assistance: coding assistants wrote much of the code and documentation under my direction, and I used model-based review workflows. I take responsibility for the published project.
 
 ---
 

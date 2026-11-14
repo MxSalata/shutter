@@ -2,11 +2,12 @@ import { scenariosHidden } from '@/api/can';
 import type { Can, CaseState, Mode } from '@/api/types';
 import { TRIAL } from '@/env/mode';
 import type { StoryStep } from '@/features/cases/case/CaseStory';
-import { PROOF } from '@/lib/proof';
+import { CATALOGUE_COHORT, PROOF, recordedBefore } from '@/lib/proof';
 
 /**
- * The guide's chapters and steps, for the three routes it offers in the trial: the quick tour (9 steps, from a case to
- * the proof), every screen, and the integration engineers' tour (6 steps, Technical on). A step names the page it
+ * The guide's chapters and steps, for the three routes it offers in the trial: the quick tour (9 steps: the short
+ * route's S2, S3 and S8 in that order, then the proof; S20 is the optional extra its finish card offers), every screen,
+ * and the integration engineers' tour (6 steps, Technical on). A step names the page it
  * shows (a fixed page, or a case, incident or review found when the step opens), the `data-tour` target on that page
  * (its card is placed just before it), the case story step or tab to open first, and its words: a title of at most 6
  * words, `say` of at most 25 and an expert `detail` of at most 40. A step may invite an action (`tryIt`, the control's
@@ -106,7 +107,7 @@ const Q: GuideScope[] = ['quick', 'all'];
 const A: GuideScope[] = ['all'];
 const E: GuideScope[] = ['engineer'];
 
-/** Step 9's sentence, from the evaluation's own figures (lib/proof.ts), never typed. */
+/** Step 9's sentence, from the evaluation's own figures (lib/proof.ts), never typed, led by the cohort they belong to. */
 function proofSay(): string {
   const b = PROOF.board;
   const p = PROOF.played;
@@ -114,11 +115,14 @@ function proofSay(): string {
     return "These figures come from runs recorded with the real agents. Each compares the board's choice with the expected action.";
   const matched = b.matched === b.scored ? `all ${b.scored}` : `${b.matched} of ${b.scored}`;
   const m = PROOF.rulesMisses;
-  const stopped = m?.total ? ` Of Rules only's ${m.total} misses, the gate stopped ${m.stopped.length}.` : '';
-  return `The board matched ${matched} recorded failures. Played through on ${p.of}: board ${p.board}, Rules only ${p.rules}.${stopped}`;
+  const stopped = m?.total ? ` Of its ${m.total} misses, the gate stopped ${m.stopped.length}.` : '';
+  return `${CATALOGUE_COHORT}: the board matched ${matched} failures. Played through on ${p.of}: board ${p.board}, Rules only ${p.rules}.${stopped}`;
 }
 
-/** "From 100 runs recorded with the real agents on IRIS AI Hub, 25 Oct to 1 Nov 2026." and what a match means. */
+/**
+ * "From 100 runs recorded with the real agents on IRIS AI Hub, 25 Oct to 1 Nov 2026, before release 1.0.0." and what a
+ * match means.
+ */
 function proofDetail(): string {
   const day = (iso: string | null) =>
     iso
@@ -127,7 +131,8 @@ function proofDetail(): string {
   const year = PROOF.recordedTo ? new Date(PROOF.recordedTo).getUTCFullYear() : null;
   const from = day(PROOF.recordedFrom);
   const to = day(PROOF.recordedTo);
-  const when = from && to && year ? `, ${from} to ${to} ${year}` : '';
+  const before = recordedBefore(PROOF);
+  const when = (from && to && year ? `, ${from} to ${to} ${year}` : '') + (before ? `, ${before}` : '');
   const runs = PROOF.runs ?? 'the';
   return `From ${runs} runs recorded with the real agents on IRIS AI Hub${when}. A match is agreement with each scenario's expected outcome, not general reliability.`;
 }
@@ -173,7 +178,7 @@ export const CHAPTERS: GuideChapter[] = [
         title: 'Three stories to start with',
         say: 'Each scenario replays a known message failure. Start with these three: a transfer recovered, one that had already arrived, and a fix held back.',
         lookOnly: {
-          say: "Each scenario replays a known failure. The cards show three of the online hospital's stories; this tour then follows S2, S8 and S20.",
+          say: "Each scenario replays a known failure. The cards show three of the online hospital's stories; this tour then follows S2, S3 and S8.",
         },
         place: { page: '/scenarios' },
         target: 'scenarios',
@@ -321,6 +326,25 @@ export const CHAPTERS: GuideChapter[] = [
     ],
   },
   {
+    // The short route's second: between S2 and S8, as the Scenarios cards order them (execution.ts, ROUTE)
+    id: 's3',
+    title: 'A transfer that had already arrived',
+    code: 'S3',
+    group: 'Operate',
+    steps: [
+      {
+        id: 'receipt',
+        title: 'Already there, nothing sent',
+        say: "Only the acknowledgement was lost: the bed system's own record shows the transfer landed. The board records that and sends nothing.",
+        detail:
+          'The delivery ended in HTTP 504, an uncertain outcome. The receiver holds a committed receipt for the operation, version 1 to 2, and its history shows the transfer. The plan reconciles: nothing is written.',
+        place: { scenario: 'S3', mode: 'board' },
+        target: 'case-outcome',
+        scopes: Q,
+      },
+    ],
+  },
+  {
     id: 's8',
     title: 'A fix held back',
     code: 'S8',
@@ -410,6 +434,7 @@ export const CHAPTERS: GuideChapter[] = [
     ],
   },
   {
+    // Optional on the short route, so not a step of the quick tour: its finish card offers S20 as the extra
     id: 's20',
     title: 'The gate stopping a fix',
     code: 'S20',
@@ -423,7 +448,7 @@ export const CHAPTERS: GuideChapter[] = [
           "The approval was bound to the receiver's version; the nurse's move changed it, the dispatch gate voided the approval, and the replanned resend was superseded and blocked.",
         place: { scenario: 'S20', mode: 'rules' },
         target: 'case-outcome',
-        scopes: Q,
+        scopes: A,
       },
       {
         id: 'decision',
@@ -662,11 +687,14 @@ export const SCOPE_OVERLINE: Record<GuideScope, string> = {
   engineer: "Engineers' tour",
 };
 
-/** The finish card's one sentence on what the route showed: each route its own, since their steps differ. */
+/**
+ * The finish card's one sentence on what the route showed: each route its own, since their steps differ. The quick
+ * tour's is the short route, S2, S3 and S8 in that order; S20 is not in it, and the card offers it as the optional extra.
+ */
 export const SCOPE_FINISH: Record<GuideScope, string> = {
   quick:
-    "You saw a transfer delivered and verified, a resend that would have overwritten the bed manager's ward held back for a person, and the gate stopping one.",
-  all: "You saw a transfer delivered and verified, a resend that would have overwritten the bed manager's ward held back for a person, the gate stopping one, and every screen on the way.",
+    "You saw a transfer delivered and verified, one that had already arrived left unsent, and a resend that would have overwritten the bed manager's ward held back for a person.",
+  all: "You saw a transfer delivered and verified, one that had already arrived left unsent, a resend that would have overwritten the bed manager's ward held back for a person, the gate stopping one, and every screen on the way.",
   engineer:
     "You saw the decision receipt as JSON, the gate's reason codes, what each agent cited, S8 beside its Rules only run, the message trace in IRIS, and where Rules only went wrong.",
 };

@@ -10,6 +10,7 @@ import {
   CATEGORIES,
   CATEGORY_TEXT,
   HISTORY_POLICY_TEXT,
+  ORDERS_RESULTS_FINDINGS,
   categoryOf,
   derivedPolicy,
   historyPolicyOf,
@@ -134,10 +135,12 @@ function ReceiverCard({
   const caps = capabilities(r, withTerms);
   const takes = caps.filter((c) => c.yes);
   const cannot = caps.filter((c) => !c.yes);
-  // The long sentence is what the case page and the tests have always read; the line above it is the plain form
+  // The long sentence is what the case page and the tests have always read; the line above it is the plain form. An
+  // orders and results card has said the rest by then (its badge and its line: no resend from a case, the outage
+  // resend), so its detail adds only what the findings are
   const longWords =
     category === 'orders_results'
-      ? text.overtaken
+      ? ORDERS_RESULTS_FINDINGS
       : policy === 'correct'
         ? CATEGORY_TEXT.history_of_record.overtaken
         : CATEGORY_TEXT.current_state.overtaken;

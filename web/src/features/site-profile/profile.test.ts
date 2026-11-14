@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { SiteProfile } from '@/api/types';
-import { CATEGORY_TEXT } from '@/lib/categories';
+import { CATEGORY_TEXT, ORDERS_RESULTS_FINDINGS } from '@/lib/categories';
 import { glossary } from '@/lib/glossary';
 import { RELEASES } from '@/lib/status';
 import { recordedSiteProfile } from '@/mocks/profile';
@@ -700,6 +700,12 @@ describe('the words the restyled page reads from the model', () => {
         '',
       ),
     ).toBe(brief);
+    // What the whole sentence adds, on its own, for a card's second layer: the same words, and none of the brief's
+    expect(ORDERS_RESULTS_FINDINGS).toBe(
+      "A case's findings are who holds the message, the receiver's own words and the result they name, and they come before any model runs.",
+    );
+    expect(whole).toContain("(who holds the message, the receiver's own words and the result they name)");
+    expect(ORDERS_RESULTS_FINDINGS).not.toMatch(/resen[dt]|outage|goes to a person/);
   });
 
   it('keeps each icon’s words short enough for a tooltip', () => {

@@ -9,7 +9,7 @@ import { TechDetail } from '@/components/TechDetail';
 import { Term } from '@/components/Term';
 import { trialHref } from '@/env/mode';
 import { plural } from '@/lib/format';
-import { PROOF, type Proof } from '@/lib/proof';
+import { cohortLabel, PROOF, type Proof } from '@/lib/proof';
 import { useDetail } from '@/stores/appearance';
 import { APP_NAME, APP_TAGLINE } from '@/theme';
 
@@ -31,12 +31,13 @@ const GIVEN_THE_ENTRY = "The agents were given the catalogue's matching entry an
 
 /**
  * The left half of the live sign-in page: what Shutter is for, in the app's best line, and the proof for it. The proof
- * (three tiles and where the runs were recorded) shows only where the figures describe the install in front of the
- * reader, a demo or the contest's own instance (`figures`); a hospital's own install shows the headline and the
- * purpose alone. Every figure comes from `lib/proof.ts` (the board's evaluation), never typed, and a figure the
- * document cannot give leaves its tile out. Each comparison keeps its own base (DESIGN.md, principle 7): the board's
- * 24 of 24 stands alone; the 11 against 4 are drawn as two bars on the same 11 failures, and 4 of 11 is never a figure
- * of its own. On a phone the tiles collapse into one line of text, so the sign-in form stays above the fold.
+ * (the cohort and release the figures belong to with where the runs were recorded, then three tiles) shows only where
+ * the figures describe the install in front of the reader, a demo or the contest's own instance (`figures`); a
+ * hospital's own install shows the headline and the purpose alone. Every figure comes from `lib/proof.ts` (the board's
+ * evaluation), never typed, and a figure the document cannot give leaves its tile out. Each comparison keeps its own
+ * base (DESIGN.md, principle 7): the board's 24 of 24 stands alone; the 11 against 4 are drawn as two bars on the same
+ * 11 failures, and 4 of 11 is never a figure of its own. On a phone the tiles collapse into one line of text that
+ * starts with the same cohort and release, so the sign-in form stays above the fold.
  */
 export function ProofPanel({ figures, proof = PROOF }: { figures: boolean; proof?: Proof }) {
   const headline = useId();
@@ -51,9 +52,11 @@ export function ProofPanel({ figures, proof = PROOF }: { figures: boolean; proof
     GIVEN_THE_ENTRY,
   ].filter((s): s is string => !!s);
 
+  // "Catalogue demonstration, recorded before release 1.0.0", from the runs' own dates (lib/proof.ts)
+  const cohort = cohortLabel(proof);
   const recorded = proof.runs
-    ? `From ${plural(proof.runs, 'run')} recorded with the real agents on IRIS AI Hub.`
-    : 'Recorded with the real agents on IRIS AI Hub.';
+    ? `${plural(proof.runs, 'run')} with the real agents on IRIS AI Hub.`
+    : 'with the real agents on IRIS AI Hub.';
 
   return (
     <Box
@@ -89,14 +92,43 @@ export function ProofPanel({ figures, proof = PROOF }: { figures: boolean; proof
         {figures && (board || played) ? (
           <>
             <Text size="sm" hiddenFrom="md" data-viewport="phone" m={0}>
+              <Text span inherit fw={600}>
+                {cohort}.
+              </Text>{' '}
               {phoneLine.join(' ')} <EvaluationLink />
             </Text>
+            {/* The cohort and the release lead the tiles, so neither figure is read without them */}
+            <Box visibleFrom="md" data-viewport="laptop">
+              <Text size="sm" m={0} data-testid="proof-cohort">
+                <Text span inherit fw={600}>
+                  {cohort}:
+                </Text>{' '}
+                {recorded} <EvaluationLink />
+              </Text>
+              {technical && proof.recordedOn ? (
+                <Text size="xs" c="dimmed" mt={4}>
+                  Image <CodeChip>{proof.recordedOn.image}</CodeChip>
+                  {proof.models.length ? (
+                    <>
+                      , model{proof.models.length > 1 ? 's' : ''}{' '}
+                      {proof.models.map((m, i) => (
+                        <span key={m}>
+                          {i ? ', ' : ''}
+                          <CodeChip>{m}</CodeChip>
+                        </span>
+                      ))}
+                    </>
+                  ) : null}
+                  .
+                </Text>
+              ) : null}
+            </Box>
             <SimpleGrid cols={2} spacing="sm" visibleFrom="md" data-viewport="laptop">
               {board ? (
                 <StatTile
                   label="Recorded failures"
                   figure={`${board.matched} of ${board.scored}`}
-                  caption="where the board chose the expected action"
+                  caption="the board chose the expected action"
                   tone={allMatched ? 'positive' : 'attention'}
                   status={
                     <StatusBadge
@@ -116,7 +148,7 @@ export function ProofPanel({ figures, proof = PROOF }: { figures: boolean; proof
                 <StatTile label="Head to head" figure={`${played.board} against ${played.rules}`}>
                   <ComparisonBars
                     of={played.of}
-                    caption={`the board against Rules only (no agents), on the same ${plural(played.of, 'failure')}`}
+                    caption={`on the same ${plural(played.of, 'failure')} (Rules only: no agents)`}
                     bars={[
                       { label: 'The board', value: played.board, hue: 'violet' },
                       { label: 'Rules only', value: played.rules, hue: 'gray' },
@@ -140,28 +172,6 @@ export function ProofPanel({ figures, proof = PROOF }: { figures: boolean; proof
                 />
               </Box>
             </SimpleGrid>
-            <Box visibleFrom="md" data-viewport="laptop">
-              <Text size="sm" c="dimmed" m={0}>
-                {recorded} <EvaluationLink />
-              </Text>
-              {technical && proof.recordedOn ? (
-                <Text size="xs" c="dimmed" mt={4}>
-                  Image <CodeChip>{proof.recordedOn.image}</CodeChip>
-                  {proof.models.length ? (
-                    <>
-                      , model{proof.models.length > 1 ? 's' : ''}{' '}
-                      {proof.models.map((m, i) => (
-                        <span key={m}>
-                          {i ? ', ' : ''}
-                          <CodeChip>{m}</CodeChip>
-                        </span>
-                      ))}
-                    </>
-                  ) : null}
-                  .
-                </Text>
-              ) : null}
-            </Box>
           </>
         ) : null}
       </Stack>

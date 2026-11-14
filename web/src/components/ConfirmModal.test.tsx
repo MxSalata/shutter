@@ -1,4 +1,5 @@
 import { screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { renderUi } from '@/test/render';
 import { ConfirmModal } from './ConfirmModal';
@@ -45,5 +46,35 @@ describe('ConfirmModal', () => {
     );
     const dialog = await screen.findByRole('dialog', { name: 'The suggested change' });
     expect(within(dialog).queryByText('Live system')).not.toBeInTheDocument();
+  });
+
+  it('closes on its close button and on Escape, never on a click outside, and on none of them while it is locked', async () => {
+    const onClose = vi.fn();
+    const { rerender } = renderUi(
+      <ConfirmModal opened onClose={onClose} title="Approve the resend: plan v1" locked>
+        <p>This sends the fix.</p>
+      </ConfirmModal>,
+    );
+    const dialog = await screen.findByRole('dialog', { name: 'Approve the resend: plan v1' });
+    // Locked, while its action is on its way: no way of closing it answers
+    expect(within(dialog).getByRole('button', { name: 'Close' })).toBeDisabled();
+    await userEvent.keyboard('{Escape}');
+    const overlay = document.querySelector('.mantine-Modal-overlay') as HTMLElement;
+    await userEvent.click(overlay);
+    expect(onClose).not.toHaveBeenCalled();
+    // The action answered: the dialog closes as any other
+    rerender(
+      <ConfirmModal opened onClose={onClose} title="Approve the resend: plan v1">
+        <p>This sends the fix.</p>
+      </ConfirmModal>,
+    );
+    expect(within(dialog).getByRole('button', { name: 'Close' })).toBeEnabled();
+    await userEvent.keyboard('{Escape}');
+    expect(onClose).toHaveBeenCalledTimes(1);
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+    expect(onClose).toHaveBeenCalledTimes(2);
+    // A stray click outside never discards a confirm, locked or not
+    await userEvent.click(overlay);
+    expect(onClose).toHaveBeenCalledTimes(2);
   });
 });

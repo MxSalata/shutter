@@ -8,7 +8,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from
 import { keys } from '@/api/hooks';
 import type { DetailLevel } from '@/env/mode';
 import { instanceLine } from '@/lib/instance';
-import { PROOF, proofFrom } from '@/lib/proof';
+import { cohortLabel, PROOF, proofFrom } from '@/lib/proof';
 import { server } from '@/mocks/node';
 import { resetMock } from '@/mocks/handlers';
 import { useAppearance } from '@/stores/appearance';
@@ -233,7 +233,7 @@ describe('LoginPage, the proof on a demo install', () => {
     const board = PROOF.board!;
     const tile = screen.getByText(`${board.matched} of ${board.scored}`).closest('.stat-tile');
     expect(tile).toHaveAttribute('data-tone', 'positive');
-    expect(tile).toHaveTextContent('where the board chose the expected action');
+    expect(tile).toHaveTextContent('the board chose the expected action');
     expect(tile).toHaveTextContent('As expected');
   });
 
@@ -248,7 +248,7 @@ describe('LoginPage, the proof on a demo install', () => {
     ).toBeInTheDocument();
     expect(
       screen.getByRole('figure', {
-        name: `the board against Rules only (no agents), on the same ${played.of} failures`,
+        name: `on the same ${played.of} failures (Rules only: no agents)`,
       }),
     ).toBeInTheDocument();
     expect(screen.getByText(`${played.board} against ${played.rules}`)).toBeInTheDocument();
@@ -260,8 +260,25 @@ describe('LoginPage, the proof on a demo install', () => {
     const { container } = await renderDemoLogin();
     expect(PROOF.board).toMatchObject({ matched: 24, scored: 24 });
     expect(PROOF.played).toMatchObject({ of: 11, board: 11, rules: 4 });
-    expect(container).toHaveTextContent(
-      `From ${PROOF.runs} runs recorded with the real agents on IRIS AI Hub.`,
+    expect(container).toHaveTextContent(`${PROOF.runs} runs with the real agents on IRIS AI Hub.`);
+  });
+
+  it('leads the tiles with the cohort and the release their figures belong to, and the phone line with the same', async () => {
+    const { container } = await renderDemoLogin();
+    const cohort = 'Catalogue demonstration, recorded before release 1.0.0';
+    expect(cohortLabel(PROOF)).toBe(cohort);
+    const lead = screen.getByTestId('proof-cohort');
+    expect(lead).toHaveTextContent(
+      `${cohort}: ${PROOF.runs} runs with the real agents on IRIS AI Hub. Evaluation in the trial`,
+    );
+    expect(lead.closest('[data-viewport]')).toHaveAttribute('data-viewport', 'laptop');
+    // Before both figures, so neither tile is read without it
+    for (const figure of ['24 of 24', '11 against 4'])
+      expect(
+        lead.compareDocumentPosition(screen.getByText(figure)) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    expect(container.querySelector('p[data-viewport="phone"]')).toHaveTextContent(
+      `${cohort}. Recorded failures: the board 24 of 24. On the same 11 failures: the board 11, Rules only 4.`,
     );
   });
 
@@ -279,7 +296,10 @@ describe('LoginPage, the proof on a demo install', () => {
     const tile = screen.getByText('8 of 9').closest('.stat-tile');
     expect(tile).toHaveAttribute('data-tone', 'attention');
     expect(tile).toHaveTextContent('Not all as expected');
-    expect(screen.getByText(/From 40 runs recorded with the real agents/)).toBeInTheDocument();
+    // An evaluation that does not date its runs names the cohort alone, with no release
+    expect(screen.getByTestId('proof-cohort')).toHaveTextContent(
+      /^Catalogue demonstration: 40 runs with the real agents on IRIS AI Hub\./,
+    );
   });
 
   it('leaves out the tile a figure is missing from, and keeps the headline', () => {
@@ -291,7 +311,7 @@ describe('LoginPage, the proof on a demo install', () => {
     );
     expect(screen.getByRole('heading', { level: 2, name: HEADLINE })).toBeInTheDocument();
     expect(container.querySelector('.stat-tile')).toBeNull();
-    expect(container).not.toHaveTextContent(/recorded with the real agents/);
+    expect(container).not.toHaveTextContent(/with the real agents|Catalogue demonstration/);
   });
 
   it('opens the evaluation in the trial from a link that says so, since a signed-out page has no session', async () => {
@@ -341,7 +361,7 @@ describe('LoginPage, the proof on a demo install', () => {
     expect(screen.getByRole('heading', { level: 2, name: HEADLINE })).toBeInTheDocument();
     expect(container.querySelector('.stat-tile')).toBeNull();
     expect(container).not.toHaveTextContent(/24 of 24/);
-    expect(container).not.toHaveTextContent(/recorded with the real agents/);
+    expect(container).not.toHaveTextContent(/with the real agents|Catalogue demonstration/);
     // The trial is the demo hospital's: a hospital's own install invites nobody into it
     expect(screen.queryByRole('region', { name: 'New to Shutter?' })).toBeNull();
     expect(screen.queryByRole('link', { name: 'Open the trial' })).toBeNull();
@@ -533,7 +553,7 @@ describe('LoginPage, how much it says', () => {
     await renderDemoLogin('plain');
     const said = "The agents were given the catalogue's matching entry and preferred outcome.";
     expect(screen.getByText(said)).toBeInTheDocument();
-    expect(screen.getByText(/^Recorded failures: the board/)).toHaveTextContent(said);
+    expect(screen.getByText(/Recorded failures: the board/)).toHaveTextContent(said);
   });
 
   it('keeps each element to its limit', async () => {
@@ -550,10 +570,11 @@ describe('LoginPage, how much it says', () => {
     for (const link of within(card).getAllByRole('link'))
       expect(layer1Words(link).length).toBeLessThanOrEqual(4);
     // A tile's caption: at most 8 words
-    for (const caption of [/^where the board chose/, /^gated, rehearsed/])
+    for (const caption of [/^the board chose/, /^gated, rehearsed/])
       expect(wordCount(screen.getByText(caption).textContent)).toBeLessThanOrEqual(8);
     // The proof line: at most 30 words
-    const proof = screen.getAllByText(/recorded with the real agents on IRIS AI Hub/)[0];
+    const proof = screen.getByTestId('proof-cohort');
+    expect(proof).toHaveTextContent(/runs with the real agents on IRIS AI Hub/);
     expect(wordCount(proof.textContent)).toBeLessThanOrEqual(30);
   });
 });

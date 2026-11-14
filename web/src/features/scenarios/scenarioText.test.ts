@@ -91,8 +91,10 @@ describe('proofParts', () => {
   it('takes its figures from the evaluation, never typed', () => {
     const parts = proofParts(PROOF);
     expect(parts.tested).toBe(
-      `Tested on ${PROOF.board!.scored} recorded cases from ${PROOF.board!.scenarios} scenarios (an incident gives several), the board chose the expected action every time.`,
+      `Tested on ${PROOF.board!.scored} cases from ${PROOF.board!.scenarios} scenarios (an incident gives several), the board chose the expected action every time.`,
     );
+    // The cohort and the release, read from the runs' own dates, lead both figures
+    expect(parts.cohort).toBe('Catalogue demonstration, recorded before release 1.0.0');
     expect(parts.played).toEqual({
       of: PROOF.played!.of,
       board: PROOF.played!.board,
@@ -106,26 +108,33 @@ describe('proofParts', () => {
   it('follows other figures, and leaves out a sentence the evaluation cannot give', () => {
     const board = { matched: 22, scored: 24, passes: 25, cases: 24, notScored: 1 };
     expect(proofParts({ board, played: null })).toEqual({
-      tested: 'Tested on 24 recorded cases, the board chose the expected action in 22 of them.',
+      cohort: 'Catalogue demonstration',
+      tested: 'Tested on 24 cases, the board chose the expected action in 22 of them.',
       played: null,
       bases: '(24 scored passes, proposed action)',
     });
     const played = { of: 9, board: 8, rules: 3, scenarios: [] };
     expect(proofParts({ board: null, played })).toEqual({
+      cohort: 'Catalogue demonstration',
       tested: null,
       played: { of: 9, board: 8, rules: 3 },
       bases: '(9 scenarios, played end to end)',
     });
-    expect(proofParts({ board: null, played: null })).toEqual({ tested: null, played: null, bases: null });
+    expect(proofParts({ board: null, played: null })).toEqual({
+      cohort: null,
+      tested: null,
+      played: null,
+      bases: null,
+    });
   });
 
-  it('names the unit: recorded cases, and the scenarios they come from when there are fewer', () => {
+  it('names the unit: cases, and the scenarios they come from when there are fewer', () => {
     const board = { matched: 24, scored: 24, passes: 25, cases: 24, notScored: 1, scenarios: 19 };
     expect(proofParts({ board, played: null }).tested).toBe(
-      'Tested on 24 recorded cases from 19 scenarios (an incident gives several), the board chose the expected action every time.',
+      'Tested on 24 cases from 19 scenarios (an incident gives several), the board chose the expected action every time.',
     );
     expect(proofParts({ board: { ...board, scenarios: 24 }, played: null }).tested).toBe(
-      'Tested on 24 recorded cases, the board chose the expected action every time.',
+      'Tested on 24 cases, the board chose the expected action every time.',
     );
   });
 });

@@ -222,6 +222,49 @@ describe('the shell', () => {
     expect(await screen.findByRole('link', { name: 'Cases 1 case needs a person' })).toBeInTheDocument();
   });
 
+  it('says "at most" beside Cases when more cases failed than the count read, as the Failed tile does', async () => {
+    server.use(
+      http.get('/api/shutter/cases', ({ request }) => {
+        const state = new URL(request.url).searchParams.get('state');
+        if (state !== 'failed')
+          return HttpResponse.json({ items: [], total: state === 'escalated' ? 120 : 0 });
+        // 150 failed, the newest 100 read, three of those given up: older ones given up cannot be taken off
+        return HttpResponse.json({
+          items: Array.from({ length: 100 }, (_, i) => ({
+            caseId: `C-F${i}`,
+            state: 'failed',
+            disposition: i < 3 ? 'abandoned' : '',
+          })),
+          total: 150,
+        });
+      }),
+    );
+    renderFrame();
+    const cases = await screen.findByRole('link', { name: 'Cases At most 267 cases need a person' });
+    expect(within(cases).getByText('at most 267')).toBeInTheDocument();
+  });
+
+  it('keeps the count exact when every failed case was read', async () => {
+    server.use(
+      http.get('/api/shutter/cases', ({ request }) => {
+        if (new URL(request.url).searchParams.get('state') !== 'failed')
+          return HttpResponse.json({ items: [], total: 0 });
+        return HttpResponse.json({
+          items: Array.from({ length: 40 }, (_, i) => ({
+            caseId: `C-F${i}`,
+            state: 'failed',
+            disposition: '',
+          })),
+          total: 40,
+        });
+      }),
+    );
+    renderFrame();
+    const cases = await screen.findByRole('link', { name: 'Cases 40 cases need a person' });
+    expect(within(cases).getByText('40')).toBeInTheDocument();
+    expect(within(cases).queryByText(/at most/i)).not.toBeInTheDocument();
+  });
+
   it('shows no count when no case needs a person', async () => {
     server.use(http.get('/api/shutter/cases', () => HttpResponse.json({ items: [], total: 0 })));
     renderFrame();

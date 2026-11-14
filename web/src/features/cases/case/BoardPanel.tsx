@@ -1,14 +1,4 @@
-import {
-  Accordion,
-  Badge,
-  Group,
-  List,
-  SimpleGrid,
-  Stack,
-  Text,
-  Tooltip,
-  VisuallyHidden,
-} from '@mantine/core';
+import { Accordion, Group, List, SimpleGrid, Stack, Text, VisuallyHidden } from '@mantine/core';
 import { IconMessageExclamation, IconUsers } from '@tabler/icons-react';
 import { type ComponentType, Fragment, lazy, Suspense, useState } from 'react';
 import { useRuns, useSettings } from '@/api/hooks';
@@ -25,15 +15,16 @@ import { TechDetail } from '@/components/TechDetail';
 import { Term } from '@/components/Term';
 import { TRIAL } from '@/env/mode';
 import { costAtPrice } from '@/lib/cost';
-import { catalogueEntriesOf, EVIDENCE_REFS, evidenceSection } from '@/lib/evidenceRefs';
+import { catalogueEntriesOf, EVIDENCE_REFS } from '@/lib/evidenceRefs';
 import { asArray, asObject } from '@/lib/json';
 import { formatDuration, formatInt, formatUsd, humanize, plural } from '@/lib/format';
 import { memberIdentity, SPECIALISTS } from '@/lib/hues';
 import { runMessageLink } from '@/lib/messageLink';
 import { PROVENANCE } from '@/lib/status';
+import type { Status } from '@/lib/tone';
 import { useTechnical } from '@/stores/appearance';
 import { describeEntry } from './derive';
-import { showEvidence } from './evidenceLinks';
+import { EvidenceChips } from './EvidenceChips';
 import { MoreToggle } from './MoreToggle';
 import type { RecordingToggleProps } from './RecordingToggle';
 import { agreementOf, answered, boardRounds, dispositionOf, latestRound, resultOf } from './boardRounds';
@@ -55,7 +46,41 @@ const LISTS: [string, string][] = [
   ['disagreements', 'Disagreements kept'],
 ];
 
-/** A run's cost and tokens, and its provenance in full: inside the finding or the run, one click from the card. */
+/**
+ * How a run's answer came to this page, which is never read from the mode alone: in the trial every run is a recording
+ * shown in the browser, whatever IRIS ran when it was recorded; on IRIS a replay restores a recorded run and calls no
+ * model; only a live run called one.
+ */
+function runProvenance(run: AgentRun): { status: Status; label: string; hint: string } {
+  const replay = run.mode === 'replay';
+  if (TRIAL)
+    return {
+      status: PROVENANCE.recording,
+      label: PROVENANCE.recording.label,
+      hint: `${PROVENANCE.recording.hint}. When it was recorded on IRIS: ${
+        replay ? PROVENANCE.replay.label.toLowerCase() : 'a live run'
+      }${run.model ? ` on ${run.model}` : ''}.`,
+    };
+  return replay
+    ? {
+        status: PROVENANCE.replay,
+        label: `${PROVENANCE.replay.label}${run.model ? ` · ${run.model}` : ''}`,
+        hint: `Replayed from a recorded live run${run.model ? ` on ${run.model}` : ''}: no model was called now`,
+      }
+    : {
+        status: PROVENANCE.live,
+        label: `${PROVENANCE.live.label} · ${run.model}`,
+        hint: `A live run on ${run.model}`,
+      };
+}
+
+/** A run whose tool calls are a recording's, restored and not executed now: a replay on IRIS, and any run in the trial. */
+const recordedCalls = (run: AgentRun) => TRIAL || run.mode === 'replay';
+
+/**
+ * A run's cost and tokens, and its provenance in full: inside the finding or the run, one click from the card. A replay
+ * and the trial say in words that no model was called now, and their tool calls are named as the recording's.
+ */
 function RunStats({ run }: { run: AgentRun }) {
   const replay = run.mode === 'replay';
   const prices = useSettings().data?.prices;
@@ -65,42 +90,44 @@ function RunStats({ run }: { run: AgentRun }) {
     ? recorded !== undefined
       ? `${formatUsd(recorded)} when recorded, nothing now`
       : 'nothing now'
-    : formatUsd(run.costUsd) || '$0.00';
+    : TRIAL
+      ? `${formatUsd(run.costUsd) || '$0.00'} when recorded, nothing now`
+      : formatUsd(run.costUsd) || '$0.00';
+  const provenance = runProvenance(run);
+  const calls = Number(run.toolCallCount) || 0;
+  const callsText = calls ? plural(calls, recordedCalls(run) ? 'recorded tool call' : 'tool call') : '';
+  const noTokens = !Number(run.promptTokens) && !Number(run.completionTokens);
+  const cache =
+    Number(run.cacheReadTokens) || Number(run.cacheCreationTokens)
+      ? ` · cache ${formatInt(run.cacheReadTokens)} read, ${formatInt(run.cacheCreationTokens)} written`
+      : '';
+  // A replay that kept no token counts has no figures to show: only that nothing was called
+  const figures =
+    replay && noTokens
+      ? ''
+      : `${formatInt(run.promptTokens)} in · ${formatInt(run.completionTokens)} out${cache} · ${cost} · ${formatDuration(run.durationMs) || '0 ms'}`;
+  const notNow = TRIAL
+    ? `No model call now: this browser shows a recording${run.model ? ` of a run on ${run.model}` : ''}.`
+    : replay && noTokens
+      ? `No model call now: the recording's findings were replayed${calls ? `, with its ${plural(calls, 'tool call')}, none of them run now` : ''}.`
+      : '';
+  const counted = figures ? [figures, callsText].filter(Boolean).join(' · ') : TRIAL ? callsText : '';
   return (
     <Stack gap={4}>
       <Group gap={6} wrap="wrap">
-        <StatusBadge
-          {...PROVENANCE[replay ? 'replay' : 'live']}
-          size="xs"
-          label={
-            replay
-              ? `${PROVENANCE.replay.label}${run.model ? ` · ${run.model}` : ''}`
-              : `${PROVENANCE.live.label} · ${run.model}`
-          }
-          hint={
-            replay
-              ? `Replayed from a recorded live run${run.model ? ` on ${run.model}` : ''}: no model was called now`
-              : `A live run on ${run.model}`
-          }
-        />
+        <StatusBadge {...provenance.status} size="xs" label={provenance.label} hint={provenance.hint} />
         {run.status !== 'ok' ? <StatusBadge tone="blocking" size="xs" label={humanize(run.status)} /> : null}
       </Group>
-      {replay && !Number(run.promptTokens) && !Number(run.completionTokens) ? (
+      {notNow ? (
         <Text size="xs" c="dimmed">
-          No model call now: the recording's findings were replayed
-          {run.toolCallCount ? `, with its ${run.toolCallCount} tool calls` : ''}.
+          {notNow}
         </Text>
-      ) : (
+      ) : null}
+      {counted ? (
         <Text size="xs" c="dimmed">
-          {formatInt(run.promptTokens)} in · {formatInt(run.completionTokens)} out
-          {Number(run.cacheReadTokens) || Number(run.cacheCreationTokens)
-            ? ` · cache ${formatInt(run.cacheReadTokens)} read, ${formatInt(run.cacheCreationTokens)} written`
-            : ''}
-          {' · '}
-          {cost} · {formatDuration(run.durationMs) || '0 ms'}
-          {run.toolCallCount ? ` · ${run.toolCallCount} tool calls` : ''}
+          {counted}
         </Text>
-      )}
+      ) : null}
       {run.error ? (
         <Text size="xs" c="red">
           {run.error}
@@ -139,7 +166,10 @@ function ToolCalls({ run }: { run: AgentRun }) {
     <Accordion variant="contained" chevronPosition="left">
       <Accordion.Item value="calls">
         <Accordion.Control>
-          <Text size="xs">Tool calls ({run.toolCalls.length})</Text>
+          {/* A replay's calls, and the trial's, were made when the run was recorded: none is executed now */}
+          <Text size="xs">
+            {recordedCalls(run) ? 'Recorded tool calls' : 'Tool calls'} ({run.toolCalls.length})
+          </Text>
         </Accordion.Control>
         <Accordion.Panel>
           <Stack gap="xs">
@@ -163,11 +193,21 @@ function ToolCalls({ run }: { run: AgentRun }) {
   );
 }
 
-/** A run's facts in one line, always on its card: "Replay · claude-opus-5-5 · 14.6 s · 3 steps · 5 tool calls · message 16615". */
+/**
+ * A run's facts in one line, always on its card: "Replay · claude-opus-5-5 · 14.6 s · 3 steps · 5 tool calls · message
+ * 16615". Its first word says how the line's figures came here, so a replay's are never read as made now; in the trial
+ * that word is the page's own, "Browser recording", as the case's header says it.
+ */
 function RunLine({ run, portalBase }: { run: AgentRun; portalBase: string }) {
   const technical = useTechnical();
   const parts = [
-    run.mode === 'replay' ? 'Replay' : run.mode === 'live' ? 'Live' : humanize(run.mode),
+    TRIAL
+      ? PROVENANCE.recording.label
+      : run.mode === 'replay'
+        ? 'Replay'
+        : run.mode === 'live'
+          ? 'Live'
+          : humanize(run.mode),
     run.model,
     formatDuration(run.durationMs),
     // "steps" is the plain word for the agent's iterations; Technical names them
@@ -194,19 +234,6 @@ function RunLine({ run, portalBase }: { run: AgentRun; portalBase: string }) {
   );
 }
 
-/** A cited section's chip, in a word or two; the section's own title is on the Evidence tab it opens. */
-const CHIPS: Record<string, string> = {
-  message: 'HL7 message',
-  validation: 'Schema validation',
-  error: 'Connector error',
-  operation: 'Failed operation',
-  route: 'Route',
-  ward_state: 'Encounter',
-  receipt: 'Receipt',
-  timeline: 'Timeline',
-  later_event: 'Later events',
-};
-
 /** The evidence sections a run cites, in the Evidence tab's order, and the catalogue entries it names. */
 function citedBy(run: AgentRun): { refs: string[]; entries: string[] } {
   const refs = asArray(resultOf(run).evidence_refs).filter((r): r is string => typeof r === 'string');
@@ -217,63 +244,28 @@ function citedBy(run: AgentRun): { refs: string[]; entries: string[] } {
 }
 
 /**
- * What a member cited, counted on its card ("Cited 8 evidence sections", "and catalogue entry E7"), with a chip per
- * section in "Which ones" (a data detail, open in Technical): each opens that section on the Evidence tab.
+ * What a member cited, counted in the name of a data detail on its card ("Cited 8 evidence sections", "and catalogue
+ * entry E7"), open in Technical: a chip per section and per entry, each opening it on the case's Evidence tab.
  */
 function Citations({ run, name, receiver }: { run: AgentRun; name: string; receiver?: string }) {
   const { refs, entries } = citedBy(run);
   if (!refs.length && !entries.length) return null;
+  const sections = refs.length ? `Cited ${plural(refs.length, 'evidence section')}` : 'Cited';
+  const named = entries.length
+    ? `${refs.length ? ' and ' : ' '}${entries.length === 1 ? 'catalogue entry' : 'catalogue entries'} ${entries.join(', ')}`
+    : '';
   return (
-    <Stack gap={4}>
-      <Text size="sm">
-        {refs.length ? `Cited ${plural(refs.length, 'evidence section')}` : 'Cited'}
-        {entries.length ? (
-          <>
-            {refs.length ? ' and ' : ' '}
-            <Term term="catalogue-entry">
-              {entries.length === 1 ? 'catalogue entry' : 'catalogue entries'}
-            </Term>{' '}
-            {entries.map((e, i) => (
-              <Fragment key={e}>
-                {i ? ', ' : ''}
-                <CodeChip>{e}</CodeChip>
-              </Fragment>
-            ))}
-          </>
-        ) : null}
-      </Text>
-      {refs.length ? (
-        <TechDetail
-          kind="data"
-          label={
-            <>
-              Which ones<VisuallyHidden component="span">{`, ${name}`}</VisuallyHidden>
-            </>
-          }
-        >
-          <Group gap={6} wrap="wrap">
-            {refs.map((ref) => {
-              const section = evidenceSection(ref, receiver);
-              return section ? (
-                <Tooltip key={ref} label={`Open ${section.title} on the Evidence tab`}>
-                  <Badge
-                    size="sm"
-                    variant="outline"
-                    color="gray"
-                    component="button"
-                    type="button"
-                    onClick={() => showEvidence(ref)}
-                    style={{ textTransform: 'none', cursor: 'pointer', height: 'auto', whiteSpace: 'normal' }}
-                  >
-                    {CHIPS[ref] ?? section.title}
-                  </Badge>
-                </Tooltip>
-              ) : null;
-            })}
-          </Group>
-        </TechDetail>
-      ) : null}
-    </Stack>
+    <TechDetail
+      kind="data"
+      label={
+        <>
+          {`${sections}${named}`}
+          <VisuallyHidden component="span">{`, ${name}`}</VisuallyHidden>
+        </>
+      }
+    >
+      <EvidenceChips refs={refs} entries={entries.map((e) => e.split('@')[0])} receiver={receiver} />
+    </TechDetail>
   );
 }
 
@@ -524,22 +516,17 @@ function CoordinatorCard({
               borderRadius: 'var(--mantine-radius-sm)',
             }}
           >
-            <Text size="sm" fw={600}>
-              {`Dissent kept: ${d.name}`}
-            </Text>
-            {/* What the specialist said is on its own card; the coordinator's reason for keeping it, a click away */}
+            {/* What the specialist said is on its own card; the coordinator's reason for keeping it is behind the
+                line that names it, a click away */}
             {d.why ? (
-              <TechDetail
-                kind="data"
-                label={
-                  <>
-                    Why it was kept<VisuallyHidden component="span">{`, ${d.name}`}</VisuallyHidden>
-                  </>
-                }
-              >
+              <TechDetail kind="data" label={`Dissent kept: ${d.name}`}>
                 <Text size="sm">{d.why}</Text>
               </TechDetail>
-            ) : null}
+            ) : (
+              <Text size="sm" fw={600}>
+                {`Dissent kept: ${d.name}`}
+              </Text>
+            )}
           </Stack>
         ))
       ) : (

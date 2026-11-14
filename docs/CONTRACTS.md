@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.60, 14 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.62, 14 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -274,7 +274,7 @@ Step kinds: `file` (drop the file into the ADT In folder; `expect` is `delivered
 
 The mimic replays the member's recording turn by turn when the case's material facts (scenario, event, catalogue entry, outcome, matches and conditions, the receiver's version and state, the receipt, conditional writes and the specialists' dispositions) are the recorded case's, and otherwise answers from the catalogue match the evidence carries; every text it writes starts with `[mock]`. How to use it: `tests/mock/README.md`. The mimic does not answer production review runs (v1.22, section 13): `Shutter.Mock.Turns.Heading` has no `review` entry, so a run of `Shutter.Agent.Review` under it is refused as `context_mismatch`, and the review's tests run with `agent: false` or in replay against a recording.
 
-The live runner's `TestRun(case, member, mode, budget)` (v1.21), a check over SQL, takes mode `live` or `record` only (`{"error": "mode must be live or record"}` otherwise, so a replay never runs live by mistake), keys each run's tool calls `test:<case>:<member>:<n>` with a counter, one key per run (`run_key` in its answer; a member's runs are found with `LIKE 'test:<case>:<member>:%'`), says in `mock` whether the mimic answered, and writes no `AgentRun` row.
+The live runner's `TestRun(case, member, mode, budget)` (v1.21), a check over SQL, takes mode `live` or `record` only (`{"error": "mode must be live or record"}` otherwise, so a replay never runs live by mistake), keys each run's tool calls `test:<case>:<member>:<n>` with a counter, one key per run (`run_key` in its answer; a member's runs are found with `LIKE 'test:<case>:<member>:%'`), says in `mock` whether the mimic answered. Since 1.4.6 the day's budget admits it as it admits the Agent item's runs (`Shutter.Bridge.Runner.Diagnostic`, `Budget.Admit`, charged to the SQL caller): refused, it answers `{"error": <the refusal's words>, "status": "budget_exhausted"}` before any provider is contacted; admitted, what it spent or that it failed is recorded as an `AgentRun` row with `Purpose` `diagnostic` and no case, snapshot or question (`run_id` in its answer), which the day's spend, the caller's share and `GET /costs` count and no case's runs, events or counts read, and its reservation is settled once that row is saved.
 
 An agent item's `ProviderConfig` (v1.17) names a Config Store configuration resolved as the agent class's `@{config:...}` is (a name of fewer than three parts is under `AI.LLM`, secrets resolved) and is made with `%AI.Provider.Create`, before `%Init`; the run's model is the item's `Model`, else the configuration's `model`, else the class's. Build 154 has no `%AI.Provider.CreateFromConfig`, which the runner called before.
 
@@ -387,7 +387,7 @@ hospital has. It never resets anything; the scenario runner's Reset (and so ever
   for the app's banner; `{enabled: false}` when there is no hospital or no player. Since 1.4.2 a copy of the switch and the cadence alone, `^Shutter.Live("public")` `{enabled, every_minutes, at}` in Shutter's own namespace (`Shutter.Util.LivePublic`), is written by the player on every round, by `SetLive` and the hospital's install, and by `Setup.LiveStatus` whenever it reads the hospital and the copy says otherwise, for a caller who may not read the hospital's database (12). The item logs one trace line per story
   ("Live story n: S with k message(s) for p patient(s)") and a warning when a story or a fault fails.
 
-## 4.5 The pathology paths on the demo (v1.60)
+## 4.5 The pathology paths on the demo (v1.62)
 
 Two optional paths besides the scenarios, on the demo hospital's results route, offered on a demo install with the
 hospital (never in the trial, whose outage routes answer `not_in_trial`): **P1**, one ORU^R01 result the demo's results
@@ -507,18 +507,24 @@ escalation), the case's `outcome` ("Handled by hand, recorded by <who>: <reason>
 **Abandoning a case the workflow left behind** (v1.21). A case can be left in a working state (detected, collecting, investigating, grouped, proposed, gated, rehearsing, awaiting_approval, approved, executing or verifying) when the answer its workflow instance waits for never comes: a container killed in the middle of a scenario, an alarm or a delivered request lost with it. `POST /cases/{id}/abandon` with `{reason, expectedVersion?}` (`Shutter_Approve` only, whatever the site profile says; `X-Requested-With`; an `Idempotency-Key`) answers 202 `{caseId, state: "abandoning", requestedBy, reason}` and sends `Shutter.Msg.CaseAbandon` to the Case Workflow item, as `/close` and `/reinvestigate` go through it, so the abandon shows in the trace. There a fresh instance fails the case (`Shutter.Store.Case.Abandon`): state `failed`, disposition `abandoned`, headline "Abandoned by <who>. <reason>" (the reason clipped to 200), outcome "Abandoned, recorded by <who>: <reason>. The workflow stopped in <state>; nothing more is sent", the current approval revoked, every draft or queued escalation email cancelled, and an open approval task completed as cancelled (an `approval` event "Approval task <id> cancelled: the case was abandoned"). The record is the state event: its actor is the approver, its time when, its text "Abandoned from <state>: <reason>" (with "; N pending emails cancelled" when any were). The case keeps its `workflowSessionId`, so the trace link still shows where it stopped; the old instance, if it ever answers, finds the case closed and ignores the answer. A failed case reopens with `/reinvestigate`, so a wrong abandon is recoverable. Errors: 400 `bad_request` when the body is not a JSON object or `reason` is empty; 404 `not_found`; 409 `wrong_state` for a closed case (resolved, blocked, escalated or failed), whose detail says a closed case is marked handled (`/close`) or reopened (`/reinvestigate`); 409 `stale_version` with `currentVersion` when `expectedVersion` is not the case's version; 409 `busy` with `{state, inFlight, newestAt, deferred}` while the case's workflow has a message in flight. The in-flight rule (`Shutter.Store.Case.InFlight`): the case's workflow session (for a grouped case, its incident's) is busy while any `Ens.MessageHeader` of the session is Created, Queued or Deferred, or Delivered with `TimeCreated` within the last N minutes; a case with no session yet is busy while its last state event is younger than N minutes. `inFlight` is the count, `newestAt` the newest header's time (the state event's for a case with no session), and `deferred: true` means an approval task is waiting for a person: the case is not stuck, reject the plan through `POST /cases/{id}/approvals` instead (the detail says so). N is `^Shutter.Config("abandonAfterMinutes")`, 15 by default; a value of 10 or less reads as 11, since N must exceed the 600 s board timeout, the longest wait the workflow arms. Age is never judged by `updatedAt`, which a note writes (the start sweep's note, below, would make every stranded case look fresh). The 202 is given before the transition: when the instance moves the case between the route's check and the workflow's transition, the version check refuses the abandon (logged, case unchanged) and the approver re-reads the case and tries again.
 
 
-**The cases list's query** (`open` since v1.59). `GET /cases?state=&scenario=&open=&limit=&offset=` answers `{items, total}`, newest
-first: `state` keeps the cases in that one state, `scenario` those a scenario opened, and `open=1` leaves out the closed
-cases, those whose state is `resolved`, `blocked`, `escalated` or `failed` (what `Shutter.Store.Case.IsClosed` and the
-app's `CLOSED_STATES` call closed), so what is left is still being worked on or waits for an approval. The three combine
-with AND, so `open=1` beside a closed `state` matches nothing; any other value of `open` filters nothing. Every filter is
-part of the query itself (`Shutter.API.Dispatch.CasesWhere`), so `total` counts the filter's rows and `limit` (50; 1 to
-500) and `offset` (0 to 100000) page through the same rows. The Cases page's **Hide closed** switch sends `open=1` and
-keeps it in its own address, as it keeps `state`, `scenario` and `page`; choosing a closed outcome's tile or a closed
-state there turns it off. The list's closed-outcome tiles are counted in the browser over the 100 newest cases
+**The cases list's query** (`open` since v1.59, `resolved` since v1.60). `GET /cases?state=&scenario=&open=&resolved=&limit=&offset=`
+answers `{items, total}`, newest first: `state` keeps the cases in that one state, `scenario` those a scenario opened,
+`open=1` leaves out the closed cases, those whose state is `resolved`, `blocked`, `escalated` or `failed` (what
+`Shutter.Store.Case.IsClosed` and the app's `CLOSED_STATES` call closed), so what is left is still being worked on or
+waits for an approval, and `resolved=0` leaves out the cases whose state is `resolved` and no other, so the blocked,
+escalated and failed ones, which are closed and still need a person, stay with the ones being worked on. The four
+combine with AND, so `open=1` beside a closed `state`, or `resolved=0` beside `state=resolved`, matches nothing, and
+`open=1` with `resolved=0` is `open=1`; any other value of `open` or of `resolved` filters nothing (`resolved=1` does not
+list the resolved cases alone: `state=resolved` does). Every filter is part of the query itself
+(`Shutter.API.Dispatch.CasesWhere`), so `total` counts the filter's rows and `limit` (50; 1 to 500) and `offset` (0 to
+100000) page through the same rows. The Cases page's **Hide resolved** switch sends `resolved=0` and keeps it in its own
+address, as it keeps `state`, `scenario` and `page`; choosing a closed outcome's tile or the resolved state there turns
+it off, and a blocked, escalated or failed state stays beside it. The page reads 1.4.5's address, `open=1`, as the switch
+on, and never sends `open=1` itself. The list's closed-outcome tiles are counted in the browser over the 100 newest cases
 (`limit=100`), which the page says when there are more ("7 matches among the 100 most recent cases. Older cases have not
 been searched."); its Failed tile takes the abandoned cases off among the 100 newest failed ones, and reads "at most"
-when more than that failed.
+when more than that failed, as do the count of cases that need a person beside Cases in the navigation and on Home,
+which add that figure.
 
 **What an empty list says** (v1.59; no new field). With no filter on and no case, the Cases page chooses its words from
 what the install says of itself, never from its hostname or the signed-in name: the trial (the build, or `?trial`) offers a
@@ -1427,21 +1433,21 @@ that tries to reach past its case leaves a mark, and `Shutter.Bridge.ToolCall.De
 **The day's model budget (v1.34).** `SHUTTER_DAILY_BUDGET_USD`, read by the installer and at every start of the production
 (`Setup.ApplyEnvironment`, 12) into `^Shutter.Config("dailyBudgetUsd")`
 (`Shutter.Util.Budget`; 0, unset or not a number means no cap), caps what the live and record agent runs may spend between one
-00:00 UTC and the next. Before a run that would call a model, the Agent item asks `Budget.Allows()`, which sums the day's
+00:00 UTC and the next. Before a run that would call a model, the Agent item asks for admission (`Budget.Admit`, below), which sums the day's
 `AgentRun` rows' `CostUSD` as `GET /costs` does (a replay or a run the API mimic answered spent nothing); once the spend has
-reached the cap the run is not sent, and the response's status is `budget_exhausted` with an error naming the cap, the spend
+reached the cap, or the run's estimate no longer fits (1.4.6), the run is not sent, and the response's status is `budget_exhausted` with an error naming the cap, the spend
 and when it resets. A board whose members all answered so has no board answer (6.6), as when replay mode has no recording
 (the case says which); a question or a review fails with the status. `GET
 /settings` and the Doctor carry `budget: {dailyUsd, spentTodayUsd, exhausted, since, resetsAt, perUserUsd}`, and `GET /settings`
-adds the caller's own `spentByMeUsd` and `shareExhausted`. The public demo sets the cap with an API key of its own, so a day of
-visitors spends at most the cap. **Each user's share** (`SHUTTER_JUDGE_BUDGET_USD` into `^Shutter.Config("judgeBudgetUsd")`,
+adds the caller's own `spentByMeUsd` and `shareExhausted`. The public demo sets the cap with an API key of its own; the cap bounds
+spend plus estimates, not the provider's invoice (below). **Each user's share** (`SHUTTER_JUDGE_BUDGET_USD` into `^Shutter.Config("judgeBudgetUsd")`,
 0 or unset means none): every agent request carries who asked (`RequestedBy`: a question's asker, a judge who convened the
 board, since v1.57 the user who started the scenario run that opened the case (`Shutter.Store.Case` `ScenarioBy`, from
 `^Shutter.Config("scenarioBy")`, which the runner's Begin writes and its Reset clears), `system` for the feed's own runs), the run keeps it, and a run for a user whose live runs today have reached the share is
 refused `budget_exhausted` with "Your share of the day's model budget ... is spent", so one judge cannot spend the day. A replay-only scenario run's runs (v1.58, 4.2) are replays: the Agent item asks the budget nothing and reserves nothing for them, and they cost 0, so they count against neither the cap nor the starter's share.
 **Whether the live agents can run (v1.37).** `GET /settings` carries `live.agents = {available, reason, until, detail}`
 (`Shutter.Util.LiveAgents`), one signal for the web's notice: `reason` is `budget` when the day's cap or the caller's share
-is spent (`until` = `budget.resetsAt`), `provider_auth` when a live run failed with an authentication error (a 401, a bad or
+is spent, or since 1.4.6 has less left than the next run's estimate (`until` = `budget.resetsAt`; `detail` then says which limit, "Your share ..." for the share), `provider_auth` when a live run failed with an authentication error (a 401, a bad or
 deactivated key) within the last 15 minutes (`until` = the next 00:00 UTC, when a key a site deactivates for the day comes
 back; the flag clears on the next live run the provider accepts, and after 15 minutes one run tries again), and null when
 live runs can go; `detail` is the sentence to show. As built in 1.2.0 (v1.48), the flag is set only by a run whose status is `error` with an authentication
@@ -1461,7 +1467,7 @@ cap here guards a burst; absent when unset (an empty, zero or non-numeric value 
 counted against the cap until they finished. The Agent item now reserves an estimate for each live run it starts
 (`Budget.Reserve`, keyed by the run) and settles it when the run ends whatever its outcome (`Budget.Settle`); the day's state
 carries `reservedUsd` and `inFlight`, `GET /settings` adds the caller's `reservedByMeUsd`, and a run is refused once spend plus
-reservations reach the cap (or spend plus the user's own reservations the share), the refusal naming the runs in flight. The
+reservations reach the cap (or spend plus the user's own reservations the share), the refusal naming the runs in flight. **Admission (1.4.6).** `Budget.Admit(key, user)` admits a run only when the day's spend plus the reservations plus the run's own estimate stay within the cap and, for a user other than `system`, the user's spend plus their reservations plus the estimate within the share, and reserves it in the same step, under one lock (`^Shutter.Budget("admit")`, which `Reserve` takes too), so two runs cannot both be admitted on the same remaining allowance; refused, nothing is reserved and the refusal says what is left and the estimate. `AllowsFor`, which `POST /cases/{id}/board` and `live.agents` ask, applies the same rule with nothing reserved, and the budget object it returns carries `estimateUsd`. This bounds spend plus estimates, not the bill: a run can cost more than its estimate, a reservation older than twenty minutes is released whether or not its run has ended, the Agent item settles a run before the workflow writes its row, and a production review's cost is kept on `Shutter.Store.Review`, which the day's spend does not read. A cap or a share smaller than one run's estimate admits no run at all, even with nothing spent: a site with so small a cap sets `budgetReserveUsd` below it. An admission that cannot take the lock within 10 seconds (`ADMITLOCKSECONDS`; another admission holding it) is refused `budget_exhausted` as well, whatever the cap, with words that say the budget could not be checked in time. The
 estimate is `^Shutter.Config("budgetReserveUsd")` when the site sets it, else the mean cost of the last twenty live runs that
 cost anything, else 0.50 USD, never below 0.01; a reservation older than twenty minutes was left by a job that died and is
 dropped when next counted.
@@ -1946,9 +1952,22 @@ demo items, switched off on a site install with the others.
   since the case counter starts again at `C-000001` and their rows would name cases that never existed; since v1.1.0 the three outage stores too (17.7); and it sets
   `^Shutter.Config("resetAt")` to the time of the purge, as a scenario reset does, so nothing from before it is read as
   this instance's history.
-- **The aihub module's install** (v1.21) fails when the environment carries a provider key (`ANTHROPIC_API_KEY`) and the
-  provider could not be configured from it, so a live edition is never built on a key that does not work; the image
-  build has no key and is unaffected.
+- **The aihub module's install** (v1.21) fails when the environment carries a provider key (`ANTHROPIC_API_KEY`, or
+  since v1.61 `OPENAI_API_KEY`) and the provider could not be configured from it, so a live edition is never built on a
+  key that does not work; the image build has no key and is unaffected.
+- **The provider the install configures** (v1.61): Anthropic or OpenAI, one at a time, as the one configuration
+  `AI.LLM.Shutter`. `Shutter.Setup.ProviderChoice` decides from `SHUTTER_PROVIDER` and the two keys: the provider named
+  (`anthropic` or `openai`) when its key is set; with none named, the one whose key is set, Anthropic when both are. A
+  provider named with its key empty, or a name that is neither, configures nothing while a key is set, and the other
+  provider's key is never used in its place: the install fails as above, and the production's start logs a warning and
+  leaves the instance as it was. `ConfigureProvider(key, model, provider)` writes the wallet secret (`Shutter.Anthropic`,
+  or `Shutter.OpenAI`), then `AI.LLM.Shutter` with `model_provider`, the model (`SHUTTER_MODEL`, else
+  `claude-opus-5-5`, or `gpt-4.1` on OpenAI) and the key by reference, removes the other provider's secret and records
+  the provider in `^Shutter.Config("aihub", "modelProvider")`; a record without it is Anthropic's. It refuses, before
+  changing anything, a provider it does not configure and a model whose name is plainly the other provider's
+  (one beginning with the family of the other provider's default model, `claude-opus-5-5` on OpenAI, `gpt-4.1` on Anthropic). The two-argument call is Anthropic's, as it was. `ClearProvider`
+  removes the configuration, both secrets and the record. The price list (`Shutter.Store.ModelPrice`) holds Anthropic's
+  models only, so a run on another model has no cost and the budgets (9) do not count it.
 - **Shape B: Shutter's items inside a site's own production.** `Shutter.Setup.InstallInto(production, root)`
   (`SELECT Shutter.Setup_InstallInto('Your.Production', '/path/to/module/')`, or `zpm "load <dir> -Ddemo=0
   -Dproduction=Your.Production"`), in that production's namespace with the core classes loaded: refuses an empty name or a
@@ -2011,7 +2030,7 @@ survives a restart that does not name it. The install reads the same variables (
 cap), so the image's build arguments stay the two the installer alone reads, with the demo password as a build secret
 (INSTALL.md section 3). The call returns JSON
 naming what was applied, with `errors` when a step failed, and the event log carries it; `SELECT Shutter.Setup_ApplyEnvironment()`
-runs it by hand. `ApplyRuntime(...)` is the same on given values, for the tests. At every start (v1.39) the production checks that the wallet secret and the Config Store entry still exist, not only the key's digest, and writes them again from `ANTHROPIC_API_KEY` when either is missing (`Shutter.Setup.ProviderNeedsRewrite`; a container recreated on the same volume loses both, since they live in IRISSYS while the record lives in the volume); the Doctor reports `provider`, `wallet_secret` and `provider_config`, each true, false or null where the edition has no such class or this process may not read it: the wallet answers a reader without `Shutter_Secrets` as if the secret were gone and the Config Store refuses one without `%Admin_ConfigStore`, so each probe checks its resource first and a signed-in operator or judge is told nothing rather than "gone" (the v0.2.6 rehearsal); the production's own process, which wrote them, reads them. `SHUTTER_DEMO_PORTAL` is read with them (v1.39): `1` applies `HardenPortal` (14.5's read-only portal) at every start of the production, since that hardening lives in IRISSYS and a recreated container would come back with the portal open, and records the time as `^Shutter.Config("portalHardened")`. The record stands for the latest start alone: it is cleared before each attempt, and a start whose hardening fails leaves no stamp and records its errors as `^Shutter.Config("portalHardeningErrors")`. The Doctor reports `portal_hardened` and `portal_hardened_at` from the stamp and `portal_hardening_errors` from the errors node ("" when the latest start's hardening succeeded or was never asked for). Never from the demo flag alone: a local demo keeps the portal as IRIS made it. Since 1.2.0 `HardenPortal` also sets the `/api/shutter` application's session timeout to `Shutter.Setup.#DEMOAPISESSIONSECONDS`, 120 s in place of IRIS's 900: every signed-in web session holds one licence connection until it ends, and the Community licence refuses every new login, Management Portal and terminal included, once the instance holds 8, which the demo reached at its 8th sign-in. The shorter timeout shortens the lock rather than preventing it: 8 or more sign-ins within 120 s without signing out (the 8th of 10 back-to-back sign-ins, or of 14 visitors 12 s apart, on 8 Nov 2026) still refuse the portal, until 120 s after the last of them; the operator waits that out or restarts the container (troubleshooting.md). A visible tab with the live hospital on, as on the public demo, keeps its session by the live banner's poll (every 30 s at most, on every page). A hidden tab polls nothing, so a tab hidden, or idle on a page that polls nothing, for more than 120 s is signed out: its next request sends it to sign in, and anything not yet sent, such as an approval being written, is lost. A closed tab's session ends 120 s after its last request. `PortalState` reports `api_session_timeout` and is `hardened` only when it is set and no longer than that.
+runs it by hand. `ApplyRuntime(...)` is the same on given values, for the tests. At every start (v1.39) the production checks that the wallet secret and the Config Store entry still exist, not only the key's digest, and writes them again from the environment's key (`ANTHROPIC_API_KEY`, or `OPENAI_API_KEY`) when either is missing, and since v1.61 when the environment asks for the other provider than the record's (`Shutter.Setup.ProviderNeedsRewrite`; a container recreated on the same volume loses both, since they live in IRISSYS while the record lives in the volume); the Doctor reports `provider`, `wallet_secret` (the recorded provider's own secret) and `provider_config`, each true, false or null where the edition has no such class or this process may not read it: the wallet answers a reader without `Shutter_Secrets` as if the secret were gone and the Config Store refuses one without `%Admin_ConfigStore`, so each probe checks its resource first and a signed-in operator or judge is told nothing rather than "gone" (the v0.2.6 rehearsal); the production's own process, which wrote them, reads them. `SHUTTER_DEMO_PORTAL` is read with them (v1.39): `1` applies `HardenPortal` (14.5's read-only portal) at every start of the production, since that hardening lives in IRISSYS and a recreated container would come back with the portal open, and records the time as `^Shutter.Config("portalHardened")`. The record stands for the latest start alone: it is cleared before each attempt, and a start whose hardening fails leaves no stamp and records its errors as `^Shutter.Config("portalHardeningErrors")`. The Doctor reports `portal_hardened` and `portal_hardened_at` from the stamp and `portal_hardening_errors` from the errors node ("" when the latest start's hardening succeeded or was never asked for). Never from the demo flag alone: a local demo keeps the portal as IRIS made it. Since 1.2.0 `HardenPortal` also sets the `/api/shutter` application's session timeout to `Shutter.Setup.#DEMOAPISESSIONSECONDS`, 120 s in place of IRIS's 900: every signed-in web session holds one licence connection until it ends, and the Community licence refuses every new login, Management Portal and terminal included, once the instance holds 8, which the demo reached at its 8th sign-in. The shorter timeout shortens the lock rather than preventing it: 8 or more sign-ins within 120 s without signing out (the 8th of 10 back-to-back sign-ins, or of 14 visitors 12 s apart, on 8 Nov 2026) still refuse the portal, until 120 s after the last of them; the operator waits that out or restarts the container (troubleshooting.md). A visible tab with the live hospital on, as on the public demo, keeps its session by the live banner's poll (every 30 s at most, on every page). A hidden tab polls nothing, so a tab hidden, or idle on a page that polls nothing, for more than 120 s is signed out: its next request sends it to sign in, and anything not yet sent, such as an approval being written, is lost. A closed tab's session ends 120 s after its last request. `PortalState` reports `api_session_timeout` and is `hardened` only when it is set and no longer than that.
 
 **Prevent failures** (v1.34; decided on 1 Nov 2026: an interface deployed without its schema would read every field from the
 wrong place, so Shutter "would actually stop an incident waiting to happen until the schema is imported"). With the site
@@ -2832,8 +2851,35 @@ No message content is copied: the rows hold ids, codes, the body's class and the
 
 ## Changes
 
-- v1.60, 14 Nov 2026 (the pathology paths on the demo): section 4.5, P1 and P2 on the demo hospital's results route, with
-  the runner's three steps, P2's refusals, the reset's `lab` and `GET /scenarios`'s `pathology`. No outage contract changed.
+- v1.62, 14 Nov 2026 (the pathology paths on the demo): section 4.5, P1 and P2 on the demo hospital's results route, with
+  the runner's three steps, P2's refusals, the reset's `lab` and `GET /scenarios`'s `pathology`. Whether the stand-in runs
+  is read from the running production, a reset through the API (whose caller may not update the hospital's production)
+  answers `not switched` and changes nothing, the stand-in listens on loopback only, and a path's wait reads only its own
+  run's cases. No outage contract changed.
+
+- v1.61, 14 Nov 2026 (OpenAI as a second provider the install configures): the install and the production's start
+  read `OPENAI_API_KEY` and `SHUTTER_PROVIDER` beside `ANTHROPIC_API_KEY` and `SHUTTER_MODEL`
+  (`Shutter.Setup.EnvironmentProvider`, `ProviderChoice`): the provider named, else the one whose key is set, Anthropic
+  when both are; a named provider with no key, or an unknown name, configures nothing and is said, never replaced by the
+  other key. `ConfigureProvider` takes the provider as a third argument (the two-argument call stays Anthropic's),
+  keeps each provider's key in a wallet secret of its own (`Shutter.Anthropic`, `Shutter.OpenAI`), writes
+  `AI.LLM.Shutter` with that provider's `model_provider`, removes the other provider's secret, and refuses a model that
+  is plainly the other provider's. The record names its provider (`modelProvider`; none means Anthropic), so
+  `ProviderNeedsRewrite`, the Doctor's `wallet_secret` and `ClearProvider` follow whichever was configured. The status
+  line is `ok: AI.LLM.Shutter, <provider>, model <model>` (it named no provider before). No prompt, agent, tool or gate
+  changed, and no evaluation has run on OpenAI through the install yet (12;
+  `tests/unit/Shutter/Test/Provider.cls`).
+
+- v1.60, 13 Nov 2026 (the Cases list hides the resolved cases only): `GET /cases` takes `resolved=0`, which leaves out
+  the cases whose state is `resolved` and no other, in the query itself (`Shutter.API.Dispatch.CasesWhere`), so `total`
+  and the pages count the same rows; any other value filters nothing, and it combines with `state`, `scenario` and
+  `open` with AND (5; `tests/unit/Shutter/Test/CasesOpen.cls`). `open=1` keeps its v1.59 meaning. The Cases page's switch
+  is now **Hide resolved**: it sends `resolved=0` and keeps it in its address, since a blocked, an escalated and a
+  failed case are closed and still need a person; a closed outcome's tile or the resolved state turns it off, the other
+  states stay beside it, and an address with 1.4.5's `open=1` reads as the switch on. The page no longer sends
+  `open=1`; the trial's API takes both parameters. The count of cases that need a person, beside Cases in the
+  navigation and on Home, reads "at most" when more than 100 cases failed, as the Failed tile does (5).
+
 - v1.59, 13 Nov 2026 (the Cases list: hiding the closed cases, and saying what it searched): `GET /cases` takes
   `open=1`, which leaves out the cases that are resolved, blocked, escalated or failed, in the query itself
   (`Shutter.API.Dispatch.CasesWhere`), so `total` and the pages are of the open cases; any other value filters nothing,
