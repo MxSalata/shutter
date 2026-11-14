@@ -433,6 +433,13 @@ jobs:
       - name: The production review of Shutter's production and the hospital's
         if: matrix.shard == 'checks'
         run: python3 tests/e2e/review_check.py --url "$IRIS_URL"
+      # The pathology paths on the demo (1.4.6): a result the demo's results system refuses opens a person's case with no
+      # resend (P1), and an outage of that receiver (P2) offers its three results, which one approval with the receiver
+      # check sends again, each once, in order, byte for byte; another run's start and a reset leave the outage as it was,
+      # and no outage store row is ever removed. It plays its own runs, so it runs after the review.
+      - name: The pathology paths on the demo (P1, P2)
+        if: matrix.shard == 'checks'
+        run: python3 tests/e2e/demo_pathology_check.py --url "$IRIS_URL"
       # Every case the shard played, from the message warehouse: no write before the gate and a rehearsal, an approval
       # before the write where one case holds the session, the board before the gate, every resolved resend verified
       - name: Every case's lineage in the message warehouse

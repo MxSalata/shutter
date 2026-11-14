@@ -294,6 +294,8 @@ The case shows the document's identity, status and chain for a person to review,
 
 **Release scope:** outage lists and findings from 1.3.0, approved engine resend from 1.4.0, settlement of late outcomes from 1.4.1.
 
+**On the online demo (1.4.6):** two optional paths on the Scenarios page, P1 (a result the demo's results system refuses) and P2 (that receiver's outage, recovered under one approval), both played on a stand-in receiver inside the instance, with no agent and no model call ([scenarios.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/scenarios.md#pathology-on-the-demo)).
+
 ![A pathology outage after recovery: each ORU^R01 resent under one approval, its new header completed, and the two handled by hand](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/pathology-oru-r01-outage-recovery.png)
 
 [Document exceptions and their contract](https://github.com/MxSalata/shutter/blob/main/docs/CONTRACTS.md#112-document-exceptions) · [Outage recovery contract](https://github.com/MxSalata/shutter/blob/main/docs/CONTRACTS.md#178-the-send-v151-to-v154) · [Release history](https://github.com/MxSalata/shutter/blob/main/CHANGELOG.md)

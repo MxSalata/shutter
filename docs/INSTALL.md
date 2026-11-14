@@ -284,7 +284,14 @@ finding's exact value: it reopens when the value moves, when it expires or when 
 **The worked example: Hospital PAS.** The demo image carries a second, tiny production in its own namespace, the
 hospital's side of shape A: an HL7 service (`PAS In`), a delivery (`Downstream Out`) that fails, and the forwarder. Its
 failures appear as cases in Shutter's own production in SHUTTER, each recording where the original lives; nothing in
-that production is stopped, purged or rerouted.
+that production is stopped, purged or rerouted. Since 1.4.6 it also carries a results route, three items in the category
+Lab: `Lab In` (a feed with no job), `Lab Results Out` (a stock HL7 TCP operation, which `Ens.Alert` hands to Shutter) and
+`Results System In`, a stand-in for a results system inside the same instance that answers each result and files
+nothing. They talk over one loopback port, 7650 by default (`^Hospital.Config("labPort")`, written as a default setting),
+which nothing publishes. On a demo install whose site profile is still the seed's, the hospital's install adds the
+receiver `Lab Results Out` to the profile (`orders_results`, watched for outages, `engine_resend`, `ack_level` commit,
+`duplicates` unknown) as one new version. The Scenarios page's two pathology paths play through it (CONTRACTS 4.5): two
+more production jobs, and no new user, role, resource, credential or environment variable.
 
 ## 4. Shape B: Shutter's items inside an existing production
 
