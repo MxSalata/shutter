@@ -4,7 +4,7 @@
 
 In this release the receiver must be InterSystems IRIS for Health's own FHIR R4 server. The capability check reads a proof document as `tests/conformance/fhir_conformance.py` writes it after a run with no differing exchange, and the conformance file holds that server's answers. The document is not signed: whoever imports one vouches that the run took place. No other FHIR server can pass it, except Shutter's own test server, which is held to those answers. A run compares the status, the headers and the fields the file records for each exchange, not the whole answer.
 
-What this profile does: for a receiver entry that carries a `fhir` object, a failed A02 (transfer) that names no bed, whose HL7 delivery a stock `EnsLib.HL7.Operation.TCPOperation` gave up on before a connection opened, becomes at most one person-approved `PUT Encounter/{id}` with `If-Match`. Before closing the case Shutter finds the version carrying its marker in the Encounter's history as the receiver returned it, reads that version back by its version id when the receiver's answer named one, checks it against the approved base, and checks that the current record has not undone the move.
+What this profile does: for a FHIR receiver, a receiver entry whose `fhir` block passes the profile's validation (what a save asks of it, the one FHIR receiver per install included), a failed A02 (transfer) that names no bed, whose HL7 delivery a stock `EnsLib.HL7.Operation.TCPOperation` gave up on before a connection opened, becomes at most one person-approved `PUT Encounter/{id}` with `If-Match`. Before closing the case Shutter finds the version carrying its marker in the Encounter's history as the receiver returned it, reads that version back by its version id when the receiver's answer named one, checks it against the approved base, and checks that the current record has not undone the move.
 
 The one operation: complete the open ward-level `location` entry at the event time, append one active entry for the target ward, add Shutter's marker tag. Nothing else in the body changes.
 
@@ -64,7 +64,7 @@ Every stop names its reason, and an unknown blocks. The FHIR gate (policy `fhir-
 
 | Code | What the case says |
 | --- | --- |
-| `FHIR_ITEMS_MISSING` | The site profile describes a FHIR receiver, but the production's FHIR items are missing, switched off or set to different servers, so nothing was read or sent. |
+| `FHIR_ITEMS_MISSING` | The site profile describes a FHIR receiver, but the production's FHIR items are missing, switched off or set to different servers, so nothing was sent; at the dispatch the approval is void. |
 | `FHIR_ITEM_ERROR` | A FHIR item of the production answered with an error before anything was sent. Nothing was written. |
 | `FHIR_PLAN_NEEDS_PERSON` | For a FHIR receiver Shutter proposes one thing only, the ward move the failed message asked for: in Rules only mode always, in every other mode when one catalogue entry says to send it. Here that did not hold, or the plan asks for a person, so a person decides. |
 
@@ -118,7 +118,7 @@ Every stop names its reason, and an unknown blocks. The FHIR gate (policy `fhir-
 | --- | --- |
 | `FHIR_LOCATION_UNMAPPED` | The ward the message names has no Location in the site profile's map. |
 | `FHIR_LOCATION_UNREADABLE` | A mapped Location could not be read, so it could not be checked. |
-| `FHIR_LOCATION_MISMATCH` | A mapped Location is not active, or does not carry the identifier the site profile recorded for it. |
+| `FHIR_LOCATION_MISMATCH` | A mapped Location is not active, or does not carry the identifier the site profile recorded for it: that value, and no other value under its system. |
 
 ### The change
 
@@ -174,11 +174,13 @@ Every stop names its reason, and an unknown blocks. The FHIR gate (policy `fhir-
 | verified | Verified in Encounter version "&lt;v&gt;": the approved location update is present, carrying Shutter's marker; no other field changed from version "&lt;base&gt;", the version the write was conditional on. | resolved |
 | verified, a later change followed | Verified in Encounter version "&lt;v&gt;": the approved location update is present, carrying Shutter's marker. The current resource is version "&lt;current&gt;"; a later change followed. | resolved |
 | committed, for review | The approved update is present in version "&lt;v&gt;". The current record needs review: &lt;why&gt;. A person checks at the receiver. | escalated, `FHIR_COMMITTED_NEEDS_REVIEW` |
-| unknown | The update's outcome is unknown: &lt;why&gt;. Shutter will not repeat it until its committed history can be established. | read again at about 10, 30 and 70 seconds; then escalated, `FHIR_WRITE_OUTCOME_UNKNOWN` |
+| unknown | The update's outcome is unknown: &lt;why&gt;. Shutter will not repeat it until its committed history can be established. | read again on the verifier's own schedule, at about 10, 30 and 70 seconds after the first read; then escalated, `FHIR_WRITE_OUTCOME_UNKNOWN` |
 | not found | No version of this update was found in the history the receiver returned, from version "&lt;head&gt;" back to the base "&lt;base&gt;"; the receiver's history is not a proof that none was committed. | escalated, `FHIR_WRITE_NOT_FOUND` |
 | failed | The receiver's record contradicts the update: &lt;why&gt;. A person checks at the receiver. | escalated, `FHIR_WRITE_CONTRADICTED` |
 
 Only "verified" and "verified, a later change followed" resolve a case. After any other verdict the approval is spent and nothing automatic follows.
+
+The reads after the write follow the verifier's own schedule, at about 0, 10, 30 and 70 seconds after the write, whatever Case Workflow's `MaxRefreshes` setting is: that setting bounds only the evidence refresh and the read before the write, and the last read falls where the settle window ends. The verification holds every mapped Location to the gate's rule: active, and carrying the identifier the site profile recorded, that value and no other under its system. A Location that no longer does is committed for review ("location_changed") and is not read again.
 
 ## The marker
 
@@ -198,6 +200,7 @@ On IRIS for Health (2026.2, 2026.3.0AI.154, 2027.1.0AI.109) the tag stays on Shu
 ## Limits
 
 - One FHIR receiver per install.
+- A receiver entry is a FHIR receiver only when its `fhir` block passes the profile's validation, what a save asks of it, the one FHIR receiver per install included. An entry with anything else under that key, or a second entry with one, is read as its other keys make it: nothing of the FHIR flow runs for it, and the profile cannot be saved again until that key is corrected or removed.
 - A move at the receiver within the site's source skew (300 seconds unless the profile says otherwise) of the failed message's event time stops the case for a person.
 - An A02 that names a bed stops for a person: this version moves wards only.
 - The failed delivery must be a stock HL7 TCP operation whose engine record can be read and whose attempts all failed before a connection opened; any other source stops for a person.

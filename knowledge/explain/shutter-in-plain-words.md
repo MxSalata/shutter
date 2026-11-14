@@ -265,7 +265,7 @@ SPW-5.91. **FURTHER_MOVEMENT_NEW: Another visit moved after the plan was made.**
 
 SPW-5.92. **FHIR_NO_DRY_RUN_SUBSTITUTED: No dry run exists for a FHIR receiver.** No dry run exists for this receiver. In its place stand a complete versioned read, a bounded change, If-Match on the version read, this case's own approval by a person, and a search of the returned history for the marked version, read back by id when the answer named it. Next: None: a pass. A person still approves the update.
 
-SPW-5.93. **FHIR_ITEMS_MISSING: The production's FHIR items are not ready.** The site profile describes a FHIR receiver, but the production's FHIR items are missing, switched off or set to different servers, so nothing was read or sent. Next: Add or enable the items the note names and set FHIR Receiver and FHIR Out to the same server, port, TLS configuration and credential, then reinvestigate the case.
+SPW-5.93. **FHIR_ITEMS_MISSING: The production's FHIR items are not ready.** The site profile describes a FHIR receiver, but the production's FHIR items are missing, switched off or set to different servers, so nothing was sent. Next: Add or enable the items the note names and set FHIR Receiver and FHIR Out to the same server, port, TLS configuration and credential, then reinvestigate the case.
 
 SPW-5.94. **FHIR_ITEM_ERROR: A FHIR item failed before anything was sent.** A FHIR item of the production answered with an error before anything was sent. Nothing was written. Next: Read the error in the case's note and in the production's event log, correct what it names, then reinvestigate the case.
 

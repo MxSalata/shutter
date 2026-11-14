@@ -20,6 +20,15 @@ The release and its CONTRACTS version are named when this is merged.
   waits for a person's approval, sends one update with If-Match and is verified from the Encounter's history. CI plays it
   in the policy shard and on the built image. A site install gets none of it, and the in-browser trial keeps its 26
   recorded scenarios.
+- **A FHIR receiver is an entry whose `fhir` block a save takes.** An entry with anything else under that key reads as
+  its other keys make it, nothing of the FHIR flow runs for it, and the profile cannot be saved again until the key is
+  corrected or removed.
+- **FHIR items found missing at the dispatch void the approval.** The case says the approval is void and nothing was
+  sent; at the proposal it still says nothing was read or sent.
+- **The verifier keeps its own schedule.** After the write the Encounter is read at about 0, 10, 30 and 70 seconds,
+  whatever Case Workflow's `MaxRefreshes` is, so the last read falls where the settle window ends.
+- **A mapped Location is held to its identifier after the write too.** That value and no other under its system, as the
+  gate asks; a Location that no longer carries it sends the case to a person, who checks at the receiver.
 
 ## 1.4.6 (14 November 2026)
 

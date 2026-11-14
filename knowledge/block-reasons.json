@@ -850,7 +850,7 @@
       "next_action": "Add or enable the items the note names and set FHIR Receiver and FHIR Out to the same server, port, TLS configuration and credential, then reinvestigate the case.",
       "owner": "Integration team",
       "reevaluate_when": "The four items are there, enabled and set to one server",
-      "text": "The site profile describes a FHIR receiver, but the production's FHIR items are missing, switched off or set to different servers, so nothing was read or sent."
+      "text": "The site profile describes a FHIR receiver, but the production's FHIR items are missing, switched off or set to different servers, so nothing was sent."
     },
     {
       "code": "FHIR_ITEM_ERROR",
