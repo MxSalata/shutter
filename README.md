@@ -16,7 +16,7 @@
   <a href="https://github.com/MxSalata/shutter#for-judges">For judges</a> ·
   <a href="https://github.com/MxSalata/shutter#what-has-been-measured">Results</a> ·
   <a href="https://github.com/MxSalata/shutter#where-the-agents-sit">The agents</a> ·
-  <a href="https://github.com/MxSalata/shutter/releases/download/v1.4.5/shutter-overview.mp4">Two-minute video</a>
+  <a href="https://youtu.be/ZBnAqKTfdvM">Two-minute video</a>
 </p>
 <p align="center"><sub>
   <a href="https://github.com/MxSalata/shutter/blob/main/docs/readme/how-shutter-works.md">How Shutter works (guide)</a> ·
@@ -25,6 +25,7 @@
   <a href="https://github.com/MxSalata/shutter#limits-plainly">Limits</a> ·
   <a href="https://openexchange.intersystems.com/package/Shutter">Open Exchange</a> ·
   <a href="https://github.com/MxSalata/shutter/blob/main/CHANGELOG.md">What's new</a> ·
+  <a href="https://github.com/MxSalata/shutter/releases/download/v1.4.5/shutter-overview.mp4">Two-minute video (MP4)</a> ·
   <a href="https://youtu.be/oGW7u9RKf9M">Full demo video (13 minutes, recorded on 1.4.4)</a>
 </sub></p>
 
