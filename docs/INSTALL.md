@@ -138,7 +138,8 @@ nothing sent.
 `Install` creates, in the current namespace, the folders under `<mgr>/shutter/`, the resources `Shutter_Operate`,
 `Shutter_Approve` and `Shutter_Intake`, the roles `Shutter_Operator`, `Shutter_Approver`, `Shutter_WebApp` and
 `Shutter_Forwarder`, the Workflow role "Shutter Approvers", the seeds, the web applications `/api/shutter` and
-`/shutter`, the daily task "Shutter retention", the default settings, and `Shutter.Production`, started as the
+`/shutter`, the daily task "Shutter retention", the task "Shutter case reminders" (every 15 minutes; it sends nothing until
+the site profile turns reminders on), the default settings, and `Shutter.Production`, started as the
 auto-start production. The operator, approver, demo, judge and forwarder roles are granted SQL SELECT on Shutter's schemas
 (`Shutter_Store`; all but the forwarder also `Shutter_Index`, `Shutter_Msg`, `Shutter_Bridge` and `Ens_Config`, and the one table outside Shutter's schemas the cases list reads, `Ens.MessageHeader`; the uninstall revokes it): the API
 reads without privilege checks, but a cached query that has to be compiled again in the caller's process is checked
