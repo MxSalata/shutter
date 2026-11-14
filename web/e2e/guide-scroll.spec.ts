@@ -195,10 +195,10 @@ test.describe('where the tour scrolls to', () => {
   test('pressing the try-it leaves the card where it is when its control is already in view', async ({
     page,
   }) => {
-    const guide = await resumeAt(page, 's8/ask', 7);
+    const guide = await resumeAt(page, 's8/ask', 8);
     await atRest(page);
     const before = await measure(page);
-    checkStep(before, 'step 7');
+    checkStep(before, 'step 8');
     await guide.getByRole('button', { name: /^Try it/ }).click();
     await expect(page.locator('[data-tour-action="ask-open"]')).toBeFocused();
     await atRest(page);
@@ -307,7 +307,7 @@ test.describe('where the tour scrolls to', () => {
   test("leaves the page where the reader's own scroll put it, even while the card is landing", async ({
     page,
   }) => {
-    await resumeAt(page, 's8/compare', 6);
+    await resumeAt(page, 's8/compare', 7);
     await expect(page.locator('[data-guide-card]')).toBeVisible();
     await page.mouse.move(800, 400);
     await page.mouse.wheel(0, 300);

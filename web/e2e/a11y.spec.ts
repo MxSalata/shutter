@@ -108,7 +108,7 @@ for (const { colorScheme, contrast, palette } of MODES) {
       await page.getByRole('button', { name: 'Resume tour' }).click();
       await page.getByRole('menuitem', { name: 'Resume the tour' }).click();
       const guide = page.getByRole('region', { name: 'Guide' });
-      await expect(guide).toContainText('Step 7 of 9');
+      await expect(guide).toContainText('Step 8 of 9');
       await page.locator('[data-tour-action="ask-open"]').click();
       const panel = page.getByRole('region', { name: 'Ask about this case' });
       await expect(

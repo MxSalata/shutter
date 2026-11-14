@@ -599,19 +599,25 @@ export function releaseStatus(f: CaseFacts): Status | undefined {
   return latest.approver === 'policy' ? { ...APPROVALS.policy, label: 'Site policy' } : APPROVALS.approved;
 }
 
+/** What every replay says in its label, on IRIS as in the trial: nothing was inferred for the page being read. */
+const NO_NEW_INFERENCE = 'no new inference';
+
 /**
  * Where an agent's answer came from on this case: how it executed, which the mode (who proposed the plan) does not say.
- * On IRIS it is what the case's own runs record. In the trial the page shows a recording in the browser and runs
- * nothing, so it says that first, and what IRIS ran when the case was recorded second: a recorded board case is never
- * read as inference made now.
+ * On IRIS it is what the case's own runs record, and a replay says in the label itself that it made no new inference,
+ * not only in its hint. In the trial the page shows a recording in the browser and runs nothing, so it says that first,
+ * and what IRIS ran when the case was recorded second: a recorded board case is never read as inference made now.
  */
 export function provenanceOf(mode: string, runs: AgentRun[] | null | undefined, trial = TRIAL): Status {
   const recorded = ranOnIris(mode, runs);
   // While the runs are still being read, a case with agents says Unknown, as on IRIS
-  if (!trial || (mode !== 'rules' && runs === undefined)) return recorded;
+  if (!trial || (mode !== 'rules' && runs === undefined))
+    return recorded === PROVENANCE.replay
+      ? { ...recorded, label: `${recorded.label}: ${NO_NEW_INFERENCE}` }
+      : recorded;
   return {
     ...PROVENANCE.recording,
-    label: `${PROVENANCE.recording.label}: no new inference`,
+    label: `${PROVENANCE.recording.label}: ${NO_NEW_INFERENCE}`,
     hint: `${PROVENANCE.recording.hint}. When it was recorded on IRIS: ${recorded.label}.`,
   };
 }

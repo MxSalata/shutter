@@ -18,7 +18,8 @@ import { resetAssistantForTests } from '@/features/assistant/store';
 import EvaluationPage from '@/features/evaluation/EvaluationPage';
 import ScenariosPage from '@/features/scenarios/ScenariosPage';
 import { INITIAL, type GuideProgress } from './controller';
-import { APPROVED_FOR_YOU, Guide, REPLAY_DONE } from './Guide';
+import { START_S2 } from '@/features/home/HomePage';
+import { APPROVED_FOR_YOU, Guide, REPLAY_DONE, WELCOME_START_S2 } from './Guide';
 import { TrialHelpMenu } from './HelpMenu';
 import { welcomeActions } from './registry';
 import {
@@ -148,13 +149,71 @@ describe('the guide', () => {
     const quick = within(d).getByRole('radio', { name: /Quick tour/ });
     expect(quick).toBeChecked();
     expect(quick).toHaveTextContent('9 steps, about 4 min');
+    // The quick tour names the short route's order
+    expect(quick).toHaveTextContent(
+      'S2, S3, then S8: a transfer delivered, one already there, a fix held back, and the proof.',
+    );
     expect(within(d).getByRole('radio', { name: /Every screen/ })).toHaveTextContent(
-      '32 steps in 15 chapters',
+      '33 steps in 16 chapters',
     );
     expect(within(d).getByRole('radio', { name: /For integration engineers/ })).toHaveTextContent('6 steps');
     expect(within(d).getByRole('button', { name: 'Start the tour' })).toBeInTheDocument();
+    // Once the role is read: Start with S2 is offered to who may run a scenario
+    expect(await within(d).findByRole('button', { name: 'Start with S2' })).toBeInTheDocument();
+    expect(d).toHaveTextContent(
+      'Start with S2 skips the tour: it opens the first scenario, a failed transfer recovered, with its Run ready. Nothing runs until you press it.',
+    );
     expect(within(d).getByRole('button', { name: 'Explore on my own' })).toBeInTheDocument();
     expect(within(d).getByRole('button', { name: "Don't show again" })).toBeInTheDocument();
+  });
+
+  it("starts with S2 from the welcome as Home does: S2's card in Board mode, Run focused, nothing pressed", async () => {
+    // One address for both starts
+    expect(WELCOME_START_S2).toBe(START_S2);
+    const sent: string[] = [];
+    const note = ({ request }: { request: Request }) => {
+      if (request.method !== 'GET') sent.push(`${request.method} ${new URL(request.url).pathname}`);
+    };
+    server.events.on('request:start', note);
+    try {
+      const router = renderApp();
+      await userEvent.click(await within(await welcome()).findByRole('button', { name: 'Start with S2' }));
+      await noDialog();
+      // Put off for the visit, as Explore on my own puts it off: no tour started, nothing dismissed for good
+      expect(useGuide.getState().snoozed).toBe(true);
+      expect(useGuide.getState().phase).toBe('closed');
+      expect(stored()).toBeNull();
+      expect(bannerForm.get()).toBe('compact');
+      // The second choice is Run itself: it has the focus on S2's card, in Board mode
+      const run = await screen.findByRole('button', { name: 'Run S2 in Board mode' }, { timeout: 15_000 });
+      await waitFor(() => expect(run).toHaveFocus());
+      expect(run.closest('[data-first="S2"]')).not.toBeNull();
+      expect(run).toBeEnabled();
+      // The address keeps the mode and drops the start, so Back or a reload does not land again
+      await waitFor(() => expect(router.state.location.search).toBe('?mode=board'));
+      expect(router.state.location.pathname).toBe('/scenarios');
+      // Focus stays on Run: nothing takes it back to where the welcome opened
+      await new Promise((r) => setTimeout(r, 50));
+      expect(run).toHaveFocus();
+      // Arriving pressed nothing: no run, no approval, no write
+      expect(sent).toEqual([]);
+      expect(screen.queryByText(/^Playing S2/)).not.toBeInTheDocument();
+    } finally {
+      server.events.removeListener('request:start', note);
+    }
+  });
+
+  it('offers no Start with S2 to a role that may not run a scenario', async () => {
+    resetMock('demo');
+    // The public demo's account before 1.4.4, which ran no scenarios
+    server.use(http.get('/api/shutter/me', () => HttpResponse.json(LOOK_ONLY_DEMO)));
+    renderApp();
+    const d = await welcome();
+    expect(within(d).getByRole('button', { name: 'Start the tour' })).toBeInTheDocument();
+    // The role is read by the time the welcome promises only what it can do
+    await waitFor(() => expect(d).toHaveTextContent('Approve or escalate: each replays the recording'));
+    expect(within(d).queryByRole('button', { name: 'Start with S2' })).not.toBeInTheDocument();
+    expect(d).not.toHaveTextContent('Start with S2');
   });
 
   it("closes for the visit on Explore on my own, for good on Don't show again, and compacts the banner", async () => {
@@ -377,7 +436,7 @@ describe('the guide', () => {
     at('s8/ask');
     const router = renderApp();
     const guide = await card();
-    expect(guide).toHaveTextContent('Step 7 of 9');
+    expect(guide).toHaveTextContent('Step 8 of 9');
     expect(
       await within(guide).findByRole('button', { name: 'Try it: open Ask, pick a question' }),
     ).toBeInTheDocument();
@@ -388,7 +447,7 @@ describe('the guide', () => {
     // The same step's card, now in the dock just before the sheet, with no notch pointing down
     await waitFor(() => expect(document.querySelector('[data-guide-dock] [data-guide-card]')).not.toBeNull());
     const docked = screen.getByRole('region', { name: 'Guide' });
-    expect(docked).toHaveTextContent('Step 7 of 9');
+    expect(docked).toHaveTextContent('Step 8 of 9');
     expect(docked).toHaveAttribute('data-docked', 'true');
     expect(docked.querySelector('.guide-notch')).toBeNull();
     expect(docked.closest('[data-guide-dock]')!.nextElementSibling).toBe(sheet);
@@ -399,7 +458,7 @@ describe('the guide', () => {
     expect(screen.queryByTestId('guide-try-pointer')).not.toBeInTheDocument();
     await userEvent.click(within(docked).getByRole('button', { name: 'Next' }));
     await waitFor(
-      () => expect(screen.getByRole('region', { name: 'Guide' })).toHaveTextContent('Step 8 of 9'),
+      () => expect(screen.getByRole('region', { name: 'Guide' })).toHaveTextContent('Step 9 of 9'),
       { timeout: 15_000 },
     );
     expect(screen.queryByRole('region', { name: 'Ask about this case' })).not.toBeInTheDocument();
@@ -433,9 +492,11 @@ describe('the guide', () => {
     const finish = await screen.findByRole('heading', { name: 'That is the tour.' });
     const region = finish.closest('[role="region"]') as HTMLElement;
     expect(region).toHaveTextContent(
-      "You saw a transfer delivered and verified, a resend that would have overwritten the bed manager's ward held back for a person, and the gate stopping one.",
+      "You saw a transfer delivered and verified, one that had already arrived left unsent, and a resend that would have overwritten the bed manager's ward held back for a person.",
     );
+    // S20 is the short route's optional extra: offered here, and said to be optional
     expect(within(region).getByRole('button', { name: 'Run S20 yourself' })).toBeInTheDocument();
+    expect(region).toHaveTextContent('Optional: watch the gate stop a fix.');
     expect(within(region).getByRole('button', { name: 'Explore on my own' })).toBeInTheDocument();
     expect(stored()).toMatchObject({ at: null, dismissed: true, completed: ['evaluation'] });
     await waitFor(() => expect(announced()).toHaveTextContent('That is the tour.'));
@@ -452,6 +513,7 @@ describe('the guide', () => {
     const finish = await screen.findByRole('heading', { name: 'That is the tour.' });
     const region = finish.closest('[role="region"]') as HTMLElement;
     expect(within(region).queryByRole('button', { name: 'Run S20 yourself' })).not.toBeInTheDocument();
+    expect(region).toHaveTextContent('Optional: S20, as the rules ran it.');
     await userEvent.click(within(region).getByRole('button', { name: 'See the gate stop a fix' }));
     // S20's newest rules case, as the guide's own steps find it
     await waitFor(() => expect(router.state.location.pathname).toBe('/cases/C-000053'));

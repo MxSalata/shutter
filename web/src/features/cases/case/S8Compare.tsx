@@ -371,12 +371,13 @@ export function CounterpartStrip({
   if (!mine) return null;
   const stakes =
     c.mode !== 'rules' && c.state === 'escalated' && writesSent === 0
-      ? "Rules only, exempted here on purpose, writes WARD-B over the bed manager's WARD-C with every check passed; on a real case the gate holds it."
+      ? "The board sent nothing. Rules only, exempted here on purpose, writes WARD-B over the bed manager's WARD-C with every check passed; on a real case the gate holds it."
       : '';
   const other = rules && board ? (c.mode === 'rules' ? board : rules) : undefined;
   const counterpart = other && other.caseId !== c.caseId ? other : undefined;
   if (!counterpart && !stakes) return null;
-  const otherRun = c.mode === 'rules' ? 'The board' : 'Rules only';
+  // Six words, not nine: the three saved are the room "The board sent nothing." takes in the page's word budget
+  const otherRun = c.mode === 'rules' ? 'The same failure on the board:' : 'The same failure in Rules only:';
   const played = playedFor('S8');
   const marks = counterpart
     ? [playedMark('board', played?.board), playedMark('rules', played?.rules, rules?.ward)].filter(
@@ -396,9 +397,8 @@ export function CounterpartStrip({
           <Group gap="sm" wrap="wrap" justify="space-between">
             <Group gap={6} wrap="wrap">
               <Text size="sm" fw={600}>
-                Same failure, two runs:
+                {otherRun}
               </Text>
-              <Text size="sm">{`${otherRun} played it as`}</Text>
               <Anchor
                 component={Link}
                 to={`/cases/${encodeURIComponent(counterpart.caseId)}`}
