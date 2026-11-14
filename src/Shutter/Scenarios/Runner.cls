@@ -79,12 +79,6 @@ ClassMethod LoadPathology(Output error As %String) As %DynamicArray
     Quit paths
 }
 
-/// Whether <var>scenario</var> is one of the pathology paths.
-ClassMethod IsPathology(scenario As %String) As %Boolean
-{
-    Quit $ISOBJECT(..FindPathology(scenario))
-}
-
 /// The pathology path <var>scenario</var>, or "".
 ClassMethod FindPathology(scenario As %String) As %DynamicObject
 {
