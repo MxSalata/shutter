@@ -24,7 +24,7 @@ Parameter BODYCLASSES = "Shutter.,Hospital.,Downstream.";
 
 /// The module's demo classes, for when the tree it was loaded from is no longer on disk (ModuleClasses). The unit test
 /// TestModuleClassesAreKnown fails when the tree's src/Hospital or src/Downstream has a class this does not name.
-Parameter DEMOCLASSES = "Downstream.API,Downstream.Encounter,Downstream.Event,Downstream.Installer,Downstream.Receipt,Downstream.Service,Hospital.LivePlayer,Hospital.Operation.DownstreamOut,Hospital.Process.PASToDownstream,Hospital.Production,Hospital.Setup";
+Parameter DEMOCLASSES = "Downstream.API,Downstream.Encounter,Downstream.Event,Downstream.Installer,Downstream.Receipt,Downstream.Service,Hospital.LivePlayer,Hospital.Operation.DownstreamOut,Hospital.Process.PASToDownstream,Hospital.Production,Hospital.Service.LabFeed,Hospital.Service.LabReceiver,Hospital.Setup";
 
 /// What an uninstall would do here, changing nothing. Needs what the uninstall needs.
 ClassMethod Plan() As %String [ SqlProc ]

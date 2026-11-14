@@ -180,10 +180,12 @@ Method TestCapabilityUndeclared()
     Set recs = ##class(Shutter.Store.SiteProfile).Current().%Get("receivers")
     Set n = 0, iter = recs.%GetIterator()
     While iter.%GetNext(.i, .r) {
+        // The demo's API receivers; its results receiver (1.4.6) has no API, so there is no capability to read
+        Continue:'$ISOBJECT(r.%Get("api"))
         Set n = n + 1
         Do $$$AssertTrue($ISOBJECT(r.%Get("features")), r.name _ " declares its features")
     }
-    Do $$$AssertTrue(n > 0, "the profile names receivers")
+    Do $$$AssertTrue(n > 0, "the profile names receivers with an API")
     Set api = {"base": "/wardb/api", "state": "/encounters/{encounter}", "receipt": "", "capabilities": "", "operations": "/operations"}
     Do recs.%Push({"name": "UT Ward B", "tier": 2, "api": (api)})
     Do recs.%Push({"name": "UT Ward C", "tier": 2, "api": (api), "features": {"conditional_writes": true, "receipts": true, "history": true, "dry_run": true}})
