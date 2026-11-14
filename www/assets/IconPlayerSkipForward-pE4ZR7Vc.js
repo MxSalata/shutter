@@ -1,1 +1,0 @@
-import{c as o}from"./index-Bph_4kt1.js";const r=[["path",{d:"M4 5v14l12 -7l-12 -7",key:"svg-0"}],["path",{d:"M20 5l0 14",key:"svg-1"}]],e=o("outline","player-skip-forward","PlayerSkipForward",r);export{e as I};
