@@ -5,7 +5,7 @@ case, the evidence is collected, a plan is checked by a deterministic gate and a
 policy, and the result is verified at the receiver through its API. A receiver's outage has a second path: at a receiver set up
 for it, one approval has the engine resend the messages that never arrived, settled by the engine's delivery outcome and the
 receiver's declared duplicate handling rather than verified at the receiver (section 11). This document is for the integration team that installs it beside
-the productions a hospital already runs; the README's `docker compose up` is the demo.
+the productions a hospital already runs; the README's `./install.sh --replay` is the demo.
 
 ## 1. In one page
 
@@ -212,7 +212,7 @@ disabled (the six named in section 1), so it has no feed of its own until the in
 one. **Load only in the namespace made for Shutter.** A load in a namespace running another production is refused and says
 so, since starting `Shutter.Production` there would stop it; name that production (`-Dproduction=...`) for shape B.
 
-**From the registry.** The IPM in `vendor/ipm` starts with no registry, so `zpm "install iris-shutter"` answers "No repositories are configured and enabled in this namespace" until you run `zpm "repo -reset-defaults"`. `zpm "install iris-shutter"` installs the latest version published on the registry, which can be behind this repository: on 8 Nov 2026 the registry served 1.1.1, which has no uninstall and no `Uninstall_Plan` (both are 1.2.0's). `zpm "list"` shows the version installed; for the exact version of a clone, use `zpm "load <module> -Ddemo=0"` instead. `zpm "load"` from a clone doesn't need the registry. For a hospital, install with the demo switched off, as below; without `-Ddemo=0` either command installs the demo, with its users and well-known passwords. The same commands without `-Ddemo=0`, a demo install, took about 2.5 minutes on clean 154 and 109 containers on 7 Nov 2026, and started `Shutter.Production` and `Hospital.Production`:
+**From the registry.** The IPM in `vendor/ipm` starts with no registry, so `zpm "install iris-shutter"` answers "No repositories are configured and enabled in this namespace" until you run `zpm "repo -reset-defaults"`. `zpm "install iris-shutter"` installs the latest version published on the registry, which can be behind this repository: on 14 Nov 2026 it served 1.4.6, and on 8 Nov 2026 it still served 1.1.1, which has no uninstall and no `Uninstall_Plan` (both are 1.2.0's). `zpm "list"` shows the version installed; for the exact version of a clone, use `zpm "load <module> -Ddemo=0"` instead. `zpm "load"` from a clone doesn't need the registry. For a hospital, install with the demo switched off, as below; without `-Ddemo=0` either command installs the demo, with its users and well-known passwords. The same commands without `-Ddemo=0`, a demo install, took about 2.5 minutes on clean 154 and 109 containers on 7 Nov 2026, and started `Shutter.Production` and `Hospital.Production`:
 
 ```
 Do $SYSTEM.OBJ.Load("<module>/src/Shutter/Setup.cls", "ck")
