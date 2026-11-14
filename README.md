@@ -356,7 +356,9 @@ Each technology has a job in the workflow.
 
 ## How Shutter was developed
 
-Shutter was developed with substantial AI assistance. I set the requirements and the design direction, reviewed the work and decided what shipped. Coding assistants wrote much of the code and documentation under my direction, and I also used model-based reviewer workflows. I take responsibility for the published project.
+I set Shutter's requirements and made its architectural and safety decisions, including the deterministic gate, approval tied to the exact plan and verification at the receiver. I tested the trial and the online demo myself, sent back the changes I wanted, and decided each release.
+
+Shutter was built with substantial AI assistance: coding assistants wrote much of the code and documentation under my direction, and I used model-based review workflows. I take responsibility for the published project.
 
 ---
 
