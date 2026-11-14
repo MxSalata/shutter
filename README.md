@@ -119,7 +119,9 @@ For an API-recovery incident, one approval binds the incident's plan. Its cases 
 | **Duplicates** | The receipt and history establish what the receiver holds | The receiver's declared duplicate answer closes a message as already delivered. Where duplicate refusal is not declared, the approver first checks the receiver and confirms it |
 | **What is not claimed** | A guarantee beyond the receiver API's contract | Shutter reads nothing at the receiver and does not claim receiver-side verification |
 
-Outside an outage, a plain MLLP receiver's case gets investigation and a drafted email, never a resend from the case.
+A FHIR R4 receiver is a third, narrower contract: one version-aware update (`If-Match`) with no dry run and no receipt; its completion evidence is the version carrying Shutter's marker in the Encounter's history, read back by id when the receiver's answer named it ([fhir.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/fhir.md)).
+
+Outside an outage, the case of a plain MLLP receiver with no API and no FHIR entry gets investigation and a drafted email, never a resend from the case.
 
 The [receiver contract](https://github.com/MxSalata/shutter/blob/main/docs/readme/receiver-contract.md) defines the API path. [CONTRACTS 17.8](https://github.com/MxSalata/shutter/blob/main/docs/CONTRACTS.md#178-the-send-v151-to-v154) defines the engine resend.
 
@@ -309,6 +311,14 @@ The case shows the document's identity, status and chain for a person to review,
 
 [Document exceptions and their contract](https://github.com/MxSalata/shutter/blob/main/docs/CONTRACTS.md#112-document-exceptions) · [Outage recovery contract](https://github.com/MxSalata/shutter/blob/main/docs/CONTRACTS.md#178-the-send-v151-to-v154) · [Release history](https://github.com/MxSalata/shutter/blob/main/CHANGELOG.md)
 
+## FHIR R4: one ward move on an existing Encounter
+
+An optional FHIR R4 profile repairs one failed A02 as a ward-location update to an existing, in-progress Encounter, by another route than the original HL7 delivery. It sends at most one person-approved PUT per approval with the ETag the receiver returned in `If-Match`. Before closing the case it finds the version carrying its marker in the Encounter's history as the receiver returned it, reads that version back by its version id when the receiver's answer named one, checks it against the approved base, and checks that the current record has not undone the move. This profile has no receiver-side dry run, and says so on every decision. A 412 is not retried. Any further write needs fresh evidence and a new approval. A lost answer is reconciled through the receiver's history and never resent, and an incomplete or untrusted history may leave it unknown for good. Version ids and ETags are kept as the server gave them. Version ids are not treated as numbers. Verification concerns the Encounter record, not the patient's physical location or delivery to any downstream system. No agent plans a FHIR case: Rules only proposes the one update, every other mode follows the catalogue's one matching entry, and anything else goes to a person. In this release the receiver must be InterSystems IRIS for Health's own FHIR R4 server.
+
+It runs end to end, in the steps CI runs, on an IRIS for Health 2026.2 instance against Shutter's own test FHIR server, which is held to the answers InterSystems IRIS for Health's FHIR server gave when measured (2026.2, 2026.3.0AI Build 154 and 2027.1.0AI Build 109 answered alike on the write path; the conformance file's 234 exchanges for IRIS for Health were run against Build 109). It was also run against IRIS for Health's own FHIR server (2026.2 and 2026.3.0AI Build 154, 14 November 2026); the request, the answers and the history are in [receipt-fhir.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt-fhir.md).
+
+No other recovery writes over FHIR: no create, no admission or discharge, no merge, no documents, no Provenance, no `$validate` as a rehearsal. Details and limits: [fhir.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/fhir.md).
+
 ## How it is tested
 
 **Release-specific checks and historical evaluations are different evidence.** The latest unit-suite totals given here are release 1.4.3's. Release 1.4.4 changed who may run scenarios on the online demo and release 1.4.5 how a case leads to its review; their changelogs give no separate totals.
@@ -357,7 +367,7 @@ Each technology has a job in the workflow.
 - **Model failure does not authorise a write.** Depending on the case, Shutter escalates, uses available findings or proposes a rules plan. A fallback plan requires a person even where policy would otherwise release it.
 - **Large incidents need a full review.** One approval binds every chain, although the Workflow task lists only those fitting its 2,000-character message. The incident page has the full set. Complete release at 1,000 failures has not been measured.
 - **Failover, mirrors and backup restoration are untested.**
-- **FHIR R4 is in development, not supported.** Some components are present and tested; no case uses them yet.
+- **FHIR R4 is one profile, not general FHIR handling.** One ward move on an existing, in-progress Encounter held by InterSystems IRIS for Health's FHIR R4 server, off until a site turns it on for a receiver. No create, no admission or discharge, no bed move, no merge, no documents. It has no receiver-side dry run and says so on every decision.
 - **The catalogue guides the agents.** In the scenario demonstration each agent is given the matching entry and its preferred outcome, and the coordinator took it in 24 of the 25 board plans recorded between 25 October and 1 November 2026, before release 1.0.0. The held-out cases are the test of judgement.
 
 [Every limit, with effect, workaround and status](https://github.com/MxSalata/shutter/blob/main/docs/readme/limits.md) · [Failure scenarios and their boundaries](https://github.com/MxSalata/shutter/blob/main/docs/edge-cases.md) · [What happens when a model fails](https://github.com/MxSalata/shutter/blob/main/docs/readme/model-fails.md)

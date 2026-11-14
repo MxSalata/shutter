@@ -30,12 +30,14 @@ ClassMethod ByCode(code As %String) As Shutter.Store.BlockReason
 
 /// The reason as a person reads it for one case: ForReceiver's, and for an order or a result (a message Shutter does not
 /// model, or one to an orders and results receiver) its own words where the catalogue's speak of a mapping that failed, a
-/// category not modelled or a receiver's record that could not be read (one with no API has none to read). The stored row
+/// category not modelled or a receiver's record that could not be read (one with no API has none to read); and for a
+/// case of a FHIR receiver its own words where the catalogue's promise a wait (<method>ForFHIR</method>). The stored row
 /// is never changed.
 ClassMethod ForCase(code As %String, case As Shutter.Store.Case) As Shutter.Store.BlockReason
 {
     Set r = ..ForReceiver(code, case.Receiver)
     If '$ISOBJECT(r) Quit r
+    If ((code = "ENGINE_STILL_TRYING") || (code = "NEWER_MESSAGE_PENDING")) && (##class(Shutter.Store.SiteProfile).ReceiverKind(case.Receiver) = "fhir_r4") Quit ..ForFHIR(r, code)
     If '..OrderOrResult(case) Quit r
     If '((code = "UNMAPPABLE") || (code = "RECEIVER_NOT_MODELLED") || ((code = "RECEIVER_UNREADABLE") && ##class(Shutter.Operation.Gate).NoRecordToRead(case.Receiver))) Quit r
     Set r.Title = "Shutter does not resend one order or result by itself"
@@ -44,6 +46,24 @@ ClassMethod ForCase(code As %String, case As Shutter.Store.Case) As Shutter.Stor
     Set r.Owner = "Operator"
     Set r.ReevaluateWhen = "The message is delivered, sent again by hand or entered at the receiver"
     Set r.Text = "This is an order or a result. Shutter sends nothing for one such message on its own, and the message itself may be sound: a person decides, starting from the source's Message Viewer."
+    Quit r
+}
+
+/// The two reasons that elsewhere hold a case until something has finished, as a person reads them for a case of a
+/// FHIR receiver. Such a case is held for nothing and is never judged again by itself, so the words say to
+/// reinvestigate. A copy: the stored row is never changed.
+ClassMethod ForFHIR(stored As Shutter.Store.BlockReason, code As %String) As Shutter.Store.BlockReason [ Private ]
+{
+    Set r = stored.%ConstructClone()
+    If code = "ENGINE_STILL_TRYING" {
+        Set r.NextAction = "Read the message in the Message Viewer. Over FHIR the case does not wait for the engine: once the engine has finished with the message, reinvestigate the case, which reads fresh evidence and judges it again."
+        Set r.ReevaluateWhen = "A person reinvestigates the case, once the engine has finished with the message"
+        Set r.Text = "The message is Queued or Delivered at a stock HL7 TCP operation, or that operation is retrying, or a copy of it is in hand. The engine may still deliver it when the receiver returns, so an update over FHIR now could be followed by the same move over HL7. Nothing is written, and the case stops for a person."
+    } Else {
+        Set r.NextAction = "Over FHIR the case does not wait for the newer message. Once it has been delivered, reinvestigate the case: it is planned again on fresh evidence, and a newer movement usually means nothing needs writing."
+        Set r.ReevaluateWhen = "A person reinvestigates the case, once the newer message is delivered or its delivery has failed"
+        Set r.Text = "A newer message for the same patient arrived from the source system and has not yet reached the receiver. Writing first would be pointless at best, and wrong behind a cancellation or a merge, so nothing is written and the case stops for a person."
+    }
     Quit r
 }
 

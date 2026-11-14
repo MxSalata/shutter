@@ -237,3 +237,4 @@ None of these is a control in this repository. They are the site's to do, and a 
 - The provider's transport, and the embedding model's source.
 - The history-correction steps against any real receiver.
 - `/health`'s full summary beyond its keys, the rest of the log lines, and whether a shipped path writes a profile entry with no `tier`.
+- The FHIR R4 profile ([fhir.md](readme/fhir.md)) was added after this review and is not covered by it. What it reads from the FHIR server (the Encounter, every version in its history, the search result and a version read by id) stays whole in the production's message bodies, readable by anyone who can read message contents, until the site's message purge; purging a case does not reach them.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { SiteProfile, SiteReceiver } from '@/api/types';
+import type { FhirReceiverSettings, SiteProfile, SiteReceiver } from '@/api/types';
 import { categoryOf, historyPolicyOf } from './categories';
 
 const receiver = (extra: Partial<SiteReceiver>): SiteReceiver => ({ name: 'R', tier: 2, ...extra });
@@ -24,5 +24,12 @@ describe('a receiver category and the history policy it derives, as the server r
   it('falls back to the deprecated site-wide answer only for an entry with neither', () => {
     expect(historyPolicyOf(receiver({}), site('correct'))).toBe('correct');
     expect(historyPolicyOf(receiver({}), site())).toBe('current');
+  });
+
+  it('reads a FHIR receiver as current whatever else is said, as the server does', () => {
+    const fhir = { base: '/fhir/r4' } as FhirReceiverSettings;
+    expect(historyPolicyOf(receiver({ fhir }), site('correct'))).toBe('current');
+    expect(historyPolicyOf(receiver({ fhir, category: 'history_of_record' }))).toBe('current');
+    expect(historyPolicyOf(receiver({ fhir, history_policy: 'correct' }), site('correct'))).toBe('current');
   });
 });

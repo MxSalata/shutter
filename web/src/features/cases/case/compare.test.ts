@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AttemptView, CaseDetail, CaseSummary, Closure, PlanView, Snapshot } from '@/api/types';
 import fixtures from '@/mocks/fixtures.json';
-import { compareSide, evidenceRows, playedMark, s8Pair } from './compare';
+import { compareSide, evidenceFacts, evidenceRows, playedMark, s8Pair } from './compare';
 import { playedFor } from '@/lib/proof';
 
 function sideOf(id: 'C-000008' | 'C-000021') {
@@ -135,5 +135,36 @@ describe('playedMark', () => {
     });
     expect(playedMark('board', 'not-played')).toBeNull();
     expect(playedMark('board', null)).toBeNull();
+  });
+});
+
+describe('the evidence facts of a FHIR case', () => {
+  const withSummary = (summary: Record<string, unknown>, route: Record<string, unknown>) => {
+    const s = structuredClone(fixtures.cases['C-000008'].snapshot) as unknown as Snapshot;
+    s.summary = { ...(s.summary as object), ...summary };
+    s.items = s.items.map((i) =>
+      i.kind === 'route' ? { ...i, data: { ...(i.data as object), ...route } } : i,
+    );
+    return s;
+  };
+
+  it("says no version carries the case's marker, never that nothing was committed", () => {
+    const facts = evidenceFacts(
+      withSummary(
+        {
+          receipt_http_status: 404,
+          ward_state: { ward: 'WARD-A', version: '1' },
+        },
+        { kind: 'fhir_r4' },
+      ),
+    );
+    expect(facts?.receipt).toBe("No version in the history read carries this case's marker");
+    expect(facts?.receiver).toBe('WARD-A at version "1"');
+  });
+
+  it('keeps the ADT words', () => {
+    const facts = evidenceFacts(withSummary({ receipt_http_status: 404 }, {}));
+    expect(facts?.receipt).toBe('none: never committed');
+    expect(facts?.receiver).not.toMatch(/"/);
   });
 });

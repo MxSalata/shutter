@@ -392,6 +392,6 @@ Every run, the scoring rule and the one disagreement with the grader are in [fai
 - **The receiver is part of the safety boundary.** One that ignores the condition on a write, returns part of its history, or writes during a dry run can defeat checks that rely on its answers.
 - **An approval does not stand in for validating a feed.** A site confirms its identifiers, event meanings, location fields and times before it enables recovery.
 - **Escalated does not mean someone was told.** Outage mail and reminders are opt-in.
-- **FHIR R4 is in development, not supported.** No case uses it yet.
+- **FHIR R4 is one profile, not general FHIR handling.** One ward move on an existing, in-progress Encounter held by InterSystems IRIS for Health's FHIR R4 server, off until a site turns it on for a receiver. No create, no admission or discharge, no bed move, no merge, no documents. It has no receiver-side dry run and says so on every decision.
 
 Next: installing at a hospital in [INSTALL.md](../INSTALL.md), how to test a receiver in [receiver-conformance.md](../receiver-conformance.md), every limit in [limits.md](../readme/limits.md), what one agent was sent and did in [s8-what-the-agents-saw.md](../readme/s8-what-the-agents-saw.md), and every route in [openapi.json](../api/openapi.json).

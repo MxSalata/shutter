@@ -104,6 +104,7 @@ export function CaseStory({
     loading: plan === undefined && !facts.planError,
     error: facts.planError,
     onRetry: facts.retryPlan,
+    snapshot: facts.snapshot,
   };
   // A case with no receipt reads what the engine and the site say, and that nobody read the receiver
   const notChecked = notCheckedAtReceiver(c, facts.snapshot, facts.attempts);
@@ -116,6 +117,7 @@ export function CaseStory({
     state: c.state,
     receiver: c.receiver,
     notChecked,
+    snapshot: facts.snapshot,
   };
   const key = (facts.snapshot?.items ?? []).filter((x) => KEY_KINDS.includes(x.kind));
   return (
@@ -191,7 +193,7 @@ export function CaseStory({
         ) : null}
       </Step>
       <Step value="written" n={5} title="What was written" summary={writtenSummary(facts)}>
-        <RehearsalPanel view={plan} write={write} receiver={c.receiver} />
+        <RehearsalPanel view={plan} write={write} receiver={c.receiver} snapshot={facts.snapshot} />
         <DispatchPanel {...execution} />
       </Step>
       <Step

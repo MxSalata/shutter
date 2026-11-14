@@ -41,12 +41,14 @@ describe('status', () => {
   });
 
   it("counts none of the gate's passes without a check as passed", () => {
-    // Gate.cls: no write proposed, a later stage's check, no catalogue installed, no encounter to compare
+    // Gate.cls: no write proposed, a later stage's check, no catalogue installed, no encounter to compare; the FHIR
+    // gate's rehearsal row, since no dry run exists for that receiver
     expect(NOT_APPLICABLE_CODES).toEqual([
       'NOT_APPLICABLE',
       'NOT_YET_REQUIRED',
       'NOT_CONFIGURED',
       'NO_ENCOUNTER',
+      'FHIR_NO_DRY_RUN_SUBSTITUTED',
     ]);
     for (const code of NOT_APPLICABLE_CODES)
       expect(checkState(check('pass', code))).toBe(code === 'NOT_YET_REQUIRED' ? 'later' : 'not_applicable');

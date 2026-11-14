@@ -15,7 +15,16 @@ import type { EvidenceRef } from '@/lib/evidenceRefs';
 import { asArray, asObject } from '@/lib/json';
 import { APPROVALS, caseState, gateOutcome, PROVENANCE, ranOnIris, type OutcomeCase } from '@/lib/status';
 import type { Status } from '@/lib/tone';
-import { checksOf, failureKindInWords, orderOrResult, outageResend } from './derive';
+import {
+  checksOf,
+  failureKindInWords,
+  kindOfAttempts,
+  NO_MARKER,
+  orderOrResult,
+  outageResend,
+  quotedVersion,
+  receiverKind,
+} from './derive';
 import { planLeader } from './follows';
 import { decisionLabels } from './planAction';
 import { approvalsByPlan, WRITE_OUTCOMES, type SafetyReceipt } from './receipt';
@@ -129,6 +138,18 @@ const VERIFIER_OUTCOMES = ['verified', 'unresolved', 'not_committed', 'failed'];
 /** Whether the receiver's dry run of the plan's exact write passed. */
 const rehearsed = (f: CaseFacts) => f.plan?.rehearsal?.wouldApply === true;
 
+/** Whether a case is a FHIR case: its evidence's route.kind, else what its attempts say. */
+const isFhir = (f: Pick<CaseFacts, 'snapshot' | 'attempts'>) =>
+  (receiverKind(f.snapshot) ?? kindOfAttempts(f.attempts)) === 'fhir_r4';
+
+/** A FHIR case's write, in place of "Sent the transfer again": the HL7 message is not sent again. */
+const fhirUpdated = (n: number) =>
+  `Updated the Encounter's location ${n === 1 ? 'once' : n === 2 ? 'twice' : `${n} times`}, by another route than the original HL7 delivery`;
+
+/** A FHIR case's write that was not verified: sent, which is all that is known of it. */
+const fhirSent = (n: number) =>
+  `Sent ${n === 1 ? 'one update' : `${n} updates`} of the Encounter's location, by another route than the original HL7 delivery`;
+
 /** "once", "twice", "3 times". */
 const times = (n: number) => (n === 1 ? 'once' : n === 2 ? 'twice' : `${n} times`);
 
@@ -149,6 +170,8 @@ function stoppedWrites(f: CaseFacts, event: string): string {
       : sent === 1
         ? 'and the receiver acknowledged it'
         : 'and the receiver acknowledged the last';
+  if (isFhir(f))
+    return `${f.receipt.verificationState === 'verified' ? fhirUpdated(sent) : fhirSent(sent)}, ${answer}`;
   return `Sent the ${event} again, ${times(sent)}, ${answer}`;
 }
 
@@ -164,7 +187,9 @@ export function actionHeadline(f: CaseFacts): string {
   const disposition = f.plan?.plan?.disposition || c.disposition;
   const unknown = f.attempts === undefined;
   const sent = receipt.writes;
-  const sentAgain = `Sent the ${event} again, ${times(sent)}${rehearsed(f) ? ', after a test run' : ''}`;
+  const sentAgain = isFhir(f)
+    ? fhirUpdated(sent)
+    : `Sent the ${event} again, ${times(sent)}${rehearsed(f) ? ', after a test run' : ''}`;
   if (c.disposition === 'handled_by_hand') return 'Handed it to the team, who corrected it by hand';
   if (c.disposition === 'abandoned') return 'Gave the case up when its workflow stopped moving';
   if (c.disposition === 'already_delivered')
@@ -443,6 +468,7 @@ export function headerSentence(c: CaseDetail): string {
 function evidenceFacts(snapshot: Snapshot): { text: string; ref: EvidenceRef }[] {
   const item = (kind: string) => snapshot.items.find((x) => x.kind === kind);
   const facts: { text: string; ref: EvidenceRef }[] = [];
+  const fhir = receiverKind(snapshot) === 'fhir_r4';
   const ward = asObject(item('ward_state')?.data);
   if (ward && !ward.not_applicable) {
     const status = Number(ward.http_status);
@@ -451,7 +477,7 @@ function evidenceFacts(snapshot: Snapshot): { text: string; ref: EvidenceRef }[]
       ref: 'ward_state',
       text:
         status === 200
-          ? `when Shutter looked, the receiver held the encounter ${humanize(str(b.state)).toLowerCase()}${b.ward ? ` in ${str(b.ward)}` : ''} at version ${str(b.version)}`
+          ? `when Shutter looked, the receiver held the encounter ${humanize(str(b.state)).toLowerCase()}${b.ward ? ` in ${str(b.ward)}` : ''} at version ${fhir ? quotedVersion(b.version) : str(b.version)}`
           : status === 404
             ? 'the receiver has no such encounter'
             : "the receiver's state is unknown",
@@ -467,7 +493,9 @@ function evidenceFacts(snapshot: Snapshot): { text: string; ref: EvidenceRef }[]
         status === 200
           ? `it committed this operation, version ${str(b.version_before)} to ${str(b.version_after)}`
           : status === 404
-            ? 'no receipt for this operation'
+            ? fhir || b.kind === 'fhir'
+              ? lowerFirst(NO_MARKER)
+              : 'no receipt for this operation'
             : 'whether it committed this operation is unknown',
     });
   }
@@ -537,9 +565,11 @@ export function proposedSummary(f: CaseFacts): string {
               ? 'unknown'
               : by;
   const action =
-    p.disposition === 'resend'
-      ? `resend the operation unchanged, on condition the receiver is at version ${str(p.expectedVersion)}`
-      : `${humanize(p.disposition).toLowerCase()} without writing`;
+    p.disposition === 'resend' && isFhir(f)
+      ? "update the Encounter's location once, with If-Match on the version read; the HL7 message is not sent again"
+      : p.disposition === 'resend'
+        ? `resend the operation unchanged, on condition the receiver is at version ${str(p.expectedVersion)}`
+        : `${humanize(p.disposition).toLowerCase()} without writing`;
   // The specialists whose disagreement the coordinator kept, by name, with what each proposed instead
   const dissent = asArray(
     asObject(runs.filter((r) => r.role === 'coordinator').at(-1)?.result)?.disagreements,

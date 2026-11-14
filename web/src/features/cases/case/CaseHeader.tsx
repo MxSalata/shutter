@@ -26,7 +26,7 @@ import { HINT_EVENTS } from '@/theme';
 import { caseOutcome, caseState, type ExpectedScenario, type OutcomeCase } from '@/lib/status';
 import { toneText, type Status, type Tone } from '@/lib/tone';
 import { useDetail } from '@/stores/appearance';
-import { forwardedFrom, orderOrResult, outageResend } from './derive';
+import { forwardedFrom, orderOrResult, outageResend, receiverKind } from './derive';
 import { receiverWords } from './failureMapModel';
 import { followedBoard } from './follows';
 import { evidenceOf, messageTypeLabel, messageTypeOf } from './message';
@@ -223,7 +223,7 @@ export function CaseHeader({
               abandoned, would only repeat it */}
           {(c.state === 'escalated' && c.disposition === 'escalate') ||
           ['handled_by_hand', 'abandoned'].includes(c.disposition) ? null : (
-            <DispositionBadge disposition={c.disposition} proposed />
+            <DispositionBadge disposition={c.disposition} proposed kind={receiverKind(snapshot)} />
           )}
           {technical && scenario ? <ExpectedMark c={oc} scenario={scenario} /> : null}
           {c.failureKind === 'unreadable' ? (

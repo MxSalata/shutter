@@ -1,7 +1,7 @@
 import type { CaseDetail, Plan, Snapshot } from '@/api/types';
 import { humanize } from '@/lib/format';
 import { asObject } from '@/lib/json';
-import { orderOrResult } from './derive';
+import { fhirSummary, orderOrResult, quotedVersion, receiverKind } from './derive';
 import { evidenceOf } from './message';
 
 /**
@@ -177,6 +177,29 @@ export function planWords(
             ? `Send nothing: hand ${what} to a person`
             : `Send nothing to ${receiver}${plan.disposition ? `: ${humanize(plan.disposition).toLowerCase()}` : ''}`;
     return { write: false, noun: 'the plan', action, condition: '', headline: `${action}.`, onlyIf: [] };
+  }
+  if (receiverKind(snapshot) === 'fhir_r4') {
+    // A FHIR case's write is one update of the Encounter's location with If-Match on the version read: the HL7
+    // message is not sent again, and the version is the Encounter's own, quoted, with its ETag verbatim
+    const e = fhirSummary(snapshot)?.encounter;
+    const read = e?.etag ? `${quotedVersion(e.version_id)} (ETag ${e.etag})` : '';
+    const action = "Update the Encounter's location once, with If-Match on the version read";
+    const condition = read
+      ? `only if the Encounter is still at version ${read}`
+      : 'on an Encounter version the evidence does not name';
+    return {
+      write: true,
+      noun: 'the resend',
+      action,
+      condition,
+      headline: `${action}, ${condition}.`,
+      onlyIf: [
+        read
+          ? `The Encounter is still at version ${read}`
+          : 'The Encounter version the update is conditional on: unknown, the evidence names none',
+        'No later event has moved the encounter on',
+      ],
+    };
   }
   const what = operationWords(op, c);
   const version = versionOf(plan);

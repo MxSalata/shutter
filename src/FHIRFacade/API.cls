@@ -4,8 +4,10 @@
 /// the one that serves this class asks for a password and nothing else.
 /// <p>A caller needs the <code>FHIRFacade_API</code> resource, <code>READ</code> to read and <code>WRITE</code> to
 /// write; without it the answer is 403 with an empty <code>text/html</code> body, as IRIS answers a user without the
-/// FHIR endpoint's required resource. <code>POST /admin/reset</code> (with an optional JSON array of resources to seed)
-/// needs <code>FHIRFacade_Admin</code> <code>USE</code>, which the client a test uses does not hold.</p>
+/// FHIR endpoint's required resource. The demo controls need <code>FHIRFacade_Admin</code> <code>USE</code>, which the
+/// client a test uses does not hold: <code>POST /admin/reset</code> (with an optional JSON array of resources to seed),
+/// <code>POST /admin/fault</code> (<code>{"modes": [..], "times": 1}</code>, the fault modes of
+/// <class>FHIRFacade.Service</class>) and <code>GET /admin/stats</code> (the PUTs counted and the fault still set).</p>
 Class FHIRFacade.API Extends %CSP.REST
 {
 
@@ -19,6 +21,8 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
 {
 <Routes>
 <Route Url="/admin/reset" Method="POST" Call="PostReset"/>
+<Route Url="/admin/fault" Method="POST" Call="PostFault"/>
+<Route Url="/admin/stats" Method="GET" Call="GetStats"/>
 <Route Url="/(.*)" Method="GET" Call="Dispatch"/>
 <Route Url="/(.*)" Method="PUT" Call="Dispatch"/>
 <Route Url="/(.*)" Method="DELETE" Call="Dispatch"/>
@@ -38,6 +42,18 @@ ClassMethod PostReset() As %Status
 {
     Quit:'$SYSTEM.Security.Check("FHIRFacade_Admin", "USE") ..Forbidden()
     Quit ..Answer(##class(FHIRFacade.Service).AdminReset(..Body()))
+}
+
+ClassMethod PostFault() As %Status
+{
+    Quit:'$SYSTEM.Security.Check("FHIRFacade_Admin", "USE") ..Forbidden()
+    Quit ..Answer(##class(FHIRFacade.Service).AdminFault(..Body()))
+}
+
+ClassMethod GetStats() As %Status
+{
+    Quit:'$SYSTEM.Security.Check("FHIRFacade_Admin", "USE") ..Forbidden()
+    Quit ..Answer(##class(FHIRFacade.Service).AdminStats())
 }
 
 /// The request as <class>FHIRFacade.Service</class> takes it.

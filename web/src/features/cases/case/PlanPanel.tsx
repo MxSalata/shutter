@@ -1,6 +1,6 @@
 import { Accordion, Group, List, Stack, Table, Text } from '@mantine/core';
 import { IconCircleCheck, IconCircleX } from '@tabler/icons-react';
-import type { GateDecision, PlanView, Snapshot } from '@/api/types';
+import type { GateDecision, PlanView, ReceiverKind, Snapshot } from '@/api/types';
 import { Digest } from '@/components/Digest';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { DispositionBadge } from '@/components/StateBadge';
@@ -9,7 +9,7 @@ import { TechDetail } from '@/components/TechDetail';
 import { Timestamp } from '@/components/Timestamp';
 import { checkCounts, CHECK_STATES, checkState, gateOutcome } from '@/lib/status';
 import { asArray, asObject } from '@/lib/json';
-import { checksOf, shownFailureText } from './derive';
+import { checksOf, fhirSummary, kindOfPlan, quotedVersion, receiverKind, shownFailureText } from './derive';
 import { planLeader } from './follows';
 import { humanize } from '@/lib/format';
 import { KeyValueList } from '@/components/KeyValueList';
@@ -24,6 +24,12 @@ const STAGES: Record<string, string> = {
   proposal: 'At proposal, before the rehearsal',
   approval: 'At approval',
   dispatch: 'At dispatch, after the approval and a fresh read of the receiver',
+};
+
+/** A FHIR case's stages: no dry run exists for that receiver, so no stage comes before a rehearsal. */
+const FHIR_STAGES: Record<string, string> = {
+  ...STAGES,
+  proposal: 'At proposal',
 };
 
 /** What each of the gate's checks asks, in a line, under its name. */
@@ -42,8 +48,37 @@ const CHECK_QUESTIONS: Record<string, string> = {
   rehearsal: "Did the receiver's dry run say this would apply?",
 };
 
-function GateTable({ d }: { d: GateDecision }) {
+/**
+ * The FHIR gate's questions: its own rows, and the two whose ADT question would be false there (no dry run exists for a
+ * FHIR receiver; its capability is what was measured, not what it declares).
+ */
+const FHIR_CHECK_QUESTIONS: Record<string, string> = {
+  ...CHECK_QUESTIONS,
+  rehearsal: 'No dry run exists for this receiver. What stands in its place?',
+  capability: 'Does the server refuse a stale If-Match and keep version history, as measured?',
+  enablement: 'Has the site turned recovery on for this receiver?',
+  representation: 'Is the record whole enough to change?',
+  mapping: 'Are both wards mapped to Locations that still match?',
+  plan_shape: 'Is the change exactly the one move?',
+  history: 'Was the history read, and is it free of an earlier update?',
+  earlier_write: 'Is an earlier update of this case still unsettled?',
+};
+
+/** The receiver kind behind a plan's panels: the evidence's route.kind, else the FHIR gate's own policy version. */
+function planKind(view: PlanView | null | undefined, snapshot?: Snapshot | null): ReceiverKind | undefined {
+  return receiverKind(snapshot) ?? kindOfPlan(view);
+}
+
+/** The Encounter version a FHIR plan is conditional on: the version id quoted and the ETag verbatim, from the evidence. */
+function encounterVersion(snapshot: Snapshot | null | undefined): string {
+  const e = fhirSummary(snapshot)?.encounter;
+  if (!e?.etag) return '';
+  return `${quotedVersion(e.version_id)} (ETag ${e.etag})`;
+}
+
+function GateTable({ d, fhir }: { d: GateDecision; fhir: boolean }) {
   const checks = checksOf(d);
+  const questions = fhir ? FHIR_CHECK_QUESTIONS : CHECK_QUESTIONS;
   return (
     <Stack gap={6}>
       <Group gap="sm" wrap="wrap">
@@ -71,9 +106,9 @@ function GateTable({ d }: { d: GateDecision }) {
                 <StackTable.Tr key={`${c.check}:${c.reason_code ?? ''}:${i}`}>
                   <StackTable.Td>
                     <Text size="sm">{humanize(c.check)}</Text>
-                    {CHECK_QUESTIONS[c.check] ? (
+                    {questions[c.check] ? (
                       <Text size="xs" c="dimmed">
-                        {CHECK_QUESTIONS[c.check]}
+                        {questions[c.check]}
                       </Text>
                     ) : null}
                   </StackTable.Td>
@@ -122,6 +157,7 @@ export function PlanPanel({
   onRetry?: () => void;
 }) {
   const p = view?.plan;
+  const fhir = planKind(view, snapshot) === 'fhir_r4';
   const body = asObject(p?.plan) ?? {};
   const action = asObject(body.action) ?? {};
   const preconditions = asArray<string>(p?.preconditions ?? body.preconditions);
@@ -132,7 +168,7 @@ export function PlanPanel({
       id="plan"
       title="The plan"
       note="One plan, bound by its digest: what the gate checks, and what a release names."
-      aside={p ? <DispositionBadge disposition={p.disposition} /> : null}
+      aside={p ? <DispositionBadge disposition={p.disposition} kind={fhir ? 'fhir_r4' : undefined} /> : null}
     >
       {!p && error ? <ErrorAlert error={error} title="The plan could not be read" onRetry={onRetry} /> : null}
       {!p && !error ? (
@@ -157,10 +193,12 @@ export function PlanPanel({
               <KeyValueList
                 rows={[
                   ["The author's summary", p.why ? p.summary : ''],
-                  [
-                    'Conditional on receiver version',
-                    write ? String(p.expectedVersion ?? action.expected_version ?? '') : '',
-                  ],
+                  fhir
+                    ? ['Conditional on Encounter version', write ? encounterVersion(snapshot) : '']
+                    : [
+                        'Conditional on receiver version',
+                        write ? String(p.expectedVersion ?? action.expected_version ?? '') : '',
+                      ],
                   [
                     'Operation key',
                     write ? <Digest key="k" value={p.operationKey} label="operation key" length={80} /> : '',
@@ -244,14 +282,19 @@ export function GatePanel({
   loading,
   error,
   onRetry,
+  snapshot,
 }: {
   view: PlanView | null | undefined;
   loading: boolean;
   /** The plan's read error: shown in place of the panel's body. */
   error?: unknown;
   onRetry?: () => void;
+  /** The case's evidence, for its route.kind. */
+  snapshot?: Snapshot | null;
 }) {
   const decisions = view?.gateDecisions ?? [];
+  const fhir = planKind(view, snapshot) === 'fhir_r4';
+  const stages = fhir ? FHIR_STAGES : STAGES;
   const technical = useDetail() === 'technical';
   // The latest decision opens by itself when it stopped the write, or for the engineer in Technical; a clean pass
   // stays closed under its badge ("Passed 10 of 10 applicable checks"), its rows a click away
@@ -261,7 +304,11 @@ export function GatePanel({
     <Section
       id="gate"
       title="The gate"
-      note="Mechanical checks of the plan against the evidence, before the rehearsal and again before dispatch. An unknown blocks a write as surely as a failed check; the agents can explain the gate's result but cannot override it."
+      note={
+        fhir
+          ? 'Mechanical checks of the plan against the evidence, at proposal and again before dispatch. No dry run exists for this receiver: the rehearsal row says what stands in its place. An unknown blocks a write as surely as a failed check.'
+          : "Mechanical checks of the plan against the evidence, before the rehearsal and again before dispatch. An unknown blocks a write as surely as a failed check; the agents can explain the gate's result but cannot override it."
+      }
     >
       {decisions.length ? (
         <Accordion
@@ -275,13 +322,13 @@ export function GatePanel({
               <Accordion.Control>
                 <Group gap="sm" wrap="wrap">
                   <Text size="sm" fw={600}>
-                    {STAGES[d.stage] ?? humanize(d.stage)}
+                    {stages[d.stage] ?? humanize(d.stage)}
                   </Text>
                   <StatusBadge {...gateOutcome(d.outcome, checksOf(d))} />
                 </Group>
               </Accordion.Control>
               <Accordion.Panel>
-                <GateTable d={d} />
+                <GateTable d={d} fhir={fhir} />
               </Accordion.Panel>
             </Accordion.Item>
           ))}
@@ -306,14 +353,29 @@ export function RehearsalPanel({
   view,
   write,
   receiver,
+  snapshot,
 }: {
   view: PlanView | null | undefined;
   write: boolean;
   /** The case's receiver (its production item). */
   receiver?: string;
+  /** The case's evidence, for its route.kind. */
+  snapshot?: Snapshot | null;
 }) {
   const noun = receiverNoun(receiver);
   const r = view?.rehearsal;
+  if (planKind(view, snapshot) === 'fhir_r4' && !r)
+    return (
+      <Section
+        id="rehearsal"
+        title="Rehearsal"
+        note="No dry run exists for this receiver. What stands in its place is the gate's rehearsal row, at proposal and again before dispatch, and an update sent only with If-Match on the version read."
+      >
+        <NotYet>
+          {write ? 'No dry run exists for this receiver' : 'Nothing to rehearse: the plan writes nothing.'}
+        </NotYet>
+      </Section>
+    );
   const response = asObject(r?.response) ?? {};
   const before = asObject(response.encounter_before);
   const after = asObject(response.encounter_after);

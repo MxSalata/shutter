@@ -140,6 +140,9 @@ Property ReopenedBy As %String(MAXLEN = 100);
 /// provider refuses the key; then every agent request carries ModeOverride replay, as a question's does (14).
 Property LiveAllowed As %Boolean [ InitialExpression = 1 ];
 
+/// The id of the binding sealed for a FHIR R4 receiver's plan (Shutter.Store.FHIRBinding); empty for every other case.
+Property FHIRBindingId As %String(MAXLEN = 20);
+
 Parameter SETTINGS = "EvidenceTarget:Targets,GateTarget:Targets,WardTarget:Targets,ApprovalTarget:Targets,VerifyTarget:Targets,IncidentTarget:Targets,ApprovalValidSeconds:Approval,ApprovalWaitSeconds:Approval,SettleSeconds:Timing,BoardTimeoutSeconds:Timing,BoardsPerMinute:Timing,MaxRefreshes:Timing";
 
 Method OnRequest(request As %Library.Persistent, Output response As %Library.Persistent) As %Status
@@ -264,6 +267,7 @@ Method OnResponse(request As %Library.Persistent, ByRef response As %Library.Per
             $$$TRACE("Case " _ ..CaseId _ " is driven by another instance (session " _ case.WorkflowSessionId _ "); ignoring " _ completionkey)
             Quit
         }
+        If $EXTRACT(completionkey, 1, 5) = "fhir:" { Set sc = ##class(Shutter.FHIR.Flow).OnResponse($THIS, case, completionkey, callrequest, callresponse) Quit }
         If $PIECE(completionkey, ":", 1, 2) = "board:timeout" {
             If +$PIECE(completionkey, ":", 3) '= +..Round { $$$TRACE("A board timeout from round " _ $PIECE(completionkey, ":", 3) _ " arrived in round " _ ..Round _ "; ignored") Quit }
             Set sc = ..OnBoardTimeout(case) Quit
@@ -328,6 +332,7 @@ Method OnError(request As %Library.Persistent, ByRef response As %Library.Persis
                 Do case.Note("error", "The call " _ pCompletionKey _ " failed after the case had moved on: " _ text, "system")
                 Quit
             }
+            If ($EXTRACT(pCompletionKey, 1, 5) = "fhir:") && ##class(Shutter.FHIR.Flow).OnError($THIS, case, pCompletionKey, text) Quit
             If pCompletionKey = "execute" {
                 // The write may or may not have been applied: that is for a person to establish, not a failure. OnExecute
                 // never ran, so the attempt is recorded here, as uncertain: every surface counts it as a write that may have landed.
@@ -381,7 +386,7 @@ Method OnEvidence(case As Shutter.Store.Case, result As Shutter.Msg.EvidenceResu
         }
         Set ..Refreshing = 0
         Set approval = ##class(Shutter.Store.Approval).%OpenId(..ApprovalId)
-        If $ISOBJECT(approval) && $ISOBJECT(snap) && (approval.MaterialDigest '= "") && (approval.MaterialDigest = snap.MaterialDigest) {
+        If $ISOBJECT(approval) && $ISOBJECT(snap) && (approval.MaterialDigest '= "") && (approval.MaterialDigest = snap.MaterialDigest) && '..IsFHIR(case) {
             Set sc = case.Transition("approved", "Evidence refreshed (" _ ..Refreshes _ " of " _ ..MaxRefreshes _ "): nothing material changed, so the approval of " _ approval.Approver _ " stands; dispatching again", "system", "snapshot:" _ snap.%Id())
             Quit:$$$ISERR(sc) sc
             Quit ..SendPreflight(case)
@@ -409,6 +414,7 @@ Method OnEvidence(case As Shutter.Store.Case, result As Shutter.Msg.EvidenceResu
     // A receiver of category orders_results (v1.23) keeps orders and results, which the ADT catalogue does not model:
     // the case goes to a person at once, in every mode, and no model runs for it.
     If ##class(Shutter.Store.SiteProfile).ReceiverCategory($SELECT(case.Receiver '= "": case.Receiver, 1: ..WardTarget)) = "orders_results" Quit ..NotModelledToPerson(case)
+    If ..IsFHIR(case) Quit ##class(Shutter.FHIR.Flow).Plan($THIS, case, summary, cat)
     // A death on the message (catalogue E19) goes to a person in Board mode as in Site policy mode, and no board is asked what
     // only a person can check. Rules only is the baseline and stays as it is; a judge's forced board still convenes.
     If (..Mode '= "rules") && '..ForceBoard && (decision = "person") && (##class(Shutter.Util.Json).Str(cat, "entry") = "E19") Quit ..PersonByCatalogue(case, cat)
@@ -1345,6 +1351,7 @@ Method AdoptPlan(case As Shutter.Store.Case, plan As %DynamicObject, createdBy A
         Set sc = ..Park(case, .parked)
         If parked || $$$ISERR(sc) Quit sc
     }
+    If ..IsFHIR(case) Quit ##class(Shutter.FHIR.Flow).SendGate($THIS, case, "proposal")
     Quit ..SendGate(case, "proposal", "gate:proposal")
 }
 
@@ -1734,6 +1741,7 @@ Method OnRelease(request As Shutter.Msg.CaseRelease, Output response As %Library
     Set ..ExpectedVersion = request.ExpectedVersion, ..ReleasePolicy = request.ReleasePolicy
     Set ..IncidentApprover = request.Approver, ..IncidentApprovalRef = request.ApprovalRef, ..IncidentPlanDigest = request.PlanDigest
     Set ..IncidentEntry = request.Entry, ..IncidentOutcome = request.Outcome
+    If ..IsFHIR(case) Set ..ReleasePolicy = "path", ..ExpectedVersion = ""
     Set case.WorkflowSessionId = ..%SessionId
     Do case.%Save()
     Set how = $CASE(..ReleasePolicy, "automatic": "automatic by site policy", "incident": "under the incident's approval by " _ ..IncidentApprover, : "on its own path")
@@ -2248,6 +2256,18 @@ Method NoteSupersededBy(case As Shutter.Store.Case, by As %DynamicObject)
     If $$$ISERR(sc) $$$LOGWARNING("Could not note the supersession on " _ otherId _ ": " _ $SYSTEM.Status.GetErrorText(sc))
 }
 
+/// Whether the case's receiver is a FHIR R4 receiver of the site profile.
+Method IsFHIR(case As Shutter.Store.Case) As %Boolean
+{
+    Quit ##class(Shutter.Store.SiteProfile).ReceiverKind($SELECT(case.Receiver '= "": case.Receiver, 1: ..WardTarget)) = "fhir_r4"
+}
+
+/// The one send of a FHIR case's flow (Shutter.FHIR.Flow sends only through it).
+Method FHIRSend(target As %String, request As %Library.Persistent, key As %String, description As %String = "") As %Status
+{
+    Quit ..SendRequestAsync(target, request, 1, key, description)
+}
+
 Storage Default
 {
 <Data name="CaseWorkflowDefaultData">
@@ -2381,12 +2401,6 @@ Storage Default
 <Value name="43">
 <Value>ConvenedBy</Value>
 </Value>
-<Value name="48">
-<Value>ReopenedBy</Value>
-</Value>
-<Value name="49">
-<Value>LiveAllowed</Value>
-</Value>
 <Value name="44">
 <Value>BoardsPerMinute</Value>
 </Value>
@@ -2398,6 +2412,18 @@ Storage Default
 </Value>
 <Value name="47">
 <Value>LeadSignature</Value>
+</Value>
+<Value name="48">
+<Value>ReopenedBy</Value>
+</Value>
+<Value name="49">
+<Value>LiveAllowed</Value>
+</Value>
+<Value name="50">
+<Value>ApprovalWaitSeconds</Value>
+</Value>
+<Value name="51">
+<Value>FHIRBindingId</Value>
 </Value>
 </Data>
 <DefaultData>CaseWorkflowDefaultData</DefaultData>

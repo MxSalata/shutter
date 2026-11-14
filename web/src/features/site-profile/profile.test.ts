@@ -19,6 +19,7 @@ import {
   describePath,
   describeSource,
   diffProfiles,
+  fhirSettingsProblem,
   fieldId,
   incidentRule,
   isDemoPolicy,
@@ -759,5 +760,84 @@ describe("validateProfile on a receiver's outage keys, the table Shutter.Test.Pr
       path: 'receivers[0].mail.on[1]',
       message: 'must be open, needs_person or closed',
     });
+  });
+});
+
+describe('validateProfile on a FHIR receiver, the table Shutter.Test.FHIRProfile runs at the server', () => {
+  const source = readFileSync(join(__dirname, '../../../../tests/unit/Shutter/Test/FHIRProfile.cls'), 'utf8');
+  const xdata = (name: string): unknown => {
+    const block = new RegExp(
+      `XData ${name} \\[ MimeType = application/json \\]\\n\\{\\n([\\s\\S]*?)\\n\\}\\n`,
+    ).exec(source);
+    return JSON.parse(block![1]) as unknown;
+  };
+  type Json = Record<string, unknown>;
+  const isJsonObject = (x: unknown): x is Json => typeof x === 'object' && x !== null && !Array.isArray(x);
+  // As Shutter.Test.SiteProfile.Merge merges a patch: null removes a field, an object merges into an object, any
+  // other value (an array included) replaces it.
+  const merge = (target: Json, patch: Json): Json => {
+    for (const [k, v] of Object.entries(patch)) {
+      if (v === null) delete target[k];
+      else if (isJsonObject(v) && isJsonObject(target[k])) merge(target[k], v);
+      else target[k] = structuredClone(v);
+    }
+    return target;
+  };
+  const entry = (): Json => structuredClone(xdata('Entry')) as Json;
+  const plain = (): Json[] => structuredClone(xdata('Plain')) as Json[];
+  const rows = xdata('Rows') as { name: string; patch: Json; expect: string }[];
+  const profileWith = (...receivers: Json[]) => ({ receivers, policy: {} });
+  const ONE = '.fhir: one FHIR receiver per install in this version';
+
+  it('has the rows of the server class', () => {
+    expect(rows.length).toBeGreaterThan(60);
+  });
+
+  it.each(rows.map((row) => [row.name, row] as const))('%s', (_name, row) => {
+    const e = merge(entry(), row.patch);
+    const p = profileWith(plain()[0], e);
+    expect(validateProfile(p)).toBe(row.expect === '' ? '' : `receivers[1]${row.expect}`);
+    expect(fhirSettingsProblem(e, p.receivers, 1)).toBe(row.expect);
+  });
+
+  it('takes a map of 25 wards and refuses 26', () => {
+    for (const size of [25, 26]) {
+      const e = entry();
+      (e.fhir as Json).location_map = Array.from({ length: size }, (_, j) => ({
+        ward: `WARD-${j + 1}`,
+        location: `Location/ward-${j + 1}`,
+        identifier: { system: 'urn:shutter:ward', value: `WARD-${j + 1}` },
+      }));
+      expect(validateProfile(profileWith(plain()[0], e))).toBe(
+        size === 25 ? '' : 'receivers[1].fhir.location_map: must be an array of 2 to 25 wards',
+      );
+    }
+  });
+
+  it('takes a Location id of 64 characters and refuses 65', () => {
+    for (const length of [64, 65]) {
+      const e = entry();
+      ((e.fhir as Json).location_map as Json[])[0].location = `Location/${'a'.repeat(length)}`;
+      expect(validateProfile(profileWith(plain()[0], e))).toBe(
+        length === 64 ? '' : 'receivers[1].fhir.location_map[0].location: must be Location/{id}',
+      );
+    }
+  });
+
+  it('refuses a second FHIR receiver at its own place, and only the second', () => {
+    const [downstream] = plain();
+    const second = { ...entry(), name: 'FHIR Ward Out 2' };
+    expect(validateProfile(profileWith(downstream, entry()))).toBe('');
+    expect(validateProfile(profileWith(downstream, entry(), second))).toBe(`receivers[2]${ONE}`);
+    const between = profileWith(entry(), downstream, second);
+    expect(validateProfile(between)).toBe(`receivers[2]${ONE}`);
+    expect(fhirSettingsProblem(second, between.receivers, 2)).toBe(ONE);
+    expect(fhirSettingsProblem(between.receivers[0], between.receivers, 0)).toBe('');
+    expect(validateProfile(profileWith(downstream, second))).toBe('');
+  });
+
+  it('leaves the demo receivers, which have no fhir block, as they were', () => {
+    expect(validateProfile(profileWith(...plain()))).toBe('');
+    expect(validateProfile(recorded)).toBe('');
   });
 });

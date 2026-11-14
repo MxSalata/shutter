@@ -262,3 +262,109 @@ SPW-5.89. **ENGINE_ROUTE_REFUSED: An engine resend's condition failed.** A resen
 SPW-5.90. **ENGINE_ROUTE_NO_API: No API at this receiver.** There is no API at this receiver: the never-opened rule before the send and the declared acknowledgement after it take the place of the version, the receipt and the dry run. Next: None: a pass. A person still approves the resend.
 
 SPW-5.91. **FURTHER_MOVEMENT_NEW: Another visit moved after the plan was made.** This site lets a movement on another visit through, shown on the plan, so the approver sees it. A new admission or ward stay for the same patient under another visit number reached the engine after the plan was made, so the plan did not show it and an approval of that plan does not cover it. Nothing is sent on that approval. Next: Nothing to do yet. Shutter reads the evidence again and makes the plan afresh with the new visit shown, and an approval given before is void, so the approver reads the new visit and decides again. A case that stays blocked with this reason could not complete its refresh: read the new visit the check names and decide.
+
+SPW-5.92. **FHIR_NO_DRY_RUN_SUBSTITUTED: No dry run exists for a FHIR receiver.** No dry run exists for this receiver. In its place stand a complete versioned read, a bounded change, If-Match on the version read, this case's own approval by a person, and a search of the returned history for the marked version, read back by id when the answer named it. Next: None: a pass. A person still approves the update.
+
+SPW-5.93. **FHIR_ITEMS_MISSING: The production's FHIR items are not ready.** The site profile describes a FHIR receiver, but the production's FHIR items are missing, switched off or set to different servers, so nothing was read or sent. Next: Add or enable the items the note names and set FHIR Receiver and FHIR Out to the same server, port, TLS configuration and credential, then reinvestigate the case.
+
+SPW-5.94. **FHIR_ITEM_ERROR: A FHIR item failed before anything was sent.** A FHIR item of the production answered with an error before anything was sent. Nothing was written. Next: Read the error in the case's note and in the production's event log, correct what it names, then reinvestigate the case.
+
+SPW-5.95. **FHIR_PLAN_NEEDS_PERSON: Over FHIR this case is for a person.** For a FHIR receiver Shutter proposes one thing only, the ward move the failed message asked for: in Rules only mode always, in every other mode when one catalogue entry says to send it. Here that did not hold, or the plan asks for a person, so a person decides. Next: Read the evidence and decide by hand: make the change at the receiver or leave it, and mark the case handled.
+
+SPW-5.96. **FHIR_RECEIVER_UNREADABLE: The FHIR server could not be read.** The FHIR server did not answer, or answered with something that is not its own answer for this request (a sign-in page, a plain 404, another media type). Nothing is assumed about the record. Next: Check that the server runs and that the FHIR items' server, port, path and credential are right, then collect the evidence again.
+
+SPW-5.97. **FHIR_ENCOUNTER_NOT_FOUND: No Encounter carries this visit number.** No Encounter carries this visit number under the identifier system the site profile names. Next: Check the visit number and the identifier system. If the receiver never had the admission, recover that first; otherwise decide by hand.
+
+SPW-5.98. **FHIR_ENCOUNTER_AMBIGUOUS: More than one Encounter carries this visit number.** More than one Encounter carries this visit number, or the search came in pages, so which record the message meant is not known. Next: Find the right Encounter at the receiver and make the change by hand, or have the duplicate records corrected.
+
+SPW-5.99. **FHIR_IDENTIFIER_UNMAPPED: The identifiers are not the ones the site profile maps.** The message's patient identifier does not come from the assigning authority the site profile maps to the FHIR identifier system, or the Encounter read does not carry the visit number that was searched. Next: Check the assigning authority in PID-3 against the site profile and the Encounter's identifiers. Correct the profile if it is wrong; otherwise decide by hand.
+
+SPW-5.100. **FHIR_SUBJECT_UNRESOLVED: The Encounter's patient could not be read.** The Encounter's subject is not a literal reference to a Patient, or that Patient could not be read. Next: Read the Encounter's subject at the receiver. If the Patient read failed, collect the evidence again; otherwise decide by hand.
+
+SPW-5.101. **FHIR_PATIENT_MISMATCH: The Encounter belongs to another patient.** The Encounter belongs to a Patient who does not carry the message's patient identifier. Next: Escalate the identity conflict to the integration team. Nothing is sent.
+
+SPW-5.102. **FHIR_PATIENT_LINKED: The Patient record is linked or not active.** The Patient record is linked to another or is not active, which often means a merge. A person decides. Next: Check the Patient at the receiver, and with the PAS team whether a merge happened. A person decides.
+
+SPW-5.103. **FHIR_EVENT_UNSUPPORTED: Over FHIR only a ward move is changed.** Over FHIR Shutter makes one kind of change, a ward move on an existing Encounter. This message is another kind of event. Next: Make the change by hand at the receiver if it is still wanted, and mark the case handled.
+
+SPW-5.104. **FHIR_FAILURE_KIND_UNSUPPORTED: Over FHIR only a failed or uncertain delivery is repaired.** Over FHIR Shutter repairs only a delivery that failed or whose outcome is uncertain. This message was rejected, withheld or could not be read, so the receiver or the site already said no to it. Next: Read why the message was rejected, withheld or unreadable, and handle that cause. Nothing is sent over FHIR.
+
+SPW-5.105. **FHIR_RECOVERY_DISABLED: Recovery is not turned on for this receiver.** The receiver's entry in the site profile does not turn recovery on (fhir.recovery_enabled), so nothing is written to it. Next: Make the change by hand. To let Shutter write to this receiver, import a conformance proof for its server software and set fhir.recovery_enabled to true; that applies to later evidence.
+
+SPW-5.106. **FHIR_REPRESENTATION_PARTIAL: The server returned a reduced copy of the Encounter.** The server returned a reduced copy of the Encounter (marked SUBSETTED). A change built on part of a record would remove the rest. Next: Check why the server reduces its reads for this credential, then collect the evidence again.
+
+SPW-5.107. **FHIR_MODIFIER_EXTENSION: The Encounter carries a modifierExtension.** The Encounter carries a modifierExtension, which can change what its other fields mean. Shutter does not change such a record. Next: Make the change by hand at the receiver, where the extension's meaning is known.
+
+SPW-5.108. **FHIR_NARRATIVE_PRESENT: The Encounter carries a narrative.** The Encounter carries a narrative text, which the server does not regenerate. After the move it would describe the old ward. Next: Make the change by hand at the receiver, so the narrative is corrected with it.
+
+SPW-5.109. **FHIR_RESTRICTED: The Encounter carries a security label.** The Encounter carries a security label. Shutter does not change a labelled record. Next: Make the change by hand at the receiver, by someone the label allows.
+
+SPW-5.110. **FHIR_NO_ETAG: The read named no version to write against.** The read came with no ETag, or one that does not name the version read, so a write could not be made conditional on it. Next: Collect the evidence again. If the server still sends no usable ETag, make the change by hand.
+
+SPW-5.111. **FHIR_STATUS_NOT_IN_PROGRESS: The Encounter is not in progress.** The Encounter is not in progress, so a ward move no longer applies to it. Next: Nothing to send. Check the Encounter at the receiver and close the case with what was found.
+
+SPW-5.112. **FHIR_ALREADY_THERE: The patient is already on that ward at the receiver.** The Encounter already shows the patient on the ward the message moves them to. Shutter cannot tell who made that change, so it takes no credit and sends nothing. Next: Nothing to send. Check the Encounter at the receiver and mark the case handled.
+
+SPW-5.113. **FHIR_LATER_MOVE_AT_RECEIVER: The receiver shows a later move.** The Encounter shows a location that starts at or after the failed message's event time. Sending the older move would undo it. Next: Nothing to send. Close the case as superseded, recording the later location.
+
+SPW-5.114. **FHIR_PRIOR_LOCATION_DIFFERS: The patient is not where the message says they came from.** The Encounter's open location is not the ward the message says the patient came from, or the message names none. Next: Compare the Encounter's locations with the message and decide by hand.
+
+SPW-5.115. **FHIR_TIME_UNREADABLE: A location's start time could not be read.** A location entry's start is not a time with an offset that Shutter can order against the message's event time. Next: Read the Encounter's locations at the receiver and decide by hand.
+
+SPW-5.116. **FHIR_LOCATION_UNMAPPED: A ward of the message has no Location in the site profile.** The ward the message names has no Location in the site profile's map. Next: Add the ward and its Location to the site profile's map, or make the change by hand.
+
+SPW-5.117. **FHIR_LOCATION_UNREADABLE: A mapped Location could not be read.** A mapped Location could not be read, so it could not be checked. Next: Check the Location references in the site profile's map against the server, then collect the evidence again.
+
+SPW-5.118. **FHIR_LOCATION_MISMATCH: A mapped Location is not what the site profile recorded.** A mapped Location is not active, or does not carry the identifier the site profile recorded for it. Next: Check the Location at the receiver against the site profile's map and correct whichever is wrong.
+
+SPW-5.119. **FHIR_SHAPE_UNSUPPORTED: The Encounter's locations are not the one shape Shutter changes.** The Encounter's location entries are not the one shape Shutter changes: exactly one open, mapped, ward-level entry. Next: Make the change by hand at the receiver.
+
+SPW-5.120. **FHIR_BED_MOVE_UNSUPPORTED: The message names a bed.** The message names a bed. An Encounter's version does not reserve a bed, so this version moves wards only and sends nothing for a move that names one. Next: Make the move by hand at the receiver, where the bed can be checked.
+
+SPW-5.121. **FHIR_DIFF_OUT_OF_BOUNDS: The change touches more than the move.** The change Shutter built touches more than the closed entry, the new entry and its marker. Nothing is sent. Next: Report this to the integration team with the case: it is a fault in Shutter, not in the message. Make the change by hand.
+
+SPW-5.122. **FHIR_BODY_CHANGED: The update is no longer the one that was approved.** The update built from the read made just before the write is not the one the person approved. Next: Collect the evidence again and make the plan afresh; the approver then decides on the new update.
+
+SPW-5.123. **FHIR_NO_BINDING: The approval is not tied to a sealed update.** The approval is not tied to a sealed record of what it approved (the version, the body, the Locations), so it authorises nothing. Next: Make the plan afresh and send it to an approver again.
+
+SPW-5.124. **FHIR_RECEIVER_CHANGED: The Encounter changed after the approval.** The Encounter is at another version than the one the person approved against. The approval is void. Next: Collect the evidence again and make the plan afresh; the approver then decides on the record as it now is.
+
+SPW-5.125. **FHIR_PATIENT_CHANGED: The Patient record changed after the approval.** The Patient record changed after the approval. The approval is void. Next: Collect the evidence again and make the plan afresh; the approver then decides again.
+
+SPW-5.126. **FHIR_LOCATION_CHANGED: A mapped Location changed after the approval.** A mapped Location changed after the approval. The approval is void. Next: Collect the evidence again and make the plan afresh; the approver then decides again.
+
+SPW-5.127. **FHIR_EARLIER_WRITE_UNRESOLVED: An earlier update of this case may yet land.** An earlier update of this case, conditional on this same version, has no known outcome and may yet land. Nothing is sent until the record moves on or a person settles it. Next: Check the Encounter at the receiver: whether the earlier update arrived. Then decide by hand and mark the case handled.
+
+SPW-5.128. **FHIR_CAPABILITIES_UNREADABLE: The server's CapabilityStatement could not be read.** The server's CapabilityStatement could not be read, so what it guarantees is not known. Next: Check that the server answers its metadata request for this credential, then collect the evidence again.
+
+SPW-5.129. **FHIR_NO_HISTORY: The server does not offer what a checked write needs.** The server does not offer read, version read, update and instance history for Encounters, so a write could not be checked afterwards. Next: Make the change by hand. Shutter writes only where it can read the history afterwards.
+
+SPW-5.130. **FHIR_VERSIONING_UNPROVEN: This server software is not proved to refuse a stale write.** No conformance run recorded for this server software shows that it refuses a stale and an unknown If-Match and keeps a version's tags on that version, or the server now names other software or another version than the run measured. Next: Run tests/conformance/fhir_conformance.py against a test instance of the same InterSystems IRIS for Health FHIR server software and import its proof file. No other FHIR server can pass that file in this release, except Shutter's own test server, which is held to those answers.
+
+SPW-5.131. **FHIR_HISTORY_UNAVAILABLE: The Encounter's history could not be read whole.** The Encounter's history could not be read whole. Next: Collect the evidence again. If the history stays unreadable or comes in pages, make the change by hand.
+
+SPW-5.132. **FHIR_HISTORY_HEAD_DIFFERS: The history's newest version is not the one read.** The newest version in the Encounter's history is not the version that was read. Next: Collect the evidence again: the record moved between the two reads.
+
+SPW-5.133. **FHIR_ALREADY_WRITTEN: This case's update is already in the history.** A version in the Encounter's history carries the marker of an update this case already sent. Nothing is sent again. Next: Nothing to send. Read the case's outcome and check the Encounter at the receiver.
+
+SPW-5.134. **FHIR_APPROVAL_NOT_PERSONAL: This approval is not a person's approval of this case.** A FHIR update goes only on a person's approval of this one case. This approval came from a policy or an incident. Next: Send the plan to an approver.
+
+SPW-5.135. **FHIR_ENGINE_NOT_IN_SCOPE: The engine's record cannot show whether it is still trying.** The delivery that failed did not go through a stock HL7 TCP operation, so whether the engine is still trying it cannot be read. Unknown is not nothing pending. Next: Read the message in the source production's Message Viewer, make sure the engine no longer holds it, then decide by hand.
+
+SPW-5.136. **FHIR_ENGINE_SUBCLASS_UNPROVEN: The delivery went through a subclass of the stock operation.** The delivery went through a subclass of the stock HL7 TCP operation. What the engine's record proves was measured for the stock class only. Next: Read the message in the source production's Message Viewer, make sure the engine no longer holds it, then decide by hand.
+
+SPW-5.137. **FHIR_ENGINE_DELIVERED: The engine delivered this message over HL7.** The engine delivered this message over HL7. Whatever the receiver then answered, it was handed the move once, so Shutter does not write it again over FHIR. Next: Nothing to send. Check the receiver's own record of the move and note what was found.
+
+SPW-5.138. **FHIR_ENGINE_HOLDS_SUSPENDED: The engine holds this message suspended.** The engine holds this message suspended, and anyone can send it again. Discard it in the source production, then reinvestigate. Next: Discard the suspended message in the source production, then reinvestigate the case.
+
+SPW-5.139. **FHIR_WRITE_REFUSED: The update was not applied.** The update was not applied: the receiver refused it, or Shutter's own last checks stopped it before anything was sent. Next: Read the reason in the case's note. Reinvestigate to try again on fresh evidence and a new approval, or make the change by hand.
+
+SPW-5.140. **FHIR_WRITE_CONFLICT: The Encounter changed before the update arrived.** The receiver refused the update because the Encounter changed after it was read (412). It is not retried: any further write needs fresh evidence and a new approval. Next: Reinvestigate the case: any further write needs fresh evidence and a new approval.
+
+SPW-5.141. **FHIR_WRITE_OUTCOME_UNKNOWN: What became of the update is not known.** What became of the update cannot be established from what the receiver returned. Shutter does not repeat it. A person checks at the receiver. Next: Check the Encounter at the receiver, record what was found and mark the case handled. Do not send it again.
+
+SPW-5.142. **FHIR_WRITE_NOT_FOUND: The update is not in the history the receiver returned.** No version of this update is in the history the receiver returned. A returned history is not a proof that none was committed. The approval is spent. Next: Check the Encounter at the receiver before anything else. If the move is not there and is still wanted, reinvestigate for a new approval or make it by hand.
+
+SPW-5.143. **FHIR_COMMITTED_NEEDS_REVIEW: The update is in the history, but the record has moved on.** The approved update is in the Encounter's history, but the current record no longer shows it as it was written. The case stays open for a person. Next: Read the Encounter's current locations at the receiver and decide whether anything is left to do, then mark the case handled.
+
+SPW-5.144. **FHIR_WRITE_CONTRADICTED: The receiver's record contradicts the update.** The receiver's record contradicts the update, for example a version that carries Shutter's marker but does not follow the version the write was conditional on. A person checks at the receiver. Next: Check the Encounter and its history at the receiver, and tell the integration team: the server may not honour If-Match.

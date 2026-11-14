@@ -14,10 +14,10 @@ Parameter GLOBALS = "^Shutter.,^Downstream.,^Hospital.,^Wards.,^FHIRFacade.";
 Parameter USERCOMMENTS = "Shutter demo user|Used by the production's HTTP operation|Shutter public demo user|Used by the Shutter Forwarder item of Hospital.Production|Reads the warehouse history tables only";
 
 /// The users Shutter's installers can make.
-Parameter USERNAMES = "operator,approver,forwarder,downstream-client,demo,demo-trace,judge,ShutterWarehouseReader";
+Parameter USERNAMES = "operator,approver,forwarder,downstream-client,demo,demo-trace,judge,ShutterWarehouseReader,fhir-client";
 
 /// The credentials Shutter's installers can store in its own namespace.
-Parameter CREDENTIALS = "DownstreamAPI,ShutterIntake,WarehouseReader";
+Parameter CREDENTIALS = "DownstreamAPI,ShutterIntake,WarehouseReader,FHIRFacade";
 
 /// The body classes whose messages are Shutter's own, wherever they are.
 Parameter BODYCLASSES = "Shutter.,Hospital.,Downstream.";
@@ -126,7 +126,7 @@ ClassMethod RunSteps(out As %DynamicObject, steps As %List, class As %String = {
 /// Whether a role or resource is Shutter's, by its name alone.
 ClassMethod OwnSecurityName(name As %String) As %Boolean
 {
-    Quit ($EXTRACT(name, 1, 8) = "Shutter_") || (name = "Downstream_API") || (name = "Downstream_Admin") || (name = "Wards_API")
+    Quit ($EXTRACT(name, 1, 8) = "Shutter_") || (name = "Downstream_API") || (name = "Downstream_Admin") || (name = "Wards_API") || (name = "FHIRFacade_API") || (name = "FHIRFacade_Admin")
 }
 
 /// Whether a user is one Shutter's installers made: its name and its comment. A site's own "operator" stays.
@@ -137,12 +137,21 @@ ClassMethod OwnUser(name As %String, comment As %String) As %Boolean
 }
 
 /// Whether an item of the site's production is one Shutter's install put there: a listed name, and the class Shutter's own
-/// production gives that name. A site's item that happens to share the name, with another class, stays.
+/// production gives that name. A site's item that happens to share the name, with another class, stays. The four items
+/// of a FHIR receiver are placed by a call and are in no production of Shutter's, so they are known by FHIRItem.
 ClassMethod OwnItem(name As %String, className As %String, ownClassName As %String) As %Boolean
 {
+    If ..FHIRItem(name, className) Quit 1
     If ownClassName = "" Quit 0
     If '$LISTFIND($LISTFROMSTRING(##class(Shutter.Setup).#INSTALLITEMS), name) Quit 0
     Quit className = ownClassName
+}
+
+/// Whether an item is one of the four a FHIR receiver's set-up placed here: only where that set-up recorded itself, and
+/// only with the name and the class it gives. Elsewhere an item called "FHIR Out" is the site's.
+ClassMethod FHIRItem(name As %String, className As %String) As %Boolean
+{
+    Quit ($DATA(^Shutter.Config("fhirItems")) > 0) && (className '= "") && ($CASE(name, "FHIR Receiver": "Shutter.Operation.FHIRReceiver", "FHIR Out": "Shutter.Operation.FHIRExecute", "FHIR Gate": "Shutter.Operation.FHIRGate", "FHIR Verifier": "Shutter.Operation.FHIRVerify", : "") = className)
 }
 
 /// Whether a namespace with this name was made for the demo: it maps the demo's package from this namespace's own code

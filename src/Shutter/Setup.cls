@@ -162,6 +162,7 @@ ClassMethod InstallStatus(root As %String = "", demo As %Boolean = 1, production
             Set ^Shutter.Config("recordsImported") = count
         }
         Set sc = ..CreateWebApps(ns, root, demo) Quit:$$$ISERR(sc)
+        If demo && ##class(%Dictionary.CompiledClass).%ExistsId("FHIRFacade.Installer") Set sc = $CLASSMETHOD("FHIRFacade.Installer", "Install", ns) Quit:$$$ISERR(sc)
         Set r = ..EnsureRetentionTasks(ns)
         If $EXTRACT(r, 1, 6) = "ERROR:" Set sc = $$$ERROR($$$GeneralError, "Retention tasks: " _ r) Quit
         // Replayed runs spend nothing; rows written before this rule held a recording's price.
@@ -175,6 +176,7 @@ ClassMethod InstallStatus(root As %String = "", demo As %Boolean = 1, production
         If 'demo Set sc = ..DisableDemoItems() Quit:$$$ISERR(sc)
         // The compile above rewrote the definition from the package: the receivers' connector items go back (v1.42).
         If 'demo Set sc = ##class(Shutter.Util.Onboard).RestoreReceiverItems() Quit:$$$ISERR(sc)
+        Set sc = ##class(Shutter.FHIR.Install).RestoreItems() Quit:$$$ISERR(sc)
         If demo Set sc = ..InstallDemoHospital(ns) Quit:$$$ISERR(sc)
     } Catch ex {
         Set sc = ex.AsStatus()
@@ -1927,6 +1929,7 @@ ClassMethod PurgeStore() As %String [ SqlProc ]
     // another instance's files.
     Set emails = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT Seq, Result FROM Shutter_Store.Escalation WHERE Transport = 'file'")
     While emails.%Next() { Do ##class(Shutter.Store.Escalation).RemoveFile(emails.%Get("Result"), emails.%Get("Seq")) }
+    Do ##class(Shutter.FHIR.Install).KillStores()
     For cls = "Shutter.Store.WarehouseRead", "Shutter.Store.CaseToken", "Shutter.Store.ChainItem", "Shutter.Store.Chain", "Shutter.Store.IncidentEvent", "Shutter.Store.Incident", "Shutter.Store.Verification", "Shutter.Store.ExecutionAttempt", "Shutter.Store.Approval", "Shutter.Store.Rehearsal", "Shutter.Store.GateDecision", "Shutter.Store.Plan", "Shutter.Store.Finding", "Shutter.Store.CaseQuestion", "Shutter.Store.PageQuestion", "Shutter.Store.AgentRun", "Shutter.Store.SnapshotItem", "Shutter.Store.Snapshot", "Shutter.Store.CaseEvent", "Shutter.Store.Escalation", "Shutter.Store.CaseReminder", "Shutter.Store.ReminderDigest", "Shutter.Store.Case", "Shutter.Store.Precedent", "Shutter.Store.BoardLead", "Shutter.Store.ReviewAnnotation", "Shutter.Store.Review", "Shutter.Store.Idempotency", "Shutter.Bridge.ToolCall", "Shutter.Store.OutageEvent", "Shutter.Store.Outage", "Shutter.Store.ResendRecord", "Shutter.Store.ReceiverReading" {
         Set sc = $CLASSMETHOD(cls, "%KillExtent")
         If $$$ISERR(sc) Quit
@@ -2105,6 +2108,7 @@ ClassMethod Doctor(refresh As %Boolean = 0) As %String [ SqlProc ]
     }
     Set r."missing_items" = missing, r."disabled_items" = disabled
     Set r."gate_policy_version" = $PARAMETER("Shutter.Operation.Gate", "POLICYVERSION")
+    Set r.fhir = ##class(Shutter.FHIR.Install).Doctor()
     Set entries = 0, ids = ""
     Set ers = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT EntryId FROM Shutter_Catalogue.Entry ORDER BY LENGTH(EntryId), EntryId")
     While ers.%Next() { Set entries = entries + 1, ids = ids _ $SELECT(ids = "": "", 1: ",") _ ers.%Get("EntryId") }

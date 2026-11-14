@@ -56,8 +56,8 @@
       <!-- The demo hospital's production (shape A): runs in the HOSPITAL namespace through a package mapping, so a judge
            sees Shutter watching a production it does not own. Compiled here; installed there by Hospital.Setup. -->
       <Resource Name="Hospital.PKG"/>
-      <!-- A test FHIR R4 server held to the answers IRIS for Health's own FHIR server gave when measured: what the FHIR
-           plan builder and verifier are tested against. No web application serves it yet, so nothing reaches it from outside. -->
+      <!-- A test FHIR R4 server held to the answers IRIS for Health's own FHIR server gave when measured. A demo install
+           serves it at /fhir-facade/r4; a site install does not. -->
       <Resource Name="FHIRFacade.PKG"/>
       <!-- No folder resources: this module is loaded from the repository, never packaged, and the install reads the
            knowledge, the fixtures and the web application's built files from the repository root, passed below. -->

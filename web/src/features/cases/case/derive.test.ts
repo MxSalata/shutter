@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import type { CaseEvent, SnapshotItem } from '@/api/types';
+import type { AttemptView, CaseEvent, PlanView, Snapshot, SnapshotItem } from '@/api/types';
+import fixtures from '@/mocks/fixtures.json';
 import {
   checksOf,
+  kindOfAttempts,
+  kindOfPlan,
+  NO_MARKER,
+  receiverKind,
   describeEntry,
   describeItem,
   forwardedFrom,
@@ -370,5 +375,72 @@ describe('the words of a message Shutter does not model', () => {
       },
     } as unknown as SnapshotItem;
     expect(describeItem(item)).toBe(`Unmappable: This message is ORU, not ADT: ${now}`);
+  });
+});
+
+describe('the words of a FHIR case (route.kind fhir_r4)', () => {
+  const item = (kind: string, data: Record<string, unknown>): SnapshotItem =>
+    ({ seq: 1, kind, source: 'test', observedAt: '', digest: '', data }) as unknown as SnapshotItem;
+  const noMarker = item('receipt', {
+    http_status: 404,
+    body: {
+      error: 'no_receipt',
+      kind: 'fhir',
+      note: 'No version in the history read carries the marker of a write this case sent',
+    },
+  });
+
+  it('never reads a FHIR 404 receipt as proof that nothing was committed', () => {
+    expect(describeItem(noMarker, 'FHIR Out')).toBe(NO_MARKER);
+    expect(describeItem(noMarker, 'FHIR Out', 'fhir_r4')).toBe(
+      "No version in the history read carries this case's marker",
+    );
+    expect(describeItem(noMarker, 'FHIR Out')).not.toMatch(/did not commit/);
+  });
+
+  it('quotes the Encounter version id and leaves out the epoch', () => {
+    const ward = item('ward_state', {
+      http_status: 200,
+      body: { state: 'admitted', ward: 'WARD-A', version: '1', epoch: '', history: [] },
+    });
+    expect(describeItem(ward, 'FHIR Out', 'fhir_r4')).toBe(
+      'Admitted in WARD-A, version "1"; 0 operations in its history',
+    );
+  });
+
+  it('keeps the ADT words as they were', () => {
+    const receipt = item('receipt', { http_status: 404, body: { error: 'no_receipt' } });
+    expect(describeItem(receipt, 'Downstream Out')).toBe(
+      'No receipt: Downstream Out did not commit this operation',
+    );
+    const ward = item('ward_state', {
+      http_status: 200,
+      body: { state: 'admitted', ward: 'WARD-A', version: 1, epoch: 80, history: [] },
+    });
+    expect(describeItem(ward, 'Downstream Out')).toBe(
+      'Admitted in WARD-A, version 1, epoch 80; 0 operations in its history',
+    );
+  });
+
+  it('reads the kind from the route, the FHIR gate or the attempts, and finds none on a recorded case', () => {
+    for (const [id, x] of Object.entries(fixtures.cases)) {
+      expect(receiverKind(x.snapshot as unknown as Snapshot), id).toBeUndefined();
+      expect(kindOfPlan(x.plan as unknown as PlanView), id).toBeUndefined();
+      expect(kindOfAttempts(x.attempts as unknown as AttemptView[]), id).toBeUndefined();
+    }
+    const snapshot = {
+      items: [item('route', { kind: 'fhir_r4' })],
+      summary: {},
+    } as unknown as Snapshot;
+    expect(receiverKind(snapshot)).toBe('fhir_r4');
+    expect(receiverKind({ items: [], summary: { route: { kind: 'fhir_r4' } } } as unknown as Snapshot)).toBe(
+      'fhir_r4',
+    );
+    expect(
+      kindOfPlan({ gateDecisions: [{ policyVersion: 'fhir-2026-11-14.1' }] } as unknown as PlanView),
+    ).toBe('fhir_r4');
+    expect(kindOfAttempts([{ attempt: { receipt: { kind: 'fhir' } } }] as unknown as AttemptView[])).toBe(
+      'fhir_r4',
+    );
   });
 });

@@ -9,7 +9,10 @@
 /// <li><code>("order", type, seq)</code> = id, in the order ids were first written (the order a search returns);</li>
 /// <li><code>("query", queryId)</code> = <code>$LISTBUILD(type, total, page size, query as sent)</code> and
 /// <code>("query", queryId, i)</code> = id: a search's result, kept so its later pages are the same list;</li>
-/// <li><code>("clock")</code> = the instant tests fix the clock at.</li>
+/// <li><code>("clock")</code> = the instant tests fix the clock at;</li>
+/// <li><code>("fault")</code> = <code>$LISTBUILD(modes as a comma list, times left)</code>: the fault a test set, gone
+/// once it has fired its times;</li>
+/// <li><code>("stats", name)</code> = a counter (<code>puts_received</code>, <code>puts_refused</code>).</li>
 /// </ul>
 /// Version ids are decimal strings from "1", plus one per update and per delete, as IRIS for Health's server gives them.
 /// Callers compare them as strings and never as numbers.
@@ -124,12 +127,67 @@ ClassMethod Unlock(type As %String, id As %String)
     Lock -^FHIRFacade.Data("res", type, id)
 }
 
-/// Every resource, version and kept search gone; version ids start again from "1". The clock is kept.
-ClassMethod Reset()
+/// Every resource, version and kept search gone, and with them the fault and the counters; version ids start again
+/// from "1". The clock is kept. The whole global is locked for it, so a reset waits for a write that is under way (up
+/// to 10 seconds) and no write starts in the middle of one; 0, with nothing cleared, when the lock was not given.
+ClassMethod Reset() As %Boolean
 {
+    Lock +^FHIRFacade.Data:10
+    Quit:'$TEST 0
     Set clock = $GET(^FHIRFacade.Data("clock"))
     Kill ^FHIRFacade.Data
     Set:clock'="" ^FHIRFacade.Data("clock") = clock
+    Lock -^FHIRFacade.Data
+    Quit 1
+}
+
+/// Sets the fault: <var>modes</var> a comma list, fired <var>times</var> times. An empty list or no times clears it.
+ClassMethod SetFault(modes As %String, times As %Integer)
+{
+    Lock +^FHIRFacade.Data("fault"):10
+    If (modes = "") || (times < 1) {
+        Kill ^FHIRFacade.Data("fault")
+    } Else {
+        Set ^FHIRFacade.Data("fault") = $LISTBUILD(modes, times \ 1)
+    }
+    Lock -^FHIRFacade.Data("fault")
+}
+
+/// The fault as it stands: its modes and how many times it still fires.
+ClassMethod Fault(Output modes As %String, Output left As %Integer)
+{
+    Set node = $GET(^FHIRFacade.Data("fault"))
+    Set modes = $LISTGET(node, 1), left = +$LISTGET(node, 2)
+}
+
+/// Fires the fault once: its modes, or "" when none is set. The last firing clears it. Two requests never take the
+/// same firing.
+ClassMethod TakeFault() As %String
+{
+    Quit:'$DATA(^FHIRFacade.Data("fault")) ""
+    Lock +^FHIRFacade.Data("fault"):10
+    Quit:'$TEST ""
+    Do ..Fault(.modes, .left)
+    If left > 1 {
+        Set ^FHIRFacade.Data("fault") = $LISTBUILD(modes, left - 1)
+    } Else {
+        Kill ^FHIRFacade.Data("fault")
+        Set:left<1 modes = ""
+    }
+    Lock -^FHIRFacade.Data("fault")
+    Quit modes
+}
+
+/// Adds one to a counter.
+ClassMethod Tally(name As %String)
+{
+    Do $INCREMENT(^FHIRFacade.Data("stats", name))
+}
+
+/// A counter's value, 0 when nothing was counted.
+ClassMethod Tallied(name As %String) As %Integer
+{
+    Quit +$GET(^FHIRFacade.Data("stats", name))
 }
 
 /// The instant the clock is fixed at, or empty for the real time.

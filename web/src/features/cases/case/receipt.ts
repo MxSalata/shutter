@@ -8,6 +8,9 @@ import type {
   Snapshot,
 } from '@/api/types';
 import { humanize } from '@/lib/format';
+import { asObject } from '@/lib/json';
+import { fhirVerification } from '@/lib/status';
+import { fhirSummary, receiverKind } from './derive';
 
 /**
  * A case's safety receipt: what was proposed, what it was bound to, who or what let it through, how many writes the
@@ -46,7 +49,13 @@ export interface SafetyReceipt {
   verificationState: string;
   /** One line that says where the case stands. */
   status: string;
+  /** Set only on a FHIR case ("fhir_r4"): expectedVersion then holds the Encounter's ETag as read, verbatim. */
+  receiverKind?: 'fhir_r4';
 }
+
+/** What a FHIR case's plan does, in place of a resend: the HL7 message is not sent again. */
+export const FHIR_PROPOSAL =
+  "Update the Encounter's location once, by another route than the original HL7 delivery";
 
 const str = (v: unknown) => (v === undefined || v === null ? '' : String(v));
 
@@ -180,7 +189,10 @@ export function safetyReceipt({
   const p = plan?.plan;
   const byPlan = approvalsByPlan(approvals, plan);
   const approval = approvalOf(byPlan.current);
-  const tried = (attempts ?? []).filter((x) => x.attempt);
+  // A FHIR update that Shutter's own last check stopped before the socket is not an attempt the receiver did not take
+  const tried = (attempts ?? []).filter(
+    (x) => x.attempt && (asObject(x.attempt.response) ?? {}).sent !== false,
+  );
   const sent = tried.filter((x) => WRITE_OUTCOMES.includes(str(x.attempt?.outcome)));
   const acknowledged = sent.filter((x) => ['applied', 'already_committed'].includes(str(x.attempt?.outcome)));
   const last =
@@ -193,8 +205,9 @@ export function safetyReceipt({
   // correction, a case that stopped before its write went out)
   // A case stopped with a write and no verification, as a write call that errored: nothing is coming to verify it
   const unverifiedWrite = sent.length > 0 && STOPPED_STATES.includes(c.state);
+  const fhir = receiverKind(snapshot) === 'fhir_r4';
   const verification = last
-    ? `${humanize(last.outcome)}${last.summary ? `: ${last.summary}` : ''}`
+    ? `${fhir ? fhirVerification(last.outcome).label : humanize(last.outcome)}${last.summary ? `: ${last.summary}` : ''}`
     : unverifiedWrite
       ? 'Not established: whether the write landed is for a person to check'
       : sent.length
@@ -218,11 +231,14 @@ export function safetyReceipt({
             ? 'not_applicable'
             : '';
   const target = `${humanize(c.event).toLowerCase()}${c.ward ? ` to ${c.ward}` : ''}`;
+  const etag = fhirSummary(snapshot)?.encounter?.etag ?? '';
   const action = !p
     ? 'No plan yet'
-    : writes
-      ? `Resend ${c.sourceSystem} ${target} unchanged, on condition the receiver is still at version ${str(p.expectedVersion)}`
-      : `${humanize(disposition)}: no write to the receiver`;
+    : writes && fhir
+      ? `${FHIR_PROPOSAL}, with If-Match on the version read${etag ? ` (ETag ${etag})` : ''}`
+      : writes
+        ? `Resend ${c.sourceSystem} ${target} unchanged, on condition the receiver is still at version ${str(p.expectedVersion)}`
+        : `${humanize(disposition)}: no write to the receiver`;
   return {
     caseId: c.caseId,
     state: c.state,
@@ -233,7 +249,7 @@ export function safetyReceipt({
     planVersion: p ? Number(p.version) : null,
     planDigest: str(p?.digest || approval?.planDigest),
     snapshotDigest: str(approval?.snapshotDigest || snapshot?.digest),
-    expectedVersion: writes ? str(approval?.expectedVersion ?? p?.expectedVersion) : '',
+    expectedVersion: writes ? (fhir ? etag : str(approval?.expectedVersion ?? p?.expectedVersion)) : '',
     receiverEpoch: str(approval?.receiverEpoch),
     gate: gate ? { stage: gate.stage, outcome: gate.outcome, policyVersion: gate.policyVersion } : null,
     decidedBy: decider(c, plan, approvals, approval, writes),
@@ -245,6 +261,7 @@ export function safetyReceipt({
     verification,
     verificationState,
     status: statusOf(c, sent.length, closure, last?.outcome === 'verified' ? 'verified at the receiver' : ''),
+    ...(fhir ? { receiverKind: 'fhir_r4' as const } : {}),
   };
 }
 
@@ -254,6 +271,8 @@ export function safetyReceipt({
  * receipt's "Versions, keys and times".
  */
 export function proposalCaption(r: SafetyReceipt): string {
+  if (r.disposition === 'resend' && r.planVersion !== null && r.receiverKind === 'fhir_r4')
+    return FHIR_PROPOSAL;
   return r.disposition === 'resend' && r.planVersion !== null ? 'Send it again, unchanged' : r.action;
 }
 
@@ -278,9 +297,11 @@ export function writesDetail(r: SafetyReceipt): string {
   return [
     r.writes ? `${r.acknowledged} acknowledged` : '',
     r.notWritten ? `${r.notWritten} attempt${r.notWritten === 1 ? '' : 's'} the receiver did not take` : '',
-    r.writes && r.expectedVersion
-      ? `conditional on version ${r.expectedVersion}${r.receiverEpoch ? `, epoch ${r.receiverEpoch}` : ''}`
-      : '',
+    r.writes && r.expectedVersion && r.receiverKind === 'fhir_r4'
+      ? `sent with If-Match ${r.expectedVersion}`
+      : r.writes && r.expectedVersion
+        ? `conditional on version ${r.expectedVersion}${r.receiverEpoch ? `, epoch ${r.receiverEpoch}` : ''}`
+        : '',
   ]
     .filter(Boolean)
     .join('; ');

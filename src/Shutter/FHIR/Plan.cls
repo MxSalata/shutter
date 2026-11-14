@@ -21,9 +21,6 @@ Class Shutter.FHIR.Plan [ Abstract ]
 /// A literal reference to a Location: the type, a slash and a FHIR id.
 Parameter LITERALLOCATION = "^Location/[A-Za-z0-9.\-]{1,64}$";
 
-/// A FHIR dateTime to the second, with optional fractions and a required zone.
-Parameter EVENTTIME = "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:([0-5][0-9]|60)(\.[0-9]+)?(Z|[+-]((0[0-9]|1[0-3]):[0-5][0-9]|14:00))$";
-
 /// The marker's code: the operation id, 32 lower-case hex characters.
 Parameter MARKERCODE = "^[0-9a-f]{32}$";
 
@@ -33,7 +30,8 @@ Parameter MARKERCODE = "^[0-9a-f]{32}$";
 /// <li><var>encounterBody</var>: the sealed read, as characters (UTF-8 already decoded).</li>
 /// <li><var>view</var>: {"prior_location", "target_location", "location_map": [{"ward", "bed", "location",
 /// "checked_identifier"}]}, built by the gate from the profile and the message. Only its shape is trusted.</li>
-/// <li><var>eventTime</var>: the FHIR dateTime to write as the end of the old entry and the start of the new one.</li>
+/// <li><var>eventTime</var>: the FHIR time to write as the end of the old entry and the start of the new one, one that
+/// Shutter.Util.Time.FromFHIR reads (the reader the verifier uses): seconds and an offset, a real date, no second 60.</li>
 /// <li><var>marker</var>: {"system", "code"}, the code 32 lower-case hex characters.</li>
 /// </ul>
 /// <var>detail</var> is {"completed_index", "appended_index", "marker_index", "paths"} on success, and
@@ -89,7 +87,7 @@ ClassMethod Apply(encounterBody As %String, view As %DynamicObject, eventTime As
     // The inputs: the caller's, so a bad one is a shape this builder cannot apply.
     Set path = ..ViewProblem(view)
     Quit:path'="" ..Refuse("FHIR_SHAPE_UNSUPPORTED", "view", path, .detail)
-    If ('$DATA(eventTime)) || ($ISOBJECT(eventTime)) || ('$MATCH(eventTime, ..#EVENTTIME)) {
+    If ('$DATA(eventTime)) || ($ISOBJECT(eventTime)) || (##class(Shutter.Util.Time).FromFHIR(eventTime) = "") {
         Quit ..Refuse("FHIR_SHAPE_UNSUPPORTED", "event_time", "", .detail)
     }
     Quit:'..MarkerShape(marker) ..Refuse("FHIR_SHAPE_UNSUPPORTED", "marker", "", .detail)

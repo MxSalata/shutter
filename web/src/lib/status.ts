@@ -138,6 +138,14 @@ export const DISPOSITIONS: Record<string, Status> = {
 export const disposition = (d: string): Status =>
   DISPOSITIONS[d] ?? s('neutral', humanize(d), undefined, IconListDetails);
 
+/** A FHIR case's resend: one version-aware update after its own approval; the HL7 message is not sent again. */
+export const FHIR_RESEND: Status = s(
+  'neutral',
+  'One FHIR update',
+  "One version-aware update (If-Match) after this case's own approval; no dry run; the HL7 message is not sent again",
+  IconRepeat,
+);
+
 /** One gate check, in four states: a check a plan that writes nothing does not need is not counted as passed. */
 export type CheckState = 'passed' | 'blocked' | 'unknown' | 'not_applicable' | 'later';
 
@@ -166,9 +174,16 @@ export const CHECK_STATES: Record<CheckState, Status> = {
 
 /**
  * The reason codes the gate (Gate.cls) gives a check it passes without checking anything: no write proposed, a check
- * of a later stage, no catalogue installed, a message that names no encounter to compare.
+ * of a later stage, no catalogue installed, a message that names no encounter to compare; and the FHIR gate's
+ * rehearsal row, since no dry run exists for that receiver (its detail says what stands in its place).
  */
-export const NOT_APPLICABLE_CODES = ['NOT_APPLICABLE', 'NOT_YET_REQUIRED', 'NOT_CONFIGURED', 'NO_ENCOUNTER'];
+export const NOT_APPLICABLE_CODES = [
+  'NOT_APPLICABLE',
+  'NOT_YET_REQUIRED',
+  'NOT_CONFIGURED',
+  'NO_ENCOUNTER',
+  'FHIR_NO_DRY_RUN_SUBSTITUTED',
+];
 
 /** A check that belongs to a later stage: on a case waiting for authorization, "not applicable" would misread. */
 const LATER_CODE = 'NOT_YET_REQUIRED';
@@ -258,6 +273,43 @@ export const ATTEMPTS: Record<string, Status> = {
 
 export const attempt = (outcome: string): Status => ATTEMPTS[outcome] ?? s('neutral', humanize(outcome));
 
+/**
+ * What a FHIR server answered the one version-aware update (If-Match) of a FHIR case: its own hints, since the shared
+ * ones speak of a 201 and a receipt key that a FHIR server has neither of.
+ */
+export const FHIR_ATTEMPTS: Record<string, Status> = {
+  applied: s(
+    'info',
+    'Acknowledged',
+    'The FHIR server accepted the update; verification reads the version it committed from its history',
+    IconSend,
+  ),
+  uncertain: s(
+    'attention',
+    'No answer: outcome unknown',
+    'The update may or may not have been committed; the verifier looks for its marker in the history',
+    IconQuestionMark,
+  ),
+  version_conflict: s(
+    'blocking',
+    'Refused: the Encounter changed',
+    'The version named in If-Match was no longer current; nothing was written',
+    IconCircleX,
+  ),
+  refused: s('blocking', 'Refused', 'The FHIR server refused the update', IconCircleX),
+  error: s('blocking', 'Error', 'The update could not be sent', IconAlertCircle),
+};
+
+export const fhirAttempt = (outcome: string): Status => FHIR_ATTEMPTS[outcome] ?? attempt(outcome);
+
+/** A FHIR update that Shutter's own last check before the socket stopped: nothing reached the FHIR server. */
+export const FHIR_NOT_SENT: Status = s(
+  'blocking',
+  "Not sent: Shutter's last check stopped it",
+  'Shutter checked once more just before sending and stopped; nothing reached the FHIR server',
+  IconHandStop,
+);
+
 /** What the verifier found at the receiver; the two last are what a case without a verification says. */
 export const VERIFICATIONS: Record<string, Status> = {
   verified: s('positive', 'Effect verified at the receiver', undefined, IconCircleCheck),
@@ -271,6 +323,18 @@ export const VERIFICATIONS: Record<string, Status> = {
 
 export const verification = (outcome: string): Status =>
   VERIFICATIONS[outcome] ?? s('neutral', humanize(outcome));
+
+/**
+ * A FHIR case's verifier outcomes where they differ: a history the receiver returned is not proof that no version was
+ * committed, and an unsettled write is an unknown outcome.
+ */
+export const FHIR_VERIFICATIONS: Record<string, Status> = {
+  not_committed: s('attention', 'Not found in the history read', undefined, IconQuestionMark),
+  unresolved: s('attention', 'Outcome unknown', undefined, IconQuestionMark),
+};
+
+export const fhirVerification = (outcome: string): Status =>
+  FHIR_VERIFICATIONS[outcome] ?? verification(outcome);
 
 /** The writes a run made: information when there were some, neutral when none. Proposed and made are kept apart. */
 export function writes(n: number): Status {

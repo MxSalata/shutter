@@ -1,10 +1,65 @@
-import type { CaseEvent, CaseResend, GateCheck, GateDecision, SnapshotItem } from '@/api/types';
+import type {
+  AttemptView,
+  CaseEvent,
+  CaseResend,
+  FhirSummary,
+  GateCheck,
+  GateDecision,
+  PlanView,
+  ReceiverKind,
+  Snapshot,
+  SnapshotItem,
+} from '@/api/types';
 import { asArray, asObject } from '@/lib/json';
 import { formatTime, humanize } from '@/lib/format';
 
 /** Pure helpers behind the case page's panels: what they derive from the API's data, kept apart to be tested. */
 
 const str = (v: unknown) => (v === undefined || v === null ? '' : String(v));
+
+/**
+ * The receiver kind a case's evidence recorded: route.kind of the sealed route item (or summary.route), "fhir_r4" on a
+ * FHIR case and absent on every other, so a branch keyed on it is dead on every ADT, pathology or document case.
+ */
+export function receiverKind(snapshot: Snapshot | null | undefined): ReceiverKind | undefined {
+  const item = snapshot?.items?.find((i) => i.kind === 'route');
+  const route = asObject(item?.data) ?? asObject(asObject(snapshot?.summary)?.route);
+  return route?.kind === 'fhir_r4' ? 'fhir_r4' : undefined;
+}
+
+/** summary.fhir of a FHIR case's evidence: identifiers, statuses and version ids; null on every other case. */
+export function fhirSummary(snapshot: Snapshot | null | undefined): FhirSummary | null {
+  if (receiverKind(snapshot) !== 'fhir_r4') return null;
+  return (asObject(asObject(snapshot?.summary)?.fhir) as FhirSummary | undefined) ?? null;
+}
+
+/**
+ * The same kind where a panel is handed the plan and not the evidence: the FHIR gate decides every FHIR case, and only
+ * it writes a policy version starting "fhir-" (fhir-2026-11-14.1).
+ */
+export function kindOfPlan(view: PlanView | null | undefined): ReceiverKind | undefined {
+  return (view?.gateDecisions ?? []).some((d) => str(d.policyVersion).startsWith('fhir-'))
+    ? 'fhir_r4'
+    : undefined;
+}
+
+/** The same kind where a panel is handed the attempts: a FHIR update's receipt and verification say kind "fhir". */
+export function kindOfAttempts(attempts: AttemptView[] | null | undefined): ReceiverKind | undefined {
+  return (attempts ?? []).some(
+    (x) => asObject(x.attempt?.receipt)?.kind === 'fhir' || asObject(x.verification?.detail)?.kind === 'fhir',
+  )
+    ? 'fhir_r4'
+    : undefined;
+}
+
+/**
+ * What a FHIR case's 404 receipt means: the history read whole holds no version marked by a write of this case. It is
+ * never proof that nothing was committed (DESIGN 2.10 row 6).
+ */
+export const NO_MARKER = "No version in the history read carries this case's marker";
+
+/** A FHIR version id as the page prints it: quoted, a string and never a number ("2"). */
+export const quotedVersion = (v: unknown) => `"${str(v)}"`;
 
 /**
  * What a receiver did with a message Shutter does not model, an order, a result or a document (CONTRACTS v1.45). Its kind
@@ -107,9 +162,11 @@ export function kindLabel(kind: string, receiver?: string): string | undefined {
 }
 
 /** One line that says what an observation found, so the list reads without opening each item. */
-export function describeItem(item: SnapshotItem, receiver?: string): string {
+export function describeItem(item: SnapshotItem, receiver?: string, kind?: ReceiverKind): string {
   const noun = receiver || 'the downstream system';
   const d = asObject(item.data) ?? {};
+  // A FHIR case's receiver observations say kind "fhir" themselves, for a caller not handed the route
+  const fhir = kind === 'fhir_r4' || asObject(d.body)?.kind === 'fhir';
   switch (item.kind) {
     case 'operation':
       return `${humanize(str(d.event))}${d.ward ? ` to ${str(d.ward)}` : ''} at ${formatTime(str(d.event_time))} for ${str(d.encounter_id)}`;
@@ -133,7 +190,7 @@ export function describeItem(item: SnapshotItem, receiver?: string): string {
       const status = Number(d.http_status);
       const b = asObject(d.body) ?? {};
       if (status === 200)
-        return `${humanize(str(b.state))}${b.ward ? ` in ${str(b.ward)}` : ''}, version ${str(b.version)}${b.epoch !== undefined ? `, epoch ${str(b.epoch)}` : ''}; ${asArray(b.history).length} operations in its history`;
+        return `${humanize(str(b.state))}${b.ward ? ` in ${str(b.ward)}` : ''}, version ${fhir ? quotedVersion(b.version) : str(b.version)}${b.epoch !== undefined && !fhir ? `, epoch ${str(b.epoch)}` : ''}; ${asArray(b.history).length} operations in its history`;
       if (status === 404) return `${noun.charAt(0).toUpperCase()}${noun.slice(1)} has no such encounter`;
       // A receiver whose description names no state endpoint (an orders and results receiver with no API) was not asked
       if (!status && /no state endpoint/.test(str(b.error)))
@@ -146,6 +203,7 @@ export function describeItem(item: SnapshotItem, receiver?: string): string {
       const b = asObject(d.body) ?? {};
       if (status === 200)
         return `Committed: version ${str(b.version_before)} to ${str(b.version_after)}, at ${formatTime(str(b.applied_at))}`;
+      if (status === 404 && fhir) return NO_MARKER;
       if (status === 404) return `No receipt: ${noun} did not commit this operation`;
       // -1: the receiver keeps no receipts (no receipt path in its description), as against 0 for no answer
       if (status === -1) return `Not read: ${noun} keeps no receipts Shutter reads`;

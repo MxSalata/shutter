@@ -37,7 +37,14 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { TechDetail } from '@/components/TechDetail';
 import { Timestamp } from '@/components/Timestamp';
 import { humanize } from '@/lib/format';
-import { caseOutcome, gateOutcome, verification, writes, type CaseOutcome } from '@/lib/status';
+import {
+  caseOutcome,
+  fhirVerification,
+  gateOutcome,
+  verification,
+  writes,
+  type CaseOutcome,
+} from '@/lib/status';
 import { CATEGORY_TEXT } from '@/lib/categories';
 import { SHOW_NEXT_ACTION } from '@/lib/events';
 import { useGuideTarget } from '@/lib/guideDock';
@@ -732,7 +739,13 @@ export function DecisionCard({
                     {notChecked ? (
                       <NotCheckedWords accepted={notChecked.accepted} />
                     ) : r.verificationState ? (
-                      <StatusBadge {...verification(r.verificationState)} size="md" w="fit-content" />
+                      <StatusBadge
+                        {...(r.receiverKind === 'fhir_r4' ? fhirVerification : verification)(
+                          r.verificationState,
+                        )}
+                        size="md"
+                        w="fit-content"
+                      />
                     ) : (
                       // No verification state yet: the words stand alone, so the fact is never empty
                       <Text size="sm">

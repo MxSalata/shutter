@@ -1903,3 +1903,129 @@ describe('the case page in the trial', () => {
     expect(again).toHaveAccessibleDescription('Needs a real model: not in the trial');
   });
 });
+
+describe('a FHIR case in true words', () => {
+  beforeEach(() => {
+    resetMock('approver');
+    resetAssistantForTests();
+    env.trial = false;
+    env.reduced = false;
+    useAppearance.setState({ detail: 'plain' });
+  });
+
+  const ID = 'C-000002';
+  const x = fixtures.cases[ID];
+  const POLICY = 'fhir-2026-11-14.1';
+  const NO_DRY_RUN =
+    'No dry run exists for this receiver: the version read, If-Match and the measured refusal of a changed version stand in its place';
+
+  /** The recorded held case as a FHIR case: its route kind, the Encounter read, the FHIR gate's rows, no rehearsal. */
+  function serveFhir() {
+    const snapshot = structuredClone(x.snapshot) as unknown as {
+      items: { kind: string; data: unknown }[];
+      summary: Record<string, unknown>;
+    };
+    snapshot.items = snapshot.items.map((i) =>
+      i.kind === 'route' ? { ...i, data: { ...(i.data as object), kind: 'fhir_r4' } } : i,
+    );
+    snapshot.summary = {
+      ...snapshot.summary,
+      route: { kind: 'fhir_r4' },
+      fhir: { kind: 'fhir_r4', encounter: { id: 'enc-1', etag: 'W/"1"', version_id: '1' } },
+      ward_state: { ward: 'WARD-A', version: '1', state: 'admitted' },
+    };
+    const plan = structuredClone(x.plan) as unknown as {
+      plan: Record<string, unknown>;
+      gateDecisions: { policyVersion: string; checks: unknown[] }[];
+      rehearsal: unknown;
+    };
+    plan.plan.expectedVersion = '';
+    plan.rehearsal = null;
+    plan.gateDecisions = plan.gateDecisions.slice(0, 1).map((d) => ({
+      ...d,
+      policyVersion: POLICY,
+      checks: [
+        {
+          check: 'rehearsal',
+          result: 'pass',
+          reason_code: 'FHIR_NO_DRY_RUN_SUBSTITUTED',
+          detail: NO_DRY_RUN,
+        },
+        { check: 'enablement', result: 'pass', reason_code: 'FHIR_RECOVERY_ON', detail: 'Recovery is on' },
+      ],
+    }));
+    server.use(
+      http.get(`/api/shutter/cases/${ID}/snapshot`, () => HttpResponse.json(snapshot)),
+      http.get(`/api/shutter/cases/${ID}/plan`, () => HttpResponse.json(plan)),
+    );
+  }
+
+  it('asks for approval on the ETag read, with no rehearsal words and no resend preview', async () => {
+    serveFhir();
+    renderCase(ID);
+    const approval = await screen.findByRole('region', { name: 'Approval' });
+    expect(await within(approval).findByText('Waiting for approval')).toBeInTheDocument();
+    expect(await within(approval).findByText('Base version (ETag)')).toBeInTheDocument();
+    expect(within(approval).getByText('W/"1"')).toBeInTheDocument();
+    expect(within(approval).queryByText('Receiver version')).not.toBeInTheDocument();
+    expect(
+      within(approval).queryByRole('button', { name: 'What would resending now do?' }),
+    ).not.toBeInTheDocument();
+
+    // The gate: the rehearsal row is not a green Passed, and each FHIR row asks its question
+    const gate = screen.getByRole('region', { name: 'The gate' });
+    expect(within(gate).getByText('At proposal')).toBeInTheDocument();
+    expect(within(gate).queryByText(/before the rehearsal/)).not.toBeInTheDocument();
+    await openGateDecision(within(gate).getByText('At proposal'));
+    expect(
+      await within(gate).findByText('No dry run exists for this receiver. What stands in its place?'),
+    ).toBeInTheDocument();
+    expect(within(gate).getByText('Has the site turned recovery on for this receiver?')).toBeInTheDocument();
+    expect(
+      within(gate).queryByText("Did the receiver's dry run say this would apply?"),
+    ).not.toBeInTheDocument();
+    const row = within(gate).getByText('FHIR_NO_DRY_RUN_SUBSTITUTED').closest('tr')!;
+    expect(row).toHaveTextContent('Not applicable');
+    expect(row).not.toHaveTextContent('Passed');
+
+    // The dialog says what is sent, on which version, and what must not follow it
+    await userEvent.click(within(approval).getByRole('button', { name: 'Approve the resend' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Approve the resend: plan v1' });
+    const words = within(dialog).getByTestId('fhir-approval').textContent ?? '';
+    expect(words).toMatch(
+      /^Shutter sends this update with If-Match on the version read at .+ \(ETag W\/"1"\)\. /,
+    );
+    expect(words).toContain(
+      'This server software refused a changed version when it was measured. No dry run exists for this receiver. After this update, do not resend the original HL7 message from the engine.',
+    );
+    expect(dialog).not.toHaveTextContent(/conditional on receiver version/);
+    expect(dialog).toHaveTextContent(
+      "Update the Encounter's location once, with If-Match on the version read",
+    );
+    expect(dialog).not.toHaveTextContent(/Resend the /);
+    expect(dialog).toHaveTextContent('WARD-A at version "1"');
+  });
+
+  it('says no dry run exists where the rehearsal would be', async () => {
+    serveFhir();
+    renderCase(ID);
+    await openStep('What was written');
+    const rehearsal = await screen.findByRole('region', { name: 'Rehearsal' });
+    expect(within(rehearsal).getByText('No dry run exists for this receiver')).toBeInTheDocument();
+    expect(rehearsal).not.toHaveTextContent('Not rehearsed yet.');
+  });
+
+  it('keeps the ADT words of the same case', async () => {
+    renderCase(ID);
+    const approval = await screen.findByRole('region', { name: 'Approval' });
+    expect(await within(approval).findByText('Receiver version')).toBeInTheDocument();
+    expect(within(approval).queryByText('Base version (ETag)')).not.toBeInTheDocument();
+    expect(
+      within(approval).getByRole('button', { name: 'What would resending now do?' }),
+    ).toBeInTheDocument();
+    await openStep('What was written');
+    expect(await screen.findByRole('region', { name: 'Rehearsal' })).not.toHaveTextContent(
+      'No dry run exists for this receiver',
+    );
+  });
+});

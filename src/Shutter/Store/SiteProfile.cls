@@ -262,6 +262,8 @@ ClassMethod Validate(p As %DynamicObject) As %String
         If r.%IsDefined("cancels") && (r.%GetTypeOf("cancels") '= "boolean") Return at _ ".cancels: must be true or false"
         // A receiver's document profile (11.2), off when absent.
         If r.%IsDefined("documents") { Set dp = ##class(Shutter.Util.DocumentCase).SettingsProblem(r.%Get("documents")) If dp '= "" Return at _ ".documents" _ dp }
+        // A FHIR R4 receiver's block (Shutter.FHIR.Profile), read only when the entry has one.
+        If r.%IsDefined("fhir") { Set fp = ##class(Shutter.FHIR.Profile).SettingsProblem(r, rcv, i) If fp '= "" Return at _ fp }
         // The site's one line on where to look (Shutter.Util.ReceiverCheck): a hint for a person, never read by the core.
         If r.%IsDefined("manual_check") {
             Set problem = ##class(Shutter.Util.ReceiverCheck).ManualCheckProblem(r.%Get("manual_check"))
@@ -860,6 +862,8 @@ ClassMethod SiteInstall() As %Boolean
 /// with neither reads as a profile from before v1.8 does, on the defaults.
 ClassMethod HasNoApi(entry) As %Boolean [ Private ]
 {
+    // A FHIR R4 receiver is read and written through its own items: it has no path of this kind and its label names no address.
+    If $ISOBJECT(entry) && $ISOBJECT(entry.%Get("fhir")) Quit 1
     If '$ISOBJECT(entry) || $ISOBJECT(entry.%Get("api")) Quit 0
     // An orders and results receiver (a LIMS, order communications) has no receiver API Shutter reads: one the site gave no
     // api is never read at the demo receiver's address, and its label names no address.
@@ -890,6 +894,8 @@ ClassMethod ReceiverPath(name As %String, kind As %String, encounter As %String 
 ClassMethod ReceiverFeatures(name As %String) As %DynamicObject
 {
     Set r = ..Receiver(name)
+    // A FHIR R4 receiver declares nothing: what it can do is read from the server, and none of these four is its route.
+    If $ISOBJECT(r) && $ISOBJECT(r.%Get("fhir")) Quit {"conditional_writes": false, "receipts": false, "history": false, "dry_run": false}
     If $ISOBJECT(r) && $ISOBJECT(r.%Get("features")) Quit r.%Get("features")
     If '$ISOBJECT(r) && ..SiteInstall() Quit {"conditional_writes": false, "receipts": false, "history": false, "dry_run": false}
     Quit {"conditional_writes": true, "receipts": true, "history": true, "dry_run": true}
@@ -920,12 +926,21 @@ ClassMethod ReceiverCategory(name As %String) As %String
     Quit category
 }
 
+/// The receiver's kind: fhir_r4 for an entry with a fhir block (Shutter.FHIR.Profile), else "".
+ClassMethod ReceiverKind(name As %String) As %String
+{
+    Set r = ..Receiver(name)
+    Quit $SELECT($ISOBJECT(r) && $ISOBJECT(r.%Get("fhir")): "fhir_r4", 1: "")
+}
+
 /// The receiver's history policy, current or correct (v1.23): the entry's own history_policy when it has one, else
 /// derived from its category (history_of_record keeps the history straight: correct; the others: current), else, for
-/// an entry with neither, the profile's site-wide history_policy (deprecated since v1.23), else current.
+/// an entry with neither, the profile's site-wide history_policy (deprecated since v1.23), else current. An entry with
+/// a fhir block is current whatever else is said: the site-wide flag never reaches it.
 ClassMethod ReceiverHistoryPolicy(name As %String) As %String
 {
     Set r = ..Receiver(name)
+    If $ISOBJECT(r) && $ISOBJECT(r.%Get("fhir")) Quit "current"
     Set own = $SELECT($ISOBJECT(r): ##class(Shutter.Util.Json).Str(r, "history_policy"), 1: "")
     If $LISTFIND($LISTBUILD("current", "correct"), own) Quit own
     If $ISOBJECT(r) && (##class(Shutter.Util.Json).Str(r, "category") '= "") Quit $SELECT(..ReceiverCategory(name) = "history_of_record": "correct", 1: "current")

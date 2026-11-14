@@ -167,6 +167,7 @@ jobs:
           python3 scripts/check-records.py --self-test
           python3 tests/privacy_check.py --self-test
           python3 tests/knowledge_check.py --self-test
+          python3 tests/e2e/lineage_check.py --self-test
       # The HL7 folders and scenarios.json are made by fixtures/generate.py, so a rerun must write the committed files
       # byte for byte: a scenario edited by hand instead of in the script would otherwise be lost at the next rerun. The
       # copy runs next to a copy of scenarios.json, which keeps S22 (written by hand) as the script does.
@@ -183,6 +184,10 @@ jobs:
       # of block-reasons.json is written there as that file gives it (scripts/build-explain.py rebuilds the section)
       - name: Every reason code of the gate is explained in plain words, as block-reasons.json gives it
         run: python3 tests/knowledge_check.py
+      # The FHIR conformance file is carried in two classes (the unit test's exchanges, and the name, digest and counts a
+      # proof must give to be imported): neither copy may differ from tests/conformance/fhir-facade-v1.json
+      - name: The classes that carry the FHIR conformance file hold the file as it is
+        run: python3 tests/conformance/embed.py --check
       # The model gets tokens (MRN-T1, ENC-T1) for the patient's identifiers and never their name, date of birth,
       # address, phone numbers or note text: nothing personal from the fixtures may appear in what a recorded run saw,
       # and no NHS number in it or in the demo's agent output.
@@ -428,6 +433,20 @@ jobs:
       - name: The operator's and the approver's routes
         if: matrix.shard == 'board'
         run: python3 tests/e2e/roles_check.py --url "$IRIS_URL"
+      # The FHIR R4 receiver profile. First the test FHIR server a demo install serves, over HTTP: every exchange of the
+      # conformance file answered as IRIS for Health's own FHIR server answered it when measured, which writes the proof
+      # a FHIR receiver needs before anything is sent to it. Then a stock HL7 TCP operation fails a ward transfer whose
+      # receiver the site profile describes as that server: blocked while no proof is imported; one update with If-Match
+      # after the case's own approval, verified from the history; a lost answer; another writer; recovery switched off.
+      # Both run after the unit tests, whose resets of the test server's store are over, and each case seeds itself.
+      # They run before the three checks below because the second works through terminal sessions: the Community license
+      # allows 8 connections, and the users those checks sign in hold all 8 for 15 minutes after their last request.
+      - name: The test FHIR server over HTTP, and the proof its run gives
+        if: matrix.shard == 'checks'
+        run: FHIR_PASSWORD=SYS python3 tests/conformance/fhir_conformance.py --base "$IRIS_URL/fhir-facade/r4" --target facade --user _SYSTEM --proof "$RUNNER_TEMP/fhir-proof.json"
+      - name: The FHIR R4 receiver profile, end to end
+        if: matrix.shard == 'checks'
+        run: python3 tests/e2e/fhir_receiver_check.py --ctr "$CTR" --url "$IRIS_URL" --proof "$RUNNER_TEMP/fhir-proof.json"
       # Tries to break the approval boundary: another plan digest, a stale case version, an operator's approval and one
       # approval sent twice with its key then reused (S2), the receiving system changed after the approval (S20), and a
       # resend of a delivery the receiver already holds (S3), each refused with nothing written. It plays its own
@@ -456,7 +475,8 @@ jobs:
         if: matrix.shard == 'checks'
         run: python3 tests/e2e/demo_pathology_check.py --url "$IRIS_URL"
       # Every case the shard played, from the message warehouse: no write before the gate and a rehearsal, an approval
-      # before the write where one case holds the session, the board before the gate, every resolved resend verified
+      # before the write where one case holds the session, the board before the gate, every resolved resend verified;
+      # for a FHIR case, exactly one write, after the FHIR gate and the case's own approval
       - name: Every case's lineage in the message warehouse
         run: python3 tests/e2e/lineage_check.py --url "$IRIS_URL"
       # The scenarios fail deliveries on purpose (the routing processes log those); a runtime error in Shutter's own code

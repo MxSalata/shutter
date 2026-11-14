@@ -2,7 +2,7 @@ import { Box, Group, Stack, Text, Title, UnstyledButton, VisuallyHidden } from '
 import { IconCheck, IconClock, IconQuestionMark, IconX } from '@tabler/icons-react';
 import { useEffect, useRef, useState } from 'react';
 import { usePlan, useRuns, useSnapshot } from '@/api/hooks';
-import type { AgentRun, Plan, Snapshot, SnapshotItem } from '@/api/types';
+import type { AgentRun, Plan, ReceiverKind, Snapshot, SnapshotItem } from '@/api/types';
 import { ApiSource } from '@/components/ApiSource';
 import { CodeChip } from '@/components/CodeChip';
 import { Digest } from '@/components/Digest';
@@ -27,7 +27,7 @@ import { asArray, asObject } from '@/lib/json';
 import { displayZone, formatUtcTime, formatZoned, humanize, keyLabel, parseTime, plural } from '@/lib/format';
 import { useNow } from '@/lib/useNow';
 import { useTechnical } from '@/stores/appearance';
-import { describeEntry, describeItem, kindLabel } from './derive';
+import { describeEntry, describeItem, kindLabel, quotedVersion, receiverKind } from './derive';
 import { EncounterTimeline } from './EncounterTimeline';
 import { FindingsLines } from './FindingsLines';
 import { investigationRuns } from './runClock';
@@ -247,7 +247,18 @@ function ValidationLine({ d }: { d: Record<string, unknown> }) {
 }
 
 /** One observation's finding in plain words, every time with its date; the kinds with no time read as the case's story names them. */
-function PlainLine({ item, receiver, event }: { item: SnapshotItem; receiver?: string; event: string }) {
+function PlainLine({
+  item,
+  receiver,
+  event,
+  kind,
+}: {
+  item: SnapshotItem;
+  receiver?: string;
+  event: string;
+  /** The case's route.kind: a FHIR case's receipt is a marked version in the history, not a receipt store's row. */
+  kind?: ReceiverKind;
+}) {
   const d = asObject(item.data) ?? {};
   switch (item.kind) {
     case 'message':
@@ -271,6 +282,10 @@ function PlainLine({ item, receiver, event }: { item: SnapshotItem; receiver?: s
       );
     case 'receipt': {
       const b = asObject(d.body) ?? {};
+      if (Number(d.http_status) === 200 && (kind === 'fhir_r4' || b.kind === 'fhir'))
+        return (
+          <Text size="md">{`Version ${quotedVersion(b.version_after)} in the history read carries this case's marker.`}</Text>
+        );
       if (Number(d.http_status) === 200 && !d.not_applicable)
         return (
           <Text size="md">
@@ -284,7 +299,7 @@ function PlainLine({ item, receiver, event }: { item: SnapshotItem; receiver?: s
             .
           </Text>
         );
-      return <Text size="md">{describeItem(item, receiver)}</Text>;
+      return <Text size="md">{describeItem(item, receiver, kind)}</Text>;
     }
     case 'later_event':
       return (
@@ -300,7 +315,7 @@ function PlainLine({ item, receiver, event }: { item: SnapshotItem; receiver?: s
         </Text>
       );
     default:
-      return <Text size="md">{describeItem(item, receiver)}</Text>;
+      return <Text size="md">{describeItem(item, receiver, kind)}</Text>;
   }
 }
 
@@ -668,7 +683,7 @@ export function EvidencePanel({
                   ) : (
                     g.items.map((item, n) => (
                       <Stack key={item.seq} gap={6}>
-                        <PlainLine item={item} receiver={receiver} event={event} />
+                        <PlainLine item={item} receiver={receiver} event={event} kind={receiverKind(s)} />
                         {item.kind === 'message' ? (
                           <TechDetail
                             key={`segments-${request}`}
