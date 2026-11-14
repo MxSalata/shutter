@@ -146,7 +146,7 @@ export function Turn({
   return (
     <Box component="article" aria-labelledby={turnId(questionId)} className="ask-turn">
       <Stack gap="xs">
-        <Title order={order} id={turnId(questionId)} tabIndex={-1}>
+        <Title order={order} size="h4" id={turnId(questionId)} tabIndex={-1}>
           {question}
         </Title>
         {q.isError ? (
