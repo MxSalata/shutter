@@ -2,7 +2,7 @@
 
 ## What it does
 
-In this release the receiver must be InterSystems IRIS for Health's own FHIR R4 server. The capability check accepts only a conformance run with no differing exchange, and the conformance file holds that server's answers. No other FHIR server can pass it.
+In this release the receiver must be InterSystems IRIS for Health's own FHIR R4 server. The capability check reads a proof document as `tests/conformance/fhir_conformance.py` writes it after a run with no differing exchange, and the conformance file holds that server's answers. The document is not signed: whoever imports one vouches that the run took place. No other FHIR server can pass it.
 
 What this profile does: for a receiver entry that carries a `fhir` object, a failed A02 (transfer) that names no bed, whose HL7 delivery a stock `EnsLib.HL7.Operation.TCPOperation` gave up on before a connection opened, becomes at most one person-approved `PUT Encounter/{id}` with `If-Match`. Before closing the case Shutter finds the version carrying its marker in the Encounter's history as the receiver returned it, reads that version back by its version id when the receiver's answer named one, checks it against the approved base, and checks that the current record has not undone the move.
 
@@ -182,7 +182,7 @@ On IRIS for Health (2026.2, 2026.3.0AI.154, 2027.1.0AI.109) the tag stays on Shu
 - An A02 that names a bed stops for a person: this version moves wards only.
 - The failed delivery must be a stock HL7 TCP operation whose engine record can be read and whose attempts all failed before a connection opened; any other source stops for a person.
 - After a FHIR update, do not resend the original HL7 message from the engine. Shutter stops while the engine holds the message suspended, and it cannot stop a message that is resent later by hand.
-- A proof is a conformance run against the same server software and version as the endpoint names, not against the endpoint itself, and it can be recorded only for a server that answers the conformance file as IRIS for Health did.
+- A proof is a conformance run against the same server software and version as the endpoint names, not against the endpoint itself. Shutter checks the proof document's shape, not its origin: it is not signed, and whoever imports one vouches that the run took place.
 - Turning the profile on takes the API and a terminal; the Site profile page shows a FHIR entry and does not edit it.
 - Shutter signs in with a user name and password (an IRIS credential). OAuth is not supported, and TLS is passed to the adapter and was not measured.
 - Shutter's FHIR credentials can write every resource type the endpoint allows them; a narrower grant is the site's to configure.
