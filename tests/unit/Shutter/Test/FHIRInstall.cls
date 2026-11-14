@@ -263,6 +263,26 @@ Method TestDoctorWithAndWithoutAnEntry()
     Kill ^Shutter.Config("fhirItems")
 }
 
+/// A demo install with S35's receiver (Shutter.FHIR.Install.Demo): the four items placed on one server, the proof of the
+/// in-process run on record and matching, the demo's credential stored. Only where the items' server is recorded and the
+/// profile has the demo's entry with a fhir block.
+Method TestDoctorOnTheDemo()
+{
+    Set c = "Shutter.FHIR.Install", name = $PARAMETER(c, "DEMORECEIVER")
+    Set entry = ##class(Shutter.Store.SiteProfile).Receiver(name)
+    If '..HadNode || '$ISOBJECT(entry) || '$ISOBJECT(entry.%Get("fhir")) Do $$$AssertSkipped("no recorded FHIR items, or no " _ name _ " entry with a fhir block: not a demo install with S35's receiver") Quit
+    Set ^Shutter.Config("fhirItems") = ..Node
+    Set d = $CLASSMETHOD(c, "Doctor"), row = ""
+    Set iter = d.receivers.%GetIterator()
+    While iter.%GetNext(, .one) { Set:one.receiver=name row = one }
+    Do $$$AssertTrue($ISOBJECT(row), "the Doctor names " _ name _ ": " _ d.%ToJSON())
+    Quit:'$ISOBJECT(row)
+    Do $$$AssertEquals(row.proof, "matches", "its proof is on record and matches")
+    Do $$$AssertEquals(d."items_problem", "", "the four items are placed")
+    Do $$$AssertEquals(d.%GetTypeOf("endpoints_agree") _ d."endpoints_agree", "boolean1", "and name one server")
+    Do $$$AssertEquals(row.%GetTypeOf("credential") _ row.credential, "boolean1", "with a stored credential")
+}
+
 /// The entry of DESIGN 2.1 under this test's name.
 ClassMethod Entry() As %DynamicObject
 {
