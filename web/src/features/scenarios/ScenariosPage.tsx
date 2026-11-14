@@ -51,6 +51,7 @@ import { PageSkeleton } from '@/components/PageSkeleton';
 import { DispositionBadge, StateBadge } from '@/components/StateBadge';
 import { StatusBadge } from '@/components/StatusBadge';
 import { TechDetail } from '@/components/TechDetail';
+import { Term } from '@/components/Term';
 import { StackTable } from '@/components/StackTable';
 import { caseOutcome, caseState, PROVENANCE, proposedWrites, ranOnIris, writes } from '@/lib/status';
 import { describeError } from '@/lib/errors';
@@ -320,17 +321,23 @@ function RunBanner({ run, cases }: { run: ScenarioRun; cases: CaseSummary[] | un
 
 /**
  * The writes a scenario should make, as a badge: conditional writes are proposed, never made before the gate. A FHIR
- * receiver (S35) takes one version-aware update, so its badge says that instead.
+ * receiver (S35) takes one version-aware update, so its badge says that instead. Plain counts the writes in plain
+ * words, since the row's diagram beside it says what conditional means ("1 write if unchanged"); Technical keeps the
+ * terms.
  */
 function WritesBadge({ n, inAll = false, fhir = false }: { n: number; inAll?: boolean; fhir?: boolean }) {
+  const technical = useTechnical();
   if (!n) return <StatusBadge {...writes(0)} label="Nothing written" hint={undefined} />;
+  const plural = n === 1 ? '' : 's';
   return (
     <StatusBadge
       {...proposedWrites(n)}
       label={
         fhir
-          ? '1 update with If-Match'
-          : `${n} conditional write${n === 1 ? '' : 's'}${inAll ? ' in all' : ''}`
+          ? technical
+            ? '1 update with If-Match'
+            : '1 update'
+          : `${n}${technical ? ' conditional' : ''} write${plural}${inAll ? ' in all' : ''}`
       }
       hint={undefined}
     />
@@ -923,6 +930,22 @@ function AllScenarios({
   );
 }
 
+/**
+ * The page's lead, its "case" one press from what a case is: on the short route from Home, this is where a case is first
+ * named, so it is explained here and nowhere before.
+ */
+function CaseLead({ words }: { words: string }) {
+  const [before, after] = words.split(/\bcase\b/);
+  if (after === undefined) return <>{words}</>;
+  return (
+    <>
+      {before}
+      <Term term="case">case</Term>
+      {after}
+    </>
+  );
+}
+
 /** The judges' path (`?trial=judge`) lands on the S8 card once per page, never again on a later visit to Scenarios. */
 let judgeLanded = false;
 
@@ -1095,7 +1118,7 @@ export default function ScenariosPage() {
         title="Scenarios"
         icon={IconFlask2}
         hue="cyan"
-        lead={hidden || playerOff ? SCENARIOS_LEAD.lookOnly : byEnv(SCENARIOS_LEAD)}
+        lead={<CaseLead words={hidden || playerOff ? SCENARIOS_LEAD.lookOnly : byEnv(SCENARIOS_LEAD)} />}
         actions={
           <Stack gap={4} align="flex-end">
             <Tooltip

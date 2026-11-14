@@ -243,7 +243,7 @@ export function ScenarioDiagram({ scenario, mode }: { scenario: Scenario; mode: 
   const diagram = scenarioDiagram(scenario, mode, technical);
   if (!diagram) return null;
   const parts = diagram.nodes.map((n, i) => placeNode(n, technical, i));
-  const frame = endFrame(DIAGRAM_MODES.map((m) => endOf(scenario, m)));
+  const frame = endFrame(DIAGRAM_MODES.map((m) => endOf(scenario, m, technical)));
   const end = placeEnd(diagram.end, frame.width);
   let x = 0;
   const drawn: React.ReactNode[] = [];

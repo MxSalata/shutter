@@ -10,7 +10,7 @@ import { http, HttpResponse } from 'msw';
 import { LOOK_ONLY_DEMO, resetMock } from '@/mocks/handlers';
 import { useAppearance } from '@/stores/appearance';
 import type { DetailLevel } from '@/env/mode';
-import { layer1WordCount } from '@/test/words';
+import { layer1WordCount, sentence } from '@/test/words';
 import { theme } from '@/theme';
 import ScenariosPage from './ScenariosPage';
 import { SCENARIOS_LEAD } from './scenarioText';
@@ -61,8 +61,8 @@ describe('ScenariosPage in the trial', () => {
   it("leads with the trial's words, which are not the live system's", async () => {
     renderTrial();
     expect(SCENARIOS_LEAD.trial).not.toBe(SCENARIOS_LEAD.live);
-    expect(await screen.findByText(SCENARIOS_LEAD.trial)).toBeInTheDocument();
-    expect(screen.queryByText(SCENARIOS_LEAD.live)).not.toBeInTheDocument();
+    expect(await screen.findByText(sentence(SCENARIOS_LEAD.trial))).toBeInTheDocument();
+    expect(screen.queryByText(sentence(SCENARIOS_LEAD.live))).not.toBeInTheDocument();
     expect(SCENARIOS_LEAD.trial).not.toMatch(/production/);
   });
 

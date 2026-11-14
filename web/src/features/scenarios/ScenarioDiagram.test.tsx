@@ -44,8 +44,9 @@ describe('ScenarioDiagram across the modes', () => {
     const { container: policy } = render(<ScenarioDiagram scenario={s} mode="policy" />);
     const pill = (c: HTMLElement) => c.querySelector('.diagram-end rect')!.getAttribute('width');
     const caption = (c: HTMLElement) => c.querySelector('[data-row="end"] .diagram-caption')!.textContent;
-    expect(caption(board)).toBe('after gate checks and approval');
-    expect(caption(policy)).toBe('after gate checks and release');
+    // Plain, the Detail level a test starts at: its label says the write is conditional, so the caption says "checks"
+    expect(caption(board)).toBe('after checks and approval');
+    expect(caption(policy)).toBe('after checks and release');
     expect(pill(board)).toBe(pill(policy));
   });
 });
