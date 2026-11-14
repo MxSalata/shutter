@@ -228,6 +228,18 @@ function RunNext({ run, cases }: { run: ScenarioRun; cases: CaseSummary[] | unde
   );
 }
 
+/** A run started on this page: see `ownRun` in the page. */
+interface OwnRun {
+  scenario: string;
+  mode: Mode;
+  /** The run current at the press, by `runKey`. */
+  before: string;
+  startedAt?: string;
+}
+
+/** A run's mark on the shared player: its start time, or the time it was queued before the player started it. */
+const runKey = (r: ScenarioRun | null | undefined) => r?.startedAt || r?.queuedAt || '';
+
 /**
  * From the press of Run until the server answers: the run just asked for, as starting, in place of the last run's
  * banner. That banner's "Open its case" link is the earlier run's, and it stayed in view for the seconds the answer
@@ -1034,8 +1046,12 @@ export default function ScenariosPage() {
   const runBusy =
     busy || (settling ? `${settling.caseId} is still settling: a new run now would abandon it` : '');
 
+  // The run a press here started, so that a screen reader is told of that run only: its scenario and mode, the run that
+  // was current at the press (the one started here is any other), and its start time once the player has started it,
+  // after which no later run on the shared player counts as this one. A refused start leaves none.
+  const [ownRun, setOwnRun] = useState<OwnRun | null>(null);
   const start = (s: Scenario, m: Mode = mode) => {
-    setOwnRun(true);
+    setOwnRun({ scenario: s.id, mode: m, before: runKey(current) });
     run.mutate(
       { id: s.id, mode: m },
       {
@@ -1050,8 +1066,10 @@ export default function ScenariosPage() {
               trial: { color: 'blue', message: `${s.id} is playing from its recording in your browser.` },
             }),
           ),
-        onError: (e) =>
-          notifications.show({ color: 'red', title: `${s.id} did not start`, message: describeError(e) }),
+        onError: (e) => {
+          setOwnRun(null);
+          notifications.show({ color: 'red', title: `${s.id} did not start`, message: describeError(e) });
+        },
       },
     );
   };
@@ -1064,18 +1082,25 @@ export default function ScenariosPage() {
   // has put elsewhere is left where it is.
   const runStatus = useRef<HTMLDivElement>(null);
   const pressedRun = pressed ? `${pressed.id} ${pressed.mode}` : '';
+  const mine =
+    !!ownRun &&
+    current?.scenario === ownRun.scenario &&
+    current.mode === ownRun.mode &&
+    (ownRun.startedAt ? current.startedAt === ownRun.startedAt : runKey(current) !== ownRun.before);
+  // A live run is queued before the player starts it: from its start time on, that run alone is the one started here
+  if (mine && ownRun && !ownRun.startedAt && current?.startedAt)
+    setOwnRun({ ...ownRun, startedAt: current.startedAt });
   // What a screen reader is told of a run started here: that it starts, plays and has played, once each, and never
   // each step the banner shows as it is read again; a failed run's banner is an alert of its own
-  const [ownRun, setOwnRun] = useState(false);
   const inMode = (id: string, m: Mode) =>
     pathology.some((p) => p.id === id) ? '' : ` in ${humanize(m)} mode`;
-  const runSaid = !ownRun
-    ? ''
-    : pressed
-      ? `${pressed.id} is starting${inMode(pressed.id, pressed.mode)}.`
-      : current && isPlaying(current)
+  const runSaid = pressed
+    ? `${pressed.id} is starting${inMode(pressed.id, pressed.mode)}.`
+    : !mine || !current
+      ? ''
+      : isPlaying(current)
         ? `${current.scenario} is playing${inMode(current.scenario, current.mode)}.`
-        : current?.state === 'done'
+        : current.state === 'done'
           ? `${current.scenario} has played${inMode(current.scenario, current.mode)}.`
           : '';
   useEffect(() => {
@@ -1087,7 +1112,7 @@ export default function ScenariosPage() {
   /** A pathology path runs no agent, so its mode is never the question: only who may run, and whether a run plays. */
   const pathWhy = playerOff ? PLAYER_OFF : hidden || !canRun ? runNeeds : runBusy || pending;
   const startPath = (p: PathologyPath) => {
-    setOwnRun(true);
+    setOwnRun({ scenario: p.id, mode: 'board', before: runKey(current) });
     run.mutate(
       { id: p.id, mode: 'board' },
       {
@@ -1099,8 +1124,10 @@ export default function ScenariosPage() {
               ? 'No agent runs on it. Its outage reaches Incidents in about a minute.'
               : 'No agent runs on it. Its case appears in a few seconds.',
           }),
-        onError: (e) =>
-          notifications.show({ color: 'red', title: `${p.id} did not start`, message: describeError(e) }),
+        onError: (e) => {
+          setOwnRun(null);
+          notifications.show({ color: 'red', title: `${p.id} did not start`, message: describeError(e) });
+        },
       },
     );
   };
