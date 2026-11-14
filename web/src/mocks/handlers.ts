@@ -233,10 +233,6 @@ resetSiteProfile();
 const recordedLibrary = structuredClone(fixtures.library);
 
 /**
- * A fresh mock: signed in as the role (or nobody), with no run playing and nothing done here yet. The trial starts
- * with it (src/trial/transport.ts), and so does each test.
- */
-/**
  * The pathology paths GET /scenarios lists (1.4.6): a live demo's with the results route, so a test sets them; none by
  * default, as the trial and an instance without the route list none.
  */
@@ -245,6 +241,10 @@ export function mockPathology(paths: PathologyPath[] | undefined) {
   pathology = paths;
 }
 
+/**
+ * A fresh mock: signed in as the role (or nobody), with no run playing and nothing done here yet. The trial starts
+ * with it (src/trial/transport.ts), and so does each test.
+ */
 export function resetMock(signedInAs: keyof typeof USERS | null = 'approver') {
   session = signedInAs ? USERS[signedInAs] : null;
   pathology = undefined;
