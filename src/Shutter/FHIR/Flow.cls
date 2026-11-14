@@ -113,12 +113,16 @@ ClassMethod Backfill(case As Shutter.Store.Case) As %Integer
 
 // ---- the gate ----
 
-/// Sends the plan to the FHIR gate at one stage. With the FHIR items missing or disagreeing the case blocks here. At
-/// the proposal a plan that writes gets its headline first: the workflow's own would promise a rehearsal.
+/// Sends the plan to the FHIR gate at one stage. With the FHIR items missing or disagreeing the case blocks here, and
+/// at the dispatch the approval is void. At the proposal a plan that writes gets its headline first: the workflow's
+/// own would promise a rehearsal.
 ClassMethod SendGate(p As Shutter.Process.CaseWorkflow, case As Shutter.Store.Case, stage As %String, readId As %String = "") As %Status
 {
     Set problem = ##class(Shutter.FHIR.Install).Problem()
     If problem '= "" {
+        // At the dispatch a person has approved and the read before the write was made: the approval is void, as at
+        // every stop of that stage, and the words claim only that nothing was sent.
+        If stage = "dispatch" Quit ..Stop(p, case, "blocked", "Blocked: the FHIR items are missing or disagree", "The production cannot reach this FHIR receiver: " _ ..Plain(problem) _ ". The approval is void and nothing was sent (FHIR_ITEMS_MISSING)", "", "the FHIR items are missing or disagree")
         Quit ..Stop(p, case, "blocked", "Blocked: the FHIR items are missing or disagree", "The production cannot reach this FHIR receiver: " _ ..Plain(problem) _ ". Nothing was read or sent (FHIR_ITEMS_MISSING)")
     }
     Set plan = $SELECT(p.PlanId = "": "", 1: ##class(Shutter.Store.Plan).%OpenId(p.PlanId))

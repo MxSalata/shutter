@@ -542,6 +542,22 @@ Method TestTheSixOutcomes()
 
 /// The case's reason is the code a stop of the flow closes its own text with, never a code quoted inside other
 /// words: an approver's comment that names one, on any case, is still a rejection, and an earlier round's failing
+/// The FHIR items found missing after the approval, when the read before the write has been made: the stop voids the
+/// approval with its reason, as every stop at the dispatch does, and does not say that nothing was read.
+Method TestItemsMissingAtTheDispatchVoidTheApproval()
+{
+    Do ..Approved(.wf, .case)
+    Set wf = ..Carry(wf)
+    Set ^Shutter.Config("production") = "ShutterTest.NoSuchFhirFlow"
+    Do ..Step(wf, "fhir:preflight", ..Read())
+    Set ^Shutter.Config("production") = ..#PRODUCTION
+    Do ..Stopped(case, 1, "blocked", "Blocked: the FHIR items are missing or disagree", "The production cannot reach this FHIR receiver: No production ShutterTest.NoSuchFhirFlow. The approval is void and nothing was sent (FHIR_ITEMS_MISSING)", "FHIR_ITEMS_MISSING", wf)
+    Do $$$AssertEquals(##class(Shutter.Store.Approval).%OpenId(wf.ApprovalId).RevokedBy, "system: the FHIR items are missing or disagree", "the approval says why it is void")
+    Do $$$AssertTrue(..AllEvents(case) [ "The read before the write was made", "the read before the write was made")
+    Do $$$AssertTrue(..AllEvents(case) '[ "Nothing was read", "and no event says that nothing was read")
+    Do $$$AssertEquals(wf.Keys(), "", "nothing follows by itself: no gate request, no update")
+}
+
 /// The verification's further walks follow their own schedule, whatever Case Workflow's MaxRefreshes is: the same
 /// three, after 10, 20 and 40 seconds, and then the walk that still asks for another read is final.
 Method TestTheVerifyWalksKeepTheirOwnSchedule()
