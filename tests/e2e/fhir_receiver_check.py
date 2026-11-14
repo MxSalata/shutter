@@ -472,6 +472,10 @@ def variant_a(ctr, api, n, record=None):
     if case is None:
         return failures
     check(failures, case['state'] == 'resolved', f'the case is resolved ({case["state"]}: {reason(api, cid) if case["state"] != "resolved" else ""})')
+    after = api.get(f'/cases/{urllib.parse.quote(cid)}/plan').get('gateDecisions') or []
+    dispatch = [d for d in after if d.get('stage') == 'dispatch']
+    check(failures, bool(dispatch) and dispatch[0].get('outcome') == 'pass' and dispatch[0].get('policyVersion') == POLICY,
+          f'the FHIR gate passed the update again at dispatch, after the approval ({[(d.get("stage"), d.get("outcome")) for d in after]})')
     stored, _ = approvals(api, cid)
     check(failures, len(stored) == 1 and stored[0].get('approver') == 'approver' and stored[0].get('approver') != 'policy',
           f'the one approval is the approver\'s own, never the policy\'s ({[a.get("approver") for a in stored]})')
