@@ -10,7 +10,7 @@ import { server } from '@/mocks/node';
 import fixtures from '@/mocks/fixtures.json';
 import { resetMock } from '@/mocks/handlers';
 import { useAppearance } from '@/stores/appearance';
-import { layer1Words } from '@/test/words';
+import { layer1Words, visibleText } from '@/test/words';
 import { theme } from '@/theme';
 import CasePage, { REPLAY_DONE } from './CasePage';
 import { AssistantFrame } from '@/features/assistant/AssistantSurface';
@@ -412,7 +412,7 @@ describe('CasePage', () => {
     expect(await within(top).findByText('Asked a person to decide; sent nothing')).toBeInTheDocument();
     expect(
       await within(top).findByText(
-        /^Handed to a person; PAS and the bed manager \(BEDMGR\) moved the encounter at the same event time/,
+        /^PAS and the bed manager \(BEDMGR\) moved the encounter at the same event time/,
       ),
     ).toBeInTheDocument();
     expect(await within(top).findByText('Escalate: no write to the receiver')).toBeInTheDocument();
@@ -428,9 +428,10 @@ describe('CasePage', () => {
     expect(within(top).getByText('Passed: no write')).toBeInTheDocument();
     // Three cards first, each under its heading: what happened, what Shutter did and what needs you now, the last in
     // the attention tone since a person has to act; then the receipt as its own band
+    // By their visible words: the receipt's heading is a term, whose definition sits in it for screen readers
     const headings = within(top)
       .getAllByRole('heading', { level: 3 })
-      .map((h) => h.textContent);
+      .map((h) => visibleText(h));
     expect(headings.slice(0, 4)).toEqual([
       'What happened',
       'What Shutter did',
@@ -440,15 +441,16 @@ describe('CasePage', () => {
     expect(within(top).getByText('Transfer was not delivered')).toBeInTheDocument();
     expect(
       within(top).getByText(
-        'When Shutter looked, the receiver held the encounter admitted in WARD-C at version 2; no receipt for this operation; PAS and BEDMGR have the same event time.',
+        'When Shutter looked, the receiver held the encounter admitted in WARD-C at version 2; the receiver has no receipt for this operation; PAS and BEDMGR have the same event time.',
       ),
     ).toBeInTheDocument();
     expect(
       within(top).getByRole('heading', { name: 'What needs you now' }).closest('[data-tone]'),
     ).toHaveAttribute('data-tone', 'attention');
-    // The receipt's facts are labelled, as a description list; the first names who proposed, once the runs are read
+    // The receipt's facts are labelled, as a description list; the first names who proposed, once the runs are read.
+    // Gate is a term, its definition one press away
     for (const label of ['Gate', 'Released by', 'Writes', 'Verification'])
-      expect(within(top).getByText(label, { selector: 'dt' })).toBeInTheDocument();
+      expect(within(top).getByText(label, { selector: 'dt, dt .term' })).toBeInTheDocument();
     expect(
       await within(top).findByText("Coordinator agent's proposal", { selector: 'dt' }),
     ).toBeInTheDocument();
@@ -981,7 +983,8 @@ describe('CasePage', () => {
     renderCase('C-000002');
     const top = await outcome();
     expect(await within(top).findByText('Eligible for approval')).toBeInTheDocument();
-    expect(within(top).getByText('Checked at dispatch: authorization, rehearsal.')).toBeInTheDocument();
+    // Plain says when and names the checks as the case does; Technical keeps "Checked at dispatch: authorization, rehearsal."
+    expect(within(top).getByText('Checked before sending: the approval, the test run.')).toBeInTheDocument();
     expect(within(top).queryByText('Passed')).not.toBeInTheDocument();
   });
 
@@ -1025,7 +1028,8 @@ describe('CasePage', () => {
     await waitFor(() => expect(within(progress).getAllByText('done')).toHaveLength(4));
     expect(within(progress).getByText('waiting for approval')).toBeInTheDocument();
     expect(within(progress).getAllByText('not yet')).toHaveLength(2);
-    expect(screen.getByText(/^Rehearsal is a dry run of the write at the receiver/)).toBeInTheDocument();
+    // Plain names each stage in words and gives its term under What the stages mean
+    expect(screen.getByText(/^Plan and checks: the safety checks \(the gate\)/)).toBeInTheDocument();
   });
 
   it('marks the steps a superseded case did not need', async () => {
@@ -1838,7 +1842,10 @@ describe('the case page for both audiences', () => {
   // The clarity
   // review of 13 Nov names the proposer in the receipt, with the plan's reason one press under it and the evidence
   // behind What happened as chips, and pays for them on the board (the citations and a kept dissent open from their
-  // own lines): 658 measured before and after, Technical 960 (959 before), with nothing added to either cap
+  // own lines): 658 measured before and after, Technical 960 (959 before), with nothing added to either cap. Plain's
+  // words for Shutter's terms (14 Nov) name the receiver's receipt as the receiver's and the rehearsal stage a test run
+  // (5 words), and leave out the general hand-off's title where the reason has a fact of its own, since the headline
+  // already says a person decides and the title stays behind Why? (4): 659 measured in Plain, Technical unchanged
   it('keeps the Summary tab, steps closed, within 660 words in Plain', async () => {
     const plain = await summaryWords('plain');
     expect(plain).toBeLessThanOrEqual(660);

@@ -205,22 +205,44 @@ const humanWord = (disposition: string | undefined) =>
 /**
  * A write waits for the gate's checks and a release. A plan of the board, a single investigator or the rules path is
  * always released by a person; in Site policy the site's table may release it, so there the word is only "release".
+ * Plain's caption says "checks" (its label already says what a conditional write is, in the word Technical spends on
+ * "conditional") and its words "the safety checks"; Technical keeps the gate's name.
  */
-const releasedBy = (mode: Mode) =>
-  mode === 'policy'
-    ? { caption: 'after gate checks and release', words: "after the gate's checks and a release" }
-    : { caption: 'after gate checks and approval', words: "after the gate's checks and a person's approval" };
+const releasedBy = (mode: Mode, technical: boolean) => {
+  const checks = technical ? 'gate checks' : 'checks';
+  const theChecks = technical ? "the gate's checks" : 'the safety checks';
+  return mode === 'policy'
+    ? { caption: `after ${checks} and release`, words: `after ${theChecks} and a release` }
+    : { caption: `after ${checks} and approval`, words: `after ${theChecks} and a person's approval` };
+};
 
-const writesEnd = (n: number, inAll: boolean, mode: Mode, oneCase = false): DiagramEnd => ({
+/**
+ * Writes the scenario should make. Technical names them conditional writes; Plain says what that means, a write sent only
+ * if the record is unchanged (the receiver refuses it otherwise).
+ */
+const writesEnd = (
+  n: number,
+  inAll: boolean,
+  mode: Mode,
+  technical: boolean,
+  oneCase = false,
+): DiagramEnd => ({
   kind: n === 1 ? 'write' : 'writes',
   writes: n,
-  label: `${n} conditional write${n === 1 ? '' : 's'}`,
-  caption: oneCase ? 'this case only' : releasedBy(mode).caption,
-  words: `${n === 1 ? 'one conditional write' : `${n} conditional writes`}${inAll ? ' in all' : ''}${oneCase ? ' for this case' : ''}, ${releasedBy(mode).words}`,
+  label: technical
+    ? `${n} conditional write${n === 1 ? '' : 's'}`
+    : `${n} write${n === 1 ? '' : 's'} if unchanged`,
+  caption: oneCase ? 'this case only' : releasedBy(mode, technical).caption,
+  words: technical
+    ? `${n === 1 ? 'one conditional write' : `${n} conditional writes`}${inAll ? ' in all' : ''}${oneCase ? ' for this case' : ''}, ${releasedBy(mode, technical).words}`
+    : `${n === 1 ? 'one write' : `${n} writes`}${inAll ? ' in all' : ''}${oneCase ? ' for this case' : ''}, sent only if the record is unchanged, ${releasedBy(mode, technical).words}`,
 });
 
-/** The end the scenario expects in the mode, by the same fields the row's "What should happen" reads. */
-export function endOf(s: Pick<Scenario, 'expected'>, mode: Mode): DiagramEnd {
+/**
+ * The end the scenario expects in the mode, by the same fields the row's "What should happen" reads: in the Technical
+ * words by default, in Plain's (`technical` false) for the diagram under Plain.
+ */
+export function endOf(s: Pick<Scenario, 'expected'>, mode: Mode, technical = true): DiagramEnd {
   const e = { ...s.expected, ...s.expected.by_mode?.[mode] };
   const none = (caption: string | undefined, words: string): DiagramEnd => ({
     kind: 'none',
@@ -231,12 +253,12 @@ export function endOf(s: Pick<Scenario, 'expected'>, mode: Mode): DiagramEnd {
   });
   if (e.incident && e.encounters?.length) {
     const n = e.encounters.reduce((sum, x) => sum + (x.writes || 0), 0);
-    return n ? writesEnd(n, true, mode) : none(undefined, 'nothing written');
+    return n ? writesEnd(n, true, mode, technical) : none(undefined, 'nothing written');
   }
   if (e.by_receiver) {
     const receivers = Object.values(e.by_receiver);
     const n = receivers.filter((x) => x.write).length;
-    if (n) return writesEnd(n, true, mode);
+    if (n) return writesEnd(n, true, mode, technical);
     const people = receivers.filter((x) => x.disposition === 'escalate').length;
     if (people === receivers.length)
       return {
@@ -257,12 +279,14 @@ export function endOf(s: Pick<Scenario, 'expected'>, mode: Mode): DiagramEnd {
     return {
       kind: 'write',
       writes: 1,
-      label: '1 update with If-Match',
-      caption: 'after gate checks and approval',
-      words: "one version-aware update (If-Match), after the gate's checks and a person's approval",
+      label: technical ? '1 update with If-Match' : '1 update if unchanged',
+      caption: releasedBy('board', technical).caption,
+      words: technical
+        ? "one version-aware update (If-Match), after the gate's checks and a person's approval"
+        : "one update, sent only if the record is unchanged, after the safety checks and a person's approval",
     };
   // A scenario whose expected names one failure's case has other cases too: the count is that case's, not the story's
-  if (e.write) return writesEnd(1, false, mode, !!e.case_by_key);
+  if (e.write) return writesEnd(1, false, mode, technical, !!e.case_by_key);
   // S23c proposes a resend, and the gate hands it to a person when the bed's occupant can't leave
   if (e.disposition === 'escalate' || e.final_reason === 'OCCUPANT_CASE_FAILED')
     return {
@@ -320,7 +344,7 @@ export function scenarioDiagram(
   if (!s.expected || !s.steps?.length) return null;
   const nodes = nodesOf(s);
   if (!nodes.length) return null;
-  const end = endOf(s, mode);
+  const end = endOf(s, mode, technical);
   // A merge (A40) is never resent: the gate withholds it for the PAS team whatever the mode (S15)
   const mergeWithheld = nodes.some((n) => n.kind === 'message' && n.event === 'A40' && n.mark === 'withheld');
   const note = mergeWithheld ? 'Merges are never resent automatically.' : undefined;

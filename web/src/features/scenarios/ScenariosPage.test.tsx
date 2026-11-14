@@ -1,6 +1,6 @@
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, useLocation } from 'react-router';
@@ -15,7 +15,7 @@ import { caseOutcome } from '@/lib/status';
 import { PROOF } from '@/lib/proof';
 import { useAppearance } from '@/stores/appearance';
 import type { DetailLevel } from '@/env/mode';
-import { layer1WordCount } from '@/test/words';
+import { layer1WordCount, sentence } from '@/test/words';
 import { theme } from '@/theme';
 import ScenariosPage from './ScenariosPage';
 import { ROUTE } from './execution';
@@ -425,7 +425,8 @@ describe('ScenariosPage', () => {
           `Opens one incident of ${encounters.length} encounters, each released as its own chain.`,
         ),
       ).toBeInTheDocument();
-      expect(within(c).getByText(`${writes} conditional writes in all`)).toBeInTheDocument();
+      // Plain counts them in plain words, its diagram saying what conditional means; Technical says "conditional"
+      expect(within(c).getByText(`${writes} writes in all`)).toBeInTheDocument();
     }
     // The catalogue's two incidents, as it defines them today
     expect(within(await card('S11')).getByText(/of 6 encounters/)).toBeInTheDocument();
@@ -446,13 +447,23 @@ describe('ScenariosPage', () => {
     renderScenarios();
     await userEvent.click(await screen.findByRole('radio', { name: 'Site policy' }));
     const row = await card('S35');
-    expect(within(row).getAllByText('1 update with If-Match').length).toBeGreaterThan(0);
+    // Plain: one update, sent only if the record is unchanged; If-Match is Technical's word for it
+    expect(within(row).getByText('1 update')).toBeInTheDocument();
+    expect(within(row).getByText('1 update if unchanged')).toBeInTheDocument();
+    expect(within(row).queryByText('1 update with If-Match')).not.toBeInTheDocument();
     expect(
       within(row).getByText(
         "Ends with the Encounter at WARD-B (Location/ward-b), found in its history by Shutter's marker.",
       ),
     ).toBeInTheDocument();
     expect(within(row).queryByText(/conditional/)).not.toBeInTheDocument();
+    act(() => useAppearance.setState({ detail: 'technical' }));
+    try {
+      expect(within(row).getAllByText('1 update with If-Match').length).toBe(2);
+      expect(within(row).queryByText(/conditional/)).not.toBeInTheDocument();
+    } finally {
+      act(() => useAppearance.setState({ detail: 'plain' }));
+    }
   });
 
   it('offers runs on a demo instance', async () => {
@@ -478,8 +489,8 @@ describe('ScenariosPage', () => {
     expect(screen.queryByRole('region', { name: 'Try these three first' })).not.toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Three to look at first' })).not.toBeInTheDocument();
     expect(screen.queryByText('You will see')).not.toBeInTheDocument();
-    expect(screen.getByText(SCENARIOS_LEAD.lookOnly)).toBeInTheDocument();
-    expect(screen.queryByText(SCENARIOS_LEAD.live)).not.toBeInTheDocument();
+    expect(screen.getByText(sentence(SCENARIOS_LEAD.lookOnly))).toBeInTheDocument();
+    expect(screen.queryByText(sentence(SCENARIOS_LEAD.live))).not.toBeInTheDocument();
   });
 
   it('says nothing of a demo hospital to a site user who operates but may not run scenarios', async () => {
@@ -566,8 +577,8 @@ describe('ScenariosPage, as each role has it', () => {
     expect(within(first).getAllByRole('button', { name: /^Run / })).toHaveLength(3);
     for (const run of within(first).getAllByRole('button', { name: /^Run / })) expect(run).toBeDisabled();
     // Nothing tells this role to try or play anything
-    expect(screen.queryByText(SCENARIOS_LEAD.live)).not.toBeInTheDocument();
-    expect(screen.getByText(SCENARIOS_LEAD.lookOnly)).toBeInTheDocument();
+    expect(screen.queryByText(sentence(SCENARIOS_LEAD.live))).not.toBeInTheDocument();
+    expect(screen.getByText(sentence(SCENARIOS_LEAD.lookOnly))).toBeInTheDocument();
     const words = document.body.textContent ?? '';
     expect(words).not.toMatch(/\bTry\b/);
     expect(words).not.toMatch(/You will see/);
@@ -1097,8 +1108,8 @@ describe('ScenariosPage, its rows and its proof', () => {
 
   it('reads the live lead outside the trial', async () => {
     renderScenarios();
-    expect(await screen.findByText(SCENARIOS_LEAD.live)).toBeInTheDocument();
-    expect(screen.queryByText(SCENARIOS_LEAD.trial)).not.toBeInTheDocument();
+    expect(await screen.findByText(sentence(SCENARIOS_LEAD.live))).toBeInTheDocument();
+    expect(screen.queryByText(sentence(SCENARIOS_LEAD.trial))).not.toBeInTheDocument();
   });
 
   it("colours a row by its latest case's outcome when the case is among the newest cases", async () => {

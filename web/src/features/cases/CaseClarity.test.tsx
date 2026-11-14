@@ -290,8 +290,9 @@ describe('the progress strip', () => {
     expect(
       within(progress).getByRole('button', { name: 'Approval: waiting for approval, show the approval' }),
     ).toBeInTheDocument();
-    expect(within(progress).queryByRole('button', { name: /^Dispatch/ })).not.toBeInTheDocument();
-    expect(within(progress).getByText('Dispatch')).toBeInTheDocument();
+    // Plain names the dispatch Sending; it is not reached, so it is text, not a button
+    expect(within(progress).queryByRole('button', { name: /^Sending/ })).not.toBeInTheDocument();
+    expect(within(progress).getByText('Sending')).toBeInTheDocument();
     await userEvent.click(evidence);
     expect(await screen.findByRole('tab', { name: 'Evidence' })).toHaveAttribute('aria-selected', 'true');
     await waitFor(() => expect(document.activeElement?.id).toBe('evidence-title'));
@@ -302,7 +303,7 @@ describe('the progress strip', () => {
     const progress = await screen.findByLabelText("The case's progress");
     await userEvent.click(
       await within(progress).findByRole('button', {
-        name: 'Plan and gate: stopped here, show the plan and the gate',
+        name: 'Plan and checks: stopped here, show the plan and its checks',
       }),
     );
     expect(await screen.findByRole('button', { name: /^4\. Gate and decision/ })).toHaveAttribute(

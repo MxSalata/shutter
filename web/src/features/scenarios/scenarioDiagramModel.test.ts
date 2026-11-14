@@ -105,10 +105,35 @@ describe('scenarioDiagram', () => {
   it('says the end is what should happen, never what a run did', () => {
     for (const s of scenarios)
       expect(diagram(s.id).label, s.id).toMatch(/ mode, in a diagram: .*\. Expected: /);
-    expect(diagram('S2', 'board').label).toMatch(
+    expect(diagram('S2', 'board', true).label).toMatch(
       /^S2, Board mode, in a diagram: .*Expected: one conditional write, after the gate's checks and a person's approval\.$/,
     );
     expect(diagram('S2', 'policy').label).toMatch(/^S2, Site policy mode,/);
+  });
+
+  it('says in Plain what a conditional write and the gate are, and keeps the terms for Technical', () => {
+    expect(diagram('S2', 'board').label).toMatch(
+      /Expected: one write, sent only if the record is unchanged, after the safety checks and a person's approval\.$/,
+    );
+    expect(endOf(byId('S2'), 'board', false)).toMatchObject({
+      label: '1 write if unchanged',
+      caption: 'after checks and approval',
+    });
+    expect(endOf(byId('S2'), 'policy', false).caption).toBe('after checks and release');
+    expect(endOf(byId('S11'), 'policy', false).label).toBe('5 writes if unchanged');
+    expect(endOf(byId('S35'), 'board', false)).toMatchObject({
+      label: '1 update if unchanged',
+      caption: 'after checks and approval',
+    });
+    expect(endOf(byId('S35'), 'board', false).words).not.toMatch(/If-Match|conditional|gate/);
+    for (const s of scenarios)
+      for (const mode of modesOf(s)) {
+        const plain = endOf(s, mode, false);
+        expect(`${plain.label} ${plain.caption ?? ''} ${plain.words}`, `${s.id} in ${mode}`).not.toMatch(
+          /conditional|gate|If-Match/,
+        );
+        expect(plain.writes, `${s.id} in ${mode}`).toBe(endOf(s, mode).writes);
+      }
   });
 
   it('says under S15 that a merge is never resent, and only where a merge is withheld', () => {
@@ -180,7 +205,10 @@ describe('scenarioDiagram', () => {
       { kind: 'message', event: 'A02', plain: 'Move', count: 1, mark: 'fails' },
     ]);
     expect(diagram('S35', 'policy').label).toBe(
-      "S35, Site policy mode, in a diagram: the HL7 link to the ward system never opens a connection; move fails. Expected: one version-aware update (If-Match), after the gate's checks and a person's approval.",
+      "S35, Site policy mode, in a diagram: the HL7 link to the ward system never opens a connection; move fails. Expected: one update, sent only if the record is unchanged, after the safety checks and a person's approval.",
+    );
+    expect(diagram('S35', 'policy', true).label).toBe(
+      "S35, Site policy mode, in a diagram: the HL7 link to the ward system never opens a connection; A02 fails. Expected: one version-aware update (If-Match), after the gate's checks and a person's approval.",
     );
     for (const mode of MODES)
       expect(endOf(byId('S35'), mode)).toEqual({

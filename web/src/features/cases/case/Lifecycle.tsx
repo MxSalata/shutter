@@ -9,6 +9,7 @@ import {
 } from '@tabler/icons-react';
 import type { CaseDetail, CaseEvent } from '@/api/types';
 import { TechDetail } from '@/components/TechDetail';
+import { useTechnical } from '@/stores/appearance';
 import { outageResend, PHASES, phaseStatuses, type PhaseStatus } from './derive';
 
 /** The stages the trial's replay fills in after a reader's approval: Approval, Dispatch and Verification. */
@@ -29,6 +30,16 @@ const SHOWS: Record<StageKey, string> = {
 };
 
 /**
+ * Plain's names for the three stages named in Shutter's own terms (the gate, the rehearsal, the dispatch), and what
+ * pressing each shows; "What the stages mean" gives each one's term. Technical keeps the terms.
+ */
+const PLAIN: Partial<Record<StageKey, { label: string; shows: string }>> = {
+  gate: { label: 'Plan and checks', shows: 'the plan and its checks' },
+  rehearsal: { label: 'Test run', shows: 'the test run' },
+  dispatch: { label: 'Sending', shows: 'the sending' },
+};
+
+/**
  * The case's progress through the seven stages, one icon set with a word under each: done (a tick), now (in progress,
  * or a person's turn at the approval), not yet (a dashed circle), not needed (a dash), and where it stopped, in the
  * blocking tone (an escalation is a person's turn, in attention). The last stage is drawn positive once the verifier
@@ -37,7 +48,8 @@ const SHOWS: Record<StageKey, string> = {
  *
  * With `onStage`, each stage the case has reached (done, now, stopped or not needed) is a button that takes the reader
  * to where the page tells that stage (the Evidence tab, the board, a story step), named for it ("Evidence: done, show
- * the evidence"); a stage not reached yet stays plain text.
+ * the evidence"); a stage not reached yet stays plain text. Plain names the gate, rehearsal and dispatch stages in words
+ * (Plan and checks, Test run, Sending, as the guided tour does), and "What the stages mean" ties each to its term; Technical keeps the terms.
  */
 export function Lifecycle({
   c,
@@ -74,6 +86,7 @@ export function Lifecycle({
         verification: resent.closure === 'sent' ? 'header Completed' : 'already held',
       }
     : {};
+  const technical = useTechnical();
   const firstOpen = statuses.findIndex((s) => s === 'current' || s === 'pending' || s === 'stopped');
   const active = firstOpen < 0 ? PHASES.length : firstOpen;
   // Where the case stopped: an escalation is a person's turn (attention), a block or a failure is red
@@ -109,7 +122,10 @@ export function Lifecycle({
           const replayed = i - (PHASES.length - REPLAYED_STAGES);
           // A stage the case has reached is a button to where the page tells it; one not reached yet stays text
           const reached = !!onStage && s !== 'pending';
-          const shows = p.key === 'investigation' && investigation ? investigation : SHOWS[p.key];
+          const plain = technical ? undefined : PLAIN[p.key];
+          const label = plain?.label ?? p.label;
+          const shows =
+            p.key === 'investigation' && investigation ? investigation : (plain?.shows ?? SHOWS[p.key]);
           return (
             <Stepper.Step
               key={p.key}
@@ -118,11 +134,11 @@ export function Lifecycle({
               allowStepSelect={reached}
               {...(reached
                 ? {
-                    'aria-label': `${p.label}: ${resentWords[p.key] ?? words[s]}, show ${shows}`,
+                    'aria-label': `${label}: ${resentWords[p.key] ?? words[s]}, show ${shows}`,
                     'data-stage': p.key,
                   }
                 : { component: 'div' })}
-              label={p.label}
+              label={label}
               description={
                 <Text size="xs" c={s === 'stopped' ? stopColour : 'dimmed'}>
                   {resentWords[p.key] ?? words[s]}
@@ -165,10 +181,19 @@ export function Lifecycle({
         })}
       </Stepper>
       <TechDetail kind="explain" label="What the stages mean">
-        <Text size="sm" maw="68ch">
-          Rehearsal is a dry run of the write at the receiver, rolled back; Approval is its release by a
-          person, or the site&apos;s written policy.
-        </Text>
+        {technical ? (
+          <Text size="sm" maw="68ch">
+            Rehearsal is a dry run of the write at the receiver, rolled back; Approval is its release by a
+            person, or the site&apos;s written policy.
+          </Text>
+        ) : (
+          <Text size="sm" maw="68ch">
+            Plan and checks: the safety checks (the gate) test the plan against the evidence, with no model.
+            Test run: the rehearsal, a dry run where the receiver tries the write and rolls it back. Approval:
+            a person, or the site&apos;s written policy, releases it. Sending: the dispatch, checked again
+            just before the write.
+          </Text>
+        )}
       </TechDetail>
     </Stack>
   );

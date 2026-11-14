@@ -153,6 +153,22 @@ describe('the outcome sentence', () => {
     expect(outcomeReason(f)).toBe('Blocked by the gate: a later event made this movement obsolete.');
   });
 
+  it("under Plain names the safety checks in the reason only when the headline named a person's rejection", () => {
+    const f = factsOf('C-000053');
+    expect(actionHeadline(f, false)).toBe('Sent nothing: the safety checks (the gate) stopped the plan');
+    expect(outcomeReason(f, false)).toBe('Blocked: a later event made this movement obsolete.');
+    // An earlier round's rejection stands, so the headline names the person and the reason names the gate
+    const [first] = f.approvals!.approvals;
+    const rejected = factsOf('C-000053', {
+      approvals: { ...f.approvals!, approvals: [{ ...first!, decision: 'rejected', revoked: false }] },
+    });
+    expect(actionHeadline(rejected, false)).toBe('Sent nothing: a person rejected the plan');
+    expect(outcomeReason(rejected, false)).toBe(
+      'Blocked by the safety checks (the gate): a later event made this movement obsolete.',
+    );
+    expect(outcomeReason(rejected)).toBe('Blocked by the gate: a later event made this movement obsolete.');
+  });
+
   it('says writes are unknown, never 0, while the attempts are not read', () => {
     const f = factsOf('C-000002', { attempts: undefined });
     // Nothing guessed: the outcome stays "Resolved" and the action says the writes are not read

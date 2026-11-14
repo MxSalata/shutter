@@ -35,3 +35,19 @@ function hidden(el: HTMLElement): boolean {
 
 /** The number of first-layer words in the container. */
 export const layer1WordCount = (container: HTMLElement) => layer1Words(container).length;
+
+/** An element's visible text: its terms' definitions, which sit in the sentence `hidden` for screen readers, left out. */
+export function visibleText(el: Element): string {
+  const copy = el.cloneNode(true) as Element;
+  for (const h of copy.querySelectorAll('[hidden]')) h.remove();
+  return (copy.textContent ?? '').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * A text matcher for a sentence with a `Term` in it, which `getByText` cannot find by its words since the term is an
+ * element of its own: the innermost element whose visible text is the sentence.
+ */
+export const sentence =
+  (words: string) =>
+  (_: string, el: Element | null): boolean =>
+    !!el && visibleText(el) === words && ![...el.children].some((c) => visibleText(c) === words);

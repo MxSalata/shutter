@@ -9,6 +9,7 @@ import fixtures from '@/mocks/fixtures.json';
 import { resetMock } from '@/mocks/handlers';
 import { server } from '@/mocks/node';
 import { useAppearance } from '@/stores/appearance';
+import { visibleText } from '@/test/words';
 import { theme } from '@/theme';
 import CasePage from './CasePage';
 
@@ -71,7 +72,8 @@ const receiptOf = (top: HTMLElement) => within(top).findByRole('region', { name:
 function facts(receipt: HTMLElement): Record<string, string> {
   return Object.fromEntries(
     [...receipt.querySelectorAll('.receipt-fact')].map((f) => [
-      f.querySelector('dt')?.textContent ?? '',
+      // By its visible words: Gate is a term, its definition in the label for screen readers
+      f.querySelector('dt') ? visibleText(f.querySelector('dt')!) : '',
       f.querySelector('dd')?.textContent ?? '',
     ]),
   );
@@ -86,21 +88,21 @@ describe('the decision receipt on S2, S3 and S8', () => {
       proposal: 'Resend the PAS transfer to WARD-B, once',
       reason: 'Why: Not delivered, still current',
       gate: 'Eligible for approval',
-      evidence: ['Encounter', 'Receipt'],
+      evidence: ['Encounter', "Receiver's receipt"],
     },
     {
       id: 'C-000003',
       proposal: 'Reconcile: no write to the receiver',
       reason: 'Why: Committed after all',
       gate: 'Passed: no write',
-      evidence: ['Encounter', 'Receipt'],
+      evidence: ['Encounter', "Receiver's receipt"],
     },
     {
       id: 'C-000008',
       proposal: 'Escalate: no write to the receiver',
       reason: 'Why: Two sources at the same time',
       gate: 'Passed: no write',
-      evidence: ['Encounter', 'Receipt', 'Timeline'],
+      evidence: ['Encounter', "Receiver's receipt", 'Timeline'],
     },
   ] as const)(
     'names who proposed, the proposal, its reason, the gate result and the writes on $id',
@@ -169,7 +171,8 @@ describe('the evidence links', () => {
     renderCase('C-000008');
     const top = await band();
     const links = await within(top).findByRole('group', { name: 'The evidence this was read from' });
-    const chip = within(links).getByRole('button', { name: 'Receipt' });
+    // The receiver's receipt, named apart from Shutter's own decision receipt
+    const chip = within(links).getByRole('button', { name: "Receiver's receipt" });
     expect(chip).not.toHaveAttribute('href');
     await userEvent.click(chip);
     expect(await screen.findByRole('tab', { name: 'Evidence' })).toHaveAttribute('aria-selected', 'true');
@@ -199,7 +202,7 @@ describe('the evidence links', () => {
       'Failed operation',
       'Route',
       'Encounter',
-      'Receipt',
+      "Receiver's receipt",
       'Timeline',
       "See each agent's finding",
     ]);

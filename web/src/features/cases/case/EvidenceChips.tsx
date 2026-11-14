@@ -1,5 +1,6 @@
 import { Badge, Group, Tooltip } from '@mantine/core';
 import { evidenceSection } from '@/lib/evidenceRefs';
+import { useTechnical } from '@/stores/appearance';
 import { showEvidence } from './evidenceLinks';
 
 /** A cited section's chip, in a word or two; the section's own title is on the Evidence tab it opens. */
@@ -14,6 +15,12 @@ const CHIPS: Record<string, string> = {
   timeline: 'Timeline',
   later_event: 'Later events',
 };
+
+/**
+ * Plain's chips where Technical's word is Shutter's own: the receiver's receipt says whose it is, since the case's own
+ * record is Shutter's decision receipt. Technical keeps the short word.
+ */
+const PLAIN_CHIPS: Record<string, string> = { receipt: "Receiver's receipt" };
 
 const CHIP_STYLE = {
   textTransform: 'none',
@@ -38,6 +45,7 @@ export function EvidenceChips({
   /** The case's receiver, for the names of the sections it recorded. */
   receiver?: string;
 }) {
+  const technical = useTechnical();
   return (
     <Group gap={6} wrap="wrap">
       {entries.map((entry) => (
@@ -69,7 +77,7 @@ export function EvidenceChips({
               onClick={() => showEvidence(ref)}
               style={CHIP_STYLE}
             >
-              {CHIPS[ref] ?? section.title}
+              {(technical ? undefined : PLAIN_CHIPS[ref]) ?? CHIPS[ref] ?? section.title}
             </Badge>
           </Tooltip>
         ) : null;
