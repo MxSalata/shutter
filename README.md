@@ -321,14 +321,15 @@ No other recovery writes over FHIR: no create, no admission or discharge, no mer
 
 ## How it is tested
 
-**Release-specific checks and historical evaluations are different evidence.** The latest unit-suite totals given here are release 1.4.3's. Release 1.4.4 changed who may run scenarios on the online demo and release 1.4.5 how a case leads to its review; their changelogs give no separate totals.
+**Release-specific checks and historical evaluations are different evidence.** The latest totals here are release 1.4.7's, from its tagged commit; the evaluations below them keep their own releases.
 
 | Scope | Recorded checks |
 | --- | --- |
+| **Release 1.4.7** | CI on the tagged commit ([run 49](https://github.com/MxSalata/shutter/actions/runs/43624412267)): the web and browser suites and three IRIS shards, 1,276 unit tests, every scenario including FHIR's S35, the FHIR conformance kit (244 exchanges) and the pathology check. The same IRIS job ran 13 full rounds on the tag with no failure. A fresh install on AI Hub build 154 is recorded step by step in [its receipt](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt-1.4.7.md) |
 | **Release 1.4.3** | 1,083 unit tests passed on AI Hub build 154 and 1,074 on IRIS 2026.2, none failed. Role checks covered judges running but not resetting, upgraded permissions and attribution of scenario runs. Web and relevant browser suites included accessibility checks |
 | **Pathology, release 1.4.0** | All 56 pathology-rig rows passed on build 154. An end-to-end check counted receiver sends under shadow mode and the recovery stop |
 | **Replay CI, figures at 1.1.0** | Full installation on IRIS 2026.2, 37 receiver-contract tests, 26 scenarios end to end and approval-boundary attacks over HTTP |
-| **Live AI Hub** | Separate fresh-install checks on builds 109 and 154, last recorded on release 1.0.0 (6 November 2026), recorded live runs, and live comparative tests up to the 1.4.3 rerun. CI cannot download the Early Access image, so replay CI does not replace this evidence |
+| **Live AI Hub** | Separate fresh-install checks on builds 109 and 154 on release 1.0.0 (6 November 2026), and on build 154 on release 1.4.7 (14 November, no live call), recorded live runs, and live comparative tests up to the 1.4.3 rerun. CI cannot download the Early Access image, so replay CI does not replace this evidence |
 
 The approval boundary tests stale versions, wrong digests, insufficient roles, repeated approval and a receiver changed after approval. Privacy checks inspect recordings.
 
