@@ -88,6 +88,23 @@ Method TestNearTheCapTheEstimateCounts()
     Do $$$AssertTrue($CLASSMETHOD(b, "Admit", "ut-adm-next", "operator"), "once it settles, the next is admitted")
     Do $CLASSMETHOD(b, "Settle", "ut-adm-next")
     Do $$$AssertEquals($CLASSMETHOD(b, "Reserved", "", .n) _ "|" _ n, "0|0", "all settled")
+    // The review's own figures, with the spend recorded: a 5.00 cap above what the day had, 4.90 spent in a row, 0.50
+    // estimated. Before admission counted the estimate, this run was admitted.
+    Set since = $CLASSMETHOD(b, "Status").since, before = $CLASSMETHOD(b, "Spent", since)
+    Do $CLASSMETHOD(b, "Configure", $FNUMBER(before + 5, "", 6))
+    Set resp = ##class(Shutter.Bridge.Msg.AgentResponse).%New()
+    Set resp.Mode = "live", resp.Model = "claude-opus-5-5", resp.PromptTokens = 1225000, resp.CompletionTokens = 0, resp.Status = "ok"
+    Set resp.StartedAt = ##class(Shutter.Util.Time).NowUTC(), resp.RequestedBy = "ut-adm-spender"
+    Set sc = ##class(Shutter.Store.AgentRun).FromDiagnostic("conformance", resp, .row)
+    Do $$$AssertStatusOK(sc, "a row of 4.90 recorded")
+    If $$$ISERR(sc) Quit
+    Set s = $CLASSMETHOD(b, "Status")
+    Do $$$AssertEquals(s.spentTodayUsd - before, 4.9, "the day's spend reads it: " _ s.spentTodayUsd)
+    Do $$$AssertNotTrue(s.exhausted, "4.90 of 5.00: not spent")
+    Do $$$AssertNotTrue($CLASSMETHOD(b, "Admit", "ut-adm-review", "approver", .st), "and a run estimated at 0.50 is refused")
+    Do $$$AssertTrue($CLASSMETHOD(b, "Refusal", st) [ "has 0.10 USD left", "with what is left: " _ $CLASSMETHOD(b, "Refusal", st))
+    Do $$$AssertEquals($DATA(^Shutter.Budget("reserve", "ut-adm-review")), 0, "nothing reserved")
+    Do ##class(Shutter.Store.AgentRun).%DeleteId(row.%Id())
 }
 
 /// The asker's share counts the estimate too, per user; the feed's own runs ("system") have no share.
