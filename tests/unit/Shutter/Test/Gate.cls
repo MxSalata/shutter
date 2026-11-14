@@ -243,6 +243,27 @@ Method TestCatalogue()
     Do ..RunRows("catalogue")
 }
 
+/// A catalogue decision that is missing reads as no catalogue: the snapshot's catalogue item absent, not an object or
+/// without a decision gives the passing row that the matcher's not_configured gives, with the same reason code and the
+/// same words, and neither the entry the plan names nor the entries the item still lists are looked at. The instance
+/// under test has a catalogue, so the row does not say what the instance holds. Shutter's own evidence always writes a
+/// decision, or error when the matcher fails (Shutter.Operation.Evidence), so these snapshots are made by hand. A plan
+/// made on one records no catalogue version, so its approval is not bound to the catalogue in force and stands at
+/// dispatch. A decision word the matcher never writes is read as a match.
+Method TestAMissingCatalogueDecisionReadsAsNoCatalogue()
+{
+    Do $$$AssertTrue(##class(Shutter.Catalogue.Entry).Count() > 0, "the instance under test has a catalogue")
+    Do ..RunRows("missing_decision")
+    Set run = ..Run({"name": "a missing decision at dispatch", "summary": {"catalogue": null}, "approval": {}})
+    Do $$$AssertEquals(..Found(run.checks, "catalogue", "NOT_CONFIGURED"), "pass", "at dispatch the catalogue row passes as at the proposal (" _ ..Codes(run.checks, "catalogue") _ ")")
+    Do $$$AssertEquals(..Found(run.checks, "authorization", "APPROVAL_VALID"), "pass", "the approval stands (" _ ..Codes(run.checks, "authorization") _ ")")
+    Do $$$AssertEquals(run.response.Outcome, "pass", "and the dispatch gate passes the write")
+    Set decision = ##class(Shutter.Store.GateDecision).%OpenId(run.response.DecisionId)
+    Do $$$AssertTrue($ISOBJECT(decision) && $ISOBJECT(decision.Plan), "the decision names its plan")
+    If $ISOBJECT(decision) && $ISOBJECT(decision.Plan) Do $$$AssertEquals(decision.Plan.CatalogueVersion, "", "the plan records no catalogue version")
+    Do $$$AssertNotEquals(##class(Shutter.Catalogue.Entry).CatalogueVersion(), "", "while the catalogue in force has one")
+}
+
 Method TestRehearsal()
 {
     Do ..RunRows("rehearsal")
@@ -1617,6 +1638,39 @@ XData Rows [ MimeType = application/json ]
   {"group": "catalogue", "name": "an allowed alternative the plan does not follow",
    "plan": {"catalogue_entry": "E5", "outcome": "alternative:1"}, "summary": {"catalogue": {"decision": "board", "entry": "E5", "matches": [{"id": "E5", "preferred": {"outcome": "resend_latest"}, "alternatives": [{"outcome": "reconcile", "when": "always"}]}]}},
    "expect": [["catalogue", "pass", "OUTCOME_ALLOWED"], ["catalogue", "block", "OUTCOME_MISMATCH"]]},
+
+  {"group": "missing_decision", "name": "the snapshot has no catalogue item",
+   "summary": {"catalogue": null},
+   "expect": [["catalogue", "pass", "NOT_CONFIGURED"]], "absent": [["catalogue", "MATCHER_ERROR"], ["catalogue", "NEW_PATTERN"]], "outcome": "pass",
+   "contains": [["catalogue", "NOT_CONFIGURED", "No catalogue is installed, or the matcher gave no result"]]},
+  {"group": "missing_decision", "name": "the matcher had no catalogue: the same row, word for word",
+   "summary": {"catalogue": {"decision": "not_configured", "matches": []}},
+   "expect": [["catalogue", "pass", "NOT_CONFIGURED"]], "outcome": "pass",
+   "contains": [["catalogue", "NOT_CONFIGURED", "No catalogue is installed, or the matcher gave no result"]]},
+  {"group": "missing_decision", "name": "the catalogue item is not an object",
+   "summary": {"catalogue": "lost"},
+   "expect": [["catalogue", "pass", "NOT_CONFIGURED"]], "outcome": "pass"},
+  {"group": "missing_decision", "name": "the catalogue item has no decision",
+   "summary": {"catalogue": {"matches": []}},
+   "expect": [["catalogue", "pass", "NOT_CONFIGURED"]], "outcome": "pass"},
+  {"group": "missing_decision", "name": "the decision is empty",
+   "summary": {"catalogue": {"decision": "", "matches": []}},
+   "expect": [["catalogue", "pass", "NOT_CONFIGURED"]], "outcome": "pass"},
+  {"group": "missing_decision", "name": "the decision is null",
+   "summary": {"catalogue": {"decision": null, "matches": []}},
+   "expect": [["catalogue", "pass", "NOT_CONFIGURED"]], "outcome": "pass"},
+  {"group": "missing_decision", "name": "the item lists an entry that stops and has lost its decision: the entry goes unread",
+   "case": {"mode": "board"}, "plan": {"created_by": "run:1"}, "summary": {"catalogue": {"entry": "E7", "outcome": "escalate", "matches": [{"id": "E7", "preferred": {"outcome": "escalate"}}]}},
+   "expect": [["catalogue", "pass", "NOT_CONFIGURED"]], "absent": [["catalogue", "ENTRY_NOT_NAMED_WRITE"]], "outcome": "pass"},
+  {"group": "missing_decision", "name": "the plan names an entry no catalogue has, with the decision missing: the entry is not looked up",
+   "plan": {"catalogue_entry": "E999", "outcome": "preferred"}, "summary": {"catalogue": null},
+   "expect": [["catalogue", "pass", "NOT_CONFIGURED"]], "absent": [["catalogue", "ENTRY_UNKNOWN"]], "outcome": "pass"},
+  {"group": "missing_decision", "name": "the plan names an entry no catalogue has, and the matcher had no catalogue: the same",
+   "plan": {"catalogue_entry": "E999", "outcome": "preferred"}, "summary": {"catalogue": {"decision": "not_configured", "matches": []}},
+   "expect": [["catalogue", "pass", "NOT_CONFIGURED"]], "absent": [["catalogue", "ENTRY_UNKNOWN"]], "outcome": "pass"},
+  {"group": "missing_decision", "name": "a decision word the matcher never writes, with no matches, reads as a match",
+   "summary": {"catalogue": {"decision": "matched"}},
+   "expect": [["catalogue", "pass", "ENTRY_NOT_NAMED"]], "absent": [["catalogue", "NOT_CONFIGURED"], ["catalogue", "MATCHER_ERROR"]], "outcome": "pass"},
 
   {"group": "capability", "name": "a receiver without dry runs",
    "summary": {"route": {"dry_run": false}},

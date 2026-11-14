@@ -233,6 +233,21 @@ Method TestWordsNotReadMatchNoResend()
     Do $$$AssertEquals(##class(Shutter.Catalogue.Matcher).Match(known).entry, "E2", "known words still read as a timeout")
 }
 
+/// With a catalogue installed the matcher always names a decision, and never not_configured, which is the answer of an
+/// empty catalogue alone: conditions that show nothing match no entry and are a new pattern, and the result carries the
+/// catalogue's version. So a snapshot of Shutter's own evidence cannot reach the gate with its decision missing.
+Method TestACatalogueAlwaysGivesADecision()
+{
+    Do $$$AssertTrue(##class(Shutter.Catalogue.Entry).Count() > 0, "the instance under test has a catalogue")
+    Set words = $LISTBUILD("policy", "board", "person", "new_pattern")
+    Set nothing = ##class(Shutter.Catalogue.Matcher).Match({})
+    Do $$$AssertEquals(nothing.decision, "new_pattern", "conditions that show nothing are a new pattern: " _ nothing.decision)
+    Do $$$AssertEquals(nothing."catalogue_version", ##class(Shutter.Catalogue.Entry).CatalogueVersion(), "the result carries the catalogue's version")
+    Set known = ##class(Shutter.Catalogue.Matcher).Match(..Conditions({"case": {"failure_kind": "uncertain_outcome"}, "summary": {"failure": {"reason_code": "alert", "http_status": 0}}}))
+    Do $$$AssertTrue($LISTFIND(words, known.decision) > 0, "a matched case's decision is one of the matcher's words: " _ known.decision)
+    Do $$$AssertNotEquals(known.decision, "not_configured", "and never not_configured while the catalogue has entries")
+}
+
 /// An alert-only failure (the alert intake's reason code "alert", a 503 read from the alert's words) matches E4 in an
 /// ordered chain, as a failure the connector recorded with ward_unavailable does: the reason code names no answer of the
 /// receiver's, so the status decides and the case is not a new pattern.
