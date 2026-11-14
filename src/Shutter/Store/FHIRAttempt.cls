@@ -73,12 +73,16 @@ ClassMethod Open(case As Shutter.Store.Case, binding As Shutter.Store.FHIRBindin
     Quit $$$OK
 }
 
-/// Unsent to sent, once. True only when this call changed the row; a row already sent answers false.
+/// Unsent to sent, once. True only when this call changed the row; a row already sent answers false. When it answers
+/// true the journal holds the change: the commit waits for it.
 Method MarkSent() As %Boolean
 {
     Set id = ..%Id()
     If id = "" Quit 0
     Set changed = 0
+    // This commit waits for the journal's write, which a commit does not do by itself: the update leaves right after
+    // it, and the row must read sent after a crash too. The process's own setting is put back.
+    Set was = $SYSTEM.Process.SynchCommit(1)
     TSTART
     Try {
         Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "UPDATE Shutter_Store.FHIRAttempt SET State = 'sent', SentAt = ? WHERE ID = ? AND State = 'unsent'", ##class(Shutter.Util.Time).NowUTC(), id)
@@ -87,6 +91,7 @@ Method MarkSent() As %Boolean
         Set changed = 0
     }
     If changed { TCOMMIT } Else { TROLLBACK 1 }
+    Do $SYSTEM.Process.SynchCommit(was)
     Do ..%Reload()
     Quit changed
 }
