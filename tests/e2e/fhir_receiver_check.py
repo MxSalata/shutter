@@ -17,9 +17,12 @@ and with --extended:
   D2  Shutter recovery stopped while the case waits: the approval is refused, nothing sent.
 
 It changes the instance: two items in Hospital.Production, the four FHIR items in Shutter's production, a receiver in
-the site profile, the proof row of that receiver. At its end it restores the site profile, removes the watched mode it
-set and clears a stop it latched. Run it on a throwaway instance, after tests/conformance/fhir_conformance.py wrote
-the proof file:
+the site profile, the proof row of that receiver. On a demo install that already has them (scenario S35's FHIR Ward In
+and FHIR Ward Out, the entry and the proof measured at install), it adds no item, drops each transfer into the folder
+FHIR Ward In reads (^Shutter.Config("fhirWardIn")), and deletes the receiver's proof row before variant 0, so that "no
+proof yet" holds again; the proof it imports then stays. At its end it restores the site profile, removes the watched
+mode it set and clears a stop it latched. Run it on a throwaway instance, after tests/conformance/fhir_conformance.py
+wrote the proof file:
 
   python3 tests/e2e/fhir_receiver_check.py --ctr CONTAINER --url http://127.0.0.1:PORT --proof FILE [--ns SHUTTER] [--extended]
 
@@ -96,6 +99,8 @@ class Rig(Api):
         self.wards = (f'Location/{prefix}ward-a', f'Location/{prefix}ward-b')
         self.seeded = False
         self.last_size = 0
+        # The folder FHIR Ward In reads: the check's own, or the demo's when the demo install placed the items (S35)
+        self.inbox = f'{FOLDER}/in'
 
     def fhir(self, path, method='GET', body=None):
         """One request to the FHIR server: the status, and the body as JSON when it is JSON."""
@@ -151,14 +156,19 @@ def ask(ctr, ns, lines, what):
         sys.exit(f'{what}: {got}')
 
 
-def add_items(ctr):
-    """A file service feeding the stock TCP operation, which reports to the alert intake the production already has."""
+def add_items(ctr, ns):
+    """A file service feeding the stock TCP operation, which reports to the alert intake the production already has.
+    Returns whether it added them, and the folder the file service reads: on a demo install that placed the two items
+    (S35), the one it recorded in ^Shutter.Config("fhirWardIn"), and no item is added."""
     have = result(terminal(ctr, 'HOSPITAL', [
         'Set p = ##class(Ens.Config.Production).%OpenId("Hospital.Production")',
         f'Write !,"RESULT: ",$SELECT($ISOBJECT(p.FindItemByConfigName("{RECEIVER}")): "there", 1: "missing"),!',
     ]), 'reading Hospital.Production')
     if have == 'there':
-        return False
+        folder = result(terminal(ctr, ns, ['Write !,"RESULT: ",$GET(^Shutter.Config("fhirWardIn")),!']),
+                        'reading ^Shutter.Config("fhirWardIn")')
+        # Items an earlier run of this check added read its own folder; the demo's read the recorded one
+        return False, folder.rstrip('/') if folder else f'{FOLDER}/in'
     ask(ctr, 'HOSPITAL', [
         'Set p = ##class(Ens.Config.Production).%OpenId("Hospital.Production")',
         f'Set i = ##class(Ens.Config.Item).%New() Set i.Name = "{FEED}", i.ClassName = "EnsLib.HL7.Service.FileService", i.PoolSize = 1, i.Enabled = 1, i.Production = p',
@@ -184,7 +194,7 @@ def add_items(ctr):
         'Set:sc sc = ##class(Ens.Director).UpdateProduction(30, 1)',
         'Write !,"RESULT: ",$SELECT(sc: "ok", 1: $SYSTEM.Status.GetErrorText(sc)),!',
     ], 'adding the items to Hospital.Production')
-    return True
+    return True, f'{FOLDER}/in'
 
 
 def place_items(ctr, ns, credential='FHIRFacade', user='', password=''):
@@ -234,6 +244,14 @@ def read_file_lines(name):
         f'Set f = ##class(%Stream.FileCharacter).%New() Set f.TranslateTable = "UTF8" Do f.LinkToFile("{FOLDER}/{name}")',
         'Set text = "" While \'f.AtEnd { Set text = text _ f.Read(32000) }',
     ]
+
+
+def forget_proof(ctr, ns):
+    """The receiver's proof row deleted, so that variant 0 meets no proof: a demo install recorded one at install (S35)."""
+    ask(ctr, ns, [
+        f'Set rs = ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM Shutter_Store.FHIRProof WHERE Receiver = ?", "{RECEIVER}")',
+        'Write !,"RESULT: ",$SELECT(rs.%SQLCODE >= 0: "ok", 1: "SQLCODE "_rs.%SQLCODE_" "_rs.%Message),!',
+    ], 'deleting the receiver\'s proof row')
 
 
 def import_proof(ctr, ns, path):
@@ -347,7 +365,7 @@ def begin(ctr, api, n, faults=()):
     pv1[0], pv1[1], pv1[2], pv1[3], pv1[6], pv1[19], pv1[44] = 'PV1', '1', 'I', 'WARD-B', 'WARD-A', r.visit, admitted
     message = (f'MSH|^~\\&|PAS|HOSP|WARD|HOSP|{t}||ADT^A02^ADT_A02|FHIR{n}|P|2.5.1\rEVN|A02|{t}||||{t}\r'
                f'PID|1||{r.mrn}^^^HOSP^MR||SYNTH^BRAM||19860412|M\r' + '|'.join(pv1) + '\r')
-    drop(ctr, f'{FOLDER}/in', f'a02-{n}', message)
+    drop(ctr, api.inbox, f'a02-{n}', message)
     return r
 
 
@@ -691,10 +709,11 @@ def main():
             placed = place_items(args.ctr, args.ns, IRIS_CREDENTIAL, args.fhir_user, os.environ['FHIR_PASSWORD'])
         else:
             placed = place_items(args.ctr, args.ns)
-        add_items(args.ctr)
+        added, api.inbox = add_items(args.ctr, args.ns)
         store_entry(api, True)
-        print(f'placed the FHIR items ({placed.get("added")} added), added {RECEIVER}, a stock TCP operation on port {PORT} with nothing '
-              f'listening, to Hospital.Production, and stored it in the site profile as a FHIR R4 receiver at {api.fhir_base}')
+        print(f'placed the FHIR items ({placed.get("added")} added), {"added" if added else "found"} {RECEIVER}, a stock TCP operation on '
+              f'port {PORT} with nothing listening, {"to" if added else "in"} Hospital.Production (its feed reads {api.inbox}), and stored '
+              f'it in the site profile as a FHIR R4 receiver at {api.fhir_base}')
         time.sleep(5)
         n = int(time.time()) % 800000 * 10 + 1000000
 
@@ -704,11 +723,13 @@ def main():
                 print(f'imported the proof {args.proof} for {RECEIVER}')
                 failures += variant_a(args.ctr, api, n + 1, record.setdefault('a', {}))
             else:
+                forget_proof(args.ctr, args.ns)
                 r = begin(args.ctr, api, n)
                 failures += stopped_without_asking(api, r, '0, no proof (the conformance run wrote none):', 'FHIR_VERSIONING_UNPROVEN',
                                                    'no conformance run is recorded for this server software', record.setdefault('0', {}))
                 check(failures, False, 'variant A was played (it needs the proof of a conformance run against this server)')
         else:
+            forget_proof(args.ctr, args.ns)
             r = begin(args.ctr, api, n)
             failures += stopped_without_asking(api, r, '0, no proof yet:', 'FHIR_VERSIONING_UNPROVEN', 'no conformance run is recorded for this server software')
             import_proof(args.ctr, args.ns, args.proof)
