@@ -185,8 +185,8 @@ Method TestAReplayedRequestCallsNoProviderAndSpendsNothing()
     // The item's choice of runner, and that the budget and the provider's state are asked only off replay
     Set item = ..Source("Shutter.Bridge.Operation.Agent", "OnAgentRequest")
     Do $$$AssertTrue(item [ "$SELECT(spec.Mode = ""replay"": ""Shutter.Bridge.Runner.Replay""", "the item takes the replay runner for a replay")
-    Do $$$AssertTrue(item [ "(spec.Mode '= ""replay"") && '##class(Shutter.Util.Budget).AllowsFor(", "the budget is asked only off replay")
-    Do $$$AssertTrue(item [ "If spec.Mode '= ""replay"" {", "and reserved only off replay")
+    Do $$$AssertTrue(item [ "(spec.Mode '= ""replay"") && '##class(Shutter.Util.Budget).Admit(", "the budget is asked only off replay")
+    Do $$$AssertTrue(item [ "$SELECT(spec.Mode '= ""replay"": spec.CorrelationKey", "and reserved only off replay")
     // A recording of S8 answers it, as the demo's case would be answered
     Set key = ""
     &sql(SELECT TOP 1 "Key" INTO :key FROM Shutter_Bridge.Record WHERE "Key" %STARTSWITH 'scenario:S8:' AND "Key" [ '|conformance|')

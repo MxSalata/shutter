@@ -1,15 +1,21 @@
 /// The day's model budget (CONTRACTS 9, v1.34): a cap in US dollars on what the live and record agent runs may spend between
 /// one 00:00 UTC and the next, read from SHUTTER_DAILY_BUDGET_USD at the install into ^Shutter.Config("dailyBudgetUsd");
-/// 0 or unset means no cap. The Agent item asks Allows() before a run that would call a model and refuses the run with the
-/// status budget_exhausted when the day's spend (the AgentRun rows' CostUSD since 00:00 UTC; replays and the mimic's runs
-/// spend nothing, as GET /costs counts them) has reached the cap. A case the catalogue gives to the board or a person then
-/// goes to a person, and another takes the rules path (CaseWorkflow.NoBoard); a question or a review fails with the status. GET /settings and the Doctor
-/// carry Status(). The public demo sets the cap with its own API key, so a day of visitors spends at most the cap.
-/// Reserve, then settle (v1.35): a run in flight has no row yet, so three members running at once were not counted against
-/// the cap. The Agent item reserves an estimate for each live run it starts (Reserve) and settles it when the run ends
-/// (Settle); the day's state counts the reservations beside the spend (reservedUsd, inFlight), and a run is refused when
-/// spend plus reservations reach the cap. The estimate is ^Shutter.Config("budgetReserveUsd") when the site sets it, else
-/// the mean cost of the last twenty live runs, else 0.50 USD; a reservation older than twenty minutes is stale and dropped.
+/// 0 or unset means no cap. The day's spend is the AgentRun rows' CostUSD since 00:00 UTC (replays and the mimic's runs
+/// spend nothing, as GET /costs counts them). The Agent item admits a run that would call a model through Admit() and refuses
+/// it with the status budget_exhausted when it does not fit; a case the catalogue gives to the board or a person then goes to
+/// a person, and another takes the rules path (CaseWorkflow.NoBoard); a question or a review fails with the status. GET
+/// /settings and the Doctor carry Status().
+/// Reserve, then settle (v1.35): a run in flight has no row yet, so each admitted run holds a reservation of the estimate
+/// until it ends (Settle); the day's state counts the reservations beside the spend (reservedUsd, inFlight). The estimate is
+/// ^Shutter.Config("budgetReserveUsd") when the site sets it, else the mean cost of the last twenty live runs, else 0.50 USD;
+/// a reservation older than twenty minutes is taken for a job that died and dropped.
+/// Admission (R145-03): a run is admitted only when the day's spend, the reservations in flight and the run's own estimate
+/// together stay within the cap, and for a user with a share, that user's spend, reservations and the estimate within the
+/// share. The check and the reservation are one step under one lock, so two runs cannot both be admitted on the same
+/// remaining allowance. What this bounds is spend plus estimates, not the bill: a run can cost more than its estimate, a run
+/// still going after twenty minutes stops counting until its row is written, and a production review's cost is kept on the
+/// review, not on an AgentRun row, so the day's spend does not read it. It is no ceiling on a provider's invoice; a hard
+/// limit at the provider is that.
 Class Shutter.Util.Budget
 {
 
@@ -18,6 +24,10 @@ Parameter DEFAULTRESERVEUSD = 0.5;
 
 /// A reservation older than this many seconds was left behind by a run that never settled (a job that died).
 Parameter RESERVESTALESECONDS = 1200;
+
+/// How long an admission waits for another one to finish, in seconds. The step under the lock is two sums and a write, so
+/// a wait this long means something is wrong, and the run is refused rather than admitted unchecked.
+Parameter ADMITLOCKSECONDS = 10;
 
 /// What one live run is expected to cost: the site's figure, else the mean of the last twenty live runs that cost
 /// anything, else the default; never below 0.01.
@@ -37,13 +47,56 @@ ClassMethod Estimate() As %Numeric
     Quit +mean
 }
 
-/// Reserve the estimate for a run about to call a model, under a key the caller settles with. Returns the estimate.
+/// Reserve the estimate for a run about to call a model, under a key the caller settles with, with no check. Returns the
+/// estimate. The Agent item and the SQL diagnostic go through Admit(), which checks and reserves in one step.
 ClassMethod Reserve(key As %String, user As %String = "") As %Numeric
 {
     Set est = ..Estimate()
-    Set now = ##class(Shutter.Util.Time).EpochSeconds()
-    Set ^Shutter.Budget("reserve", key) = $LISTBUILD(est, now, user)
+    Lock +^Shutter.Budget("admit"):..#ADMITLOCKSECONDS
+    Set locked = $TEST
+    Set ^Shutter.Budget("reserve", key) = $LISTBUILD(est, ##class(Shutter.Util.Time).EpochSeconds(), user)
+    If locked Lock -^Shutter.Budget("admit")#"I"
     Quit est
+}
+
+/// Admission (R145-03): whether a run that would call a model may start for a user and, when it may, its reservation under
+/// key, in one step under one lock (the lock Reserve takes too), so two callers cannot both be admitted on the same remaining
+/// allowance. Admitted when the day's spend plus the reservations in flight plus this run's estimate stay within the cap,
+/// and, for a user with a share (not "system" or nobody), that user's spend plus their reservations plus the estimate stay
+/// within the share. status gets StatusFor(user) with estimateUsd, read under the lock; estimate gets the run's estimate.
+/// Refused, nothing is reserved; the caller settles an admitted run's key when the run ends.
+ClassMethod Admit(key As %String, user As %String, Output status As %DynamicObject, Output estimate As %Numeric) As %Boolean
+{
+    Set estimate = ..Estimate(), admitted = 0
+    Lock +^Shutter.Budget("admit"):..#ADMITLOCKSECONDS
+    If '$TEST {
+        Set status = ..StatusFor(user)
+        Set status.estimateUsd = estimate
+        Do status.%Set("busy", 1, "boolean")
+        Quit 0
+    }
+    Try {
+        Set status = ..StatusFor(user)
+        Set status.estimateUsd = estimate
+        Set admitted = ..Fits(status, user)
+        If admitted Set ^Shutter.Budget("reserve", key) = $LISTBUILD(estimate, ##class(Shutter.Util.Time).EpochSeconds(), user)
+    } Catch ex {
+        Lock -^Shutter.Budget("admit")#"I"
+        Throw ex
+    }
+    Lock -^Shutter.Budget("admit")#"I"
+    Quit admitted
+}
+
+/// Whether one more run of status.estimateUsd fits a day's state from StatusFor(user): the cap, then the user's share (the
+/// feed's own runs, "system" or nobody, have no share).
+ClassMethod Fits(status As %DynamicObject, user As %String) As %Boolean
+{
+    Set est = +status.%Get("estimateUsd")
+    If (+status.dailyUsd > 0) && ((+status.spentTodayUsd + +status.%Get("reservedUsd") + est) > +status.dailyUsd) Quit 0
+    If (user = "") || (user = "system") Quit 1
+    If (+status.%Get("perUserUsd") > 0) && ((+status.%Get("spentByMeUsd") + +status.%Get("reservedByMeUsd") + est) > +status.perUserUsd) Quit 0
+    Quit 1
 }
 
 /// The run ended, whatever its outcome: its row carries the real cost now.
@@ -175,19 +228,23 @@ ClassMethod StatusFor(user As %String, now As %String = "") As %DynamicObject
     Quit s
 }
 
-/// Whether a run that would call a model may go for a user: the day's cap, then the user's share (the feed's own runs,
-/// "system" or nobody, have no share). status gets StatusFor(user).
+/// Whether a run that would call a model would be admitted now for a user, as Admit() decides (the estimate counted), with
+/// nothing reserved: for a check ahead of the runs, the board convened by hand and the live agents' availability. status
+/// gets StatusFor(user) with estimateUsd.
 ClassMethod AllowsFor(user As %String, Output status As %DynamicObject) As %Boolean
 {
     Set status = ..StatusFor(user)
-    Quit 'status.exhausted
+    Set status.estimateUsd = ..Estimate()
+    Quit ..Fits(status, user)
 }
 
-/// Whether a run that would call a model may go: no cap, or the day's spend below it. status gets Status().
+/// Whether a run that would call a model would be admitted now with no user's share in play: the day's spend, the
+/// reservations and the estimate within the cap. status gets Status() with estimateUsd.
 ClassMethod Allows(Output status As %DynamicObject) As %Boolean
 {
     Set status = ..Status()
-    Quit 'status.exhausted
+    Set status.estimateUsd = ..Estimate()
+    Quit ..Fits(status, "")
 }
 
 /// The refusal's words, for the run's error and the case's note; the figures in dollars and cents. A user's spent share is
@@ -195,8 +252,22 @@ ClassMethod Allows(Output status As %DynamicObject) As %Boolean
 ClassMethod Refusal(status As %DynamicObject) As %String
 {
     Set flight = $SELECT(+status.%Get("inFlight") > 0: " with " _ status.inFlight _ " run(s) in flight, " _ ..Dollars(status.%Get("reservedUsd")) _ " reserved", 1: "")
-    If status.%IsDefined("shareExhausted") && status.shareExhausted && '..Exhausted(status.dailyUsd, status.spentTodayUsd + +status.%Get("reservedUsd")) {
-        Quit "Your share of the day's model budget, " _ ..Dollars(status.perUserUsd) _ ", is spent (" _ ..Dollars(status.spentByMeUsd) _ " since " _ status.since _ "); the run was not sent. It resets at " _ status.resetsAt _ "."
+    If status.%Get("busy") Quit "The day's model budget could not be checked in time (another run was being admitted); the run was not sent. Try again in a moment."
+    Set dayFull = ..Exhausted(status.dailyUsd, status.spentTodayUsd + +status.%Get("reservedUsd"))
+    Set est = status.%Get("estimateUsd")
+    // Not spent, but the run's estimate does not fit what is left (Admit, R145-03): which limit, what is left, the estimate.
+    Set dayShort = (est '= "") && 'dayFull && (+status.dailyUsd > 0) && ((+status.spentTodayUsd + +status.%Get("reservedUsd") + est) > +status.dailyUsd)
+    If 'dayFull && 'dayShort && status.%IsDefined("shareExhausted") {
+        Set mine = +status.%Get("spentByMeUsd") + +status.%Get("reservedByMeUsd")
+        If status.shareExhausted {
+            Quit "Your share of the day's model budget, " _ ..Dollars(status.perUserUsd) _ ", is spent (" _ ..Dollars(status.spentByMeUsd) _ " since " _ status.since _ "); the run was not sent. It resets at " _ status.resetsAt _ "."
+        }
+        If (est '= "") && (+status.%Get("perUserUsd") > 0) && ((mine + est) > +status.perUserUsd) {
+            Quit "Your share of the day's model budget, " _ ..Dollars(status.perUserUsd) _ ", has " _ ..Dollars(status.perUserUsd - mine) _ " left (" _ ..Dollars(status.spentByMeUsd) _ " spent since " _ status.since _ $SELECT(+status.%Get("reservedByMeUsd") > 0: ", " _ ..Dollars(status.reservedByMeUsd) _ " reserved", 1: "") _ "), less than a run's estimate of " _ ..Dollars(est) _ "; the run was not sent. It resets at " _ status.resetsAt _ "."
+        }
+    }
+    If dayShort {
+        Quit "The day's model budget of " _ ..Dollars(status.dailyUsd) _ " has " _ ..Dollars(status.dailyUsd - status.spentTodayUsd - status.%Get("reservedUsd")) _ " left (" _ ..Dollars(status.spentTodayUsd) _ " spent since " _ status.since _ flight _ "), less than a run's estimate of " _ ..Dollars(est) _ "; the run was not sent. It resets at " _ status.resetsAt _ "."
     }
     Quit "The day's model budget of " _ ..Dollars(status.dailyUsd) _ " is spent (" _ ..Dollars(status.spentTodayUsd) _ " since " _ status.since _ flight _ "); the run was not sent. It resets at " _ status.resetsAt _ "."
 }
