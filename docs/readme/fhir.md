@@ -196,7 +196,7 @@ On IRIS for Health (2026.2, 2026.3.0AI.154, 2027.1.0AI.109) the tag stays on Shu
 - Replacing the active location entry, and bed-level shapes.
 - Marker modes other than a required tag, and server-owned fields to ignore.
 - Paged history.
-- A new plan after a 412 in the same case.
+- An automatic new plan after a 412: a person reinvestigates the case, which reads fresh evidence and asks for a new approval.
 - A Receiver check variant for a FHIR update, and a FHIR panel on the case page.
 - Further faults in the test server: a second writer making the same change, a history that answers 503, a dropped tag.
 - A FHIR demo receiver in the seed, and a playable scenario on the Scenarios page and the online demo.
