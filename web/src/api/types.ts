@@ -148,8 +148,11 @@ export interface ScenarioStep {
   receivers?: string[];
   /** A change made by hand in the receiver itself, not through the feed (S20). */
   manual?: { encounter_id: string; event: string; ward: string; event_time: string };
-  /** "hospital" plays through the demo hospital's feed; "lab" through its results route (the pathology paths, 1.4.6). */
-  route?: string;
+  /**
+   * "hospital" plays through the demo hospital's feed; "fhir_ward" through its FHIR ward feed, whose HL7 link never
+   * opens a connection (S35); "lab" through its results route (the pathology paths, 1.4.6).
+   */
+  route?: 'hospital' | 'fhir_ward' | 'lab';
   /** The pathology paths' stand-in for the results system taken down or brought back (1.4.6). */
   lab_receiver?: 'down' | 'up';
   /** A wait for the receiver's outage to reach this state (1.4.6, P2). */
@@ -172,6 +175,21 @@ export interface ScenarioExpected {
   final_reason?: string;
   injected_note?: string;
   other_encounter?: string;
+  /** A person approves the case's plan before anything is written (S30, S35). */
+  person_approves?: boolean;
+  /** Where the failure came from, when the demo hospital's production forwarded it (S19, S35). */
+  source?: { namespace: string; production: string; route: string };
+  /**
+   * A receiver that takes FHIR R4 (S35): the case ends at the FHIR server, judged there. The Encounter is updated
+   * once, with If-Match on the version read, and the version carrying Shutter's marker is found in its history.
+   */
+  fhir?: {
+    receiver: string;
+    encounter: string;
+    final_location: string;
+    versions: number;
+    marked_version: string;
+  };
   /** The modes the scenario is defined for, when not all of them: in another mode its card doesn't apply. */
   modes?: Mode[];
   /** An incident scenario: many failures to one receiver, settled as one chain per encounter (S11, S12). */
