@@ -5,6 +5,7 @@ import type { Mode, Scenario, ScenarioStep } from '@/api/types';
  * `expected` gives in the mode. Nothing here is written per scenario, so a scenario that changes changes its diagram.
  * The end is what the scenario should end in, never what a run did: a recorded run can differ (S8 in Rules only wrote),
  * and the row's latest case says that. The words are the row's: a resend is conditional, and an escalation writes nothing.
+ * A receiver that takes FHIR R4 (S35) is written to once, by a version-aware update (If-Match) a person approves.
  */
 export type DiagramNode =
   | {
@@ -79,6 +80,12 @@ const FAULTS: Record<string, { caption: string; words: string }> = {
   delay_response: { caption: 'slow', words: 'the receiver is slow to answer' },
 };
 
+/** The demo hospital's FHIR ward feed (S35): its HL7 link to the ward system never opens a connection. */
+const LINK_DOWN = {
+  caption: 'link down',
+  words: 'the HL7 link to the ward system never opens a connection',
+};
+
 const eventOf = (step: ScenarioStep) => /(A\d{2})\.hl7$/i.exec(step.file ?? '')?.[1]?.toUpperCase();
 
 /**
@@ -120,9 +127,12 @@ function nodesOf(s: Pick<Scenario, 'summary' | 'steps' | 'expected'>): DiagramNo
   for (const step of steps) {
     if (step.file) {
       const event = eventOf(step) ?? 'HL7';
+      // On the FHIR ward feed a delivery fails with no fault: the link is down, so nothing at the receiver said no
+      const linkDown = step.route === 'fhir_ward' && step.expect === 'delivery_fails';
+      if (linkDown) nodes.push({ kind: 'fault', ...LINK_DOWN });
       const mark =
         step.expect === 'delivery_fails'
-          ? faultOn
+          ? faultOn || linkDown
             ? 'fails'
             : 'refused'
           : step.expect === 'withheld'
@@ -242,6 +252,15 @@ export function endOf(s: Pick<Scenario, 'expected'>, mode: Mode): DiagramEnd {
     );
   }
   const stopped = !!e.blocked_by;
+  // A FHIR receiver takes one version-aware update, and a person approves it in every mode: no site policy releases it
+  if (e.fhir && e.write)
+    return {
+      kind: 'write',
+      writes: 1,
+      label: '1 update with If-Match',
+      caption: 'after gate checks and approval',
+      words: "one version-aware update (If-Match), after the gate's checks and a person's approval",
+    };
   // A scenario whose expected names one failure's case has other cases too: the count is that case's, not the story's
   if (e.write) return writesEnd(1, false, mode, !!e.case_by_key);
   // S23c proposes a resend, and the gate hands it to a person when the bed's occupant can't leave
