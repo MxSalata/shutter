@@ -240,6 +240,119 @@ ClassMethod KillStores()
     }
 }
 
+/// The demo's FHIR receiver (scenario S35): the demo hospital's stock HL7 TCP operation whose link to the ward system
+/// never opens a connection (Hospital.Production), described in the demo's site profile as a FHIR R4 server.
+Parameter DEMORECEIVER = "FHIR Ward Out";
+
+/// The demo's FHIR receiver entry, DESIGN 2.1's: the test FHIR server this instance serves at /fhir-facade/r4, with the
+/// demo's visit and hospital number systems and its two wards.
+ClassMethod DemoReceiverEntry() As %DynamicObject
+{
+    Quit {"name": (..#DEMORECEIVER), "system": "the ward system (FHIR R4)", "category": "current_state", "tier": 3,
+        "applies": "arrival_order", "resend_timestamp": "original", "cancels": false, "merges": false,
+        "fhir": {"base": "/fhir-facade/r4", "recovery_enabled": true,
+            "encounter_identifier": {"system": "urn:oid:2.16.840.1.113883.2.1.3.2.4.18.49"},
+            "patient_identifier": {"system": "urn:shutter:demo:mrn", "hl7_authority": "HOSP"},
+            "marker": {"system": "urn:shutter:recovery"},
+            "location_map": [
+                {"ward": "WARD-A", "location": "Location/ward-a", "identifier": {"system": "urn:shutter:ward", "value": "WARD-A"}},
+                {"ward": "WARD-B", "location": "Location/ward-b", "identifier": {"system": "urn:shutter:ward", "value": "WARD-B"}}]}}
+}
+
+/// On a demo install (^Shutter.Config("demo")) whose stored profile is still the seed's (<var>seedPath</var> as its
+/// source, or the demo's or the live hospital's mark on it, as Shutter.Setup DemoProfilePolicy, LiveProfilePolicy and
+/// DemoLabReceiver write it), the demo's FHIR receiver entry is added to the profile's receivers, or put in place of an
+/// entry of that name with no fhir block, and stored as a new version with the same source. A profile a person saved is
+/// never touched, a site install gets nothing, and nothing changes when an entry of that name has a fhir block already or
+/// another entry has one (one FHIR receiver per install), so a second run stores no new version. Returns a status.
+ClassMethod DemoEntry(seedPath As %String) As %Status
+{
+    Quit:'$GET(^Shutter.Config("demo")) $$$OK
+    Set row = ##class(Shutter.Store.SiteProfile).Row()
+    Quit:'$ISOBJECT(row) $$$OK
+    Set marks = $LISTBUILD(seedPath, seedPath _ " (demo)", seedPath _ " (live hospital)", seedPath _ " (demo) (live hospital)")
+    Quit:'$LISTFIND(marks, row.Source) $$$OK
+    Set p = ##class(Shutter.Util.Json).Parse(row.Json, .sc)
+    Quit:('$ISOBJECT(p) || $$$ISERR(sc)) $$$OK
+    Set receivers = p.%Get("receivers")
+    If '$ISOBJECT(receivers) Set receivers = [] Do p.%Set("receivers", receivers)
+    Set at = "", iter = receivers.%GetIterator()
+    While iter.%GetNext(.i, .r) {
+        Continue:'$ISOBJECT(r)
+        If $ISOBJECT(r.%Get("fhir")) Return $$$OK
+        If ##class(Shutter.Util.Json).Str(r, "name") = ..#DEMORECEIVER Set at = i
+    }
+    If at = "" { Do receivers.%Push(..DemoReceiverEntry()) } Else { Do receivers.%Set(at, ..DemoReceiverEntry()) }
+    Quit ##class(Shutter.Store.SiteProfile).Store(p.%ToJSON(), row.Source, "install", row.Version, .version)
+}
+
+/// The proof of the demo's FHIR receiver: the conformance kit run in process against this instance's own test FHIR
+/// server (FHIRFacade.Kit.Measure), imported for the receiver as a site imports the proof of its HTTP run.
+ClassMethod DemoProof() As %Status
+{
+    Set sc = ##class(FHIRFacade.Kit).Measure(.doc)
+    Quit:$$$ISERR(sc) $$$ERROR($$$GeneralError, "The proof of the demo's FHIR receiver: " _ $SYSTEM.Status.GetErrorText(sc))
+    Quit ##class(Shutter.Store.FHIRProof).Import(..#DEMORECEIVER, doc.%ToJSON())
+}
+
+/// What a demo install sets up for scenario S35: the entry (DemoEntry), the four items on this instance's own web port
+/// with the demo's credential FHIRFacade (PlaceItems), and the proof (DemoProof). The items and the proof only when the
+/// stored profile has the entry with a fhir block, so a demo whose profile a person saved gets neither. Returns a status.
+ClassMethod Demo(seedPath As %String) As %Status
+{
+    Set sc = ..DemoEntry(seedPath)
+    Quit:$$$ISERR(sc) sc
+    Set entry = ##class(Shutter.Store.SiteProfile).Receiver(..#DEMORECEIVER)
+    Quit:'($ISOBJECT(entry) && $ISOBJECT(entry.%Get("fhir"))) $$$OK
+    Set placed = ..PlaceItems("127.0.0.1", "", "FHIRFacade", "")
+    Quit:'placed.ok $$$ERROR($$$GeneralError, "The demo's FHIR items: " _ placed.error)
+    Quit ..DemoProof()
+}
+
+/// A scenario reset's FHIR part (Shutter.Scenarios.Runner Reset), on a demo with the demo's FHIR receiver: (1) the test
+/// FHIR server reset and seeded from the fixtures' fhir/seed.json; (2) every approval not yet revoked whose case has a
+/// FHIR binding and is not closed revoked by "system: " and <var>why</var>, so FHIR Out refuses it; (3) every fence row
+/// sent with no answer recorded marked uncertain, since the server that would have answered is gone. An unsent row needs
+/// nothing: its approval is revoked. Answers {"reset", "seeded", "revoked", "settled"}, and "error" when a part failed.
+ClassMethod DemoReset(why As %String) As %DynamicObject
+{
+    Set out = {"reset": false, "seeded": 0, "revoked": 0, "settled": 0}, errors = ""
+    Try {
+        If '##class(%Dictionary.CompiledClass).%ExistsId("FHIRFacade.Service") Set errors = "the test FHIR server is not compiled here" Quit
+        If '##class(FHIRFacade.Service).Reset() Set errors = "the test FHIR server could not be reset: a write did not end in 10 seconds" Quit
+        Do out.%Set("reset", 1, "boolean")
+        Set path = ##class(Shutter.Scenarios.Runner).FixturesDir() _ "fhir/seed.json"
+        Set stream = ##class(%Stream.FileCharacter).%New()
+        Set stream.TranslateTable = "UTF8"
+        If '##class(%File).Exists(path) || $$$ISERR(stream.LinkToFile(path)) Set errors = "no seed at " _ path Quit
+        Set seed = [].%FromJSON(stream)
+        Set answers = ##class(FHIRFacade.Service).Seed(seed), seeded = 0
+        Set iter = answers.%GetIterator()
+        While iter.%GetNext(, .a) { Set:(a.status=200)||(a.status=201) seeded = seeded + 1 }
+        Set out.seeded = seeded
+    } Catch ex {
+        Set errors = "the test FHIR server: " _ ex.DisplayString()
+    }
+    Try {
+        Set revoked = 0
+        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT a.ID AS ID FROM Shutter_Store.Approval a WHERE (a.Revoked = 0 OR a.Revoked IS NULL) AND a.""Case""->ClosedAt IS NULL AND a.""Case"" IN (SELECT b.""Case"" FROM Shutter_Store.FHIRBinding b)")
+        While rs.%Next() {
+            Set approval = ##class(Shutter.Store.Approval).%OpenId(rs.%Get("ID"))
+            Continue:'$ISOBJECT(approval)
+            Set sc = approval.Revoke("system: " _ why)
+            If $$$ISOK(sc) { Set revoked = revoked + 1 } Else { Set errors = errors _ $SELECT(errors = "": "", 1: "; ") _ "approval " _ rs.%Get("ID") _ ": " _ $SYSTEM.Status.GetErrorText(sc) }
+        }
+        Set out.revoked = revoked
+        // Diagnostics is a reserved word in SQL, so the column is named in quotes.
+        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "UPDATE Shutter_Store.FHIRAttempt SET Outcome = 'uncertain', ""Diagnostics"" = ? WHERE State = 'sent' AND (Outcome IS NULL OR Outcome = '')", "the test FHIR server was reset by the scenario runner while this update's answer was outstanding")
+        If rs.%SQLCODE < 0 { Set errors = errors _ $SELECT(errors = "": "", 1: "; ") _ "the fence rows: SQLCODE " _ rs.%SQLCODE _ " " _ rs.%Message } Else { Set out.settled = +rs.%ROWCOUNT }
+    } Catch ex {
+        Set errors = errors _ $SELECT(errors = "": "", 1: "; ") _ ex.DisplayString()
+    }
+    Set:errors'="" out.error = errors
+    Quit out
+}
+
 /// The names of the stored profile's receiver entries that have a fhir block.
 ClassMethod Receivers() As %DynamicArray [ Private ]
 {
