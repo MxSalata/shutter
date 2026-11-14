@@ -63,6 +63,8 @@ PATIENTS = {
     # S33 and S34: a site that moves beds by A08
     "S33": ("MRN1033", "ENC-1033", "SYNTH^QUIN", "19680125", "F"),
     "S34": ("MRN1034", "ENC-1034", "SYNTH^RHYS", "19820517", "M"),
+    # S35, a transfer to a ward system that takes FHIR R4
+    "S35": ("MRN1035", "ENC-1035", "SYNTH^RUBY", "19900607", "F"),
     # S11, the outage burst: six patients in one scenario
     "S11-P1": ("MRN1101", "ENC-1101", "SYNTH^KAI", "19880404", "M"),
     "S11-P2": ("MRN1102", "ENC-1102", "SYNTH^LENA", "19790908", "F"),
@@ -147,13 +149,14 @@ def field_list(values, count):
 
 def message(scenario, seq, trigger, time, ward=None, prior=None, admit_time="0900", note=None, phone=None,
             source="PAS", encounter=None, patient=None, version="2.5.1", merged=None, patient_class="I", bed=None,
-            extra=None, category=None):
+            extra=None, category=None, ward_only=False):
     """One ADT message. ward is PV1-3, the patient's location as the PAS holds it after the event (the new ward of a
     transfer, the ward a patient is discharged from, the current ward on an update); prior is PV1-6, the location a
     transfer moves the patient from. bed replaces PV1-3's bed component, for scenarios with several patients on one
     ward (each needs a bed of its own, since the receiver keeps one encounter per bed). extra is a raw segment appended
     after the others, such as a site's own Z segment. category is what MSH-12 says when a site's feed names its own schema
-    rather than the HL7 version."""
+    rather than the HL7 version. ward_only names the ward alone in PV1-3 and PV1-6 (point of care and facility, no room or
+    bed), as a ward system that keeps no beds is told (S35)."""
     mrn, default_encounter, name, dob, sex = PATIENTS[patient or scenario]
     encounter = encounter or default_encounter
     day = day_of(scenario)
@@ -169,13 +172,13 @@ def message(scenario, seq, trigger, time, ward=None, prior=None, admit_time="090
     pid = "PID|" + "|".join(field_list(pid_fields, max(pid_fields)))
     pv1_fields = {1: "1", 2: patient_class, 19: encounter, 44: f"{day}{admit_time}00"}
     if ward:
-        pv1_fields[3] = LOCATIONS[ward]
+        pv1_fields[3] = f"{ward}^^^HOSP" if ward_only else LOCATIONS[ward]
         if bed:
             parts = LOCATIONS[ward].split("^")
             parts[2] = bed
             pv1_fields[3] = "^".join(parts)
     if prior:
-        pv1_fields[6] = LOCATIONS[prior]
+        pv1_fields[6] = f"{prior}^^^HOSP" if ward_only else LOCATIONS[prior]
     if trigger == "A03":
         pv1_fields[45] = stamp
     pv1 = "PV1|" + "|".join(field_list(pv1_fields, max(pv1_fields)))
@@ -1118,7 +1121,65 @@ def scenarios():
                      "modes": ["rules", "policy"]},
     }, [a, b]))
 
+    # S35: a transfer to a ward system that takes FHIR R4 (docs/readme/fhir.md). The demo hospital's FHIR Ward In feeds the
+    # 09:20 transfer, Ward A to Ward B with no bed named, to FHIR Ward Out, a stock HL7 TCP operation whose port nothing
+    # listens on, so the delivery fails and its alert hands the message to Shutter. The site profile describes that
+    # receiver as the FHIR R4 server the demo serves, seeded by the runner's reset from fixtures/fhir/seed.json (fhir_seed
+    # below): Shutter reads the Encounter, plans one update and waits for a person; the update goes with If-Match on the
+    # version it read and is verified by the version carrying its marker in the history. Site policy only: a failure from
+    # the hospital's production runs in the site's watched mode, as S19 and S31.
+    b = message("S35", 1, "A02", "0920", ward="WARD-B", prior="WARD-A", ward_only=True)
+    out.append(({
+        "id": "S35",
+        "title": "A failed transfer to a ward system that takes FHIR R4",
+        "summary": "The 09:20 transfer from Ward A to Ward B, with no bed named, fails in the demo hospital's own "
+                   "production: its HL7 link to the ward system never opens a connection. The site profile describes "
+                   "the ward system as a FHIR R4 server, so Shutter reads the Encounter, plans one update of its location "
+                   "and waits for a person's approval, since no dry run exists for this receiver. After the approval it "
+                   "sends one update with If-Match on the version it read, and verifies it by the version carrying its "
+                   "marker in the Encounter's history.",
+        "steps": [{"file": b[0], "route": "fhir_ward", "expect": "delivery_fails"}],
+        "expected": {"disposition": "resend", "write": True, "final_state": "in-progress", "final_ward": "WARD-B",
+                     "failed_operation_key": b[2]["operation_key"],
+                     "person_approves": True,
+                     "source": {"namespace": "HOSPITAL", "production": "Hospital.Production", "route": "FHIR Ward In"},
+                     "fhir": {"receiver": "FHIR Ward Out", "encounter": fhir_id("enc", "S35"),
+                              "final_location": "Location/ward-b", "versions": 2, "marked_version": "2"},
+                     "modes": ["policy"]},
+    }, [b]))
+
     return out
+
+
+# S35's ward system, the test FHIR server a demo install serves: the systems of the demo's site profile entry (DESIGN 2.1)
+VISIT_SYSTEM = "urn:oid:2.16.840.1.113883.2.1.3.2.4.18.49"
+MRN_SYSTEM = "urn:shutter:demo:mrn"
+WARD_SYSTEM = "urn:shutter:ward"
+
+
+def fhir_id(kind, scenario):
+    """A FHIR id of the scenario's patient (pat) or Encounter (enc): the kind and the hospital number's four digits."""
+    return f"{kind}-{PATIENTS[scenario][0][-4:]}"
+
+
+def fhir_seed(scenario="S35"):
+    """What the ward system holds before the transfer (fixtures/fhir/seed.json, which the runner's reset puts on the test
+    FHIR server): Ward A and Ward B, the patient by hospital number, and the visit's Encounter in progress, open at Ward A
+    since the admission at 09:00, with a participant the update must leave alone."""
+    mrn, encounter = PATIENTS[scenario][:2]
+    wards = [{"resourceType": "Location", "id": f"ward-{w[-1].lower()}", "status": "active", "name": f"Ward {w[-1]}",
+              "identifier": [{"system": WARD_SYSTEM, "value": w}]} for w in ("WARD-A", "WARD-B")]
+    return wards + [
+        {"resourceType": "Patient", "id": fhir_id("pat", scenario), "active": True,
+         "identifier": [{"system": MRN_SYSTEM, "value": mrn}]},
+        {"resourceType": "Encounter", "id": fhir_id("enc", scenario), "status": "in-progress",
+         "identifier": [{"system": VISIT_SYSTEM, "value": encounter}],
+         "class": {"system": "http://terminology.hl7.org/CodeSystem/v3-ActCode", "code": "IMP"},
+         "subject": {"reference": "Patient/" + fhir_id("pat", scenario)},
+         "participant": [{"individual": {"display": "Dr Synth"}}],
+         "location": [{"location": {"reference": "Location/ward-a"}, "status": "active",
+                       "period": {"start": utc("0900", day_of(scenario))}}]},
+    ]
 
 
 def main():
@@ -1152,6 +1213,10 @@ def main():
         json.dump(listing, f, indent=2)
         f.write("\n")
     os.replace(target + ".tmp", target)
+    os.makedirs(os.path.join(HERE, "fhir"), exist_ok=True)
+    with open(os.path.join(HERE, "fhir", "seed.json"), "w", encoding="utf-8", newline="\n") as f:
+        json.dump(fhir_seed(), f, indent=2)
+        f.write("\n")
     print(f"{sum(len(s['steps']) for s in listing)} steps in {len(listing)} scenarios written to {HERE}")
 
 

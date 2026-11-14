@@ -1634,5 +1634,40 @@
         "policy"
       ]
     }
+  },
+  {
+    "id": "S35",
+    "title": "A failed transfer to a ward system that takes FHIR R4",
+    "summary": "The 09:20 transfer from Ward A to Ward B, with no bed named, fails in the demo hospital's own production: its HL7 link to the ward system never opens a connection. The site profile describes the ward system as a FHIR R4 server, so Shutter reads the Encounter, plans one update of its location and waits for a person's approval, since no dry run exists for this receiver. After the approval it sends one update with If-Match on the version it read, and verifies it by the version carrying its marker in the Encounter's history.",
+    "steps": [
+      {
+        "file": "S35-01-A02.hl7",
+        "route": "fhir_ward",
+        "expect": "delivery_fails"
+      }
+    ],
+    "expected": {
+      "disposition": "resend",
+      "write": true,
+      "final_state": "in-progress",
+      "final_ward": "WARD-B",
+      "failed_operation_key": "PAS^HOSP^MRN1035^ENC-1035^transfer^2026-10-15T08:20:00Z",
+      "person_approves": true,
+      "source": {
+        "namespace": "HOSPITAL",
+        "production": "Hospital.Production",
+        "route": "FHIR Ward In"
+      },
+      "fhir": {
+        "receiver": "FHIR Ward Out",
+        "encounter": "enc-1035",
+        "final_location": "Location/ward-b",
+        "versions": 2,
+        "marked_version": "2"
+      },
+      "modes": [
+        "policy"
+      ]
+    }
   }
 ]
