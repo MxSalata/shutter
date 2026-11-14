@@ -196,7 +196,9 @@ ClassMethod RefreshShutterSecurity(shutterNs As %String) As %Status [ Private ]
 }
 
 /// Where the hospital's feed is, written into Shutter's configuration for the scenario runner: hospitalIn and
-/// hospitalArchive (the folders) and hospitalNamespace. Quiet when Shutter's namespace is not there.
+/// hospitalArchive (the folders) and hospitalNamespace; and, since 1.4.6, the results route's three items (labFeed,
+/// labReceiver, labListener), with the results receiver's entry added to the demo's site profile while that profile is
+/// still the seed's (Shutter.Setup DemoLabReceiver). Quiet when Shutter's namespace is not there.
 ClassMethod RecordInShutter(shutterNs As %String) [ Private ]
 {
     Set hospital = $NAMESPACE
@@ -207,13 +209,23 @@ ClassMethod RecordInShutter(shutterNs As %String) [ Private ]
         Set ^Shutter.Config("hospitalIn") = inbound
         Set ^Shutter.Config("hospitalArchive") = archive
         Set ^Shutter.Config("hospitalNamespace") = hospital
+        Set ^Shutter.Config("labFeed") = "Lab In", ^Shutter.Config("labReceiver") = "Lab Results Out", ^Shutter.Config("labListener") = "Results System In"
+        If ##class(%Dictionary.CompiledMethod).%ExistsId("Shutter.Setup||DemoLabReceiver") Set sc = $CLASSMETHOD("Shutter.Setup", "DemoLabReceiver", hospital)
     } Catch ex {
     }
     Quit
 }
 
-/// System default settings for the production: the folders and the two addresses on this instance (Shutter's intake
-/// and the demo receiver both answer on the instance's own web port), so the production definition carries none.
+/// The results route's port (1.4.6): ^Hospital.Config("labPort"), else 7650. The connector reaches the stand-in on
+/// 127.0.0.1 only, inside the instance; nothing publishes the port.
+ClassMethod LabPort() As %Integer
+{
+    Quit +$GET(^Hospital.Config("labPort"), 7650)
+}
+
+/// System default settings for the production: the folders, the two addresses on this instance (Shutter's intake
+/// and the demo receiver both answer on the instance's own web port) and the results route's loopback port, so the
+/// production definition carries none.
 ClassMethod ApplyDefaultSettings() As %Status
 {
     Set sc = $$$OK
@@ -224,6 +236,9 @@ ClassMethod ApplyDefaultSettings() As %Status
         Set values(item, "HTTPServer") = $GET(^Hospital.Config("httpServer"), "127.0.0.1")
         Set values(item, "HTTPPort") = $GET(^Hospital.Config("httpPort"), 52773)
     }
+    // The results route (1.4.6): one loopback port for the connector and the stand-in that listens on it.
+    Set values("Lab Results Out", "Port") = ..LabPort()
+    Set values("Results System In", "Port") = ..LabPort()
     Set item = ""
     For {
         Set item = $ORDER(values(item))
