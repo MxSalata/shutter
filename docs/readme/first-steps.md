@@ -48,7 +48,8 @@ The mode decides who proposes the plan. In every mode the same gate checks the p
   4. To leave it undecided, press **Cancel**: nothing is sent, and the case still waits.
   5. Press **Decide on the resend** again. To refuse, press **Reject instead**, then **Reject the resend**: the case
      stops as blocked, with nothing sent.
-  6. Or, to release, press **Approve the resend**: one conditional write, then the receiver's own record confirms it.
+  6. To release instead of refusing, press **Approve the resend** in the same review: one conditional write, then the
+     receiver's own record confirms it.
 - **Done when:** the outcome reads **Delivered: verified at the receiver** after an approval, or **Blocked: nothing
   sent** after a refusal. In the trial, a reload starts the recording afresh.
 - **If it does not work:** "Approval no longer valid" means the plan or the case changed after the review opened, and
