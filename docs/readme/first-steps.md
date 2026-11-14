@@ -60,7 +60,7 @@ For a hospital trying Shutter beside a real production, as [the install guide](h
 
 ![S2's approval as a task in the IRIS Workflow inbox, with the plan digest in its message and Approve and Reject beside it](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/workflow-inbox-s2.png)
 
-**Designed for a PC and a phone.** One web app: the browser tests hold 57 screens and states to a phone's width with no sideways scroll, and walk the main flows there. S2 at phone size, in the trial:
+**Designed for a PC and a phone.** One web app: the browser tests hold 61 screens and states to a phone's width with no sideways scroll, and walk the main flows there. S2 at phone size, in the trial:
 
 ![S2 at phone size: the case waiting, the review of the resend with its plan digest, and the outcome verified at the receiver](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/phone-s2.png)
 
