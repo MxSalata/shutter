@@ -16,7 +16,7 @@
   <a href="https://github.com/MxSalata/shutter#for-judges">For judges</a> ·
   <a href="https://github.com/MxSalata/shutter#what-has-been-measured">Results</a> ·
   <a href="https://github.com/MxSalata/shutter#where-the-agents-sit">The agents</a> ·
-  <a href="https://youtu.be/oGW7u9RKf9M">Video</a>
+  <a href="https://github.com/MxSalata/shutter/releases/download/v1.4.5/shutter-overview.mp4">Two-minute video</a>
 </p>
 <p align="center"><sub>
   <a href="https://github.com/MxSalata/shutter/blob/main/docs/readme/how-shutter-works.md">How Shutter works (guide)</a> ·
@@ -25,7 +25,7 @@
   <a href="https://github.com/MxSalata/shutter#limits-plainly">Limits</a> ·
   <a href="https://openexchange.intersystems.com/package/Shutter">Open Exchange</a> ·
   <a href="https://github.com/MxSalata/shutter/blob/main/CHANGELOG.md">What's new</a> ·
-  <a href="https://github.com/MxSalata/shutter/releases/download/v1.4.4/shutter-demo.mp4">Video (MP4)</a>
+  <a href="https://youtu.be/oGW7u9RKf9M">Full demo video (13 minutes, recorded on 1.4.4)</a>
 </sub></p>
 
 **When a hospital's HL7 delivery fails, the usual fix is Resend, and when two systems move a patient at the same moment, that resend can write over the bed manager's newer ward. Shutter's IRIS AI Hub agents decide how to put the failure right; a deterministic gate decides whether anything is written.**
