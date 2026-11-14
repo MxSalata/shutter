@@ -205,9 +205,9 @@ function ReviewBody({
   // the dialog: the focus goes to Cancel, the way out the refusal's words point to. A focus on another control in the
   // dialog is left where it is.
   const cancel = useRef<HTMLButtonElement>(null);
-  const refused = moved || decide.isError;
+  const halted = moved || decide.isError;
   useEffect(() => {
-    if (!refused) return;
+    if (!halted) return;
     const active = document.activeElement;
     const dialog = body.current?.closest('.mantine-Modal-content');
     if (
@@ -217,7 +217,7 @@ function ReviewBody({
       (active instanceof HTMLButtonElement && active.disabled)
     )
       cancel.current?.focus();
-  }, [refused]);
+  }, [halted]);
   // Whether the controls are still wholly below the dialog's foot (a short screen, a plan with notes): a line at the
   // foot then says the decision is further down, so a screen that happens to end on a whole sentence never reads as
   // a dialog without one
