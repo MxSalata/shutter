@@ -37,9 +37,10 @@ A plain **Resend** can also repeat something the receiver already holds, or revi
 
 Shutter turns a failed delivery into a case. AI Hub agents examine sealed evidence and propose a plan. A deterministic gate checks whether it may write. A person, or the site's written policy, releases it. **The agents have no write tool.**
 
-There are two recovery paths, with different guarantees:
+Recovery has different contracts, with different guarantees:
 
 - **Case recovery:** a conditional write through the receiver's API, verified in its receipt and history.
+- **FHIR R4, one profile:** a version-aware Encounter update with If-Match on InterSystems IRIS for Health's FHIR server, after a person's approval, verified from the Encounter's history; there is no receiver-side dry run.
 - **Outage recovery:** stored HL7 messages resent through the engine, completed in the engine and settled by the receiver's declared duplicate handling. This is not receiver-side verification.
 
 ![S8 played twice on the same evidence: Rules only, exempted on purpose from one gate check, writes WARD-B over the bed manager's WARD-C; the board escalates and writes nothing](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/s8-rules-and-board.png)
@@ -50,8 +51,8 @@ There are two recovery paths, with different guarantees:
 ### In 60 seconds
 
 - **What the agents decide:** resend a failed HL7 delivery, close it as already delivered, or stop and escalate with nothing written. Four `%AI.Agent` business operations, three specialists and a coordinator, read sealed evidence through typed tools; the coordinator submits the plan.
-- **What permits a write:** a deterministic gate, then an approval bound to the plan's digest and the case's version. The receiver is read again just before a conditional write, and its own history confirms the result. IRIS Workflow carries the approval, `%AI.Policy` authorisation holds each run to its own case and its audit logs every tool call, and Visual Trace shows every agent's lane.
-- **What the test found:** on release 1.4.3, twelve held-out synthetic cases with three runs of each per mode, the board's mean loss was 0.167 against 4.000 for rules only, and no mode executed a wrong write: the gate stopped the bad proposals. A single investigator matched the board as settled (0.667 by the unchanged grader) at about a quarter of the cost per run, and both modes ship. [The results](https://github.com/MxSalata/shutter#what-has-been-measured)
+- **What permits a write:** a deterministic gate, then a person's approval bound to the plan's digest and the case's version, or a release under the site's written policy. For a case recovered through the receiver's API, the receiver is read again just before a conditional write and its own history confirms the result; FHIR and the engine's resend have their own contracts, above. IRIS Workflow carries the approval, `%AI.Policy` authorisation holds each run to its own case and its audit logs every tool call, and Visual Trace shows every agent's lane.
+- **What the test found:** release 1.4.3 reran twelve synthetic cases that had influenced fixes, three runs of each per mode: a regression test, not a new held-out evaluation. The board's mean loss was 0.167 against 4.000 for rules only, and no mode executed a wrong write: the gate stopped the bad proposals. A single investigator matched the board as settled (0.667 by the unchanged grader) at about a quarter of the cost per run, so four agents have not shown better decisions than one; both modes ship. [The results](https://github.com/MxSalata/shutter#what-has-been-measured)
 - **The whole mechanism:** [How Shutter works](https://github.com/MxSalata/shutter/blob/main/docs/readme/how-shutter-works.md), from a failed delivery to a verified recovery, with every gate check and its source; [How to integrate Shutter at your trust](https://github.com/MxSalata/shutter/blob/main/docs/readme/integrating-at-your-trust.md) for an integration team planning a pilot.
 - **Why I built it:** the failures above are the ones I met in my interoperability work with 28 NHS hospitals. At one trust we checked every interface daily for failed messages, and I wrote a 30-page guide to handling them. Not every clinical system checks what it receives. When a bed transfer from I.PM failed to reach NerveCentre and clinicians corrected the history there by hand, resending the failures in order could displace several patients, because NerveCentre won't put two patients in one bed and moves the other to the waiting area. Blindly resending coding messages from NerveCentre to Careflow would overwrite a patient's coding and end-date it as of today, and on older PAS systems a resent A02 for a past spell could reopen it, leaving two active spells. That is why Shutter reads the receiver before it writes. While building Shutter I filed AI Hub bug reports [#11](https://github.com/intersystems-community/ai-hub-eap-bugreports/issues/11), [#12](https://github.com/intersystems-community/ai-hub-eap-bugreports/issues/12), [#22](https://github.com/intersystems-community/ai-hub-eap-bugreports/issues/22) and [#23](https://github.com/intersystems-community/ai-hub-eap-bugreports/issues/23).
 
@@ -61,7 +62,7 @@ There are two recovery paths, with different guarantees:
 
 ## For judges
 
-**Start here: about three minutes, nothing to install and no key.**
+**Start here: three recorded outcomes, about three minutes, nothing to install and no key.** On each case, read what the agents contributed; on S2, the **Decision receipt** and **What was verified**; on S8, the **Message trace**, the agents' separate lanes.
 
 **Know the mode:** the trial plays recordings in your browser; the online demo runs on real IRIS, where the `demo` account replays the recorded agents and the judges' account calls them live; your machine runs either ([Try it](https://github.com/MxSalata/shutter#try-it)).
 
@@ -321,7 +322,7 @@ No other recovery writes over FHIR: no create, no admission or discharge, no mer
 
 ## How it is tested
 
-**Release-specific checks and historical evaluations are different evidence.** The latest totals here are release 1.4.7's, from its tagged commit; the evaluations below them keep their own releases.
+**Release checks and agent evaluations are different evidence.** The latest release checks below are for the 1.4.7 tag; the latest comparative agent evaluation remains the 1.4.3 rerun.
 
 | Scope | Recorded checks |
 | --- | --- |
@@ -329,7 +330,7 @@ No other recovery writes over FHIR: no create, no admission or discharge, no mer
 | **Release 1.4.3** | 1,083 unit tests passed on AI Hub build 154 and 1,074 on IRIS 2026.2, none failed. Role checks covered judges running but not resetting, upgraded permissions and attribution of scenario runs. Web and relevant browser suites included accessibility checks |
 | **Pathology, release 1.4.0** | All 56 pathology-rig rows passed on build 154. An end-to-end check counted receiver sends under shadow mode and the recovery stop |
 | **Replay CI, figures at 1.1.0** | Full installation on IRIS 2026.2, 37 receiver-contract tests, 26 scenarios end to end and approval-boundary attacks over HTTP |
-| **Live AI Hub** | Separate fresh-install checks on builds 109 and 154 on release 1.0.0 (6 November 2026), and on build 154 on release 1.4.7 (14 November, no live call), recorded live runs, and live comparative tests up to the 1.4.3 rerun. CI cannot download the Early Access image, so replay CI does not replace this evidence |
+| **AI Hub installs and live agents** | Separate fresh-install checks on builds 109 and 154 on release 1.0.0 (6 November 2026), and on build 154 on release 1.4.7 (14 November, no live call), recorded live runs, and live comparative tests up to the 1.4.3 rerun. CI cannot download the Early Access image, so replay CI does not replace this evidence |
 
 The approval boundary tests stale versions, wrong digests, insufficient roles, repeated approval and a receiver changed after approval. Privacy checks inspect recordings.
 
@@ -362,14 +363,14 @@ Each technology has a job in the workflow.
 
 ## Limits, plainly
 
-- **No hospital outcome study.** Coverage and operational benefit have not been measured at a hospital. Every recovery proof so far uses a demo receiver or stub.
+- **No hospital outcome study.** Coverage and operational benefit have not been measured at a hospital. Recovery evidence uses synthetic cases with demo receivers, test servers or InterSystems IRIS for Health's own FHIR server; none establishes hospital outcomes.
 - **The receiver remains part of the safety boundary.** Ignoring conditional writes or returning incomplete history may escape detection. A receiver that writes during a declared dry run has already acted; Shutter can record and stop, not undo it.
 - **An approval is not a substitute for feed validation.** Sites must confirm identifiers, event meanings, location fields and times before enabling recovery.
 - **Model failure does not authorise a write.** Depending on the case, Shutter escalates, uses available findings or proposes a rules plan. A fallback plan requires a person even where policy would otherwise release it.
 - **Large incidents need a full review.** One approval binds every chain, although the Workflow task lists only those fitting its 2,000-character message. The incident page has the full set. Complete release at 1,000 failures has not been measured.
 - **Failover, mirrors and backup restoration are untested.**
 - **FHIR R4 is one profile, not general FHIR handling.** One ward move on an existing, in-progress Encounter held by InterSystems IRIS for Health's FHIR R4 server, off until a site turns it on for a receiver. No create, no admission or discharge, no bed move, no merge, no documents. It has no receiver-side dry run and says so on every decision.
-- **The catalogue guides the agents.** In the scenario demonstration each agent is given the matching entry and its preferred outcome, and the coordinator took it in 24 of the 25 board plans recorded between 25 October and 1 November 2026, before release 1.0.0. The held-out cases are the test of judgement.
+- **The catalogue guides the agents.** In the scenario demonstration each agent is given the matching entry and its preferred outcome, and the coordinator took it in 24 of the 25 board plans recorded between 25 October and 1 November 2026, before release 1.0.0. The original held-out evaluation tested judgement beyond these demonstrations; later reruns used cases that had influenced fixes.
 
 [Every limit, with effect, workaround and status](https://github.com/MxSalata/shutter/blob/main/docs/readme/limits.md) · [Failure scenarios and their boundaries](https://github.com/MxSalata/shutter/blob/main/docs/edge-cases.md) · [What happens when a model fails](https://github.com/MxSalata/shutter/blob/main/docs/readme/model-fails.md)
 
