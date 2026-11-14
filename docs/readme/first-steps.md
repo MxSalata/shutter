@@ -1,6 +1,6 @@
 # First steps, step by step
 
-The README's "For judges" and "Try it" in full: what each kind of receiver gets, the four modes, the first three scenarios, three ways to try to break the approval, the online demo's four steps, how a hospital pilots it first, what to look at in S2, S8 and S20, what CI attacks at the approval boundary, and the terms. Sign-ins are under [Try it](https://github.com/MxSalata/shutter#try-it).
+The README's "For judges" and "Try it" in full: what each kind of receiver gets, the four modes, the first three scenarios, three ways to try to break the approval, an approver's decision on a waiting case, the online demo's four steps, how a hospital pilots it first, what to look at in S2, S8 and S20, what CI attacks at the approval boundary, and the terms. Sign-ins are under [Try it](https://github.com/MxSalata/shutter#try-it).
 
 ## What a receiver gets
 
@@ -34,6 +34,26 @@ The mode decides who proposes the plan. In every mode the same gate checks the p
 - Sign in as `operator` / `shutter`: the case's action reads **Waiting for an approver**, **Approve the resend** under **Gate and decision** is disabled ("Deciding needs the approver role"), and the API answers 403.
 - Open the review (**Decide on the resend**) in two tabs and confirm in each: one write; the second answers 409 ("The case is resolved, not awaiting approval").
 - Sign in to the Management Portal as `approver` / `shutter`, the role's member (`_SYSTEM` is not one, so its inbox is empty), and open the Workflow inbox at http://localhost:52773/csp/healthshare/shutter/_DeepSee.UserPortal.Workflow.zen. Select the task, press **Accept**, then **Approve** with `PlanDigest` empty or wrong: the case blocks and nothing is dispatched ("The approval carried no plan digest, so it binds nothing", or "named another plan digest"). **Reinvestigate** recovers it; the digest in the new task's message then approves it: one write, verified.
+
+## As an approver: decide on a waiting case
+
+- **Goal:** release, refuse or leave a plan that waits for you, knowing what each does. About two minutes in the
+  [trial](https://mxsalata.github.io/shutter/), which opens signed in as an approver; on your machine, sign in as
+  `approver` / `shutter`.
+- **Steps:**
+  1. Open the trial and choose **Explore on my own**.
+  2. Open **Cases** and press **Waiting for approval**: only the cases that wait for a decision stay listed.
+  3. Open **C-000002**, then press **Decide on the resend**. The review leads with the plan's action, what releasing it
+     is expected to leave and what this decision does, and binds it to plan v1 and case version 7.
+  4. To leave it undecided, press **Cancel**: nothing is sent, and the case still waits.
+  5. Press **Decide on the resend** again. To refuse, press **Reject instead**, then **Reject the resend**: the case
+     stops as blocked, with nothing sent.
+  6. Or, to release, press **Approve the resend**: one conditional write, then the receiver's own record confirms it.
+- **Done when:** the outcome reads **Delivered: verified at the receiver** after an approval, or **Blocked: nothing
+  sent** after a refusal. In the trial, a reload starts the recording afresh.
+- **If it does not work:** "Approval no longer valid" means the plan or the case changed after the review opened, and
+  nothing was recorded: leave the review and decide on the plan as it is now. Every step works with the keyboard alone:
+  Tab to a control, Enter to press it, Escape to leave the review.
 
 ## On the online demo, first
 
