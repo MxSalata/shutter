@@ -12,7 +12,7 @@ Property Saved As %String(MAXLEN = "") [ MultiDimensional ];
 
 Method OnBeforeOneTest() As %Status
 {
-    For key = "demo", "mode", "resetAt", "scenario", "scenarioRun", "scenarioBy" {
+    For key = "demo", "mode", "resetAt", "scenario", "scenarioRun", "scenarioBy", "adtIn" {
         Set ..Saved(key) = $LISTBUILD($DATA(^Shutter.Config(key)) # 10, $GET(^Shutter.Config(key)))
     }
     Set ..Saved("run") = $LISTBUILD($DATA(^Shutter.Scenarios("run")) # 10, $GET(^Shutter.Scenarios("run")))
@@ -21,7 +21,7 @@ Method OnBeforeOneTest() As %Status
 
 Method OnAfterOneTest() As %Status
 {
-    For key = "demo", "mode", "resetAt", "scenario", "scenarioRun", "scenarioBy" {
+    For key = "demo", "mode", "resetAt", "scenario", "scenarioRun", "scenarioBy", "adtIn" {
         Set saved = $GET(..Saved(key))
         Continue:saved=""
         If $LIST(saved, 1) { Set ^Shutter.Config(key) = $LIST(saved, 2) } Else { Kill ^Shutter.Config(key) }
@@ -153,13 +153,15 @@ Method TestRunnerRefusesOffTheDemo()
     // An open incident a reset would abandon, and a file a reset would delete
     Set sc = ##class(Shutter.Store.Incident).Open("UT-GUARD-RECEIVER", "board", .incident)
     Do $$$AssertStatusOK(sc, "an open incident to keep")
-    Set hadIn = $DATA(^Shutter.Config("adtIn")) # 10, savedIn = $GET(^Shutter.Config("adtIn"))
-    Set dir = savedIn
-    If dir = "" {
-        Set dir = ##class(%File).NormalizeDirectory(##class(%File).TempFilename("dir"))
-        Do ##class(%File).CreateDirectoryChain(dir)
-        Set ^Shutter.Config("adtIn") = dir
-    }
+    // The file goes in an inbound folder of the test's own, which adtIn names until OnAfterOneTest puts it back, so a reset
+    // that ran would empty it. The configured folder is ADT In's: its file service takes each *.hl7 there within a second
+    // and deletes it, which is not a reset. TempFilename makes an empty file of a unique name, which becomes the folder.
+    Set dir = ##class(%File).TempFilename("in")
+    Do ##class(%File).Delete(dir)
+    Set dir = ##class(%File).NormalizeDirectory(dir)
+    Do ##class(%File).CreateDirectoryChain(dir)
+    Set ^Shutter.Config("adtIn") = dir
+    Do $$$AssertTrue((dir '= "") && ##class(%File).DirectoryExists(dir), "an inbound folder of the test's own: " _ dir)
     Set file = ##class(%File).NormalizeDirectory(dir) _ "ut-guard-runner.hl7"
     Set stream = ##class(%Stream.FileCharacter).%New()
     Do stream.LinkToFile(file)
@@ -189,10 +191,7 @@ Method TestRunnerRefusesOffTheDemo()
     Do $$$AssertTrue(##class(%File).Exists(file), "the inbound file is still there")
     // Put back what the test made
     Do ##class(%File).Delete(file)
-    If savedIn = "" {
-        Do ##class(%File).RemoveDirectory(dir)
-        If hadIn { Set ^Shutter.Config("adtIn") = savedIn } Else { Kill ^Shutter.Config("adtIn") }
-    }
+    Do ##class(%File).RemoveDirectory(dir)
     Set id = incident.%Id()
     Kill incident, kept
     &sql(DELETE FROM Shutter_Store.IncidentEvent WHERE Incident = :id)
