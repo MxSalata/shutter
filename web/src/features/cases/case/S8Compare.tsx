@@ -371,7 +371,7 @@ export function CounterpartStrip({
   if (!mine) return null;
   const stakes =
     c.mode !== 'rules' && c.state === 'escalated' && writesSent === 0
-      ? "The board sent nothing. Rules only, exempted here on purpose, writes WARD-B over the bed manager's WARD-C with every check passed; on a real case the gate holds it."
+      ? "The board sent nothing. Rules only, deliberately exempted here, writes WARD-B over the bed manager's WARD-C with every check passed; on a real case the gate holds it."
       : '';
   const other = rules && board ? (c.mode === 'rules' ? board : rules) : undefined;
   const counterpart = other && other.caseId !== c.caseId ? other : undefined;

@@ -445,9 +445,12 @@ describe('CasePage', () => {
     expect(
       within(top).getByRole('heading', { name: 'What needs you now' }).closest('[data-tone]'),
     ).toHaveAttribute('data-tone', 'attention');
-    // The receipt's facts are labelled, as a description list
-    for (const label of ['Proposal', 'Gate', 'Released by', 'Writes', 'Verification'])
+    // The receipt's facts are labelled, as a description list; the first names who proposed, once the runs are read
+    for (const label of ['Gate', 'Released by', 'Writes', 'Verification'])
       expect(within(top).getByText(label, { selector: 'dt' })).toBeInTheDocument();
+    expect(
+      await within(top).findByText("Coordinator agent's proposal", { selector: 'dt' }),
+    ).toBeInTheDocument();
     const tabs = screen.getByRole('tablist', { name: 'The case in detail' });
     expect(top.compareDocumentPosition(tabs) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
@@ -588,7 +591,7 @@ describe('CasePage', () => {
   it("names the stakes on the board's S8 case, and the top button of the rules case goes to the two runs", async () => {
     renderCase('C-000008');
     expect(await screen.findByTestId('s8-stakes')).toHaveTextContent(
-      "The board sent nothing. Rules only, exempted here on purpose, writes WARD-B over the bed manager's WARD-C with every check passed; on a real case the gate holds it.",
+      "The board sent nothing. Rules only, deliberately exempted here, writes WARD-B over the bed manager's WARD-C with every check passed; on a real case the gate holds it.",
     );
     cleanup();
     renderCase('C-000021');
@@ -675,7 +678,7 @@ describe('CasePage', () => {
       renderCase('C-000008');
       const strip = await screen.findByRole('region', { name: 'What a resend would do' });
       expect(within(strip).getByTestId('s8-stakes')).toHaveTextContent(
-        "The board sent nothing. Rules only, exempted here on purpose, writes WARD-B over the bed manager's WARD-C with every check passed; on a real case the gate holds it.",
+        "The board sent nothing. Rules only, deliberately exempted here, writes WARD-B over the bed manager's WARD-C with every check passed; on a real case the gate holds it.",
       );
       expect(
         await within(strip).findByRole('link', { name: 'See the two side by side in the trial' }),
@@ -1045,9 +1048,11 @@ describe('CasePage', () => {
     renderCase('C-000009');
     const board = await screen.findByRole('region', { name: 'The board' });
     const card = await within(board).findByRole('region', { name: 'Encounter Integrity' });
-    // Its citations are counted on the card, and listed one click away, each a chip to its section
+    // Its citations are counted on the card, in the name of the detail that lists them, each a chip to its section
     expect(within(card).getByText(/^Cited \d+ evidence sections$/)).toBeInTheDocument();
-    await userEvent.click(within(card).getByRole('button', { name: /^Which ones\s?, Encounter Integrity$/ }));
+    await userEvent.click(
+      within(card).getByRole('button', { name: /^Cited \d+ evidence sections\s?, Encounter Integrity$/ }),
+    );
     const cites = await within(card).findAllByRole('button', { name: 'Encounter' });
     expect(cites[0]).not.toHaveAttribute('href');
     await userEvent.click(cites[0]);
@@ -1711,10 +1716,9 @@ describe('the case page for both audiences', () => {
     const board = await screen.findByRole('region', { name: 'The board' });
     const conformance = await within(board).findByRole('region', { name: 'Conformance' });
     expect(conformance).toHaveTextContent('Replay · claude-opus-5-5 · 14.7 s · 3 iterations · 5 tool calls');
-    expect(within(conformance).getByRole('button', { name: /^Which ones\s?, Conformance$/ })).toHaveAttribute(
-      'aria-expanded',
-      'true',
-    );
+    expect(
+      within(conformance).getByRole('button', { name: /^Cited 8 evidence sections\s?, Conformance$/ }),
+    ).toHaveAttribute('aria-expanded', 'true');
     // The receipt's versions stay a click away in Technical too, so the Outcome band stays short (review, 2 Nov)
     const top = await outcome();
     expect(within(top).getByRole('button', { name: 'Versions, keys and times' })).toHaveAttribute(
@@ -1766,7 +1770,11 @@ describe('the case page for both audiences', () => {
   // the source item and production, the failure's kind and time, the header id, the plan's version, digest and
   // catalogue entry) take Technical to 954, within the spec's own 1.5 times the 653 measured in Plain. The S8 strip's
   // stakes line says "The board sent nothing." again (4 words) and its first line is three words shorter to make the
-  // room: 659 measured in Plain and 960 in Technical on 13 Nov, both budgets as they were
+  // room: 659 measured in Plain and 960 in Technical on 13 Nov, both budgets as they were.
+  // The clarity
+  // review of 13 Nov names the proposer in the receipt, with the plan's reason one press under it and the evidence
+  // behind What happened as chips, and pays for them on the board (the citations and a kept dissent open from their
+  // own lines): 658 measured before and after, Technical 960 (959 before), with nothing added to either cap
   it('keeps the Summary tab, steps closed, within 660 words in Plain', async () => {
     const plain = await summaryWords('plain');
     expect(plain).toBeLessThanOrEqual(660);
