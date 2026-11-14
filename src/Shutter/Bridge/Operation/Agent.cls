@@ -111,7 +111,8 @@ Method OnAgentRequest(request As Shutter.Bridge.Msg.AgentRequest, Output respons
         Set response.Status = "provider_auth"
         Set response.Error = downText
     } ElseIf (spec.Mode '= "replay") && '##class(Shutter.Util.Budget).Admit(reserveKey, request.RequestedBy, .budget, .reserved) {
-        Set response.Status = "budget_exhausted"
+        // budget_exhausted, or budget_busy when the budget could not be checked in time (R146-05): nothing is spent then.
+        Set response.Status = ##class(Shutter.Util.Budget).RefusalStatus(budget)
         Set response.Error = ##class(Shutter.Util.Budget).Refusal(budget)
     } ElseIf (runnerClass = "") || '##class(%Dictionary.CompiledClass).%ExistsId(runnerClass) {
         Set response.Status = "error"

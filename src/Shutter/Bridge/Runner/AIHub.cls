@@ -438,7 +438,8 @@ ClassMethod Probe(agentClass As %String = "Shutter.Agent.Conformance") As %Strin
 /// runs are found with LIKE 'test:<case>:<member>:%'), so two runs of one member never share a list; mock
 /// says whether the API mimic answered. The day's budget holds it as it holds the Agent item's runs (R145-04,
 /// Shutter.Bridge.Runner.Diagnostic): it is admitted before any provider is contacted (the day's spend, the reservations
-/// and its estimate within the cap and the caller's share), refused with status budget_exhausted otherwise, and charged to
+/// and its estimate within the cap and the caller's share), refused with status budget_exhausted otherwise (budget_busy
+/// when the budget could not be checked in time), and charged to
 /// the caller. What it spent, or that it failed, is recorded as an AgentRun row with Purpose "diagnostic" and no case
 /// (run_id in the answer), which the day's spend and GET /costs count; no case's runs, events or counts read it.
 ClassMethod TestRun(caseId As %String, memberCode As %String = "conformance", mode As %String = "live", tokenBudget As %Integer = 60000) As %String [ SqlProc ]
@@ -472,7 +473,7 @@ ClassMethod TestRun(caseId As %String, memberCode As %String = "conformance", mo
         Set spec.RecordKey = "", spec.EnsMessageId = "test:" _ caseId _ ":" _ memberCode _ ":" _ n, spec.EnsSessionId = ""
         // Admitted by the day's budget before the runner is made, run, recorded and settled (R145-04).
         Set sc = ##class(Shutter.Bridge.Runner).Diagnostic(spec, $USERNAME, .response, .runId)
-        If response.Status = "budget_exhausted" Return {"error": (response.Error), "status": "budget_exhausted"}.%ToJSON()
+        If $LISTFIND($LISTBUILD("budget_exhausted", "budget_busy"), response.Status) Return {"error": (response.Error), "status": (response.Status)}.%ToJSON()
         Set out = response.ToObject()
         If $$$ISERR(sc) Set out."run_error" = $SYSTEM.Status.GetErrorText(sc)
         Set out."run_id" = runId
