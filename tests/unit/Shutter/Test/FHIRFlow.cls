@@ -542,6 +542,27 @@ Method TestTheSixOutcomes()
 
 /// The case's reason is the code a stop of the flow closes its own text with, never a code quoted inside other
 /// words: an approver's comment that names one, on any case, is still a rejection, and an earlier round's failing
+/// The verification's further walks follow their own schedule, whatever Case Workflow's MaxRefreshes is: the same
+/// three, after 10, 20 and 40 seconds, and then the walk that still asks for another read is final.
+Method TestTheVerifyWalksKeepTheirOwnSchedule()
+{
+    For max = 1, 2, 3, 5 {
+        Do ..Verifying(.wf, .case)
+        Set wf.MaxRefreshes = max
+        Set waits = "", walks = 0
+        For walk = 1:1:8 {
+            Do ..Step(wf, "fhir:verify", ..Verified("unresolved", "unknown", 1, "The history could not be read yet."))
+            Set walks = walks + 1
+            Quit:case.State'="verifying"
+            Set waits = waits _ " " _ wf.LastRequest().Timeout
+            Do ..Step(wf, "fhir:verify:retry")
+        }
+        Do $$$AssertEquals(walks _ " |" _ waits, "4 | 10 20 40", "MaxRefreshes " _ max _ ": four walks, the further ones after 10, 20 and 40 seconds")
+        Do $$$AssertEquals(case.State _ "|" _ ..Code(case), "escalated|FHIR_WRITE_OUTCOME_UNKNOWN", "MaxRefreshes " _ max _ ": then the unknown is final")
+        Do $$$AssertTrue(..AllEvents(case) [ "verifying again in 40 s (3 of 3)", "MaxRefreshes " _ max _ ": the case counts the walks of the verification's own schedule")
+    }
+}
+
 /// row of the gate stays the reason where it was.
 Method TestAQuotedCodeIsNotTheReason()
 {

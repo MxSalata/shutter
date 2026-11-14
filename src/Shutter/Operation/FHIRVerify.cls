@@ -19,9 +19,23 @@ Parameter INVOCATION = "Queue";
 /// The item that reads the receiver.
 Property ReaderTarget As %String(MAXLEN = 128) [ InitialExpression = "FHIR Receiver" ];
 
+/// The seconds waited before each further walk of one update, when a walk asks for another read. The flow follows this
+/// schedule and no other setting, so every FHIR case makes the same walks. The waits add up to SETTLEFINALSECONDS:
+/// the last walk of the schedule is that long after the first, which is itself after the update, so it is final.
+/// Change the two together.
+Parameter RETRYWAITS = "10,20,40";
+
 /// From this many seconds after the update was sent, a read is the last of the settle window: what it does not show
-/// is no longer waited for.
+/// is no longer waited for. The sum of RETRYWAITS.
 Parameter SETTLEFINALSECONDS = 70;
+
+/// The seconds to wait before further walk <var>n</var> of an update (1 is the first after the walk that follows the
+/// update), or "" when the schedule has no such walk; <var>of</var> is the number of further walks.
+ClassMethod RetryWait(n As %Integer, Output of As %Integer) As %String
+{
+    Set of = $LENGTH(..#RETRYWAITS, ",")
+    Quit $SELECT((n >= 1) && (n <= of): +$PIECE(..#RETRYWAITS, ",", n), 1: "")
+}
 
 Method OnVerifyRequest(request As Shutter.Msg.VerifyRequest, Output response As Shutter.Msg.VerifyResult) As %Status
 {
