@@ -189,7 +189,7 @@ Enabling recovery is not part of the install, and observation does not lead to i
 - **It sends no escalation held in shadow mode.** An escalation a person sent in shadow mode reads Not sent, and enabling recovery does not send it; a person can send it again. Reminders differ: if the profile has turned them on, the first reminder run after enabling sends what is due.
 - **It resends nothing by itself.** An outage's offered messages still wait for their own approval.
 
-Going back to shadow mode is the same save the other way. An upgrade from a version before shadow mode also comes up in shadow ([INSTALL 8](../INSTALL.md#8-upgrading-in-place)).
+Going back to shadow mode is the same save the other way. An upgrade from a version before shadow mode also comes up in shadow ([INSTALL 8](../INSTALL.md#8-upgrading-in-place)). Upgrade a site's install with `-Ddemo=0` every time: the package's `demo` parameter defaults to 1, and an upgrade without it would set the install up as a demo (INSTALL 8).
 
 ## 7. Who approves what, the stop switch and the escalation email
 

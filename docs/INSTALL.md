@@ -545,6 +545,10 @@ production, its cases and the saved site profile, and never runs the uninstall. 
 (stop and start it in the Production Configuration page): the load does not restart a running production, so its
 long-lived jobs keep the earlier code until then.
 
+**On a site's install, pass `-Ddemo=0` on every upgrade too:** `zpm "load <folder> -Ddemo=0"`, or `zpm "install
+iris-shutter -Ddemo=0"` from the registry. Every install, an upgrade included, writes the demo flag from the `demo`
+parameter, and the parameter's default is 1, so a site upgraded without it would be set up as a demo.
+
 **Upgrading to 1.2.0.** Run the install once, or load the newer tree, and restart the production as above. Then:
 
 - **An upgrade keeps the further-movement stop.** On a new install another visit's in-patient movement shows on the
