@@ -1,11 +1,13 @@
 /// Whether the live agents can run now (CONTRACTS 12, v1.37), for the web's notice and the routes' refusals: the day's
 /// model budget (Shutter.Util.Budget) and the model provider's answer to the key. GET /settings carries
-/// live.agents = {available, reason, until, detail}: reason "budget" when the day's cap or the caller's share is spent
-/// (until = when the cap resets), "provider_auth" when a live run failed with an authentication error in the last fifteen
-/// minutes (until = the next 00:00 UTC, when a key a site deactivates for the day comes back; the flag clears on the next
-/// live run the provider accepts), null when live runs can go. While the provider refuses the key, the Agent item refuses
-/// live runs itself with the status provider_auth and makes no call (a board nobody answers then ends as for
-/// budget_exhausted: CaseWorkflow.NoBoard), and POST /cases/{id}/board and a live question with no recorded answer answer 409 live_unavailable.
+/// live.agents = {available, reason, until, detail}: reason "budget" when the day's cap or the caller's share has no
+/// room for the next run (spent, or since 1.4.6 less left than its estimate) (until = when the cap resets),
+/// "provider_auth" when a live run failed with an authentication error in the last fifteen minutes (until = the next
+/// 00:00 UTC, when a key a site deactivates for the day comes back; the flag clears on the next live run the provider
+/// accepts), null when live runs can go. While the provider refuses the key, the Agent item refuses live runs itself
+/// with the status provider_auth and makes no call (a board nobody answers then ends as for budget_exhausted:
+/// CaseWorkflow.NoBoard), and POST /cases/{id}/board and a live question with no recorded answer answer 409
+/// live_unavailable.
 Class Shutter.Util.LiveAgents
 {
 
