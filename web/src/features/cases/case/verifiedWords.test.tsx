@@ -430,4 +430,19 @@ describe('the words of a FHIR case', () => {
     expect(within(verification).getByText('Not found in the history read')).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/Not committed/);
   });
+
+  it('badges a FHIR plan as one FHIR update, never as a resend after rehearsal', async () => {
+    const x = fixtures.cases['C-000002'];
+    serve(
+      { ...x.detail, caseId: ID, state: 'awaiting_approval', disposition: 'resend', outcome: '' },
+      { kind: 'fhir_r4' },
+      [],
+      x.closure,
+    );
+    // No board plans a FHIR case: the recorded case's board runs are left out
+    server.use(http.get(`/api/shutter/cases/${ID}/runs`, () => HttpResponse.json([])));
+    renderCase();
+    expect(await screen.findByText('Proposed: One FHIR update')).toBeInTheDocument();
+    expect(screen.queryAllByText(/^(Proposed: )?Resend$/)).toHaveLength(0);
+  });
 });

@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react';
-import { caseState, CASE_STATES, disposition as dispositionStatus } from '@/lib/status';
+import type { ReceiverKind } from '@/api/types';
+import { caseState, CASE_STATES, disposition as dispositionStatus, FHIR_RESEND } from '@/lib/status';
 import { TONE_COLOURS } from '@/lib/tone';
 import { dispositionSlug, hasDispositionColour } from '@/theme';
 import { StatusBadge } from './StatusBadge';
@@ -50,13 +51,17 @@ export function DispositionBadge({
   disposition,
   proposed = false,
   focusable,
+  kind,
 }: {
   disposition: string;
   proposed?: boolean;
   focusable?: boolean;
+  /** The case's receiver kind: a FHIR case's resend is its one version-aware update. */
+  kind?: ReceiverKind;
 }) {
   if (!disposition) return null;
-  const status = dispositionStatus(disposition);
+  const status =
+    kind === 'fhir_r4' && disposition === 'resend' ? FHIR_RESEND : dispositionStatus(disposition);
   const label = proposed && PROPOSALS.has(disposition) ? `Proposed: ${status.label}` : status.label;
   const style = dispositionStyle(disposition);
   return (

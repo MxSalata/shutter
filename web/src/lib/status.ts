@@ -138,6 +138,14 @@ export const DISPOSITIONS: Record<string, Status> = {
 export const disposition = (d: string): Status =>
   DISPOSITIONS[d] ?? s('neutral', humanize(d), undefined, IconListDetails);
 
+/** A FHIR case's resend: one version-aware update after its own approval; the HL7 message is not sent again. */
+export const FHIR_RESEND: Status = s(
+  'neutral',
+  'One FHIR update',
+  "One version-aware update (If-Match) after this case's own approval; no dry run; the HL7 message is not sent again",
+  IconRepeat,
+);
+
 /** One gate check, in four states: a check a plan that writes nothing does not need is not counted as passed. */
 export type CheckState = 'passed' | 'blocked' | 'unknown' | 'not_applicable' | 'later';
 

@@ -168,7 +168,7 @@ export function PlanPanel({
       id="plan"
       title="The plan"
       note="One plan, bound by its digest: what the gate checks, and what a release names."
-      aside={p ? <DispositionBadge disposition={p.disposition} /> : null}
+      aside={p ? <DispositionBadge disposition={p.disposition} kind={fhir ? 'fhir_r4' : undefined} /> : null}
     >
       {!p && error ? <ErrorAlert error={error} title="The plan could not be read" onRetry={onRetry} /> : null}
       {!p && !error ? (
