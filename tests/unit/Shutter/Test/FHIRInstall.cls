@@ -20,8 +20,13 @@ Property HadProfileRow As %Boolean [ InitialExpression = 0 ];
 
 Property Made As %String [ MultiDimensional ];
 
+/// How many of the four Shutter's own production held before the test: none on a site install, all four on a demo install
+/// with S35's receiver. The tests here never change that.
+Property OwnBefore As %Integer [ InitialExpression = 0 ];
+
 Method OnBeforeOneTest() As %Status
 {
+    Set ..OwnBefore = ..OwnFhirItems()
     Set ..HadNode = $DATA(^Shutter.Config("fhirItems"), was), ..Node = $GET(was)
     Kill ^Shutter.Config("fhirItems")
     Quit ..MakeProduction()
@@ -53,7 +58,7 @@ Method TestNothingWithoutTheNode()
     Do $$$AssertTrue(..ClassHolds("Site Out") && '..ClassHolds("FHIR Out"), "and so is its class")
     Do $$$AssertStatusOK($CLASSMETHOD(c, "RestoreItems", .added), "the install's own call, with no record")
     Do $$$AssertEquals(added, 0, "adds nothing to Shutter's production")
-    Do $$$AssertEquals(..OwnFhirItems(), 0, "which has none of the four")
+    Do $$$AssertEquals(..OwnFhirItems(), ..OwnBefore, "which holds as many of the four as before")
     Do $$$AssertStatusOK($CLASSMETHOD(c, "RestoreItems", .added, "ShutterTest.NoSuchProduction"), "nor is the production looked for")
     Do $$$AssertEquals($DATA(^Shutter.Config("fhirItems")), 0, "no record is made")
 }
@@ -84,7 +89,7 @@ Method TestPlaceOnAScratchProduction()
     Do $$$AssertTrue(out.error [ "port", "and said: " _ out.error)
     Do $$$AssertEquals(out.added _ "," _ out.updated, "0,0", "nothing added or updated")
     Do $$$AssertTrue(^Shutter.Config("fhirItems") = was, "the record is as it was")
-    Do $$$AssertEquals(..OwnFhirItems(), 0, "and Shutter's production has none of the four")
+    Do $$$AssertEquals(..OwnFhirItems(), ..OwnBefore, "and Shutter's production holds as many of the four as before")
     // Nor does it place an item whose class this install does not have.
     Set absent = 0
     For class = "Shutter.Operation.FHIRReceiver", "Shutter.Operation.FHIRExecute", "Shutter.Operation.FHIRGate", "Shutter.Operation.FHIRVerify" { Set:'##class(%Dictionary.CompiledClass).%ExistsId(class) absent = 1 }
@@ -93,7 +98,7 @@ Method TestPlaceOnAScratchProduction()
         Do $$$AssertNotTrue(out.ok, "an install without the four classes places nothing")
         Do $$$AssertTrue(out.error [ "Nothing was changed", "and says so: " _ out.error)
         Do $$$AssertTrue(^Shutter.Config("fhirItems") = was, "the record is as it was")
-        Do $$$AssertEquals(..OwnFhirItems(), 0, "and Shutter's production has none of the four")
+        Do $$$AssertEquals(..OwnFhirItems(), ..OwnBefore, "and Shutter's production holds as many of the four as before")
     }
 }
 
@@ -200,7 +205,7 @@ Method TestRemoveItems()
     Do $$$AssertEquals(added, 3, "adds the three that are missing, never a second item of that name")
     Do $$$AssertEquals($CLASSMETHOD(c, "Problem", p), "Not on Shutter's class: FHIR Gate (Site.TheirGate)", "which the problem names")
     Do $$$AssertStatusOK($CLASSMETHOD(c, "RemoveItems", "ShutterTest.NoSuchProduction"), "a production that is not there is no error")
-    Do $$$AssertEquals(..OwnFhirItems(), 0, "Shutter's production never had one")
+    Do $$$AssertEquals(..OwnFhirItems(), ..OwnBefore, "Shutter's production holds as many of the four as before")
 }
 
 Method TestDoctorWithAndWithoutAnEntry()
