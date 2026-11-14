@@ -117,12 +117,15 @@ describe('SiteProfilePage', () => {
     const card = within(cards).getByRole('listitem', { name: 'Lab Results Out' });
     expect(within(card).getByText('No resend from a case')).toBeInTheDocument();
     expect(within(card).getByText(ORDERS_RESULTS_LINE)).toBeInTheDocument();
-    // The second layer says the whole of it: the findings, and the outage resend where the receiver is set up for it
+    // The second layer adds only what the first has not said: the history policy and what the findings are
     expect(
       within(card).getByText(
-        /A case goes to a person with its findings .* before any model runs, and nothing is resent from the case\. At a receiver set up for it, an outage's messages that never arrived are listed, and after one approval the engine sends them again\./,
+        "History policy: keep what is current (from its category). A case's findings are who holds the message, the receiver's own words and the result they name, and they come before any model runs.",
       ),
     ).toBeInTheDocument();
+    // So the card says once, beside its badge, that nothing is resent from a case, and once how an outage's are
+    expect(card.textContent?.match(/resent from the case/g)).toHaveLength(1);
+    expect(card.textContent?.match(/the engine sends them again/g)).toHaveLength(1);
     expect(screen.queryByText(/[Nn]ot modelled yet/)).not.toBeInTheDocument();
     expect(screen.queryByText(/[Ee]very failure goes to a person/)).not.toBeInTheDocument();
     expect(screen.queryByText(/gate blocks any write to it/)).not.toBeInTheDocument();

@@ -34,8 +34,8 @@ export interface CategoryText {
  */
 const ORDERS_RESULTS = {
   person: 'A case goes to a person with its findings',
-  findings:
-    "(who holds the message, the receiver's own words and the result they name) before any model runs",
+  findingsAre: "who holds the message, the receiver's own words and the result they name",
+  before: 'before any model runs',
   noResend: 'and nothing is resent from the case.',
   outage:
     "At a receiver set up for it, an outage's messages that never arrived are listed, and after one approval the engine sends them again.",
@@ -46,6 +46,12 @@ const ORDERS_RESULTS = {
  * of it, with what the findings are, is `CATEGORY_TEXT.orders_results.overtaken`.
  */
 export const ORDERS_RESULTS_BRIEF = `${ORDERS_RESULTS.person}, ${ORDERS_RESULTS.noResend} ${ORDERS_RESULTS.outage}`;
+
+/**
+ * What the whole sentence adds to the brief one, on its own: what a case's findings are and when they come. For a
+ * second layer under words that have already said the rest, so nothing is said twice.
+ */
+export const ORDERS_RESULTS_FINDINGS = `A case's findings are ${ORDERS_RESULTS.findingsAre}, and they come ${ORDERS_RESULTS.before}.`;
 
 export const CATEGORY_TEXT: Record<ReceiverCategory, CategoryText> = {
   current_state: {
@@ -68,7 +74,7 @@ export const CATEGORY_TEXT: Record<ReceiverCategory, CategoryText> = {
     label: 'Orders and results',
     gist: 'Each order or result is its own record',
     examples: 'Order communications, a laboratory system (LIMS)',
-    overtaken: `${ORDERS_RESULTS.person} ${ORDERS_RESULTS.findings}, ${ORDERS_RESULTS.noResend} ${ORDERS_RESULTS.outage}`,
+    overtaken: `${ORDERS_RESULTS.person} (${ORDERS_RESULTS.findingsAre}) ${ORDERS_RESULTS.before}, ${ORDERS_RESULTS.noResend} ${ORDERS_RESULTS.outage}`,
     modelled: false,
   },
 };
