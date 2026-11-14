@@ -226,6 +226,66 @@ Method TestRegisterJoinsNoIncident()
     Do $$$AssertNotTrue($ISOBJECT(##class(Shutter.Store.Incident).OpenFor(name)), "nothing of the test is left")
 }
 
+/// A receiver is a FHIR receiver only when its fhir object passes what a save of the profile asks of it. A stored
+/// entry whose fhir key holds something else (a note from before this profile existed) is exactly what its other keys
+/// make it: it reads its own API, keeps its features and its history policy, and its failures still group in an
+/// incident. All of it in a transaction that is rolled back.
+Method TestAnEntryWhoseFhirObjectDoesNotPassIsNoFhirReceiver()
+{
+    Set c = "Shutter.Store.SiteProfile", f = "Shutter.FHIR.Profile", name = "Noted Out"
+    Set features = {"conditional_writes": true, "receipts": false, "history": true, "dry_run": false}
+    TSTART
+    Try {
+        // What the entry is without the key.
+        Set list = ..Json("Plain")
+        Do list.%Push({"name": (name), "system": "a records system with a note", "tier": 2, "category": "history_of_record", "api": {"base": "/noted/api"}, "features": (features)})
+        Do ..ChangeProfile({"receivers": (list)})
+        Set was = ..Readings(name) _ "|" _ $CLASSMETHOD(c, "ReceiverHistoryPolicy", name)
+        Do $$$AssertEquals(was, "/noted/api/encounters/E%201|/noted/api/receipts/K/1|/noted/api/capabilities|/noted/api/operations|" _ features.%ToJSON() _ "|a records system with a note (/noted/api)|history_of_record|correct", "the entry without the key: its own API, features, label, category and history policy")
+        // The same entry with one thing or another under the key that no save would take.
+        Set notes = [{"endpoint": "https://ward.example/fhir, to be planned"}, {}, {"base": "/fhir/r4"}, "see the integration plan", ["a", "list"], null, 7]
+        Set whole = ..Json("Entry").fhir
+        Do notes.%Push(whole)
+        Set ni = notes.%GetIterator()
+        While ni.%GetNext(.n, .note, .type) {
+            Set what = $SELECT(n = (notes.%Size() - 1): "a whole block beside an api", $ISOBJECT(note): note.%ToJSON(), 1: type _ " " _ note)
+            Set list = ..Json("Plain")
+            Set entry = {"name": (name), "system": "a records system with a note", "tier": 2, "category": "history_of_record", "api": {"base": "/noted/api"}, "features": (features)}
+            Do entry.%Set("fhir", note, $SELECT($ISOBJECT(note): "", 1: type))
+            Do list.%Push(entry)
+            Do ..ChangeProfile({"receivers": (list)})
+            Do $$$AssertEquals($CLASSMETHOD(c, "ReceiverKind", name), "", what _ ": no kind")
+            Do $$$AssertEquals(..Readings(name) _ "|" _ $CLASSMETHOD(c, "ReceiverHistoryPolicy", name), was, what _ ": the entry reads as it does without the key")
+            Do $$$AssertEquals($ISOBJECT($CLASSMETHOD(f, "Block", name)) _ "|" _ $CLASSMETHOD(f, "Enabled", name), "0|0", what _ ": no block of a FHIR receiver, and no recovery")
+            Do $$$AssertEquals(##class(Shutter.FHIR.Install).Doctor().receivers.%Size(), 0, what _ ": the Doctor lists no FHIR receiver")
+        }
+        // Its failures still group: the incident open for it takes the case.
+        Do $$$AssertStatusOK(##class(Shutter.Store.Incident).Open(name, "board", .open), "an incident is open for the entry with the note")
+        Set case = ##class(Shutter.Store.Case).%New(), case.FailureKind = "delivery_failed"
+        Set incident = "unset"
+        Set sc = ##class(Shutter.Store.IncidentDetector).Register(case, name, .incident, .openedNow)
+        Do $$$AssertTrue($ISOBJECT(incident), "and its failure is handed that incident")
+        // A whole block behind an entry that carries the key is not one a save takes, so neither is a FHIR receiver.
+        Set list = ..Json("Plain")
+        Do list.%Push({"name": (name), "tier": 2, "fhir": {"endpoint": "to be planned"}})
+        Do list.%Push(..Json("Entry"))
+        Do ..ChangeProfile({"receivers": (list)})
+        Do $$$AssertEquals($CLASSMETHOD(c, "Validate", $CLASSMETHOD(c, "Current")) '= "", 1, "a save refuses the profile with the note")
+        Do $$$AssertEquals($CLASSMETHOD(c, "ReceiverKind", name) _ "|" _ $CLASSMETHOD(c, "ReceiverKind", ..#NAME), "|", "a block that a save refuses where it stands is no FHIR receiver either")
+        // The control: the whole block where a save takes it is a FHIR receiver, as before.
+        Set list = ..Json("Plain")
+        Do list.%Push(..Json("Entry"))
+        Do ..ChangeProfile({"receivers": (list)})
+        Do $$$AssertEquals($CLASSMETHOD(c, "ReceiverKind", ..#NAME) _ "|" _ $CLASSMETHOD(c, "ReceiverPath", ..#NAME, "state", "E1") _ "|" _ $CLASSMETHOD(c, "ReceiverHistoryPolicy", ..#NAME) _ "|" _ $ISOBJECT($CLASSMETHOD(f, "Block", ..#NAME)), "fhir_r4||current|1", "a block that passes is a FHIR receiver: its kind, no path, current, and its block")
+        Do $$$AssertEquals(##class(Shutter.FHIR.Install).Doctor().receivers.%Size(), 1, "and the Doctor lists it")
+        Do $$$AssertEquals($CLASSMETHOD(f, "IsReceiver", list.%Get(2), list, 2) _ "|" _ $CLASSMETHOD(f, "IsReceiver", list.%Get(0), list, 0) _ "|" _ $CLASSMETHOD(f, "IsReceiver", "", list, 0) _ "|" _ $CLASSMETHOD(f, "IsReceiver", list.%Get(2), "", ""), "1|0|0|0", "the one rule, asked directly: the entry, where it stands in the list")
+    } Catch ex {
+        Do $$$AssertStatusOK(ex.AsStatus(), "nothing is thrown")
+    }
+    TROLLBACK
+    Set ..ProfileChanged = 0
+}
+
 /// What the readers answer for one receiver, as one text.
 Method Readings(name As %String) As %String
 {

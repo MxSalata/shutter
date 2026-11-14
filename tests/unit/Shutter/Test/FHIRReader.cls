@@ -876,7 +876,8 @@ ClassMethod AdtEntry() As %DynamicObject
     Quit {"name": (..#ADTRECEIVER), "system": "a unit test's bed system", "category": "current_state", "tier": 2, "applies": "arrival_order", "resend_timestamp": "original", "cancels": false, "merges": false, "api": {"base": "/ut-adt-reader/api", "state": "/encounters/{encounter}", "receipt": "/receipts/{key}", "capabilities": "/capabilities", "operations": "/operations"}, "features": {"conditional_writes": true, "receipts": true, "history": true, "dry_run": true}}
 }
 
-/// Puts receivers into the stored profile, each in place of an earlier copy of the same name; every other entry stays.
+/// Puts receivers into the stored profile, each in place of an earlier copy of the same name; every other entry stays,
+/// but for another FHIR entry when one of these is one.
 /// The row as it was before the first call is kept for RestoreProfile.
 ClassMethod PutReceivers(entries As %DynamicArray) As %Status
 {
@@ -889,11 +890,17 @@ ClassMethod PutReceivers(entries As %DynamicArray) As %Status
     Set version = +p.version
     Do p.%Remove("version")
     Set it = entries.%GetIterator()
-    While it.%GetNext(.i, .e) { Set names(e.name) = "" }
+    Set fhir = 0
+    While it.%GetNext(.i, .e) { Set names(e.name) = "" Set:e.%IsDefined("fhir") fhir = 1 }
     Set kept = [], list = p.%Get("receivers")
     If $ISOBJECT(list) {
         Set it = list.%GetIterator()
-        While it.%GetNext(.i, .r) { Do:'($ISOBJECT(r)&&(r.%Get("name")'="")&&$DATA(names(r.%Get("name")))) kept.%Push(r) }
+        While it.%GetNext(.i, .r) {
+            Continue:($ISOBJECT(r)&&(r.%Get("name")'="")&&$DATA(names(r.%Get("name"))))
+            // A profile holds one FHIR entry, and one behind another is none a save takes: the test's takes its place.
+            Continue:(fhir&&$ISOBJECT(r)&&r.%IsDefined("fhir"))
+            Do kept.%Push(r)
+        }
     }
     Set it = entries.%GetIterator()
     While it.%GetNext(.i, .e) { Do kept.%Push(e) }

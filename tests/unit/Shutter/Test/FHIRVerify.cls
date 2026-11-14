@@ -583,11 +583,12 @@ Method ChangeEntry(wards As %String)
         Do map.%Push({"ward": (code), "location": ("Location/ward-" _ ward), "identifier": {"system": "urn:shutter:ward", "value": (code)}})
     }
     Set entry = {"name": (..#RECEIVER), "system": "the ward system (FHIR R4)", "category": "current_state", "tier": 3, "applies": "arrival_order", "resend_timestamp": "original", "cancels": false, "merges": false, "fhir": {"base": (..#BASE), "recovery_enabled": true, "encounter_identifier": {"system": (..#SYS)}, "patient_identifier": {"system": "urn:shutter:demo:mrn", "hl7_authority": "HOSP"}, "marker": {"system": "urn:shutter:recovery"}, "location_map": (map)}}
-    // Every other entry stays as it is; an earlier copy of this one is replaced
+    // Every other entry stays as it is, but for another FHIR entry (a profile holds one, and an entry behind another
+    // is none a save takes); an earlier copy of this one is replaced
     Set kept = [], list = p.%Get("receivers")
     If $ISOBJECT(list) {
         Set it = list.%GetIterator()
-        While it.%GetNext(.i, .r) { Do:'($ISOBJECT(r)&&(r.%Get("name")=..#RECEIVER)) kept.%Push(r) }
+        While it.%GetNext(.i, .r) { Do:'($ISOBJECT(r)&&((r.%Get("name")=..#RECEIVER)||r.%IsDefined("fhir"))) kept.%Push(r) }
     }
     Do kept.%Push(entry)
     Do p.%Set("receivers", kept)

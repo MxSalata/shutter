@@ -279,6 +279,8 @@ ClassMethod DemoEntry(seedPath As %String) As %Status
     Set at = "", iter = receivers.%GetIterator()
     While iter.%GetNext(.i, .r) {
         Continue:'$ISOBJECT(r)
+        // The key's presence, as the validator's one-receiver rule counts it: a second entry with the key is one no
+        // save takes, whether or not the first is a FHIR receiver (Shutter.FHIR.Profile.IsReceiver).
         If $ISOBJECT(r.%Get("fhir")) Return $$$OK
         If ##class(Shutter.Util.Json).Str(r, "name") = ..#DEMORECEIVER Set at = i
     }
@@ -297,13 +299,12 @@ ClassMethod DemoProof() As %Status
 
 /// What a demo install sets up for scenario S35: the entry (DemoEntry), the four items on this instance's own web port
 /// with the demo's credential FHIRFacade (PlaceItems), and the proof (DemoProof). The items and the proof only when the
-/// stored profile has the entry with a fhir block, so a demo whose profile a person saved gets neither. Returns a status.
+/// stored profile has the entry as a FHIR receiver, so a demo whose profile a person saved gets neither. Returns a status.
 ClassMethod Demo(seedPath As %String) As %Status
 {
     Set sc = ..DemoEntry(seedPath)
     Quit:$$$ISERR(sc) sc
-    Set entry = ##class(Shutter.Store.SiteProfile).Receiver(..#DEMORECEIVER)
-    Quit:'($ISOBJECT(entry) && $ISOBJECT(entry.%Get("fhir"))) $$$OK
+    Quit:(##class(Shutter.Store.SiteProfile).ReceiverKind(..#DEMORECEIVER) '= "fhir_r4") $$$OK
     Set placed = ..PlaceItems("127.0.0.1", "", "FHIRFacade", "")
     Quit:'placed.ok $$$ERROR($$$GeneralError, "The demo's FHIR items: " _ placed.error)
     Quit ..DemoProof()
@@ -353,16 +354,16 @@ ClassMethod DemoReset(why As %String) As %DynamicObject
     Quit out
 }
 
-/// The names of the stored profile's receiver entries that have a fhir block.
+/// The names of the stored profile's FHIR receivers: the entries whose fhir block passes what a save asks of it
+/// (Shutter.FHIR.Profile.IsReceiver).
 ClassMethod Receivers() As %DynamicArray [ Private ]
 {
     Set out = []
     Set list = ##class(Shutter.Store.SiteProfile).Current().%Get("receivers")
     Quit:'$ISOBJECT(list) out
     Set li = list.%GetIterator()
-    While li.%GetNext(, .r) {
-        Continue:'$ISOBJECT(r)
-        If $ISOBJECT(r.%Get("fhir")) Do out.%Push(##class(Shutter.Util.Json).Str(r, "name"))
+    While li.%GetNext(.i, .r) {
+        If ##class(Shutter.FHIR.Profile).IsReceiver(r, list, i) Do out.%Push(##class(Shutter.Util.Json).Str(r, "name"))
     }
     Quit out
 }
@@ -396,7 +397,8 @@ ClassMethod ProofWord(proof As Shutter.Store.FHIRProof, softwareName As %String,
     Quit $SELECT(proof.Matches(softwareName, softwareVersion): "matches", 1: "other_software")
 }
 
-/// The FHIR part of the Doctor. {"receivers": []} when the stored profile has no entry with a fhir block; else
+/// The FHIR part of the Doctor. {"receivers": []} when the stored profile has no FHIR receiver (an entry whose fhir
+/// block passes what a save asks of it); else
 /// {"policy_version", "items_problem", "endpoints_agree", "receivers": [{"receiver", "recovery_enabled", "proof",
 /// "proof_measured_at", "credential"}]}. It reads what is stored and calls no server.
 ClassMethod Doctor() As %DynamicObject

@@ -817,15 +817,29 @@ ClassMethod TierOf(receiver As %String) As %Integer
     Quit 2
 }
 
-/// The receiver's entry in the profile (CONTRACTS 6.4), or "" when the profile does not name it.
-ClassMethod Receiver(name As %String) As %DynamicObject
+/// The receiver's entry in the profile (CONTRACTS 6.4), or "" when the profile does not name it. <var>receivers</var>
+/// is the profile's list and <var>index</var> the entry's place in it, for a caller that asks more of the same read.
+ClassMethod Receiver(name As %String, Output receivers As %DynamicArray, Output index As %Integer) As %DynamicObject
 {
+    Set receivers = "", index = ""
     Set p = ..Current()
     Set list = p.%Get("receivers")
     If '$ISOBJECT(list) Quit ""
+    Set receivers = list
     Set iter = list.%GetIterator()
-    While iter.%GetNext(.i, .r) { If $ISOBJECT(r) && (##class(Shutter.Util.Json).Str(r, "name") = name) Return r }
+    While iter.%GetNext(.i, .r) { If $ISOBJECT(r) && (##class(Shutter.Util.Json).Str(r, "name") = name) Set index = i Return r }
     Quit ""
+}
+
+/// The receiver's entry, and whether it is a FHIR R4 receiver, on one read of the profile. The rule is one, and it is
+/// Shutter.FHIR.Profile.IsReceiver: an entry whose fhir object passes what a save asks of it. Every reader here that
+/// treats a FHIR receiver differently asks this, so an entry with anything else under the key reads as its other keys
+/// make it.
+ClassMethod ReceiverWithKind(name As %String, Output fhir As %Boolean) As %DynamicObject [ Private ]
+{
+    Set r = ..Receiver(name, .receivers, .index)
+    Set fhir = ##class(Shutter.FHIR.Profile).IsReceiver(r, receivers, index)
+    Quit r
 }
 
 /// A boolean of the receiver's entry (cancels, merges): false when the profile does not name the receiver or the
@@ -860,10 +874,10 @@ ClassMethod SiteInstall() As %Boolean
 /// Declared features and no api: a receiver with no API of its own, such as a plain MLLP system. It has no paths: falling back
 /// to the defaults would read the demo receiver in its place and believe its capabilities over the declared ones. An entry
 /// with neither reads as a profile from before v1.8 does, on the defaults.
-ClassMethod HasNoApi(entry) As %Boolean [ Private ]
+ClassMethod HasNoApi(entry, fhir As %Boolean = 0) As %Boolean [ Private ]
 {
     // A FHIR R4 receiver is read and written through its own items: it has no path of this kind and its label names no address.
-    If $ISOBJECT(entry) && $ISOBJECT(entry.%Get("fhir")) Quit 1
+    If fhir Quit 1
     If '$ISOBJECT(entry) || $ISOBJECT(entry.%Get("api")) Quit 0
     // An orders and results receiver (a LIMS, order communications) has no receiver API Shutter reads: one the site gave no
     // api is never read at the demo receiver's address, and its label names no address.
@@ -875,8 +889,8 @@ ClassMethod HasNoApi(entry) As %Boolean [ Private ]
 /// stays empty: the caller then uses what the profile declares instead.
 ClassMethod ReceiverPath(name As %String, kind As %String, encounter As %String = "", key As %String = "") As %String
 {
-    Set r = ..Receiver(name), defaults = ..DefaultApi()
-    If ..HasNoApi(r) Quit ""
+    Set r = ..ReceiverWithKind(name, .fhir), defaults = ..DefaultApi()
+    If ..HasNoApi(r, fhir) Quit ""
     // A site's receiver the profile does not name (v1.42) has no API: the defaults are the demo receiver's.
     If '$ISOBJECT(r) && ..SiteInstall() Quit ""
     Set api = $SELECT($ISOBJECT(r) && $ISOBJECT(r.%Get("api")): r.%Get("api"), 1: defaults)
@@ -893,9 +907,9 @@ ClassMethod ReceiverPath(name As %String, kind As %String, encounter As %String 
 /// with no capabilities endpoint and as the record of what the site believes; every flag true by default.
 ClassMethod ReceiverFeatures(name As %String) As %DynamicObject
 {
-    Set r = ..Receiver(name)
+    Set r = ..ReceiverWithKind(name, .fhir)
     // A FHIR R4 receiver declares nothing: what it can do is read from the server, and none of these four is its route.
-    If $ISOBJECT(r) && $ISOBJECT(r.%Get("fhir")) Quit {"conditional_writes": false, "receipts": false, "history": false, "dry_run": false}
+    If fhir Quit {"conditional_writes": false, "receipts": false, "history": false, "dry_run": false}
     If $ISOBJECT(r) && $ISOBJECT(r.%Get("features")) Quit r.%Get("features")
     If '$ISOBJECT(r) && ..SiteInstall() Quit {"conditional_writes": false, "receipts": false, "history": false, "dry_run": false}
     Quit {"conditional_writes": true, "receipts": true, "history": true, "dry_run": true}
@@ -926,21 +940,22 @@ ClassMethod ReceiverCategory(name As %String) As %String
     Quit category
 }
 
-/// The receiver's kind: fhir_r4 for an entry with a fhir block (Shutter.FHIR.Profile), else "".
+/// The receiver's kind: fhir_r4 for an entry whose fhir block passes what a save asks of it
+/// (Shutter.FHIR.Profile.IsReceiver), else "".
 ClassMethod ReceiverKind(name As %String) As %String
 {
-    Set r = ..Receiver(name)
-    Quit $SELECT($ISOBJECT(r) && $ISOBJECT(r.%Get("fhir")): "fhir_r4", 1: "")
+    Do ..ReceiverWithKind(name, .fhir)
+    Quit $SELECT(fhir: "fhir_r4", 1: "")
 }
 
 /// The receiver's history policy, current or correct (v1.23): the entry's own history_policy when it has one, else
 /// derived from its category (history_of_record keeps the history straight: correct; the others: current), else, for
-/// an entry with neither, the profile's site-wide history_policy (deprecated since v1.23), else current. An entry with
-/// a fhir block is current whatever else is said: the site-wide flag never reaches it.
+/// an entry with neither, the profile's site-wide history_policy (deprecated since v1.23), else current. A FHIR R4
+/// receiver is current whatever else is said: the site-wide flag never reaches it.
 ClassMethod ReceiverHistoryPolicy(name As %String) As %String
 {
-    Set r = ..Receiver(name)
-    If $ISOBJECT(r) && $ISOBJECT(r.%Get("fhir")) Quit "current"
+    Set r = ..ReceiverWithKind(name, .fhir)
+    If fhir Quit "current"
     Set own = $SELECT($ISOBJECT(r): ##class(Shutter.Util.Json).Str(r, "history_policy"), 1: "")
     If $LISTFIND($LISTBUILD("current", "correct"), own) Quit own
     If $ISOBJECT(r) && (##class(Shutter.Util.Json).Str(r, "category") '= "") Quit $SELECT(..ReceiverCategory(name) = "history_of_record": "correct", 1: "current")
@@ -970,9 +985,9 @@ ClassMethod ReceiverNames() As %DynamicArray
 /// The receiver's description for a person: its display name and base path.
 ClassMethod ReceiverLabel(name As %String) As %String
 {
-    Set r = ..Receiver(name)
+    Set r = ..ReceiverWithKind(name, .fhir)
     Set system = ..DisplayName(r, name)
-    If ..HasNoApi(r) Quit system
+    If ..HasNoApi(r, fhir) Quit system
     Set base = ##class(Shutter.Util.Json).Str($SELECT($ISOBJECT(r) && $ISOBJECT(r.%Get("api")): r.%Get("api"), 1: ..DefaultApi()), "base", "/downstream/api")
     Quit system _ " (" _ base _ ")"
 }
