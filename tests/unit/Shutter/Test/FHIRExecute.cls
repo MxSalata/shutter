@@ -1,4 +1,4 @@
-/// FHIR Out's write (Shutter.Operation.FHIRExecute): at most one conditional update for one approval. The operation
+/// FHIR Out's write (Shutter.Operation.FHIRExecute): at most one version-aware update for one approval. The operation
 /// runs in process with the test FHIR server as its adapter (Shutter.Test.FakeFhir), so every request it makes is in
 /// that adapter's log, and a canned answer stands for what a gateway or a failing receiver would say. Each test puts
 /// back the profile and the control row as it found them, purges the cases it saved and removes the permits it made.

@@ -1,4 +1,4 @@
-/// The writer of a FHIR R4 receiver: at most one conditional update of one Encounter for one approval. It trusts
+/// The writer of a FHIR R4 receiver: at most one version-aware update of one Encounter for one approval. It trusts
 /// nothing of the gate's moment, because a request can wait in this item's queue across a disabled item or a
 /// production stop: it opens the case, the binding, the approval, the plan and the dispatch decision again, and
 /// refuses unless each still holds. The order of what follows is the promise:

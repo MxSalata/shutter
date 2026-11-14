@@ -1,6 +1,6 @@
 /// The steps of a case whose receiver is a FHIR R4 receiver, between the evidence and the close: the plan, the FHIR
 /// gate at the proposal, the seal of the one update, a person's approval of this case alone, the read just before the
-/// write, the FHIR gate at the dispatch, the one conditional update, and the walk that verifies it.
+/// write, the FHIR gate at the dispatch, the one version-aware update, and the walk that verifies it.
 ///
 /// Class methods only; <var>p</var> is the case's workflow instance (Shutter.Process.CaseWorkflow), which keeps the
 /// identifiers between steps, and every send goes through its FHIRSend. No step waits and none makes an HTTP call:
