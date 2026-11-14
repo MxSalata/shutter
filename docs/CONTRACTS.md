@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.61, 14 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.62, 14 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -386,6 +386,65 @@ hospital has. It never resets anything; the scenario runner's Reset (and so ever
   Shutter reads across namespaces (`^Shutter.Config("hospitalNamespace")`) as `live` in the Doctor and in `GET /settings`,
   for the app's banner; `{enabled: false}` when there is no hospital or no player. Since 1.4.2 a copy of the switch and the cadence alone, `^Shutter.Live("public")` `{enabled, every_minutes, at}` in Shutter's own namespace (`Shutter.Util.LivePublic`), is written by the player on every round, by `SetLive` and the hospital's install, and by `Setup.LiveStatus` whenever it reads the hospital and the copy says otherwise, for a caller who may not read the hospital's database (12). The item logs one trace line per story
   ("Live story n: S with k message(s) for p patient(s)") and a warning when a story or a fault fails.
+
+## 4.5 The pathology paths on the demo (v1.62)
+
+Two optional paths besides the scenarios, on the demo hospital's results route, offered on a demo install with the
+hospital (never in the trial, whose outage routes answer `not_in_trial`): **P1**, one ORU^R01 result the demo's results
+system refuses, and **P2**, an outage of that receiver. They are `fixtures/pathology.json`, a file of their own, so every
+reader of `scenarios.json` (the evaluation, the recordings, the fair test, CI's evaluation step, the live hospital) never
+sees them and the scenarios still number 36. No agent runs on them and no model is called.
+
+- **The route** (`Hospital.Production`, category Lab): `Lab In` (`Hospital.Service.LabFeed`, PoolSize 0) sends a result to
+  `Lab Results Out`, a stock `EnsLib.HL7.Operation.TCPOperation` on 127.0.0.1 (`FailureTimeout` 0, `AlertOnError`, stock
+  `ReplyCodeActions`), which `Ens.Alert` lists beside `Downstream Out`. Its receiver is `Results System In`
+  (`Hospital.Service.LabReceiver`, an HL7 TCP service with no target), a stand-in inside the instance that listens on the
+  loopback interface only (`LocalInterface` 127.0.0.1), on the port `^Hospital.Config("labPort")` (default 7650, a default
+  setting): it answers AA, or AE with "Test code not recognised:
+  <code>" for an OBX-3 code outside its list, files nothing, and records each frame it answered in `^Hospital.Lab("heard")`
+  (`HeardList()`). It keeps the inbound body with no header, so no outage set ever reads it. A played result gets a fresh
+  MSH-7, MSH-10, PID-3 first identifier (a 999 number with a valid check digit) and placer and filler numbers, so two runs
+  never share a message or a patient.
+- **The profile entry.** `Hospital.Setup`'s install records the three items in `^Shutter.Config` (`labFeed`, `labReceiver`,
+  `labListener`) and calls `Shutter.Setup.DemoLabReceiver`, which adds `Lab Results Out` to a demo's profile while its
+  source is still the seed's (or the demo's or the live hospital's mark on it), as a new version with that source:
+  `orders_results`, tier 3, `watch` on the hospital's namespace, `engine_resend`, `ack_level` `commit` and `duplicates`
+  `unknown`. A profile a person saved and a site install get nothing.
+- **The steps.** A file step with `"route": "lab"` plays through `Lab In`; `{"lab_receiver": "down"}` and `"up"` switch
+  `Results System In` off and on through `Ens.Director.EnableConfigItem`, as the production, only when it runs otherwise.
+  Whether it runs is read from the running production (the item's runtime record, `LabReceiver.Listening()`), never from
+  the definition's flag; a definition that already says so is put into effect by the update alone, and an update that
+  fails puts the definition back, so the two never disagree. A process that may not update the production (`MaySwitch`:
+  the interoperability user, `%All`, or USE on `%Ens_ProductionRun` or `%Ens_ConfigItemRun`) changes neither; `{"wait_for_outage":
+  "offered", "receiver": "Lab Results Out", "timeout": 240}` waits for the receiver's outage that is not closed to reach
+  the state (`|` separates several). Each hospital step runs as a process of its own in the hospital's namespace
+  (`LabFeed.Step`), so the Scenario Player's job is never left registered in that production.
+- **The run.** `Prepare` finds a path when the route is installed (`LabReady`). `Begin` sets `^Shutter.Config("scenario")`
+  and never `scenarioRun` (`Tag`), so a path's cases are tagged and never `ScenarioRecorded`, and the gate's Rules only
+  baseline cannot see them; an `orders_results` case goes to a person in every mode anyway. P1: the case at
+  `Lab Results Out` escalates with no resend, its findings naming the OBX and the receiver's words. P2: three results fail
+  with the stand-in down (each Error, the connection never opened), the stand-in comes back, and the outage (17) offers the
+  three; one approval of the existing kind (17.8: the digest, the note, the receiver check, the recovery stop and shadow
+  mode) has the engine send them again unchanged.
+- **P2's start** is refused, before the reset and with nothing changed, while the demo results receiver has an outage that
+  is not closed ("... is still open on the Incidents page: approve its resend or close it there with a reason", or while
+  it is `sending`, "... is still sending its approved resend"), and for the receiver's `window_minutes` and half a minute
+  after the last P2 run played its results (`^Shutter.Scenarios("pathology", "played")`), so the next outage's window
+  cannot list them. `POST /scenarios/P2/run` answers those as 409 `wrong_state` before anything is queued. No start and no
+  reset closes, changes or deletes an outage, its events, its readings or its ledger (17.7 stands); a person finishes or
+  closes the last run's outage on its card.
+- **The reset** switches `Results System In` back on when it does not run (a P2 run cut short) and the caller may update
+  the hospital's production, and says so as `lab` (`on`, `already on`, `none`, or `not switched: ...` with why). Every
+  run's start resets as the Scenario Player, which may, so the next run of any scenario or path puts it back. `POST
+  /scenarios/reset` runs as the person who asks (an operator or an approver; judges and the demo sign-in may not reset),
+  who may not: it answers `not switched: this sign-in may not update the demo hospital's production; ...` and leaves the
+  stand-in, its definition and a P2 run in play as they were. That reset does not wait for a run in play: during P2's
+  down window it leaves the stand-in down, and P2's own `up` step brings it back. Nothing else.
+- `ListPathology()` lists the paths; `GET /scenarios` carries them as `pathology` (an empty list where the route is not
+  installed), each with `kind` `pathology`, `latestCase` as a scenario has it and `latestOutage` (`{ "id", "state",
+  "openedAt" }` of the receiver's newest outage, for P2; otherwise null).
+- **A path's waits** read only the cases its own run opens (`WaitForState` with the newest case row before the run), since
+  a path's cases keep its tag from one run to the next.
 
 ## 5. The REST API for the app
 
@@ -2798,6 +2857,12 @@ then null, never 0, with the reason in `sourceError`. `incomplete` for any of th
 No message content is copied: the rows hold ids, codes, the body's class and the HL7 structure's family (ADT, ORU).
 
 ## Changes
+
+- v1.62, 14 Nov 2026 (the pathology paths on the demo): section 4.5, P1 and P2 on the demo hospital's results route, with
+  the runner's three steps, P2's refusals, the reset's `lab` and `GET /scenarios`'s `pathology`. Whether the stand-in runs
+  is read from the running production, a reset through the API (whose caller may not update the hospital's production)
+  answers `not switched` and changes nothing, the stand-in listens on loopback only, and a path's wait reads only its own
+  run's cases. No outage contract changed.
 
 - v1.61, 14 Nov 2026 (OpenAI as a second provider the install configures): the install and the production's start
   read `OPENAI_API_KEY` and `SHUTTER_PROVIDER` beside `ANTHROPIC_API_KEY` and `SHUTTER_MODEL`

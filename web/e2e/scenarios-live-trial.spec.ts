@@ -1,5 +1,6 @@
 import { expect, test, type Page, type Route } from '@playwright/test';
 import fixtures from '../src/mocks/fixtures.json' with { type: 'json' };
+import paths from '../../fixtures/pathology.json' with { type: 'json' };
 import { audit } from './axe';
 import { skipWelcome } from './guide';
 
@@ -36,8 +37,19 @@ const JUDGE = {
 const RESET_WHY =
   'This sign-in runs scenarios but does not reset the shared demo, which would clear it for everyone signed in';
 
+/** The pathology paths (1.4.6) as a demo with the results route lists them: P1 played, P2's outage offered. */
+const PATHOLOGY = paths.map((p) => ({
+  ...p,
+  kind: 'pathology',
+  latestCase:
+    p.id === 'P1'
+      ? { caseId: 'C-000901', state: 'escalated', disposition: 'escalate', headline: 'A person decides' }
+      : null,
+  latestOutage: p.id === 'P2' ? { id: 7, state: 'offered', openedAt: '2026-11-14T02:32:04Z' } : null,
+}));
+
 /** The stand-in server, signed in as `me`, with a fresh demo: no scenario has a case yet. */
-async function standIn(page: Page, me: unknown) {
+async function standIn(page: Page, me: unknown, pathology?: unknown[]) {
   const json = (route: Route, body: unknown, status = 200) => route.fulfill({ status, json: body });
   await page.route('**/api/shutter/**', (route) => {
     const path = new URL(route.request().url()).pathname.replace(/^.*\/api\/shutter/, '');
@@ -52,6 +64,7 @@ async function standIn(page: Page, me: unknown) {
         return json(route, {
           scenarios: fixtures.scenarios.map((s) => ({ ...s, latestCase: null })),
           run: null,
+          ...(pathology ? { pathology } : {}),
         });
       case '/site-profile':
         return json(route, fixtures.siteProfile);
@@ -135,6 +148,30 @@ for (const width of [1280, 360])
       await expect(page.getByRole('tooltip')).toHaveText(RESET_WHY);
       if (process.env.E2E_SHOTS)
         await page.screenshot({ path: `${process.env.E2E_SHOTS}/demo-reset-tooltip-${width}.png` });
+    });
+
+    test('shows a judge the optional pathology paths after the scenarios, P2 held while its outage is open', async ({
+      page,
+    }) => {
+      await standIn(page, JUDGE, PATHOLOGY);
+      await page.goto('./#/scenarios');
+      await page.getByRole('button', { name: 'Not now' }).click();
+      await page.getByRole('button', { name: /^Optional, after these three: pathology on the demo/ }).click();
+      const group = page.getByRole('region', { name: 'Pathology on the demo (optional)' });
+      await expect(group).toBeInViewport();
+      await expect(group.getByText(/No agent runs and no model is called\./)).toBeVisible();
+      await expect(group.getByRole('button', { name: 'Run P1' })).toBeEnabled();
+      await expect(group.getByRole('button', { name: 'Run P2' })).toBeDisabled();
+      await expect(group.getByText(/^P2 runs again once this outage is closed/)).toBeVisible();
+      await expect(group.getByRole('link', { name: 'Outage 7 on Incidents' })).toHaveAttribute(
+        'href',
+        '#/incidents#outage-7',
+      );
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+      // WCAG 2.1 A and AA, as every screen is audited
+      expect(await audit(page)).toEqual([]);
+      if (process.env.E2E_SHOTS)
+        await group.screenshot({ path: `${process.env.E2E_SHOTS}/live-pathology-${width}.png` });
     });
 
     test('gives a judge Run, and Reset greyed out with a reason that asks for no role it shows', async ({

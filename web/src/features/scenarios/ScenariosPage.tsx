@@ -38,7 +38,7 @@ import {
   useSiteProfile,
 } from '@/api/hooks';
 import { replaysOnly, scenariosHidden, showsRoleBadges } from '@/api/can';
-import type { AgentRun, CaseSummary, Mode, Scenario, ScenarioRun } from '@/api/types';
+import type { AgentRun, CaseSummary, Mode, PathologyPath, Scenario, ScenarioRun } from '@/api/types';
 import { ENV, TRIAL } from '@/env/mode';
 import { byEnv } from '@/env/copy';
 import { PageHeader } from '@/components/PageHeader';
@@ -66,6 +66,8 @@ import { landOn } from '@/features/guide/reveal';
 import { caseOf } from '@/features/guide/places';
 import { EXECUTION, routeNext, runCase, runExecution, SINGLE_ROUTE } from './execution';
 import { MoreAbout } from './MoreAbout';
+import { PathologyLink, PathologyPaths, PathologyRunBanner, PathologyRunStarting } from './PathologyPaths';
+import { isPathologyRun } from './pathologyText';
 import { ScenarioDiagram } from './ScenarioDiagram';
 import { StartHere } from './StartHere';
 import { ModeName, ScenariosHero, TryFirst } from './TryFirst';
@@ -997,6 +999,8 @@ export default function ScenariosPage() {
   useJudgeLanding(!!scenarios.data);
   useStartLanding(!!scenarios.data);
   const current = scenarios.data?.run ?? null;
+  // The pathology paths (1.4.6): listed by a live demo with the results route only, never in the trial
+  const pathology = TRIAL || playerOff ? [] : (scenarios.data?.pathology ?? []);
   // A run that has just finished has opened its case: the cases are read again at once, so the banner's link to the
   // run's own case does not wait for the list's next quiet poll
   const refetchCases = cases.refetch;
@@ -1034,6 +1038,24 @@ export default function ScenariosPage() {
   // The run being asked for, from the press until the server's answer and the list read after it (useRunScenario
   // waits for that read): by then `current` is the new run, queued or playing, so the last run is never shown as this one
   const pressed = run.isPending ? run.variables : undefined;
+  /** A pathology path runs no agent, so its mode is never the question: only who may run, and whether a run plays. */
+  const pathWhy = playerOff ? PLAYER_OFF : hidden || !canRun ? runNeeds : runBusy || pending;
+  const startPath = (p: PathologyPath) =>
+    run.mutate(
+      { id: p.id, mode: 'board' },
+      {
+        onSuccess: () =>
+          notifications.show({
+            color: 'blue',
+            title: `${p.id} started`,
+            message: p.steps.some((s) => s.wait_for_outage)
+              ? 'No agent runs on it. Its outage reaches Incidents in about a minute.'
+              : 'No agent runs on it. Its case appears in a few seconds.',
+          }),
+        onError: (e) =>
+          notifications.show({ color: 'red', title: `${p.id} did not start`, message: describeError(e) }),
+      },
+    );
   /** Why a featured scenario cannot be played in its own mode now, or "". */
   const whyNot = (s: Scenario, m: Mode) =>
     playerOff
@@ -1115,11 +1137,20 @@ export default function ScenariosPage() {
             })}
           </Text>
         ) : null}
-        {/* A Run just pressed shows as starting at once: the last run's banner and its case link give way to it */}
+        {/* A Run just pressed shows as starting at once: the last run's banner and its case link give way to it. A
+            pathology path's press says what it is, with no mode and no agent */}
         {pressed ? (
-          <RunStarting scenario={pressed.id} mode={pressed.mode} />
+          pathology.some((p) => p.id === pressed.id) ? (
+            <PathologyRunStarting id={pressed.id} />
+          ) : (
+            <RunStarting scenario={pressed.id} mode={pressed.mode} />
+          )
         ) : current ? (
-          <RunBanner run={current} cases={cases.data?.items} />
+          isPathologyRun(current, pathology) ? (
+            <PathologyRunBanner run={current} path={pathology.find((p) => p.id === current.scenario)} />
+          ) : (
+            <RunBanner run={current} cases={cases.data?.items} />
+          )
         ) : null}
         {/* Always rendered, loading or not, so the guide's first step has its target; a site install has nothing to try,
             and the list below stands as its reference */}
@@ -1136,6 +1167,7 @@ export default function ScenariosPage() {
             replayed={replayOnly}
           />
         )}
+        {pathology.length ? <PathologyLink /> : null}
         {playerOff ? (
           <Alert color="gray" variant="light" title="The Scenario Player is switched off">
             <Text size="sm">
@@ -1182,6 +1214,14 @@ export default function ScenariosPage() {
                 onRun={() => start(s)}
               />
             )}
+          />
+        ) : null}
+        {pathology.length ? (
+          <PathologyPaths
+            paths={pathology}
+            why={pathWhy}
+            starting={(p) => run.isPending && run.variables?.id === p.id}
+            onRun={startPath}
           />
         ) : null}
         {/* The demo's guided path through the recorded cases, past the first three */}

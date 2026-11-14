@@ -5,8 +5,21 @@
 /// <method>Start</method> does the same in a background job and returns at once, for the app. The methods are SQL
 /// procedures, so scripts and the app can call them: <code>SELECT Shutter_Scenarios.Runner_Run('S2', 'board')</code>.
 /// All three play on a demo instance only (<method>NotDemo</method>), whoever calls them.
+/// Beside the scenarios, the pathology paths (1.4.6; fixtures/pathology.json, <method>LoadPathology</method>): P1, one
+/// result the demo's results system refuses, and P2, an outage of that receiver. They play results through the demo
+/// hospital's results route (a file step with the route "lab"), switch the results system's stand-in off and on
+/// (<code>lab_receiver</code>) and wait for the receiver's outage (<code>wait_for_outage</code>). No agent runs on them and
+/// no model is called: a result case goes to a person, and an outage waits for a person's approval.
 Class Shutter.Scenarios.Runner
 {
+
+/// The demo results receiver the pathology paths use (Hospital.Production): its connector, its feed and the stand-in.
+Parameter LABRECEIVER = "Lab Results Out";
+
+Parameter LABFEED = "Lab In";
+
+/// Seconds a <code>wait_for_outage</code> step waits when it gives no <code>timeout</code>.
+Parameter OUTAGETIMEOUT = 180;
 
 /// Seconds a <code>wait_for_state</code> step waits when it gives no <code>timeout</code>.
 Parameter WAITTIMEOUT = 120;
@@ -42,14 +55,73 @@ ClassMethod List() As %String [ SqlProc ]
     Quit scenarios.%ToJSON()
 }
 
-/// scenarios.json, parsed, with each file step's <code>path</code> filled in; <var>error</var> says what went wrong.
-ClassMethod Load(Output error As %String) As %DynamicArray
+/// The pathology paths as pathology.json lists them, each with "kind": "pathology" and each file step's full path added.
+/// JSON text; an empty list on an instance without the demo's results route (<method>LabReady</method>).
+ClassMethod ListPathology() As %String [ SqlProc ]
+{
+    Quit:'..LabReady() "[]"
+    Set paths = ..LoadPathology(.error)
+    If error '= "" {
+        Quit {"error": (error)}.%ToJSON()
+    }
+    Quit paths.%ToJSON()
+}
+
+/// pathology.json (1.4.6), parsed as <method>Load</method> parses scenarios.json, with "kind": "pathology" on each path.
+/// It is a file of its own, so every tool that reads scenarios.json (the evaluation, the recordings, the fair test, the
+/// live hospital) never sees the two paths.
+ClassMethod LoadPathology(Output error As %String) As %DynamicArray
+{
+    Set paths = ..Load(.error, "pathology.json")
+    Quit:error'="" paths
+    Set iter = paths.%GetIterator()
+    While iter.%GetNext(.i, .one) { Set one.kind = "pathology" }
+    Quit paths
+}
+
+/// Whether <var>scenario</var> is one of the pathology paths.
+ClassMethod IsPathology(scenario As %String) As %Boolean
+{
+    Quit $ISOBJECT(..FindPathology(scenario))
+}
+
+/// The pathology path <var>scenario</var>, or "".
+ClassMethod FindPathology(scenario As %String) As %DynamicObject
+{
+    Set paths = ..LoadPathology(.error)
+    Quit:error'="" ""
+    Set iter = paths.%GetIterator()
+    While iter.%GetNext(.i, .one) { Return:one.id=scenario one }
+    Quit ""
+}
+
+/// Whether the demo hospital's results route is installed: its namespace recorded, and the connector in its production.
+ClassMethod LabReady() As %Boolean
+{
+    Set hospital = $GET(^Shutter.Config("hospitalNamespace"))
+    Quit:hospital="" 0
+    Quit:$GET(^Shutter.Config("labReceiver"))'=..#LABRECEIVER 0
+    Set ready = 0
+    Try {
+        New $NAMESPACE
+        Set $NAMESPACE = hospital
+        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT COUNT(*) AS N FROM Ens_Config.Item WHERE Production = ? AND Name = ?", "Hospital.Production", ..#LABRECEIVER)
+        Set ready = rs.%Next() && (+rs.%Get("N") > 0)
+    } Catch ex {
+        Set ready = 0
+    }
+    Quit ready
+}
+
+/// scenarios.json (or <var>file</var>), parsed, with each file step's <code>path</code> filled in; <var>error</var> says
+/// what went wrong.
+ClassMethod Load(Output error As %String, file As %String = "scenarios.json") As %DynamicArray
 {
     Set error = ""
     Set dir = ..FixturesDir()
-    Set path = dir _ "scenarios.json"
+    Set path = dir _ file
     If '##class(%File).Exists(path) {
-        Set error = "no scenarios.json in " _ dir
+        Set error = "no " _ file _ " in " _ dir
         Quit []
     }
     Set stream = ##class(%Stream.FileCharacter).%New()
@@ -58,7 +130,7 @@ ClassMethod Load(Output error As %String) As %DynamicArray
     Try {
         Set scenarios = ##class(%DynamicAbstractObject).%FromJSON(stream)
     } Catch ex {
-        Set error = "scenarios.json is not valid JSON: " _ ex.DisplayString()
+        Set error = file _ " is not valid JSON: " _ ex.DisplayString()
         Set scenarios = []
     }
     Quit:error'="" scenarios
@@ -198,6 +270,8 @@ ClassMethod Prepare(scenario As %String, mode As %String, Output inbound As %Str
             Quit
         }
     }
+    // A pathology path (1.4.6): its own file, and only where the demo's results route is installed.
+    If '$ISOBJECT(found) && ..LabReady() Set found = ..FindPathology(scenario)
     If '$ISOBJECT(found) {
         Set error = "no scenario " _ scenario
         Quit ""
@@ -219,11 +293,20 @@ ClassMethod Prepare(scenario As %String, mode As %String, Output inbound As %Str
 /// only: ^Shutter.Config("scenarioReplay") says so, the cases it opens keep it (Case's ScenarioReplay), and every agent of
 /// theirs answers from its recording (Shutter.Process.CaseWorkflow Stamp), with no model call and nothing spent; a mode
 /// with no recording is refused before the reset (<method>NotRecorded</method>). Returns the time of the reset.
+/// A pathology path (1.4.6) runs no agent, so the mode's recordings don't matter, and it sets only the case's tag
+/// (^Shutter.Config("scenario")), never scenarioRun: its cases are never ScenarioRecorded, so the gate's Rules only
+/// baseline cannot see them. P2's start is refused, before the reset, while the demo results receiver has an outage that
+/// is not closed, or while the last run's results are still inside the next outage's window (<method>PathologyRefusal</method>).
 ClassMethod Begin(scenario As %String, mode As %String, Output error As %String, requestedBy As %String = "", liveAllowed As %String = "") As %String
 {
     Set error = ""
     If liveAllowed = "" Set liveAllowed = $SYSTEM.Security.Check("Shutter_LiveAgents", "USE")
-    Set error = ..NotRecorded(mode, liveAllowed)
+    Set pathology = ..FindPathology(scenario)
+    If $ISOBJECT(pathology) {
+        Set error = ..PathologyRefusal(pathology)
+    } Else {
+        Set error = ..NotRecorded(mode, liveAllowed)
+    }
     Quit:error'="" ""
     Set reset = {}.%FromJSON(..Reset())
     If reset.ward.error '= "" {
@@ -231,11 +314,24 @@ ClassMethod Begin(scenario As %String, mode As %String, Output error As %String,
         Quit ""
     }
     Set ^Shutter.Config("mode") = mode
-    Set ^Shutter.Config("scenario") = scenario, ^Shutter.Config("scenarioRun") = scenario
+    Do ..Tag(scenario, $ISOBJECT(pathology))
     If requestedBy = "" Set requestedBy = $SELECT($USERNAME = "UnknownUser": "", 1: $USERNAME)
     Set ^Shutter.Config("scenarioBy") = requestedBy
     Set ^Shutter.Config("scenarioReplay") = '+liveAllowed
     Quit reset."reset_at"
+}
+
+/// The run's tag on the cases it opens: ^Shutter.Config("scenario"), and for a scenario, not a pathology path,
+/// ^Shutter.Config("scenarioRun") too, which makes its cases ScenarioRecorded (Shutter.Store.Case), the mark the gate's
+/// Rules only baseline reads. A pathology path's cases are tagged and never recorded runs.
+ClassMethod Tag(scenario As %String, pathology As %Boolean)
+{
+    Set ^Shutter.Config("scenario") = scenario
+    If pathology {
+        Kill ^Shutter.Config("scenarioRun")
+    } Else {
+        Set ^Shutter.Config("scenarioRun") = scenario
+    }
 }
 
 /// Why a run in <var>mode</var> can't be played replay only, or "": the single investigator was never recorded, so a
@@ -245,6 +341,39 @@ ClassMethod NotRecorded(mode As %String, liveAllowed As %Boolean) As %String
     Quit:+liveAllowed ""
     Quit:mode'="single" ""
     Quit "The single investigator has no recordings, and a run from this sign-in replays the recorded agents only: choose Board, Site policy or Rules only"
+}
+
+/// Why the pathology path <var>path</var> can't start now, in words a person reads, or "" (1.4.6). Only a path that waits
+/// for an outage (P2) is ever refused, and nothing is read or written but what decides it:
+/// <ul><li>the demo results receiver has an outage that is not closed: P2's start never closes it, since a person
+/// finishes it or closes it on its card (Incidents), as at a site;</li>
+/// <li>the last P2 run played its results less than the outage window (the receiver's window_minutes) and half a minute
+/// ago: the next outage's window would reach back to them and offer them again if they were never resent.</li></ul>
+/// P1's result is not waited for: the receiver answered it, so an outage's set never offers it (it reads Suspended, which
+/// the set lists as refused, with the receiver's words).
+ClassMethod PathologyRefusal(path As %DynamicObject, receiver As %String = {..#LABRECEIVER}) As %String
+{
+    Quit:'..WaitsForOutage(path) ""
+    Set outage = ##class(Shutter.Store.Outage).ActiveFor(receiver)
+    If $ISOBJECT(outage) {
+        If outage.State = "sending" Quit "The last run's outage of " _ receiver _ " (outage " _ outage.%Id() _ ") is still sending its approved resend: start " _ path.id _ " again when it has finished."
+        Quit "The last run's outage of " _ receiver _ " (outage " _ outage.%Id() _ ", " _ $TRANSLATE(outage.State, "_", " ") _ ") is still open on the Incidents page: approve its resend or close it there with a reason, then start " _ path.id _ " again. Each run opens its own outage."
+    }
+    Set last = $GET(^Shutter.Scenarios("pathology", "played"))
+    If last '= "" {
+        Set wait = (##class(Shutter.Store.SiteProfile).ReceiverMinutes(receiver, "window_minutes") * 60) + 30
+        Set since = ##class(Shutter.Util.Time).MillisBetween(last, ##class(Shutter.Util.Time).NowUTC()) \ 1000
+        If (since >= 0) && (since < wait) Quit "The last run's results are still inside the outage window for " _ (wait - since) _ " s: start " _ path.id _ " again after that, so its outage lists only its own results."
+    }
+    Quit ""
+}
+
+/// Whether a path has a <code>wait_for_outage</code> step: the outage path, P2.
+ClassMethod WaitsForOutage(path As %DynamicObject) As %Boolean
+{
+    Set steps = path.steps.%GetIterator()
+    While steps.%GetNext(, .step) { Return:step.%IsDefined("wait_for_outage") 1 }
+    Quit 0
 }
 
 /// Whether the run playing now, or the last one, is replay only (1.4.4): who started it holds no Shutter_LiveAgents.
@@ -258,6 +387,8 @@ ClassMethod ReplayOnly() As %Boolean
 ClassMethod Play(found As %DynamicObject, scenario As %String, mode As %String, started As %String, inbound As %String, track As %Boolean = 0) As %DynamicObject
 {
     Set files = [], timeouts = [], error = ""
+    // A pathology path's waits read only the cases this run opens (1.4.6)
+    Set after = $SELECT($ISOBJECT(..FindPathology(scenario)): ..LastCaseRow(), 1: 0)
     Set steps = found.steps.%GetIterator()
     While steps.%GetNext(.j, .step) {
         Set:track ^Shutter.Scenarios("run", "step") = ..Describe(step)
@@ -276,6 +407,16 @@ ClassMethod Play(found As %DynamicObject, scenario As %String, mode As %String, 
             }
             Quit:error'=""
         } ElseIf step.%IsDefined("file") {
+            // A results route step (1.4.6) plays through the demo hospital's results feed, in the hospital's namespace
+            If step.%IsDefined("route") && (step.route = "lab") {
+                Set error = ..InHospital("play", step.path)
+                Quit:error'=""
+                // The outage path's results, for its next start's window (PathologyRefusal)
+                Set:..WaitsForOutage(found) ^Shutter.Scenarios("pathology", "played") = ##class(Shutter.Util.Time).NowUTC()
+                Do files.%Push(step.file)
+                Hang 2
+                Continue
+            }
             // A step naming an item plays through that demo route instead of the inbound folder (S14, S26)
             If step.%IsDefined("item") {
                 Set error = ##class(Shutter.Scenarios.Route).Play(step.item, step.path)
@@ -302,9 +443,16 @@ ClassMethod Play(found As %DynamicObject, scenario As %String, mode As %String, 
             Hang 2
         } ElseIf step.%IsDefined("wait") {
             Hang +step.wait
+        } ElseIf step.%IsDefined("lab_receiver") {
+            Set error = ..InHospital($SELECT(step."lab_receiver" = "up": "up", 1: "down"))
+            Quit:error'=""
+        } ElseIf step.%IsDefined("wait_for_outage") {
+            Set timeout = $SELECT(step.%IsDefined("timeout"): +step.timeout, 1: ..#OUTAGETIMEOUT)
+            Set receiver = $SELECT(step.%IsDefined("receiver"): step.receiver, 1: ..#LABRECEIVER)
+            Do:'..WaitForOutage(receiver, step."wait_for_outage", timeout) timeouts.%Push("outage " _ step."wait_for_outage")
         } ElseIf step.%IsDefined("wait_for_state") {
             Set timeout = $SELECT(step.%IsDefined("timeout"): +step.timeout, 1: ..#WAITTIMEOUT)
-            Set reached = ..WaitForState(scenario, step."wait_for_state", timeout, .problem)
+            Set reached = ..WaitForState(scenario, step."wait_for_state", timeout, .problem, after)
             Set:problem'="" error = "the runner could not read the case store: " _ problem
             Quit:error'=""
             Do:'reached timeouts.%Push(step."wait_for_state")
@@ -334,7 +482,9 @@ ClassMethod Play(found As %DynamicObject, scenario As %String, mode As %String, 
 /// A step in words, for <method>Status</method>.
 ClassMethod Describe(step As %DynamicObject) As %String
 {
-    Quit:step.%IsDefined("file") "delivering " _ step.file _ $SELECT(step.%IsDefined("route") && (step.route = "hospital"): " to the demo hospital", step.%IsDefined("item"): " through " _ step.item, 1: "")
+    Quit:step.%IsDefined("file") "delivering " _ step.file _ $SELECT(step.%IsDefined("route") && (step.route = "hospital"): " to the demo hospital", step.%IsDefined("route") && (step.route = "lab"): " to the demo results system", step.%IsDefined("item"): " through " _ step.item, 1: "")
+    Quit:step.%IsDefined("lab_receiver") $SELECT(step."lab_receiver" = "up": "bringing the demo results system back", 1: "taking the demo results system down")
+    Quit:step.%IsDefined("wait_for_outage") "waiting for the outage of " _ $SELECT(step.%IsDefined("receiver"): step.receiver, 1: ..#LABRECEIVER) _ " to reach " _ $REPLACE(step."wait_for_outage", "|", " or ")
     Quit:step.%IsDefined("prevent_failures") "turning prevent failures " _ $SELECT(step."prevent_failures": "on", 1: "off") _ " for this run"
     Quit:step.%IsDefined("schema_forget") "removing the schema " _ step."schema_forget"
     Quit:step.%IsDefined("schema_import") "importing the schema " _ step."schema_import"
@@ -379,14 +529,16 @@ ClassMethod Manual(entry As %DynamicObject, Output status As %Integer) As %Dynam
 }
 
 /// Waits until the newest case of <var>scenario</var> reaches <var>state</var> (CONTRACTS 4.1). Returns 1 when it
-/// did, 0 when <var>timeout</var> seconds passed; <var>problem</var> says why the case store couldn't be read.
-ClassMethod WaitForState(scenario As %String, state As %String, timeout As %Integer = {..#WAITTIMEOUT}, Output problem As %String) As %Boolean
+/// did, 0 when <var>timeout</var> seconds passed; <var>problem</var> says why the case store couldn't be read. With
+/// <var>after</var>, only a case whose row id is above it counts: a pathology path's run waits for its own case, not the
+/// last run's (its cases keep the path's tag from one run to the next).
+ClassMethod WaitForState(scenario As %String, state As %String, timeout As %Integer = {..#WAITTIMEOUT}, Output problem As %String, after As %Integer = 0) As %Boolean
 {
     Set problem = ""
     Set deadline = $ZHOROLOG + timeout
     While $ZHOROLOG < deadline {
         // Without privilege checks: the caller may be the app's user, which has no SQL privileges on the store
-        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT TOP 1 State FROM Shutter_Store.""Case"" WHERE Scenario = ? ORDER BY ID DESC", scenario)
+        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT TOP 1 State FROM Shutter_Store.""Case"" WHERE Scenario = ? AND ID > ? ORDER BY ID DESC", scenario, +after)
         If rs.%SQLCODE < 0 {
             Set problem = rs.%Message
             Return 0
@@ -399,10 +551,62 @@ ClassMethod WaitForState(scenario As %String, state As %String, timeout As %Inte
     Quit 0
 }
 
+/// The row id of the newest case in the store, 0 when there is none.
+ClassMethod LastCaseRow() As %Integer
+{
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT MAX(ID) AS M FROM Shutter_Store.""Case""")
+    Quit $SELECT(rs.%Next(): +rs.%Get("M"), 1: 0)
+}
+
 /// Whether a case's state is the one a wait names, or one of several separated by "|" (S26: awaiting_approval|resolved).
 ClassMethod StateIs(state As %String, wanted As %String) As %Boolean
 {
     Quit (state '= "") && (("|" _ wanted _ "|") [ ("|" _ state _ "|"))
+}
+
+/// Waits until <var>receiver</var>'s outage that is not closed reads <var>state</var>, or one of several separated by
+/// "|" (1.4.6, P2). Returns 1 when it did, 0 when <var>timeout</var> seconds passed. It only reads the outage store.
+ClassMethod WaitForOutage(receiver As %String, state As %String, timeout As %Integer = {..#OUTAGETIMEOUT}) As %Boolean
+{
+    Set deadline = $ZHOROLOG + timeout
+    While $ZHOROLOG < deadline {
+        Set outage = ##class(Shutter.Store.Outage).ActiveFor(receiver)
+        If $ISOBJECT(outage) && ..StateIs(outage.State, state) Return 1
+        Hang 1
+    }
+    Quit 0
+}
+
+/// A step on the demo hospital's results route (1.4.6): "play" a file through the results feed, take the results
+/// system's stand-in "down" or bring it back "up" (as the production, through Ens.Director.EnableConfigItem: the Scenario
+/// Player plays the steps, so no person's role gains anything). Each runs as a process of its own in the hospital's
+/// namespace (Hospital.Service.LabFeed, Step), so this job never calls that production's services or its director and is
+/// never left registered there; this waits up to a minute for its answer. Returns "" or what went wrong.
+ClassMethod InHospital(what As %String, path As %String = "") As %String
+{
+    Set hospital = $GET(^Shutter.Config("hospitalNamespace"))
+    Quit:hospital="" "the demo hospital is not installed (^Shutter.Config(""hospitalNamespace"") is not set)"
+    Set error = ""
+    Try {
+        Set key = $JOB _ "-" _ $INCREMENT(^|hospital|Hospital.Lab("step"))
+        Kill ^|hospital|Hospital.Lab("step", key)
+        Job ##class(Hospital.Service.LabFeed).Step(what, ..#LABFEED, path, key):(hospital):10
+        If '$TEST {
+            Set error = "no process could start for the demo results route (the licence caps them): try again in a moment"
+        } Else {
+            Set deadline = $ZHOROLOG + 60, answer = ""
+            While ($ZHOROLOG < deadline) && '$DATA(^|hospital|Hospital.Lab("step", key), answer) { Hang 0.2 }
+            Kill ^|hospital|Hospital.Lab("step", key)
+            If answer = "" {
+                Set error = "the demo results route did not answer within a minute"
+            } ElseIf $LISTGET(answer, 2) '= "" {
+                Set error = $SELECT(what = "play": "", 1: "the demo results system could not be switched " _ $SELECT(what = "up": "on", 1: "off") _ ": ") _ $LISTGET(answer, 2)
+            }
+        }
+    } Catch ex {
+        Set error = "the demo results route: " _ ex.DisplayString()
+    }
+    Quit error
 }
 
 /// The longest <var>scenario</var>'s steps can take, in seconds: two a file, its waits and each state's timeout.
@@ -417,6 +621,10 @@ ClassMethod Duration(scenario As %DynamicObject) As %Integer
             Set total = total + step.wait
         } ElseIf step.%IsDefined("wait_for_state") {
             Set total = total + $SELECT(step.%IsDefined("timeout"): +step.timeout, 1: ..#WAITTIMEOUT)
+        } ElseIf step.%IsDefined("wait_for_outage") {
+            Set total = total + $SELECT(step.%IsDefined("timeout"): +step.timeout, 1: ..#OUTAGETIMEOUT)
+        } ElseIf step.%IsDefined("lab_receiver") {
+            Set total = total + 5
         }
     }
     Quit total
@@ -476,10 +684,44 @@ ClassMethod Reset() As %String [ SqlProc ]
     Set ^Shutter.Config("resetAt") = resetAt
     Set abandoned = ##class(Shutter.Store.Incident).AbandonOpen("scenario reset")
     Do ##class(Shutter.Util.RecoveryControl).DemoReset($USERNAME)
+    // The demo results system's stand-in back on if a P2 run cut short left it off (1.4.6): only when it does not run and
+    // the caller may update the hospital's production (the Scenario Player at each run's start; never a person's reset
+    // through the API, which leaves it as it is). Nothing in the outage stores or the resend ledger is read or written here.
+    Set lab = ..LabListenerOn()
     // A run record left queued or finished goes with the reset (a queued run whose player stopped would otherwise
     // refuse every later run); one that is playing stays, since that run's own reset comes through here
     Kill:'..Running() ^Shutter.Scenarios("run")
-    Quit {"ward": (ward), "receivers": (receivers), "live": (live), "emptied": (emptied), "mode": "board", "reset_at": (resetAt), "abandoned_incidents": (abandoned)}.%ToJSON()
+    Quit {"ward": (ward), "receivers": (receivers), "live": (live), "lab": (lab), "emptied": (emptied), "mode": "board", "reset_at": (resetAt), "abandoned_incidents": (abandoned)}.%ToJSON()
+}
+
+/// The demo results system's stand-in switched on when it does not run (1.4.6): "on", "already on", "none" (no results
+/// route here) or "not switched: ..." with why. A caller that may not update the hospital's production (every person
+/// signed in to Shutter; Hospital.Service.LabReceiver, MaySwitch) changes nothing, neither the running production nor its
+/// definition, and is told so: the next run's start, played by the Scenario Player, switches it on. Never an error: the
+/// rest of the reset must still happen.
+ClassMethod LabListenerOn() As %String
+{
+    Quit:'..LabReady() "none"
+    Quit:..ListenerReads()=1 "already on"
+    Quit:'##class(Hospital.Service.LabReceiver).MaySwitch() "not switched: this sign-in may not update the demo hospital's production; the next run's start switches it back on"
+    Set r = ..InHospital("up")
+    Quit $SELECT(r = "": $SELECT(..ListenerReads() = 1: "on", 1: "not switched"), 1: "not switched: " _ r)
+}
+
+/// Whether the stand-in runs in the hospital's running production (1, 0, or "" when it can't be read): the production's
+/// own record of the item, not its definition's flag (Hospital.Service.LabReceiver, Listening).
+ClassMethod ListenerReads() As %String
+{
+    Set hospital = $GET(^Shutter.Config("hospitalNamespace"))
+    Quit:hospital="" ""
+    Try {
+        New $NAMESPACE
+        Set $NAMESPACE = hospital
+        Set on = ##class(Hospital.Service.LabReceiver).Listening()
+    } Catch ex {
+        Set on = ""
+    }
+    Quit on
 }
 
 /// A playing mark older than this, in seconds, was left by a job that died: no story takes this long.

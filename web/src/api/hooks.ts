@@ -172,7 +172,7 @@ export function useScenarios() {
       const data = await api.get<Scenario[] | ScenarioList>('/scenarios');
       return Array.isArray(data)
         ? { scenarios: data, run: null }
-        : { scenarios: data.scenarios ?? [], run: data.run ?? null };
+        : { scenarios: data.scenarios ?? [], run: data.run ?? null, pathology: data.pathology ?? [] };
     },
     refetchInterval: (query) =>
       isPlaying(query.state.data?.run) || settlingCase(query.state.data) ? 2_000 : CALM,

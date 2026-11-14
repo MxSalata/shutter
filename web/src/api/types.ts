@@ -148,6 +148,13 @@ export interface ScenarioStep {
   receivers?: string[];
   /** A change made by hand in the receiver itself, not through the feed (S20). */
   manual?: { encounter_id: string; event: string; ward: string; event_time: string };
+  /** "hospital" plays through the demo hospital's feed; "lab" through its results route (the pathology paths, 1.4.6). */
+  route?: string;
+  /** The pathology paths' stand-in for the results system taken down or brought back (1.4.6). */
+  lab_receiver?: 'down' | 'up';
+  /** A wait for the receiver's outage to reach this state (1.4.6, P2). */
+  wait_for_outage?: string;
+  receiver?: string;
 }
 
 export interface ScenarioExpected {
@@ -208,9 +215,26 @@ export interface Scenario {
   latestCase: { caseId: string; state: CaseState; disposition: string; headline: string } | null;
 }
 
+/**
+ * A pathology path on the online demo (1.4.6): played through the demo hospital's results route, counted apart from the
+ * scenarios, with no agent and no recording. P1 opens a result case; P2 an outage of the results receiver.
+ */
+export interface PathologyPath {
+  id: string;
+  kind: 'pathology';
+  title: string;
+  summary: string;
+  steps: ScenarioStep[];
+  latestCase: Scenario['latestCase'];
+  /** The newest outage of the demo results receiver, for the path that waits for one (P2); otherwise null. */
+  latestOutage: { id: number; state: string; openedAt: string } | null;
+}
+
 export interface ScenarioList {
   scenarios: Scenario[];
   run: ScenarioRun | null;
+  /** The pathology paths (1.4.6): empty where the demo's results route is not installed; absent from an older server and the trial. */
+  pathology?: PathologyPath[];
 }
 
 export interface RunStarted {

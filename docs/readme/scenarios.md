@@ -22,6 +22,14 @@
 16. Run **S27** and **S9** in **Site policy** mode: further messages for the patient. In S27 the same patient is admitted under a new visit number after a transfer fails, so the resend stops and the case names both visits (`FURTHER_MOVEMENT`). The demo's site profile keeps that stop; a site install shows such a visit on the plan instead, unless its profile says stop. In S9 the other visit is an out-patient attendance, so the resend goes and the plan shows it. S28 is a day case whose admission and discharge both fail, S29 a failed transfer that is then withdrawn, S30 a lost admission that waits for a person, S31 is S27 through the hospital's own production, and S32 is S27 arriving while a plan waits for approval, in **Rules only** mode.
 17. In the Management Portal, the Visual Trace of a case shows each step as a message: the feed, the board's four lanes, the gate, the Workflow task, the dispatch and the verification.
 
+## Pathology on the demo
+
+Two optional paths, counted apart from the 36 scenarios, under **Pathology on the demo (optional)** at the end of the Scenarios page, on a demo install with the hospital (not in the trial). They play through the demo hospital's results route: `Lab In` feeds `Lab Results Out`, a stock HL7 TCP operation, whose receiver is a stand-in inside the same instance (`Results System In`). No agent runs on them and no model is called.
+
+1. Run **P1**. One ORU^R01 result goes to the results system, which answers AE: one test code in it, `ZZUNK`, is not one it knows. A case opens at `Lab Results Out` and goes to a person: its findings name the OBX (set id 5) and the receiver's own words, and it offers no resend, since Shutter never resends one order or result by itself.
+2. Run **P2**. The results system goes down, three results fail without a connection ever opening, and it comes back. About a minute later **Incidents** shows the outage of `Lab Results Out` offering the three, in order (its link on the Scenarios page opens that card). The receiver declares duplicates unknown, so the approval asks you to say you checked the receiver; then **Engine Resend** sends each again unchanged, one at a time. Each reads Completed in the engine, which says the stand-in took it and no more: nothing is verified at the receiver.
+3. P2 runs again only once its last outage is closed (approve its resend, or close it on its card with a reason), and not within about five minutes of its last run, so each run's outage lists only its own results. The demo is shared: another visitor's P2 outage may be the open one.
+
 ## What to look for
 
 | What | Where |

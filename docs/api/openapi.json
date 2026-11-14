@@ -525,7 +525,7 @@
           "scenarios"
         ],
         "summary": "Run a scenario",
-        "description": "With the production's Scenario Player enabled, writes a run record in state queued and sends the run to the player, which moves it through running to done or failed; without it, Runner.Start plays it in a background job.\n\nNeeds Shutter_Scenarios. A starter without Shutter_LiveAgents (since 1.4.4, the public demo's role) runs replay only: every agent of the run's cases answers from its recording, with no model call and nothing spent, the record says replay true, and the single investigator, never recorded, is refused 409 not_recorded. A change: send X-Requested-With: Shutter. An Idempotency-Key replays the first reply.\n\nCONTRACTS 4.2.",
+        "description": "With the production's Scenario Player enabled, writes a run record in state queued and sends the run to the player, which moves it through running to done or failed; without it, Runner.Start plays it in a background job.\n\nNeeds Shutter_Scenarios. A starter without Shutter_LiveAgents (since 1.4.4, the public demo's role) runs replay only: every agent of the run's cases answers from its recording, with no model call and nothing spent, the record says replay true, and the single investigator, never recorded, is refused 409 not_recorded. A pathology path (P1, P2; CONTRACTS 4.5) runs no agent; P2 is refused 409 wrong_state while the demo results receiver has an outage that is not closed, or while the last P2 run's results are still in the outage window. A change: send X-Requested-With: Shutter. An Idempotency-Key replays the first reply.\n\nCONTRACTS 4.2.",
         "x-contract": "docs/CONTRACTS.md section 4.2",
         "x-required-resource": "Shutter_Scenarios",
         "x-writes": true,
@@ -539,7 +539,7 @@
             "schema": {
               "type": "string"
             },
-            "description": "The scenario's id, such as S1.",
+            "description": "The scenario's id, such as S1, or a pathology path's, P1 or P2.",
             "example": "S1"
           },
           {
@@ -15638,11 +15638,80 @@
                 "type": "null"
               }
             ]
+          },
+          "pathology": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PathologyPath"
+            },
+            "description": "The pathology paths on the demo (1.4.6, CONTRACTS 4.5): P1 and P2, counted apart from the scenarios; an empty list where the demo hospital's results route is not installed."
           }
         },
         "required": [
           "scenarios",
           "run"
+        ]
+      },
+      "PathologyPath": {
+        "type": "object",
+        "description": "A pathology path (1.4.6, CONTRACTS 4.5): pathology.json's entry with its files' paths, and what it last opened.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "P2"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "pathology"
+            ]
+          },
+          "title": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "latestCase": {
+            "description": "The newest case the path opened, as a scenario's latestCase, or null."
+          },
+          "latestOutage": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "integer"
+                  },
+                  "state": {
+                    "type": "string"
+                  },
+                  "openedAt": {
+                    "type": "string"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For the path that waits for an outage (P2): the demo results receiver's newest outage; otherwise null."
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "summary",
+          "steps",
+          "latestCase",
+          "latestOutage"
         ]
       },
       "ScenarioListOrArray": {
@@ -15657,7 +15726,7 @@
             }
           }
         ],
-        "description": "{scenarios, run}; an empty array when the scenario runner is not installed."
+        "description": "{scenarios, run, pathology}; an empty array when the scenario runner is not installed."
       },
       "ScenarioReset": {
         "description": "What Runner.Reset cleared and reset (its own JSON, snake case), with resetAt added by the route.",
@@ -15666,6 +15735,10 @@
           "ward": {},
           "receivers": {},
           "live": {},
+          "lab": {
+            "type": "string",
+            "description": "The demo results system's stand-in (1.4.6): on, already on, none, or not switched with why."
+          },
           "emptied": {},
           "mode": {
             "type": "string"

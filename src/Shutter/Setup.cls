@@ -1402,6 +1402,49 @@ ClassMethod DemoProfilePolicy(seedPath As %String, demo As %Integer = -1) As %St
     Quit ##class(Shutter.Store.SiteProfile).Store(p.%ToJSON(), $SELECT(isLive: liveDemo, 1: demoSource), "install", "", .version)
 }
 
+/// The demo's results receiver (1.4.6): on a demo install whose stored profile is still the seed's (the seed's path as
+/// its source, or the demo's or the live hospital's mark on it, as DemoProfilePolicy and LiveProfilePolicy write it), the
+/// entry for "Lab Results Out", the demo hospital's results route (Hospital.Production, category Lab), is added to the
+/// profile's receivers and stored as a new version with the same source: category orders_results, watched in the
+/// hospital's namespace, engine_resend, ack_level commit (the stand-in takes a result and files nothing, so a Completed
+/// header proves no more than that) and duplicates unknown (so an approval asks for the receiver check, as at a site that
+/// has not declared it). A profile a person saved is never touched, a site install gets nothing, and an entry already
+/// there changes nothing, so a second run stores no new version. Called by Hospital.Setup's install, once the items exist.
+/// Returns a status.
+ClassMethod DemoLabReceiver(hospitalNs As %String = "HOSPITAL", demo As %Integer = -1) As %Status
+{
+    If demo = -1 Set demo = +$GET(^Shutter.Config("demo"))
+    Quit:'demo $$$OK
+    Set row = ##class(Shutter.Store.SiteProfile).Row()
+    Quit:'$ISOBJECT(row) $$$OK
+    Set seedPath = $GET(^Shutter.Config("root")) _ "knowledge/site/profile.json"
+    Set marks = $LISTBUILD(seedPath, seedPath _ " (demo)", seedPath _ " (live hospital)", seedPath _ " (demo) (live hospital)")
+    Quit:'$LISTFIND(marks, row.Source) $$$OK
+    Set p = ##class(Shutter.Util.Json).Parse(row.Json, .sc)
+    Quit:('$ISOBJECT(p) || $$$ISERR(sc)) $$$OK
+    Set receivers = p.%Get("receivers")
+    If '$ISOBJECT(receivers) Set receivers = [] Do p.%Set("receivers", receivers)
+    Set iter = receivers.%GetIterator()
+    While iter.%GetNext(, .r) { If $ISOBJECT(r) && (##class(Shutter.Util.Json).Str(r, "name") = ..#LABRECEIVER) Return $$$OK }
+    Do receivers.%Push(..DemoLabEntry(hospitalNs))
+    Quit ##class(Shutter.Store.SiteProfile).Store(p.%ToJSON(), row.Source, "install", row.Version, .version)
+}
+
+/// The demo results receiver's name, as Hospital.Production names its connector.
+Parameter LABRECEIVER = "Lab Results Out";
+
+/// The demo results receiver's profile entry (DemoLabReceiver).
+ClassMethod DemoLabEntry(hospitalNs As %String = "HOSPITAL") As %DynamicObject
+{
+    Set entry = {"name": (..#LABRECEIVER), "system": "the demo results system (a stand-in inside this instance)", "category": "orders_results", "tier": 3}
+    Set entry.watch = {"namespace": ($ZCONVERT(hospitalNs, "U")), "item": (..#LABRECEIVER)}
+    Do entry.%Set("engine_resend", 1, "boolean")
+    Set entry."ack_level" = "commit", entry.duplicates = {"behaviour": "unknown"}
+    Set entry.runbook = "Restart the results system's listener, then tell the lab desk"
+    Set entry.call = "Lab desk (demo), no real number"
+    Quit entry
+}
+
 /// Existing sites keep stop (1.2.0): before 1.2.0 a profile that did not name further_messages.in_patient_movement read
 /// stop, and since then it reads show on a site. An install over a site installed before 1.2.0 (before, the version that
 /// install recorded, or none recorded) whose stored profile does not name the setting stores it as stop, a new version
