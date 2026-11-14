@@ -232,11 +232,11 @@ A blocked, escalated or failed case can be handed to the team that corrects the 
 
 | Setting | Where | What it does |
 | --- | --- | --- |
-| `ANTHROPIC_API_KEY`, `SHUTTER_MODEL` | The environment, at install and at every start of `Shutter.Production` | Configure the provider and the model (`claude-opus-5-5` by default). A start writes the provider again when none is configured or the key has changed. The install configures Anthropic only |
+| `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `SHUTTER_PROVIDER`, `SHUTTER_MODEL` | The environment, at install and at every start of `Shutter.Production` | Configure the provider and the model: Anthropic (`claude-opus-5-5` by default) or OpenAI (`gpt-4.1`), one at a time, and Anthropic when both keys are set. A start writes the provider again when none is configured, or the key or the provider has changed. Only Anthropic is measured ([INSTALL, section 2](../INSTALL.md#2-what-an-install-creates)) |
 | `SELECT Shutter.Setup_ConfigureProvider(?, ?)` | SQL, the key bound as a parameter | The same by hand. The key goes into the IRIS wallet and is never printed |
 | `SELECT Shutter.Setup_ClearProvider()` | SQL | Removes the provider and the key. Take the key out of the environment too, or the production's next start configures it again |
 | `Model`, `ProviderConfig` | An agent item's settings | That item's model, or its provider configuration |
-| `SHUTTER_DAILY_BUDGET_USD` | The environment, applied at every start of the production | A cap on a day's live runs, 00:00 to 00:00 UTC. Never set, or 0: no cap. Left empty later, the cap already stored stays |
+| `SHUTTER_DAILY_BUDGET_USD` | The environment, applied at every start of the production | A cap on a day's live runs, 00:00 to 00:00 UTC. Never set, or 0: no cap. Left empty later, the cap already stored stays. Runs on a model with no price, OpenAI's included, are not counted |
 | `SHUTTER_JUDGE_BUDGET_USD` | The same | Each user's share of that day |
 | `SHUTTER_PROVIDER_TIMEOUT_SECONDS` | The same | The bound on one model call: 10 to 600 seconds, 120 by default |
 

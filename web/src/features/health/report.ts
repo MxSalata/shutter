@@ -488,7 +488,7 @@ const PROVIDER_PIECES = new Set(['wallet_secret', 'provider_config']);
 const NOT_VISIBLE = 'Not visible to you';
 const NOT_VISIBLE_NOTES: Record<string, string> = {
   wallet_secret:
-    'The provider key lives in the IRIS wallet, which answers only a reader with the resource Shutter_Secrets, so this report cannot say whether it is there. The production checks it at every start and writes it again from ANTHROPIC_API_KEY when it is gone; the Event Log shows that check.',
+    'The provider key lives in the IRIS wallet, which answers only a reader with the resource Shutter_Secrets, so this report cannot say whether it is there. The production checks it at every start and writes it again from the key in the environment (ANTHROPIC_API_KEY, or OPENAI_API_KEY) when it is gone; the Event Log shows that check.',
   provider_config:
     'The provider configuration lives in the Config Store, which answers only a reader with %Admin_ConfigStore, so this report cannot say whether it is there. The production checks it at every start, with the key; the Event Log shows that check.',
 };
@@ -502,7 +502,7 @@ const NOT_IN_EDITION_NOTE =
  */
 const NOT_CONFIGURED = 'Not configured';
 const NOT_CONFIGURED_NOTE =
-  'No model provider is recorded. The install configures one from ANTHROPIC_API_KEY when it is set; until then the agents replay recorded runs.';
+  'No model provider is recorded. The install configures one from ANTHROPIC_API_KEY or OPENAI_API_KEY when either is set; until then the agents replay recorded runs.';
 
 /** The credential check threw instead of answering: the state carries the error, and the check says nothing. */
 const CHECK_FAILED = 'Check did not run';

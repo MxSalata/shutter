@@ -11,10 +11,12 @@ Class Shutter.Production Extends Ens.Production
 /// the feed, the case workflow, evidence, verification and the blind-resend preview use when nothing names another.
 Parameter RECEIVER = "Downstream Out";
 
-/// When the container's environment carries ANTHROPIC_API_KEY and the provider configuration is
-/// not there yet, was written from another key (the .env changed), or lost its wallet secret or its
-/// Config Store configuration (a container recreated on the same volume: the record is in the volume,
-/// the secret in the instance), write it, so live agents need no manual step. Replay mode needs
+/// When the container's environment carries a provider key (ANTHROPIC_API_KEY or OPENAI_API_KEY; SHUTTER_PROVIDER
+/// chooses between them, Shutter.Setup.EnvironmentProvider) and the provider configuration is
+/// not there yet, was written from another key or for the other provider (the .env changed), or lost its wallet
+/// secret or its Config Store configuration (a container recreated on the same volume: the record is in the volume,
+/// the secret in the instance), write it, so live agents need no manual step. A SHUTTER_PROVIDER that names a provider
+/// with no key, or one the install does not configure, is logged and changes nothing. Replay mode needs
 /// nothing. The mode SHUTTER_AGENT_MODE names is recorded, and a refusal logged; the API mimic's switch, when set, is logged too. The knowledge files (block reasons,
 /// catalogue, site profile seed, recordings) are re-read when they changed since the last start: a
 /// rebuilt image brings its knowledge to the data the volume kept.
@@ -32,13 +34,16 @@ ClassMethod OnStart(pTimeStarted As %String) As %Status
         $$$LOGWARNING("Clearing the startup alerts failed: " _ ex.DisplayString())
     }
     Try {
-        Set key = $SYSTEM.Util.GetEnviron("ANTHROPIC_API_KEY")
-        If (key '= "") && ##class(Shutter.Setup).ProviderNeedsRewrite(key, .reason) {
-            Set r = ##class(Shutter.Setup).ConfigureProvider(key, $SYSTEM.Util.GetEnviron("SHUTTER_MODEL"))
+        Set provider = ##class(Shutter.Setup).EnvironmentProvider(.key, .model, .problem)
+        If problem '= "" {
+            $$$LOGWARNING("The model provider was not configured from the environment: " _ problem)
+        } ElseIf (provider '= "") && ##class(Shutter.Setup).ProviderNeedsRewrite(key, .reason, 1, provider) {
+            Set r = ##class(Shutter.Setup).ConfigureProvider(key, model, provider)
+            Set variable = ##class(Shutter.Setup).ProviderFact(provider, "variable")
             If $EXTRACT(r, 1, 3) '= "ok:" {
-                $$$LOGWARNING("The model provider was not configured from ANTHROPIC_API_KEY (" _ reason _ "): " _ r)
+                $$$LOGWARNING("The model provider was not configured from " _ variable _ " (" _ reason _ "): " _ r)
             } Else {
-                $$$LOGINFO("The model provider was configured from ANTHROPIC_API_KEY (" _ reason _ "): " _ r)
+                $$$LOGINFO("The model provider was configured from " _ variable _ " (" _ reason _ "): " _ r)
             }
         }
         // A mode set by hand (record, for the recordings) survives a restart: only an environment that names one

@@ -89,8 +89,8 @@
         <Arg>${demo}</Arg>
         <Arg>${production}</Arg>
       </Invoke>
-      <!-- The agents' install: the provider configuration (ANTHROPIC_API_KEY in the environment, else the agents replay
-           recordings), the knowledge bases, the agent mode and the publisher's web application. InstallAIHubStatus
+      <!-- The agents' install: the provider configuration (ANTHROPIC_API_KEY or OPENAI_API_KEY in the environment, else
+           the agents replay recordings), the knowledge bases, the agent mode and the publisher's web application. InstallAIHubStatus
            returns a %Status and the Invoke checks it, so an install that stops at an error stops the load. -->
       <Invoke Class="Shutter.Setup" Method="InstallAIHubStatus" CheckStatus="true">
         <Arg>${root}</Arg>
