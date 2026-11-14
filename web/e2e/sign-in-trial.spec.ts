@@ -53,7 +53,11 @@ test.describe('the live sign-in page of a demo install, on a laptop', () => {
     await expect(page.getByText('24 of 24', { exact: true })).toBeVisible();
     await expect(page.getByRole('img', { name: 'The board: 11 of 11' })).toBeVisible();
     await expect(page.getByRole('img', { name: 'Rules only: 4 of 11' })).toBeVisible();
-    await expect(page.getByText(/recorded with the real agents on IRIS AI Hub/)).toBeVisible();
+    // The cohort and the release lead the tiles, with where the runs were recorded
+    await expect(page.getByTestId('proof-cohort')).toHaveText(
+      /^Catalogue demonstration, recorded before release 1\.0\.0: 100 runs with the real agents on IRIS AI Hub\. Evaluation/,
+    );
+    await expect(page.getByTestId('proof-cohort')).toBeVisible();
     // The phone's one line is for the phone
     await expect(page.getByText('Recorded failures: the board 24 of 24')).toBeHidden();
     // The card and its links
@@ -88,7 +92,7 @@ test.describe('the live sign-in page of a demo install, on a phone', () => {
     await openLive(page);
     await expect(
       page.getByText(
-        'Recorded failures: the board 24 of 24. On the same 11 failures: the board 11, Rules only 4.',
+        'Catalogue demonstration, recorded before release 1.0.0. Recorded failures: the board 24 of 24. On the same 11 failures: the board 11, Rules only 4.',
       ),
     ).toBeVisible();
     await expect(page.getByText('24 of 24', { exact: true })).toBeHidden();
