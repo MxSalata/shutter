@@ -98,6 +98,10 @@ function gateStopped(f: CaseFacts): boolean {
   return !!d && d.outcome !== 'pass';
 }
 
+/** Whether a person's rejection, not revoked, stands on the case: a blocked case's headline then names the person. */
+const personRejected = (f: CaseFacts) =>
+  (f.approvals?.approvals ?? []).some((a) => a.decision === 'rejected' && !a.revoked);
+
 const lowerFirst = (t: string) => t.charAt(0).toLowerCase() + t.slice(1);
 
 /** The write the receiver acknowledged, as "version 1 to 2", from the attempt's receipt. */
@@ -219,8 +223,7 @@ export function actionHeadline(f: CaseFacts, technical = true): string {
         ? `${stoppedWrites(f, event)}; a person decides`
         : 'Asked a person to decide; sent nothing';
     case 'blocked': {
-      const rejected = (f.approvals?.approvals ?? []).some((a) => a.decision === 'rejected' && !a.revoked);
-      const why = rejected
+      const why = personRejected(f)
         ? 'a person rejected the plan'
         : gateStopped(f)
           ? `${theGate(technical)} stopped the plan`
@@ -258,8 +261,9 @@ export function recordedApprovalTime(events: CaseEvent[] | null | undefined): st
 }
 
 /**
- * The short reason under What Shutter did; Plain names the safety checks (the gate), as `actionHeadline` does, and a
- * plan they blocked reads "Blocked: <reason>", since the headline above it has already said what stopped it.
+ * The short reason under What Shutter did; Plain names the safety checks (the gate), as `actionHeadline` does. A plan
+ * they blocked reads "Blocked: <reason>" when the headline above it has already named them; when it named a person's
+ * rejection instead, the reason still says the safety checks (the gate) blocked it.
  */
 export function outcomeReason(f: CaseFacts, technical = true): string {
   const { c } = f;
@@ -301,10 +305,15 @@ export function outcomeReason(f: CaseFacts, technical = true): string {
         f.blocked === undefined
           ? 'reason not read yet'
           : f.blocked?.title || f.blocked?.code || 'reason unknown';
+      // Plain leaves out the general hand-off's title ("Handed to a person") when a fact says why: the headline above
+      // already says a person decides, and the title stays behind Why? under What needs you now
+      const restated = !technical && c.state === 'escalated' && f.blocked?.code === 'ESCALATED' && !!sameTime;
       return sentence([
         c.state === 'blocked' && f.blocked && gateStopped(f)
-          ? `${technical ? 'blocked by the gate' : 'blocked'}: ${lowerFirst(reason)}`
-          : reason,
+          ? `${technical || personRejected(f) ? `blocked by ${theGate(technical)}` : 'blocked'}: ${lowerFirst(reason)}`
+          : restated
+            ? ''
+            : reason,
         sameTime,
       ]);
     }
@@ -506,7 +515,7 @@ function evidenceFacts(snapshot: Snapshot, technical = true): { text: string; re
           : status === 404
             ? fhir || b.kind === 'fhir'
               ? lowerFirst(NO_MARKER)
-              : 'no receipt for this operation'
+              : `${technical ? '' : 'the receiver has '}no receipt for this operation`
             : 'whether it committed this operation is unknown',
     });
   }
@@ -523,8 +532,8 @@ function evidenceFacts(snapshot: Snapshot, technical = true): { text: string; re
 }
 
 /**
- * What the receiver holds, whether it has a receipt for this operation, and the facts that complicate it. Plain says a
- * committed operation is read from the receiver's receipt ("its receipt shows"), never Shutter's decision receipt.
+ * What the receiver holds, whether it has a receipt for this operation, and the facts that complicate it. Plain names
+ * the receipt as the receiver's ("its receipt shows", "the receiver has no receipt"), never Shutter's decision receipt.
  */
 export function evidenceSummary(snapshot: Snapshot | null | undefined, technical = true): string {
   if (!snapshot) return 'No evidence yet.';

@@ -91,8 +91,27 @@ describe('a blocked case in Plain', () => {
   });
 });
 
+describe('an escalated case in Plain', () => {
+  it("gives the reason a fact of its own and names the receiver's missing receipt", async () => {
+    renderCase('C-000008');
+    const top = await band();
+    expect(await within(top).findByText('Asked a person to decide; sent nothing')).toBeInTheDocument();
+    expect(
+      within(top).getByText(
+        "PAS and the bed manager (BEDMGR) moved the encounter at the same event time, so the times can't say which movement is current.",
+      ),
+    ).toBeInTheDocument();
+    expect(within(top).queryByText(/^Handed to a person;/)).not.toBeInTheDocument();
+    expect(
+      within(top).getByText(
+        /; the receiver has no receipt for this operation; PAS and BEDMGR have the same event time\.$/,
+      ),
+    ).toBeInTheDocument();
+  });
+});
+
 describe('a case waiting for approval in Plain', () => {
-  it('says the plan passed the safety checks and waits for an approver', async () => {
+  it('says the plan passed the safety checks and waits for an approver, and whose receipt is missing', async () => {
     renderCase('C-000002');
     const top = await band();
     expect(
@@ -107,6 +126,9 @@ describe('a case waiting for approval in Plain', () => {
     ).toBeInTheDocument();
     // The checks still to come, named as the case names them
     expect(within(top).getByText('Checked before sending: the approval, the test run.')).toBeInTheDocument();
+    // The receiver's missing receipt is the receiver's, a few lines above Shutter's Decision receipt
+    expect(within(top).getByText(/; the receiver has no receipt for this operation\.$/)).toBeInTheDocument();
+    expect(within(top).getByRole('heading', { name: 'Decision receipt' })).toBeInTheDocument();
   });
 });
 
@@ -143,6 +165,7 @@ describe('the same cases in Technical', () => {
       ),
     ).toBeInTheDocument();
     expect(screen.getByText('Checked at dispatch: authorization, rehearsal.')).toBeInTheDocument();
+    expect(screen.getByText(/; no receipt for this operation\.$/)).toBeInTheDocument();
   });
 });
 

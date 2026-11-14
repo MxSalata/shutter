@@ -412,7 +412,7 @@ describe('CasePage', () => {
     expect(await within(top).findByText('Asked a person to decide; sent nothing')).toBeInTheDocument();
     expect(
       await within(top).findByText(
-        /^Handed to a person; PAS and the bed manager \(BEDMGR\) moved the encounter at the same event time/,
+        /^PAS and the bed manager \(BEDMGR\) moved the encounter at the same event time/,
       ),
     ).toBeInTheDocument();
     expect(await within(top).findByText('Escalate: no write to the receiver')).toBeInTheDocument();
@@ -441,7 +441,7 @@ describe('CasePage', () => {
     expect(within(top).getByText('Transfer was not delivered')).toBeInTheDocument();
     expect(
       within(top).getByText(
-        'When Shutter looked, the receiver held the encounter admitted in WARD-C at version 2; no receipt for this operation; PAS and BEDMGR have the same event time.',
+        'When Shutter looked, the receiver held the encounter admitted in WARD-C at version 2; the receiver has no receipt for this operation; PAS and BEDMGR have the same event time.',
       ),
     ).toBeInTheDocument();
     expect(
@@ -1842,7 +1842,10 @@ describe('the case page for both audiences', () => {
   // The clarity
   // review of 13 Nov names the proposer in the receipt, with the plan's reason one press under it and the evidence
   // behind What happened as chips, and pays for them on the board (the citations and a kept dissent open from their
-  // own lines): 658 measured before and after, Technical 960 (959 before), with nothing added to either cap
+  // own lines): 658 measured before and after, Technical 960 (959 before), with nothing added to either cap. Plain's
+  // words for Shutter's terms (14 Nov) name the receiver's receipt as the receiver's and the rehearsal stage a test run
+  // (5 words), and leave out the general hand-off's title where the reason has a fact of its own, since the headline
+  // already says a person decides and the title stays behind Why? (4): 659 measured in Plain, Technical unchanged
   it('keeps the Summary tab, steps closed, within 660 words in Plain', async () => {
     const plain = await summaryWords('plain');
     expect(plain).toBeLessThanOrEqual(660);
