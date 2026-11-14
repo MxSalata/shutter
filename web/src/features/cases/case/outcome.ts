@@ -614,9 +614,11 @@ export function writtenSummary(f: CaseFacts): string {
     return sentence([`0 writes by Shutter${extra}`]);
   }
   const versions = appliedVersions(f.attempts);
-  return sentence([
-    `${plural(r.writes, 'conditional write')}, ${r.acknowledged} acknowledged${versions ? `, receiver ${versions}` : ''}`,
-  ]);
+  // A FHIR case's write is an update with If-Match, as its scenario card and its dispatch say
+  const writes = isFhir(f)
+    ? `${plural(r.writes, 'update')} with If-Match`
+    : plural(r.writes, 'conditional write');
+  return sentence([`${writes}, ${r.acknowledged} acknowledged${versions ? `, receiver ${versions}` : ''}`]);
 }
 
 /** What the verifier found, or why there is nothing to verify. */

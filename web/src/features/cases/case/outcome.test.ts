@@ -339,6 +339,32 @@ describe("the story steps' summaries", () => {
     );
     expect(verifiedSummary(factsOf('C-000008'))).toBe('Not applicable: no Shutter write.');
   });
+
+  it("counts a FHIR case's writes as updates with If-Match, told by its route or by its attempts", () => {
+    const x = fixtures.cases['C-000021'];
+    const [view] = structuredClone(x.attempts) as unknown as AttemptView[];
+    const update = (etag: string) =>
+      ({
+        ...view,
+        attempt: {
+          ...view.attempt,
+          expectedVersion: '',
+          receipt: { kind: 'fhir', encounter: 'Encounter/enc-1', expected_etag: etag, response_etag: '' },
+        },
+      }) as unknown as AttemptView;
+    const snapshot = structuredClone(x.snapshot) as unknown as Snapshot;
+    snapshot.items = snapshot.items.map((i) =>
+      i.kind === 'route' ? { ...i, data: { ...(i.data as object), kind: 'fhir_r4' } } : i,
+    );
+    expect(writtenSummary(factsOf('C-000021', { snapshot, attempts: [update('W/"1"')] }))).toBe(
+      '1 update with If-Match, 1 acknowledged.',
+    );
+    expect(
+      writtenSummary(factsOf('C-000021', { snapshot: null, attempts: [update('W/"1"'), update('W/"2"')] })),
+    ).toBe('2 updates with If-Match, 2 acknowledged.');
+    // Every other receiver keeps its words
+    expect(writtenSummary(factsOf('C-000021'))).toMatch(/^1 conditional write, /);
+  });
 });
 
 describe('provenance', () => {
