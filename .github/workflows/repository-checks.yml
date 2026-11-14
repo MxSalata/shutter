@@ -65,12 +65,16 @@ jobs:
       - name: Both module.xml files are plain ASCII
         run: python3 scripts/check-ascii.py module.xml core/module.xml
       # No em dash and no en dash (U+2014, U+2013) in any tracked file but the built www/ and the vendored installer,
-      # nor in the messages of the commits a push brings. A run that is not a push reads the last commit's message.
-      - name: No em or en dash in the tracked files or in the pushed commit messages
+      # nor in the messages of the commits a push brings. On a person's pull request the checkout is the merge of the
+      # pull request into its base (the first parent is the base, the second the pull request's last commit), so the
+      # messages read are the pull request's own commits; on Dependabot's, and on any other run, the last commit's message.
+      - name: No em or en dash in the tracked files or in the commit messages
         run: |
           before="${{ github.event.before }}"
           if [ "${{ github.event_name }}" = "push" ] && [ -n "$before" ] && [ "$before" != "0000000000000000000000000000000000000000" ] && git cat-file -e "$before^{commit}" 2>/dev/null; then
             python3 scripts/check-text.py --messages "$before..${{ github.sha }}"
+          elif [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ github.event.pull_request.user.login }}" != "dependabot[bot]" ] && git rev-parse -q --verify "HEAD^2" > /dev/null; then
+            python3 scripts/check-text.py --messages "HEAD^1..HEAD^2"
           else
             python3 scripts/check-text.py --messages "-1"
           fi
