@@ -2,7 +2,7 @@
 
 This page is the record of two runs of the FHIR R4 receiver profile ([fhir.md](fhir.md)) against InterSystems IRIS for Health's own FHIR R4 server, not Shutter's test FHIR server: one on IRIS for Health 2026.2 and one on 2026.3.0AI Build 154, the contest's build. Each is the conformance run that gives the proof, then the end-to-end check's variants A (the move) and D (switched off). Nothing in Shutter's image or install changed for them.
 
-**When and what:** 14 November 2026, commit `14cc9a7`, on a Linux VM with 10 threads, each in a fresh container, one after the other. Shutter was installed as CI installs it (the namespace, the load, `Shutter.Setup.Install`, the demo hospital and records system).
+**When and what:** 14 November 2026, on a Linux VM with 10 threads, each in a fresh container, one after the other. Shutter was installed as CI installs it (the namespace, the load, `Shutter.Setup.Install`, the demo hospital and records system).
 
 | | IRIS for Health 2026.2 | 2026.3.0AI Build 154 |
 | --- | --- | --- |
