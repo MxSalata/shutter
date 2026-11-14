@@ -86,12 +86,13 @@ ClassMethod WritePublicLive(shutterNs As %String = "") As %Boolean
     Quit 0
 }
 
-/// The inbound, archive and work folders under the manager directory, beside Shutter's own (the same volume).
+/// The inbound, archive and work folders under the manager directory, beside Shutter's own (the same volume), and the
+/// same three of the FHIR ward feed (scenario S35).
 ClassMethod CreateFolders() As %Status
 {
     Set sc = $$$OK
     Set base = ##class(%File).NormalizeDirectory(##class(%File).ManagerDirectory() _ "shutter/hospital")
-    For sub = "in", "archive", "work" {
+    For sub = "in", "archive", "work", "fhirward-in", "fhirward-archive", "fhirward-work" {
         Set dir = base _ sub _ "/"
         If '##class(%File).DirectoryExists(dir) && '##class(%File).CreateDirectoryChain(dir) {
             Set sc = $$$ERROR($$$GeneralError, "Cannot create " _ dir)
@@ -196,18 +197,22 @@ ClassMethod RefreshShutterSecurity(shutterNs As %String) As %Status [ Private ]
 }
 
 /// Where the hospital's feed is, written into Shutter's configuration for the scenario runner: hospitalIn and
-/// hospitalArchive (the folders) and hospitalNamespace; and, since 1.4.6, the results route's three items (labFeed,
+/// hospitalArchive (the folders), fhirWardIn and fhirWardArchive (the FHIR ward feed's, scenario S35) and
+/// hospitalNamespace; and, since 1.4.6, the results route's three items (labFeed,
 /// labReceiver, labListener), with the results receiver's entry added to the demo's site profile while that profile is
 /// still the seed's (Shutter.Setup DemoLabReceiver). Quiet when Shutter's namespace is not there.
 ClassMethod RecordInShutter(shutterNs As %String) [ Private ]
 {
     Set hospital = $NAMESPACE
     Set inbound = $GET(^Hospital.Config("dir", "in")), archive = $GET(^Hospital.Config("dir", "archive"))
+    Set fhirIn = $GET(^Hospital.Config("dir", "fhirward-in")), fhirArchive = $GET(^Hospital.Config("dir", "fhirward-archive"))
     Try {
         New $NAMESPACE
         Set $NAMESPACE = shutterNs
         Set ^Shutter.Config("hospitalIn") = inbound
         Set ^Shutter.Config("hospitalArchive") = archive
+        // Scenario S35's ward feed, for the runner's "fhir_ward" route
+        Set ^Shutter.Config("fhirWardIn") = fhirIn, ^Shutter.Config("fhirWardArchive") = fhirArchive
         Set ^Shutter.Config("hospitalNamespace") = hospital
         Set ^Shutter.Config("labFeed") = "Lab In", ^Shutter.Config("labReceiver") = "Lab Results Out", ^Shutter.Config("labListener") = "Results System In"
         If ##class(%Dictionary.CompiledMethod).%ExistsId("Shutter.Setup||DemoLabReceiver") Set sc = $CLASSMETHOD("Shutter.Setup", "DemoLabReceiver", hospital)
@@ -223,9 +228,13 @@ ClassMethod LabPort() As %Integer
     Quit +$GET(^Hospital.Config("labPort"), 7650)
 }
 
+/// The loopback port of the FHIR ward feed's HL7 link (scenario S35): nothing listens on it, so every delivery fails
+/// before a connection opens.
+Parameter FHIRWARDPORT = 6662;
+
 /// System default settings for the production: the folders, the two addresses on this instance (Shutter's intake
-/// and the demo receiver both answer on the instance's own web port) and the results route's loopback port, so the
-/// production definition carries none.
+/// and the demo receiver both answer on the instance's own web port) and the loopback ports of the results route and
+/// the FHIR ward feed, so the production definition carries none.
 ClassMethod ApplyDefaultSettings() As %Status
 {
     Set sc = $$$OK
@@ -239,6 +248,11 @@ ClassMethod ApplyDefaultSettings() As %Status
     // The results route (1.4.6): one loopback port for the connector and the stand-in that listens on it.
     Set values("Lab Results Out", "Port") = ..LabPort()
     Set values("Results System In", "Port") = ..LabPort()
+    // Scenario S35's ward feed, and its HL7 link's loopback port, on which nothing listens.
+    Set values("FHIR Ward In", "FilePath") = $GET(^Hospital.Config("dir", "fhirward-in"))
+    Set values("FHIR Ward In", "ArchivePath") = $GET(^Hospital.Config("dir", "fhirward-archive"))
+    Set values("FHIR Ward In", "WorkPath") = $GET(^Hospital.Config("dir", "fhirward-work"))
+    Set values("FHIR Ward Out", "Port") = ..#FHIRWARDPORT
     Set item = ""
     For {
         Set item = $ORDER(values(item))

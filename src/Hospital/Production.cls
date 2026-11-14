@@ -3,9 +3,11 @@
 /// system and hands each failed delivery to Shutter through the forwarder; the case then appears in Shutter's own
 /// production with the source recorded on it. Beside it, a results route (category "Lab", since 1.4.6): Lab In feeds
 /// laboratory results to Lab Results Out, a stock HL7 TCP operation that Shutter watches for outages, whose receiver is a
-/// stand-in inside this instance (Results System In); the pathology paths of the Scenarios page play through it. The
-/// folders, the two addresses and the results route's loopback port come from system default settings written by
-/// Hospital.Setup, so this definition carries none.
+/// stand-in inside this instance (Results System In); the pathology paths of the Scenarios page play through it. And a
+/// ward feed for scenario S35 (category "FHIR Ward"): FHIR Ward In feeds a stock HL7 TCP operation, FHIR Ward Out, whose
+/// port nothing listens on, so a delivery fails before a connection opens and its alert hands the message to Shutter;
+/// the demo's site profile describes that receiver as a FHIR R4 server. The folders, the two addresses and the loopback
+/// ports come from system default settings written by Hospital.Setup, so this definition carries none.
 Class Hospital.Production Extends Ens.Production
 {
 
@@ -33,7 +35,7 @@ XData ProductionDefinition
     <Setting Target="Host" Name="AlertOnError">1</Setting>
   </Item>
   <Item Name="Ens.Alert" Category="Shutter" ClassName="Shutter.Intake.AlertProcess" PoolSize="1" Enabled="true" Foreground="false" Comment="The alerts the hospital's items raise: a delivery failure's message goes to Shutter through the forwarder, once per session; every alert is passed on to the site's own consumer when PassTo names one" LogTraceEvents="true" Schedule="">
-    <Setting Target="Host" Name="Receivers">Downstream Out,Lab Results Out</Setting>
+    <Setting Target="Host" Name="Receivers">Downstream Out,Lab Results Out,FHIR Ward Out</Setting>
   </Item>
   <Item Name="Lab In" Category="Lab" ClassName="Hospital.Service.LabFeed" PoolSize="0" Enabled="true" Foreground="false" Comment="The demo's results route: the pathology paths of the Scenarios page play their results through it, to the results system's connector" LogTraceEvents="true" Schedule="">
     <Setting Target="Host" Name="TargetConfigName">Lab Results Out</Setting>
@@ -47,6 +49,19 @@ XData ProductionDefinition
     <Setting Target="Adapter" Name="JobPerConnection">0</Setting>
     <Setting Target="Adapter" Name="LocalInterface">127.0.0.1</Setting>
     <Setting Target="Host" Name="MessageSchemaCategory">2.5.1</Setting>
+  </Item>
+  <Item Name="FHIR Ward In" Category="FHIR Ward" ClassName="EnsLib.HL7.Service.FileService" PoolSize="1" Enabled="true" Foreground="false" Comment="Scenario S35's ward feed: ADT for the ward system that takes FHIR R4, one message per file, to its HL7 link" LogTraceEvents="true" Schedule="">
+    <Setting Target="Adapter" Name="FileSpec">*.hl7</Setting>
+    <Setting Target="Adapter" Name="CallInterval">1</Setting>
+    <Setting Target="Adapter" Name="DeleteFromServer">1</Setting>
+    <Setting Target="Host" Name="TargetConfigNames">FHIR Ward Out</Setting>
+    <Setting Target="Host" Name="MessageSchemaCategory">2.5.1</Setting>
+    <Setting Target="Host" Name="AckMode">Never</Setting>
+  </Item>
+  <Item Name="FHIR Ward Out" Category="FHIR Ward" ClassName="EnsLib.HL7.Operation.TCPOperation" PoolSize="1" Enabled="true" Foreground="false" Comment="The hospital's HL7 link to the ward system that takes FHIR R4: a stock HL7 TCP operation on a loopback port nothing listens on, so every delivery fails and raises an alert; the port is a default setting (Hospital.Setup)" LogTraceEvents="true" Schedule="">
+    <Setting Target="Adapter" Name="IPAddress">127.0.0.1</Setting>
+    <Setting Target="Host" Name="FailureTimeout">0</Setting>
+    <Setting Target="Host" Name="AlertOnError">1</Setting>
   </Item>
   <Item Name="Live PAS" Category="Feed" ClassName="Hospital.LivePlayer" PoolSize="1" Enabled="false" Foreground="false" Comment="The live hospital's PAS: one of Shutter's scenarios every few minutes with fresh patients at present times and real faults, and an ordinary message a minute between them; on only when the install was told live" LogTraceEvents="true" Schedule="">
     <Setting Target="Adapter" Name="CallInterval">5</Setting>
