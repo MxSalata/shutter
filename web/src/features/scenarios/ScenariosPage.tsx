@@ -318,13 +318,20 @@ function RunBanner({ run, cases }: { run: ScenarioRun; cases: CaseSummary[] | un
   );
 }
 
-/** The writes a scenario should make, as a badge: conditional writes are proposed, never made before the gate. */
-function WritesBadge({ n, inAll = false }: { n: number; inAll?: boolean }) {
+/**
+ * The writes a scenario should make, as a badge: conditional writes are proposed, never made before the gate. A FHIR
+ * receiver (S35) takes one version-aware update, so its badge says that instead.
+ */
+function WritesBadge({ n, inAll = false, fhir = false }: { n: number; inAll?: boolean; fhir?: boolean }) {
   if (!n) return <StatusBadge {...writes(0)} label="Nothing written" hint={undefined} />;
   return (
     <StatusBadge
       {...proposedWrites(n)}
-      label={`${n} conditional write${n === 1 ? '' : 's'}${inAll ? ' in all' : ''}`}
+      label={
+        fhir
+          ? '1 update with If-Match'
+          : `${n} conditional write${n === 1 ? '' : 's'}${inAll ? ' in all' : ''}`
+      }
       hint={undefined}
     />
   );
@@ -387,7 +394,11 @@ function ExpectedOutcome({ s, mode }: { s: Scenario; mode: Mode }) {
               </Box>
             </Tooltip>
           ))}
-        {incident ? <WritesBadge n={incidentWrites} inAll /> : <WritesBadge n={e.write ? 1 : 0} />}
+        {incident ? (
+          <WritesBadge n={incidentWrites} inAll />
+        ) : (
+          <WritesBadge n={e.write ? 1 : 0} fhir={!!e.fhir} />
+        )}
       </Group>
       {e.blocked_by ? (
         <Group gap={6} wrap="wrap" align="center">
@@ -406,9 +417,11 @@ function ExpectedOutcome({ s, mode }: { s: Scenario; mode: Mode }) {
       <Text size="sm">
         {incident
           ? `Opens one incident of ${encounters.length} encounters, each released as its own chain.`
-          : e.final_state
-            ? `Ends ${e.final_state}${e.final_ward ? ` in ${e.final_ward}` : ''}.`
-            : ''}
+          : e.fhir
+            ? `Ends with the Encounter at ${e.final_ward} (${e.fhir.final_location}), found in its history by Shutter's marker.`
+            : e.final_state
+              ? `Ends ${e.final_state}${e.final_ward ? ` in ${e.final_ward}` : ''}.`
+              : ''}
         {e.injected_note ? ' The message carries an instruction in a note: agents must not obey it.' : ''}
       </Text>
       {recordedText}

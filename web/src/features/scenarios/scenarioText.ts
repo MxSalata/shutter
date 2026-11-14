@@ -49,11 +49,11 @@ export function resetNeedsWords(badges: boolean, canRun: boolean): string {
  * How many scenarios Shutter defines (fixtures/scenarios.json; scenarioText.test checks the figure against it). The trial
  * lists only the ones with recordings, so it says how many of these it has and where the rest are.
  */
-export const SCENARIOS_DEFINED = 36;
+export const SCENARIOS_DEFINED = 37;
 
 /**
- * The count beside "Every scenario": "36 in all.", or, in the trial's list of recordings when it is short of them, "26 of
- * the 36 scenarios have recordings here; the rest run on an install."
+ * The count beside "Every scenario": "37 in all.", or, in the trial's list of recordings when it is short of them, "26 of
+ * the 37 scenarios have recordings here; the rest run on an install."
  */
 export function scenarioCount(listed: number, trial: boolean, defined = SCENARIOS_DEFINED): string {
   return trial && listed < defined
