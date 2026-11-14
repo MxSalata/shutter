@@ -104,6 +104,9 @@ describe('The pathology paths on the demo (1.4.6)', () => {
     await userEvent.click(within(group).getByRole('button', { name: 'Run P1' }));
     const starting = await screen.findByTestId('pathology-run-starting');
     expect(starting).toHaveTextContent('Starting P1');
+    // A group, not an alert: the page's polite line says the path is starting, once, with no mode
+    expect(starting).toHaveAttribute('role', 'group');
+    expect(screen.getByTestId('run-said')).toHaveTextContent(/^P1 is starting\.$/);
     expect(starting).toHaveTextContent(PATHOLOGY_WORDS.starting);
     expect(starting).not.toHaveTextContent('Board');
     expect(within(starting).queryByRole('link')).not.toBeInTheDocument();
@@ -141,6 +144,9 @@ describe('The pathology paths on the demo (1.4.6)', () => {
     };
     const path = listed({ id: 7, state: 'offered', openedAt: '2026-11-14T02:32:04Z' })[1];
     renderPage('plain', <PathologyRunBanner run={run} path={path} />);
+    // Groups while it plays and once it has played, so each poll's step is not announced again; a failure is an alert
+    expect(screen.getByRole('group', { name: 'Playing P2' })).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.getByText('Playing P2')).toBeInTheDocument();
     expect(screen.getByText(/^Now taking the demo results system down\./)).toBeInTheDocument();
     expect(screen.getByText(PATHOLOGY_WORDS.noAgent)).toBeInTheDocument();
@@ -149,6 +155,7 @@ describe('The pathology paths on the demo (1.4.6)', () => {
       'plain',
       <PathologyRunBanner run={{ ...run, state: 'done', finishedAt: run.startedAt }} path={path} />,
     );
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open its outage on Incidents' })).toHaveAttribute(
       'href',
       '/incidents#outage-7',
@@ -161,7 +168,7 @@ describe('The pathology paths on the demo (1.4.6)', () => {
         path={path}
       />,
     );
-    expect(screen.getByText('P2 failed')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('P2 failed');
   });
 
   it('keeps the page within its word budget with the group, in Plain and in Technical', async () => {
