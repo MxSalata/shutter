@@ -2226,7 +2226,10 @@ the day's budget (`Shutter.Util.Budget`) and `GET /costs` count it (`byQuestion`
 
 **The summary of the screen** (`context`) is built in the web app from the page itself (`features/assistant/screen.ts`):
 the page's title, its lead, its section headings and the things it links to by id, as `{id, kind, label}`, and nothing
-else; at most 3600 characters. The server holds it to its shape (`Shutter.Util.PageQuestion.CleanContext`): an object of
+else; at most 3600 characters. A question asked from "Ask Shutter about this" beside one of a page's questions (the Site
+profile's receiver kind and tier, and enabling recovery) adds `focus`: `{question, answer, consequence, chosenBy}`, the
+question's title, the answer on the page and what it does there in the page's own words, and that a person chooses it; the
+route reads it as any other part of the summary. The server holds it to its shape (`Shutter.Util.PageQuestion.CleanContext`): an object of
 plain keys (`[A-Za-z][A-Za-z0-9_]{0,39}`), at most three levels deep and forty entries wide in one place, texts cut at 200
 characters with their control characters removed, numbers, booleans and nulls kept, anything else `400 bad_request`; and to
 its length, at most 4000 characters as the agent reads it. It reaches the agent as data: inside the evidence tag the context
@@ -2270,9 +2273,13 @@ missing answer `failed`; the item's alarm (600 s) fails it with what is missing.
 
 **The web app.** Without `Shutter_LiveAgents` the panel shows the page's written guide (`features/assistant/guides.ts`:
 what the page is and what to try next, with links) and says live answers need the judges' account; with no model key and
-no mimic it says so and shows the guide. The trial answers each page's suggested questions from its mock
-(`mocks/pageQuestions.ts`) and labels them as sample answers until they are recordings (`PAGE_ANSWERS_RECORDED`). Open or
-closed is remembered per tab; the panel sits beside the page from 1200 px and is a drawer below, the whole screen on a phone.
+no mimic it says so and shows the guide. On the Site profile, "Ask Shutter about this" beside a receiver's kind and tier
+and beside enabling recovery asks about that question once for the reader where a live answer can be given (in the panel
+from 1200 px, under the question below it, so the form stays in view); wherever none can be given it shows the question's
+written explanation instead, and asking changes nothing in the profile. The trial answers each page's suggested
+questions from its mock (`mocks/pageQuestions.ts`) and labels them as sample answers until they are recordings
+(`PAGE_ANSWERS_RECORDED`). Open or closed is remembered per tab; the panel sits beside the page from 1200 px and is a
+drawer below, the whole screen on a phone.
 
 ## Repository layout
 
