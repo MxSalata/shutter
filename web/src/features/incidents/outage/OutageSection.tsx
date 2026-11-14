@@ -1,6 +1,6 @@
 import { Button, Card, Group, List, Stack, Text, TextInput, Textarea, Title } from '@mantine/core';
-import { useState, type ReactNode } from 'react';
-import { Link } from 'react-router';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Link, useLocation } from 'react-router';
 import { useCan, useRecoveryControl } from '@/api/hooks';
 import { StatusBadge, StatusNotice } from '@/components/StatusBadge';
 import { TechDetail } from '@/components/TechDetail';
@@ -59,6 +59,13 @@ export function OutageSection() {
   const outages = useOutages();
   const now = useNow(5_000);
   const data = outages.data;
+  // A link to one outage (the Scenarios page's pathology path, 1.4.6) lands on its card once the list has loaded
+  const { hash } = useLocation();
+  const loaded = !!data;
+  useEffect(() => {
+    if (!loaded || !hash.startsWith('#outage-')) return;
+    document.getElementById(hash.slice(1))?.scrollIntoView({ block: 'start' });
+  }, [loaded, hash]);
   if (!data || (data.items.length === 0 && data.receivers.length === 0)) return null;
   const shown = data.items.filter((o) => o.state !== 'closed' || o.openCases.length > 0 || recentRun(o, now));
   return (
@@ -141,7 +148,13 @@ export function OutageCard({ outage: o }: { outage: Outage }) {
       <HandledByHand outage={o} row={r} />
     ) : null;
   return (
-    <Card padding="md" withBorder component="section" aria-label={`Outage ${o.id}, ${o.receiver}`}>
+    <Card
+      padding="md"
+      withBorder
+      component="section"
+      id={`outage-${o.id}`}
+      aria-label={`Outage ${o.id}, ${o.receiver}`}
+    >
       <Stack gap="sm">
         <Group gap="xs" wrap="wrap" justify="space-between">
           <Title order={3} fz="md">
