@@ -3,6 +3,8 @@ import { IconArchive, IconSettingsBolt } from '@tabler/icons-react';
 import type { ReactNode } from 'react';
 import { CodeChip } from '@/components/CodeChip';
 import { TechDetail } from '@/components/TechDetail';
+import { useAskAbout } from '@/features/assistant/AskAbout';
+import type { PageFocus } from '@/features/assistant/store';
 import { HINT_EVENTS } from '@/theme';
 import { EFFECT_WORDS } from './profile';
 
@@ -40,9 +42,49 @@ export function Effect({ acts, decorative = false }: { acts: boolean; decorative
 
 /**
  * One question of the induction: its number in a circle, the question in 600 weight, and the icon that says whether the
- * answer changes what Shutter does. The number is also said to a screen reader ("Question 7:").
+ * answer changes what Shutter does. The number is also said to a screen reader ("Question 7:"). A consequential question
+ * (`ask`) has "Ask Shutter about this" after the icon, and what it opens under the row below the wide breakpoint.
  */
-export function Question({ n, text, acts }: { n: number; text: ReactNode; acts: boolean }) {
+export function Question({
+  n,
+  text,
+  acts,
+  ask,
+}: {
+  n: number;
+  text: ReactNode;
+  acts: boolean;
+  ask?: PageFocus;
+}) {
+  return ask ? (
+    <AskableQuestion n={n} text={text} acts={acts} focus={ask} />
+  ) : (
+    <QuestionRow n={n} text={text} acts={acts} />
+  );
+}
+
+/** A question with "Ask Shutter about this": the row with the button, and below it what the button opens in the page. */
+function AskableQuestion({ focus, ...row }: { n: number; text: ReactNode; acts: boolean; focus: PageFocus }) {
+  const about = useAskAbout(focus);
+  return (
+    <>
+      <QuestionRow {...row} extra={about.button} />
+      {about.region}
+    </>
+  );
+}
+
+function QuestionRow({
+  n,
+  text,
+  acts,
+  extra,
+}: {
+  n: number;
+  text: ReactNode;
+  acts: boolean;
+  extra?: ReactNode;
+}) {
   return (
     <Group gap="sm" wrap="nowrap" align="flex-start" data-question={n}>
       <span
@@ -64,6 +106,7 @@ export function Question({ n, text, acts }: { n: number; text: ReactNode; acts: 
         {text}
       </Text>
       <Effect acts={acts} />
+      {extra}
     </Group>
   );
 }

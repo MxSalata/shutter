@@ -69,6 +69,7 @@ import {
   problemField,
   toPutBody,
 } from './profile';
+import { kindFocus, tierFocus } from './askAbout';
 import { ReviewModal, type SaveProblem } from './ReviewModal';
 import { SaveBar } from './SaveBar';
 import { VersionsPanel } from './VersionsPanel';
@@ -216,6 +217,7 @@ function ReceiverFields({
   r,
   i,
   only,
+  profile,
   problem,
   update,
   remove,
@@ -223,6 +225,8 @@ function ReceiverFields({
   r: SiteReceiver;
   i: number;
   only: boolean;
+  /** The profile as drafted: what the kind's and the tier's "Ask Shutter about this" read (history policy, release table). */
+  profile: SiteProfile;
   problem: Problem;
   update: (fn: (r: SiteReceiver) => void) => void;
   remove: () => void;
@@ -262,7 +266,7 @@ function ReceiverFields({
           />
         </SimpleGrid>
         <RunbookField r={r} i={i} err={err} update={update} />
-        <Question n={2} text="What kind of system is it?" acts />
+        <Question n={2} text="What kind of system is it?" acts ask={kindFocus(r, i, profile)} />
         <CategoryFields r={r} i={i} err={err} update={update} />
         <QuestionDetails
           first={<HistoryPolicyFold r={r} i={i} err={err} update={update} />}
@@ -272,7 +276,7 @@ function ReceiverFields({
           ]}
           more={CATEGORY_TEXT[category].overtaken}
         />
-        <Question n={3} text="Its tier" acts />
+        <Question n={3} text="Its tier" acts ask={tierFocus(r, i, profile.policy)} />
         <Choice
           id={id('tier')}
           label={`Tier of ${r.name || 'this receiver'}`}
@@ -437,6 +441,7 @@ function ProfileForm({
                 r={r}
                 i={i}
                 only={draft.receivers.length === 1}
+                profile={draft}
                 problem={problem}
                 update={(fn) => setDraft((d) => fn(d.receivers[i]))}
                 remove={() => setDraft((d) => void d.receivers.splice(i, 1))}

@@ -89,7 +89,7 @@ export const GUIDES: Record<string, PageGuide> = {
   },
   'site-profile': {
     title: 'Site profile',
-    what: "The site's own answers: each receiver, what kind of record it keeps and how sensitive it is, and who releases a write at each tier, the site's written policy or a person. A suggested change from a case opens here as a draft for an approver to save.",
+    what: "The site's own answers: each receiver, what kind of record it keeps and how sensitive it is, and who releases a write at each tier, the site's written policy or a person. A suggested change from a case opens here as a draft for an approver to save. Beside a receiver's kind and tier, and beside enabling recovery, \"Ask Shutter about this\" explains that answer.",
     next: [
       { label: 'Read the receivers and the policy', to: '/site-profile' },
       { label: 'The agents the board is made of', to: '/library' },

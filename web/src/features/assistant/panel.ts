@@ -5,6 +5,9 @@ import { pageNameOf } from './screen';
 /** The panel's id: the header's button and a case's "Ask about this case" name it in `aria-controls`. */
 export const ASSISTANT_PANEL_ID = 'ask-panel';
 
+/** The id of a page question's "Ask Shutter about this", by its question's: focus goes back to it when the panel closes. */
+export const askAboutButtonId = (id: string) => `ask-about-${id}`;
+
 /** From this width the panel sits beside the page, which keeps its own room; below it the panel is a drawer. */
 export const ASSISTANT_WIDE_QUERY = '(min-width: 75em)';
 

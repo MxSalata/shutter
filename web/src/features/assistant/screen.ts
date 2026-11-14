@@ -1,4 +1,5 @@
 import type { ScreenContext } from '@/api/types';
+import type { PageFocus } from './store';
 
 /**
  * What the Ask Shutter panel sends with a question about a page: the page's name and a short structured summary of what is
@@ -43,12 +44,24 @@ export interface ScreenItem {
   label: string;
 }
 
+/**
+ * The question "Ask Shutter about this" was pressed on, as the summary carries it: the question, the answer on the page
+ * and what it does there, in the page's own words, and who chooses the answer.
+ */
+export interface ScreenFocus {
+  question: string;
+  answer: string;
+  consequence: string;
+  chosenBy: string;
+}
+
 /** The summary's shape: one level of texts and lists of items with an id, a kind and a label. */
 export interface ScreenSummary extends ScreenContext {
   title: string;
   lead?: string;
   headings: string[];
   items: ScreenItem[];
+  focus?: ScreenFocus;
 }
 
 /**
@@ -71,10 +84,13 @@ export function pageNameOf(pathname: string): string {
 const text = (s: string | null | undefined): string =>
   (s ?? '').replace(/\s+/g, ' ').trim().slice(0, MAX_TEXT);
 
-/** Whether a node is part of the page, not of the panel (beside it or as a drawer), the guide's card or a hidden template. */
+/**
+ * Whether a node is part of the page, not of the panel (beside it or as a drawer), Ask Shutter under a page's question
+ * (FocusAsk's `data-ask-inline`), the guide's card or a hidden template.
+ */
 function onPage(el: Element): boolean {
   return !el.closest(
-    '#ask-panel, .assistant-aside, [role="dialog"], [data-guide-card], [data-guide-dock], [aria-hidden="true"], template',
+    '#ask-panel, .assistant-aside, [data-ask-inline], [role="dialog"], [data-guide-card], [data-guide-dock], [aria-hidden="true"], template',
   );
 }
 
@@ -114,6 +130,27 @@ export function summariseScreen(root: ParentNode | null | undefined, page: strin
     if (summary.items.length >= MAX_ITEMS) break;
   }
   return fitted(summary);
+}
+
+/** Who chooses an answer that "Ask Shutter about this" asks about, as the summary says it. */
+export const FOCUS_CHOSEN_BY =
+  'A person, with the control on the page. Ask Shutter explains the answer and does not choose it.';
+
+/**
+ * The summary with the question "Ask Shutter about this" was pressed on: its title, the answer on the page and what that
+ * answer does, each a text cut at the server's limit, so the agent reads which control the question is about. Fitted as
+ * any summary is, so items and headings give way first.
+ */
+export function withFocus(summary: ScreenSummary, focus: PageFocus): ScreenSummary {
+  return fitted({
+    ...summary,
+    focus: {
+      question: text(focus.title),
+      answer: text(focus.answer),
+      consequence: text(focus.consequence),
+      chosenBy: FOCUS_CHOSEN_BY,
+    },
+  });
 }
 
 /** The summary cut to its length: items from the end, then headings, then the lead. */

@@ -6,6 +6,7 @@ import { Section } from '@/components/Section';
 import { TechDetail } from '@/components/TechDetail';
 import { AnswerGroup, Checkbox, NativeSelect, NumberInput, Radio, Switch, TextInput } from './controls';
 import { IANA_ZONE, ZONE_LABELS, newTeam, parseList } from './profile';
+import { recoveryFocus } from './askAbout';
 import { Question, QuestionDetails } from './Question';
 import {
   DAY_LABELS,
@@ -481,7 +482,12 @@ function Recovery({
       wideNote
       note="Off is shadow mode: Shutter investigates, sending no recovery write, rehearsal, resend preview or outage resend. The hospital's feed goes on either way."
     >
-      <Question n={14} text="May Shutter attempt recovery here, within its gate and the policy above?" acts />
+      <Question
+        n={14}
+        text="May Shutter attempt recovery here, within its gate and the policy above?"
+        acts
+        ask={recoveryFocus(draft)}
+      />
       <Switch
         id="site-recovery-mode"
         label="Enable recovery"

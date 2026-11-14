@@ -28,6 +28,33 @@ function remember(open: boolean): void {
   }
 }
 
+/**
+ * One question of a page that "Ask Shutter about this" opened the panel on: the page's name, the control it is about
+ * (`id`, which the button carries too, so focus goes back to it when the panel closes), the question as Ask Shutter is
+ * asked it, the answer on the page when it was asked and what that answer does there, both in the page's own words, and
+ * the written explanation shown wherever no live answer can be given. The page builds it; nothing in it is sent but the
+ * question and the context (screen.ts, `withFocus`).
+ */
+export interface PageFocus {
+  page: string;
+  id: string;
+  /** What the question is, as the panel heads it: "Its tier: Records Out". */
+  title: string;
+  /** The question asked live. */
+  question: string;
+  /** The answer on the page, in its words: "Tier 2, operations". */
+  answer: string;
+  /** What that answer does, from the page's own rules, not from a model. */
+  consequence: string;
+  /** The written explanation. */
+  written: string;
+}
+
+/** Whether two of a page's questions read the same, field by field. */
+const sameFocus = (a: PageFocus, b: PageFocus) =>
+  (Object.keys(a) as (keyof PageFocus)[]).every((k) => a[k] === b[k]) &&
+  Object.keys(a).length === Object.keys(b).length;
+
 /** A question asked about a page in this tab: its id on the server (or in the mock) and its words. */
 export interface PageAsked {
   questionId: string;
@@ -40,12 +67,21 @@ interface AssistantState {
   autoAsk: string | null;
   /** The questions asked about each page (by the page's name), oldest first. */
   threads: Record<string, PageAsked[]>;
+  /** The page's question the panel was opened on by "Ask Shutter about this", until the panel closes. */
+  focus: PageFocus | null;
   setOpen: (open: boolean) => void;
   toggle: () => void;
   /** Opens the panel from a case's "Ask about this case": the panel then asks the case's first suggested question. */
   openForCase: (caseId: string) => void;
   /** The panel took the auto-ask: it is not asked again. */
   tookAutoAsk: () => void;
+  /** Opens the panel on one of the page's questions ("Ask Shutter about this"). */
+  askAbout: (focus: PageFocus) => void;
+  /**
+   * Keeps the question in focus in step with the page while the panel is open on it: the same page and control, with
+   * the answer and what it does as the page has them now. Any other question, or a closed panel, is left as it is.
+   */
+  followFocus: (focus: PageFocus) => void;
   addAsked: (page: string, asked: PageAsked) => void;
 }
 
@@ -53,9 +89,10 @@ export const useAssistant = create<AssistantState>((set, get) => ({
   open: typeof window === 'undefined' ? false : storedOpen(),
   autoAsk: null,
   threads: {},
+  focus: null,
   setOpen: (open) => {
     remember(open);
-    set(open ? { open } : { open, autoAsk: null });
+    set(open ? { open } : { open, autoAsk: null, focus: null });
   },
   toggle: () => get().setOpen(!get().open),
   openForCase: (caseId) => {
@@ -63,6 +100,16 @@ export const useAssistant = create<AssistantState>((set, get) => ({
     set({ open: true, autoAsk: caseId });
   },
   tookAutoAsk: () => set({ autoAsk: null }),
+  askAbout: (focus) => {
+    remember(true);
+    set({ open: true, focus });
+  },
+  followFocus: (focus) =>
+    set((s) =>
+      s.open && s.focus?.page === focus.page && s.focus.id === focus.id && !sameFocus(s.focus, focus)
+        ? { focus }
+        : s,
+    ),
   addAsked: (page, asked) =>
     set((s) => ({ threads: { ...s.threads, [page]: [...(s.threads[page] ?? []), asked] } })),
 }));
@@ -73,10 +120,12 @@ export const useAssistant = create<AssistantState>((set, get) => ({
  * appearance.
  */
 if (typeof window !== 'undefined')
-  window.addEventListener(SIGNED_OUT, () => useAssistant.setState({ threads: {}, autoAsk: null }));
+  window.addEventListener(SIGNED_OUT, () =>
+    useAssistant.setState({ threads: {}, autoAsk: null, focus: null }),
+  );
 
-/** For tests: the panel closed, nothing to auto-ask, no threads. */
+/** For tests: the panel closed, nothing to auto-ask, no threads, no question in focus. */
 export function resetAssistantForTests(): void {
   remember(false);
-  useAssistant.setState({ open: false, autoAsk: null, threads: {} });
+  useAssistant.setState({ open: false, autoAsk: null, threads: {}, focus: null });
 }

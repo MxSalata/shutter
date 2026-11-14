@@ -2653,3 +2653,13 @@ main[data-assistant='beside'] .stack-scroll {
 .access-table .access-you {
   background: var(--mantine-color-teal-light);
 }
+/* A question's "Ask Shutter about this" (features/assistant/AskAbout.tsx) and what it opens: in the panel, and under the
+   question below the wide breakpoint. Its size, 44 px on a phone, is set in the component. */
+.ask-focus {
+  border: calc(0.0625rem * var(--mantine-scale)) solid var(--mantine-color-default-border);
+  border-left: 4px solid var(--mantine-primary-color-filled);
+  border-radius: var(--mantine-radius-md);
+}
+.ask-about {
+  flex: none;
+}
