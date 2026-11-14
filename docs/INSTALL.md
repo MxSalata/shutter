@@ -197,7 +197,10 @@ read it.
 second opinion on a message IRIS cannot read. The Docker image builds it (`pex/build.sh`: the jars from Maven Central with
 pinned SHA-256 checks, compiled against the IRIS image's own PEX framework jar and JDK into the manager directory's
 `pex/`, outside the data volume; the step never fails the image, it skips with the reason where something is missing). On an instance you
-install by hand, run `pex/build.sh` once with Java 11 or later on the machine, then run the install again or enable the item;
+install by hand, run `pex/build.sh` once on the server, as a user who can write to `<mgr>/pex`, with a JDK 11 or later (`javac`
+and `jar`, not only a Java runtime), `python3`, `sha256sum` and a route to Maven Central; where IRIS isn't in `/usr/irissys`,
+set `IRIS_HOME` and give the script `<mgr>/pex` as its one argument. It exits without an error and says why when it skips, so
+a missing tool leaves no jar and no failure. Then run the install again or enable the item;
 without the jar the install leaves the item disabled, the evidence carries no second opinion and the Doctor's `second_parser`
 says so. Nothing else depends on it.
 
@@ -345,7 +348,9 @@ Shape A:
 1. On the integration server, create the SHUTTER namespace with its data database on backed-up storage.
 2. On an AI Hub build, `zpm "install iris-shutter"` with `-Ddemo=0`, or `zpm "load <repository> -Ddemo=0"` by path (the provider
    key in the environment); on a plain 2026.2, `zpm "load <repository>/core -Ddemo=0"`. IPM goes in that namespace first (3.1).
-   Check `/api/shutter/health`.
+   Check `/api/shutter/health`. These installs are checked on IRIS for Health only (Community 2026.2 for the core; AI Hub builds 154
+   and 109 for the whole package); plain InterSystems IRIS has not been tried. An IPM install builds no Second Parser jar: to
+   have that item, run `pex/build.sh` on the server and then the install again (section 2).
 3. Map the trust's users to `Shutter_Operator` and `Shutter_Approver`; add the approvers to the Workflow role; create
    the forwarder's user with `Shutter_Forwarder`. An operator escalates a case (the escalation is the sign-off),
    marks it handled once the team has corrected the systems and starts a production review (3.6); an approver also
