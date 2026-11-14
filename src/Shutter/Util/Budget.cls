@@ -11,8 +11,9 @@
 /// a reservation older than twenty minutes is taken for a job that died and dropped.
 /// Admission (R145-03): a run is admitted only when the day's spend, the reservations in flight and the run's own estimate
 /// together stay within the cap, and for a user with a share, that user's spend, reservations and the estimate within the
-/// share. The check and the reservation are one step under one lock, so two runs cannot both be admitted on the same
-/// remaining allowance. What this bounds is spend plus estimates, not the bill: a run can cost more than its estimate, a run
+/// share; with nothing spent or reserved under a limit yet, one run is admitted whatever its estimate (R146-01), so a cap
+/// or a share below one run's estimate does not refuse every run for good. The check and the reservation are one step
+/// under one lock, so two runs cannot both be admitted on the same remaining allowance. What this bounds is spend plus estimates, not the bill: a run can cost more than its estimate, a run
 /// still going after twenty minutes stops counting until its row is written, and a production review's cost is kept on the
 /// review, not on an AgentRun row, so the day's spend does not read it. It is no ceiling on a provider's invoice; a hard
 /// limit at the provider is that.
@@ -63,8 +64,9 @@ ClassMethod Reserve(key As %String, user As %String = "") As %Numeric
 /// key, in one step under one lock (the lock Reserve takes too), so two callers cannot both be admitted on the same remaining
 /// allowance. Admitted when the day's spend plus the reservations in flight plus this run's estimate stay within the cap,
 /// and, for a user with a share (not "system" or nobody), that user's spend plus their reservations plus the estimate stay
-/// within the share. status gets StatusFor(user) with estimateUsd, read under the lock; estimate gets the run's estimate.
-/// Refused, nothing is reserved; the caller settles an admitted run's key when the run ends.
+/// within the share; with nothing spent or reserved under a limit, one run is admitted whatever its estimate (Short).
+/// status gets StatusFor(user) with estimateUsd, read under the lock; estimate gets the run's estimate. Refused, nothing
+/// is reserved; the caller settles an admitted run's key when the run ends.
 ClassMethod Admit(key As %String, user As %String, Output status As %DynamicObject, Output estimate As %Numeric) As %Boolean
 {
     Set estimate = ..Estimate(), admitted = 0
@@ -89,14 +91,24 @@ ClassMethod Admit(key As %String, user As %String, Output status As %DynamicObje
 }
 
 /// Whether one more run of status.estimateUsd fits a day's state from StatusFor(user): the cap, then the user's share (the
-/// feed's own runs, "system" or nobody, have no share).
+/// feed's own runs, "system" or nobody, have no share). Each limit is checked by Short().
 ClassMethod Fits(status As %DynamicObject, user As %String) As %Boolean
 {
     Set est = +status.%Get("estimateUsd")
-    If (+status.dailyUsd > 0) && ((+status.spentTodayUsd + +status.%Get("reservedUsd") + est) > +status.dailyUsd) Quit 0
+    If ..Short(status.%Get("dailyUsd"), +status.%Get("spentTodayUsd") + +status.%Get("reservedUsd"), est) Quit 0
     If (user = "") || (user = "system") Quit 1
-    If (+status.%Get("perUserUsd") > 0) && ((+status.%Get("spentByMeUsd") + +status.%Get("reservedByMeUsd") + est) > +status.perUserUsd) Quit 0
+    If ..Short(status.%Get("perUserUsd"), +status.%Get("spentByMeUsd") + +status.%Get("reservedByMeUsd"), est) Quit 0
     Quit 1
+}
+
+/// Whether a run of estimate est is short of room under a limit (the cap or a user's share; 0 or less is none) with used
+/// already spent and reserved under it: used plus the estimate over the limit. With nothing used under the limit, one run
+/// is never short (R146-01): the estimate moves only when live runs land, so refusing it would refuse every run for good
+/// where the limit is below one run's estimate.
+ClassMethod Short(limit As %Numeric, used As %Numeric, est As %Numeric) As %Boolean
+{
+    If (+limit <= 0) || (+used <= 0) Quit 0
+    Quit (+used + +est) > +limit
 }
 
 /// The run ended, whatever its outcome: its row carries the real cost now.
@@ -256,13 +268,13 @@ ClassMethod Refusal(status As %DynamicObject) As %String
     Set dayFull = ..Exhausted(status.dailyUsd, status.spentTodayUsd + +status.%Get("reservedUsd"))
     Set est = status.%Get("estimateUsd")
     // Not spent, but the run's estimate does not fit what is left (Admit, R145-03): which limit, what is left, the estimate.
-    Set dayShort = (est '= "") && 'dayFull && (+status.dailyUsd > 0) && ((+status.spentTodayUsd + +status.%Get("reservedUsd") + est) > +status.dailyUsd)
+    Set dayShort = (est '= "") && 'dayFull && ..Short(status.%Get("dailyUsd"), +status.%Get("spentTodayUsd") + +status.%Get("reservedUsd"), est)
     If 'dayFull && 'dayShort && status.%IsDefined("shareExhausted") {
         Set mine = +status.%Get("spentByMeUsd") + +status.%Get("reservedByMeUsd")
         If status.shareExhausted {
             Quit "Your share of the day's model budget, " _ ..Dollars(status.perUserUsd) _ ", is spent (" _ ..Dollars(status.spentByMeUsd) _ " since " _ status.since _ "); the run was not sent. It resets at " _ status.resetsAt _ "."
         }
-        If (est '= "") && (+status.%Get("perUserUsd") > 0) && ((mine + est) > +status.perUserUsd) {
+        If (est '= "") && ..Short(status.%Get("perUserUsd"), mine, est) {
             Quit "Your share of the day's model budget, " _ ..Dollars(status.perUserUsd) _ ", has " _ ..Dollars(status.perUserUsd - mine) _ " left (" _ ..Dollars(status.spentByMeUsd) _ " spent since " _ status.since _ $SELECT(+status.%Get("reservedByMeUsd") > 0: ", " _ ..Dollars(status.reservedByMeUsd) _ " reserved", 1: "") _ "), less than a run's estimate of " _ ..Dollars(est) _ "; the run was not sent. It resets at " _ status.resetsAt _ "."
         }
     }
