@@ -61,10 +61,11 @@ the case page (`POST /api/shutter/cases/{id}/escalations` through the API); unti
      category and the tier that decide what Shutter may do there.
   4. Open **Cases**, press **Waiting for approval**, then open **C-000002**.
   5. Open **1. What failed**: the operation and what the receiver answered (HTTP 503, `ward_unavailable`).
-  6. Open **4. Gate and decision**: each check of the plan, with its result.
+  6. Under **4. Gate and decision**, already open, press **At proposal, before the rehearsal**: each check of the plan,
+     with its result and reason code.
   7. Open the **Audit trail** tab: each step of the case, with its time.
-- **Done when:** Health says every core check passed (7 of 7), and step 6 says "Passed 10 of 10 applicable checks" at
-  proposal.
+- **Done when:** Health says every core check passed (7 of 7), and the gate at proposal says "Passed 10 of 10 applicable
+  checks".
 - **If it does not work:** a reload starts the trial afresh. On your own instance, the first case comes from
   `SELECT Shutter.Setup_OnboardTest('<namespace>')` once its namespace is onboarded (9.2 to 9.4), with nothing sent.
 

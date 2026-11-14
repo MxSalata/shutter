@@ -91,7 +91,7 @@ The demo resets hourly. Live spending is capped at 5 USD an hour and 15 USD a da
   1. Open the [trial](https://mxsalata.github.io/shutter/) and choose **Explore on my own**.
   2. Open **Cases**, press **Waiting for approval**, then open **C-000002**.
   3. Press **Decide on the resend**, then **Approve the resend** in the review that opens.
-  4. Open **4. Gate and decision**: the gate's checks at proposal, and again at dispatch after the approval.
+  4. Under **4. Gate and decision**, already open, press **At dispatch, after the approval and a fresh read of the receiver**: each check the gate ran again just before the write, with its reason code.
   5. Open **6. What was verified**: the receiver's receipt and record version, read after the write.
   6. Open the **Audit trail** tab: each step of the case, with its time.
 - **Done when:** the outcome reads **Delivered: verified at the receiver**, step 4 says "Gate passed 12 of 12 applicable checks at dispatch; approved by approver", and step 6 says "Verified: Committed and current".
