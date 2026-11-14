@@ -31,10 +31,11 @@ the case page (`POST /api/shutter/cases/{id}/escalations` through the API); unti
   HTTP; Shutter stores its own copy, opens the case and records where the original lives.
 - **Shape B: Shutter's items inside a production the hospital already runs**, in that namespace, through
   `Setup.InstallInto`. One production to look at, with Shutter's queues, settings and upgrades beside the hospital's.
-- **Both start from a non-demo install** (`-Ddemo=0`): no demo users, no demo receiver, no credential, and no
+- **Both start from a non-demo install** (`-Ddemo=0`): no demo users, no demo receiver, no credential of Shutter's, and no
   namespace-wide purge unless asked for. The feed, records and scenario items (`ADT In`, `ADT to Downstream`,
   `Downstream Out`, `ADT to Records`, `Records Out` and `Scenario Player`) are present but switched off in shape A (the
-  installer disables them in `Shutter.Production`), and not added at all in shape B (`InstallInto`).
+  installer disables them in `Shutter.Production`), and not added at all in shape B (`InstallInto`). A namespace made on IRIS for
+  Health also gets a few things of the platform's own (3.1).
 - **A new install starts in shadow mode.** Shutter investigates and records what it would propose, and sends no rehearsal, recovery write, resend preview or outage resend, and no escalation or reminder email (unless the profile says `"notifications": {"shadow_delivery": "enabled"}`, which lets both go while recovery stays off); the hospital's ordinary feed goes on as before. An approver enables recovery by saving `"recovery": {"mode": "enabled"}` in the site profile, as a step of its own (section 5, step 9): the save releases no plan made before it and sends no escalation email held before it. Settings has "Stop Shutter recovery", for any operator or approver, and the shadow report (`docs/CONTRACTS.md`, 18).
 - **A case at a receiver with no API is escalated, never resent.** A case resends only to a receiver whose site profile
   entry describes its API (state, receipt, capabilities and operations paths), and that write is verified in the
@@ -207,22 +208,29 @@ a namespace first, from any namespace, and make it there (`$SYSTEM.OBJ.Load("<mo
 `Write ##class(Shutter.Setup).CreateNamespace("SHUTTER")`): its database goes under `<mgr>/shutter/`; a site that wants the
 data on storage the trust backs up makes the namespace and its database in the Management Portal instead, with
 Interoperability on. `src/Shutter/Installer.cls`, as the image uses it, also makes the demo's namespaces, so it is not for a
-site. IPM (`zpm`) is per namespace and a stock image has none: load `vendor/ipm/zpm-0.10.10.xml` in the new namespace with
+site. `Shutter.Setup` is needed there only to make the namespace, so the block below deletes the copy in the namespace you
+started from (the install puts its own in `SHUTTER`). IPM (`zpm`) is per namespace, and a stock IRIS for Health image has no
+`zpm` command and IPM's classes only in `HSLIB` and `HSSYS`: load `vendor/ipm/zpm-0.10.10.xml` in the new namespace with
 `$SYSTEM.OBJ.Load`. Load the module with `-Ddemo=0`: `Shutter.Production` starts with its feed, records and scenario items
 disabled (the six named in section 1), so it has no feed of its own until the intake route or the site's own items bring it
 one. **Load only in the namespace made for Shutter.** A load in a namespace running another production is refused and says
-so, since starting `Shutter.Production` there would stop it; name that production (`-Dproduction=...`) for shape B.
+so, since starting `Shutter.Production` there would stop it; name that production (`-Dproduction=...`) for shape B. On IRIS
+for Health, making the namespace also adds the platform's own web applications under `/csp/healthshare/shutter` (`bulkfhir`,
+`bulkfhir/api` and `services` below it) and an `HS_Services` credential; they are not Shutter's.
 
 **From the registry.** The IPM in `vendor/ipm` starts with no registry, so `zpm "install iris-shutter"` answers "No repositories are configured and enabled in this namespace" until you run `zpm "repo -reset-defaults"`. `zpm "install iris-shutter"` installs the latest version published on the registry, which can be behind this repository: on 14 Nov 2026 it served 1.4.6, and on 8 Nov 2026 it still served 1.1.1, which has no uninstall and no `Uninstall_Plan` (both are 1.2.0's). `zpm "list"` shows the version installed; for the exact version of a clone, use `zpm "load <module> -Ddemo=0"` instead. `zpm "load"` from a clone doesn't need the registry. For a hospital, install with the demo switched off, as below; without `-Ddemo=0` either command installs the demo, with its users and well-known passwords. The same commands without `-Ddemo=0`, a demo install, took about 2.5 minutes on clean 154 and 109 containers on 7 Nov 2026, and started `Shutter.Production` and `Hospital.Production`:
 
 ```
 Do $SYSTEM.OBJ.Load("<module>/src/Shutter/Setup.cls", "ck")
 Write ##class(Shutter.Setup).CreateNamespace("SHUTTER")
+Do $SYSTEM.OBJ.Delete("Shutter.Setup")
 zn "SHUTTER"
 Do $SYSTEM.OBJ.Load("<module>/vendor/ipm/zpm-0.10.10.xml", "ck")
 zpm "repo -reset-defaults"
 zpm "install iris-shutter -Ddemo=0"
 ```
+
+`repo -reset-defaults` prints IPM's own warning about `-password`; the command passes none and the public registry needs none. An install from the registry or by path builds no Second Parser jar (section 2).
 
 **3.2 The hook.** A failure reaches Shutter through `POST /api/shutter/intake`. The caller signs in with HTTP Basic
 authentication as a user holding `Shutter_Forwarder` (the resource `Shutter_Intake`), sends the header
