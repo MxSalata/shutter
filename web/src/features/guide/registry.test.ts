@@ -268,8 +268,12 @@ describe('the guide registry', () => {
   });
 
   it('reads the proof and the costs from the evaluation, never typed', () => {
+    // Led by the cohort the figures belong to; the release they were recorded before is in the step's detail
     expect(stepAt('evaluation/headline')!.step.say).toBe(
-      "The board matched all 24 recorded failures. Played through on 11: board 11, Rules only 4. Of Rules only's 7 misses, the gate stopped 6.",
+      'Catalogue demonstration: the board matched all 24 failures. Played through on 11: board 11, Rules only 4. Of its 7 misses, the gate stopped 6.',
+    );
+    expect(stepAt('evaluation/headline')!.step.detail).toBe(
+      "From 100 runs recorded with the real agents on IRIS AI Hub, 25 Oct to 1 Nov 2026, before release 1.0.0. A match is agreement with each scenario's expected outcome, not general reliability.",
     );
     expect(stepAt('settings/costs')!.step.say).toMatch(/cost \$0\.34 to \$0\.50\.$/);
   });

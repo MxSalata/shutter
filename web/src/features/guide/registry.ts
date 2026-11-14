@@ -2,7 +2,7 @@ import { scenariosHidden } from '@/api/can';
 import type { Can, CaseState, Mode } from '@/api/types';
 import { TRIAL } from '@/env/mode';
 import type { StoryStep } from '@/features/cases/case/CaseStory';
-import { PROOF } from '@/lib/proof';
+import { CATALOGUE_COHORT, PROOF, recordedBefore } from '@/lib/proof';
 
 /**
  * The guide's chapters and steps, for the three routes it offers in the trial: the quick tour (9 steps: the short
@@ -107,7 +107,7 @@ const Q: GuideScope[] = ['quick', 'all'];
 const A: GuideScope[] = ['all'];
 const E: GuideScope[] = ['engineer'];
 
-/** Step 9's sentence, from the evaluation's own figures (lib/proof.ts), never typed. */
+/** Step 9's sentence, from the evaluation's own figures (lib/proof.ts), never typed, led by the cohort they belong to. */
 function proofSay(): string {
   const b = PROOF.board;
   const p = PROOF.played;
@@ -115,11 +115,14 @@ function proofSay(): string {
     return "These figures come from runs recorded with the real agents. Each compares the board's choice with the expected action.";
   const matched = b.matched === b.scored ? `all ${b.scored}` : `${b.matched} of ${b.scored}`;
   const m = PROOF.rulesMisses;
-  const stopped = m?.total ? ` Of Rules only's ${m.total} misses, the gate stopped ${m.stopped.length}.` : '';
-  return `The board matched ${matched} recorded failures. Played through on ${p.of}: board ${p.board}, Rules only ${p.rules}.${stopped}`;
+  const stopped = m?.total ? ` Of its ${m.total} misses, the gate stopped ${m.stopped.length}.` : '';
+  return `${CATALOGUE_COHORT}: the board matched ${matched} failures. Played through on ${p.of}: board ${p.board}, Rules only ${p.rules}.${stopped}`;
 }
 
-/** "From 100 runs recorded with the real agents on IRIS AI Hub, 25 Oct to 1 Nov 2026." and what a match means. */
+/**
+ * "From 100 runs recorded with the real agents on IRIS AI Hub, 25 Oct to 1 Nov 2026, before release 1.0.0." and what a
+ * match means.
+ */
 function proofDetail(): string {
   const day = (iso: string | null) =>
     iso
@@ -128,7 +131,8 @@ function proofDetail(): string {
   const year = PROOF.recordedTo ? new Date(PROOF.recordedTo).getUTCFullYear() : null;
   const from = day(PROOF.recordedFrom);
   const to = day(PROOF.recordedTo);
-  const when = from && to && year ? `, ${from} to ${to} ${year}` : '';
+  const before = recordedBefore(PROOF);
+  const when = (from && to && year ? `, ${from} to ${to} ${year}` : '') + (before ? `, ${before}` : '');
   const runs = PROOF.runs ?? 'the';
   return `From ${runs} runs recorded with the real agents on IRIS AI Hub${when}. A match is agreement with each scenario's expected outcome, not general reliability.`;
 }

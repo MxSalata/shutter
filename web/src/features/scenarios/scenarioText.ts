@@ -1,5 +1,5 @@
 import type { ScenarioStep } from '@/api/types';
-import type { PlayedResult, Proof } from '@/lib/proof';
+import { cohortLabel, type PlayedResult, type Proof } from '@/lib/proof';
 
 /** The page's lead, in the live system's words or the trial's, which plays recordings rather than into a production. */
 export const SCENARIOS_LEAD = {
@@ -116,8 +116,14 @@ export function recordedLine(played: { board: PlayedResult; rules: PlayedResult 
 /** The proof line's parts, each left out when the evaluation cannot give its figures. */
 export interface ProofParts {
   /**
-   * "Tested on 24 recorded cases from 19 scenarios (an incident gives several), the board chose the expected action
-   * every time." The unit is named, so the case count is not read as a count of scenarios.
+   * The cohort and release both figures belong to, said before them: "Catalogue demonstration, recorded before release
+   * 1.0.0" (lib/proof.ts reads the release from the runs' own dates).
+   */
+  cohort: string | null;
+  /**
+   * "Tested on 24 cases from 19 scenarios (an incident gives several), the board chose the expected action every
+   * time." The unit is named, so the case count is not read as a count of scenarios; that the cases are recorded is the
+   * cohort's word, before it.
    */
   tested: string | null;
   /** Played end to end on the one-failure scenarios: how many, the board's and Rules only's expected outcomes. */
@@ -127,10 +133,12 @@ export interface ProofParts {
 }
 
 /** The proof line from the evaluation's figures, on one base per comparison (DESIGN principle 7). */
-export function proofParts(proof: Pick<Proof, 'board' | 'played'>): ProofParts {
+export function proofParts(
+  proof: Pick<Proof, 'board' | 'played'> & Partial<Pick<Proof, 'recordedTo'>>,
+): ProofParts {
   const { board, played } = proof;
   const tested = board
-    ? `Tested on ${board.scored} recorded cases${
+    ? `Tested on ${board.scored} cases${
         board.scenarios && board.scenarios < board.scored
           ? ` from ${board.scenarios} scenarios (an incident gives several)`
           : ''
@@ -143,6 +151,7 @@ export function proofParts(proof: Pick<Proof, 'board' | 'played'>): ProofParts {
     played ? `${played.of} scenarios, played end to end` : null,
   ].filter(Boolean);
   return {
+    cohort: board || played ? cohortLabel(proof) : null,
     tested,
     played: played ? { of: played.of, board: played.board, rules: played.rules } : null,
     bases: bases.length ? `(${bases.join('; ')})` : null,

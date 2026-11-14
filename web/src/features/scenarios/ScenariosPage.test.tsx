@@ -1221,9 +1221,10 @@ describe('ScenariosPage, its rows and its proof', () => {
     expect(board).toMatchObject({ matched: 24, scored: 24 });
     expect(played).toMatchObject({ of: 11, board: 11, rules: 4 });
     const line = (await screen.findByText(/^Tested on/)).closest<HTMLElement>('[data-proof-line]')!;
-    // The words a reader sees (the definitions the terms carry for screen readers aside)
+    // The words a reader sees (the definitions the terms carry for screen readers aside), led by the cohort and the
+    // release both figures belong to
     expect(visibleText(line)).toContain(
-      `Tested on ${board.scored} recorded cases from ${board.scenarios} scenarios (an incident gives several), the board chose the expected action every time. Played end to end on ${played.of} one-failure scenarios: the board ${played.board}, Rules only ${played.rules}.`,
+      `Catalogue demonstration, recorded before release 1.0.0. Tested on ${board.scored} cases from ${board.scenarios} scenarios (an incident gives several), the board chose the expected action every time. Played end to end on ${played.of} one-failure scenarios: the board ${played.board}, Rules only ${played.rules}.`,
     );
     expect(within(line).getByRole('link', { name: 'See the evaluation' })).toHaveAttribute(
       'href',
