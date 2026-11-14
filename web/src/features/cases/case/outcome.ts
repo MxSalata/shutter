@@ -146,6 +146,10 @@ const isFhir = (f: Pick<CaseFacts, 'snapshot' | 'attempts'>) =>
 const fhirUpdated = (n: number) =>
   `Updated the Encounter's location ${n === 1 ? 'once' : n === 2 ? 'twice' : `${n} times`}, by another route than the original HL7 delivery`;
 
+/** A FHIR case's write that was not verified: sent, which is all that is known of it. */
+const fhirSent = (n: number) =>
+  `Sent ${n === 1 ? 'one update' : `${n} updates`} of the Encounter's location, by another route than the original HL7 delivery`;
+
 /** "once", "twice", "3 times". */
 const times = (n: number) => (n === 1 ? 'once' : n === 2 ? 'twice' : `${n} times`);
 
@@ -166,7 +170,8 @@ function stoppedWrites(f: CaseFacts, event: string): string {
       : sent === 1
         ? 'and the receiver acknowledged it'
         : 'and the receiver acknowledged the last';
-  if (isFhir(f)) return `${fhirUpdated(sent)}, ${answer}`;
+  if (isFhir(f))
+    return `${f.receipt.verificationState === 'verified' ? fhirUpdated(sent) : fhirSent(sent)}, ${answer}`;
   return `Sent the ${event} again, ${times(sent)}, ${answer}`;
 }
 

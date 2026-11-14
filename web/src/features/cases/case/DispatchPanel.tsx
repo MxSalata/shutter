@@ -7,7 +7,7 @@ import { KeyValueList } from '@/components/KeyValueList';
 import { Digest } from '@/components/Digest';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Timestamp } from '@/components/Timestamp';
-import { attempt, caseState, fhirAttempt, FHIR_NOT_SENT, verification } from '@/lib/status';
+import { attempt, caseState, fhirAttempt, fhirVerification, FHIR_NOT_SENT, verification } from '@/lib/status';
 import { asObject } from '@/lib/json';
 import { kindOfAttempts, receiverKind } from './derive';
 import { NotCheckedWords } from './NotCheckedWords';
@@ -118,11 +118,13 @@ function AttemptCard({ a }: { a: Attempt }) {
   );
 }
 
-function VerificationCard({ v }: { v: Verification }) {
-  const verdict = asObject(v.detail)?.verdict;
+function VerificationCard({ v, fhir }: { v: Verification; fhir: boolean }) {
+  const detail = asObject(v.detail);
+  const verdict = detail?.verdict;
+  const words = fhir || detail?.kind === 'fhir' ? fhirVerification : verification;
   return (
     <Stack gap={6}>
-      <StatusBadge {...verification(v.outcome)} w="fit-content" />
+      <StatusBadge {...words(v.outcome)} w="fit-content" />
       {typeof verdict === 'string' && verdict ? (
         <Text size="xs" c="dimmed">
           Verdict: {verdict}
@@ -283,14 +285,17 @@ export function VerificationPanel({
       {attempts.isError ? <ErrorAlert error={attempts.error} title="The attempts could not be read" /> : null}
       {attempts.isSuccess && list.length === 0 ? (
         sent ? (
-          <StatusBadge {...verification(unverified ? 'unresolved' : 'pending')} w="fit-content" />
+          <StatusBadge
+            {...(fhir ? fhirVerification : verification)(unverified ? 'unresolved' : 'pending')}
+            w="fit-content"
+          />
         ) : (
           <NoWrite write={write} planned={planned} byHand={byHand} state={state} />
         )
       ) : null}
       {list.map((x, i) => (
         <Card key={i} padding="sm" withBorder>
-          <VerificationCard v={x.verification!} />
+          <VerificationCard v={x.verification!} fhir={fhir} />
         </Card>
       ))}
     </Section>

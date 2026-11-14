@@ -392,4 +392,42 @@ describe('the words of a FHIR case', () => {
     expect(dispatch.textContent).not.toMatch(/FHIR server refused/);
     expect(document.body.textContent).not.toMatch(/did not take/);
   });
+
+  it('says a FHIR write the history read did not show was not found there, never that it was not committed', async () => {
+    const x = fixtures.cases['C-000002'];
+    const [view] = structuredClone(x.attempts) as unknown as AttemptView[];
+    const attempts = [
+      {
+        attempt: fhirAttempt('uncertain', 500, { sent: true, reason_code: '' }),
+        verification: {
+          ...view.verification,
+          outcome: 'not_committed',
+          summary: "No version in the history read carries this case's marker.",
+          detail: {
+            kind: 'fhir',
+            judge_outcome: 'not_found',
+            disposition: 'resend',
+            case_code: 'FHIR_WRITE_NOT_FOUND',
+          },
+        },
+      },
+    ];
+    serve(
+      { ...x.detail, caseId: ID, state: 'escalated', disposition: 'resend', outcome: '' },
+      { kind: 'fhir_r4' },
+      attempts,
+      x.closure,
+    );
+    renderCase();
+    await waitFor(() =>
+      expect(screen.getByRole('region', { name: 'Outcome' })).toHaveTextContent(
+        "Sent one update of the Encounter's location",
+      ),
+    );
+    expect(document.body.textContent).not.toMatch(/Updated the Encounter's location/);
+    await openStep('What was verified');
+    const verification = await screen.findByRole('region', { name: 'Verification' });
+    expect(within(verification).getByText('Not found in the history read')).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/Not committed/);
+  });
 });

@@ -9,6 +9,7 @@ import type {
 } from '@/api/types';
 import { humanize } from '@/lib/format';
 import { asObject } from '@/lib/json';
+import { fhirVerification } from '@/lib/status';
 import { fhirSummary, receiverKind } from './derive';
 
 /**
@@ -204,8 +205,9 @@ export function safetyReceipt({
   // correction, a case that stopped before its write went out)
   // A case stopped with a write and no verification, as a write call that errored: nothing is coming to verify it
   const unverifiedWrite = sent.length > 0 && STOPPED_STATES.includes(c.state);
+  const fhir = receiverKind(snapshot) === 'fhir_r4';
   const verification = last
-    ? `${humanize(last.outcome)}${last.summary ? `: ${last.summary}` : ''}`
+    ? `${fhir ? fhirVerification(last.outcome).label : humanize(last.outcome)}${last.summary ? `: ${last.summary}` : ''}`
     : unverifiedWrite
       ? 'Not established: whether the write landed is for a person to check'
       : sent.length
@@ -229,7 +231,6 @@ export function safetyReceipt({
             ? 'not_applicable'
             : '';
   const target = `${humanize(c.event).toLowerCase()}${c.ward ? ` to ${c.ward}` : ''}`;
-  const fhir = receiverKind(snapshot) === 'fhir_r4';
   const etag = fhirSummary(snapshot)?.encounter?.etag ?? '';
   const action = !p
     ? 'No plan yet'

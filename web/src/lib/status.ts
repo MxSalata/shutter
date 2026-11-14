@@ -316,6 +316,18 @@ export const VERIFICATIONS: Record<string, Status> = {
 export const verification = (outcome: string): Status =>
   VERIFICATIONS[outcome] ?? s('neutral', humanize(outcome));
 
+/**
+ * A FHIR case's verifier outcomes where they differ: a history the receiver returned is not proof that no version was
+ * committed, and an unsettled write is an unknown outcome.
+ */
+export const FHIR_VERIFICATIONS: Record<string, Status> = {
+  not_committed: s('attention', 'Not found in the history read', undefined, IconQuestionMark),
+  unresolved: s('attention', 'Outcome unknown', undefined, IconQuestionMark),
+};
+
+export const fhirVerification = (outcome: string): Status =>
+  FHIR_VERIFICATIONS[outcome] ?? verification(outcome);
+
 /** The writes a run made: information when there were some, neutral when none. Proposed and made are kept apart. */
 export function writes(n: number): Status {
   return n
