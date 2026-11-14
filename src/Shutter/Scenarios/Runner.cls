@@ -435,6 +435,14 @@ ClassMethod Play(found As %DynamicObject, scenario As %String, mode As %String, 
                     Quit
                 }
                 Set target = ##class(%File).NormalizeDirectory(target)
+            } ElseIf step.%IsDefined("route") && (step.route = "fhir_ward") {
+                // S35: the demo hospital's FHIR ward feed, whose HL7 link to the ward system never opens a connection
+                Set target = $GET(^Shutter.Config("fhirWardIn"))
+                If target = "" {
+                    Set error = "the step's route is the demo hospital's FHIR ward feed, which is not installed (^Shutter.Config(""fhirWardIn"") is not set)"
+                    Quit
+                }
+                Set target = ##class(%File).NormalizeDirectory(target)
             }
             Set error = ..Drop(step.path, target)
             Quit:error'=""
@@ -482,7 +490,7 @@ ClassMethod Play(found As %DynamicObject, scenario As %String, mode As %String, 
 /// A step in words, for <method>Status</method>.
 ClassMethod Describe(step As %DynamicObject) As %String
 {
-    Quit:step.%IsDefined("file") "delivering " _ step.file _ $SELECT(step.%IsDefined("route") && (step.route = "hospital"): " to the demo hospital", step.%IsDefined("route") && (step.route = "lab"): " to the demo results system", step.%IsDefined("item"): " through " _ step.item, 1: "")
+    Quit:step.%IsDefined("file") "delivering " _ step.file _ $SELECT(step.%IsDefined("route") && (step.route = "hospital"): " to the demo hospital", step.%IsDefined("route") && (step.route = "lab"): " to the demo results system", step.%IsDefined("route") && (step.route = "fhir_ward"): " to the demo hospital's FHIR ward feed", step.%IsDefined("item"): " through " _ step.item, 1: "")
     Quit:step.%IsDefined("lab_receiver") $SELECT(step."lab_receiver" = "up": "bringing the demo results system back", 1: "taking the demo results system down")
     Quit:step.%IsDefined("wait_for_outage") "waiting for the outage of " _ $SELECT(step.%IsDefined("receiver"): step.receiver, 1: ..#LABRECEIVER) _ " to reach " _ $REPLACE(step."wait_for_outage", "|", " or ")
     Quit:step.%IsDefined("prevent_failures") "turning prevent failures " _ $SELECT(step."prevent_failures": "on", 1: "off") _ " for this run"
@@ -645,8 +653,10 @@ ClassMethod Drop(source As %String, inbound As %String) As %String
     Quit ""
 }
 
-/// The downstream system reset, the live hospital's bed map cleared (unless a story is playing), the inbound and archive
-/// folders (Shutter's and the demo hospital's) emptied of
+/// The downstream system reset, the live hospital's bed map cleared (unless a story is playing), on a demo with the
+/// demo's FHIR receiver (S35) the test FHIR server reset and seeded, the receiver's standing approvals revoked and its
+/// unanswered updates marked uncertain (Shutter.FHIR.Install DemoReset, answered under receivers with the receiver's
+/// name), the inbound and archive folders (Shutter's, the demo hospital's and its FHIR ward feed's) emptied of
 /// fixtures, the mode back to board, the
 /// running scenario and any run record that isn't playing cleared, and <code>^Shutter.Config("resetAt")</code> set to
 /// the time of the reset: the evidence collector ignores message-store events older than it, since encounter ids are
@@ -665,9 +675,14 @@ ClassMethod Reset() As %String [ SqlProc ]
         Set answer = ..InReceiver(name, "Reset", "", .rstatus)
         Do receivers.%Set(name, $SELECT($ISOBJECT(answer): answer, 1: {"error": ("HTTP " _ rstatus)}))
     }
+    // The demo's FHIR receiver (S35): its test FHIR server, in this namespace, reset and seeded for the next run
+    Set fhir = $PARAMETER("Shutter.FHIR.Install", "DEMORECEIVER")
+    If ##class(%Dictionary.CompiledClass).%ExistsId("FHIRFacade.Service") && (##class(Shutter.Store.SiteProfile).ReceiverKind(fhir) = "fhir_r4") {
+        Do receivers.%Set(fhir, ##class(Shutter.FHIR.Install).DemoReset("scenario reset"))
+    }
     Set live = ..ResetLive()
     Set emptied = []
-    For setting = "adtIn", "adtArchive", "hospitalIn", "hospitalArchive" {
+    For setting = "adtIn", "adtArchive", "hospitalIn", "hospitalArchive", "fhirWardIn", "fhirWardArchive" {
         Set dir = $GET(^Shutter.Config(setting))
         Continue:dir=""
         Set dir = ##class(%File).NormalizeDirectory(dir)
