@@ -179,11 +179,14 @@ function ReviewBody({
   // became invalid stays to be read until the person moves on
   const [stopped, setStopped] = useState(false);
   if ((moved || stale) && !stopped) setStopped(true);
-  // A replacing review starts at its note, which says what it replaces: keyboard focus follows the new review there
+  // A replacing review starts at its note, which says what it replaces: it is read from the dialog's top (where the
+  // stopped review's scroll would otherwise leave it under the title), and keyboard focus follows it there
   const note = useRef<HTMLDivElement>(null);
   const noteTitle = useId();
   useEffect(() => {
-    if (opened.replaces) note.current?.focus();
+    if (!opened.replaces) return;
+    note.current?.closest('.mantine-Modal-content')?.scrollTo?.({ top: 0 });
+    note.current?.focus({ preventScroll: true });
   }, [opened.replaces]);
   // The dialog is held open from the confirming press (said there, before the request is even pending) until the
   // answer: a decision that lands with the dialog closed would land unannounced
