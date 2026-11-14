@@ -45,6 +45,7 @@ XData ProductionDefinition
   </Item>
   <Item Name="Results System In" Category="Lab" ClassName="Hospital.Service.LabReceiver" PoolSize="1" Enabled="true" Foreground="false" Comment="A stand-in for the demo's results system inside this instance, on a loopback port: it answers each result (AE for a test code it does not know) and files nothing" LogTraceEvents="true" Schedule="">
     <Setting Target="Adapter" Name="JobPerConnection">0</Setting>
+    <Setting Target="Adapter" Name="LocalInterface">127.0.0.1</Setting>
     <Setting Target="Host" Name="MessageSchemaCategory">2.5.1</Setting>
   </Item>
   <Item Name="Live PAS" Category="Feed" ClassName="Hospital.LivePlayer" PoolSize="1" Enabled="false" Foreground="false" Comment="The live hospital's PAS: one of Shutter's scenarios every few minutes with fresh patients at present times and real faults, and an ordinary message a minute between them; on only when the install was told live" LogTraceEvents="true" Schedule="">
