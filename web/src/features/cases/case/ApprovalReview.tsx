@@ -1,8 +1,8 @@
-import { Alert, Button, Group, Stack, Text, Textarea } from '@mantine/core';
+import { Alert, Button, Group, Paper, Stack, Text, Textarea, VisuallyHidden } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconArrowDown } from '@tabler/icons-react';
-import { useEffect, useRef, useState } from 'react';
-import { useDecideApproval } from '@/api/hooks';
+import { useEffect, useId, useRef, useState } from 'react';
+import { useDecideApproval, useReadCurrentReview } from '@/api/hooks';
 import { newIdempotencyKey } from '@/api/client';
 import type { CaseDetail, PlanView, Snapshot } from '@/api/types';
 import { TRIAL } from '@/env/mode';
@@ -12,12 +12,14 @@ import { Digest } from '@/components/Digest';
 import { KeyValueList } from '@/components/KeyValueList';
 import { Timestamp } from '@/components/Timestamp';
 import { describeError, isApiError } from '@/lib/errors';
-import { formatZoned, shortDigest } from '@/lib/format';
+import { formatZoned, humanize, shortDigest } from '@/lib/format';
 import { ApprovalChangeRows } from './ApprovalChangeRows';
 import { fhirSummary, kindOfPlan, receiverKind } from './derive';
 import { PlanHeadline } from './PlanHeadline';
 import { decisionLabels, planWords } from './planAction';
 import { receiverNoun } from './receiver';
+import { readBehind, replacedWords, whatChanged, type ReviewedState } from './staleReview';
+import { WhatChanged } from './WhatChanged';
 
 /** What a person can decide on a plan that waits for approval. */
 export type Decision = 'approve' | 'reject';
@@ -34,6 +36,22 @@ export interface OpenedReview {
   snapshot: Snapshot | null | undefined;
   /** Counts the openings: each one starts with an empty comment and its own idempotency key. */
   n: number;
+  /**
+   * What the review this one replaces had read, when it was opened from a stopped review's "Review current plan": it
+   * says what changed and why that decision was not recorded. Nothing else of that review carries over: no comment, no
+   * key, no press.
+   */
+  replaces?: ReviewedState;
+}
+
+/** A review whose decision is no longer recorded: why, as the page saw it, and as the server refused it. */
+const MOVED_WORDS = "The plan or the case changed since you opened this, so this decision can't be recorded.";
+const STALE_WORDS =
+  'Approval no longer valid: the plan or the case changed since you opened this, so this decision was not recorded.';
+
+/** What a decision is bound to, said beside its controls: the plan, its encounter, its digest and the case version. */
+function bindingLine(opened: OpenedReview, encounter: string): string {
+  return `Bound to plan v${opened.view.plan.version}${encounter ? ` for encounter ${encounter}` : ''} (digest ${shortDigest(opened.view.plan.digest) || 'none'}) and case version ${opened.c.version}: a change to either stops it.`;
 }
 
 /**
@@ -45,23 +63,30 @@ export interface OpenedReview {
  * the action, its expected effect and what the decision does: on a screen too short for all of them, the controls
  * follow those three (`.review-rest` in styles.css). The other decision is one press away ("Reject instead"), and still
  * needs its own confirming press. Opening, switching and cancelling send nothing, and while a decision is being sent
- * the dialog can't be closed, so its answer is always shown.
+ * the dialog can't be closed, so its answer is always shown. A review the case moved under (a stale plan or case
+ * version, seen by the page or refused by the server) stops for good, keeps its refusal and says what changed, and
+ * offers "Review current plan": the case is read again and a new review opens on it, with its own confirming press.
  */
 export function ApprovalReview({
   c,
   view,
+  snapshot,
   review,
   onClose,
   onSwitch,
+  onReopen,
 }: {
-  /** The case and its plan as the page reads them now: a change since the review opened stops the decision. */
+  /** The case, its plan and its evidence as the page reads them now: a change since the review opened stops it. */
   c: CaseDetail;
   view: PlanView | null | undefined;
+  snapshot: Snapshot | null | undefined;
   /** The open review, or null when the dialog is closed. */
   review: OpenedReview | null;
   onClose: () => void;
   /** Turns the open review to the other decision, on the same plan. */
   onSwitch: (decision: Decision) => void;
+  /** Opens a new review on the case as just read, in place of one that was stopped. */
+  onReopen: (next: Omit<OpenedReview, 'n'>) => void;
 }) {
   // The dialog keeps the last review's words while it animates closed: approve must not flash as a red Reject
   const [shown, setShown] = useState<OpenedReview | null>(review);
@@ -81,17 +106,25 @@ export function ApprovalReview({
       }
       size="lg"
     >
+      {/* Said once a review replaces a stopped one, in a region that was there before, so a screen reader reads it */}
+      <VisuallyHidden role="status" aria-live="polite" data-testid="review-status">
+        {review && shown?.replaces
+          ? `Plan v${shown.view.plan.version} is open for review. Nothing is decided until you confirm it.`
+          : ''}
+      </VisuallyHidden>
       {shown ? (
         // One body per opening: its comment, its idempotency key and its request start afresh each time
         <ReviewBody
           key={shown.n}
           c={c}
           view={view}
+          snapshot={snapshot}
           opened={shown}
           live={review !== null}
           onClose={onClose}
           onSwitch={onSwitch}
           onSending={setSending}
+          onReopen={onReopen}
         />
       ) : null}
     </ConfirmModal>
@@ -101,14 +134,17 @@ export function ApprovalReview({
 function ReviewBody({
   c,
   view,
+  snapshot,
   opened,
   live,
   onClose,
   onSwitch,
   onSending,
+  onReopen,
 }: {
   c: CaseDetail;
   view: PlanView | null | undefined;
+  snapshot: Snapshot | null | undefined;
   opened: OpenedReview;
   /** Whether the dialog is open, not closing: only an open review can be stopped by a change under it. */
   live: boolean;
@@ -116,6 +152,7 @@ function ReviewBody({
   onSwitch: (decision: Decision) => void;
   /** Says when a decision is on its way, and when it has been answered: the dialog stays open in between. */
   onSending: (sending: boolean) => void;
+  onReopen: (next: Omit<OpenedReview, 'n'>) => void;
 }) {
   const decide = useDecideApproval(c.caseId);
   const [comment, setComment] = useState('');
@@ -127,12 +164,27 @@ function ReviewBody({
   // A FHIR case is approved on the Encounter's ETag as read: the evidence's route.kind, else the FHIR gate's policy
   const fhir = (receiverKind(opened.snapshot) ?? kindOfPlan(opened.view)) === 'fhir_r4';
   const etag = fhirSummary(opened.snapshot)?.encounter?.etag ?? '';
-  // A decision sent or answered moves the case by itself: only a change before that stops the dialog
+  // A decision sent or answered moves the case by itself: only a change before that stops the dialog. A read older
+  // than the review (the page catching up with the fresh read a replacing review opened on) is no change
   const moved =
     live &&
     !decide.isPending &&
     !decide.isSuccess &&
+    !readBehind(opened, c, view) &&
     (view?.plan?.digest !== opened.view.plan.digest || c.version !== opened.c.version);
+  // Only a stale plan or case version asks for a fresh look; any other refusal (a 403 naming the Workflow role, a 409
+  // naming who the task is assigned to) is shown as the server worded it.
+  const stale = !!decide.error && isApiError(decide.error) && decide.error.code === 'stale_version';
+  // Once stopped, the review stays stopped, closing included: its decision can't be sent again, and the reason it
+  // became invalid stays to be read until the person moves on
+  const [stopped, setStopped] = useState(false);
+  if ((moved || stale) && !stopped) setStopped(true);
+  // A replacing review starts at its note, which says what it replaces: keyboard focus follows the new review there
+  const note = useRef<HTMLDivElement>(null);
+  const noteTitle = useId();
+  useEffect(() => {
+    if (opened.replaces) note.current?.focus();
+  }, [opened.replaces]);
   // The dialog is held open from the confirming press (said there, before the request is even pending) until the
   // answer: a decision that lands with the dialog closed would land unannounced
   useEffect(() => {
@@ -154,6 +206,20 @@ function ReviewBody({
     return () => watch.disconnect();
   }, []);
   const encounter = opened.c.encounterId && opened.c.encounterId !== '-' ? opened.c.encounterId : '';
+  if (stopped)
+    return (
+      <StoppedReview
+        c={c}
+        view={view}
+        snapshot={snapshot}
+        opened={opened}
+        why={stale ? STALE_WORDS : MOVED_WORDS}
+        binding={bindingLine(opened, encounter)}
+        live={live}
+        onClose={onClose}
+        onReopen={onReopen}
+      />
+    );
   const submit = () => {
     if (moved) return;
     onSending(true);
@@ -190,11 +256,31 @@ function ReviewBody({
       },
     );
   };
-  // Only a stale plan or case version asks for a fresh look; any other refusal (a 403 naming the Workflow role, a 409
-  // naming who the task is assigned to) is shown as the server worded it.
-  const stale = decide.error && isApiError(decide.error) && decide.error.code === 'stale_version';
   return (
     <Stack gap="sm" ref={body}>
+      {/* A review that replaces a stopped one says so first: why that decision was not recorded and what changed */}
+      {opened.replaces ? (
+        <Paper
+          withBorder
+          p="sm"
+          radius="md"
+          ref={note}
+          tabIndex={-1}
+          role="group"
+          aria-labelledby={noteTitle}
+          data-testid="review-replaces"
+        >
+          <Stack gap={6}>
+            <Text size="sm" fw={600} id={noteTitle}>
+              {`Now reviewing the current plan, v${opened.view.plan.version}`}
+            </Text>
+            <Text size="sm">
+              {`${replacedWords(opened.replaces, opened)} Nothing is decided until you confirm it.`}
+            </Text>
+            <WhatChanged rows={whatChanged(opened.replaces, opened)} />
+          </Stack>
+        </Paper>
+      ) : null}
       {/* What is decided, first: the plan's own action, as every other place on the page names it */}
       <PlanHeadline words={planWords(opened.view.plan, opened.c, opened.snapshot)} />
       {/* Then what releasing it is expected to leave at the receiver, with what the reader should know of it */}
@@ -249,18 +335,11 @@ function ReviewBody({
         <Stack gap="sm" className="review-actions" ref={controls}>
           {/* What the decision is bound to, in view beside its controls however far the facts above are scrolled */}
           <Text size="xs" c="dimmed" data-testid="review-binding">
-            {`Bound to plan v${opened.view.plan.version}${encounter ? ` for encounter ${encounter}` : ''} (digest ${shortDigest(opened.view.plan.digest) || 'none'}) and case version ${opened.c.version}: a change to either stops it.`}
+            {bindingLine(opened, encounter)}
           </Text>
-          {moved ? (
+          {decide.error ? (
             <Alert color="red" variant="light" role="alert">
-              The plan or the case changed since you opened this, so this decision can&apos;t be recorded.
-              Close this and review the new plan.
-            </Alert>
-          ) : decide.error ? (
-            <Alert color="red" variant="light" role="alert">
-              {stale
-                ? 'Approval no longer valid: the plan or the case changed since you opened this, so this decision was not recorded. Close this and review the new plan.'
-                : describeError(decide.error)}
+              {describeError(decide.error)}
             </Alert>
           ) : null}
           <Group justify="space-between" gap="sm" wrap="wrap">
@@ -289,7 +368,7 @@ function ReviewBody({
                 color={approving ? undefined : 'red'}
                 loading={decide.isPending}
                 onClick={submit}
-                disabled={!!stale || moved}
+                disabled={moved}
               >
                 {approving ? labels.approve : labels.reject}
               </Button>
@@ -305,6 +384,107 @@ function ReviewBody({
           </Text>
         </div>
       ) : null}
+    </Stack>
+  );
+}
+
+/**
+ * A review the case moved under, stopped for good: the plan the person read, why the decision was not recorded (in
+ * the words it was refused with) and what changed, as far as the page has read it. No decision can be pressed here.
+ * "Review current plan" reads the case again and opens a new review on what it reads, which needs its own confirming
+ * press; a read that fails says so and offers to try again, and a case with nothing left to decide says that, with
+ * neither a review nor a decision to press.
+ */
+function StoppedReview({
+  c,
+  view,
+  snapshot,
+  opened,
+  why,
+  binding,
+  live,
+  onClose,
+  onReopen,
+}: {
+  c: CaseDetail;
+  view: PlanView | null | undefined;
+  snapshot: Snapshot | null | undefined;
+  opened: OpenedReview;
+  why: string;
+  binding: string;
+  live: boolean;
+  onClose: () => void;
+  onReopen: (next: Omit<OpenedReview, 'n'>) => void;
+}) {
+  const read = useReadCurrentReview(c.caseId);
+  const again = useRef<HTMLButtonElement>(null);
+  const cancel = useRef<HTMLButtonElement>(null);
+  // A read answered after the dialog closed opens nothing
+  const open = useRef(live);
+  useEffect(() => {
+    open.current = live;
+  }, [live]);
+  // The change as far as the page has read it: none until its reads have caught up with the refusal
+  const rows = readBehind(opened, c, view) ? [] : whatChanged(opened, { c, view, snapshot });
+  const now = read.data;
+  const gone = now && !(now.c.state === 'awaiting_approval' && now.view?.plan) ? now.c : null;
+  // The controls the person was at are gone: keyboard focus moves to the next step, unless it is somewhere it can stay
+  useEffect(() => {
+    if (!document.activeElement || document.activeElement === document.body) again.current?.focus();
+  }, []);
+  // A read that failed gives focus back to the press that tries again; with nothing to decide, to Cancel
+  useEffect(() => {
+    if (read.isError) again.current?.focus();
+  }, [read.isError]);
+  useEffect(() => {
+    if (gone) cancel.current?.focus();
+  }, [gone]);
+  const reviewCurrent = () =>
+    read.mutate(undefined, {
+      onSuccess: (fresh) => {
+        if (!open.current || fresh.c.state !== 'awaiting_approval' || !fresh.view?.plan) return;
+        onReopen({
+          decision: opened.decision,
+          c: fresh.c,
+          view: fresh.view,
+          snapshot: fresh.snapshot,
+          replaces: { c: opened.c, view: opened.view, snapshot: opened.snapshot },
+        });
+      },
+    });
+  return (
+    <Stack gap="sm" data-testid="review-stopped">
+      {/* The plan the person read, so the refusal and the change are read against it */}
+      <PlanHeadline words={planWords(opened.view.plan, opened.c, opened.snapshot)} />
+      <Alert color="red" variant="light" role="alert" data-testid="review-refusal">
+        {gone ? why : `${why} Review the current plan to decide again.`}
+      </Alert>
+      {rows.some((r) => r.changed) ? <WhatChanged rows={rows} /> : null}
+      <Text size="xs" c="dimmed" data-testid="review-binding">
+        {binding}
+      </Text>
+      {read.isError ? (
+        <Alert color="red" variant="light" role="alert" data-testid="review-current-failed">
+          {`The current plan could not be read: ${describeError(read.error)}. Nothing was decided; try again, or cancel.`}
+        </Alert>
+      ) : null}
+      {gone ? (
+        <Alert color="gray" variant="light" role="alert" data-testid="review-current-gone">
+          {gone.state === 'awaiting_approval'
+            ? 'The case has no plan to decide on now. Nothing was decided in this review.'
+            : `The case is no longer waiting for a decision: it is ${humanize(gone.state).toLowerCase()} now. Nothing was decided in this review.`}
+        </Alert>
+      ) : null}
+      <Group justify="flex-end" gap="sm" wrap="wrap">
+        <Button variant="default" ref={cancel} onClick={onClose}>
+          Cancel
+        </Button>
+        {gone ? null : (
+          <Button ref={again} loading={read.isPending} onClick={reviewCurrent}>
+            Review current plan
+          </Button>
+        )}
+      </Group>
     </Stack>
   );
 }

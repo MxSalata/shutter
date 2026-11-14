@@ -476,9 +476,15 @@ function CaseBody({ c }: { c: CaseDetail }) {
       <ApprovalReview
         c={c}
         view={facts.plan}
+        snapshot={facts.snapshot}
         review={review}
         onClose={() => setReview(null)}
         onSwitch={(decision) => setReview((r) => (r ? { ...r, decision } : r))}
+        onReopen={(next) => {
+          // A new opening on the case as just read: its own comment, key and confirming press
+          openings.current += 1;
+          setReview({ ...next, n: openings.current });
+        }}
       />
       {/* The case as the API sends it, for the engineer: open in Technical */}
       <Stack mt="lg">
