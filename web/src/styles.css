@@ -2654,7 +2654,7 @@ main[data-assistant='beside'] .stack-scroll {
   background: var(--mantine-color-teal-light);
 }
 /* A question's "Ask Shutter about this" (features/assistant/AskAbout.tsx) and what it opens: in the panel, and under the
-   question below the wide breakpoint. On a phone the button is a 44 px touch target, as Ask's chips are. */
+   question below the wide breakpoint. Its size, 44 px on a phone, is set in the component. */
 .ask-focus {
   border: calc(0.0625rem * var(--mantine-scale)) solid var(--mantine-color-default-border);
   border-left: 4px solid var(--mantine-primary-color-filled);
@@ -2662,9 +2662,4 @@ main[data-assistant='beside'] .stack-scroll {
 }
 .ask-about {
   flex: none;
-}
-@media (max-width: 47.99em) {
-  .ask-about.ask-about {
-    --ai-size: 44px;
-  }
 }

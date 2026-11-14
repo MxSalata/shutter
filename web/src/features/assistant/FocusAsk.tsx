@@ -47,7 +47,11 @@ export function FocusAsk({ focus, inline = false }: { focus: PageFocus; inline?:
   const mine = asked.find((a) => a.question === focus.question);
   const answer = usePageQuestion(mine?.questionId);
   const state = answer.data?.state;
-  const failed = ask.isError || answer.isError || (!!state && !isAnswering(state) && state !== 'answered');
+  // A refusal of the last question sent from here shows while that is still the question on the page: a changed answer
+  // is a new question, offered with its own button
+  const sentThis = ask.variables?.ask.question === focus.question;
+  const askFailed = ask.isError && sentThis;
+  const failed = askFailed || answer.isError || (!!state && !isAnswering(state) && state !== 'answered');
   const headingId = `ask-focus-${focus.id}${inline ? '-inline' : ''}`;
 
   const send = () => {
@@ -122,7 +126,7 @@ export function FocusAsk({ focus, inline = false }: { focus: PageFocus; inline?:
                 <Loader size="xs" aria-hidden />
                 <Text size="sm">Asking the agent…</Text>
               </Group>
-            ) : ask.isError ? (
+            ) : askFailed ? (
               <AskError error={ask.error} />
             ) : (
               <Group>

@@ -296,7 +296,7 @@ export function PageChat({ page }: { page: string }) {
       </Group>
       {focus ? (
         <Suspense fallback={<Loader size="sm" aria-label="Opening the question" />}>
-          <FocusAsk key={`${focus.id} ${focus.question}`} focus={focus} />
+          <FocusAsk key={focus.id} focus={focus} />
         </Suspense>
       ) : null}
       <Stack gap="sm">

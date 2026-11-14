@@ -50,6 +50,11 @@ export interface PageFocus {
   written: string;
 }
 
+/** Whether two of a page's questions read the same, field by field. */
+const sameFocus = (a: PageFocus, b: PageFocus) =>
+  (Object.keys(a) as (keyof PageFocus)[]).every((k) => a[k] === b[k]) &&
+  Object.keys(a).length === Object.keys(b).length;
+
 /** A question asked about a page in this tab: its id on the server (or in the mock) and its words. */
 export interface PageAsked {
   questionId: string;
@@ -72,6 +77,11 @@ interface AssistantState {
   tookAutoAsk: () => void;
   /** Opens the panel on one of the page's questions ("Ask Shutter about this"). */
   askAbout: (focus: PageFocus) => void;
+  /**
+   * Keeps the question in focus in step with the page while the panel is open on it: the same page and control, with
+   * the answer and what it does as the page has them now. Any other question, or a closed panel, is left as it is.
+   */
+  followFocus: (focus: PageFocus) => void;
   addAsked: (page: string, asked: PageAsked) => void;
 }
 
@@ -94,6 +104,12 @@ export const useAssistant = create<AssistantState>((set, get) => ({
     remember(true);
     set({ open: true, focus });
   },
+  followFocus: (focus) =>
+    set((s) =>
+      s.open && s.focus?.page === focus.page && s.focus.id === focus.id && !sameFocus(s.focus, focus)
+        ? { focus }
+        : s,
+    ),
   addAsked: (page, asked) =>
     set((s) => ({ threads: { ...s.threads, [page]: [...(s.threads[page] ?? []), asked] } })),
 }));
