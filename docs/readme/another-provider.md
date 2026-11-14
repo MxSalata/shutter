@@ -31,7 +31,7 @@ Shutter's runner always sends `max_tokens` (16000) when it opens the session ([A
 
 Run these in the namespace Shutter is installed in, as a user who may write the wallet and the Config Store (the test used `_SYSTEM`). The test passed the key as a parameter of a temporary SQL procedure over the instance's HTTP API, so that it never appeared on a screen or in a file; the calls inside it are the ones below. In a terminal, which the test didn't use, read the key into `key` without echo (`Use $PRINCIPAL:(:"+S")` before the `Read`, `Use $PRINCIPAL:(:"-S")` after it) and `Kill key` when done.
 
-**1. The wallet secret.** The same resource and collection Shutter's own setup uses, and a secret of its own, so Shutter's `Shutter.Anthropic` is left alone (the test instance had none, and no `Shutter` collection or `Shutter_Secrets` resource either, so this created both):
+**1. The wallet secret.** The same resource and collection Shutter's own setup uses, and a secret of its own, so Shutter's `Shutter.Anthropic` is left alone (the test instance had none, and no `Shutter` collection or `Shutter_Secrets` resource either, so this created both). Now that the install takes `OPENAI_API_KEY`, it owns the name `Shutter.OpenAI` and removes that secret whenever it configures Anthropic or clears the provider, so a by-hand configuration kept beside Shutter's needs a secret with a different name, here and in step 2. The calls as tested:
 
 ```objectscript
 Do ##class(Shutter.Setup).EnsureSecretResource()
