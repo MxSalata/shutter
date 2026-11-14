@@ -91,7 +91,7 @@ export interface PlanReason {
   entry?: { code: string; title: string };
   /** The evidence sections the plan cites, in the Evidence tab's order. */
   refs: EvidenceRef[];
-  /** The catalogue entries the plan cites, the one it follows first. */
+  /** The catalogue entries the plan's citations name, each of which the Evidence tab has a line about. */
   entries: string[];
 }
 
@@ -116,9 +116,8 @@ export function planReason(
   const code = str(p.catalogueEntry).split('@')[0];
   const cited = asArray(p.evidenceRefs).filter((r): r is string => typeof r === 'string');
   const refs = EVIDENCE_REFS.filter((r) => cited.includes(r));
-  const entries = [
-    ...new Set([...(code ? [code] : []), ...catalogueEntriesOf(cited).map((e) => e.split('@')[0])]),
-  ];
+  // Only the entries the plan's own citations name: each has a line on the Evidence tab for its chip to open
+  const entries = [...new Set(catalogueEntriesOf(cited).map((e) => e.split('@')[0]))];
   if (!why && !code && !refs.length) return null;
   return { why, entry: code ? { code, title: entryTitle(snapshot, code) } : undefined, refs, entries };
 }

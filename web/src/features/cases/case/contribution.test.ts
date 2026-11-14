@@ -108,6 +108,8 @@ describe("the plan's recorded reason", () => {
     expect(reasonLabel(planReason(planOf('C-000003'), snapshotOf('C-000003'))!)).toBe(
       'Why: Committed after all',
     );
+    // S3's plan follows E3 without citing it: the entry names the reason, and no chip offers a line that is not there
+    expect(planReason(planOf('C-000003'), snapshotOf('C-000003'))!.entries).toEqual([]);
   });
 
   it('names no title when the evidence is not read, and makes nothing up', () => {
@@ -126,7 +128,9 @@ describe("the plan's recorded reason", () => {
     const reason = planReason(planOf('C-000028'), snapshotOf('C-000028'))!;
     expect(reason.why).toBe(planOf('C-000028').plan!.why);
     expect(reason.entry?.code).toBe('E2');
-    expect(reason.entries).toEqual(['E2']);
+    // Its citations name the catalogue, not an entry: there is no line on the Evidence tab to open, so no chip
+    expect(reason.entries).toEqual([]);
+    expect(reason.refs).toEqual(['route', 'ward_state', 'receipt', 'timeline']);
   });
 });
 
