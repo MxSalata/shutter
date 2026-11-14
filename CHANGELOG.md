@@ -12,7 +12,7 @@ The release and its CONTRACTS version are named when this is merged.
 - **Its own gate, and capability that is measured, never declared.** The gate needs the server's CapabilityStatement and a recorded conformance run against the same software.
 - **No dry run, said on every decision.**
 - **At most one update per approval, and only a person's.** No automatic, tier, incident or standing-approval release, and no engine resend beside it.
-- **Proof.** It runs end to end, in the steps CI runs, on an IRIS for Health 2026.2 instance against Shutter's own test FHIR server, which is held to the answers InterSystems IRIS for Health's FHIR server gave when measured (2026.2, 2026.3.0AI Build 154 and 2027.1.0AI Build 109 answered alike on the write path; the conformance file's 236 exchanges were run against Build 109). It has not been run against a live IRIS for Health FHIR server in this release.
+- **Proof.** It runs end to end, in the steps CI runs, on an IRIS for Health 2026.2 instance against Shutter's own test FHIR server, which is held to the answers InterSystems IRIS for Health's FHIR server gave when measured (2026.2, 2026.3.0AI Build 154 and 2027.1.0AI Build 109 answered alike on the write path; the conformance file's 234 exchanges for IRIS for Health were run against Build 109). It was also run against IRIS for Health's own FHIR server (2026.2 and 2026.3.0AI Build 154, 14 November 2026); the request, the answers and the history are in [receipt-fhir.md](docs/readme/receipt-fhir.md).
 - **What it is not.** No create, admission, discharge, bed move, merge or document; no other FHIR server; no agent plans it.
 
 ## 1.4.5 (13 November 2026)

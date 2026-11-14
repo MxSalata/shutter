@@ -1,6 +1,6 @@
-# FHIR R4: one profile, proved on a test server
+# FHIR R4: one supported profile
 
-## What it does
+## What is supported
 
 In this release the receiver must be InterSystems IRIS for Health's own FHIR R4 server. The capability check reads a proof document as `tests/conformance/fhir_conformance.py` writes it after a run with no differing exchange, and the conformance file holds that server's answers. The document is not signed: whoever imports one vouches that the run took place. No other FHIR server can pass it, except Shutter's own test server, which is held to those answers. A run compares the status, the headers and the fields the file records for each exchange, not the whole answer.
 
@@ -171,7 +171,8 @@ On IRIS for Health (2026.2, 2026.3.0AI.154, 2027.1.0AI.109) the tag stays on Shu
 
 - **Unit classes,** all green in the whole unit suite on IRIS for Health 2026.2 (1261 passed, 0 failed): `Shutter.Test.FHIRProfile` (the entry and its validator), `FHIRReader` and `FHIRTrust` (the reads, the projection and what counts as the receiver's own answer), `FHIRStores` (the binding, the one-write fence, the sealed read, the proof), `FHIRPlan`, `FHIRPlanJudge` and `FHIRProposal` (the one body), `FHIRGate` (every row, at both stages), `FHIRExecute` (the write, its classifier, the fence and the admission), `FHIRVerify` and `FHIRJudge` (the walk and the six verdicts), `FHIRFlow` (the case's path and its every stop), `FHIRInstall` (the four items), `FHIRFacade` and `FHIRFacadeConformance` (the test server), and `SnapshotMaterial` (every recorded snapshot's material digest unchanged).
 - **End to end:** `tests/e2e/fhir_receiver_check.py` on a demo install against the test server, variants 0, A, B, C and D: no proof yet blocks, the move is approved by a person and verified, a lost answer is verified from the history, Shutter's update is refused with a 412 after another writer's change and is not retried, and a switched-off entry sends nothing.
-- **The conformance file:** 245 exchanges in the conformance file, 244 for the test server and 236 for IRIS for Health. The test server's 244 were run over HTTP on 2026.2 with none differing, and that run wrote the proof file the gate reads.
+- **The conformance file:** 245 exchanges in the conformance file, 244 for the test server and 234 for IRIS for Health. Two listings of history that Shutter never asks for, a type's and the whole system's, are measured on the test server only. The test server's 244 were run over HTTP on 2026.2 with none differing, and that run wrote the proof file the gate reads.
+- **IRIS for Health's own FHIR server:** on 14 November 2026 its 234 exchanges were run over HTTP on 2026.2 and on 2026.3.0AI Build 154 with none differing, and each run wrote a proof; with that proof the end-to-end check's variants A and D passed on both builds. Build 109 was not run. The record is [receipt-fhir.md](receipt-fhir.md).
 - **What was measured about IRIS for Health's FHIR server,** on 2026.2, 2026.3.0AI.154 and 2027.1.0AI.109, identically: a stale or unknown ETag in `If-Match` answered 412 and wrote nothing; the ETag is `W/"versionId"`; a good write answers 200 with an empty body; each `PUT` replaces `meta.tag`; the smallest role that can write is `FHIR_API:RW`.
 - **The engine:** what the engine's record proves was measured on 2026.2 only.
 - Not tested: a restart of the production with a case in flight, the engine still retrying end to end, and history faults over HTTP.
