@@ -19,6 +19,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { Term } from '@/components/Term';
 import { TRIAL, trialHref } from '@/env/mode';
 import { PORTAL_SIGN_IN } from '@/lib/hospital';
+import { useTechnical } from '@/stores/appearance';
 import { hueVar } from '@/lib/hues';
 import {
   PORTAL_PAGE,
@@ -85,13 +86,17 @@ export const START_S2 = '/scenarios?mode=board&start=S2';
  * whole path, then S3 and S8 on the same cards. The start only opens the Scenarios page at S2's card: Run there is the
  * second choice, and nothing runs before it. The whole list stays a link away. What a plain resend writes in S8 is left
  * to S8's own card and case, where the exemption that lets it through is said beside it: the page's word budget has no
- * room for both here.
+ * room for both here. Plain says what the gate is in passing (rule-based safety checks, in the guided tour's words),
+ * and the gate and the board are each one press from their definitions, one word longer than Technical's sentence
+ * (the page's word budget allows no more); Technical keeps the sentence in its terms.
  */
 function FirstStep() {
   const can = useCan();
   // A site install plays no scenarios for anyone (the Scenarios page says so): its way in is its own cases
   const playerOff = useHealth().data?.demo === false;
   const hidden = scenariosHidden(can) || playerOff;
+  // Plain names the gate and the board in words, the gate one press from its definition; Technical keeps the terms
+  const technical = useTechnical();
   return (
     <Card padding="md" component="section" aria-labelledby="home-first-step" data-tour="home-first-step">
       <Stack gap="xs" align="flex-start">
@@ -99,11 +104,19 @@ function FirstStep() {
           New here?
         </Title>
         <Text maw="68ch">
-          {playerOff
-            ? 'A failed delivery your productions forward becomes a case. Open one to see the evidence, the plan and who decided.'
-            : hidden
-              ? "This hospital's failures are already in Cases. Open one to see the evidence, the plan and who decided."
-              : 'Scenarios replay known failures: AI Hub agents propose a plan, and a deterministic gate decides whether it may write. Start with S2 in Board mode, then S3, then S8, where the board stops for a person.'}
+          {playerOff ? (
+            'A failed delivery your productions forward becomes a case. Open one to see the evidence, the plan and who decided.'
+          ) : hidden ? (
+            "This hospital's failures are already in Cases. Open one to see the evidence, the plan and who decided."
+          ) : technical ? (
+            'Scenarios replay known failures: AI Hub agents propose a plan, and a deterministic gate decides whether it may write. Start with S2 in Board mode, then S3, then S8, where the board stops for a person.'
+          ) : (
+            <>
+              Scenarios replay failures: AI Hub agents propose a plan; rule-based safety checks (the{' '}
+              <Term term="gate">gate</Term>) decide if it may be sent. Start with S2 in Board mode, then S3,
+              then S8, where the <Term term="board">board</Term> stops for a person.
+            </>
+          )}
         </Text>
         <Group gap="sm" align="center">
           <Button component={Link} to={hidden ? '/cases' : START_S2} mih={44}>

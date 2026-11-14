@@ -8,7 +8,7 @@ import { PORTAL_PAGE, SECTIONS } from '@/features/shell/sections';
 import { server } from '@/mocks/node';
 import { resetMock } from '@/mocks/handlers';
 import { useAppearance } from '@/stores/appearance';
-import { layer1Words } from '@/test/words';
+import { layer1Words, sentence } from '@/test/words';
 import { theme } from '@/theme';
 import HomePage, { START_S2 } from './HomePage';
 
@@ -118,14 +118,33 @@ describe('HomePage', () => {
       'href',
       '/scenarios',
     );
-    // The route, in order. What a plain resend writes in S8 is said on S8's card and case, with its exemption beside
-    // it, and not here without it
+    // The route, in order, in Plain's words: the gate said in passing, the gate and the board one press from their
+    // definitions. What a plain resend writes in S8 is said on S8's card and case, with its exemption beside it, and not
+    // here without it
     expect(
       screen.getByText(
-        /Start with S2 in Board mode, then S3, then S8, where the board stops for a person\.$/,
+        sentence(
+          'Scenarios replay failures: AI Hub agents propose a plan; rule-based safety checks (the gate) decide if it may be sent. Start with S2 in Board mode, then S3, then S8, where the board stops for a person.',
+        ),
       ),
     ).toBeInTheDocument();
+    expect(within(first).getByText('gate')).toHaveAttribute('aria-describedby');
+    expect(within(first).getByText('board')).toHaveAttribute('aria-describedby');
     expect(first).not.toHaveTextContent(/every check passed/);
+  });
+
+  it('keeps the route in its terms under Technical', async () => {
+    useAppearance.setState({ detail: 'technical' });
+    try {
+      renderHome();
+      expect(
+        await screen.findByText(
+          'Scenarios replay known failures: AI Hub agents propose a plan, and a deterministic gate decides whether it may write. Start with S2 in Board mode, then S3, then S8, where the board stops for a person.',
+        ),
+      ).toBeInTheDocument();
+    } finally {
+      useAppearance.setState({ detail: 'plain' });
+    }
   });
 
   it('offers the public demo the case where the agents disagree and one to approve', async () => {
