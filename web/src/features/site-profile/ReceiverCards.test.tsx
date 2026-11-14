@@ -87,4 +87,11 @@ describe('a FHIR receiver on the site profile page', () => {
       cleanup();
     }
   });
+
+  it('says an overtaken failure stops for a person, and that only a person releases the update', () => {
+    const card = cardOf([downstream, fhirEntry(true)], 'FHIR Ward Out');
+    expect(card.getByText('Overtaken failure: stops for a person; nothing is sent.')).toBeInTheDocument();
+    expect(card.getByText('Only a person releases its update, whatever the tier.')).toBeInTheDocument();
+    expect(card.queryByText(/closes, no write/)).toBeNull();
+  });
 });

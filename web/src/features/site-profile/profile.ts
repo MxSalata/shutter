@@ -42,6 +42,9 @@ export const OVERTAKEN_LINE = {
   correct: 'Overtaken failure: asks a person to correct by hand.',
 } as const;
 
+/** The same line for a FHIR receiver: its gate stops an overtaken failure for a person, whatever the policy. */
+export const FHIR_OVERTAKEN_LINE = 'Overtaken failure: stops for a person; nothing is sent.';
+
 /**
  * The category's line for a receiver (or for a category no receiver has), from its history policy. Orders and results
  * has no overtaken failure to speak of: its line is the category's own words in brief, what a case gets and the one

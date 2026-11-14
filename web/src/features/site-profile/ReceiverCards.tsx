@@ -16,7 +16,7 @@ import {
   historyPolicyOf,
 } from '@/lib/categories';
 import { categoryMark, hueVar } from '@/lib/hues';
-import { TIER_LABELS, overtakenLine } from './profile';
+import { FHIR_OVERTAKEN_LINE, TIER_LABELS, overtakenLine } from './profile';
 
 /** The category's mark: its icon in its identity hue on a round surface, dashed for a kind whose cases go to a person. */
 export function CategoryAvatar({ category }: { category: ReceiverCategory }) {
@@ -136,6 +136,7 @@ function FhirReceiverLines({ fhir }: { fhir: FhirReceiverSettings }) {
         Base: <CodeChip>{typeof fhir.base === 'string' ? fhir.base : ''}</CodeChip>
       </Text>
       <Text size="sm">One ward move on an existing Encounter.</Text>
+      <Text size="sm">Only a person releases its update, whatever the tier.</Text>
       <Text size="sm" c="dimmed">
         {on
           ? 'Recovery on: after a person approves, Shutter may send the one update.'
@@ -236,7 +237,7 @@ function ReceiverCard({
           </Group>
         ) : null}
         <Text size="md">{text.gist}.</Text>
-        <Text size="md">{overtakenLine(category, policy)}</Text>
+        <Text size="md">{fhir ? FHIR_OVERTAKEN_LINE : overtakenLine(category, policy)}</Text>
         {overridden ? (
           <Text size="sm" c="dimmed">
             {`Set on this receiver: ${policy === 'correct' ? 'correct the history' : 'keep what is current'}, not what its category gives.`}
