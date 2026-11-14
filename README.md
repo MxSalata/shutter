@@ -250,13 +250,14 @@ With a clone at `<module>` inside the container:
 ```objectscript
 Do $SYSTEM.OBJ.Load("<module>/src/Shutter/Setup.cls", "ck")
 Write ##class(Shutter.Setup).CreateNamespace("SHUTTER")
+Do $SYSTEM.OBJ.Delete("Shutter.Setup")
 zn "SHUTTER"
 Do $SYSTEM.OBJ.Load("<module>/vendor/ipm/zpm-0.10.10.xml", "ck")
 zpm "repo -reset-defaults"
 zpm "install iris-shutter"
 ```
 
-The last command installs the registry's latest version, which can lag this repository; `zpm "list"` shows the version installed. For the exact clone, replace the last two lines with `zpm "load <module>"`.
+`Shutter.Setup` is needed only to make the namespace, so its copy in the namespace you started from is deleted: start from a namespace that has no Shutter in it (USER on a stock instance), or the delete removes that install's setup class. `repo -reset-defaults` prints IPM's own warning about `-password`; the command passes none and the public registry needs none. The last command installs the registry's latest version, which can lag this repository; `zpm "list"` shows the version installed. For the exact clone, replace the last two lines with `zpm "load <module>"`.
 
 [Installation, upgrades and uninstall](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md)
 

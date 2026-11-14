@@ -1999,7 +1999,7 @@ demo items, switched off on a site install with the others.
   `Shutter_Approve` and `Shutter_Intake`, the roles `Shutter_Operator`, `Shutter_Approver`, `Shutter_DownstreamClient`,
   `Shutter_WebApp` and `Shutter_Forwarder`, the Workflow role "Shutter Approvers", the seeds (board members, model
   prices, block reasons, the site profile, the catalogue), the web applications `/api/shutter` and `/shutter`, the daily
-  task "Shutter retention", the production's default settings, and starts `Shutter.Production` as the namespace's
+  task "Shutter retention", the task "Shutter case reminders" (every 15 minutes, inert until the site profile turns reminders on), the production's default settings, and starts `Shutter.Production` as the namespace's
   auto-start production (a different running production in that namespace is stopped first). With `demo = 1` it also
   creates the users `operator`, `approver` and `forwarder`, the demo receiver (its resource and role, `/downstream/api`,
   `downstream-client` and the `DownstreamAPI` credential), imports the recorded runs, and creates the message purge
