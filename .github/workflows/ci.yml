@@ -1,10 +1,21 @@
 name: CI
 
 # The jobs run on GitHub-hosted runners: the repository is public, and no job of a public repository runs on
-# private machines. CI runs on main after a merge, and on a branch only by hand (workflow_dispatch): branch work is
-# tested on the development IRIS instances before it is pushed. A push that changes only the docs
-# (docs/ and the top-level Markdown) runs nothing here; the knowledge's Markdown is checked, so it still runs. The
-# repository checks (repository-checks.yml) run on every push to main, docs-only ones too, and CI calls them as well.
+# private machines. CI runs on main after a merge, on every pull request before it is merged, and on any other branch
+# only by hand (workflow_dispatch): branch work is tested on the development IRIS instances before it is pushed. A push
+# that changes only the docs (docs/ and the top-level Markdown) runs nothing here; the knowledge's Markdown is checked,
+# so it still runs. The repository checks (repository-checks.yml) run on every push to main, docs-only ones too, and CI
+# calls them as well.
+#
+# Which jobs run on a pull request: the repository checks, the web application, the browser suite and the recordings and
+# scenarios run on every pull request, a docs-only one included (the paths-ignore above belongs to the push), for a
+# person's as for Dependabot's: they need no secret and write nothing. The IRIS shards and the image job stay on main
+# and on Dependabot's pull requests (see their comments); the release jobs run on a push to main alone, and the Pages
+# deployment on main alone, with the repository variable DEPLOY_DEMO set. Nothing that publishes, releases, deploys or
+# holds a write token runs on a pull request, and the trigger is pull_request, never pull_request_target: a pull request
+# from a fork gets a read-only token and no secret, and runs the workflow file of its own branch. The condition that
+# used to keep other pull requests out (since 20 October) was written for a self-hosted runner, a private machine on
+# which a stranger's pull request must not run; since 3 November every job runs on GitHub's hosted runners.
 on:
   push:
     branches: [main]
@@ -12,7 +23,7 @@ on:
       - 'docs/**'
       - '*.md'
   workflow_dispatch:
-  # Dependabot's update pull requests are tested before they are merged; no other pull request runs
+  # Every pull request is tested before it is merged (see above)
   pull_request:
 
 # Least privilege by default; the Pages deployment raises what it needs.
@@ -41,7 +52,6 @@ jobs:
   web:
     name: Web application
     runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request' || github.event.pull_request.user.login == 'dependabot[bot]'
     timeout-minutes: 30
     defaults:
       run:
@@ -101,7 +111,6 @@ jobs:
   web-e2e:
     name: Web application in the browser
     runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request' || github.event.pull_request.user.login == 'dependabot[bot]'
     timeout-minutes: 75
     defaults:
       run:
@@ -137,7 +146,6 @@ jobs:
   fixtures:
     name: Recordings and scenarios
     runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request' || github.event.pull_request.user.login == 'dependabot[bot]'
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -220,6 +228,7 @@ jobs:
       fail-fast: false
       matrix:
         shard: [board, policy, checks]
+    # A pull request runs these only when Dependabot made it (this condition)
     if: github.event_name != 'pull_request' || github.event.pull_request.user.login == 'dependabot[bot]'
     timeout-minutes: 45
     env:

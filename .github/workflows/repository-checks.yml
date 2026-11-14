@@ -8,12 +8,17 @@ name: Repository checks
 # still wait for these checks; a push that changes code therefore runs it twice, once on its own and once inside CI.
 # Called from CI, github.event, github.event_name, github.sha and github.ref are CI's, so the dash check reads the
 # same pushed commits either way.
+#
+# Every pull request runs it, from a person or from Dependabot, a docs-only one included, before it is merged: it needs
+# no secret and writes nothing. The trigger is pull_request and must stay so (never pull_request_target): a pull request
+# from a fork then gets a read-only token and no secret, and runs the workflow file of its own branch. The condition
+# that kept other pull requests out was written for a self-hosted runner, a private machine, which no job uses now (all
+# run on GitHub's hosted runners); see CI's header. A pull request runs this twice, once here and once inside CI, about
+# five minutes each.
 on:
   push:
     branches: [main]
   workflow_dispatch:
-  # Dependabot's update pull requests are checked before they are merged; no other pull request runs (the job's
-  # condition)
   pull_request:
   workflow_call:
 
@@ -26,11 +31,11 @@ permissions:
 # few minutes and writes nothing.
 
 jobs:
-  # The job reads only its own checkout, waits for no other job and uses no secret.
+  # The job reads only its own checkout, waits for no other job, uses no secret and writes nothing, so it runs on
+  # every event this workflow listens to, a pull request from a fork included.
   repository-checks:
     name: Repository checks
     runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request' || github.event.pull_request.user.login == 'dependabot[bot]'
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
