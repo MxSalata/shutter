@@ -152,11 +152,16 @@ describe('Ask Shutter about one of the page’s questions, in the panel', () => 
     expect(card.getByText(FOCUS.consequence)).toBeInTheDocument();
     expect(await card.findByText(FOCUS_NOTE_LIVE)).toBeInTheDocument();
     expect(await card.findByText(ANSWER)).toBeInTheDocument();
-    expect(
-      card.getByText(
-        'Answered live by the Explain agent on IRIS AI Hub, with claude-opus-5-5. Its run is message 4321 in the Management Portal.',
-      ),
-    ).toBeInTheDocument();
+    // The run's message is a link into the Management Portal, as a case's agent runs are
+    const run = card.getByRole('link', { name: 'message 4321' });
+    expect(run).toHaveAttribute(
+      'href',
+      '/csp/healthshare/shutter/EnsPortal.MessageContents.zen?HeaderClass=Ens.MessageHeader&HeaderId=4321',
+    );
+    expect(run).toHaveAttribute('target', '_blank');
+    expect(run.parentElement).toHaveTextContent(
+      'Answered live by the Explain agent on IRIS AI Hub, with claude-opus-5-5. Its run is message 4321 in the Management Portal.',
+    );
     // Once, to the page question route, with the page's summary and the question it is about
     expect(posts()).toHaveLength(1);
     expect(posts()[0].path).toBe(`${BASE}/page-questions`);

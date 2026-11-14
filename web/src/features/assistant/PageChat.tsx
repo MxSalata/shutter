@@ -19,12 +19,14 @@ import { isAnswering, useAskPageQuestion, usePageQuestion, useSettings } from '@
 import type { PageQuestion } from '@/api/types';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { LiveUnavailableNotice } from '@/components/LiveUnavailableNotice';
+import { PortalLink } from '@/components/PortalLink';
 import { StatusBadge } from '@/components/StatusBadge';
 import { TechDetail } from '@/components/TechDetail';
 import { TRIAL } from '@/env/mode';
 import { isApiError } from '@/lib/errors';
 import { parseTime } from '@/lib/format';
 import { liveRefusal, liveRefusalInText, liveUnavailable } from '@/lib/liveAgents';
+import { messageContentsLink } from '@/lib/messageLink';
 import { MAIN_ID } from '@/features/shell/SkipLink';
 import { AnswerText, focusSoon } from '@/features/cases/ask/AskPanel';
 import { guideFor } from './guides';
@@ -56,6 +58,12 @@ const day = new Intl.DateTimeFormat('en-GB', {
 
 /** The agent that answers a question about a page, as an answer names it. */
 export const PAGE_AGENT = 'the Explain agent on IRIS AI Hub';
+
+/**
+ * The Management Portal's base path in Shutter's own namespace, where the Explain agent runs: a page answer's run is a
+ * message there. On IRIS for Health a namespace's default application is /csp/healthshare/<namespace>/ (reviews/review.ts).
+ */
+const SHUTTER_PORTAL = '/csp/healthshare/shutter/';
 
 /**
  * Where a page answer came from, in a sentence: sample data in the trial until its answers are recordings; the API mimic
@@ -127,7 +135,8 @@ function Cites({ cites }: { cites: string[] }) {
 
 /**
  * One question and its answer, read every 2 s until it is answered or refused. Off the trial, an answer with its run's
- * message names it, the agent's request and answer in the production's own record (the Management Portal's messages).
+ * message links to it, the agent's request and answer in the production's own record (the Management Portal's message
+ * page), as a case's agent runs do.
  */
 export function Turn({
   questionId,
@@ -162,9 +171,19 @@ export function Turn({
             <Cites cites={a.answer.cites ?? []} />
             <Text size="xs" c="dimmed">
               {pageProvenance(a)}.
-              {!TRIAL && a.ensMessageId
-                ? ` Its run is message ${a.ensMessageId} in the Management Portal.`
-                : ''}
+              {!TRIAL && a.ensMessageId ? (
+                <>
+                  {' Its run is '}
+                  <PortalLink
+                    href={messageContentsLink(SHUTTER_PORTAL, a.ensMessageId)}
+                    what={`message ${a.ensMessageId}, the agent's request and answer`}
+                    size="xs"
+                  >
+                    message {a.ensMessageId}
+                  </PortalLink>
+                  {' in the Management Portal.'}
+                </>
+              ) : null}
             </Text>
           </Stack>
         ) : refused ? (
