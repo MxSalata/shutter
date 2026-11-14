@@ -165,11 +165,7 @@ export function ProofPanel({ figures, proof = PROOF }: { figures: boolean; proof
                 {GIVEN_THE_ENTRY}
               </Text>
               <Box style={{ gridColumn: '1 / -1' }}>
-                <StatTile
-                  label="Safety"
-                  figure="Every write"
-                  caption="gated, rehearsed, released and verified"
-                />
+                <StatTile label="Safety" figure="Every write" caption="gated, then explicitly released" />
               </Box>
             </SimpleGrid>
           </>
