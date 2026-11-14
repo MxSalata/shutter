@@ -66,7 +66,7 @@ ClassMethod Judge(ctx As %DynamicObject, Output text As %String, Output detail A
 ///              "prior_location": "Location/ward-a", "target_location": "Location/ward-b",
 ///              "locations": [{"reference": "Location/ward-b", "checked_identifier": "WARD-B"}, ...],
 ///              (checked_identifier is a value, looked for under any system, or {"system": "...", "value": "WARD-B"},
-///              the exact pair)
+///              that value and no other under that system)
 ///              "event_time": "2026-11-08T09:00:00Z", "server_owned_fields": []},
 ///  "base_body": "...", "expected_body": "...",
 ///  "attempt": {"outcome": "applied|uncertain|version_conflict|refused|error", "http_status": 200,
@@ -566,8 +566,8 @@ ClassMethod PatientProblem(read As %DynamicObject, b As %DynamicObject, Output u
 }
 
 /// "" when every bound Location read again is the mapped one (active, carrying the checked identifier, case-sensitive:
-/// the value under any system when the binding gives a string, the exact system and value when it gives the pair),
-/// else what is wrong; unread is set when one could not be read at all.
+/// the value under any system when the binding gives a string; when it gives the pair, that value and no other under
+/// that system, as HoldsIdentifier has it), else what is wrong; unread is set when one could not be read at all.
 ClassMethod LocationsProblem(reads As %DynamicArray, b As %DynamicObject, Output unread As %Boolean) As %String [ Private ]
 {
     Set unread = 0
@@ -579,18 +579,19 @@ ClassMethod LocationsProblem(reads As %DynamicArray, b As %DynamicObject, Output
         If '$ISOBJECT(read) || (read.%GetTypeOf("http_status") '= "number") || (read."http_status" '= 200) Set unread = 1 Return ref _ " was not read"
         If ($PIECE(ref, "/", 1) '= "Location") || '..ParseResource(..Str(read, "body"), "Location", $PIECE(ref, "/", 2), .loc) Set unread = 1 Return ref _ " is not the bound Location"
         If ..Str(loc, "status") '= "active" Return ref _ " is not active"
-        Set found = 0, ids = loc.%Get("identifier")
-        Set pair = (want.%GetTypeOf("checked_identifier") = "object"), checked = want."checked_identifier"
-        Set value = $SELECT(pair: checked.value, 1: checked)
+        Set found = 0, ids = loc.%Get("identifier"), checked = want."checked_identifier"
+        If want.%GetTypeOf("checked_identifier") = "object" {
+            // The pair is held to the rule of the Encounter and the Patient: that value, and no other under the system.
+            If '..HoldsIdentifier(ids, checked) Return ref _ " no longer carries the identifier " _ checked.value _ " and no other under its system"
+            Continue
+        }
         If ..IsArray(ids) {
             Set it3 = ids.%GetIterator()
             While it3.%GetNext(.k, .id) {
-                Continue:'..IsObject(id)
-                Continue:(..Str(id, "value") '= value)
-                If 'pair || (..Str(id, "system") = checked.system) Set found = 1
+                If ..IsObject(id) && (..Str(id, "value") = checked) Set found = 1
             }
         }
-        If 'found Return ref _ " no longer carries the identifier " _ value
+        If 'found Return ref _ " no longer carries the identifier " _ checked
     }
     Quit ""
 }

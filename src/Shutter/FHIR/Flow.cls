@@ -113,12 +113,16 @@ ClassMethod Backfill(case As Shutter.Store.Case) As %Integer
 
 // ---- the gate ----
 
-/// Sends the plan to the FHIR gate at one stage. With the FHIR items missing or disagreeing the case blocks here. At
-/// the proposal a plan that writes gets its headline first: the workflow's own would promise a rehearsal.
+/// Sends the plan to the FHIR gate at one stage. With the FHIR items missing or disagreeing the case blocks here, and
+/// at the dispatch the approval is void. At the proposal a plan that writes gets its headline first: the workflow's
+/// own would promise a rehearsal.
 ClassMethod SendGate(p As Shutter.Process.CaseWorkflow, case As Shutter.Store.Case, stage As %String, readId As %String = "") As %Status
 {
     Set problem = ##class(Shutter.FHIR.Install).Problem()
     If problem '= "" {
+        // At the dispatch a person has approved and the read before the write was made: the approval is void, as at
+        // every stop of that stage, and the words claim only that nothing was sent.
+        If stage = "dispatch" Quit ..Stop(p, case, "blocked", "Blocked: the FHIR items are missing or disagree", "The production cannot reach this FHIR receiver: " _ ..Plain(problem) _ ". The approval is void and nothing was sent (FHIR_ITEMS_MISSING)", "", "the FHIR items are missing or disagree")
         Quit ..Stop(p, case, "blocked", "Blocked: the FHIR items are missing or disagree", "The production cannot reach this FHIR receiver: " _ ..Plain(problem) _ ". Nothing was read or sent (FHIR_ITEMS_MISSING)")
     }
     Set plan = $SELECT(p.PlanId = "": "", 1: ##class(Shutter.Store.Plan).%OpenId(p.PlanId))
@@ -580,8 +584,9 @@ ClassMethod SendVerify(p As Shutter.Process.CaseWorkflow, case As Shutter.Store.
 }
 
 /// What the walk established. Verified resolves the case with the verifier's sentence as it is. A walk that asks for
-/// another read is made again after 10, 20 and 40 seconds; then, and for every other outcome, the case goes to a
-/// person with the verifier's sentence and the outcome's reason code.
+/// another read is made again after 10, 20 and 40 seconds (the verifier's own schedule, whatever MaxRefreshes is);
+/// then, and for every other outcome, the case goes to a person with the verifier's sentence and the outcome's
+/// reason code.
 ClassMethod OnVerify(p As Shutter.Process.CaseWorkflow, case As Shutter.Store.Case, result As Shutter.Msg.VerifyResult) As %Status
 {
     If '$ISOBJECT(result) Quit ..ItemFailed(p, case, "the verifier gave no answer")
@@ -594,10 +599,12 @@ ClassMethod OnVerify(p As Shutter.Process.CaseWorkflow, case As Shutter.Store.Ca
         Set case.Outcome = result.Summary
         Quit case.Transition("resolved", result.Summary, "system", ref)
     }
-    If retry && (p.Refreshes < p.MaxRefreshes) {
+    // The further walks follow the verifier's own schedule, which reaches its settle window; the shared budget of the
+    // evidence refreshes and of the read before the write (MaxRefreshes) is not asked.
+    Set wait = $SELECT(retry: ##class(Shutter.Operation.FHIRVerify).RetryWait(p.Refreshes + 1, .of), 1: "")
+    If wait '= "" {
         Set p.Refreshes = p.Refreshes + 1
-        Set wait = 10 * (2 ** (p.Refreshes - 1))
-        Do case.Note("note", "The verification established nothing yet (" _ result.Summary _ "); verifying again in " _ wait _ " s (" _ p.Refreshes _ " of " _ p.MaxRefreshes _ ")", "system", ref)
+        Do case.Note("note", "The verification established nothing yet (" _ result.Summary _ "); verifying again in " _ wait _ " s (" _ p.Refreshes _ " of " _ of _ ")", "system", ref)
         Quit ..Alarm(p, wait, "fhir:verify:retry")
     }
     Set case.Outcome = result.Summary

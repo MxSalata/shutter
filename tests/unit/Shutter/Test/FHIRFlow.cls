@@ -542,6 +542,43 @@ Method TestTheSixOutcomes()
 
 /// The case's reason is the code a stop of the flow closes its own text with, never a code quoted inside other
 /// words: an approver's comment that names one, on any case, is still a rejection, and an earlier round's failing
+/// The FHIR items found missing after the approval, when the read before the write has been made: the stop voids the
+/// approval with its reason, as every stop at the dispatch does, and does not say that nothing was read.
+Method TestItemsMissingAtTheDispatchVoidTheApproval()
+{
+    Do ..Approved(.wf, .case)
+    Set wf = ..Carry(wf)
+    Set ^Shutter.Config("production") = "ShutterTest.NoSuchFhirFlow"
+    Do ..Step(wf, "fhir:preflight", ..Read())
+    Set ^Shutter.Config("production") = ..#PRODUCTION
+    Do ..Stopped(case, 1, "blocked", "Blocked: the FHIR items are missing or disagree", "The production cannot reach this FHIR receiver: No production ShutterTest.NoSuchFhirFlow. The approval is void and nothing was sent (FHIR_ITEMS_MISSING)", "FHIR_ITEMS_MISSING", wf)
+    Do $$$AssertEquals(##class(Shutter.Store.Approval).%OpenId(wf.ApprovalId).RevokedBy, "system: the FHIR items are missing or disagree", "the approval says why it is void")
+    Do $$$AssertTrue(..AllEvents(case) [ "The read before the write was made", "the read before the write was made")
+    Do $$$AssertTrue(..AllEvents(case) '[ "Nothing was read", "and no event says that nothing was read")
+    Do $$$AssertEquals(wf.Keys(), "", "nothing follows by itself: no gate request, no update")
+}
+
+/// The verification's further walks follow their own schedule, whatever Case Workflow's MaxRefreshes is: the same
+/// three, after 10, 20 and 40 seconds, and then the walk that still asks for another read is final.
+Method TestTheVerifyWalksKeepTheirOwnSchedule()
+{
+    For max = 1, 2, 3, 5 {
+        Do ..Verifying(.wf, .case)
+        Set wf.MaxRefreshes = max
+        Set waits = "", walks = 0
+        For walk = 1:1:8 {
+            Do ..Step(wf, "fhir:verify", ..Verified("unresolved", "unknown", 1, "The history could not be read yet."))
+            Set walks = walks + 1
+            Quit:case.State'="verifying"
+            Set waits = waits _ " " _ wf.LastRequest().Timeout
+            Do ..Step(wf, "fhir:verify:retry")
+        }
+        Do $$$AssertEquals(walks _ " |" _ waits, "4 | 10 20 40", "MaxRefreshes " _ max _ ": four walks, the further ones after 10, 20 and 40 seconds")
+        Do $$$AssertEquals(case.State _ "|" _ ..Code(case), "escalated|FHIR_WRITE_OUTCOME_UNKNOWN", "MaxRefreshes " _ max _ ": then the unknown is final")
+        Do $$$AssertTrue(..AllEvents(case) [ "verifying again in 40 s (3 of 3)", "MaxRefreshes " _ max _ ": the case counts the walks of the verification's own schedule")
+    }
+}
+
 /// row of the gate stays the reason where it was.
 Method TestAQuotedCodeIsNotTheReason()
 {
@@ -1013,7 +1050,7 @@ Method ChangeProfile(policy As %DynamicObject = "")
     Set kept = [], list = p.%Get("receivers")
     If $ISOBJECT(list) {
         Set it = list.%GetIterator()
-        While it.%GetNext(.i, .r) { Do:'($ISOBJECT(r)&&(r.%Get("name")=..#RECEIVER)) kept.%Push(r) }
+        While it.%GetNext(.i, .r) { Do:'($ISOBJECT(r)&&((r.%Get("name")=..#RECEIVER)||r.%IsDefined("fhir"))) kept.%Push(r) }
     }
     Do kept.%Push(entry)
     Do p.%Set("receivers", kept)

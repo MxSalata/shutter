@@ -601,11 +601,12 @@ Method ChangeEntry(patch As %DynamicObject)
         Set it = patch.%GetIterator()
         While it.%GetNext(.key, .value) { Do entry.fhir.%Set(key, value) }
     }
-    // Every other entry stays as it is; an earlier copy of this one is replaced
+    // Every other entry stays as it is, but for another FHIR entry (a profile holds one, and an entry behind another
+    // is none a save takes); an earlier copy of this one is replaced
     Set kept = [], list = p.%Get("receivers")
     If $ISOBJECT(list) {
         Set it = list.%GetIterator()
-        While it.%GetNext(.i, .r) { Do:'($ISOBJECT(r)&&(r.%Get("name")=..#RECEIVER)) kept.%Push(r) }
+        While it.%GetNext(.i, .r) { Do:'($ISOBJECT(r)&&((r.%Get("name")=..#RECEIVER)||r.%IsDefined("fhir"))) kept.%Push(r) }
     }
     Do kept.%Push(entry)
     Do p.%Set("receivers", kept)

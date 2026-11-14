@@ -196,6 +196,35 @@ Method TestAFailedReadIsARetry()
     Do $$$AssertEquals($SELECT(rs.%Next(): rs.%Get("n"), 1: -1), 4, "each walk stored its verification")
 }
 
+/// The further walks' schedule and the settle window are held together in the verifier's class: the waits add up to
+/// the window, so the last walk of the schedule is made at or after it, and a walk made at the window is final.
+Method TestTheScheduleReachesTheSettleWindow()
+{
+    Set cls = "Shutter.Operation.FHIRVerify", window = $PARAMETER(cls, "SETTLEFINALSECONDS")
+    Set total = 0, waits = ""
+    For n = 1:1:20 {
+        Set wait = $CLASSMETHOD(cls, "RetryWait", n, .of)
+        Quit:wait=""
+        Set total = total + wait, waits = waits _ " " _ wait
+    }
+    Do $$$AssertEquals(waits _ " | " _ of, " 10 20 40 | 3", "three further walks, after 10, 20 and 40 seconds")
+    Do $$$AssertEquals($CLASSMETHOD(cls, "RetryWait", 0) _ "|" _ $CLASSMETHOD(cls, "RetryWait", of + 1), "|", "and none before the first or after the last")
+    Do $$$AssertTrue(total >= window, "the schedule reaches the settle window (" _ total _ " s of waits, a window of " _ window _ " s)")
+    Quit:'..Sent(.s)
+    // Before the window a failed read asks for another walk
+    Do ..Age(.s, window - 15)
+    Set op = ..Verifier()
+    Set op.Fail = "the reader did not answer in time"
+    Set response = ..Walk(op, .s, .detail)
+    Do $$$AssertEquals(detail.reason _ " " _ detail.retry, "history_unavailable 1", "a walk made before the window asks for another")
+    // The walk the schedule ends with is made its waits after the first, which is itself after the update: at the window
+    Do ..Age(.s, total)
+    Set op = ..Verifier()
+    Set op.Fail = "the reader did not answer in time"
+    Set response = ..Walk(op, .s, .detail)
+    Do $$$AssertEquals(detail.reason _ " " _ detail.retry, "history_unavailable 0", "a walk made where the schedule ends is final")
+}
+
 /// The six outcomes of the Judge, row by row: the word stored and the case's code.
 Method TestTheMappingTable()
 {
@@ -554,11 +583,12 @@ Method ChangeEntry(wards As %String)
         Do map.%Push({"ward": (code), "location": ("Location/ward-" _ ward), "identifier": {"system": "urn:shutter:ward", "value": (code)}})
     }
     Set entry = {"name": (..#RECEIVER), "system": "the ward system (FHIR R4)", "category": "current_state", "tier": 3, "applies": "arrival_order", "resend_timestamp": "original", "cancels": false, "merges": false, "fhir": {"base": (..#BASE), "recovery_enabled": true, "encounter_identifier": {"system": (..#SYS)}, "patient_identifier": {"system": "urn:shutter:demo:mrn", "hl7_authority": "HOSP"}, "marker": {"system": "urn:shutter:recovery"}, "location_map": (map)}}
-    // Every other entry stays as it is; an earlier copy of this one is replaced
+    // Every other entry stays as it is, but for another FHIR entry (a profile holds one, and an entry behind another
+    // is none a save takes); an earlier copy of this one is replaced
     Set kept = [], list = p.%Get("receivers")
     If $ISOBJECT(list) {
         Set it = list.%GetIterator()
-        While it.%GetNext(.i, .r) { Do:'($ISOBJECT(r)&&(r.%Get("name")=..#RECEIVER)) kept.%Push(r) }
+        While it.%GetNext(.i, .r) { Do:'($ISOBJECT(r)&&((r.%Get("name")=..#RECEIVER)||r.%IsDefined("fhir"))) kept.%Push(r) }
     }
     Do kept.%Push(entry)
     Do p.%Set("receivers", kept)

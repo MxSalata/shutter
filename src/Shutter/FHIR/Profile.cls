@@ -104,12 +104,30 @@ ClassMethod IsText(o As %DynamicObject, key As %String) As %Boolean [ Private ]
     Quit (o.%GetTypeOf(key) = "string") && (o.%Get(key) '= "")
 }
 
-/// The fhir object of the stored profile's entry of that name, or "" when the entry has none or the profile does not
-/// name the receiver.
+/// The one rule that tells a FHIR R4 receiver from every other entry: its fhir key holds an object, and the entry
+/// passes SettingsProblem where it stands in the profile's list, which is what a save of the profile asks of it.
+/// An entry whose fhir key holds anything else is no FHIR receiver, and every reader takes it as its other keys make
+/// it. r is the entry, receivers the profile's whole list and index the entry's place in it. Only an entry with an
+/// object under the key is validated, so the question costs an entry of another kind one look at the key.
+ClassMethod IsReceiver(r, receivers, index) As %Boolean
+{
+    Set is = 0
+    Try {
+        If '$ISOBJECT(r) || 'r.%IsA("%Library.DynamicObject") || (r.%GetTypeOf("fhir") '= "object") Quit
+        If '$ISOBJECT(receivers) || 'receivers.%IsA("%Library.DynamicArray") || (index = "") Quit
+        Set is = (..SettingsProblem(r, receivers, index) = "")
+    } Catch ex {
+        Set is = 0
+    }
+    Quit is
+}
+
+/// The fhir object of the stored profile's FHIR receiver of that name (IsReceiver), or "" when the profile does not
+/// name the receiver or its entry is no FHIR receiver.
 ClassMethod Block(name As %String) As %DynamicObject
 {
-    Set r = ##class(Shutter.Store.SiteProfile).Receiver(name)
-    Quit $SELECT($ISOBJECT(r) && $ISOBJECT(r.%Get("fhir")): r.%Get("fhir"), 1: "")
+    Set r = ##class(Shutter.Store.SiteProfile).Receiver(name, .receivers, .index)
+    Quit $SELECT(..IsReceiver(r, receivers, index): r.%Get("fhir"), 1: "")
 }
 
 /// Whether the stored entry of that name turns recovery on: recovery_enabled true, and nothing else.
