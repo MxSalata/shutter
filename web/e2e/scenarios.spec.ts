@@ -233,6 +233,44 @@ test.describe('the page at 1280 px @scenarios', () => {
     await expect(card.getByText(/^Rules only is exempted here on purpose\./)).toBeVisible();
   });
 
+  test("pressing Run never shows the last run's case link: the new run is starting from the press", async ({
+    page,
+  }) => {
+    await go(page, '/scenarios?mode=board');
+    await page.locator('[data-first="S2"]').getByRole('button', { name: 'Run S2 in Board mode' }).click();
+    await expect(page.getByText(/^S2 played \(Board\)$/)).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole('link', { name: 'Open its case, C-000002' })).toBeVisible();
+    // From the next press on, note the banner at every change of the page: what it is, and any case link it offers
+    await page.evaluate(() => {
+      const seen: string[] = [];
+      let pressed = false;
+      (window as unknown as { seenAfterPress: string[] }).seenAfterPress = seen;
+      document.addEventListener('click', () => (pressed = true), { capture: true, once: true });
+      new MutationObserver(() => {
+        if (!pressed) return;
+        const links = [...document.querySelectorAll('a')]
+          .map((a) => a.textContent ?? '')
+          .filter((t) => t.startsWith('Open its case'));
+        const banner = document.querySelector('[data-testid="run-starting"]')
+          ? 'starting'
+          : (document.querySelector('[role="alert"] .mantine-Alert-title')?.textContent ?? 'none');
+        seen.push(`${banner} | ${links.join(', ') || 'no case link'}`);
+      }).observe(document.body, { childList: true, subtree: true, characterData: true });
+    });
+    await page.locator('[data-first="S3"]').getByRole('button', { name: 'Run S3 in Board mode' }).click();
+    await expect(page.getByText(/^Playing S3 \(Board\)$/)).toBeVisible();
+    const seen = await page.evaluate(
+      () => (window as unknown as { seenAfterPress: string[] }).seenAfterPress,
+    );
+    // The first thing the page shows after the press is the new run, starting, and S2's case is never offered again
+    expect(seen[0]).toBe('starting | no case link');
+    expect(seen.filter((s) => s.includes('C-000002'))).toEqual([]);
+    expect(seen.filter((s) => s.startsWith('S2 played'))).toEqual([]);
+    // S3 plays out: the link is then to its own case
+    await expect(page.getByText(/^S3 played \(Board\)$/)).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole('link', { name: 'Open its case, C-000003' })).toBeVisible();
+  });
+
   test("shows each row's latest case by its outcome, with how it compares with what the scenario expects", async ({
     page,
   }) => {

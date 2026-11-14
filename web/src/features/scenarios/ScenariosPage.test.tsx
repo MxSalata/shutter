@@ -996,7 +996,7 @@ describe("ScenariosPage, a finished run's own case and Home's way in", () => {
     const starting = await screen.findByTestId('run-starting');
     expect(starting).toHaveTextContent('Starting S3 (Board)');
     expect(starting).toHaveTextContent(
-      'Sent to the scenario player. Its case link appears here once the run has played and its case has opened.',
+      'Asking the scenario player to start it. Its case link appears here once the run has played and its case has opened.',
     );
     expect(within(starting).queryByRole('link')).not.toBeInTheDocument();
     expect(screen.queryByText(/^S2 played \(Board\), /)).not.toBeInTheDocument();

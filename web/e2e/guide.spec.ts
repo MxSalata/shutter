@@ -104,8 +104,8 @@ test.describe('the guide', () => {
         await expect(
           guide.getByRole('heading', { name: 'Already there, nothing sent', level: 2 }),
         ).toBeVisible();
-        await expect(page.getByRole('region', { name: 'Outcome' }).getByTestId('outcome-line')).toContainText(
-          'nothing',
+        await expect(page.getByRole('region', { name: 'Outcome' }).getByTestId('outcome-line')).toHaveText(
+          'Nothing to send: verified at the receiver',
         );
       }
       if (n === 6) {

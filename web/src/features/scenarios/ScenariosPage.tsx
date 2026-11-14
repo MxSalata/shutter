@@ -243,7 +243,7 @@ function RunStarting({ scenario, mode }: { scenario: string; mode: Mode }) {
     >
       <Text size="sm">
         {byEnv({
-          live: 'Sent to the scenario player. Its case link appears here once the run has played and its case has opened.',
+          live: 'Asking the scenario player to start it. Its case link appears here once the run has played and its case has opened.',
           trial: 'Its recording starts in a moment. Its case link appears here once it has played.',
         })}
       </Text>
