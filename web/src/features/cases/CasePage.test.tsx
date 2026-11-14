@@ -197,8 +197,10 @@ describe('CasePage', () => {
       ),
     ).toBeInTheDocument();
     // Its confidence is its own report, with the definition on its first use; the board says how it works once
-    expect(within(dissent).getByTestId('own-confidence')).toHaveTextContent(/^Its own confidence.*: 80%$/);
-    expect(within(dissent).getByText('own confidence')).toHaveAccessibleDescription(
+    expect(within(dissent).getByTestId('own-confidence')).toHaveTextContent(
+      /^Its self-reported confidence.*: 80%$/,
+    );
+    expect(within(dissent).getByText('self-reported confidence')).toHaveAccessibleDescription(
       "The agent's own report, not calibrated. The gate does not use it.",
     );
     expect(
@@ -211,7 +213,9 @@ describe('CasePage', () => {
     const agreed = within(board).getByRole('region', { name: 'Encounter Integrity' });
     expect(within(agreed).getByText('Proposed: Escalate')).toBeInTheDocument();
     expect(within(agreed).queryByText('Dissent')).not.toBeInTheDocument();
-    expect(within(agreed).getByTestId('own-confidence')).toHaveTextContent('Its own confidence: 85%');
+    expect(within(agreed).getByTestId('own-confidence')).toHaveTextContent(
+      'Its self-reported confidence: 85%',
+    );
     // The coordinator's card: the plan it proposed and the dissent it kept, with its recorded reason
     const coordinator = within(board).getByRole('region', { name: 'Coordinator' });
     expect(within(coordinator).getByText('Proposed: Escalate')).toBeInTheDocument();
@@ -1056,7 +1060,7 @@ describe('CasePage', () => {
     // Its citations are counted on the card, in the name of the detail that lists them, each a chip to its section
     expect(within(card).getByText(/^Cited \d+ evidence sections$/)).toBeInTheDocument();
     await userEvent.click(
-      within(card).getByRole('button', { name: /^Cited \d+ evidence sections\s?, Encounter Integrity$/ }),
+      within(card).getByRole('button', { name: /^Cited \d+ evidence sections \(Encounter Integrity\)$/ }),
     );
     const cites = await within(card).findAllByRole('button', { name: 'Encounter' });
     expect(cites[0]).not.toHaveAttribute('href');
@@ -1986,7 +1990,7 @@ describe('the case page for both audiences', () => {
     const conformance = await within(board).findByRole('region', { name: 'Conformance' });
     expect(conformance).toHaveTextContent('Replay · claude-opus-5-5 · 14.7 s · 3 iterations · 5 tool calls');
     expect(
-      within(conformance).getByRole('button', { name: /^Cited 8 evidence sections\s?, Conformance$/ }),
+      within(conformance).getByRole('button', { name: /^Cited 8 evidence sections \(Conformance\)$/ }),
     ).toHaveAttribute('aria-expanded', 'true');
     // The receipt's versions stay a click away in Technical too, so the Outcome band stays short (review, 2 Nov)
     const top = await outcome();
