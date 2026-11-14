@@ -20,6 +20,9 @@ import { formatAge } from '@/lib/format';
 import type { Tone } from '@/lib/tone';
 import { PATHOLOGY_ANCHOR, PATHOLOGY_WORDS } from './pathologyText';
 
+/** Where a scroll to the group lands: below the app's fixed header, with a little room. */
+const LANDING_MARGIN = 'calc(var(--app-shell-header-height, 0px) + var(--mantine-spacing-md))';
+
 const OUTAGE_TONE: Record<string, Tone> = {
   open: 'blocking',
   draining: 'info',
@@ -97,6 +100,7 @@ export function PathologyPaths({
       padding="md"
       component="section"
       id={PATHOLOGY_ANCHOR}
+      style={{ scrollMarginTop: LANDING_MARGIN }}
       aria-labelledby="pathology-title"
       data-testid="pathology-paths"
     >
@@ -122,7 +126,7 @@ export function PathologyPaths({
               <Stack gap={6}>
                 <Group gap="xs" justify="space-between" wrap="wrap" align="center">
                   <Group gap="xs" wrap="nowrap" align="center">
-                    <Badge variant="light" color="gray" radius="sm">
+                    <Badge variant="light" color="gray" radius="sm" style={{ flex: 'none' }}>
                       {p.id}
                     </Badge>
                     <Title order={3} fz="md" id={`pathology-${p.id}`}>
@@ -157,11 +161,20 @@ export function PathologyPaths({
   );
 }
 
-/** The optional link after the main route's three cards, to the group: shown only where the server lists the paths. */
+/**
+ * The optional link after the main route's three cards, to the group: shown only where the server lists the paths. It
+ * scrolls to the group rather than changing the address, whose hash the build IRIS serves routes by.
+ */
 export function PathologyLink() {
   return (
     <Text size="sm">
-      <Anchor href={`#${PATHOLOGY_ANCHOR}`}>{PATHOLOGY_WORDS.link}</Anchor>
+      <Anchor
+        component="button"
+        type="button"
+        onClick={() => document.getElementById(PATHOLOGY_ANCHOR)?.scrollIntoView({ block: 'start' })}
+      >
+        {PATHOLOGY_WORDS.link}
+      </Anchor>
     </Text>
   );
 }

@@ -153,6 +153,8 @@ export function OutageCard({ outage: o }: { outage: Outage }) {
       withBorder
       component="section"
       id={`outage-${o.id}`}
+      // A link to the card lands below the app's fixed header
+      style={{ scrollMarginTop: 'calc(var(--app-shell-header-height, 0px) + var(--mantine-spacing-md))' }}
       aria-label={`Outage ${o.id}, ${o.receiver}`}
     >
       <Stack gap="sm">

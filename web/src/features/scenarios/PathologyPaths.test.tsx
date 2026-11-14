@@ -74,7 +74,7 @@ describe('The pathology paths on the demo (1.4.6)', () => {
     expect(within(p2).getByRole('button', { name: 'Run P2' })).toBeDisabled();
     expect(within(p2).getByText(PATHOLOGY_WORDS.outageOpen)).toBeInTheDocument();
     // The optional link after the main route's three
-    expect(screen.getByRole('link', { name: PATHOLOGY_WORDS.link })).toHaveAttribute('href', '#pathology');
+    expect(screen.getByRole('button', { name: PATHOLOGY_WORDS.link })).toBeInTheDocument();
   });
 
   it('offers P2 again once its outage is closed', async () => {
@@ -90,7 +90,7 @@ describe('The pathology paths on the demo (1.4.6)', () => {
     renderPage();
     await screen.findByRole('button', { name: 'Run S2' });
     expect(screen.queryByRole('region', { name: PATHOLOGY_WORDS.title })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: PATHOLOGY_WORDS.link })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: PATHOLOGY_WORDS.link })).not.toBeInTheDocument();
   });
 
   it("a sign-in that may not run scenarios sees the paths and can't run them", async () => {
