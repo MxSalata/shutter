@@ -92,9 +92,11 @@ Method OnAgentRequest(request As Shutter.Bridge.Msg.AgentRequest, Output respons
     Set runnerClass = $SELECT(spec.Mode = "replay": "Shutter.Bridge.Runner.Replay", 1: spec.RunnerClass)
     $$$TRACE("Agent run: " _ spec.AgentClass _ " (" _ spec.MemberCode _ ") in " _ spec.Mode _ " mode for " _ spec.CorrelationKey _ " via " _ runnerClass)
     Set start = $ZHOROLOG
-    // The day's model budget (Shutter.Util.Budget, v1.34): a run that would call a model is refused once the day's spend
-    // has reached the cap; a replay calls no model and is never refused.
+    // The day's model budget (Shutter.Util.Budget, v1.34; admission, R145-03): a run that would call a model is admitted
+    // only when the day's spend, the reservations in flight and its own estimate stay within the cap (and the asker's
+    // share), checked and reserved in one locked step; a replay calls no model, asks the budget nothing and reserves nothing.
     Set response.RequestedBy = request.RequestedBy
+    Set reserveKey = $SELECT(spec.Mode '= "replay": spec.CorrelationKey _ "|" _ spec.MemberCode _ "|" _ $JOB _ "|" _ $ZHOROLOG, 1: "")
     // The provider refusing the key (Shutter.Util.LiveAgents, v1.37): while a live run failed with an authentication error
     // in the last fifteen minutes, a run that would call a model is refused here with no call, as the budget refuses one.
     // A run that would call a model with such a setting is refused before anything is looked up with it.
@@ -108,20 +110,15 @@ Method OnAgentRequest(request As Shutter.Bridge.Msg.AgentRequest, Output respons
     } ElseIf (spec.Mode '= "replay") && ##class(Shutter.Util.LiveAgents).ProviderDown(.downUntil, .downText) {
         Set response.Status = "provider_auth"
         Set response.Error = downText
-    } ElseIf (spec.Mode '= "replay") && '##class(Shutter.Util.Budget).AllowsFor(request.RequestedBy, .budget) {
+    } ElseIf (spec.Mode '= "replay") && '##class(Shutter.Util.Budget).Admit(reserveKey, request.RequestedBy, .budget, .reserved) {
         Set response.Status = "budget_exhausted"
         Set response.Error = ##class(Shutter.Util.Budget).Refusal(budget)
     } ElseIf (runnerClass = "") || '##class(%Dictionary.CompiledClass).%ExistsId(runnerClass) {
         Set response.Status = "error"
         Set response.Error = "Runner class not available: " _ runnerClass _ ". Install the aihub module for live runs, or set the Mode to replay."
     } Else {
-        // Reserve, then settle (Shutter.Util.Budget, v1.35): the run counts against the cap while it is in flight.
-        Set reserveKey = ""
-        If spec.Mode '= "replay" {
-            Set reserveKey = spec.CorrelationKey _ "|" _ spec.MemberCode _ "|" _ $JOB _ "|" _ $ZHOROLOG
-            Set reserved = ##class(Shutter.Util.Budget).Reserve(reserveKey, request.RequestedBy)
-            $$$TRACE("Reserved " _ ##class(Shutter.Util.Budget).Dollars(reserved) _ " of the day's budget for this run")
-        }
+        // Reserve, then settle (Shutter.Util.Budget, v1.35): the admitted run counts against the cap while it is in flight.
+        If spec.Mode '= "replay" $$$TRACE("Reserved " _ ##class(Shutter.Util.Budget).Dollars(reserved) _ " of the day's budget for this run")
         Try {
             Set runner = $CLASSMETHOD(runnerClass, "%New")
             Set sc = runner.Run(spec, .response)
@@ -133,8 +130,9 @@ Method OnAgentRequest(request As Shutter.Bridge.Msg.AgentRequest, Output respons
             Set response.Status = "error"
             Set response.Error = ex.DisplayString()
         }
-        If reserveKey '= "" Do ##class(Shutter.Util.Budget).Settle(reserveKey)
     }
+    // Whatever happened after an admission (the run ended, or no runner was there to start it), its reservation goes.
+    If reserveKey '= "" Do ##class(Shutter.Util.Budget).Settle(reserveKey)
     Do ##class(Shutter.Util.Secret).MaskResponse(response, $LISTBUILD(..ProviderConfig), ..Model)
     Do ##class(Shutter.Util.LiveAgents).NoteRun(spec.Mode, response.Status, response.Error)
     Do ##class(Shutter.Bridge.Runner).Stamp(spec, response)

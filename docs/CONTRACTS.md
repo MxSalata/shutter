@@ -274,7 +274,7 @@ Step kinds: `file` (drop the file into the ADT In folder; `expect` is `delivered
 
 The mimic replays the member's recording turn by turn when the case's material facts (scenario, event, catalogue entry, outcome, matches and conditions, the receiver's version and state, the receipt, conditional writes and the specialists' dispositions) are the recorded case's, and otherwise answers from the catalogue match the evidence carries; every text it writes starts with `[mock]`. How to use it: `tests/mock/README.md`. The mimic does not answer production review runs (v1.22, section 13): `Shutter.Mock.Turns.Heading` has no `review` entry, so a run of `Shutter.Agent.Review` under it is refused as `context_mismatch`, and the review's tests run with `agent: false` or in replay against a recording.
 
-The live runner's `TestRun(case, member, mode, budget)` (v1.21), a check over SQL, takes mode `live` or `record` only (`{"error": "mode must be live or record"}` otherwise, so a replay never runs live by mistake), keys each run's tool calls `test:<case>:<member>:<n>` with a counter, one key per run (`run_key` in its answer; a member's runs are found with `LIKE 'test:<case>:<member>:%'`), says in `mock` whether the mimic answered, and writes no `AgentRun` row.
+The live runner's `TestRun(case, member, mode, budget)` (v1.21), a check over SQL, takes mode `live` or `record` only (`{"error": "mode must be live or record"}` otherwise, so a replay never runs live by mistake), keys each run's tool calls `test:<case>:<member>:<n>` with a counter, one key per run (`run_key` in its answer; a member's runs are found with `LIKE 'test:<case>:<member>:%'`), says in `mock` whether the mimic answered. Since 1.4.6 the day's budget admits it as it admits the Agent item's runs (`Shutter.Bridge.Runner.Diagnostic`, `Budget.Admit`, charged to the SQL caller): refused, it answers `{"error": <the refusal's words>, "status": "budget_exhausted"}` before any provider is contacted; admitted, what it spent or that it failed is recorded as an `AgentRun` row with `Purpose` `diagnostic` and no case, snapshot or question (`run_id` in its answer), which the day's spend, the caller's share and `GET /costs` count and no case's runs, events or counts read, and its reservation is settled once that row is saved.
 
 An agent item's `ProviderConfig` (v1.17) names a Config Store configuration resolved as the agent class's `@{config:...}` is (a name of fewer than three parts is under `AI.LLM`, secrets resolved) and is made with `%AI.Provider.Create`, before `%Init`; the run's model is the item's `Model`, else the configuration's `model`, else the class's. Build 154 has no `%AI.Provider.CreateFromConfig`, which the runner called before.
 
@@ -1374,21 +1374,21 @@ that tries to reach past its case leaves a mark, and `Shutter.Bridge.ToolCall.De
 **The day's model budget (v1.34).** `SHUTTER_DAILY_BUDGET_USD`, read by the installer and at every start of the production
 (`Setup.ApplyEnvironment`, 12) into `^Shutter.Config("dailyBudgetUsd")`
 (`Shutter.Util.Budget`; 0, unset or not a number means no cap), caps what the live and record agent runs may spend between one
-00:00 UTC and the next. Before a run that would call a model, the Agent item asks `Budget.Allows()`, which sums the day's
+00:00 UTC and the next. Before a run that would call a model, the Agent item asks for admission (`Budget.Admit`, below), which sums the day's
 `AgentRun` rows' `CostUSD` as `GET /costs` does (a replay or a run the API mimic answered spent nothing); once the spend has
-reached the cap the run is not sent, and the response's status is `budget_exhausted` with an error naming the cap, the spend
+reached the cap, or the run's estimate no longer fits (1.4.6), the run is not sent, and the response's status is `budget_exhausted` with an error naming the cap, the spend
 and when it resets. A board whose members all answered so has no board answer (6.6), as when replay mode has no recording
 (the case says which); a question or a review fails with the status. `GET
 /settings` and the Doctor carry `budget: {dailyUsd, spentTodayUsd, exhausted, since, resetsAt, perUserUsd}`, and `GET /settings`
-adds the caller's own `spentByMeUsd` and `shareExhausted`. The public demo sets the cap with an API key of its own, so a day of
-visitors spends at most the cap. **Each user's share** (`SHUTTER_JUDGE_BUDGET_USD` into `^Shutter.Config("judgeBudgetUsd")`,
+adds the caller's own `spentByMeUsd` and `shareExhausted`. The public demo sets the cap with an API key of its own; the cap bounds
+spend plus estimates, not the provider's invoice (below). **Each user's share** (`SHUTTER_JUDGE_BUDGET_USD` into `^Shutter.Config("judgeBudgetUsd")`,
 0 or unset means none): every agent request carries who asked (`RequestedBy`: a question's asker, a judge who convened the
 board, since v1.57 the user who started the scenario run that opened the case (`Shutter.Store.Case` `ScenarioBy`, from
 `^Shutter.Config("scenarioBy")`, which the runner's Begin writes and its Reset clears), `system` for the feed's own runs), the run keeps it, and a run for a user whose live runs today have reached the share is
 refused `budget_exhausted` with "Your share of the day's model budget ... is spent", so one judge cannot spend the day. A replay-only scenario run's runs (v1.58, 4.2) are replays: the Agent item asks the budget nothing and reserves nothing for them, and they cost 0, so they count against neither the cap nor the starter's share.
 **Whether the live agents can run (v1.37).** `GET /settings` carries `live.agents = {available, reason, until, detail}`
 (`Shutter.Util.LiveAgents`), one signal for the web's notice: `reason` is `budget` when the day's cap or the caller's share
-is spent (`until` = `budget.resetsAt`), `provider_auth` when a live run failed with an authentication error (a 401, a bad or
+is spent, or since 1.4.6 has less left than the next run's estimate (`until` = `budget.resetsAt`; `detail` then says which limit, "Your share ..." for the share), `provider_auth` when a live run failed with an authentication error (a 401, a bad or
 deactivated key) within the last 15 minutes (`until` = the next 00:00 UTC, when a key a site deactivates for the day comes
 back; the flag clears on the next live run the provider accepts, and after 15 minutes one run tries again), and null when
 live runs can go; `detail` is the sentence to show. As built in 1.2.0 (v1.48), the flag is set only by a run whose status is `error` with an authentication
@@ -1408,7 +1408,7 @@ cap here guards a burst; absent when unset (an empty, zero or non-numeric value 
 counted against the cap until they finished. The Agent item now reserves an estimate for each live run it starts
 (`Budget.Reserve`, keyed by the run) and settles it when the run ends whatever its outcome (`Budget.Settle`); the day's state
 carries `reservedUsd` and `inFlight`, `GET /settings` adds the caller's `reservedByMeUsd`, and a run is refused once spend plus
-reservations reach the cap (or spend plus the user's own reservations the share), the refusal naming the runs in flight. The
+reservations reach the cap (or spend plus the user's own reservations the share), the refusal naming the runs in flight. **Admission (1.4.6).** `Budget.Admit(key, user)` admits a run only when the day's spend plus the reservations plus the run's own estimate stay within the cap and, for a user other than `system`, the user's spend plus their reservations plus the estimate within the share, and reserves it in the same step, under one lock (`^Shutter.Budget("admit")`, which `Reserve` takes too), so two runs cannot both be admitted on the same remaining allowance; refused, nothing is reserved and the refusal says what is left and the estimate. `AllowsFor`, which `POST /cases/{id}/board` and `live.agents` ask, applies the same rule with nothing reserved, and the budget object it returns carries `estimateUsd`. This bounds spend plus estimates, not the bill: a run can cost more than its estimate, a reservation older than twenty minutes is released whether or not its run has ended, the Agent item settles a run before the workflow writes its row, and a production review's cost is kept on `Shutter.Store.Review`, which the day's spend does not read. A cap or a share smaller than one run's estimate admits no run at all, even with nothing spent: a site with so small a cap sets `budgetReserveUsd` below it. An admission that cannot take the lock within 10 seconds (`ADMITLOCKSECONDS`; another admission holding it) is refused `budget_exhausted` as well, whatever the cap, with words that say the budget could not be checked in time. The
 estimate is `^Shutter.Config("budgetReserveUsd")` when the site sets it, else the mean cost of the last twenty live runs that
 cost anything, else 0.50 USD, never below 0.01; a reservation older than twenty minutes was left by a job that died and is
 dropped when next counted.

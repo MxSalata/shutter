@@ -10641,6 +10641,10 @@
           "reservedByMeUsd": {
             "type": "number",
             "description": "What the signed-in user's own runs in flight have reserved against their share (v1.35)."
+          },
+          "estimateUsd": {
+            "type": "number",
+            "description": "What the next live run is expected to cost, as admission counts it: present where the budget was asked whether a run may start (the 409 budget_exhausted of POST /cases/{id}/board), not in GET /settings (1.4.6)."
           }
         },
         "required": [

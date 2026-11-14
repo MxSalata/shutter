@@ -68,10 +68,20 @@ function context(s: Settings | undefined) {
   return { hourly, demo: s?.demo === true || hourly };
 }
 
-/** The reason as the app words it: `budget` stays, the share is read from the budget, anything else is the service. */
-function reasonOf(reason: string | null | undefined, b: Budget | undefined): LiveUnavailableReason {
-  if (reason === 'budget') return budgetLimit(b) === 'share' ? 'share' : 'budget';
-  return 'service';
+/**
+ * The reason as the app words it: `budget` stays, the share is read from the budget, anything else is the service. Since
+ * 1.4.6 the budget also refuses a run whose estimate no longer fits what is left, while neither figure says spent: the
+ * server's own sentence then tells the share ("Your share of the day's model budget ...") from the cap.
+ */
+function reasonOf(
+  reason: string | null | undefined,
+  b: Budget | undefined,
+  detail?: string | null,
+): LiveUnavailableReason {
+  if (reason !== 'budget') return 'service';
+  const limit = budgetLimit(b);
+  if (limit) return limit;
+  return /\byour share\b/i.test(detail ?? '') ? 'share' : 'budget';
 }
 
 /**
@@ -86,7 +96,7 @@ export function liveUnavailable(s: Settings | undefined): LiveUnavailable | null
     if (agents.available !== false) return null;
     return {
       ...context(s),
-      reason: reasonOf(agents.reason, s.budget),
+      reason: reasonOf(agents.reason, s.budget, agents.detail),
       timing: 'until',
       until: agents.until ?? null,
       code: `live.agents.reason ${agents.reason ?? 'null'}`,
@@ -131,7 +141,7 @@ export function liveRefusal(error: unknown, s: Settings | undefined): LiveUnavai
     const reason = live.reason ?? agents?.reason ?? null;
     return {
       ...base,
-      reason: reasonOf(reason, b),
+      reason: reasonOf(reason, b, error.detail),
       timing: 'until',
       until: live.until ?? (agents?.available === false ? (agents.until ?? null) : null),
     };

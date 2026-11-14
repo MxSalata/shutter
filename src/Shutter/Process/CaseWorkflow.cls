@@ -944,7 +944,8 @@ Method AllNoRecord(case As Shutter.Store.Case) As %Boolean
     Quit (+n > 0) && (+other = 0)
 }
 
-/// Why nobody on the board answered this snapshot: the day's model budget is spent (Shutter.Util.Budget, v1.34), the
+/// Why nobody on the board answered this snapshot: the day's model budget has no room for another run (Shutter.Util.Budget,
+/// v1.34; spent, or since 1.4.6 less left than a run's estimate), the
 /// provider refuses the key, or replay mode has no recording for the case (it answers the fixtures only).
 Method UnansweredWhy(case As Shutter.Store.Case) As %String
 {
@@ -952,7 +953,7 @@ Method UnansweredWhy(case As Shutter.Store.Case) As %String
     // A replay-only scenario run's case (1.4.4) never called a model: it can only lack a recording.
     If case.ScenarioReplay && '..Reopened && '..ForceBoard Quit "this scenario run replays the recorded agents only, and this case has no recording"
     &sql(SELECT COUNT(*) INTO :n FROM Shutter_Store.AgentRun WHERE "Case" = :cid AND Snapshot = :sid AND Status = 'budget_exhausted')
-    If +n > 0 Quit "the day's model budget is spent (budget_exhausted)"
+    If +n > 0 Quit "the day's model budget has no room for another run (budget_exhausted)"
     &sql(SELECT COUNT(*) INTO :n FROM Shutter_Store.AgentRun WHERE "Case" = :cid AND Snapshot = :sid AND Status = 'provider_auth')
     If +n > 0 Quit "the model provider refuses the key (provider_auth)"
     Quit "this case has no recording (replay mode answers the fixtures only)"
@@ -1009,7 +1010,7 @@ Method OnCoordinator(case As Shutter.Store.Case, result As Shutter.Bridge.Msg.Ag
     Set ..CoordinatorPending = 0
     If (result.Status '= "ok") || (result.ResultJSON = "") {
         Do ..LeadFinish(case, "failed", "", "the coordinator produced no plan (" _ result.Status _ ")")
-        If result.Status = "budget_exhausted" Set case.Headline = "No plan: the day's model budget is spent"
+        If result.Status = "budget_exhausted" Set case.Headline = "No plan: the day's model budget has no room for another run"
         Quit case.Transition("escalated", "The coordinator produced no plan: " _ result.Status _ $SELECT(result.Error '= "": ", " _ result.Error, 1: ""), "system", "run:" _ run.%Id())
     }
     Set restored = ##class(Shutter.Util.ModelView).Restore(case, result.ResultJSON)
