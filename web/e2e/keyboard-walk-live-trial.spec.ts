@@ -150,7 +150,7 @@ test.beforeEach(({ page }) =>
 );
 
 test.describe('the keyboard walk on a live page', () => {
-  test('a decision refused as stale leaves the focus on Cancel, in the review, and Escape goes back', async ({
+  test('a decision refused as stale leaves the focus on Review current plan, in the review, and Escape goes back', async ({
     page,
   }) => {
     await stubServer(page, {
@@ -166,19 +166,21 @@ test.describe('the keyboard walk on a live page', () => {
     const { action, dialog, confirm } = await openReview(page);
     await page.keyboard.press('Enter');
     await expect(dialog.getByRole('alert')).toContainText('Approval no longer valid');
-    await expect(confirm).toBeDisabled();
-    await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused();
-    // The next Tab and Shift+Tab stay in the review
-    await page.keyboard.press('Tab');
-    expect(await focusInDialog(page)).toBe(true);
+    // The stopped review offers no decision; the way forward, Review current plan, takes the focus
+    await expect(confirm).toHaveCount(0);
+    const again = dialog.getByRole('button', { name: 'Review current plan' });
+    await expect(again).toBeFocused();
+    // The next Shift+Tab and Tab stay in the review
     await page.keyboard.press('Shift+Tab');
-    await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused();
+    expect(await focusInDialog(page)).toBe(true);
+    await page.keyboard.press('Tab');
+    await expect(again).toBeFocused();
     await page.keyboard.press('Escape');
     await expect(dialog).toBeHidden();
     await expect(action).toBeFocused();
   });
 
-  test('a case that changes under the open review stops it and leaves the focus on Cancel', async ({
+  test('a case that changes under the open review stops it and leaves the focus on Review current plan', async ({
     page,
   }) => {
     const stub: Stub = {};
@@ -192,8 +194,8 @@ test.describe('the keyboard walk on a live page', () => {
         timeout: 20_000,
       },
     );
-    await expect(confirm).toBeDisabled();
-    await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused();
+    await expect(confirm).toHaveCount(0);
+    await expect(dialog.getByRole('button', { name: 'Review current plan' })).toBeFocused();
   });
 
   test('another refusal leaves the focus on Cancel, with the decision still there to press', async ({
