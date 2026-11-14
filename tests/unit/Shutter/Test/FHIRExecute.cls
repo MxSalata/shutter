@@ -372,6 +372,7 @@ Method TestItsOwnReadRefusesAnotherVersionOrBody()
     Set rows($INCREMENT(rows)) = $LISTBUILD("a plain 404", $LISTBUILD(404, "text/html", "", "", "Not Found"))
     Set rows($INCREMENT(rows)) = $LISTBUILD("the receiver's own 404", $LISTBUILD(404, ..#FHIRJSON, "", "", ..#OUTCOME))
     Set rows($INCREMENT(rows)) = $LISTBUILD("a 503", $LISTBUILD(503, "text/plain", "", "", "busy"))
+    Set rows($INCREMENT(rows)) = $LISTBUILD("a redirect to another host", $LISTBUILD(302, "text/html", "", "http://other.example/fhir/r4/Encounter/enc-1", ""))
     Set rows($INCREMENT(rows)) = $LISTBUILD("no answer", $LISTBUILD(0))
     For i = 1:1:rows {
         Set what = $LIST(rows(i), 1)
@@ -393,6 +394,18 @@ Method TestItsOwnReadRefusesAnotherVersionOrBody()
     Do $$$AssertEquals(..Verbs(http), "GET", "one read and no PUT")
     Do $$$AssertEquals(..Permits().%Size() _ " " _ ..Permits("answered").%Size(), (rows + 1) _ " " _ (rows + 1), "each refusal finished its permit as answered")
     Do ..NoneAdmitted()
+}
+
+/// Neither the item's own read nor the update follows a redirect: each request says so itself, so the credential and
+/// the update stay with the server the item names.
+Method TestNoRequestFollowsARedirect()
+{
+    Quit:'..Ready()
+    Set request = ..Fixture()
+    Set op = ..Op(.http)
+    Set response = ..Run(op, request)
+    Do $$$AssertEquals(..Verbs(http), "GET PUT", "the read and the one update")
+    Do $$$AssertEquals($GET(http.Follow(1)) _ "|" _ $GET(http.Follow(2)), "0|0", "neither follows a redirect")
 }
 
 /// Shadow mode and the stop refuse at the admission: nothing is read or sent, and the fence row stays unsent.

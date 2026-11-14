@@ -1,5 +1,6 @@
-/// The reader of a FHIR R4 receiver. It only reads: every request is a GET with Accept: application/fhir+json, and
-/// what came back is carried as parts, each with the status that can be trusted (<class>Shutter.FHIR.Trust</class>).
+/// The reader of a FHIR R4 receiver. It only reads: every request is a GET with Accept: application/fhir+json that
+/// follows no redirect, and what came back is carried as parts, each with the status that can be trusted
+/// (<class>Shutter.FHIR.Trust</class>).
 /// A request names no receiver: the case is opened by its id and the address comes from the fhir block of the case's
 /// own receiver in the site profile, so a request can borrow no other entry's settings. The server, port, TLS and
 /// credential are this item's adapter settings.
@@ -187,6 +188,9 @@ Method Get(path As %String, kind As %String, type As %String = "", id As %String
     Set part = ..Blank()
     Set http = ##class(%Net.HttpRequest).%New()
     Set http.ReadRawMode = 1
+    // A redirect is never followed: the credential would go with it to another host, whose answer would be read as
+    // the receiver's. A 3xx is carried as it came.
+    Set http.FollowRedirect = 0
     Do http.SetHeader("Accept", "application/fhir+json")
     // The adapter waits no longer for this answer than the request has left.
     Set wait = ..Adapter.ResponseTimeout

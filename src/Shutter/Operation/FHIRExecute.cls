@@ -14,8 +14,9 @@
 /// <li>one PUT with If-Match, the approved body as UTF-8 bytes;</li>
 /// <li>the answer is classified and recorded, and the permit of the admission is finished on every path.</li>
 /// </ol>
-/// A refusal is an answer, never an error status. Nothing retries. The server, port, TLS and credential are this
-/// item's adapter settings; the path in front of every request is the fhir block's base of the case's own receiver.
+/// A refusal is an answer, never an error status. Nothing retries, and no request follows a redirect. The server,
+/// port, TLS and credential are this item's adapter settings; the path in front of every request is the fhir block's
+/// base of the case's own receiver.
 Class Shutter.Operation.FHIRExecute Extends Ens.BusinessOperation
 {
 
@@ -246,6 +247,8 @@ ClassMethod Request(binding As Shutter.Store.FHIRBinding) As %Net.HttpRequest
 {
     Set http = ##class(%Net.HttpRequest).%New()
     Set http.ReadRawMode = 1, http.WriteRawMode = 1
+    // Said, not left to the connection: the update never follows a redirect.
+    Set http.FollowRedirect = 0
     Set http.ContentType = "application/fhir+json"
     Do http.SetHeader("If-Match", binding.ExpectedEtag)
     Do http.SetHeader("Accept", "application/fhir+json")
@@ -376,6 +379,9 @@ Method Read(path As %String, id As %String) As %DynamicObject [ Private ]
     Set part = {"http_status": 0, "raw_status": 0, "etag": "", "location": "", "content_type": "", "body": "", "error": ""}
     Set http = ##class(%Net.HttpRequest).%New()
     Set http.ReadRawMode = 1
+    // A redirect is never followed: the credential would go with it to another host, and that host's answer would
+    // stand as this item's own read.
+    Set http.FollowRedirect = 0
     Do http.SetHeader("Accept", "application/fhir+json")
     Set sc = $$$OK, answer = ""
     Try {

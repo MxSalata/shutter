@@ -8,6 +8,9 @@
 /// request, <code>Requests</code> itself the count. The path is the address after the base with no leading "/" and
 /// with its query ("Encounter/enc-1/_history", "Encounter?identifier=a%7Cb"); the body is the entity body as
 /// characters.</li>
+/// <li><property>Follow</property>: <code>Follow(n)</code> is what the n-th request said of redirects (its
+/// <code>FollowRedirect</code>): 0 for never, "" when it left that to the connection, which follows one for a
+/// GET.</li>
 /// <li><property>Canned</property>: <code>Canned(verb, path) = $LISTBUILD(status, contentType, etag, location,
 /// body)</code> answers that request instead of the server, every time: a page behind a 200, a plain 404, and with
 /// status 0 no answer at all.</li>
@@ -21,6 +24,8 @@ Class Shutter.Test.FakeFhir Extends EnsLib.HTTP.OutboundAdapter
 Property Base As %String(MAXLEN = "");
 
 Property Requests As %String [ MultiDimensional ];
+
+Property Follow As %String [ MultiDimensional ];
 
 Property Canned As %String [ MultiDimensional ];
 
@@ -62,6 +67,7 @@ Method SendFormDataArray(Output pHttpResponse As %Net.HttpResponse, pOp As %Stri
     Do:type'="" headers.%Set("Content-Type", type)
     Set body = ..Characters(body)
     Set ..Requests($INCREMENT(..Requests)) = $LISTBUILD(verb, path, headers.%Get("If-Match"), body)
+    Set ..Follow(..Requests) = $SELECT($ISOBJECT($GET(pHttpRequest)): pHttpRequest.FollowRedirect, 1: "")
     If $DATA(..Canned(verb, path), canned) # 2 {
         Set status = +$LISTGET(canned, 1)
         If status = 0 Quit $$$ERROR($$$HttpRequestConnect, "the test FHIR server (no answer)")

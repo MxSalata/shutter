@@ -434,6 +434,27 @@ Method TestANot200ReadGivesAnErrorObject()
     Do $$$AssertEquals(view."ward_state"."patient_id" _ " [" _ view."ward_state"."patient_id_authority" _ "] " _ view.fhir.patient."identifier_ok", ..#MRN _ " [] 1", "the receiver's value, with no authority")
 }
 
+/// No read follows a redirect: every request says so itself, so the credential and the trust in the answer stay with
+/// the server the item names. A 3xx is carried as it came, and no reader takes it as the receiver read.
+Method TestNoReadFollowsARedirect()
+{
+    Quit:'..Ready()
+    Set case = ..Case()
+    Set op = ..Op(.http)
+    Set http.Canned("GET", "Encounter/enc-1") = $LISTBUILD(302, "text/html", "", "http://other.example/fhir/r4/Encounter/enc-1", "")
+    Set parts = ..Parts(case, op)
+    Set left = ""
+    For i = 1:1:+$GET(http.Requests) {
+        If http.Follow(i) '= 0 Set left = left _ $SELECT(left = "": "", 1: " | ") _ $LIST(http.Requests(i), 2)
+    }
+    Do $$$AssertTrue(+$GET(http.Requests) >= 6, "the reads were made: " _ ..Log(http))
+    Do $$$AssertEquals(left, "", "every request tells the connection never to follow a redirect")
+    Do $$$AssertEquals(parts.encounter."http_status" _ " [" _ parts.encounter.body _ "]", "302 []", "a 302 is carried as it came, with no body")
+    Set view = ..View(parts, case)
+    Do $$$AssertEquals(view."ward_state_http_status" _ "|" _ view.fhir.encounter.etag _ "|" _ view."encounter_body", "302||", "and it is no state, no version and no body")
+    Do $$$AssertEquals(##class(Shutter.Catalogue.Matcher).Conditions(case, ..Summary(case, view))."encounter_state", "unknown", "the matcher reads it as unknown")
+}
+
 // ---- the collector ----
 
 /// The fhir item of a snapshot is the digest, the ETag and the version id of the Encounter read, and nothing else:
