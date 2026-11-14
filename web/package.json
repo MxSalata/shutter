@@ -1,7 +1,7 @@
 {
   "name": "shutter-web",
   "private": true,
-  "version": "1.4.5",
+  "version": "1.4.6",
   "type": "module",
   "description": "The Shutter web application: scenarios, cases, the board's findings, the gate, approvals and verification.",
   "scripts": {

@@ -21,6 +21,51 @@ The release and its CONTRACTS version are named when this is merged.
   in the policy shard and on the built image. A site install gets none of it, and the in-browser trial keeps its 26
   recorded scenarios.
 
+## 1.4.6 (14 November 2026)
+
+Each case says what the agents contributed, the online demo shows its pathology work, the first screen leads to a short route, and the site profile can ask Shutter about its key answers.
+
+- **What the agents contributed, on the case.** The decision receipt's first fact says who proposed the plan (the
+  coordinator agent, one agent, the rules or the site's policy), read from the plan's own origin and the case's runs, and
+  names no agent for a plan no agent's run made. "Why" opens the plan's recorded reason word for word, what it cites as
+  links to the Evidence tab, how the specialists stood to it and each agent's finding. On the board, "Cited N evidence
+  sections" and "Dissent kept" open from their own lines; in the trial every run reads "Browser recording".
+- **Pathology on the online demo.** Two optional paths on the Scenarios page, counted apart from the 36 scenarios. P1
+  sends an ORU^R01 result the demo's results system refuses (AE, an unknown test code): its case goes to a person with
+  the OBX and the receiver's words, and offers no resend. P2 takes the results system down while three results fail,
+  brings it back, and the outage of Lab Results Out offers the three; one approval with the receiver check has the engine
+  send each again unchanged. P2 waits while its last outage is open, and no start or reset changes an outage (CONTRACTS
+  1.62).
+- **The short route from the first screen.** The trial's welcome offers Start with S2, which opens S2's card in Board
+  mode with Run focused and presses nothing. The quick tour follows S2, then S3, then S8, with S20 optional. A Run just
+  pressed shows as starting at once, so the last run's "Open its case" is never offered for the new run. A replayed case
+  on IRIS says "Recorded replay: no new inference", and S8's board case says again that the board sent nothing.
+- **Ask Shutter about this, on the site profile.** Beside a receiver's kind and tier and beside enabling recovery, it
+  explains that answer with the live Explain agent on IRIS AI Hub, or shows its written explanation where no live answer
+  is given; asking changes nothing in the profile. A page answer names the agent and links its run's message.
+- **The review on a phone.** The review of a plan shows what releasing it is expected to leave, with its notes, before
+  the controls come into view; the binding line names the encounter; and from the confirming press until the answer the
+  review can't be closed. The request is unchanged.
+- **Hide resolved on Cases.** The switch now leaves out the resolved cases only, since a blocked, an escalated and a
+  failed case still need a person. `GET /cases` takes `resolved=0`, in the query itself; `open=1` keeps its 1.4.5
+  meaning. The count of cases that need a person says "at most" when more than 100 failed (CONTRACTS 1.60).
+- **Figures by cohort.** Every evaluation figure on the sign-in page, Scenarios and Evaluation names its cohort and
+  release, the 1.4.3 regression rerun first; the Evaluation page adds F03 as one case under the same gate, with nothing
+  written in any run.
+- **Budget admission.** A live run is admitted only when the recorded spend, the reservations and this run's estimate
+  fit the day's cap and the person's share, checked and reserved in one locked step; the SQL diagnostic `TestRun` goes
+  through the same admission and its cost is counted. A share that can't take the next run says so.
+- **OpenAI as a second provider, in the installer.** The install reads `OPENAI_API_KEY` and `SHUTTER_PROVIDER` beside
+  `ANTHROPIC_API_KEY` and `SHUTTER_MODEL`: the provider named, else the one whose key is set, Anthropic when both are.
+  Not yet measured on OpenAI, whose runs have no price, so the budgets do not count them (CONTRACTS 1.61).
+- **Pull requests are checked before they merge.** The repository checks, the web application, the browser suite, the
+  recordings and the IRIS shards run on every pull request, with no secret and no write.
+- **Docs.** Two guides, How Shutter works and How to integrate Shutter at your trust; a worked example of a proposed
+  local stop rule, labelled as not implemented; the README leads with what the agents decide, what permits a write,
+  what the test found and why it was built, with a two-minute video; screenshots retaken with 1.4.5's names.
+- **Tests.** The gate's unit tests pin how a snapshot with no catalogue decision is read, and the tour keeps its Cases
+  steps when the Cases switch is used.
+
 ## 1.4.5 (13 November 2026)
 
 A case leads with what it proposes and opens its review in one press, the Cases list can hide what is closed, and the
