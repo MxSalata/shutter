@@ -275,6 +275,8 @@ Before enabling it:
 
 The failure census can compare watched failures with opened cases. A redacted case bundle supports audit and handoff; warehouse history can inform a person without enabling writes.
 
+**A trust's own rules are not supported yet.** [A worked example](https://github.com/MxSalata/shutter/blob/main/docs/readme/local-rules.md) shows the proposed design of a local stop rule, which sends a trust's own pattern to a person; none of it is implemented.
+
 [Five-step pilot](https://github.com/MxSalata/shutter/blob/main/docs/readme/first-steps.md#pilot-it-first) · [Pilot decision pack](https://github.com/MxSalata/shutter/blob/main/docs/pilot/00-decision-record.md) · [Clinical safety, hazards and data flow](https://github.com/MxSalata/shutter/blob/main/docs/SAFETY.md)
 
 <a id="documents"></a>
