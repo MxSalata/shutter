@@ -87,6 +87,9 @@ Method Write(request As Shutter.Msg.FHIRWrite, response As Shutter.Msg.FHIRWrite
         Do ..Refuse(response, "fhir_recovery_disabled", "the receiver's entry in the site profile does not turn FHIR recovery on")
         Return
     }
+    // The approval was given against one fhir block: its base, map, marker and identifier systems. Another one now
+    // is another receiver as far as the approval goes.
+    If ##class(Shutter.FHIR.Profile).MappingDigest(##class(Shutter.FHIR.Profile).Block(case.Receiver)) '= binding.MappingDigest Do ..Refuse(response, "fhir_endpoint_differs", "the receiver's fhir block in the site profile is not the one the approval was given against") Return
     // A FHIR update goes only on a person's approval of this one case. Asked before the approval's validity, so
     // that a policy's or an incident's approval is named as what it is.
     If (approval.Approver = "policy") || (approval.IncidentPlanDigest '= "") Do ..Refuse(response, "fhir_approval_not_personal", "the approval came from a policy or an incident, not from a person for this case") Return

@@ -400,6 +400,25 @@ Method TestItsOwnReadRefusesAnotherVersionOrBody()
     Do ..NoneAdmitted()
 }
 
+/// The approval was given against one fhir block of the site profile: its base, its map, its marker and its
+/// identifier systems. A block that has changed since, such as another base, is another receiver as far as the
+/// approval goes: nothing is read or sent, and no fence row is made.
+Method TestAnotherBlockThanTheOneApprovedSendsNothing()
+{
+    Quit:'..Ready()
+    Set request = ..Fixture()
+    Do ..ChangeEntry({"base": "/ut-fhir-copy/r4"}, "enabled")
+    Do ..Refused(request, "fhir_endpoint_differs", "another base than the one approved against")
+    Do ..ChangeEntry({"marker": {"system": "urn:shutter:another-marker"}}, "enabled")
+    Do ..Refused(request, "fhir_endpoint_differs", "another marker system than the one approved against")
+    // With the block as it was approved the same request goes
+    Do ..ChangeEntry("", "enabled")
+    Set op = ..Op(.http)
+    Set response = ..Run(op, request)
+    Do $$$AssertEquals(..Answer(response) _ " " _ ..Verbs(http), "applied|200|1| GET PUT", "the block as approved: the update is applied")
+    Do ..NoneAdmitted()
+}
+
 /// Neither the item's own read nor the update follows a redirect: each request says so itself, so the credential and
 /// the update stay with the server the item names.
 Method TestNoRequestFollowsARedirect()
@@ -803,7 +822,7 @@ Method Fixture(Output case As Shutter.Store.Case, Output binding As Shutter.Stor
     Set body = enc.%ToJSON()
 
     Set prepared = {"view": {"prior_location": "Location/ward-a", "target_location": "Location/ward-b"}, "detail": {},
-        "fhir": {"kind": "fhir_r4", "mapping_digest": "sha256:ut-mapping",
+        "fhir": {"kind": "fhir_r4", "mapping_digest": (##class(Shutter.FHIR.Profile).MappingDigest(##class(Shutter.FHIR.Profile).Block(..#RECEIVER))),
             "encounter": {"http_status": 200, "id": "enc-1"},
             "patient": {"http_status": 200, "reference": "Patient/demo-p1", "etag": "W/\"1\""},
             "locations": [{"reference": "Location/ward-a", "etag": "W/\"1\""}, {"reference": "Location/ward-b", "etag": "W/\"1\""}]}}
