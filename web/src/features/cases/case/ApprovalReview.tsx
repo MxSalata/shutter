@@ -139,6 +139,24 @@ function ReviewBody({
     onSending(decide.isPending);
     return () => onSending(false);
   }, [decide.isPending, onSending]);
+  // A refusal, or a change under the review, leaves the confirming press disabled (it was already, while the decision
+  // was on its way), and a disabled button drops the focus to the page behind the dialog, where the next Tab leaves
+  // the dialog: the focus goes to Cancel, the way out the refusal's words point to. A focus on another control in the
+  // dialog is left where it is.
+  const cancel = useRef<HTMLButtonElement>(null);
+  const refused = moved || decide.isError;
+  useEffect(() => {
+    if (!refused) return;
+    const active = document.activeElement;
+    const dialog = body.current?.closest('.mantine-Modal-content');
+    if (
+      !active ||
+      active === document.body ||
+      !dialog?.contains(active) ||
+      (active instanceof HTMLButtonElement && active.disabled)
+    )
+      cancel.current?.focus();
+  }, [refused]);
   // Whether the controls are still wholly below the dialog's foot (a short screen, a plan with notes): a line at the
   // foot then says the decision is further down, so a screen that happens to end on a whole sentence never reads as
   // a dialog without one
@@ -200,7 +218,9 @@ function ReviewBody({
       {/* Then what releasing it is expected to leave at the receiver, with what the reader should know of it */}
       {approving ? <ApprovalChangeRows view={opened.view} c={opened.c} snapshot={opened.snapshot} /> : null}
       {/* Then what this decision does: for real on a live system, in this browser only in the trial */}
-      <Text size="sm" fw={600} data-testid="confirm-consequence">
+      {/* Said again when "Reject instead" or "Approve instead" turns the review, since the press keeps the focus on
+          that button and the title above it changes unannounced */}
+      <Text size="sm" fw={600} data-testid="confirm-consequence" aria-live="polite">
         {approving
           ? byEnv({
               live: `This sends the fix to ${receiverNoun(opened.c.receiver)}, for real. The receiver is read again and the gate checks the dispatch.`,
@@ -282,7 +302,7 @@ function ReviewBody({
               {approving ? 'Reject instead' : 'Approve instead'}
             </Button>
             <Group gap="sm">
-              <Button variant="default" onClick={onClose} disabled={decide.isPending}>
+              <Button variant="default" onClick={onClose} disabled={decide.isPending} ref={cancel}>
                 Cancel
               </Button>
               <Button
