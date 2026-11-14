@@ -14,10 +14,10 @@
 /// together stay within the cap, and for a user with a share, that user's spend, reservations and the estimate within the
 /// share; with nothing spent or reserved under a limit yet, one run is admitted whatever its estimate (R146-01), so a cap
 /// or a share below one run's estimate does not refuse every run for good. The check and the reservation are one step
-/// under one lock, so two runs cannot both be admitted on the same remaining allowance. What this bounds is spend plus estimates, not the bill: a run can cost more than its estimate, a run
-/// still going after twenty minutes stops counting until its row is written, and a production review's cost is kept on the
-/// review, not on an AgentRun row, so the day's spend does not read it. It is no ceiling on a provider's invoice; a hard
-/// limit at the provider is that.
+/// under one lock, so two runs cannot both be admitted on the same remaining allowance. What this bounds is spend plus
+/// estimates, not the bill: a run can cost more than its estimate, a run still going after twenty minutes stops counting
+/// until its row is written, and a production review's cost is kept on the review, not on an AgentRun row, so the day's
+/// spend does not read it. It is no ceiling on a provider's invoice; a hard limit at the provider is that.
 Class Shutter.Util.Budget
 {
 
@@ -65,8 +65,9 @@ ClassMethod Reserve(key As %String, user As %String = "") As %Numeric
 
 /// Admission (R145-03): whether a run that would call a model may start for a user and, when it may, its reservation under
 /// key, in one step under one lock (the lock Reserve takes too), so two callers cannot both be admitted on the same remaining
-/// allowance. A lock not free within ADMITLOCKSECONDS refuses the run with status.busy set (RefusalStatus: budget_busy). Admitted when the day's spend plus the reservations in flight plus this run's estimate stay within the cap,
-/// and, for a user with a share (not "system" or nobody), that user's spend plus their reservations plus the estimate stay
+/// allowance. A lock not free within ADMITLOCKSECONDS refuses the run with status.busy set (RefusalStatus: budget_busy).
+/// Admitted when the day's spend plus the reservations in flight plus this run's estimate stay within the cap, and, for a
+/// user with a share (not "system" or nobody), that user's spend plus their reservations plus the estimate stay
 /// within the share; with nothing spent or reserved under a limit, one run is admitted whatever its estimate (Short).
 /// status gets StatusFor(user) with estimateUsd, read under the lock; estimate gets the run's estimate. Refused, nothing
 /// is reserved; the caller settles an admitted run's key when the run ends.
