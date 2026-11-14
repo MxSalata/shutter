@@ -85,6 +85,19 @@ The demo resets hourly. Live spending is capped at 5 USD an hour and 15 USD a da
 
 **Optional comparison:** under **Run mode**, choose **Rules only**, then press **Run S8 in Rules only** on S8's card. In a recorded scenario played in Rules only, the gate deliberately lifts one check, `ENTRY_NOT_NAMED_WRITE`, which blocks a write that names no catalogue entry where the matched entry calls for no resend. S8 is built to show what that lets through: WARD-B overwrites WARD-C. Every other check still runs. The trial's recorded case, C-000021, is already approved and written. A real case gets the whole gate, which holds that resend. **Compare the two runs** on either case sets them side by side, as in the picture above. This is a demonstration of a plain resend's consequence, not evidence that AI alone prevents it.
 
+**Recipe: from S2's claim to its proof.** In the trial, as its approver; about two minutes. After step 1 above, start at step 4.
+
+- **Goal:** see what allowed S2's one write, and what confirmed it.
+- **Steps:**
+  1. Open the [trial](https://mxsalata.github.io/shutter/) and choose **Explore on my own**.
+  2. Open **Cases**, press **Waiting for approval**, then open **C-000002**.
+  3. Press **Decide on the resend**, then **Approve the resend**.
+  4. Under **4. Gate and decision**, press **At dispatch, after the approval and a fresh read of the receiver**: the checks run again just before the write.
+  5. Open **6. What was verified**: the receiver's receipt, read after the write.
+  6. Open the **Audit trail** tab: each step, with its time.
+- **Done when:** the outcome reads **Delivered: verified at the receiver**, **4. Gate and decision** says "Gate passed 12 of 12 applicable checks at dispatch; approved by approver", and **6. What was verified** says "Verified: Committed and current".
+- **If it does not work:** a reload starts the trial afresh, with C-000002 waiting again.
+
 **Then, to judge the complete workflow, as time allows:**
 
 - **Watch:** the [13-minute demo video](https://youtu.be/oGW7u9RKf9M) on YouTube, or [download the MP4](https://github.com/MxSalata/shutter/releases/download/v1.4.4/shutter-demo.mp4) (captioned, no sign-in): recorded live on the online demo, from an escalated case to an approved resend verified at the receiver.

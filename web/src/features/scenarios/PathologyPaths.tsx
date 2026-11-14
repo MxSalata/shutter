@@ -191,13 +191,18 @@ export function PathologyRunStarting({ id }: { id: string }) {
       icon={<Loader size={16} />}
       title={`Starting ${id}`}
       data-testid="pathology-run-starting"
+      role="group"
     >
       <Text size="sm">{PATHOLOGY_WORDS.starting}</Text>
     </Alert>
   );
 }
 
-/** A pathology run's banner: what it is doing, that no agent runs, and where its result is once it has played. */
+/**
+ * A pathology run's banner: what it is doing, that no agent runs, and where its result is once it has played. Groups, not
+ * alerts, as the scenarios' run banners are: each poll's step would be announced again. The page's polite line says the
+ * run starts, plays and has played once each; a failed run stays an alert.
+ */
 export function PathologyRunBanner({ run, path }: { run: ScenarioRun; path: PathologyPath | undefined }) {
   if (run.state === 'queued' || run.state === 'running')
     return (
@@ -206,6 +211,7 @@ export function PathologyRunBanner({ run, path }: { run: ScenarioRun; path: Path
         variant="light"
         icon={<Loader size={16} />}
         title={run.state === 'queued' ? `${run.scenario} is queued` : `Playing ${run.scenario}`}
+        role="group"
       >
         <Stack gap={6}>
           <Text size="sm">
@@ -218,7 +224,12 @@ export function PathologyRunBanner({ run, path }: { run: ScenarioRun; path: Path
     );
   if (run.state === 'done')
     return (
-      <Alert color="blue" variant="light" title={`${run.scenario} played, ${formatAge(run.finishedAt)}`}>
+      <Alert
+        color="blue"
+        variant="light"
+        title={`${run.scenario} played, ${formatAge(run.finishedAt)}`}
+        role="group"
+      >
         <Stack gap="xs">
           <Text size="sm">
             Delivered {run.files.join(', ') || 'no results'}. {PATHOLOGY_WORDS.noAgent}

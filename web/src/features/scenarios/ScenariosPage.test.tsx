@@ -784,7 +784,7 @@ describe('ScenariosPage, as each role has it', () => {
     // The run plays, and the banner says how it executes, from the run's own mark: recorded agents, no new inference
     await userEvent.click(run);
     const banner = (await screen.findByText(/^Playing S2 \(Board\)$/)).closest<HTMLElement>(
-      '[role="alert"]',
+      '[role="group"]',
     )!;
     expect(within(banner).getByTestId('run-execution')).toHaveTextContent(
       'Recorded replayIts agents answer from their recordings on this IRIS instance: no new inference.',
@@ -804,7 +804,7 @@ describe('ScenariosPage, as each role has it', () => {
     // A run the server did not mark as a replay claims nothing while it plays: only its case's agent runs can say
     await userEvent.click(run);
     const banner = (await screen.findByText(/^Playing S2 \(Board\)$/)).closest<HTMLElement>(
-      '[role="alert"]',
+      '[role="group"]',
     )!;
     expect(within(banner).getByTestId('run-execution')).toHaveTextContent(
       /^Its case says what ran: live only when a model was called\.$/,
@@ -861,7 +861,7 @@ describe('ScenariosPage, as each role has it', () => {
     renderScenarios();
     expect(await screen.findByRole('button', { name: 'Run S5' })).toBeDisabled();
     expect(screen.getAllByText('A run of S2 is still playing').length).toBeGreaterThan(0);
-    expect(screen.getByRole('alert')).toHaveTextContent(
+    expect(screen.getByRole('group', { name: 'Playing S2 (Board)' })).toHaveTextContent(
       'Now delivering S2-01-A01.hl7. Files delivered so far: none.',
     );
   });
@@ -916,7 +916,7 @@ describe("ScenariosPage, a finished run's own case and Home's way in", () => {
   }
 
   const banner = async () =>
-    (await screen.findByText(/^S2 played \(Board\), /)).closest<HTMLElement>('[role="alert"]')!;
+    (await screen.findByText(/^S2 played \(Board\), /)).closest<HTMLElement>('[role="group"]')!;
 
   it("offers no case until the run's own has opened: never the previous run's, never the Cases list", async () => {
     let cases = [earlier()];
@@ -1057,6 +1057,61 @@ describe("ScenariosPage, a finished run's own case and Home's way in", () => {
     const last = await banner();
     expect(last).toHaveTextContent(/^S2 played \(Board\), /);
     expect(await within(last).findByRole('link', { name: 'Open its case, C-000070' })).toBeInTheDocument();
+    // The refused start is the red notice's to say: the polite line names no run, the last one least of all
+    expect(screen.getByTestId('run-said')).toBeEmptyDOMElement();
+  });
+
+  it('tells a screen reader of the run started here, once at each stage, and of no other run on the shared player', async () => {
+    let run: Record<string, unknown> = finished();
+    let answer: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => (answer = resolve));
+    serve(finished(), () => [own(), earlier()]);
+    server.use(
+      http.get('/api/shutter/scenarios', () =>
+        HttpResponse.json({ scenarios: listed.map((d) => ({ ...d, latestCase: latestOf(d.id) })), run }),
+      ),
+      http.post('/api/shutter/scenarios/S3/run', async () => {
+        await held;
+        run = {
+          scenario: 'S3',
+          mode: 'board',
+          queuedAt: '2026-11-13T10:05:00Z',
+          state: 'queued',
+          files: [],
+          timeouts: [],
+        };
+        return HttpResponse.json({
+          scenario: 'S3',
+          mode: 'board',
+          queuedAt: '2026-11-13T10:05:00Z',
+          files: [],
+        });
+      }),
+    );
+    const client = renderScenarios();
+    await banner();
+    const said = screen.getByTestId('run-said');
+    // The last run was not started here: nothing is said of it
+    expect(said).toBeEmptyDOMElement();
+    await userEvent.click(await screen.findByRole('button', { name: 'Run S3 in Board mode' }));
+    await waitFor(() => expect(said).toHaveTextContent(/^S3 is starting in Board mode\.$/));
+    answer();
+    await waitFor(() => expect(said).toHaveTextContent(/^S3 is playing in Board mode\.$/));
+    // The player starts it, and each poll brings a new step: the line stays as it was, so nothing more is said
+    const startedAt = '2026-11-13T10:05:02Z';
+    const playing = { scenario: 'S3', mode: 'board', startedAt, state: 'running', files: [], timeouts: [] };
+    run = { ...playing, step: 'delivering S3-01-A01.hl7' };
+    await client.invalidateQueries({ queryKey: keys.scenarios });
+    await screen.findByText(/Now delivering S3-01-A01\.hl7\./);
+    expect(said).toHaveTextContent(/^S3 is playing in Board mode\.$/);
+    run = { ...playing, state: 'done', finishedAt: '2026-11-13T10:05:20Z' };
+    await client.invalidateQueries({ queryKey: keys.scenarios });
+    await waitFor(() => expect(said).toHaveTextContent(/^S3 has played in Board mode\.$/));
+    // Another account plays S3 in the same mode on the shared player: not this reader's run, so not said as theirs
+    run = { ...playing, startedAt: '2026-11-13T10:09:00Z', step: 'delivering S3-01-A01.hl7' };
+    await client.invalidateQueries({ queryKey: keys.scenarios });
+    await screen.findByText(/^Playing S3 \(Board\)$/);
+    expect(said).toBeEmptyDOMElement();
   });
 
   it("lands on S2's card from Home's start with its Run focused, starts nothing, and drops the start from the address", async () => {

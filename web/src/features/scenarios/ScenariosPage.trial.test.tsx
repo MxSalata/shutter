@@ -254,7 +254,7 @@ describe('ScenariosPage in the trial', () => {
     Date.now = () => realNow() + 9_000;
     try {
       const done = await screen.findByText(title, {}, { timeout: 10_000 });
-      return done.closest<HTMLElement>('[role="alert"]')!;
+      return done.closest<HTMLElement>('[role="group"]')!;
     } finally {
       Date.now = realNow;
     }
@@ -324,7 +324,7 @@ describe('ScenariosPage in the trial', () => {
     );
     renderTrial();
     const done = await screen.findByText(/^S20 played \(Board\)$/);
-    const alert = done.closest<HTMLElement>('[role="alert"]')!;
+    const alert = done.closest<HTMLElement>('[role="group"]')!;
     expect(alert).toHaveTextContent(
       'The trial has no recording of S20 in Board mode. Its recorded case is C-000053, played in Rules only mode.',
     );
