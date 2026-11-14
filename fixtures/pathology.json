@@ -1,0 +1,25 @@
+[
+  {
+    "id": "P1",
+    "title": "A result the results system refused",
+    "summary": "One laboratory result goes to the demo's results system, which answers AE: one test code in it is not one it knows. A case opens at Lab Results Out with the receiver's own words and the OBX they name. It goes to a person: Shutter never resends one order or result by itself, so the case offers no resend.",
+    "steps": [
+      {"file": "result-unknown-test-code.hl7", "route": "lab", "expect": "refused_ae"},
+      {"wait_for_state": "escalated", "timeout": 90}
+    ]
+  },
+  {
+    "id": "P2",
+    "title": "The results system was down",
+    "summary": "The demo's results system goes down, three results fail without a connection ever opening, and the receiver comes back. The outage of Lab Results Out offers the three, in order. One approval, with the receiver checked, and the engine sends each again unchanged, one at a time: each then reads Completed in the engine, which is not a check at the receiver.",
+    "steps": [
+      {"lab_receiver": "down"},
+      {"file": "result-1.hl7", "route": "lab", "expect": "delivery_fails"},
+      {"file": "result-2.hl7", "route": "lab", "expect": "delivery_fails"},
+      {"file": "result-3.hl7", "route": "lab", "expect": "delivery_fails"},
+      {"wait": 20},
+      {"lab_receiver": "up"},
+      {"wait_for_outage": "offered", "receiver": "Lab Results Out", "timeout": 240}
+    ]
+  }
+]

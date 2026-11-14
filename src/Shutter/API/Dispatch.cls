@@ -376,10 +376,47 @@ ClassMethod Scenarios() As %Status
     }
     Set out = {}
     Set out.scenarios = list
+    // The pathology paths (1.4.6), counted apart from the scenarios: each with its latest case and, for the outage path,
+    // the demo results receiver's newest outage. An empty list where the demo's results route is not installed.
+    Set out.pathology = ..PathologyPaths()
     Set run = ""
     If ##class(%Dictionary.CompiledMethod).%ExistsId("Shutter.Scenarios.Runner||Status") Set run = ##class(Shutter.Util.Json).Parse($CLASSMETHOD("Shutter.Scenarios.Runner", "Status"), .ssc)
     If $ISOBJECT(run) { Set out.run = run } Else { Do out.%Set("run", "", "null") }
     Quit ..Json(out)
+}
+
+/// The pathology paths for GET /scenarios (1.4.6): Runner.ListPathology's entries, each with latestCase as a scenario has
+/// it and latestOutage, the newest outage of the demo results receiver ({id, state, openedAt}) for the path that waits for
+/// one (P2), else null.
+ClassMethod PathologyPaths() As %DynamicArray
+{
+    If '##class(%Dictionary.CompiledMethod).%ExistsId("Shutter.Scenarios.Runner||ListPathology") Quit []
+    Set list = ##class(Shutter.Util.Json).Parse($CLASSMETHOD("Shutter.Scenarios.Runner", "ListPathology"), .sc)
+    If '$ISOBJECT(list) || 'list.%IsA("%Library.DynamicArray") Quit []
+    Set receiver = $PARAMETER("Shutter.Scenarios.Runner", "LABRECEIVER")
+    Set iter = list.%GetIterator()
+    While iter.%GetNext(.i, .one) {
+        Set id = ##class(Shutter.Util.Json).Str(one, "id"), cid = ""
+        &sql(SELECT TOP 1 ID INTO :cid FROM Shutter_Store."Case" WHERE Scenario = :id ORDER BY ID DESC)
+        If (SQLCODE = 0) && (cid '= "") {
+            Set c = ##class(Shutter.Store.Case).%OpenId(cid)
+            Set one.latestCase = {"caseId": (c.CaseId), "state": (c.State), "disposition": (c.Disposition), "headline": (c.Headline), "updatedAt": (c.UpdatedAt)}
+        } Else {
+            Do one.%Set("latestCase", "", "null")
+        }
+        Set oid = ""
+        If $CLASSMETHOD("Shutter.Scenarios.Runner", "WaitsForOutage", one) {
+            &sql(SELECT TOP 1 ID INTO :oid FROM Shutter_Store.Outage WHERE Receiver = :receiver ORDER BY ID DESC)
+            If SQLCODE '= 0 Set oid = ""
+        }
+        Set o = $SELECT(oid '= "": ##class(Shutter.Store.Outage).%OpenId(oid), 1: "")
+        If $ISOBJECT(o) {
+            Set one.latestOutage = {"id": (+oid), "state": (o.State), "openedAt": (o.OpenedAt)}
+        } Else {
+            Do one.%Set("latestOutage", "", "null")
+        }
+    }
+    Quit list
 }
 
 /// True when the running production (Shutter's own, or the site's that InstallInto put Shutter's items in) has the
@@ -424,8 +461,16 @@ ClassMethod ScenarioRun(id As %String) As %Status
     // answers from its recording, with no model call and nothing counted against the budget or a share. The single
     // investigator was never recorded, so that mode is refused here before anything is queued or reset.
     Set live = $SYSTEM.Security.Check("Shutter_LiveAgents", "USE")
-    Set notRecorded = ##class(Shutter.Scenarios.Runner).NotRecorded(mode, live)
-    If notRecorded '= "" Quit ..Fail("409 Conflict", "not_recorded", notRecorded)
+    // A pathology path (1.4.6) runs no agent, so its mode needs no recording; the outage path is refused here, before
+    // anything is queued or reset, while the last run's outage is open or its results are still in the window.
+    Set pathology = ##class(Shutter.Scenarios.Runner).FindPathology(id)
+    If $ISOBJECT(pathology) {
+        Set refused = ##class(Shutter.Scenarios.Runner).PathologyRefusal(pathology)
+        If refused '= "" Quit ..Fail("409 Conflict", "wrong_state", refused)
+    } Else {
+        Set notRecorded = ##class(Shutter.Scenarios.Runner).NotRecorded(mode, live)
+        If notRecorded '= "" Quit ..Fail("409 Conflict", "not_recorded", notRecorded)
+    }
     Set r = ..Idempotent(bodyText, .replayed)
     If replayed Quit $$$OK
     If ..PlayerEnabled() {
