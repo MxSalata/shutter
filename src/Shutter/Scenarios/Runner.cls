@@ -673,9 +673,9 @@ ClassMethod Reset() As %String [ SqlProc ]
     Set ^Shutter.Config("resetAt") = resetAt
     Set abandoned = ##class(Shutter.Store.Incident).AbandonOpen("scenario reset")
     Do ##class(Shutter.Util.RecoveryControl).DemoReset($USERNAME)
-    // The demo results system's stand-in back on if a P2 run cut short left it off (1.4.6). A production item's
-    // setting in the hospital's namespace, switched only when it reads off; nothing in the outage stores or the resend
-    // ledger is read or written here.
+    // The demo results system's stand-in back on if a P2 run cut short left it off (1.4.6): only when it does not run and
+    // the caller may update the hospital's production (the Scenario Player at each run's start; never a person's reset
+    // through the API, which leaves it as it is). Nothing in the outage stores or the resend ledger is read or written here.
     Set lab = ..LabListenerOn()
     // A run record left queued or finished goes with the reset (a queued run whose player stopped would otherwise
     // refuse every later run); one that is playing stays, since that run's own reset comes through here
@@ -683,18 +683,22 @@ ClassMethod Reset() As %String [ SqlProc ]
     Quit {"ward": (ward), "receivers": (receivers), "live": (live), "lab": (lab), "emptied": (emptied), "mode": "board", "reset_at": (resetAt), "abandoned_incidents": (abandoned)}.%ToJSON()
 }
 
-/// The demo results system's stand-in switched on when it reads off (1.4.6): "on", "already on", "none" (no results route
-/// here) or "not switched: ..." (a caller without the right to change the production, say). Never an error: the rest of
-/// the reset must still happen.
+/// The demo results system's stand-in switched on when it does not run (1.4.6): "on", "already on", "none" (no results
+/// route here) or "not switched: ..." with why. A caller that may not update the hospital's production (every person
+/// signed in to Shutter; Hospital.Service.LabReceiver, MaySwitch) changes nothing, neither the running production nor its
+/// definition, and is told so: the next run's start, played by the Scenario Player, switches it on. Never an error: the
+/// rest of the reset must still happen.
 ClassMethod LabListenerOn() As %String
 {
     Quit:'..LabReady() "none"
     Quit:..ListenerReads()=1 "already on"
+    Quit:'##class(Hospital.Service.LabReceiver).MaySwitch() "not switched: this sign-in may not update the demo hospital's production; the next run's start switches it back on"
     Set r = ..InHospital("up")
     Quit $SELECT(r = "": $SELECT(..ListenerReads() = 1: "on", 1: "not switched"), 1: "not switched: " _ r)
 }
 
-/// Whether the stand-in's item reads enabled in the hospital's production (1, 0, or "" when it can't be read).
+/// Whether the stand-in runs in the hospital's running production (1, 0, or "" when it can't be read): the production's
+/// own record of the item, not its definition's flag (Hospital.Service.LabReceiver, Listening).
 ClassMethod ListenerReads() As %String
 {
     Set hospital = $GET(^Shutter.Config("hospitalNamespace"))

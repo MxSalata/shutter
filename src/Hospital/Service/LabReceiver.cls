@@ -57,8 +57,9 @@ ClassMethod Heard(control As %String, text As %String, answer As %String)
 /// The item's name in Hospital.Production.
 Parameter ITEM = "Results System In";
 
-/// Whether the stand-in's item is enabled in this namespace's production definition; "" when that can't be read.
-ClassMethod Listening() As %String
+/// Whether the stand-in's item is enabled in this namespace's production definition (1 or 0); "" when that can't be read,
+/// or the item is not there. What the production will run at its next update, not what it runs now (<method>Listening</method>).
+ClassMethod Defined() As %String
 {
     Set enabled = ""
     Try {
@@ -70,18 +71,49 @@ ClassMethod Listening() As %String
     Quit enabled
 }
 
+/// Whether the stand-in runs in this namespace's running production (1 or 0): the item as the production last put it into
+/// effect (its runtime record's IsEnabled), not the definition's flag, so a definition saved without the update that should
+/// follow it (an update a caller had no right to make) never reads as listening. 0 when the production is not running; ""
+/// when the item is not in Hospital.Production here. Callable over SQL in the hospital's namespace
+/// (SELECT Hospital_Service.LabReceiver_Listening()).
+ClassMethod Listening() As %String [ SqlProc ]
+{
+    Quit:..Defined()="" ""
+    Quit +$GET(^Ens.Runtime("ConfigItem", ..#ITEM, "IsEnabled"))
+}
+
+/// Whether this process may update the running production, as Ens.Director's update asks (the interoperability user, the
+/// role %All, or USE on %Ens_ProductionRun or %Ens_ConfigItemRun): the Scenario Player may; a person signed in to Shutter
+/// may not, so a reset through the API never half switches the stand-in.
+ClassMethod MaySwitch() As %Boolean
+{
+    Quit:$USERNAME=##class(%SYS.Ensemble).EnsembleUsername() 1
+    Quit:(","_$ROLES_",")[",%All," 1
+    Quit ''($SYSTEM.Security.Check("%Ens_ProductionRun", "USE") || $SYSTEM.Security.Check("%Ens_ConfigItemRun", "USE"))
+}
+
 /// Switches the stand-in on or off in the running production, as the production's own setting (Ens.Director,
 /// EnableConfigItem): off, its listener closes and a connection to its port is refused; on, it listens again. Only when it
-/// reads otherwise, so a switch that is already so changes nothing. Returns "on", "off", "already on", "already off", or
-/// "error: ..." with what went wrong. Called in this namespace.
+/// runs otherwise (<method>Listening</method>), so a switch that is already so changes nothing. A process that may not
+/// update the production (<method>MaySwitch</method>) changes nothing, not even the definition. When the definition
+/// already says so but the running production does not, only the update runs; when the update fails, the definition is
+/// put back as it was, so the two never disagree. Returns "on", "off", "already on", "already off", or "error: ..." with
+/// what went wrong. Called in this namespace.
 ClassMethod Listen(on As %Boolean) As %String
 {
     Set on = ''on, now = ..Listening()
     If now = "" Quit "error: the item " _ ..#ITEM _ " is not in Hospital.Production here"
     If now = on Quit "already " _ $SELECT(on: "on", 1: "off")
+    If '..MaySwitch() Quit "error: this sign-in may not update the demo hospital's production; the next run's start switches it back on"
     Try {
-        Set sc = ##class(Ens.Director).EnableConfigItem(..#ITEM, on, 1)
+        If ..Defined() = on {
+            Set sc = ##class(Ens.Director).UpdateProduction(##class(Ens.Director).GetRunningProductionUpdateTimeout())
+        } Else {
+            Set sc = ##class(Ens.Director).EnableConfigItem(..#ITEM, on, 1)
+            Do:$$$ISERR(sc)&&(..Defined()=on) ##class(Ens.Director).EnableConfigItem(..#ITEM, 'on, 0)
+        }
         Set out = $SELECT($$$ISOK(sc): $SELECT(on: "on", 1: "off"), 1: "error: " _ $SYSTEM.Status.GetErrorText(sc))
+        Set:$$$ISOK(sc)&&(..Listening()'=on) out = "error: the production did not put it into effect (is Hospital.Production running?)"
     } Catch ex {
         Set out = "error: " _ ex.DisplayString()
     }
