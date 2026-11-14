@@ -39,7 +39,12 @@ def main():
         return 2
     # Anthropic's default model is named here as it always was; OpenAI's is left to the instance (an empty model).
     model = args.model or ("claude-opus-5-5" if args.provider == "anthropic" else "")
-    body = json.dumps({"query": "SELECT Shutter.Setup_ConfigureProvider(?, ?, ?) AS r", "parameters": [key, model, args.provider]}).encode()
+    # Anthropic goes as the two-parameter call, which an instance older than the second provider also takes.
+    if args.provider == "anthropic":
+        query, parameters = "SELECT Shutter.Setup_ConfigureProvider(?, ?) AS r", [key, model]
+    else:
+        query, parameters = "SELECT Shutter.Setup_ConfigureProvider(?, ?, ?) AS r", [key, model, args.provider]
+    body = json.dumps({"query": query, "parameters": parameters}).encode()
     token = base64.b64encode(f"{args.user}:{args.password}".encode()).decode()
     req = urllib.request.Request(args.url.rstrip("/") + f"/api/atelier/v1/{args.ns}/action/query", data=body, method="POST",
                                  headers={"Authorization": "Basic " + token, "Content-Type": "application/json"})
