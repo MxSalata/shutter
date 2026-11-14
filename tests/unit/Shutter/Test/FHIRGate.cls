@@ -1019,6 +1019,13 @@ XData Rows [ MimeType = application/json ]
    "expect": [["concurrency", "block", "FHIR_LOCATION_CHANGED"]], "contains": [["concurrency", "FHIR_LOCATION_CHANGED", "Location/ward-b"]], "outcome": "block"},
   {"group": "table", "name": "concurrency: a part was not read just before the write", "stage": "dispatch", "set": {"fhir.locations.0.http_status": 0},
    "expect": [["concurrency", "unknown", "FHIR_RECEIVER_UNREADABLE"], ["mapping", "unknown", "FHIR_LOCATION_UNREADABLE"]], "absent": [["concurrency", "FHIR_VERSION_MATCHES"]], "outcome": "unknown"},
+  {"group": "table", "name": "concurrency: a Patient read with no ETag, then and now, was not compared", "stage": "dispatch", "base": {"fhir": {"patient": {"etag": ""}}},
+   "expect": [["concurrency", "unknown", "FHIR_RECEIVER_UNREADABLE"]], "contains": [["concurrency", "FHIR_RECEIVER_UNREADABLE", "the Patient"]], "absent": [["concurrency", "FHIR_VERSION_MATCHES"]], "outcome": "unknown"},
+  {"group": "table", "name": "concurrency: a mapped Location read with no ETag, then and now, was not compared", "stage": "dispatch",
+   "base": {"fhir": {"locations": [{"reference": "Location/ward-a", "ward": "WARD-A", "http_status": 200, "etag": "W/\"1\"", "status": "active", "identifier_ok": true}, {"reference": "Location/ward-b", "ward": "WARD-B", "http_status": 200, "etag": "", "status": "active", "identifier_ok": true}]}},
+   "expect": [["concurrency", "unknown", "FHIR_RECEIVER_UNREADABLE"]], "contains": [["concurrency", "FHIR_RECEIVER_UNREADABLE", "Location/ward-b"]], "absent": [["concurrency", "FHIR_VERSION_MATCHES"]], "outcome": "unknown"},
+  {"group": "table", "name": "concurrency: a Patient whose ETag is gone at the dispatch has no version to compare", "stage": "dispatch", "set": {"fhir.patient.etag": ""},
+   "expect": [["concurrency", "unknown", "FHIR_RECEIVER_UNREADABLE"]], "absent": [["concurrency", "FHIR_VERSION_MATCHES"], ["concurrency", "FHIR_PATIENT_CHANGED"]], "outcome": "unknown"},
   {"group": "table", "name": "concurrency: an unread Patient does not hide a changed Encounter", "stage": "dispatch", "set": {"fhir.patient.http_status": 0, "fhir.encounter.etag": "W/\"2\""},
    "expect": [["concurrency", "unknown", "FHIR_RECEIVER_UNREADABLE"], ["concurrency", "block", "FHIR_RECEIVER_CHANGED"]], "outcome": "block"},
 

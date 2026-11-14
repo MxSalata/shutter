@@ -596,8 +596,9 @@ ClassMethod Mapping(checks As %DynamicArray, fhir As %DynamicObject, block As %D
     If checks.%Size() = before Do ..Check(checks, "mapping", "pass", "FHIR_LOCATIONS_CHECKED", "Both wards have a Location in the map, and every mapped Location was read, is active and carries its recorded identifier")
 }
 
-/// The concurrency rows at dispatch: no binding (block); a part that was not read (unknown); the Encounter, the
-/// Patient or a bound Location at another ETag than the binding sealed (block). ETags are compared as strings.
+/// The concurrency rows at dispatch: no binding (block); a part that was not read, or a Patient or a bound Location
+/// that came with no ETag, which is no version to compare (unknown); the Encounter, the Patient or a bound Location at
+/// another ETag than the binding sealed (block). ETags are compared as strings.
 ClassMethod Concurrency(checks As %DynamicArray, fhir As %DynamicObject, binding As Shutter.Store.FHIRBinding) [ Private ]
 {
     Set json = "Shutter.Util.Json", before = checks.%Size()
@@ -615,6 +616,9 @@ ClassMethod Concurrency(checks As %DynamicArray, fhir As %DynamicObject, binding
     Set bound = ##class(Shutter.Util.Json).Parse(binding.PatientJSON)
     If +$CLASSMETHOD(json, "Str", pat, "http_status", 0) '= 200 {
         Set unread = unread _ $SELECT(unread = "": "", 1: ", ") _ "the Patient"
+    } ElseIf $CLASSMETHOD(json, "Str", pat, "etag") = "" {
+        // No ETag is no version: two empty ones compare as equal and say nothing.
+        Set unread = unread _ $SELECT(unread = "": "", 1: ", ") _ "the Patient (it came with no ETag)"
     } ElseIf ..Differs($CLASSMETHOD(json, "Str", pat, "etag"), $CLASSMETHOD(json, "Str", bound, "etag")) {
         Do ..Check(checks, "concurrency", "block", "FHIR_PATIENT_CHANGED", "The Patient's ETag is " _ $CLASSMETHOD(json, "Str", pat, "etag", "(none)") _ "; the person approved against " _ $CLASSMETHOD(json, "Str", bound, "etag", "(none)") _ ". The approval is void")
     }
@@ -626,6 +630,8 @@ ClassMethod Concurrency(checks As %DynamicArray, fhir As %DynamicObject, binding
             Set reference = $CLASSMETHOD(json, "Str", b, "reference"), read = ..ByReference(reads, reference)
             If +$CLASSMETHOD(json, "Str", read, "http_status", 0) '= 200 {
                 Set unread = unread _ $SELECT(unread = "": "", 1: ", ") _ reference
+            } ElseIf $CLASSMETHOD(json, "Str", read, "etag") = "" {
+                Set unread = unread _ $SELECT(unread = "": "", 1: ", ") _ reference _ " (it came with no ETag)"
             } ElseIf ..Differs($CLASSMETHOD(json, "Str", read, "etag"), $CLASSMETHOD(json, "Str", b, "etag")) {
                 Set changed = changed _ $SELECT(changed = "": "", 1: ", ") _ reference
             }
