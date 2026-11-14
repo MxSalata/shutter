@@ -347,11 +347,13 @@ test.describe(`a stale approval in two tabs ${area.tag}`, () => {
     context,
   }) => {
     const s = held();
-    await stub(page, s);
+    const a = await stub(page, s);
     await openCase(page);
     await page.getByTestId('case-action').click();
     const stale = page.getByRole('dialog', { name: 'Approve the resend: plan v1' });
     await stale.getByRole('button', { name: 'Approve the resend' }).focus();
+    // Tab A reads nothing more while tab B acts: its next read is of the case re-planned, not of a moment between
+    a.hold = structuredClone(s);
     // Tab B's rejection and reopening, as the stand-in records them
     const other = await context.newPage();
     await stub(other, s);
@@ -362,12 +364,15 @@ test.describe(`a stale approval in two tabs ${area.tag}`, () => {
       .getByRole('dialog', { name: 'Reject the resend: plan v1' })
       .getByRole('button', { name: 'Reject the resend' })
       .click();
+    await expect(other.getByRole('dialog')).toHaveCount(0);
     await other.getByRole('button', { name: 'Reinvestigate' }).click();
     const reopen = other.getByRole('dialog', { name: `Reinvestigate ${CASE}` });
     await reopen.getByRole('textbox', { name: /Why look again/ }).fill('The ward moved the patient');
     await reopen.getByRole('button', { name: 'Reopen the case' }).click();
     await expect(reopen).toBeHidden();
+    expect(s.view.plan.version).toBe(2);
     await page.bringToFront();
+    a.hold = null;
     // Tab A's next read stops the review before anything is pressed: nothing was sent from it
     await expect(stale.getByTestId('review-refusal')).toHaveText(
       "The plan or the case changed since you opened this, so this decision can't be recorded. Review the current plan to decide again.",
@@ -413,5 +418,25 @@ for (const colorScheme of ['light', 'dark'] as const)
         expect(await audit(page)).toEqual([]);
         expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
         await shot(page, `U3-fresh-review-${width}-${colorScheme}`);
+      });
+
+      test('a review stopped by a decision in another tab says the case no longer waits', async ({
+        page,
+      }) => {
+        const s = held();
+        await stub(page, s);
+        await openCase(page);
+        await page.getByTestId('case-action').click();
+        const stale = page.getByRole('dialog', { name: 'Approve the resend: plan v1' });
+        await expect(stale.getByRole('button', { name: 'Approve the resend' })).toBeVisible();
+        // Another tab rejected plan v1: the page's next read stops this review, with no word of deciding again
+        s.detail = { ...s.detail, state: 'blocked', version: s.detail.version + 1 };
+        await expect(stale.getByTestId('review-refusal')).toHaveText(
+          "The plan or the case changed since you opened this, so this decision can't be recorded. The case was no longer waiting for a decision when this page last read it.",
+        );
+        await expect(stale.getByTestId('what-changed')).toContainText('Blocked (was Waiting for approval)');
+        expect(await audit(page)).toEqual([]);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+        await shot(page, `U3-left-approval-${width}-${colorScheme}`);
       });
     });
