@@ -935,7 +935,8 @@ function AllScenarios({
  * named, so it is explained here and nowhere before.
  */
 function CaseLead({ words }: { words: string }) {
-  const [before, after] = words.split(/\bcase\b/);
+  // Only the first "case" is the term; the rest of the lead follows it whole
+  const [before, after] = words.split(/\bcase\b(.*)/s);
   if (after === undefined) return <>{words}</>;
   return (
     <>
