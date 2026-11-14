@@ -1239,6 +1239,11 @@ export interface Budget {
   inFlight?: number;
   /** What the signed-in user's own runs in flight have reserved against their share (v1.35). */
   reservedByMeUsd?: number;
+  /**
+   * What the next live run is expected to cost, as admission counts it (1.4.6): present where the budget was asked whether
+   * a run may start (a 409 budget_exhausted's budget), not in GET /settings.
+   */
+  estimateUsd?: number;
 }
 
 /**
