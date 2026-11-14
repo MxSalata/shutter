@@ -189,8 +189,9 @@ export function ApprovalPanel({
           {/* What is to be decided, while it waits: the plan's action, and what releasing it is expected to leave */}
           {awaiting && plan ? <PlanHeadline words={planWords(plan, c, snapshot)} /> : null}
           {awaiting && view ? <ApprovalChangeRows view={view} c={c} snapshot={snapshot} /> : null}
+          {/* A standing note, not news: as an alert it was announced over the page on every arrival at the case */}
           {TRIAL && awaiting ? (
-            <Alert color="blue" variant="light" title="Held for you to decide">
+            <Alert color="blue" variant="light" title="Held for you to decide" role="note">
               This recorded case waits here for you. Approve it and the recording plays on: the fix goes out
               and the receiving system confirms it. Reject it and it stops as blocked, for a person to take
               further.
