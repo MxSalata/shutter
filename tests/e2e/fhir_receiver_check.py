@@ -552,6 +552,7 @@ def variant_c(ctr, api, n):
     check(failures, len(stored) == 1 and stored[0].get('revoked') in (True, 1), f'the approval is revoked ({[(a.get("approver"), a.get("revoked")) for a in stored]})')
     versions = history(api, r)
     check(failures, bool(versions) and not any(marked(v) for v in versions.values()), f'no version carries the marker (versions {sorted(versions)})')
+    check(failures, r.sent(api) == 1, f'the server received one PUT, refused and never sent again ({r.sent(api)})')
     return failures
 
 
