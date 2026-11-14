@@ -79,6 +79,45 @@ describe('what changed under a stopped review', () => {
     expect(gone[0]).toMatchObject({ now: 'None', changed: true });
   });
 
+  it('leads with the state when the case is no longer waiting for a decision', () => {
+    const now = opened();
+    now.c = { ...now.c, state: 'blocked', version: 7 };
+    const rows = whatChanged(opened(), now);
+    expect(rows.map((r) => r.label)).toEqual([
+      'State',
+      'Plan',
+      'Action',
+      'Receiver version',
+      'Evidence',
+      'Case version',
+    ]);
+    expect(rows[0]).toEqual({ label: 'State', was: 'Waiting for approval', now: 'Blocked', changed: true });
+    expect(rows[1]).toMatchObject({ now: 'v1', changed: false });
+  });
+
+  it('says evidence read again with the same words was read again, rather than repeat them', () => {
+    const now = opened();
+    now.snapshot = { ...now.snapshot!, digest: 'sha256:snap2', materialDigest: 'sha256:mat2' };
+    expect(byLabel(whatChanged(opened(), now)).Evidence).toEqual({
+      label: 'Evidence',
+      was: '',
+      now: 'Read again: WARD-A, bed BAY1-01 at version 1',
+      changed: true,
+    });
+  });
+
+  it('compares a material digest only with another, never with a plain digest', () => {
+    const plain = opened();
+    plain.snapshot = { ...plain.snapshot!, materialDigest: undefined };
+    // One read has a material digest and the other not: the plain digests are the same, so nothing moved
+    expect(byLabel(whatChanged(plain, opened())).Evidence).toMatchObject({ changed: false });
+    expect(byLabel(whatChanged(opened(), plain)).Evidence).toMatchObject({ changed: false });
+    // The same material digest with another plain one: nothing the decision rests on moved
+    const reread = opened();
+    reread.snapshot = { ...reread.snapshot!, digest: 'sha256:snap2' };
+    expect(byLabel(whatChanged(opened(), reread)).Evidence).toMatchObject({ changed: false });
+  });
+
   it('marks nothing changed when only the server refused it', () => {
     expect(whatChanged(opened(), opened()).some((r) => r.changed)).toBe(false);
   });

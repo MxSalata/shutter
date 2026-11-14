@@ -1577,6 +1577,45 @@ describe('CasePage', () => {
     expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeEnabled();
   });
 
+  it('keeps the server words when another tab decided first, and says the case no longer waits', async () => {
+    const detail = (await (await fetch('/api/shutter/cases/C-000002')).json()) as { version: number };
+    let decided = false;
+    server.use(
+      http.get('/api/shutter/cases/C-000002', () =>
+        HttpResponse.json(decided ? { ...detail, state: 'blocked', version: detail.version + 1 } : detail),
+      ),
+      http.post('/api/shutter/cases/C-000002/approvals', () =>
+        HttpResponse.json(
+          { error: 'wrong_state', detail: 'The case is blocked, not awaiting approval' },
+          { status: 409 },
+        ),
+      ),
+    );
+    renderCase('C-000002');
+    await screen.findByTestId('case-proposal');
+    await userEvent.click(screen.getByTestId('case-action'));
+    const dialog = await screen.findByRole('dialog', { name: 'Approve the resend: plan v1' });
+    decided = true;
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Approve the resend' }));
+    // The page reads the case again after the refusal: the review stops, in the server's words, with no word of
+    // deciding again, and the state leads what changed
+    const refusal = await within(dialog).findByTestId('review-refusal');
+    expect(refusal).toHaveTextContent(
+      /^The case is blocked, not awaiting approval \(wrong_state\)\. The case was no longer waiting for a decision when this page last read it\.$/,
+    );
+    const changed = within(dialog).getByTestId('what-changed');
+    expect(within(changed).getByRole('rowheader', { name: 'State' }).closest('tr')).toHaveTextContent(
+      'Blocked (was Waiting for approval)',
+    );
+    expect(within(dialog).queryByRole('button', { name: 'Approve the resend' })).not.toBeInTheDocument();
+    // A fresh read is still one press away: the page stops reading a closed case, so only it can say what is current
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Review current plan' }));
+    expect(await within(dialog).findByTestId('review-current-gone')).toHaveTextContent(
+      'The case is no longer waiting for a decision: it is blocked now.',
+    );
+    expect(refusal).toHaveTextContent(/^The case is blocked, not awaiting approval \(wrong_state\)\.$/);
+  });
+
   it('holds the review open while a decision is being sent, so its answer is always announced', async () => {
     const sent: unknown[] = [];
     let answer!: () => void;

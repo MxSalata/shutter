@@ -176,6 +176,11 @@ function ReviewBody({
   // Only a stale plan or case version asks for a fresh look; any other refusal (a 403 naming the Workflow role, a 409
   // naming who the task is assigned to) is shown as the server worded it.
   const stale = !!decide.error && isApiError(decide.error) && decide.error.code === 'stale_version';
+  // Another refusal the case moved under (the case no longer waiting, decided in another tab) keeps the server's words,
+  // as a sentence the stopped review can add to
+  const said =
+    !stale && isApiError(decide.error) && decide.error.isConflict ? describeError(decide.error) : '';
+  const refused = said && !/[.!?]$/.test(said) ? `${said}.` : said;
   // Once stopped, the review stays stopped, closing included: its decision can't be sent again, and the reason it
   // became invalid stays to be read until the person moves on
   const [stopped, setStopped] = useState(false);
@@ -217,7 +222,7 @@ function ReviewBody({
         view={view}
         snapshot={snapshot}
         opened={opened}
-        why={stale ? STALE_WORDS : MOVED_WORDS}
+        why={stale ? STALE_WORDS : refused || MOVED_WORDS}
         binding={bindingLine(opened, encounter)}
         live={live}
         onClose={onClose}
@@ -394,7 +399,9 @@ function ReviewBody({
 
 /**
  * A review the case moved under, stopped for good: the plan the person read, why the decision was not recorded (in
- * the words it was refused with) and what changed, as far as the page has read it. No decision can be pressed here.
+ * the words it was refused with) and what changed, as far as the page has read it. A case the page last read as no
+ * longer waiting is said to be so, with no word of deciding again: the page stops reading a closed case, so only a
+ * fresh read can say whether it was reopened since. No decision can be pressed here.
  * "Review current plan" reads the case again and opens a new review on what it reads, which needs its own confirming
  * press; a read that fails says so and offers to try again, and a case with nothing left to decide says that, with
  * neither a review nor a decision to press.
@@ -461,7 +468,11 @@ function StoppedReview({
       {/* The plan the person read, so the refusal and the change are read against it */}
       <PlanHeadline words={planWords(opened.view.plan, opened.c, opened.snapshot)} />
       <Alert color="red" variant="light" role="alert" data-testid="review-refusal">
-        {gone ? why : `${why} Review the current plan to decide again.`}
+        {gone
+          ? why
+          : c.state === 'awaiting_approval'
+            ? `${why} Review the current plan to decide again.`
+            : `${why} The case was no longer waiting for a decision when this page last read it.`}
       </Alert>
       {rows.some((r) => r.changed) ? <WhatChanged rows={rows} /> : null}
       <Text size="xs" c="dimmed" data-testid="review-binding">

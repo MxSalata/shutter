@@ -1,4 +1,5 @@
 import type { CaseDetail, PlanView, Snapshot } from '@/api/types';
+import { humanize } from '@/lib/format';
 import { approvalChange } from './approvalChange';
 import { fhirSummary, receiverKind } from './derive';
 import { planWords } from './planAction';
@@ -13,6 +14,7 @@ export interface ReviewedState {
 /** One line of what changed between a stopped review and the case now: what it was, what it is, and whether it moved. */
 export interface ChangeRow {
   label: string;
+  /** What it was; empty when it was read again and says the same, so there is nothing older to show. */
   was: string;
   now: string;
   changed: boolean;
@@ -47,10 +49,20 @@ export function readBehind(
 }
 
 /**
- * What changed between a review that was stopped and the case as read now, in the order a reader checks a decision's
- * binding: the plan, the action it takes, the receiver version its write is conditional on, what the evidence read at
- * the receiver, and the case version. The evidence is compared only where both reads have it. With no plan now, the
- * plan reads "None" and nothing else of it is compared.
+ * Whether the evidence was read again: by the digest of what matters to the decision where both reads have one, else
+ * by the whole snapshot's digest. A material digest is never compared with a plain one.
+ */
+function evidenceMoved(before: Snapshot | null | undefined, now: Snapshot | null | undefined): boolean {
+  if (before?.materialDigest && now?.materialDigest) return before.materialDigest !== now.materialDigest;
+  return str(before?.digest) !== str(now?.digest);
+}
+
+/**
+ * What changed between a review that was stopped and the case as read now: the case's state when it is no longer the
+ * one the review opened in, then in the order a reader checks a decision's binding: the plan, the action it takes, the
+ * receiver version its write is conditional on, what the evidence read at the receiver, and the case version. The
+ * evidence is compared only where both reads have it; read again with the same words, it says so rather than repeat
+ * them. With no plan now, the plan reads "None" and nothing else of it is compared.
  */
 export function whatChanged(
   before: ReviewedState,
@@ -64,6 +76,8 @@ export function whatChanged(
   });
   const plan = now.view?.plan;
   const rows: ChangeRow[] = [];
+  if (now.c.state !== before.c.state)
+    rows.push(row('State', humanize(before.c.state), humanize(now.c.state)));
   const samePlan = !!plan && plan.digest === before.view.plan.digest;
   rows.push(
     row(
@@ -87,12 +101,12 @@ export function whatChanged(
     rows.push(row('Receiver version', receiverVersion(before), receiverVersion(after)));
     const was = evidenceRead(before);
     const is = evidenceRead(after);
-    if (was && is) {
-      const moved =
-        str(before.snapshot?.materialDigest || before.snapshot?.digest) !==
-        str(now.snapshot?.materialDigest || now.snapshot?.digest);
-      rows.push(row('Evidence', was, is, moved || was !== is));
-    }
+    if (was && is)
+      rows.push(
+        was === is && evidenceMoved(before.snapshot, now.snapshot)
+          ? row('Evidence', '', `Read again: ${is}`, true)
+          : row('Evidence', was, is),
+      );
   }
   rows.push(row('Case version', String(before.c.version), String(now.c.version)));
   return rows;
