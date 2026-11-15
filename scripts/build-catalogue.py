@@ -3,9 +3,13 @@
 (CONTRACTS 6.2) checked against the condition vocabulary (6.1), plus the prose. The core seeds Shutter.Catalogue.Entry
 from the JSON at install; the board's knowledge base indexes the Markdown.
 
+It also writes knowledge/catalogue/vocabulary.json, the one vocabulary both validators read: this script checks the
+shipped entries against it, and the core (Shutter.Catalogue.Vocabulary) checks a site's own entries (CONTRACTS 6.8)
+against the same file, so the two can never disagree about a condition or a value.
+
     python3 scripts/build-catalogue.py [knowledge/catalogue] [--check]
 
---check only validates and compares with the committed JSON (exit 1 on a problem or a difference), for CI.
+--check only validates and compares with the committed JSON files (exit 1 on a problem or a difference), for CI.
 The front matter is a YAML subset: "key: value", "key: [a, b]", nested maps by two-space indentation, and lists of
 maps as "- key: value" items; strings may be quoted. Standard library only.
 """
@@ -16,30 +20,45 @@ import os
 import re
 import sys
 
-CONDITIONS = {
-    "event": {"admit", "transfer", "discharge", "update", "merge", "cancel", "other"},
-    "delivery": {"failed", "rejected", "uncertain", "unmappable", "withheld", "unreadable"},
-    "receiver_answer": {"unavailable", "timeout", "duplicate", "version_conflict", "refused", "unread", "none"},
-    "receipt": {"present", "absent", "unreadable", "none"},
-    "later_applied": {"none", "transfer", "discharge", "update", "admit", "cancelled", "cancel_other", "merge"},
-    "later_delivery": {"applied", "sent", "none"},
-    "event_time": {"plausible", "before_admission", "future", "far_from_recorded", "clock_change", "later_event_future"},
-    "encounter_state": {"admitted", "discharged", "not_found", "unknown"},
-    "transition": {"allowed", "invalid", "unknown"},
-    "patient_match": {"yes", "no", "unknown"},
-    "simultaneous_sources": {"yes", "no"},
-    "conditional_writes": {"yes", "no", "unknown"},
-    "free_text": {"yes", "no"},
-    "chain": {"single", "ordered", "interleaved"},
-    "receiver_category": {"current_state", "history_of_record", "orders_results"},
-    "bed_conflict": {"none", "occupant_leaving", "occupant_left", "occupant_staying", "unknown"},
-    "death_recorded": {"no", "yes", "cleared", "unreadable"},
-    "a08_location": {"none", "same", "different"},
+# The vocabulary (CONTRACTS 6.1), in the order the contract lists each condition's values. vocabulary.json is this table.
+VOCABULARY = {
+    "conditions": {
+        "event": ["admit", "transfer", "discharge", "update", "merge", "cancel", "other"],
+        "delivery": ["failed", "rejected", "uncertain", "unmappable", "withheld", "unreadable"],
+        "receiver_answer": ["unavailable", "timeout", "duplicate", "version_conflict", "refused", "unread", "none"],
+        "receipt": ["present", "absent", "unreadable", "none"],
+        "later_applied": ["none", "transfer", "discharge", "update", "admit", "cancelled", "cancel_other", "merge"],
+        "later_delivery": ["applied", "sent", "none"],
+        "event_time": ["plausible", "before_admission", "future", "far_from_recorded", "clock_change", "later_event_future"],
+        "encounter_state": ["admitted", "discharged", "not_found", "unknown"],
+        "transition": ["allowed", "invalid", "unknown"],
+        "patient_match": ["yes", "no", "unknown"],
+        "simultaneous_sources": ["yes", "no"],
+        "conditional_writes": ["yes", "no", "unknown"],
+        "free_text": ["yes", "no"],
+        "chain": ["single", "ordered", "interleaved"],
+        "receiver_category": ["current_state", "history_of_record", "orders_results"],
+        "bed_conflict": ["none", "occupant_leaving", "occupant_left", "occupant_staying", "unknown"],
+        "death_recorded": ["no", "yes", "cleared", "unreadable"],
+        "a08_location": ["none", "same", "different"],
+    },
+    # A shipped entry's outcomes, who decides and the gate checks it may name (6.2).
+    "outcomes": ["resend", "resend_chain", "resend_latest", "reconcile", "none", "escalate", "resend_unconditional", "correct_history", "resend_after_occupant"],
+    "decides": ["policy", "board", "person"],
+    "gate_checks": ["identity", "conformance", "intent", "ordering", "state_transition", "effect", "authorization", "concurrency", "evidence", "capability", "catalogue"],
+    # A site's own entry (6.8): its one kind, the scope facts it may name, and the condition it may not (E19 answers first).
+    "site": {
+        "kinds": ["stop"],
+        "scope": ["receiver", "source_system", "ward", "reason_code"],
+        "reserved_conditions": ["death_recorded"],
+    },
 }
-OUTCOMES = {"resend", "resend_chain", "resend_latest", "reconcile", "none", "escalate", "resend_unconditional", "correct_history", "resend_after_occupant"}
-DECIDES = {"policy", "board", "person"}
-GATE_CHECKS = {"identity", "conformance", "intent", "ordering", "state_transition", "effect", "authorization", "concurrency", "evidence", "capability", "catalogue"}
-
+CONDITIONS = VOCABULARY["conditions"]
+OUTCOMES = VOCABULARY["outcomes"]
+DECIDES = VOCABULARY["decides"]
+GATE_CHECKS = VOCABULARY["gate_checks"]
+# A shipped entry's id. A site's own entries are L<n> and live in the store, never in this folder.
+SHIPPED_ID = re.compile(r"E[1-9]\d*")
 
 def scalar(text):
     t = text.strip()
@@ -133,6 +152,8 @@ def parse_front_matter(text):
 
 def check_entry(e, problems):
     eid = e.get("id", "?")
+    if not SHIPPED_ID.fullmatch(str(eid)):
+        problems.append(f"{eid}: a shipped entry's id is E<n>; L<n> and every other form are a site's own entries, which are not files")
     for k in ("id", "version", "title", "pattern", "decides", "preferred"):
         if k not in e:
             problems.append(f"{eid}: missing {k}")
@@ -149,15 +170,15 @@ def check_entry(e, problems):
             values = allowed if isinstance(allowed, list) else [allowed]
             for v in values:
                 if str(v) not in CONDITIONS[cond]:
-                    problems.append(f"{eid}: {cond} cannot be {v!r} (allowed: {', '.join(sorted(CONDITIONS[cond]))})")
+                    problems.append(f"{eid}: {cond} cannot be {v!r} (allowed: {', '.join(CONDITIONS[cond])})")
     pref = e.get("preferred") or {}
     if pref.get("outcome") not in OUTCOMES:
-        problems.append(f"{eid}: preferred.outcome must be one of {', '.join(sorted(OUTCOMES))}")
+        problems.append(f"{eid}: preferred.outcome must be one of {', '.join(OUTCOMES)}")
     if not pref.get("why"):
         problems.append(f"{eid}: preferred.why is required")
     for n, alt in enumerate(e.get("alternatives") or [], 1):
         if alt.get("outcome") not in OUTCOMES:
-            problems.append(f"{eid}: alternative {n} outcome must be one of {', '.join(sorted(OUTCOMES))}")
+            problems.append(f"{eid}: alternative {n} outcome must be one of {', '.join(OUTCOMES)}")
         if not alt.get("when"):
             problems.append(f"{eid}: alternative {n} needs when")
     for c in e.get("checks") or []:
@@ -192,22 +213,30 @@ def main():
         check_entry(fm, problems)
         entries.append(fm)
     out_path = os.path.join(args.directory, "catalogue.json")
+    vocabulary_path = os.path.join(args.directory, "vocabulary.json")
     text = json.dumps(entries, indent=1, ensure_ascii=False) + "\n"
+    vocabulary_text = json.dumps(VOCABULARY, indent=1, ensure_ascii=False) + "\n"
     for p in problems:
         print("-", p)
     if problems:
         print(f"{len(entries)} entries, {len(problems)} problem(s)")
         return 1
     if args.check:
-        current = open(out_path, encoding="utf-8").read() if os.path.exists(out_path) else ""
-        if current != text:
-            print(f"{out_path} is out of date: run scripts/build-catalogue.py")
+        stale = 0
+        for path, wanted in ((out_path, text), (vocabulary_path, vocabulary_text)):
+            current = open(path, encoding="utf-8").read() if os.path.exists(path) else ""
+            if current != wanted:
+                print(f"{path} is out of date: run scripts/build-catalogue.py")
+                stale = 1
+        if stale:
             return 1
-        print(f"{len(entries)} entries fine; catalogue.json is current")
+        print(f"{len(entries)} entries fine; catalogue.json and vocabulary.json are current")
         return 0
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(text)
-    print(f"wrote {out_path}: {len(entries)} entries")
+    with open(vocabulary_path, "w", encoding="utf-8") as f:
+        f.write(vocabulary_text)
+    print(f"wrote {out_path}: {len(entries)} entries; wrote {vocabulary_path}: {len(CONDITIONS)} conditions")
     return 0
 
 
