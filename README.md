@@ -30,17 +30,19 @@
 </sub></p>
 <p align="center"><sub>Current release 1.4.8; the videos and measurements were recorded on the releases named beside them.</sub></p>
 
-**When a hospital's HL7 delivery fails, the usual fix is Resend, and when two systems move a patient at the same moment, that resend can write over the bed manager's newer ward. Shutter's IRIS AI Hub agents decide how to put the failure right; a deterministic gate decides whether anything is written.**
+**Shutter is my vision for the hundreds of failed HL7 messages that go unactioned, or that system administrators and integration engineers have to review by hand. Its main point is to pick up those failures, so that integration engineers can do their projects instead of firefighting failures every day.**
 
 On an ordinary day a hospital's integration engine can see hundreds of failed messages. Engineers put right what they can by hand, and the rest can go unactioned. Shutter won't fix them all, but it helps with most: in my work on interoperability with 28 NHS hospitals, most failures were of the kinds it knows. It resends the failed patient movements that pass its checks, closes those the receiver already has, and for the rest stops, writes nothing, and identifies the patient for a person to review.
+
+**Watch it on a real IRIS production:** I recorded a [13-minute walkthrough](https://youtu.be/InZx2MYJ47k) live on the online demo and narrated it myself: the running product, not slides, from an escalated case to an approved resend verified at the receiver. A [two-minute cut](https://youtu.be/ZBnAqKTfdvM) shows one recovery.
+
+**When a hospital's HL7 delivery fails, the usual fix is Resend, and when two systems move a patient at the same moment, that resend can write over the bed manager's newer ward. Shutter's IRIS AI Hub agents decide how to put the failure right; a deterministic gate decides whether anything is written.**
 
 ![S8 played twice on the same evidence: Rules only, exempted on purpose from one gate check, writes WARD-B over the bed manager's WARD-C; the board escalates and writes nothing](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/s8-rules-and-board.png)
 
 *S8, the same failure played twice on the same evidence. The Rules only run is exempted on purpose from one gate check, `ENTRY_NOT_NAMED_WRITE`, to show what a plain resend writes: WARD-B over the bed manager's WARD-C. The board escalates and writes nothing. On a real case the whole gate runs and holds that resend, so "every check passed" in the picture means every check but the one lifted.*
 
 **Why I built it:** the failures above are the ones I met in my interoperability work with 28 NHS hospitals. At one trust we checked every interface daily for failed messages, and I wrote a 30-page guide to handling them. Not every clinical system checks what it receives. When a bed transfer from I.PM failed to reach NerveCentre and clinicians corrected the history there by hand, resending the failures in order could displace several patients, because NerveCentre won't put two patients in one bed and moves the other to the waiting area. Blindly resending coding messages from NerveCentre to Careflow would overwrite a patient's coding and end-date it as of today, and on older PAS systems a resent A02 for a past spell could reopen it, leaving two active spells. That is why Shutter reads the receiver before it writes. While building Shutter I filed AI Hub bug reports [#11](https://github.com/intersystems-community/ai-hub-eap-bugreports/issues/11), [#12](https://github.com/intersystems-community/ai-hub-eap-bugreports/issues/12), [#22](https://github.com/intersystems-community/ai-hub-eap-bugreports/issues/22) and [#23](https://github.com/intersystems-community/ai-hub-eap-bugreports/issues/23).
-
-Shutter turns a failed delivery into a case. AI Hub agents examine sealed evidence and propose a plan. A deterministic gate checks whether it may write. A person, or the site's written policy, releases it. **The agents have no write tool.**
 
 ## For judges
 
@@ -57,8 +59,6 @@ Shutter turns a failed delivery into a case. AI Hub agents examine sealed eviden
 **Then on real IRIS.** The [online demo](https://shutter.mxsalata.com) is a fictional hospital on real IRIS for Health with AI Hub build `2026.3.0AI.154.0`. Sign in as `demo` / `shutter`, play the same three scenarios and open the case the banner names. The `demo` account replays the recorded agents; the judges' account, supplied by the organisers, calls them live. On S8's case, **In IRIS: Message trace** opens the agents' lanes in IRIS's Visual Trace. It first asks for a Cloudflare Access sign-in (GitHub or an emailed code), then IRIS's read-only sign-in, `demo-trace` / `Shutter-Demo-IRIS-Portal`.
 
 **Two things to know about the demo.** It is one hospital shared by every visitor: if someone else runs the same scenario, its reset of the receiver closes a case of yours still waiting, so run it again. And it resets on the hour: for up to a minute it answers with errors, then everyone is signed out, so start a scenario well before the hour.
-
-**Watch instead:** the [two-minute video](https://youtu.be/ZBnAqKTfdvM), or the [13-minute demo video](https://youtu.be/InZx2MYJ47k), recorded live on the online demo.
 
 **Read the code:** [CaseWorkflow](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Process/CaseWorkflow.cls) runs the case; the [AI Hub agents](https://github.com/MxSalata/shutter/tree/main/src/Shutter/Agent), three specialists and a [coordinator](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Agent/Coordinator.cls), read the sealed evidence; the coordinator calls [SubmitPlan](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Tools/SubmitPlan.cls); the [gate](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Operation/Gate.cls) checks the plan; an IRIS Workflow task takes the approval; one conditional write follows, and the [verifier](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Operation/Verify.cls) reads the receiver's receipts and history.
 
@@ -150,8 +150,6 @@ For an API-recovery incident, one approval binds the incident's plan. Its cases 
 
 ![S2 at phone size: the case waiting, the review of the resend with its plan digest, and the outcome verified at the receiver](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/phone-s2.png)
 
-*S2 on a phone, in the trial. The approval names the exact plan, its conditions and its digest; a change to the plan or the case stops it.*
-
 ![S2's What was verified section: the verdict read from the receiver's receipt and history, the closing record, and what was not verified](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/s2-verified.png)
 
 *What "verified" means on S2's case, in the trial: after the write, the verifier read the receiver's committed history and its receipt and found the effect there. The closing record also says what was not verified.*
@@ -223,8 +221,6 @@ Every case page leads with three answers: what happened, what Shutter did, and w
 - **For different readers:** a switch between Plain and Technical wording, three guided tours, **Ask Shutter**, a phone layout, a dark theme, and accessibility checks of every screen in CI.
 
 ![Incident I-000001 from S11: eight failed deliveries, six chains, all verified at the receiver in 1 min 42 s](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/incident-s11.png)
-
-*S11 in the trial: eight failed deliveries for six patient encounters, released in order. Site policy decided five chains, the board one, with one approval.*
 
 ## What has been measured
 
@@ -383,8 +379,6 @@ The approval boundary tests stale versions, wrong digests, insufficient roles, r
 [Release-specific checks](https://github.com/MxSalata/shutter/blob/main/CHANGELOG.md) · [Approval boundary](https://github.com/MxSalata/shutter/blob/main/docs/readme/first-steps.md#the-approval-boundary-attacked-over-http) · [Build 109 evidence](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt-109.md) · [Build 154 evidence](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt.md)
 
 ## Technology bonuses
-
-Each technology has a job in the workflow.
 
 | Technology | What it does and where to inspect it |
 | --- | --- |
