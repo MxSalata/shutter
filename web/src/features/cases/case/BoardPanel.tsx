@@ -726,7 +726,7 @@ export function BoardPanel({
           ? "The scenario catalogue matched the case and the site's profile says who decides it. A case it leaves to the board shows the board's findings here."
           : count === 1
             ? 'One specialist agent reads the evidence; a coordinator agent proposes the plan.'
-            : `${count ? `${NUMBERS[count] ?? count} specialist` : 'Specialist'} agents read the same evidence in parallel${TRIAL ? ' (live; a recording answers in turn)' : ''}; a coordinator agent proposes one plan.`;
+            : `${count ? `${NUMBERS[count] ?? count} specialist` : 'Specialist'} agents read the same evidence in parallel${TRIAL ? ' on IRIS (a recording answers in turn)' : ''}; a coordinator agent proposes one plan.`;
   const coordinatorResult = asObject(coordinator?.result) ?? {};
   const disagreements = asArray(coordinatorResult.disagreements);
   const dissent = disagreements.length;
