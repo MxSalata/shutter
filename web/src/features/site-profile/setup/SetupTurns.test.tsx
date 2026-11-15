@@ -402,7 +402,7 @@ describe('a typed answer read by Ask Shutter', () => {
                     {
                       field: 'receivers[].system',
                       receiver: 'Bed Board',
-                      to: 'a board',
+                      to: 'whiteboard',
                       quote: 'whiteboard',
                       from: null,
                     },
@@ -570,7 +570,7 @@ describe('an answer that must not be used', () => {
           {
             field: 'receivers[].system',
             receiver: 'Bed Board',
-            to: 'a board',
+            to: 'whiteboard',
             quote: 'whiteboard',
             from: null,
           },
@@ -588,7 +588,7 @@ describe('an answer that must not be used', () => {
           {
             field: 'receivers[].system',
             receiver: 'Bed Board',
-            to: 'a board',
+            to: 'whiteboard',
             quote: 'whiteboard',
             from: null,
           },
@@ -620,7 +620,7 @@ describe('an answer that must not be used', () => {
         {
           field: 'receivers[].system',
           receiver: 'Bed Board',
-          to: 'a board',
+          to: 'whiteboard',
           quote: '<a href="https://evil.example">whiteboard</a>',
           from: null,
         },
@@ -641,7 +641,7 @@ describe('an answer that must not be used', () => {
       'href',
       '/csp/healthshare/shutter/EnsPortal.MessageContents.zen?HeaderClass=Ens.MessageHeader&HeaderId=77',
     );
-    await waitFor(() => expect(added().system).toBe('a board'));
+    await waitFor(() => expect(added().system).toBe('whiteboard'));
     expect(container.querySelector('img')).toBeNull();
     expect(container.querySelector('a[href*="evil.example"]')).toBeNull();
     expect(container.querySelector('.setup-exchange b')).toBeNull();
@@ -729,7 +729,13 @@ describe('a late answer', () => {
   const turn: SetupTurnBody = {
     say: 'A whiteboard.',
     proposals: [
-      { field: 'receivers[].system', receiver: 'Bed Board', to: 'a board', quote: 'whiteboard', from: null },
+      {
+        field: 'receivers[].system',
+        receiver: 'Bed Board',
+        to: 'whiteboard',
+        quote: 'whiteboard',
+        from: null,
+      },
     ],
     ask: null,
   };

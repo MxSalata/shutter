@@ -146,6 +146,16 @@ ClassMethod Texts(conversation As %String, askedBy As %String) As %DynamicArray
     Quit texts
 }
 
+/// What a person typed in a conversation, oldest first, each with the receiver its turn was about: {text, receiver}. The
+/// words a quote must come from are those about the receiver a turn drafts for (ProfileSetup.CheckTurn).
+ClassMethod Said(conversation As %String, askedBy As %String) As %DynamicArray
+{
+    Set said = []
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT Text, Receiver FROM Shutter_Store.SetupTurn WHERE Conversation = ? AND AskedBy = ? ORDER BY ID", conversation, askedBy)
+    While rs.%Next() { Do said.%Push({"text": (rs.%Get("Text")), "receiver": (rs.%Get("Receiver"))}) }
+    Quit said
+}
+
 /// The earlier turns of the conversation as the agent reads them: what the person typed and, where a turn was accepted,
 /// the agent's own sentence. The turn <var>before</var> and any after it are left out.
 ClassMethod Earlier(conversation As %String, askedBy As %String, before As %String) As %DynamicArray

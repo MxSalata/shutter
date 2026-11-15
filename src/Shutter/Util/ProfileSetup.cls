@@ -40,6 +40,9 @@ Parameter MAXSAY = 800;
 
 Parameter MAXQUOTE = 200;
 
+/// The shortest quote: a quote of a letter or two ties nothing to the person's words.
+Parameter MINQUOTE = 3;
+
 Parameter MAXPROPOSALS = 3;
 
 Parameter MAXTURNS = 24;
@@ -404,7 +407,9 @@ ClassMethod Apply(draft As %DynamicObject, receiver As %String, proposals As %Dy
 /// Check a turn on its way back. <var>turn</var> is {say, proposals: [{field, receiver, to, quote}], ask: {field,
 /// receiver} or null}; <var>base</var> the profile in force; <var>draft</var> the draft as the person sent it, or the part
 /// of it the checks read (Frame); <var>receiver</var> the receiver the turn is about; <var>texts</var> what that person
-/// typed in this conversation, as stored. 1 with the turn as it is kept in <var>accepted</var> (each proposal with the
+/// typed in this conversation, as stored: each {text, receiver}, the receiver the turn was about (Shutter.Store.SetupTurn
+/// .Said), or a bare text, which stands for a text about <var>receiver</var>. A quote must come from a text about
+/// <var>receiver</var>, and a drafted description must be words of its quote. 1 with the turn as it is kept in <var>accepted</var> (each proposal with the
 /// draft's value as "from", a tier as a number), or 0 with the problem, which names the field. The proposals pass or
 /// fail together.
 ClassMethod CheckTurn(turn As %DynamicObject, base As %DynamicObject, draft As %DynamicObject, receiver As %String, texts As %DynamicArray, Output problem As %String, Output accepted As %DynamicObject) As %Boolean
@@ -438,16 +443,23 @@ ClassMethod CheckTurn(turn As %DynamicObject, base As %DynamicObject, draft As %
         If (toType = "unassigned") || (toType = "null") Set problem = at _ ".to: required" Quit
         Set why = ..DraftRefusal(field, base, draft, receiver, $SELECT((toType = "object") || (toType = "array"): "", 1: p.%Get("to")), toType)
         If why '= "" Set problem = at _ why Quit
-        // 3. The quote is part of what that person typed in this conversation.
+        // 3. The quote is part of what that person typed about this receiver in this conversation, and a description is
+        // lifted from it: its words are a part of the quote, so of the person's own text.
         Set quote = $SELECT(p.%GetTypeOf("quote") = "string": $ZSTRIP(p.%Get("quote"), "*C"), 1: "")
-        If ($ZSTRIP(quote, "<>W") = "") || ($LENGTH(quote) > ..#MAXQUOTE) Set problem = at _ ".quote: the person's own words, 1 to " _ ..#MAXQUOTE _ " characters" Quit
-        Set found = 0, folded = ..Fold(quote)
+        If ($LENGTH($ZSTRIP(quote, "<>W")) < ..#MINQUOTE) || ($LENGTH(quote) > ..#MAXQUOTE) Set problem = at _ ".quote: the person's own words, " _ ..#MINQUOTE _ " to " _ ..#MAXQUOTE _ " characters" Quit
+        Set key = $PIECE(field, ".", 2), folded = ..Fold(quote)
+        If (key = "system") && (folded '[ ..Fold(p.%Get("to"))) Set problem = at _ ".to: must be the person's own words, as the quote gives them" Quit
+        Set found = 0
         If $ISOBJECT(texts) {
             Set ti = texts.%GetIterator()
-            While ti.%GetNext(, .text) { If ..Fold(text) [ folded Set found = 1 }
+            While ti.%GetNext(, .said) {
+                Set text = said, about = receiver
+                If $ISOBJECT(said) Set text = ##class(Shutter.Util.Json).Str(said, "text"), about = ##class(Shutter.Util.Json).Str(said, "receiver")
+                Continue:$ISOBJECT(text)||$ISOBJECT(about)||(about'=receiver)
+                If ..Fold(text) [ folded Set found = 1
+            }
         }
-        If 'found Set problem = at _ ".quote: not part of what the person typed in this conversation" Quit
-        Set key = $PIECE(field, ".", 2)
+        If 'found Set problem = at _ ".quote: not part of what the person typed about " _ receiver _ " in this conversation" Quit
         Set kept = {"field": (field), "receiver": (receiver), "quote": (quote)}
         If key = "tier" { Do kept.%Set("to", +p.%Get("to"), "number") } Else { Do kept.%Set("to", $SELECT(key = "system": $ZSTRIP(p.%Get("to"), "<>W"), 1: p.%Get("to"))) }
         Set fromType = entry.%GetTypeOf(key)
@@ -592,7 +604,7 @@ ClassMethod CheckStored(turnId As %String, turn As %DynamicObject, Output proble
     Set row = ##class(Shutter.Store.SetupTurn).ByTurnId(turnId)
     If '$ISOBJECT(row) Set problem = "no turn " _ turnId Quit 0
     Set base = ##class(Shutter.Store.SiteProfile).Current()
-    Quit ..CheckTurn(turn, base, row.Frame(), row.Receiver, ##class(Shutter.Store.SetupTurn).Texts(row.Conversation, row.AskedBy), .problem, .accepted)
+    Quit ..CheckTurn(turn, base, row.Frame(), row.Receiver, ##class(Shutter.Store.SetupTurn).Said(row.Conversation, row.AskedBy), .problem, .accepted)
 }
 
 }

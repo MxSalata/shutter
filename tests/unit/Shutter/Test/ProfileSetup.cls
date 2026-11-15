@@ -178,10 +178,23 @@ Method TestQuoteFromStoredTurns()
     Do $$$AssertEquals(accepted.proposals.%Get(0).quote, "the WARD   whiteboard", "the quote is kept as given")
     Set turn = {"say": "History.", "proposals": [{"field": "receivers[].category", "receiver": "Bed Board", "to": "history_of_record", "quote": "it keeps the movement history"}]}
     Do $$$AssertNotTrue($CLASSMETHOD(ps, "CheckStored", second.TurnId, turn, .problem, .accepted), "another person's words are not this conversation's")
-    Do $$$AssertEquals(problem, "proposals[0].quote: not part of what the person typed in this conversation", "said so")
+    Do $$$AssertEquals(problem, "proposals[0].quote: not part of what the person typed about Bed Board in this conversation", "said so")
     Do $$$AssertNotTrue($CLASSMETHOD(ps, "CheckStored", "ST-999999", turn, .problem, .accepted), "a turn that is not there checks nothing")
     Do $$$AssertEquals($CLASSMETHOD(st, "Texts", conversation, "ut-setup").%ToJSON(), ["It is the ward whiteboard", "it only shows where patients are now"].%ToJSON(), "the texts, oldest first")
     Do $$$AssertEquals($CLASSMETHOD(st, "Earlier", conversation, "ut-setup", second.TurnId).%ToJSON(), [{"you": "It is the ward whiteboard"}].%ToJSON(), "the earlier turns the agent reads leave this one out")
+    // A turn about another receiver of the same conversation: its words are never a quote for this one.
+    Set both = ..Base()
+    Do both.receivers.%Push(..Added())
+    Do both.receivers.%Push({"name": "Lab Out"})
+    Set labFrame = $CLASSMETHOD(ps, "Frame", both, "Lab Out", .problem)
+    Do $$$AssertStatusOK($CLASSMETHOD(st, "Create", conversation, "Lab Out", "it is the laboratory system", {}, labFrame, 7, 5, "ut-setup", .lab), "a turn about Lab Out")
+    Do $$$AssertStatusOK($CLASSMETHOD(st, "Create", conversation, "Bed Board", "tier 3 I think", {}, frame, 7, 6, "ut-setup", .third), "then one about Bed Board again")
+    Do $$$AssertEquals($CLASSMETHOD(st, "Said", conversation, "ut-setup").%Get(2).%ToJSON(), {"text": "it is the laboratory system", "receiver": "Lab Out"}.%ToJSON(), "each text with the receiver its turn was about")
+    Set turn = {"say": "A laboratory system.", "proposals": [{"field": "receivers[].system", "receiver": "Bed Board", "to": "the laboratory system", "quote": "the laboratory system"}]}
+    Do $$$AssertNotTrue($CLASSMETHOD(ps, "CheckStored", third.TurnId, turn, .problem, .accepted), "words about Lab Out do not describe Bed Board")
+    Do $$$AssertEquals(problem, "proposals[0].quote: not part of what the person typed about Bed Board in this conversation", "said so")
+    Set turn = {"say": "A laboratory system.", "proposals": [{"field": "receivers[].system", "receiver": "Lab Out", "to": "the laboratory system", "quote": "the laboratory system"}]}
+    Do $$$AssertTrue($CLASSMETHOD(ps, "CheckStored", lab.TurnId, turn, .problem, .accepted), "and do describe Lab Out: " _ problem)
 }
 
 /// The text rule's cases, from the one table both suites run: [text, what is refused, or ""]. A text given as a list of
@@ -664,9 +677,16 @@ XData TurnRows [ MimeType = application/json ]
  {"name": "the next question outside the table", "turn": {"say": "Next.", "ask": {"field": "receivers[].made_up", "receiver": "Bed Board"}}, "expect": "ask.field: not a field of the site profile"},
  {"name": "the next question about another receiver", "turn": {"say": "Next.", "ask": {"field": "receivers[].tier", "receiver": "Downstream Out"}}, "expect": "ask.receiver: this turn is about Bed Board and no other receiver"},
  {"name": "the next question as a word", "turn": {"say": "Next.", "ask": "tier"}, "expect": "ask: must be {field, receiver} or null"},
- {"name": "no quote", "turn": {"say": "A board.", "proposals": [{"field": "receivers[].system", "receiver": "Bed Board", "to": "a board"}]}, "expect": "proposals[0].quote: the person's own words, 1 to 200 characters"},
+ {"name": "no quote", "turn": {"say": "A board.", "proposals": [{"field": "receivers[].system", "receiver": "Bed Board", "to": "a board"}]}, "expect": "proposals[0].quote: the person's own words, 3 to 200 characters"},
+ {"name": "a quote of two characters", "turn": {"say": "Tier 2.", "proposals": [{"field": "receivers[].tier", "receiver": "Bed Board", "to": 2, "quote": " 2 "}]}, "expect": "proposals[0].quote: the person's own words, 3 to 200 characters"},
+ {"name": "a description that is not words of its quote", "turn": {"say": "A board.", "proposals": [{"field": "receivers[].system", "receiver": "Bed Board", "to": "the bed manager", "quote": "the ward whiteboard"}]}, "expect": "proposals[0].to: must be the person's own words, as the quote gives them"},
+ {"name": "a description longer than its quote", "turn": {"say": "A board.", "proposals": [{"field": "receivers[].system", "receiver": "Bed Board", "to": "the ward whiteboard of ward 7", "quote": "the ward whiteboard"}]}, "expect": "proposals[0].to: must be the person's own words, as the quote gives them"},
+ {"name": "a description that is a part of its quote, without case", "turn": {"say": "A board.", "proposals": [{"field": "receivers[].system", "receiver": "Bed Board", "to": "The Ward Whiteboard", "quote": "it is the ward whiteboard"}]}, "expect": "", "accepted": [{"field": "receivers[].system", "receiver": "Bed Board", "quote": "it is the ward whiteboard", "to": "The Ward Whiteboard", "from": null}]},
+ {"name": "a description quoted from a turn about another receiver", "core": true, "texts": [{"text": "It is the laboratory system, it sends the results", "receiver": "Lab Out"}, {"text": "Tier 2 I think.", "receiver": "Bed Board"}], "turn": {"say": "A laboratory system.", "proposals": [{"field": "receivers[].system", "receiver": "Bed Board", "to": "the laboratory system", "quote": "the laboratory system"}]}, "expect": "proposals[0].quote: not part of what the person typed about Bed Board in this conversation"},
+ {"name": "a kind quoted from a turn about another receiver", "core": true, "texts": [{"text": "It is the laboratory system, it sends the results", "receiver": "Lab Out"}, {"text": "Tier 2 I think.", "receiver": "Bed Board"}], "turn": {"say": "Results.", "proposals": [{"field": "receivers[].category", "receiver": "Bed Board", "to": "orders_results", "quote": "laboratory"}]}, "expect": "proposals[0].quote: not part of what the person typed about Bed Board in this conversation"},
+ {"name": "a description from an earlier turn about the same receiver", "core": true, "texts": [{"text": "It is the laboratory system, it sends the results", "receiver": "Lab Out"}, {"text": "it is the ward whiteboard", "receiver": "Bed Board"}, {"text": "Tier 2 I think.", "receiver": "Bed Board"}], "turn": {"say": "A whiteboard.", "proposals": [{"field": "receivers[].system", "receiver": "Bed Board", "to": "the ward whiteboard", "quote": "the ward whiteboard"}]}, "expect": ""},
  {"name": "a quote matched without case, runs of spaces as one", "core": true, "turn": {"say": "A board.", "proposals": [{"field": "receivers[].system", "receiver": "Bed Board", "to": "the ward whiteboard", "quote": "IT IS   the ward Whiteboard"}]}, "expect": ""},
- {"name": "a quote that is not the person's words", "core": true, "turn": {"say": "History.", "proposals": [{"field": "receivers[].category", "receiver": "Bed Board", "to": "history_of_record", "quote": "it keeps the movement history"}]}, "expect": "proposals[0].quote: not part of what the person typed in this conversation"},
+ {"name": "a quote that is not the person's words", "core": true, "turn": {"say": "History.", "proposals": [{"field": "receivers[].category", "receiver": "Bed Board", "to": "history_of_record", "quote": "it keeps the movement history"}]}, "expect": "proposals[0].quote: not part of what the person typed about Bed Board in this conversation"},
  {"name": "the draft's own unfinished state is not the batch's problem: no tier yet", "turn": {"say": "A whiteboard.", "proposals": [{"field": "receivers[].system", "receiver": "Bed Board", "to": "the ward whiteboard", "quote": "the ward whiteboard"}]}, "expect": ""},
  {"name": "a batch the validator would refuse: a hold on orders and results", "added": {"tier": 2, "hold": {"minutes": 10}}, "turn": {"say": "A laboratory system.", "proposals": [{"field": "receivers[].category", "receiver": "Bed Board", "to": "orders_results", "quote": "whiteboard"}]}, "expect": "proposals: the profile would not be valid: receivers[1].hold: is for ADT receivers only, not orders_results"},
  {"name": "a receiver the draft does not name", "receiver": "Nobody", "turn": {"say": "A board.", "proposals": []}, "expect": "the draft has no receiver named Nobody"}

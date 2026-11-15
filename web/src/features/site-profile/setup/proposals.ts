@@ -19,6 +19,7 @@ import { classOf } from './fields';
 export const MAX_TEXT = 500;
 const MAX_SAY = 800;
 const MAX_QUOTE = 200;
+const MIN_QUOTE = 3;
 const MAX_PROPOSALS = 3;
 const MAX_SYSTEM = 120;
 const KINDS_OF_SYSTEM = ['current_state', 'history_of_record', 'orders_results'];
@@ -247,9 +248,13 @@ export function checkTurn(turn: unknown, base: SiteProfile, draft: SiteProfile, 
     if (why) return fail(`${at}${why}`);
     // eslint-disable-next-line no-control-regex
     const quote = typeof p.quote === 'string' ? p.quote.replace(/[\x00-\x1f\x7f-\x9f]/g, '') : '';
-    if (quote.trim() === '' || quote.length > MAX_QUOTE)
-      return fail(`${at}.quote: the person's own words, 1 to ${MAX_QUOTE} characters`);
+    if (quote.trim().length < MIN_QUOTE || quote.length > MAX_QUOTE)
+      return fail(`${at}.quote: the person's own words, ${MIN_QUOTE} to ${MAX_QUOTE} characters`);
     const key = field.split('.')[1];
+    // A description is lifted from the person's words: it is a part of its quote (where the quote came from is the core's
+    // check, which holds what was typed)
+    if (key === 'system' && !fold(quote).includes(fold(p.to as string)))
+      return fail(`${at}.to: must be the person's own words, as the quote gives them`);
     const from: unknown = (entry as Record<string, unknown>)[key];
     kept.push({
       field,

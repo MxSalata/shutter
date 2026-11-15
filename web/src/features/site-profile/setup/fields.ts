@@ -303,7 +303,7 @@ export function consequence(q: SetupQuestion, r: SiteReceiver, profile: SiteProf
     case 'name':
       return 'Shutter reads these answers for cases whose failed delivery was through this production item.';
     case 'system':
-      return 'A label people read. No decision reads it.';
+      return 'People read it, and it goes into the case evidence the agents read and into escalation email drafts. No gate check or policy reads it.';
     case 'category': {
       const category = categoryOf(r);
       return `${CATEGORY_TEXT[category].examples}. ${overtakenLine(category, historyPolicyOf(r, profile))}`;
