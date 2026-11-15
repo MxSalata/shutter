@@ -66,7 +66,7 @@
       <Invoke Class="Shutter.Util.Uninstall" Method="ModuleStatus" Phase="Clean" When="Before" CheckStatus="true"/>
       <!-- Before IPM reloads the classes: what a site set on Shutter.Production's items (pool sizes, enabled flags,
            settings, items it added) is noted while the definition is still the site's, since compiling the reloaded class
-           rebuilds it from the package; the install puts it back at its end (1.4.8). Shutter.Util.SiteItems is loaded
+           rebuilds it from the package; the install puts it back at its end (1.4.9). Shutter.Util.SiteItems is loaded
            first for it (it uses only the system's classes), and its capture never stops a load. -->
       <Invoke Class="%SYSTEM.OBJ" Method="Load" Phase="Reload" When="Before">
         <Arg>${root}../src/Shutter/Util/SiteItems.cls</Arg>

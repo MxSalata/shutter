@@ -91,7 +91,7 @@ Method TestUpgradeKeepsTheSitesValues()
     Do $$$AssertEquals(..Prop("UT Gate", "Enabled"), 0, "while its other values stand")
 }
 
-/// An upgrade over an install that left no record (1.4.7 and earlier): every value that differs is the site's, but the
+/// An upgrade over an install that left no record (1.4.8 and earlier): every value that differs is the site's, but the
 /// descriptions; nothing counts as taken out; an added item of a Shutter class is left out.
 Method TestUpgradeWithNoRecord()
 {

@@ -524,6 +524,31 @@ installer's `DATADIR` was a name `%Installer` reserves); on such an instance the
 so take what you need from it before replacing it, or copy `/usr/irissys/IRIS.DAT` out, create the database under
 `mgr/shutter/db/SHUTTERDATA` and mount it there.
 
+**What a site set on Shutter's production is kept (1.4.9).** Loading a newer tree re-imports `Shutter.Production`'s class,
+and compiling it rebuilds the production's definition from the package. Until 1.4.9 an upgrade therefore put every item
+back as shipped: a pool size raised in the Production Configuration page (`Receiver Watch` at 3 read 1 after an upgrade of
+1.4.7), an item switched off, an adapter or host setting, an item the site added. From 1.4.9 the install keeps them:
+
+- **What is kept.** On each item of `Shutter.Production`: its pool size, enabled flag, foreground, error traps, trace
+  flag, schedule, comment and category, and its host and adapter settings, a setting taken out included. On the
+  production: its actor pool size, testing and trace flags, description and settings. And the items the site added, whole.
+- **What still arrives.** A new item, a new setting, and a new value for a setting the site never set take the package's
+  values. An item whose class changed is the package's.
+- **How.** The module notes the definition before IPM reloads the classes; the install, run by hand as above, notes it
+  at its start. After its own changes the install puts the site's values back, updates the running production, and prints
+  one line, such as `Shutter: on Shutter.Production, the site's values put back: Receiver Watch: PoolSize 3; ...`. It
+  records the site's values and the definition it left in `^Shutter.Config("siteItems")`, and that line's account as JSON
+  in `^Shutter.Config("siteItems", "last")`.
+- **Over 1.4.8 or earlier** there is no record yet, so the install takes every value that differs from the new definition
+  to be the site's, apart from comments, categories and the production's description. 1.4.9's production is 1.4.8's and
+  1.4.7's, so nothing of Shutter's is taken for the site's. A later release installed straight over 1.4.8 or earlier would
+  keep the earlier value of any setting that release changed, so upgrade to 1.4.9 first. With no record nothing counts as taken out, and an added
+  item of a Shutter class is left out (the line says so).
+- **Not kept.** The system default settings Shutter writes ("Set by Shutter.Setup": the feed's folders and the receiver's
+  address, from Shutter's own configuration), the demo hospital's production, and an item of Shutter's that the site
+  deleted, which comes back: switch it off instead. In shape B (section 4) the install never rebuilds the site's
+  production, so there is nothing to keep.
+
 **Upgrading to 1.1.0.** Run the install once, as above, and then stop and start `Shutter.Production`: a business operation
 that runs for a long time keeps its old code until its production restarts. The install adds the item `Receiver Watch`
 (section 11), and the Doctor's `missing_items` names it until it is there; in shape B, `InstallInto` adds it. Then:
@@ -541,7 +566,8 @@ that runs for a long time keeps its old code until its production restarts. The 
 - **A forwarder onboarded before 1.1.0** keeps `FailureTimeout` 0 on its item and tries each forward once (section 10).
 
 **Upgrading with the package manager.** `zpm "load <folder>"` of a newer tree over an installed release keeps the
-production, its cases and the saved site profile, and never runs the uninstall. After it, restart `Shutter.Production`
+production, its cases, the saved site profile and, from 1.4.9, what the site set on the production's items (above), and
+never runs the uninstall. After it, restart `Shutter.Production`
 (stop and start it in the Production Configuration page): the load does not restart a running production, so its
 long-lived jobs keep the earlier code until then.
 

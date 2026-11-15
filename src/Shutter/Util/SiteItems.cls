@@ -1,6 +1,6 @@
-/// What a site set on the items of Shutter's own production (shape A), kept over an upgrade (1.4.8). Loading a newer
+/// What a site set on the items of Shutter's own production (shape A), kept over an upgrade (1.4.9). Loading a newer
 /// Shutter re-imports Shutter.Production's class, and compiling it rebuilds the production's definition from the class's
-/// XData: until 1.4.8 every pool size, enabled flag, setting and item a site had changed or added there went back to the
+/// XData: until 1.4.9 every pool size, enabled flag, setting and item a site had changed or added there went back to the
 /// shipped ones (found on 14 Nov 2026: Receiver Watch's pool size 3 read 1 after an upgrade of 1.4.7).
 ///
 /// An install keeps a record of the site's own values (the "site" node: the properties and settings the site changed,
@@ -13,7 +13,7 @@
 /// - puts the site's values back on the definition the install made (Apply), after the install's own changes (the demo's
 ///   items off on a site's install, the Second Parser following its jar, the receivers' and the FHIR items put back), so
 ///   new items, new settings and changed defaults arrive and the site's values stand.
-/// With no record of the last install (one over 1.4.7 or earlier), the capture is compared with the definition this
+/// With no record of the last install (one over 1.4.8 or earlier), the capture is compared with the definition this
 /// install made: every value that differs is the site's, but the descriptions (DESCRIPTIVE), nothing counts as taken out,
 /// and an added item of a Shutter class is left out, since it may be one Shutter no longer ships. (The class as last
 /// compiled tells nothing of the earlier release: a save in the Production Configuration page rewrites its XData too.)
@@ -45,7 +45,7 @@ Parameter PENDINGSECONDS = 86400;
 /// The module's Invoke, before IPM's Reload phase: the capture (Capture), while the definition is still the site's. Also
 /// the first step of Shutter.Setup.InstallStatus, which then keeps the capture the load took. Takes one only on an
 /// instance an install has run on (^Shutter.Config("version") is set), in shape A. Never stops a load or an install: a
-/// failure is written out, and the upgrade goes on as before 1.4.8.
+/// failure is written out, and the upgrade goes on as it did before.
 ClassMethod CaptureStatus() As %Status
 {
     Try {

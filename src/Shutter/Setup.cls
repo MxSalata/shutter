@@ -184,7 +184,7 @@ ClassMethod InstallStatus(root As %String = "", demo As %Boolean = 1, production
         // Scenario S35: the demo's FHIR receiver entry, its four items and the proof of an in-process conformance run.
         If demo && ##class(%Dictionary.CompiledClass).%ExistsId("FHIRFacade.Kit") Set sc = ##class(Shutter.FHIR.Install).Demo(root _ "knowledge/site/profile.json") Quit:$$$ISERR(sc)
         // The compile rewrote the definition from the package: the pool sizes, enabled flags, settings and items the site
-        // set go back on it, after the install's own changes above; new items and settings keep the package's values (1.4.8).
+        // set go back on it, after the install's own changes above; new items and settings keep the package's values (1.4.9).
         Set sc = ##class(Shutter.Util.SiteItems).KeepStatus() Quit:$$$ISERR(sc)
         If demo Set sc = ..InstallDemoHospital(ns) Quit:$$$ISERR(sc)
     } Catch ex {
