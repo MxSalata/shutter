@@ -377,7 +377,7 @@ const PUBLIC_DEMO_LINE = `Live on a real IRIS for Health instance with AI Hub (b
 describe('LoginPage, the line on what stands behind it', () => {
   beforeEach(() => resetMock(null));
 
-  it("says it under the heading on the public demo, in Mikolaj's words, with the build from the evaluation", async () => {
+  it("says it under the heading on the public demo, in the author's words, with the build from the evaluation", async () => {
     renderLogin(true, 'plain', LIVE_HOSPITAL);
     const line = await screen.findByTestId('sign-in-instance');
     expect(PROOF.recordedOn?.build).toBe('2026.3.0AI.154.0');
@@ -510,7 +510,7 @@ describe('LoginPage, how much it says', () => {
   const PLAIN_BUDGET = 170;
   const TECHNICAL_BUDGET = Math.round(PLAIN_BUDGET * 1.5);
 
-  // The line on the instance under the heading (Mikolaj's words, 9 Nov 2026) has a limit of its own, one sentence of at
+  // The line on the instance under the heading (the author's words, 9 Nov 2026) has a limit of its own, one sentence of at
   // most 32 words, and the rest of the page keeps the budget it had before it
   const INSTANCE_LINE_LIMIT = 32;
 
