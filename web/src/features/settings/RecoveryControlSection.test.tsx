@@ -87,6 +87,24 @@ describe('the recovery control', () => {
     expect(sent).toEqual({ reason: 'seen', expectedGeneration: 7 });
   });
 
+  it("leads a stop with who stopped it, when in the feed's time, and why", async () => {
+    answering(
+      control({
+        stopped: true,
+        stoppedBy: 'approver',
+        stoppedAt: '2026-11-15T03:53:49.375Z',
+        stopReason: 'checking',
+      }),
+    );
+    page(<RecoveryControlSection />);
+    expect(
+      await screen.findByText(
+        /^Recovery is stopped \(by approver, 15 Nov, 03:53:49 GMT: checking\)\. Clearing the stop resumes recovery\.$/,
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/2026-11-15T03:53/)).toBeNull();
+  });
+
   it('an operator can stop but not clear', async () => {
     resetMock('operator');
     answering(control({ stopped: true, stoppedBy: 'operator', stoppedAt: 'then' }));
@@ -130,5 +148,13 @@ describe('the banner', () => {
     page(<RecoveryBanner />);
     expect(await screen.findByText('Shutter recovery stopped by operator at 10:00.')).toBeInTheDocument();
     expect(screen.getByText(/2 earlier calls may still complete/)).toBeInTheDocument();
+  });
+
+  it("gives the stop's time in the feed's zone, not as the raw stamp", async () => {
+    answering(control({ stopped: true, stoppedBy: 'operator', stoppedAt: '2026-11-15T03:53:49.375Z' }));
+    page(<RecoveryBanner />);
+    expect(
+      await screen.findByText('Shutter recovery stopped by operator at 15 Nov, 03:53:49 GMT.'),
+    ).toBeInTheDocument();
   });
 });
