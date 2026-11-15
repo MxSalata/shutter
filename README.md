@@ -43,30 +43,19 @@
 
 On an ordinary day a hospital's integration engine can see hundreds of failed messages. Engineers put right what they can by hand, and the rest can go unactioned. Shutter won't fix them all, but it helps with most: in my work on interoperability with 28 NHS hospitals, most failures were of the kinds it knows. It resends the failed patient movements that pass its checks, closes those the receiver already has, and for the rest stops, writes nothing, and identifies the patient for a person to review.
 
+- **Judges:** [five steps in the trial](https://github.com/MxSalata/shutter#for-judges) · [what the agents add](https://github.com/MxSalata/shutter#where-the-agents-sit) · [measured results](https://github.com/MxSalata/shutter#what-has-been-measured) · [how it is tested](https://github.com/MxSalata/shutter#how-it-is-tested)
+- **Integration engineers:** [what a receiver must offer](https://github.com/MxSalata/shutter#two-recovery-contracts) · [Integrating at your trust](https://github.com/MxSalata/shutter/blob/main/docs/readme/integrating-at-your-trust.md) · [at your site](https://github.com/MxSalata/shutter#at-your-site-investigate-first-enable-recovery-deliberately) · [limits](https://github.com/MxSalata/shutter#limits-plainly)
+- **Installing:** [two IPM commands, or Docker](https://github.com/MxSalata/shutter#try-it) · [How Shutter works](https://github.com/MxSalata/shutter/blob/main/docs/readme/how-shutter-works.md) · [contracts](https://github.com/MxSalata/shutter/blob/main/docs/CONTRACTS.md)
+
 <p align="center">
-  <a href="https://youtu.be/InZx2MYJ47k"><img src="https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/walkthrough.jpg" width="760" alt="A frame of the 13-minute walkthrough: case C-000002 on the live demo hospital, delivered and verified at the receiver, with the author narrating. Opens the video on YouTube" /></a>
+  <a href="https://youtu.be/InZx2MYJ47k"><img src="https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/walkthrough.jpg" width="640" alt="A frame of the 13-minute walkthrough: case C-000002 on the live demo hospital, delivered and verified at the receiver, with the author narrating. Opens the video on YouTube" /></a>
 </p>
 
-**Watch it on a real IRIS production:** I recorded this [13-minute walkthrough](https://youtu.be/InZx2MYJ47k) and narrated it myself: the running product, not slides. After a short start in the trial it runs live on the online demo, from an escalated case to an approved resend verified at the receiver (recorded on release 1.4.4). A [two-minute cut](https://youtu.be/ZBnAqKTfdvM) shows one recovery.
+**Watch it on a real IRIS production:** I recorded this [13-minute walkthrough](https://youtu.be/InZx2MYJ47k) and narrated it myself. After a short start in the trial it runs live on the online demo, from an escalated case to an approved resend verified at the receiver (recorded on release 1.4.4). A [two-minute cut](https://youtu.be/ZBnAqKTfdvM) shows one recovery.
 
 **When a hospital's HL7 delivery fails, the usual fix is Resend, and when two systems move a patient at the same moment, that resend can write over the bed manager's newer ward. Shutter's IRIS AI Hub agents decide how to put the failure right; a deterministic gate decides whether anything is written.**
 
-![S8 played twice on the same evidence: Rules only, exempted on purpose from one gate check, writes WARD-B over the bed manager's WARD-C; the board escalates and writes nothing](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/s8-rules-and-board.png)
-
-*S8, the same failure played twice on the same evidence. The Rules only run is exempted on purpose from one gate check, `ENTRY_NOT_NAMED_WRITE`, to show what a plain resend writes: WARD-B over the bed manager's WARD-C. The board escalates and writes nothing. On a real case the whole gate runs and holds that resend, so "every check passed" in the picture means every check but the one lifted.*
-
 **Why I built it:** the failures above are the ones I met in my interoperability work with 28 NHS hospitals. At one trust we checked every interface daily for failed messages, and I wrote a 30-page guide to handling them. Not every clinical system checks what it receives. When a bed transfer from I.PM failed to reach NerveCentre and clinicians corrected the history there by hand, resending the failures in order could displace several patients, because NerveCentre won't put two patients in one bed and moves the other to the waiting area. Blindly resending coding messages from NerveCentre to Careflow would overwrite a patient's coding and end-date it as of today, and on older PAS systems a resent A02 for a past spell could reopen it, leaving two active spells. That is why Shutter reads the receiver before it writes. While building Shutter I filed AI Hub bug reports [#11](https://github.com/intersystems-community/ai-hub-eap-bugreports/issues/11), [#12](https://github.com/intersystems-community/ai-hub-eap-bugreports/issues/12), [#22](https://github.com/intersystems-community/ai-hub-eap-bugreports/issues/22) and [#23](https://github.com/intersystems-community/ai-hub-eap-bugreports/issues/23).
-
-**Find your way:**
-
-| If you are | Start here |
-| --- | --- |
-| **A judge with five minutes** | [For judges](https://github.com/MxSalata/shutter#for-judges): five steps in the trial, then the same on real IRIS |
-| **Installing it** | [Try it](https://github.com/MxSalata/shutter#try-it): two IPM commands, or Docker with replay and no key |
-| **An integration engineer** | [At your site](https://github.com/MxSalata/shutter#at-your-site-investigate-first-enable-recovery-deliberately) and the guide [Integrating at your trust](https://github.com/MxSalata/shutter/blob/main/docs/readme/integrating-at-your-trust.md) |
-| **An architect** | [The gate](https://github.com/MxSalata/shutter#the-gate-is-complex-because-the-problem-is), the guide [How Shutter works](https://github.com/MxSalata/shutter/blob/main/docs/readme/how-shutter-works.md) and the [contracts](https://github.com/MxSalata/shutter/blob/main/docs/CONTRACTS.md) |
-| **Asking what the agents add** | [Where the agents sit](https://github.com/MxSalata/shutter#where-the-agents-sit) and [What has been measured](https://github.com/MxSalata/shutter#what-has-been-measured) |
-| **Checking the claims** | [How it is tested](https://github.com/MxSalata/shutter#how-it-is-tested), [Limits, plainly](https://github.com/MxSalata/shutter#limits-plainly) and [the fair test](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md) |
 
 ## For judges
 
@@ -78,7 +67,11 @@ On an ordinary day a hospital's integration engine can see hundreds of failed me
 | 2 | **Run S2**, open **C-000002**, then **Decide on the resend** and **Approve the resend** | A transfer that never arrived. One conditional write, then **Delivered: verified at the receiver**. **4. Gate and decision** says "Gate passed 12 of 12 applicable checks at dispatch; approved by approver", and **6. What was verified** says "Verified: Committed and current", from the receiver's receipt |
 | 3 | **Run S3** and open **C-000003** | A transfer that had already arrived. Only the acknowledgement was lost, and nothing is written |
 | 4 | **Run S8 in Board** and open **C-000008** | Two systems moved the same patient at the same recorded time. The case escalates with **0 writes**, and **The board** shows the specialist who disagreed |
-| 5 | Under **Run mode** choose **Rules only**, press **Run S8 in Rules only**, then **Compare the two runs** on either case | What a plain resend writes: WARD-B over the bed manager's WARD-C, as in the picture above. One gate check is lifted on purpose for this recording; a real case gets the whole gate |
+| 5 | Under **Run mode** choose **Rules only**, press **Run S8 in Rules only**, then **Compare the two runs** on either case | What a plain resend writes: WARD-B over the bed manager's WARD-C, as in the picture below. One gate check is lifted on purpose for this recording; a real case gets the whole gate |
+
+![S8 played twice on the same evidence: Rules only, exempted on purpose from one gate check, writes WARD-B over the bed manager's WARD-C; the board escalates and writes nothing](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/s8-rules-and-board.png)
+
+*S8, the same failure played twice on the same evidence. The Rules only run is exempted on purpose from one gate check, `ENTRY_NOT_NAMED_WRITE`, to show what a plain resend writes: WARD-B over the bed manager's WARD-C. The board escalates and writes nothing. On a real case the whole gate runs and holds that resend, so "every check passed" in the picture means every check but the one lifted.* This is a demonstration of a plain resend's consequence, not evidence that AI alone prevents it.
 
 **Then on real IRIS.** The [online demo](https://shutter.mxsalata.com) is a fictional hospital on real IRIS for Health with AI Hub build `2026.3.0AI.154.0`. Sign in as `demo` / `shutter`, play the same three scenarios and open the case the banner names. The `demo` account replays the recorded agents; the judges' account, supplied by the organisers, calls them live. On S8's case, **In IRIS: Message trace** opens the agents' lanes in IRIS's Visual Trace. It first asks for a Cloudflare Access sign-in (GitHub or an emailed code), then IRIS's read-only sign-in, `demo-trace` / `Shutter-Demo-IRIS-Portal`.
 
@@ -106,7 +99,7 @@ The online demo's bed manager is a simulated receiver with a versioned HTTP API 
 
 Live spending is capped at 5 USD an hour and 15 USD a day. All judges sign in to the one judges' account, so they share its 4 USD an hour. When that is spent, live runs are refused until the next hour, and the `demo` account still plays the scenarios from their recordings. The caps bound Shutter's estimates, not the provider's invoice ([how the budget works](https://github.com/MxSalata/shutter/blob/main/docs/readme/how-shutter-works.md#13-the-budget-and-the-spending-cap)).
 
-**On step 5's comparison:** the trial's recorded Rules only case, C-000021, is already approved and written. This is a demonstration of a plain resend's consequence, not evidence that AI alone prevents it.
+**On step 5's comparison:** the trial's recorded Rules only case, C-000021, is already approved and written.
 
 </details>
 
@@ -368,7 +361,7 @@ These failures sit outside patient movements. In both kinds no agent is convened
 ### Documents: MDM exceptions without a blind resend
 
 <details>
-<summary><b>In short:</b> a failed MDM, or an ORU^R01 carrying a document, becomes an exception a person reviews; Shutter keeps no copy of the document. What qualifies and what the case shows</summary>
+<summary><b>In short:</b> with document handling switched on at the source and the receiver, a failed MDM, or an ORU^R01 carrying a document, becomes an exception a person reviews; Shutter keeps no copy of the document. What qualifies and what the case shows</summary>
 
 Where document handling is switched on in both places, the receiver's site profile entry and its source's Shutter Forwarder, a failed **MDM^T01 to T11**, including **MDM^T02**, becomes a document exception at any size: the Forwarder posts the document's metadata, not the message, so the ordinary 2 MB forwarding limit is lifted. So does an **ORU^R01** with an OBX whose OBX-2 says ED or RP; a report sent as Base64 under TX or ST takes the ordinary path. Without a document profile, a failed MDM gets the ordinary case instead, with the message copied into Shutter's store, and one over 2 MB gets no case.
 
@@ -401,25 +394,21 @@ The case shows the document's identity, status and chain for a person to review,
 
 An optional FHIR R4 profile repairs one failed A02 as a ward-location update to an existing, in-progress Encounter. It sends at most one person-approved PUT per approval, with the ETag the receiver returned in `If-Match`, and closes the case only after finding the version that carries its marker in the Encounter's history. This profile has no receiver-side dry run, and says so on every decision. A 412 is not retried. A lost answer is reconciled through the receiver's history and never resent, and an incomplete or untrusted history may leave it unknown for good. Verification concerns the Encounter record, not the patient's physical location or delivery to any downstream system. No agent plans a FHIR case. In this release the receiver must be InterSystems IRIS for Health's own FHIR R4 server.
 
-<details>
-<summary><b>Where it is proved, and what it never does</b></summary>
-
 It runs end to end in CI on IRIS for Health 2026.2 against Shutter's own test FHIR server, which is held to the answers IRIS for Health's FHIR server gave when measured. It was also run against IRIS for Health's own FHIR server on 14 November 2026: the request, the answers and the history are in [receipt-fhir.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt-fhir.md). On the online demo (not the trial), scenario S35 plays it against Shutter's own test FHIR server.
 
 No other recovery writes over FHIR: no create, no admission or discharge, no merge, no documents, no Provenance, no `$validate` as a rehearsal. Details and limits: [fhir.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/fhir.md).
-
-</details>
 
 ## How it is tested
 
 **Release checks and agent evaluations are different evidence.** The latest release checks are for release 1.4.8; the latest comparative agent evaluation remains the 1.4.3 rerun.
 
+**Release 1.4.8:** CI on the release commit ([run](https://github.com/MxSalata/shutter/actions/runs/43727898797)): the web and browser suites and three IRIS shards; the tag adds two documentation fixes after it. On a stock AI Hub build 154 image, `zpm "install iris-shutter"` installed 1.4.8 from the public registry in 130 seconds, with no API key, and the health route answered 1.4.8 with the production running (15 November 2026).
+
 <details>
-<summary><b>The recorded checks, release by release</b></summary>
+<summary><b>The recorded checks of earlier releases</b></summary>
 
 | Scope | Recorded checks |
 | --- | --- |
-| **Release 1.4.8** | CI on the release commit ([run](https://github.com/MxSalata/shutter/actions/runs/43727898797)): the web and browser suites and three IRIS shards; the tag adds two documentation fixes after it. On a stock AI Hub build 154 image, `zpm "install iris-shutter"` installed 1.4.8 from the public registry in 130 seconds, with no API key, and the health route answered 1.4.8 with the production running (15 November 2026) |
 | **Release 1.4.7** | CI on the tagged commit ([run 49](https://github.com/MxSalata/shutter/actions/runs/43624412267)): the web and browser suites and three IRIS shards, 1,276 unit tests, the scenario checks with FHIR's S35 among them, the FHIR conformance kit (244 exchanges) and the pathology check. The same IRIS job ran 13 full rounds on the tag with no failure. A fresh install on AI Hub build 154 is recorded step by step in [its receipt](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt-1.4.7.md) |
 | **Release 1.4.3** | 1,083 unit tests passed on AI Hub build 154 and 1,074 on IRIS 2026.2, none failed. Role checks covered judges running but not resetting, upgraded permissions and attribution of scenario runs. Web and relevant browser suites included accessibility checks |
 | **Pathology, release 1.4.0** | All 56 pathology-rig rows passed on build 154. An end-to-end check counted receiver sends under shadow mode and the recovery stop |
