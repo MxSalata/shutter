@@ -32,7 +32,7 @@ export function RecoveryControlSection() {
           <Text size="sm">
             {`Recovery is stopped (by ${c.stoppedBy}, ${formatZoned(c.stoppedAt) || c.stoppedAt}${c.stopReason ? `: ${c.stopReason}` : ''}).`}{' '}
             {c.mode === 'enabled'
-              ? 'Recovery is enabled; clearing the stop releases no plan made before it.'
+              ? 'The mode stays enabled; clearing the stop releases no plan made before it.'
               : 'Shadow mode: recovery is off.'}
           </Text>
         ) : (
