@@ -158,7 +158,10 @@ ClassMethod Learn(ByRef before, ByRef left, record As %Boolean, ByRef site, out 
         Set name = $ORDER(before("i", name), 1, class)
         Quit:name=""
         If $DATA(left("i", name), was) {
-            Continue:(was '= class)
+            If was '= class {
+                Do out.skipped.%Push(name _ ": its class was " _ was _ ", so what was set for " _ class _ " is not learnt")
+                Continue
+            }
             If $GET(site("i", name, "added")) {
                 // The site's own item: its record is the item as it is now.
                 Kill site("i", name)
