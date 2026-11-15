@@ -186,6 +186,10 @@ describe("the case's action for its reader", () => {
     expect(caseActionOf(factsOf('C-000002', { state: 'rehearsing' }), { me: ME.approver }).name).toBe(
       'No action needed on this case: Shutter is rehearsing',
     );
+    // What Shutter is doing, as the next action says it, not the state's label ("Shutter is gated")
+    expect(caseActionOf(factsOf('C-000002', { state: 'gated' }), { me: ME.approver }).name).toBe(
+      'No action needed on this case: Shutter is checking the plan',
+    );
     for (const disposition of ['abandoned', 'handled_by_hand']) {
       const f = factsOf('C-000008');
       expect(caseActionOf({ ...f, c: { ...f.c, disposition } }, { me: ME.approver }).label).toBe(

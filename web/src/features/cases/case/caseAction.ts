@@ -1,7 +1,6 @@
 import { resolveCan } from '@/api/can';
 import type { CaseDetail, Escalation, Me } from '@/api/types';
-import { caseState } from '@/lib/status';
-import { nextAction, type CaseFacts } from './outcome';
+import { nextAction, shutterDoing, type CaseFacts } from './outcome';
 import { decisionLabels } from './planAction';
 
 /**
@@ -118,7 +117,7 @@ export function caseActionOf(f: CaseFacts, ctx: ActionContext): CaseAction {
   if (ctx.notAsExpected && next.kind === 'none') return notExpected(c.scenario, !!ctx.comparable);
   if (c.disposition === 'abandoned' || c.disposition === 'handled_by_hand' || next.kind === 'none')
     return nothing();
-  if (next.kind === 'shutter') return nothing(`Shutter is ${caseState(c.state).label.toLowerCase()}`);
+  if (next.kind === 'shutter') return nothing(`Shutter is ${shutterDoing(c.state)}`);
   const can = resolveCan(ctx.me);
   if (c.state === 'awaiting_approval') {
     if (!can.approve) return notYours('Waiting for an approver');

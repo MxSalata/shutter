@@ -377,6 +377,9 @@ const DOING: Record<string, string> = {
   grouped: 'holding it with its incident',
 };
 
+/** "collecting evidence", "checking the plan": what Shutter is doing in a state, for the next action and the header button. */
+export const shutterDoing = (state: string): string => DOING[state] ?? caseState(state).label.toLowerCase();
+
 export function nextAction(f: CaseFacts): NextAction {
   const { c } = f;
   const none = { blocking: '', lookAgain: '', handoff: '', escalate: false };
@@ -422,7 +425,7 @@ export function nextAction(f: CaseFacts): NextAction {
     };
   return {
     kind: 'shutter',
-    action: `No action needed now: Shutter is ${DOING[c.state] ?? caseState(c.state).label.toLowerCase()}`,
+    action: `No action needed now: Shutter is ${shutterDoing(c.state)}`,
     role: '',
     ...none,
   };
