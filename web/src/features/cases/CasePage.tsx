@@ -99,7 +99,7 @@ export { REPLAY_DONE };
  * own recordings carry when they first answered live (S2's, S3's and S8's tool calls on 25 Oct).
  */
 const TRIAL_AUDIT_TIMES =
-  'These times are the recording’s, made on 2 Nov 2026 by replaying the agents’ answers; the agents first answered live before that (S2, S3 and S8 on 25 Oct), and each agent’s recording gives its own time.';
+  'These times are the recording’s, made on 2 Nov 2026 by replaying the agents’ answers; the agents first answered earlier (S2, S3 and S8 on 25 Oct), and each agent’s recording gives its own time.';
 
 const PANEL = {
   className: 'case-tab-panel',
