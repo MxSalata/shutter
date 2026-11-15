@@ -130,6 +130,7 @@ export function samplePageQuestion(
     model: null,
     costUsd: 0,
     ensMessageId: null,
+    messageLink: null,
     answer,
   };
 }

@@ -73,6 +73,8 @@ test('asks the tier’s question live, attributes the answer to the AI Hub agent
           model: 'claude-opus-5-5',
           costUsd: 0.004,
           ensMessageId: '4321',
+          messageLink:
+            '/csp/healthshare/shutter/EnsPortal.MessageContents.zen?HeaderClass=Ens.MessageHeader&HeaderId=4321',
           answer: { answer: ANSWER, cites: ['page'], confidence: 'high' },
         });
       default:

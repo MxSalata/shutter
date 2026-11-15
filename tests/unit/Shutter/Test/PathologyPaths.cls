@@ -241,6 +241,99 @@ Method MakeOutage(receiver As %String, state As %String) As %String
 }
 
 /// An outage's state, version, digest and event count, as one string.
+/// What GET /scenarios polls every two seconds is kept between polls and read again once it changes (the 1.4.6
+/// ultrareview's #8). pathology.json's reading is kept with the file's stamp, served from there while the file is the
+/// same (a run's lookup too), and read again once the file changes or goes; the results route's check is kept for
+/// LABREADYSECONDS for the same hospital namespace, and asked afresh after that, for another namespace and by a run's own
+/// checks; the poll's list follows the kept check; and every install clears what was kept. Read from a copy of the
+/// fixtures in a folder of the test's own and a hospital namespace that is not there; the settings the test moves are put
+/// back, and what was kept is cleared.
+Method TestWhatAPollReadsIsKeptUntilItChanges()
+{
+    Set r = "Shutter.Scenarios.Runner"
+    For key = "fixtures", "hospitalNamespace", "labReceiver" {
+        Set saved(key) = $LISTBUILD($DATA(^Shutter.Config(key)) # 10, $GET(^Shutter.Config(key)))
+    }
+    Set source = $CLASSMETHOD(r, "FixturesDir") _ "pathology.json"
+    Set dir = ##class(%File).NormalizeDirectory(##class(%File).ManagerDirectory() _ "Temp/ut-pathology-" _ $JOB)
+    Set file = dir _ "pathology.json"
+    Try {
+        Do ##class(%File).CreateDirectoryChain(dir)
+        Do $$$AssertTrue(##class(%File).CopyFile(source, file), "a copy of pathology.json in a folder of the test's")
+        Set ^Shutter.Config("fixtures") = dir
+        Kill ^Shutter.Scenarios("cache")
+        // The first read reads the file, and keeps the paths with the file's stamp
+        Set paths = $CLASSMETHOD(r, "LoadPathology", .error)
+        Do $$$AssertEquals(error _ "|" _ paths.%Size(), "|2", "the two paths are read")
+        Set kept = $GET(^Shutter.Scenarios("cache", "pathology"))
+        Do $$$AssertEquals($LISTGET(kept, 1), $CLASSMETHOD(r, "FileStamp", file), "kept with the file's stamp")
+        Do $$$AssertTrue($LISTGET(kept, 2) [ """kind"":""pathology""", "as they are read, each marked a pathology path")
+        // While the file is the same, a read is what was kept: a marker kept under the same stamp is what comes back
+        Set ^Shutter.Scenarios("cache", "pathology") = $LISTBUILD($LISTGET(kept, 1), "[{""id"":""PX"",""kind"":""pathology"",""steps"":[]}]")
+        Set paths = $CLASSMETHOD(r, "LoadPathology", .error)
+        Do $$$AssertEquals(paths.%Size() _ "|" _ paths.%Get(0).id, "1|PX", "while the file is the same, it is not read again")
+        Do $$$AssertTrue($ISOBJECT($CLASSMETHOD(r, "FindPathology", "PX")) && '$ISOBJECT($CLASSMETHOD(r, "FindPathology", "P1")), "and a run's lookup reads what was kept too")
+        // The file changes: it is read again, and kept with its new stamp
+        Set text = ..Text(file)
+        Do ##class(%File).Delete(file)
+        Set out = ##class(%Stream.FileCharacter).%New()
+        Do out.LinkToFile(file), out.Write(text _ $CHAR(10) _ "    "), out.%Save()
+        Kill out
+        Set paths = $CLASSMETHOD(r, "LoadPathology", .error)
+        Do $$$AssertEquals(error _ "|" _ paths.%Size() _ "|" _ paths.%Get(0).id, "|2|P1", "a changed file is read again")
+        Do $$$AssertEquals($LISTGET($GET(^Shutter.Scenarios("cache", "pathology")), 1), $CLASSMETHOD(r, "FileStamp", file), "and kept with its new stamp")
+        // The file goes: nothing kept is served
+        Do ##class(%File).Delete(file)
+        Set paths = $CLASSMETHOD(r, "LoadPathology", .error)
+        Do $$$AssertTrue((error [ "no pathology.json") && (paths.%Size() = 0), "a file that is gone is not served from what was kept: " _ error)
+        If $LIST(saved("fixtures"), 1) { Set ^Shutter.Config("fixtures") = $LIST(saved("fixtures"), 2) } Else { Kill ^Shutter.Config("fixtures") }
+        // The results route's check, for a hospital namespace that is not there: asked afresh, the answer is no route
+        Set hospital = "UTNOSUCH" _ $JOB, now = ##class(Shutter.Util.Time).EpochSeconds()
+        Set ^Shutter.Config("hospitalNamespace") = hospital, ^Shutter.Config("labReceiver") = $PARAMETER(r, "LABRECEIVER")
+        Kill ^Shutter.Scenarios("cache", "labReady")
+        Do $$$AssertNotTrue($CLASSMETHOD(r, "LabReady", 1), "a hospital namespace that is not there has no results route")
+        Set was = $GET(^Shutter.Scenarios("cache", "labReady"))
+        Do $$$AssertEquals($LISTGET(was, 1) _ "|" _ $LISTGET(was, 3), hospital _ "|0", "and the answer is kept for its namespace")
+        // A kept answer is what the poll reads, without asking the namespace, and the poll's list follows it
+        Set ^Shutter.Scenarios("cache", "labReady") = $LISTBUILD(hospital, now, 1)
+        Do $$$AssertTrue($CLASSMETHOD(r, "LabReady", 1), "within LABREADYSECONDS the poll reads what was kept")
+        Set list = ##class(%DynamicAbstractObject).%FromJSON($CLASSMETHOD(r, "ListPathology"))
+        Do $$$AssertEquals(list.%Size(), 2, "and the poll's list follows it")
+        Do $$$AssertNotTrue($CLASSMETHOD(r, "LabReady"), "a run's own check asks afresh")
+        Do $$$AssertEquals($LISTGET($GET(^Shutter.Scenarios("cache", "labReady")), 3), 0, "and its answer is the one kept")
+        Do $$$AssertEquals($CLASSMETHOD(r, "ListPathology"), "[]", "which the poll's list then follows")
+        Set ^Shutter.Scenarios("cache", "labReady") = $LISTBUILD(hospital, now - $PARAMETER(r, "LABREADYSECONDS") - 1, 1)
+        Do $$$AssertNotTrue($CLASSMETHOD(r, "LabReady", 1), "an answer older than LABREADYSECONDS is asked afresh")
+        Set ^Shutter.Scenarios("cache", "labReady") = $LISTBUILD(hospital _ "X", now, 1)
+        Do $$$AssertNotTrue($CLASSMETHOD(r, "LabReady", 1), "and one kept for another namespace is not used")
+    } Catch ex {
+        Do $$$AssertTrue(0, "the test stopped: " _ ex.DisplayString())
+    }
+    For key = "fixtures", "hospitalNamespace", "labReceiver" {
+        If $LIST(saved(key), 1) { Set ^Shutter.Config(key) = $LIST(saved(key), 2) } Else { Kill ^Shutter.Config(key) }
+    }
+    Kill ^Shutter.Scenarios("cache")
+    If ##class(%File).Exists(file) Do ##class(%File).Delete(file)
+    Do ##class(%File).RemoveDirectory(dir)
+    // Every install clears what the runner kept, and the demo hospital's clears the route's check
+    Do $$$AssertTrue(..Source("Shutter.Setup", "CreateFolders") [ "Kill ^Shutter.Scenarios(""cache"")", "every install clears what the runner kept")
+    Set hospitalSetup = ..Source("Hospital.Setup", "RecordInShutter")
+    If hospitalSetup = "" {
+        Do $$$LogMessage("Hospital.Setup is not here: its install's clearing is not read")
+    } Else {
+        Do $$$AssertTrue(hospitalSetup [ "Kill ^Shutter.Scenarios(""cache"", ""labReady"")", "and the demo hospital's install clears the route's check")
+    }
+}
+
+/// A method's code as written; "" when the class or the method is not here.
+ClassMethod Source(class As %String, method As %String) As %String
+{
+    Set def = ##class(%Dictionary.MethodDefinition).%OpenId(class _ "||" _ method)
+    If '$ISOBJECT(def) Quit ""
+    Do def.Implementation.Rewind()
+    Quit def.Implementation.Read(1000000)
+}
+
 ClassMethod Fingerprint(id As %String) As %String
 {
     Set row = ##class(Shutter.Store.Outage).%OpenId(id)

@@ -215,6 +215,8 @@ ClassMethod RecordInShutter(shutterNs As %String) [ Private ]
         Set ^Shutter.Config("fhirWardIn") = fhirIn, ^Shutter.Config("fhirWardArchive") = fhirArchive
         Set ^Shutter.Config("hospitalNamespace") = hospital
         Set ^Shutter.Config("labFeed") = "Lab In", ^Shutter.Config("labReceiver") = "Lab Results Out", ^Shutter.Config("labListener") = "Results System In"
+        // The scenario runner's kept answer on whether the results route is installed (Runner LabReady) is read afresh.
+        Kill ^Shutter.Scenarios("cache", "labReady")
         If ##class(%Dictionary.CompiledMethod).%ExistsId("Shutter.Setup||DemoLabReceiver") Set sc = $CLASSMETHOD("Shutter.Setup", "DemoLabReceiver", hospital)
     } Catch ex {
     }

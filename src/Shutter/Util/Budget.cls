@@ -7,9 +7,13 @@
 /// the budget could not check in time (another admission held the lock) is refused budget_busy instead (RefusalStatus),
 /// which a case counts as a failed run, not a spent budget. GET /settings and the Doctor carry Status().
 /// Reserve, then settle (v1.35): a run in flight has no row yet, so each admitted run holds a reservation of the estimate
-/// until it ends (Settle); the day's state counts the reservations beside the spend (reservedUsd, inFlight). The estimate is
-/// ^Shutter.Config("budgetReserveUsd") when the site sets it, else the mean cost of the last twenty live runs, else 0.50 USD;
-/// a reservation older than twenty minutes is taken for a job that died and dropped.
+/// until its row carries the real cost; the day's state counts the reservations beside the spend (reservedUsd, inFlight).
+/// The Agent item keys a run's reservation by its request's message (RunKey) and, when the run ends, holds what it cost
+/// in it (Hold) rather than settling, since the row is written later, by the process, in another job; the row's writer
+/// settles it once the row is saved (Recorded), so the run's cost counts as reserved or as spent throughout, never as
+/// neither (ultrareview 1.4.6, #6). The estimate is ^Shutter.Config("budgetReserveUsd") when the site sets it, else the
+/// mean cost of the last twenty live runs, else 0.50 USD; a reservation older than twenty minutes is taken for a job that
+/// died and dropped, and a held one twenty minutes after its run ended (an answer its process never recorded).
 /// Admission (R145-03): a run is admitted only when the day's spend, the reservations in flight and the run's own estimate
 /// together stay within the cap, and for a user with a share, that user's spend, reservations and the estimate within the
 /// share; with nothing spent or reserved under a limit yet, one run is admitted whatever its estimate (R146-01), so a cap
@@ -130,6 +134,39 @@ ClassMethod Settle(key As %String)
     Kill ^Shutter.Budget("reserve", key)
 }
 
+/// The reservation key of the Agent item's run for one request: the request's message header id, which the process that
+/// records the run's row passes on (AgentRun.FromResponse, Review.StoreAgent), so that writer can settle it (Recorded).
+ClassMethod RunKey(headerId As %String) As %String
+{
+    Quit "message:" _ headerId
+}
+
+/// The run under key ended, and its row is written later, by the process in another job: its reservation holds what the
+/// run cost from now until that row is saved (Recorded), so the cost counts as reserved or as spent throughout, never as
+/// neither. cost is the run's cost priced as its row will be (AgentRun.CostOf): "" (a model with no price) keeps the
+/// estimate; 0 has nothing to hold and settles at once. One write, so an admission reads the reservation before or after
+/// it, never without it. The hold restarts the stale clock: a run the process never records lapses twenty minutes after
+/// it ended. Nothing reserved under key (a run refused, or a replay): nothing to do.
+ClassMethod Hold(key As %String, cost As %String)
+{
+    Set value = $GET(^Shutter.Budget("reserve", key))
+    Quit:value=""
+    If (cost '= "") && (+cost <= 0) {
+        Do ..Settle(key)
+        Quit
+    }
+    Set ^Shutter.Budget("reserve", key) = $LISTBUILD($SELECT(cost = "": $LISTGET(value, 1, 0), 1: +cost), ##class(Shutter.Util.Time).EpochSeconds(), $LISTGET(value, 3))
+}
+
+/// The row that carries a run's cost is saved, by the process that sent the request whose message header id is given
+/// (AgentRun.FromResponse; Review.StoreAgent, the review keeping its own cost): the reservation the Agent item held for the
+/// run goes. Safe to repeat, and nothing for a run that reserved nothing (a replay) or a request with no message.
+ClassMethod Recorded(headerId As %String)
+{
+    Quit:headerId=""
+    Do ..Settle(..RunKey(headerId))
+}
+
 /// The reservations in flight, in USD, for every user or for one; count gets how many. Stale ones are dropped on the way.
 ClassMethod Reserved(user As %String = "", Output count As %Integer) As %Numeric
 {
@@ -232,7 +269,9 @@ ClassMethod Status(now As %String = "") As %DynamicObject
     If now = "" Set now = ##class(Shutter.Util.Time).NowUTC()
     Set day = $EXTRACT(now, 1, 10), since = day _ "T00:00:00Z"
     Set resets = $ZDATE($ZDATEH(day, 3) + 1, 3) _ "T00:00:00Z"
-    Set cap = ..Cap(), spent = ..Spent(since), reserved = ..Reserved("", .inFlight)
+    // The reservations before the spend: a run's row is saved before its reservation is settled (Recorded), so a settle
+    // that lands between the two reads counts the run twice for that moment, never not at all.
+    Set cap = ..Cap(), reserved = ..Reserved("", .inFlight), spent = ..Spent(since)
     Set s = {}
     Set s.dailyUsd = cap, s.spentTodayUsd = spent, s.since = since, s.resetsAt = resets, s.perUserUsd = ..Share()
     // The runs in flight (v1.35): reserved against the cap until their rows carry the real cost.
@@ -245,8 +284,9 @@ ClassMethod Status(now As %String = "") As %DynamicObject
 ClassMethod StatusFor(user As %String, now As %String = "") As %DynamicObject
 {
     Set s = ..Status(now)
-    Set mine = $SELECT((user = "") || (user = "system"): 0, 1: ..SpentBy(user, s.since))
+    // The user's reservations before their spend, as Status reads the day's.
     Set reservedMine = $SELECT((user = "") || (user = "system"): 0, 1: ..Reserved(user, .n))
+    Set mine = $SELECT((user = "") || (user = "system"): 0, 1: ..SpentBy(user, s.since))
     Set s.spentByMeUsd = mine, s.reservedByMeUsd = reservedMine
     Do s.%Set("shareExhausted", ..Exhausted(s.perUserUsd, mine + reservedMine), "boolean")
     If s.shareExhausted Do s.%Set("exhausted", 1, "boolean")

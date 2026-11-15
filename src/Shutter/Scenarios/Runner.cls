@@ -24,6 +24,11 @@ Parameter OUTAGETIMEOUT = 180;
 /// Seconds a <code>wait_for_state</code> step waits when it gives no <code>timeout</code>.
 Parameter WAITTIMEOUT = 120;
 
+/// Seconds GET /scenarios' poll may reuse what <method>LabReady</method> last read for the same hospital namespace
+/// (<method>ListPathology</method>), so a poll every two seconds switches into that namespace for its SQL at most once a
+/// minute. The demo hospital's install, which adds the results route, clears what was kept.
+Parameter LABREADYSECONDS = 60;
+
 /// The source system of an operation a <code>manual</code> step enters: a person on the ward, in the downstream
 /// system's own screens rather than through the feed.
 Parameter MANUALSOURCE = "WARD";
@@ -56,27 +61,59 @@ ClassMethod List() As %String [ SqlProc ]
 }
 
 /// The pathology paths as pathology.json lists them, each with "kind": "pathology" and each file step's full path added.
-/// JSON text; an empty list on an instance without the demo's results route (<method>LabReady</method>).
+/// JSON text; an empty list on an instance without the demo's results route (<method>LabReady</method>). GET /scenarios
+/// polls it every two seconds while a run plays (the 1.4.6 ultrareview's #8), so it reads neither the hospital's namespace
+/// nor the file on every poll: the route's check is the one kept for LABREADYSECONDS, and the paths the reading kept until
+/// the file changes (<method>PathologyText</method>).
 ClassMethod ListPathology() As %String [ SqlProc ]
 {
-    Quit:'..LabReady() "[]"
-    Set paths = ..LoadPathology(.error)
+    Quit:'..LabReady(1) "[]"
+    Set text = ..PathologyText(.error)
     If error '= "" {
         Quit {"error": (error)}.%ToJSON()
     }
-    Quit paths.%ToJSON()
+    Quit text
 }
 
 /// pathology.json (1.4.6), parsed as <method>Load</method> parses scenarios.json, with "kind": "pathology" on each path.
 /// It is a file of its own, so every tool that reads scenarios.json (the evaluation, the recordings, the fair test, the
-/// live hospital) never sees the two paths.
+/// live hospital) never sees the two paths. A fresh array each time, from what <method>PathologyText</method> kept.
 ClassMethod LoadPathology(Output error As %String) As %DynamicArray
 {
+    Set text = ..PathologyText(.error)
+    If error '= "" Quit []
+    Quit ##class(%DynamicAbstractObject).%FromJSON(text)
+}
+
+/// The pathology paths as JSON text, as <method>LoadPathology</method> describes them, kept in
+/// ^Shutter.Scenarios("cache", "pathology") with the file's stamp (<method>FileStamp</method>) and read from the file
+/// again only when the stamp differs: the file changes with an install, which clears what was kept (Shutter.Setup
+/// CreateFolders), or by hand, which changes its size or its time. A file that is not there or does not parse is never
+/// kept, and <var>error</var> says why. A sign-in that may not write the global still reads, from the file each time.
+ClassMethod PathologyText(Output error As %String) As %String
+{
+    Set error = "", stamp = ..FileStamp(..FixturesDir() _ "pathology.json")
+    Set kept = $GET(^Shutter.Scenarios("cache", "pathology"))
+    If (stamp '= "") && (kept '= "") && ($LISTGET(kept, 1) = stamp) Quit $LISTGET(kept, 2)
     Set paths = ..Load(.error, "pathology.json")
-    Quit:error'="" paths
+    Quit:error'="" ""
     Set iter = paths.%GetIterator()
     While iter.%GetNext(.i, .one) { Set one.kind = "pathology" }
-    Quit paths
+    Set text = paths.%ToJSON()
+    If stamp '= "" {
+        Try {
+            Set ^Shutter.Scenarios("cache", "pathology") = $LISTBUILD(stamp, text)
+        } Catch {
+        }
+    }
+    Quit text
+}
+
+/// A file's stamp for what is kept from it: its path, its size and the time it was last changed; "" when it is not there.
+ClassMethod FileStamp(path As %String) As %String
+{
+    Quit:'##class(%File).Exists(path) ""
+    Quit path _ "|" _ ##class(%File).GetFileSize(path) _ "|" _ ##class(%File).GetFileDateModified(path)
 }
 
 /// The pathology path <var>scenario</var>, or "".
@@ -90,11 +127,33 @@ ClassMethod FindPathology(scenario As %String) As %DynamicObject
 }
 
 /// Whether the demo hospital's results route is installed: its namespace recorded, and the connector in its production.
-ClassMethod LabReady() As %Boolean
+/// With <var>kept</var> (GET /scenarios' poll, <method>ListPathology</method>), the answer read for the same hospital
+/// namespace within LABREADYSECONDS is reused, rather than switching into that namespace for its SQL on every poll; a
+/// run's own checks ask afresh, and each fresh answer is the one kept. The demo hospital's install clears what was kept
+/// (Hospital.Setup RecordInShutter), so a route it adds is seen at once.
+ClassMethod LabReady(kept As %Boolean = 0) As %Boolean
 {
     Set hospital = $GET(^Shutter.Config("hospitalNamespace"))
     Quit:hospital="" 0
     Quit:$GET(^Shutter.Config("labReceiver"))'=..#LABRECEIVER 0
+    Set now = ##class(Shutter.Util.Time).EpochSeconds()
+    If kept {
+        Set was = $GET(^Shutter.Scenarios("cache", "labReady"))
+        Set age = now - $LISTGET(was, 2, 0)
+        If (was '= "") && ($LISTGET(was, 1) = hospital) && (age >= 0) && (age < ..#LABREADYSECONDS) Quit +$LISTGET(was, 3)
+    }
+    // Asked in a method of its own, so the namespace it switches to is Shutter's again before the answer is kept here.
+    Set ready = ..LabRouteIn(hospital)
+    Try {
+        Set ^Shutter.Scenarios("cache", "labReady") = $LISTBUILD(hospital, now, ready)
+    } Catch {
+    }
+    Quit ready
+}
+
+/// Whether the hospital namespace's production holds the results receiver, asked in that namespace; 0 when it cannot be.
+ClassMethod LabRouteIn(hospital As %String) As %Boolean [ Private ]
+{
     Set ready = 0
     Try {
         New $NAMESPACE

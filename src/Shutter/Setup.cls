@@ -243,6 +243,9 @@ ClassMethod CreateFolders() As %Status
     Set ^Shutter.Config("adtArchive") = base _ "archive/"
     Set root = $GET(^Shutter.Config("root"))
     If root '= "" Set ^Shutter.Config("fixtures") = root _ "fixtures/"
+    // What the scenario runner kept from the fixtures and the hospital (Shutter.Scenarios.Runner PathologyText, LabReady)
+    // goes with every install, so code that reads them differently never gets an older reading.
+    Kill ^Shutter.Scenarios("cache")
     Quit $$$OK
 }
 

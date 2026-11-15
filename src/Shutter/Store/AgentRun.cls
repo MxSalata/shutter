@@ -117,8 +117,18 @@ ClassMethod FromDiagnostic(memberCode As %String, response As Shutter.Bridge.Msg
     Set run.RequestedBy = response.RequestedBy, run.LlmMs = response.LlmMs, run.ToolMs = response.ToolMs, run.ReasoningTokens = response.ReasoningTokens
     Set run.Error = $EXTRACT(response.Error, 1, 2000)
     // Priced as every run is: a replay or a run the API mimic answered costs 0.
-    Set run.CostUSD = $SELECT(response.Mode = "replay": 0, response.Model = "mock": 0, 1: ##class(Shutter.Store.ModelPrice).Cost(response.Model, response.PromptTokens, response.CompletionTokens, response.CacheReadTokens, response.CacheCreationTokens))
+    Set run.CostUSD = ..CostOf(response)
     Quit run.%Save()
+}
+
+/// What a run cost, as its row records it: one formula for every writer of a run's cost (FromResponse, FromDiagnostic,
+/// Shutter.Store.Review StoreAgent) and for the Agent item, which holds it in the run's reservation until the row is saved
+/// (Shutter.Util.Budget Hold). A replayed run spends nothing: its tokens are the recording's, kept for the record, and cost
+/// 0. Nor does a run the API mimic answered (model mock): its tokens are estimates and no model was called. Any other run
+/// is priced by ModelPrice; "" when its model has no price.
+ClassMethod CostOf(response As Shutter.Bridge.Msg.AgentResponse) As %String
+{
+    Quit $SELECT(response.Mode = "replay": 0, response.Model = "mock": 0, 1: ##class(Shutter.Store.ModelPrice).Cost(response.Model, response.PromptTokens, response.CompletionTokens, response.CacheReadTokens, response.CacheCreationTokens))
 }
 
 ClassMethod FromResponse(case As Shutter.Store.Case, snapshot As Shutter.Store.Snapshot, role As %String, memberCode As %String, response As Shutter.Bridge.Msg.AgentResponse, ensMessageId As %String, Output run As Shutter.Store.AgentRun, questionId As %String = "") As %Status
@@ -149,10 +159,13 @@ ClassMethod FromResponse(case As Shutter.Store.Case, snapshot As Shutter.Store.S
     } Else {
         Set run.ResultJSON = response.ResultJSON, run.Content = response.Content, run.Error = $EXTRACT(response.Error, 1, 2000)
     }
-    // A replayed run spends nothing: its tokens are the recording's, kept for the record, and cost 0. Nor does a run
-    // the API mimic answered (model mock): its tokens are estimates and no model was called.
-    Set run.CostUSD = $SELECT(response.Mode = "replay": 0, response.Model = "mock": 0, 1: ##class(Shutter.Store.ModelPrice).Cost(response.Model, response.PromptTokens, response.CompletionTokens, response.CacheReadTokens, response.CacheCreationTokens))
-    Quit run.%Save()
+    // A replayed run spends nothing, nor does a run the API mimic answered (CostOf).
+    Set run.CostUSD = ..CostOf(response)
+    Set sc = run.%Save()
+    // The row carries the run's cost now: the reservation the Agent item held for it under the request's message goes
+    // (Shutter.Util.Budget Recorded), so the cost counted as reserved until here and as spent from here.
+    If $$$ISOK(sc) Do ##class(Shutter.Util.Budget).Recorded(ensMessageId)
+    Quit sc
 }
 
 Storage Default

@@ -170,7 +170,7 @@ Method StoreAgent(response As Shutter.Bridge.Msg.AgentResponse, ranking As %Dyna
         Set ..CacheReadTokens = +response.CacheReadTokens, ..CacheCreationTokens = +response.CacheCreationTokens
         Set ..DurationMs = +response.DurationMs, ..SessionId = response.SessionId
         // A replayed run spends nothing, nor does one the API mimic answered (model mock): their tokens are kept for the record.
-        Set ..CostUSD = $SELECT(response.Mode = "replay": 0, response.Model = "mock": 0, 1: ##class(Shutter.Store.ModelPrice).Cost(response.Model, response.PromptTokens, response.CompletionTokens, response.CacheReadTokens, response.CacheCreationTokens))
+        Set ..CostUSD = ##class(Shutter.Store.AgentRun).CostOf(response)
         If (response.Status = "ok") && '$ISOBJECT(ranking) && (problem = "") Set problem = "The agent answered without a ranking"
     } ElseIf problem = "" {
         Set problem = "No response from the agent"
@@ -186,7 +186,10 @@ Method StoreAgent(response As Shutter.Bridge.Msg.AgentResponse, ranking As %Dyna
         Set ..AgentState = "error", ..AgentError = $EXTRACT(response.Status _ $SELECT(response.Error '= "": ": " _ response.Error, 1: ""), 1, 2000)
     }
     Set ..State = "done", ..FinishedAt = ##class(Shutter.Util.Time).NowUTC()
-    Quit ..%Save()
+    Set sc = ..%Save()
+    // The review keeps the run's cost now: the reservation the Agent item held for it goes (Shutter.Util.Budget Recorded).
+    If $$$ISOK(sc) Do ##class(Shutter.Util.Budget).Recorded(ensMessageId)
+    Quit sc
 }
 
 /// The agent's part failed without an answer (the call failed, or the time was up): the review is done with the baseline order.

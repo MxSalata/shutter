@@ -162,7 +162,9 @@ ClassMethod Exec(sql As %String, arg As %String) As %Status [ Private ]
     Quit $$$OK
 }
 
-/// The question for the panel: its page, its text, its state and its answer (no summary: the asker sent it).
+/// The question for the panel: its page, its text, its state and its answer (no summary: the asker sent it), and its run's
+/// message in the Management Portal (messageLink, Shutter.API.Dispatch.MessageLink): under this namespace's own portal path,
+/// where the Explain agent's item runs, so the link opens the run on any install, a site's own namespace included.
 Method ToObject() As %DynamicObject
 {
     Set o = {}
@@ -174,6 +176,7 @@ Method ToObject() As %DynamicObject
     If ..Model = "" { Do o.%Set("model", "", "null") } Else { Set o.model = ..Model }
     Set o.costUsd = +..CostUSD
     If ..EnsMessageId = "" { Do o.%Set("ensMessageId", "", "null") } Else { Set o.ensMessageId = ..EnsMessageId }
+    If ..EnsMessageId = "" { Do o.%Set("messageLink", "", "null") } Else { Set o.messageLink = ##class(Shutter.API.Dispatch).MessageLink(..EnsMessageId) }
     Set answer = ""
     If ..AnswerJSON '= "" Set answer = ##class(Shutter.Util.Json).Parse(..AnswerJSON, .sc)
     If $ISOBJECT(answer) { Set o.answer = answer } Else { Do o.%Set("answer", "", "null") }

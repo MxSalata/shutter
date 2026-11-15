@@ -254,9 +254,15 @@ Method TestStore()
     Do $$$AssertEquals(o.state, "answered", "the object says answered")
     Do $$$AssertEquals(o.answer.answer, "S2 is a transfer recovered.", "with the answer")
     Do $$$AssertNotTrue(o.%IsDefined("context") || o.%IsDefined("onScreen"), "and no summary: the asker sent it")
-    Do $$$AssertEquals(o.%GetTypeOf("mode") _ " " _ o.%GetTypeOf("ensMessageId"), "null null", "what no run set is null")
+    Do $$$AssertEquals(o.%GetTypeOf("mode") _ " " _ o.%GetTypeOf("ensMessageId") _ " " _ o.%GetTypeOf("messageLink"), "null null null", "what no run set is null")
     Do $$$AssertEquals(o.costUsd, 0, "and the cost 0")
     Do $$$AssertNotTrue(q.CloseIfStale(), "an answered question is never stale")
+    // The run's message is linked under this namespace's own portal path, never a fixed one (ultrareview 1.4.6, #3).
+    Set q.EnsMessageId = "4321", portal = ##class(Shutter.API.Dispatch).PortalPath()
+    Set o = q.ToObject()
+    Do $$$AssertEquals(o.ensMessageId, "4321", "the run's message")
+    Do $$$AssertEquals(o.messageLink, portal _ "EnsPortal.MessageContents.zen?HeaderClass=Ens.MessageHeader&HeaderId=4321", "linked under the namespace's own portal path: " _ o.messageLink)
+    Set q.EnsMessageId = ""
     // Bad input is refused by the store too, not only by the route.
     Do $$$AssertStatusNotOK($CLASSMETHOD(st, "Create", "Not A Page", "x", {}, "ut-page", .bad), "a page's name that is not one is refused")
     Do $$$AssertStatusNotOK($CLASSMETHOD(st, "Create", "cases", "", {}, "ut-page", .bad), "an empty question is refused")

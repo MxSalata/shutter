@@ -442,7 +442,12 @@ sees them and the scenarios are the same without them (36 at v1.62, 37 since S35
   down window it leaves the stand-in down, and P2's own `up` step brings it back. Nothing else.
 - `ListPathology()` lists the paths; `GET /scenarios` carries them as `pathology` (an empty list where the route is not
   installed), each with `kind` `pathology`, `latestCase` as a scenario has it and `latestOutage` (`{ "id", "state",
-  "openedAt" }` of the receiver's newest outage, for P2; otherwise null).
+  "openedAt" }` of the receiver's newest outage, for P2; otherwise null). The page polls it every two seconds while a run
+  plays, so (the 1.4.6 ultrareview's #8) the paths are read from the file once and kept in
+  `^Shutter.Scenarios("cache", "pathology")` with the file's path, size and time, read again when any of them changes
+  (`PathologyText`, which `FindPathology` reads too), and the route's check is kept for 60 seconds per hospital namespace
+  (`LabReady(1)`, `LABREADYSECONDS`; a run's own checks ask afresh). Every install clears what was kept
+  (`Setup.CreateFolders`), and the demo hospital's install clears the route's check.
 - **A path's waits** read only the cases its own run opens (`WaitForState` with the newest case row before the run), since
   a path's cases keep its tag from one run to the next.
 
@@ -1535,9 +1540,17 @@ cap here guards a burst; absent when unset (an empty, zero or non-numeric value 
 
 **Reserve, then settle (v1.35).** A run in flight has no `AgentRun` row yet, so three members running at once were not
 counted against the cap until they finished. The Agent item now reserves an estimate for each live run it starts
-(`Budget.Reserve`, keyed by the run) and settles it when the run ends whatever its outcome (`Budget.Settle`); the day's state
+(`Budget.Reserve`, keyed by the run) and settles it when the run ends whatever its outcome (`Budget.Settle`). Now (the
+1.4.6 ultrareview's #6) the run's row is what settles it: the Agent item keys the reservation by the request's message
+header (`Budget.RunKey`) and, when the run ends, holds in it what the run cost, priced as its row will be
+(`AgentRun.CostOf`; the estimate when the model has no price, settled at once when it cost nothing), and the process that
+writes the row settles it once the row is saved (`AgentRun.FromResponse`, and `Review.StoreAgent`, the review keeping its
+own cost; `Budget.Recorded`), so the run counts as reserved or as spent throughout and never as neither; the day's state
+reads the reservations before the spend, so a settle between the two reads counts the run twice for that moment, never
+not at all. A held reservation whose row is never written (an answer that came after its process stopped waiting) lapses
+twenty minutes after its run ended. The day's state
 carries `reservedUsd` and `inFlight`, `GET /settings` adds the caller's `reservedByMeUsd`, and a run is refused once spend plus
-reservations reach the cap (or spend plus the user's own reservations the share), the refusal naming the runs in flight. **Admission (1.4.6).** `Budget.Admit(key, user)` admits a run only when the day's spend plus the reservations plus the run's own estimate stay within the cap and, for a user other than `system`, the user's spend plus their reservations plus the estimate within the share, and reserves it in the same step, under one lock (`^Shutter.Budget("admit")`, which `Reserve` takes too; nothing in src calls `Reserve`, the unit tests use it, and since 1.4.7 it writes nothing when the lock is not free in time), so two runs cannot both be admitted on the same remaining allowance; refused, nothing is reserved and the refusal says what is left and the estimate. `AllowsFor`, which `POST /cases/{id}/board` and `live.agents` ask, applies the same rule with nothing reserved, and the budget object it returns carries `estimateUsd`. This bounds spend plus estimates, not the bill: a run can cost more than its estimate, a reservation older than twenty minutes is released whether or not its run has ended, the Agent item settles a run before the workflow writes its row, and a production review's cost is kept on `Shutter.Store.Review`, which the day's spend does not read. With nothing spent or reserved under a limit (the day's cap, or the user's share), one run is admitted whatever its estimate (1.4.7, `Budget.Short`): the estimate moves only when live runs land, so a cap or a share smaller than one run's estimate would otherwise refuse every run for good; once anything is spent or in flight under it, the estimate counts again, so such a limit admits about one run a day (a user's share, one run of theirs). An admission that cannot take the lock within 10 seconds (`ADMITLOCKSECONDS`; another admission holding it) is refused with its own status, `budget_busy` (1.4.7; `budget_exhausted` in 1.4.6), whatever the cap, with words that say the budget could not be checked in time and to try again: nothing is spent, and a case counts it as a failed run (6.6), not a spent budget. The
+reservations reach the cap (or spend plus the user's own reservations the share), the refusal naming the runs in flight. **Admission (1.4.6).** `Budget.Admit(key, user)` admits a run only when the day's spend plus the reservations plus the run's own estimate stay within the cap and, for a user other than `system`, the user's spend plus their reservations plus the estimate within the share, and reserves it in the same step, under one lock (`^Shutter.Budget("admit")`, which `Reserve` takes too; nothing in src calls `Reserve`, the unit tests use it, and since 1.4.7 it writes nothing when the lock is not free in time), so two runs cannot both be admitted on the same remaining allowance; refused, nothing is reserved and the refusal says what is left and the estimate. `AllowsFor`, which `POST /cases/{id}/board` and `live.agents` ask, applies the same rule with nothing reserved, and the budget object it returns carries `estimateUsd`. This bounds spend plus estimates, not the bill: a run can cost more than its estimate, a reservation older than twenty minutes is released whether or not its run has ended, and a production review's cost is kept on `Shutter.Store.Review`, which the day's spend does not read. With nothing spent or reserved under a limit (the day's cap, or the user's share), one run is admitted whatever its estimate (1.4.7, `Budget.Short`): the estimate moves only when live runs land, so a cap or a share smaller than one run's estimate would otherwise refuse every run for good; once anything is spent or in flight under it, the estimate counts again, so such a limit admits about one run a day (a user's share, one run of theirs). An admission that cannot take the lock within 10 seconds (`ADMITLOCKSECONDS`; another admission holding it) is refused with its own status, `budget_busy` (1.4.7; `budget_exhausted` in 1.4.6), whatever the cap, with words that say the budget could not be checked in time and to try again: nothing is spent, and a case counts it as a failed run (6.6), not a spent budget. The
 estimate is `^Shutter.Config("budgetReserveUsd")` when the site sets it, else the mean cost of the last twenty live runs that
 cost anything, else 0.50 USD, never below 0.01; a reservation older than twenty minutes was left by a job that died and is
 dropped when next counted.
@@ -2439,8 +2452,10 @@ missing answer `failed`; the item's alarm (600 s) fails it with what is missing.
   a question missing or over 500 characters, or a context out of shape or over 4000 characters; then 403 and 409 as above;
   503 `no_service` and `not_queued`, 502 `no_answer`, 500 `question_failed` as the case question's route answers them.
 - `GET /page-questions/{qid}` -> `{questionId, tier: "page", page, question, state, askedBy, askedAt, answeredAt, error,
-  mode, model, costUsd, ensMessageId, answer}` for the one who asked it; `404 not_found` for anyone else, as for an id that
-  is not there. The summary is not sent back: the asker sent it.
+  mode, model, costUsd, ensMessageId, messageLink, answer}` for the one who asked it; `404 not_found` for anyone else, as for
+  an id that is not there. `messageLink` is the run's message in the Management Portal under this namespace's own portal
+  path (`Dispatch.MessageLink`, as a case's runs carry it), null with `ensMessageId`. The summary is not sent back: the
+  asker sent it.
 
 **The web app.** Without `Shutter_LiveAgents` the panel shows the page's written guide (`features/assistant/guides.ts`:
 what the page is and what to try next, with links) and says live answers need the judges' account; with no model key and
