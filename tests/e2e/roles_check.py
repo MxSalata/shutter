@@ -112,8 +112,14 @@ def site_entry_checks(args, operator, approver, check, error_of):
     check("operator: GET /catalogue: 200 with the shipped entries", status == 200 and len((body or {}).get("shipped") or []) > 0, f"{status} {str(body)[:200]}")
     status, body = operator.call("GET", "/site-entries")
     check("operator: GET /site-entries: 200", status == 200 and isinstance((body or {}).get("items"), list) and "status" in (body or {}), f"{status} {str(body)[:200]}")
+    def stored():
+        """Every site entry as stored: its id, revision, state, digest and proposal."""
+        _, listing = operator.call("GET", "/site-entries")
+        return sorted((e.get("id"), e.get("revision"), e.get("state"), e.get("digest"), str(e.get("proposal"))) for e in (listing or {}).get("items") or [])
+
+    before = stored()
     status, body = operator.call("POST", "/site-entries/validate", entry)
-    check("operator: POST /site-entries/validate: 200, and nothing is stored", status == 200 and (body or {}).get("valid") is True, f"{status} {str(body)[:200]}")
+    check("operator: POST /site-entries/validate: 200, and nothing is stored", status == 200 and (body or {}).get("valid") is True and stored() == before, f"{status} {str(body)[:200]}")
     status, body = operator.call("POST", "/site-entries/validate", entry, csrf=False)
     check("operator: POST /site-entries/validate without X-Requested-With is 403 csrf", status == 403 and error_of(body) == "csrf", f"{status} {body}")
     status, body = operator.call("POST", "/site-entries", entry)
@@ -155,7 +161,7 @@ def site_entry_checks(args, operator, approver, check, error_of):
             status, body = public.call(method, path, body_sent)
             check(f"{name}: {method} {path.replace(entry_id, '{id}')} is 403 forbidden, naming {resource}", status == 403 and error_of(body) == "forbidden" and resource in (body or {}).get("detail", ""), f"{status} {body}")
     status, after = operator.call("GET", f"/site-entries/{quote(entry_id)}")
-    check("after every refusal the draft is as it was made", status == 200 and (after or {}).get("revision") == revision and (after or {}).get("state") == "draft", f"{status} {str(after)[:200]}")
+    check("after every refusal the draft is as it was made", status == 200 and (after or {}).get("revision") == revision and (after or {}).get("state") == "draft" and (after or {}).get("digest") == made.get("digest") and not (after or {}).get("proposal"), f"{status} {str(after)[:200]}")
 
 
 def main():

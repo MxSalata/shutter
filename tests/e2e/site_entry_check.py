@@ -236,8 +236,11 @@ def main():
                 check("a board convened on the escalated case does not resolve it", final["state"] in ("blocked", "escalated"), final["state"])
                 held, events = ward()
                 check("and nothing is written", final.get("writes") == 0 and held == "WARD-A" and "transfer" not in events, f"writes {final.get('writes')}, ward {held}")
-            else:
+            elif status == 409 and error_of(convened) == "live_unavailable":
+                # No model can run on this instance: the one refusal that is not a fault.
                 print(f"skip the convened board: POST /cases/{{id}}/board answered HTTP {status} {error_of(convened)}")
+            else:
+                check("a board can be convened on the escalated case", False, f"HTTP {status} {convened}")
 
         # ---- 4. two site entries: the priority leads, and both instructions show ----
         broad = {"title": "Any failed transfer nothing has overtaken", "priority": 5, "pattern": {"event": "transfer", "later_applied": "none"},
