@@ -301,7 +301,7 @@ export function S8Compare({ caseId, focus }: { caseId: string; focus: boolean })
       <Section
         id="s8-compare"
         title="S8 side by side: Rules only and the board"
-        note="The same failure played twice. Two systems moved the patient in the same minute: Rules only, exempted here on purpose, writes over the bed manager's ward with every check passed; the board sees the evidence can't decide which movement is current. On a real case the gate holds that resend."
+        note="The same failure played twice. Two systems moved the patient in the same minute: Rules only, exempted here on purpose, writes over the bed manager's ward with every other check passed; the board sees the evidence can't decide which movement is current. On a real case the gate holds that resend."
       >
         {cases.isError ? <ErrorAlert error={cases.error} title="The S8 cases could not be listed" /> : null}
         {/* The online demo's visitor can't run a scenario, so "not played yet" would promise what never comes */}
@@ -335,7 +335,7 @@ export function S8RulesNote({ c }: { c: CaseDetail }) {
       <Group gap="xs" wrap="nowrap" align="flex-start">
         <IconAlertTriangle size={18} aria-hidden style={{ flexShrink: 0 }} />
         <Text size="sm" fw={600}>
-          Rules only, exempted here on purpose to show a plain resend: every check passed and WARD-B was
+          Rules only, exempted here on purpose to show a plain resend: every other check passed and WARD-B was
           written over WARD-C. On a real case the gate holds it.
         </Text>
       </Group>
@@ -372,7 +372,7 @@ export function CounterpartStrip({
   if (!mine) return null;
   const stakes =
     c.mode !== 'rules' && c.state === 'escalated' && writesSent === 0
-      ? "The board sent nothing. Rules only, deliberately exempted here, writes WARD-B over the bed manager's WARD-C with every check passed; on a real case the gate holds it."
+      ? "The board sent nothing. Rules only, deliberately exempted here, writes WARD-B over the bed manager's WARD-C with every other check passed; on a real case the gate holds it."
       : '';
   const other = rules && board ? (c.mode === 'rules' ? board : rules) : undefined;
   const counterpart = other && other.caseId !== c.caseId ? other : undefined;

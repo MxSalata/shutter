@@ -60,7 +60,7 @@ the case page (`POST /api/shutter/cases/{id}/escalations` through the API); unti
   2. Open **Health**: the checks an installed Shutter runs on itself, as the recorded instance passed them.
   3. Open **Site profile**: under **Receivers**, each receiver the production feeds, with the category and the tier that
      decide what Shutter may do there.
-  4. Open **Cases**, press **Waiting for approval**, then open **C-000002**.
+  4. Open **Cases**, press the **Waiting for approval** tile (**Show**), then open **C-000002**.
   5. Open **1. What failed**: the operation and what the receiver answered (HTTP 503, `ward_unavailable`).
   6. Under **4. Gate and decision**, **At proposal, before the rehearsal** is already open in Technical: each check of the
      plan, with its result and reason code.

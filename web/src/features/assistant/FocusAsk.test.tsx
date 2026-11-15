@@ -204,6 +204,8 @@ describe('Ask Shutter about one of the page’s questions, in the panel', () => 
     env.trial = true;
     const card = await askAbout();
     expect(await card.findByText('The trial gives no live answers.')).toBeInTheDocument();
+    // The line says it once: no "No live answer" badge under it
+    expect(card.queryByText('No live answer')).not.toBeInTheDocument();
     expect(card.getByText(FOCUS_NOTE)).toBeInTheDocument();
     expect(card.getByText(WRITTEN_LABEL)).toBeInTheDocument();
     expect(card.getByText(FOCUS.written)).toBeVisible();

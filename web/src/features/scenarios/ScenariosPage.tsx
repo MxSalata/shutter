@@ -56,6 +56,7 @@ import { StackTable } from '@/components/StackTable';
 import { caseOutcome, caseState, PROVENANCE, proposedWrites, ranOnIris, writes } from '@/lib/status';
 import { describeError } from '@/lib/errors';
 import { formatAge, humanize } from '@/lib/format';
+import { eventOfFile } from './scenarioDiagramModel';
 import { playedFor } from '@/lib/proof';
 import { INSTALL_LINK, INSTALL_URL } from '@/lib/liveAgents';
 import { traceScreenshot } from '@/lib/screenshots';
@@ -271,7 +272,18 @@ function RunStarting({ scenario, mode }: { scenario: string; mode: Mode }) {
  * The run's state above the cards: who proposes (the mode, in its title) apart from how it executes (`RunExecuted`),
  * and once done its own case and the next step (`RunNext`).
  */
+/**
+ * What a run has delivered: in Plain the count and each file's HL7 event, "2 HL7 messages: A01, A02" (a file whose name
+ * names no event stays as it is); Technical keeps the file names.
+ */
+function deliveredWords(files: string[], technical: boolean): string {
+  if (technical) return files.join(', ');
+  const events = files.map((f) => eventOfFile(f) ?? f);
+  return `${files.length} HL7 message${files.length === 1 ? '' : 's'}: ${events.join(', ')}`;
+}
+
 function RunBanner({ run, cases }: { run: ScenarioRun; cases: CaseSummary[] | undefined }) {
+  const technical = useTechnical();
   const own = cases && run.state === 'done' ? runCase(cases, run, TRIAL) : undefined;
   if (run.state === 'queued')
     return (
@@ -299,8 +311,12 @@ function RunBanner({ run, cases }: { run: ScenarioRun; cases: CaseSummary[] | un
       >
         <Stack gap={6}>
           <Text size="sm">
-            {run.step ? `Now ${run.step}.` : 'Starting.'} Files delivered so far:{' '}
-            {run.files.length ? run.files.join(', ') : 'none'}.
+            {run.step ? `Now ${run.step}.` : 'Starting.'}{' '}
+            {technical
+              ? `Files delivered so far: ${run.files.length ? deliveredWords(run.files, true) : 'none'}.`
+              : run.files.length
+                ? `So far, delivered ${deliveredWords(run.files, false)}.`
+                : 'Nothing delivered yet.'}
           </Text>
           <RunExecuted run={run} own={undefined} />
         </Stack>
@@ -317,8 +333,13 @@ function RunBanner({ run, cases }: { run: ScenarioRun; cases: CaseSummary[] | un
         <Stack gap="xs">
           <RunExecuted run={run} own={own} />
           <Text size="sm">
-            Delivered {run.files.join(', ') || 'no files'}.
-            {run.timeouts.length ? ` The case did not reach ${run.timeouts.join(', ')} in time.` : ''}
+            Delivered{' '}
+            {run.files.length
+              ? deliveredWords(run.files, technical)
+              : technical
+                ? 'no files'
+                : 'no HL7 messages'}
+            .{run.timeouts.length ? ` The case did not reach ${run.timeouts.join(', ')} in time.` : ''}
           </Text>
           <RunNext run={run} cases={cases} />
         </Stack>

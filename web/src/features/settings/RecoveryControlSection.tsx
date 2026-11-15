@@ -6,6 +6,8 @@ import { API_BASE } from '@/api/client';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { Section } from '@/components/Section';
 import { TRIAL } from '@/env/mode';
+import { formatZoned } from '@/lib/format';
+import { TRIAL_STOP } from './recoveryStopWords';
 
 /**
  * Stop Shutter recovery (CONTRACTS 18): the mode, the stop and the calls still outstanding, with what it covers beside the
@@ -26,12 +28,19 @@ export function RecoveryControlSection() {
   return (
     <Section id="recovery-control" title="Stop Shutter recovery">
       <Stack gap="sm">
-        <Text size="sm">
-          {c.mode === 'enabled' ? 'Recovery is enabled.' : 'Shadow mode: recovery is off.'}{' '}
-          {c.stopped
-            ? `Stopped by ${c.stoppedBy} at ${c.stoppedAt}${c.stopReason ? `: ${c.stopReason}` : ''}.`
-            : 'Not stopped.'}
-        </Text>
+        {c.stopped ? (
+          <Text size="sm">
+            {`Recovery is stopped (by ${c.stoppedBy}, ${formatZoned(c.stoppedAt) || c.stoppedAt}${c.stopReason ? `: ${c.stopReason}` : ''}).`}{' '}
+            {c.mode === 'enabled'
+              ? 'Recovery is enabled; clearing the stop releases no plan made before it.'
+              : 'Shadow mode: recovery is off.'}
+          </Text>
+        ) : (
+          <Text size="sm">
+            {c.mode === 'enabled' ? 'Recovery is enabled.' : 'Shadow mode: recovery is off.'} Not stopped.
+          </Text>
+        )}
+        {TRIAL && c.stopped ? <Text size="sm">{TRIAL_STOP}</Text> : null}
         <Text size="sm" c="dimmed">
           It stops: {c.covers} It does not stop: {c.doesNotCover}
         </Text>

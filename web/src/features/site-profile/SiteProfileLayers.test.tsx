@@ -121,11 +121,11 @@ describe('the release matrix', () => {
     ).toHaveAttribute('data-tone', 'attention');
   });
 
-  it('says under the table that the board is a board of agents, and that a person releases its plan', async () => {
+  it("says under the table that only a plan Site policy builds goes by policy, and an agent's plan waits for a person", async () => {
     renderPage();
     expect(
       await screen.findByText(
-        'When the board decides, a board of agents weighs the case and a person releases its plan.',
+        'Policy releases only plans Site policy builds from the catalogue; a plan from agents or Rules only waits for a person.',
       ),
     ).toBeInTheDocument();
   });

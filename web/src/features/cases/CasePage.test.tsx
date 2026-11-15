@@ -430,6 +430,11 @@ describe('CasePage', () => {
     ).not.toBeInTheDocument();
     // The gate passed a plan that writes nothing, and says so beside the green check
     expect(within(top).getByText('Passed: no write')).toBeInTheDocument();
+    // In the neutral tone: a green tile on an escalated case would read as an all-clear
+    expect(within(top).getByText('Passed: no write').closest('[data-tone]')).toHaveAttribute(
+      'data-tone',
+      'neutral',
+    );
     // Three cards first, each under its heading: what happened, what Shutter did and what needs you now, the last in
     // the attention tone since a person has to act; then the receipt as its own band
     // By their visible words: the receipt's heading is a term, whose definition sits in it for screen readers
@@ -598,7 +603,7 @@ describe('CasePage', () => {
   it("names the stakes on the board's S8 case, and the top button of the rules case goes to the two runs", async () => {
     renderCase('C-000008');
     expect(await screen.findByTestId('s8-stakes')).toHaveTextContent(
-      "The board sent nothing. Rules only, deliberately exempted here, writes WARD-B over the bed manager's WARD-C with every check passed; on a real case the gate holds it.",
+      "The board sent nothing. Rules only, deliberately exempted here, writes WARD-B over the bed manager's WARD-C with every other check passed; on a real case the gate holds it.",
     );
     cleanup();
     renderCase('C-000021');
@@ -685,7 +690,7 @@ describe('CasePage', () => {
       renderCase('C-000008');
       const strip = await screen.findByRole('region', { name: 'What a resend would do' });
       expect(within(strip).getByTestId('s8-stakes')).toHaveTextContent(
-        "The board sent nothing. Rules only, deliberately exempted here, writes WARD-B over the bed manager's WARD-C with every check passed; on a real case the gate holds it.",
+        "The board sent nothing. Rules only, deliberately exempted here, writes WARD-B over the bed manager's WARD-C with every other check passed; on a real case the gate holds it.",
       );
       expect(
         await within(strip).findByRole('link', { name: 'See the two side by side in the trial' }),
@@ -717,7 +722,7 @@ describe('CasePage', () => {
   it("says on the rules-only S8 case what went wrong, and leaves it off the board's", async () => {
     renderCase('C-000021');
     expect(await screen.findByTestId('s8-rules-note')).toHaveTextContent(
-      'Rules only, exempted here on purpose to show a plain resend: every check passed and WARD-B was written over WARD-C. On a real case the gate holds it.',
+      'Rules only, exempted here on purpose to show a plain resend: every other check passed and WARD-B was written over WARD-C. On a real case the gate holds it.',
     );
   });
 
@@ -766,6 +771,27 @@ describe('CasePage', () => {
       'aria-expanded',
       'false',
     );
+  });
+
+  it("says in the trial that the audit trail's times are the recording's", async () => {
+    env.trial = true;
+    renderCase('C-000002', '?tab=audit');
+    expect(
+      await screen.findByText(
+        /^These times are the recording's, made on 2 Nov 2026 by replaying the agents' answers;/,
+      ),
+    ).toBeInTheDocument();
+    env.trial = false;
+  });
+
+  it('says only the recording day on a trial case no agent worked', async () => {
+    env.trial = true;
+    renderCase('C-000012', '?tab=audit');
+    expect(
+      await screen.findByText("These times are the recording's, made on 2 Nov 2026."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/replaying the agents' answers/)).not.toBeInTheDocument();
+    env.trial = false;
   });
 
   it('keeps the tab in the address, and opens the one the address names', async () => {
@@ -2092,7 +2118,7 @@ describe('the case page in the trial', () => {
     // Under reduced motion, the final state at once
     await outcomeLine('Delivered: verified at the receiver');
     expect(await screen.findByTestId('replay-note')).toHaveTextContent(
-      'Replayed from the recording: approved 2 Nov, 14:16 UTC. Your approval is noted at the end of the audit trail.',
+      'Replayed from the recording: approved 2 Nov, 14:16:41 GMT. Your approval is noted at the end of the audit trail.',
     );
     expect(screen.getByTestId('replay-announcement')).toHaveTextContent(
       'Approved in the trial. The recording shows it delivered and verified.',

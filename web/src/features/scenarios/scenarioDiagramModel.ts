@@ -86,7 +86,11 @@ const LINK_DOWN = {
   words: 'the HL7 link to the ward system never opens a connection',
 };
 
-const eventOf = (step: ScenarioStep) => /(A\d{2})\.hl7$/i.exec(step.file ?? '')?.[1]?.toUpperCase();
+/** The HL7 event a scenario file carries, from its name: "S2-01-A01.hl7" is an A01. Undefined when the name says none. */
+export const eventOfFile = (file: string | undefined) =>
+  /(A\d{2})\.hl7$/i.exec(file ?? '')?.[1]?.toUpperCase();
+
+const eventOf = (step: ScenarioStep) => eventOfFile(step.file);
 
 /**
  * Only S8's summary says another source sent a message, and the steps carry no source (the sender is in the file's MSH-3,

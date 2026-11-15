@@ -365,7 +365,7 @@ const EXEMPTED = 'S8';
 export function heroSecond(proof: Pick<Proof, 'rulesMisses'>, entryOf: (scenario: string) => string): string {
   const misses = proof.rulesMisses;
   if (!misses?.wrote.length) return '';
-  const exempted = `wrote with every check passed: ${RULES_EXEMPTION}.`;
+  const exempted = `wrote with every other check passed: ${RULES_EXEMPTION}.`;
   // "The seventh": the one miss the gate did not stop, after the six it did
   if (
     misses.wrote.length === 1 &&
@@ -373,7 +373,7 @@ export function heroSecond(proof: Pick<Proof, 'rulesMisses'>, entryOf: (scenario
     misses.total > 1 &&
     misses.stopped.length === misses.total - 1
   )
-    return `The ${ordinal(misses.total)}, ${EXEMPTED}, wrote over the bed manager's ward with every check passed: ${RULES_EXEMPTION}. The board escalated${entryOf(EXEMPTED) ? `, as entry ${entryOf(EXEMPTED)} says` : ''}.`;
+    return `The ${ordinal(misses.total)}, ${EXEMPTED}, wrote over the bed manager's ward with every other check passed: ${RULES_EXEMPTION}. The board escalated${entryOf(EXEMPTED) ? `, as entry ${entryOf(EXEMPTED)} says` : ''}.`;
   const caught = `The board caught ${misses.wrote.length === 1 ? 'it' : 'them'}.`;
   if (!misses.wrote.includes(EXEMPTED)) return `${andList(misses.wrote)} wrote. ${caught}`;
   if (misses.wrote.length === 1) return `${EXEMPTED} ${exempted} ${caught}`;
@@ -819,6 +819,7 @@ function WhyABoard({
   proof: Proof;
   caseOf: (scenario: string, mode: string) => CaseSummary | undefined;
 }) {
+  const technical = useTechnical();
   const b = proof.board;
   const sp = proof.specialists;
   const misses = proof.rulesMisses;
@@ -857,7 +858,20 @@ function WhyABoard({
       {misses && (misses.stopped.length || misses.wrote.length) ? (
         <Text size="sm">
           {misses.stopped.length ? <>The gate alone catches {ids(misses.stopped)}. </> : null}
-          {misses.wrote.length ? <>The board catches {ids(misses.wrote)}.</> : null}
+          {/* S8 alone: the board escalates it, and on a real case the gate holds that resend too, so the board is not
+              what "catches" it. Plain keeps to the page's word budget; Technical names the check */}
+          {misses.wrote.length === 1 && misses.wrote[0] === EXEMPTED ? (
+            technical ? (
+              <>
+                The board escalates {ids(misses.wrote)} before the gate; on a real case the gate&apos;s{' '}
+                <CodeChip>ENTRY_NOT_NAMED_WRITE</CodeChip> also holds that resend.
+              </>
+            ) : (
+              <>The board escalates {ids(misses.wrote)}.</>
+            )
+          ) : misses.wrote.length ? (
+            <>The board catches {ids(misses.wrote)}.</>
+          ) : null}
         </Text>
       ) : null}
     </Section>

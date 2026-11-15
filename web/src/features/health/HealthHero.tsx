@@ -41,10 +41,11 @@ export function HealthHero({
     sent(report.namespace) ? <CodeChip key="namespace">{String(report.namespace)}</CodeChip> : null,
     sent(report.version) ? (
       <span key="version">
-        version <CodeChip>{String(report.version)}</CodeChip>
+        {/* The trial's report is a recording, but its version is the build's own */}
+        {trial ? 'this build' : 'version'} <CodeChip>{String(report.version)}</CodeChip>
       </span>
     ) : null,
-    read ? <span key="read">read {utcMinute(read)}</span> : null,
+    read ? <span key="read">report recorded {utcMinute(read)}</span> : null,
   ].filter(Boolean);
   return (
     <HeroBand

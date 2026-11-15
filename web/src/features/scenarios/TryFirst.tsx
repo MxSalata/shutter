@@ -174,7 +174,7 @@ export const S8_RULES_DIAGRAM_NOTE = 'Should end: a person decides. Rules only w
 
 /** S8 played by Rules only: the resend the scenario is exempted for, so that a plain resend can be seen writing. */
 export const S8_RULES_SEE =
-  'Rules only, exempted here on purpose to show a plain resend: every check passed and WARD-B was written over WARD-C. On a real case the gate holds it.';
+  'Rules only, exempted here on purpose to show a plain resend: every other check passed and WARD-B was written over WARD-C. On a real case the gate holds it.';
 
 const FIRST: Featured[] = [
   {
@@ -212,7 +212,7 @@ const FIRST: Featured[] = [
       single: {
         title: 'One agent weighs a write',
         see: () =>
-          "In Rules only, exempted here on purpose, a resend writes over the bed manager's ward with every check passed; on a real case the gate holds it. Here one generalist agent reads all the evidence and proposes the plan; the gate checks it as in every mode.",
+          "In Rules only, exempted here on purpose, a resend writes over the bed manager's ward with every other check passed; on a real case the gate holds it. Here one generalist agent reads all the evidence and proposes the plan; the gate checks it as in every mode.",
       },
     },
   },

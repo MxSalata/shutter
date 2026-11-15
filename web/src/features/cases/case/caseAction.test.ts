@@ -96,7 +96,7 @@ describe("the case's action for its reader", () => {
     const f = factsOf('C-000008');
     expect(caseActionOf(f, { me: ME.operator })).toMatchObject({
       needsYou: true,
-      label: 'Escalate to a team',
+      label: 'Notify a team',
       goes: 'escalations',
     });
     const after = factsOf('C-000008', { escalations: [sent] });
@@ -145,7 +145,7 @@ describe("the case's action for its reader", () => {
   it("escalates S25's blocked message, whose next action says to escalate otherwise", () => {
     expect(caseActionOf(factsOf('C-000064'), { me: ME.approver })).toMatchObject({
       needsYou: true,
-      label: 'Escalate to a team',
+      label: 'Notify a team',
     });
   });
 

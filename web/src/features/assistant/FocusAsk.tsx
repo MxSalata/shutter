@@ -143,7 +143,10 @@ export function FocusAsk({ focus, inline = false }: { focus: PageFocus; inline?:
             <Text size="sm" c="dimmed" style={{ flex: '1 1 200px' }}>
               {access.short}
             </Text>
-            <StatusBadge tone="neutral" label={access.badge ?? 'No live answer'} icon={IconLock} />
+            {/* The trial's short line already says it gives no live answers */}
+            {access.trial ? null : (
+              <StatusBadge tone="neutral" label={access.badge ?? 'No live answer'} icon={IconLock} />
+            )}
           </Group>
         )}
         {live && !failed ? (

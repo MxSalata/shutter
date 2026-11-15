@@ -1,5 +1,8 @@
 import { useRecoveryControl } from '@/api/hooks';
 import { StatusNotice } from '@/components/StatusBadge';
+import { TRIAL } from '@/env/mode';
+import { TRIAL_STOP_RECORDED } from '@/features/settings/recoveryStopWords';
+import { formatZoned } from '@/lib/format';
 
 /** Across every page while recovery is off or stopped: what is happening, and that the ordinary feed goes on. */
 export function RecoveryBanner() {
@@ -7,9 +10,12 @@ export function RecoveryBanner() {
   if (!c) return null;
   if (c.stopped) {
     return (
-      <StatusNotice tone="blocking" title={`Shutter recovery stopped by ${c.stoppedBy} at ${c.stoppedAt}.`}>
-        No new recovery dispatches are admitted. {c.outstandingCount} earlier calls may still complete.
-        Read-back continues.
+      <StatusNotice
+        tone="blocking"
+        title={`Shutter recovery stopped by ${c.stoppedBy} at ${formatZoned(c.stoppedAt) || c.stoppedAt}.`}
+      >
+        {TRIAL ? `${TRIAL_STOP_RECORDED} On IRIS, no` : 'No'} new recovery dispatches are admitted.{' '}
+        {c.outstandingCount} earlier calls may still complete. Read-back continues.
       </StatusNotice>
     );
   }

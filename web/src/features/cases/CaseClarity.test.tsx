@@ -231,7 +231,7 @@ describe("the case's action", () => {
   it('takes the reader to the Escalations panel when escalating is the action', async () => {
     renderCase('C-000064');
     const action = await screen.findByTestId('case-action');
-    await waitFor(() => expect(action).toHaveAccessibleName('Needs you: escalate to a team'));
+    await waitFor(() => expect(action).toHaveAccessibleName('Needs you: notify a team'));
     await userEvent.click(action);
     await waitFor(() => expect(document.activeElement?.id).toBe('escalations-title'));
   });

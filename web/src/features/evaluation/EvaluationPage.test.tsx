@@ -124,7 +124,7 @@ describe('EvaluationPage', () => {
     );
     expect(
       within(hero).getByText(
-        /^The seventh, S8, wrote over the bed manager's ward with every check passed: Rules only is exempted there on purpose, and on a real case the gate holds it\. The board escalated, as entry E7 says\./,
+        /^The seventh, S8, wrote over the bed manager's ward with every other check passed: Rules only is exempted there on purpose, and on a real case the gate holds it\. The board escalated, as entry E7 says\./,
       ),
     ).toBeInTheDocument();
     // What the agents had to go on, carried over from the evaluation so the page doesn't overclaim
@@ -253,15 +253,15 @@ describe('EvaluationPage', () => {
         entryOf,
       ),
     ).toBe(
-      `The seventh, S8, wrote over the bed manager's ward with every check passed: ${exemption}. The board escalated, as entry E7 says.`,
+      `The seventh, S8, wrote over the bed manager's ward with every other check passed: ${exemption}. The board escalated, as entry E7 says.`,
     );
     // S8 and another: the other is only said to have written
     expect(
       heroSecond({ rulesMisses: { total: 4, stopped: ['S1', 'S3'], wrote: ['S8', 'S9'] } }, entryOf),
-    ).toBe(`S8 and S9 wrote. S8 wrote with every check passed: ${exemption}. The board caught them.`);
+    ).toBe(`S8 and S9 wrote. S8 wrote with every other check passed: ${exemption}. The board caught them.`);
     // S8 alone, when the gate stopped none of the others
     expect(heroSecond({ rulesMisses: { total: 1, stopped: [], wrote: ['S8'] } }, entryOf)).toBe(
-      `S8 wrote with every check passed: ${exemption}. The board caught it.`,
+      `S8 wrote with every other check passed: ${exemption}. The board caught it.`,
     );
     // Other scenarios alone: no ward, no exemption and nothing about their checks
     const others = heroSecond({ rulesMisses: { total: 3, stopped: ['S1'], wrote: ['S4', 'S9'] } }, entryOf);
@@ -423,13 +423,21 @@ describe('EvaluationPage', () => {
     expect(card).toHaveTextContent('the single investigator 0.167 as settled');
     expect(card.compareDocumentPosition(single) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(why).not.toHaveTextContent('No single-agent run was recorded');
+    // S8 is escalated by the board, not "caught": on a real case the gate holds that resend too
     expect(why).toHaveTextContent(
-      'The gate alone catches S1, S3, S6, S7, S10 and S13. The board catches S8.',
+      'The gate alone catches S1, S3, S6, S7, S10 and S13. The board escalates S8.',
     );
     // Each id opens that scenario's Rules only case, once the recorded cases have loaded
     expect(await within(why).findByRole('link', { name: 'S1' })).toHaveAttribute('href', '/cases/C-000014');
     expect(within(why).getByRole('link', { name: 'S13' })).toHaveAttribute('href', '/cases/C-000024');
     expect(within(why).getByRole('link', { name: 'S8' })).toHaveAttribute('href', '/cases/C-000021');
+  });
+
+  it("names the gate's check that holds S8's resend on a real case, in Technical", () => {
+    renderPage(undefined, { detail: 'technical' });
+    expect(screen.getByRole('region', { name: 'How the specialists differed' })).toHaveTextContent(
+      "The board escalates S8 before the gate; on a real case the gate's ENTRY_NOT_NAMED_WRITE also holds that resend.",
+    );
   });
 
   it('opens the table filtered by the address, as a link or the guide gives it', () => {

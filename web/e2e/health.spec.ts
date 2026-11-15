@@ -37,7 +37,7 @@ test.describe('the trial report @health', () => {
     );
     await expect(hero.getByRole('list', { name: 'Core checks' }).getByRole('listitem')).toHaveCount(7);
     await expect(hero).toContainText('Shutter.Production');
-    await expect(hero).toContainText('read 2 Nov 2026, 14:56 UTC');
+    await expect(hero).toContainText('report recorded 2 Nov 2026, 14:56 UTC');
     // Recorded on the AI Hub instance, which had AI Hub and its runner
     await expect(hero).toContainText('Agents run on IRIS AI Hub');
     await expect(hero).not.toContainText(/not needed/i);
