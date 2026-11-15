@@ -38,9 +38,16 @@ const FEATURES = ['conditional_writes', 'receipts', 'history', 'dry_run'] as con
 const isObject = (x: unknown): x is Record<string, unknown> =>
   typeof x === 'object' && x !== null && !Array.isArray(x);
 
-/** The entry's tier when it is one the approval table has, else "". */
-const tierOf = (r: SiteReceiver): string =>
-  [1, 2, 3].includes(Number(r.tier)) ? String(Number(r.tier)) : '';
+/**
+ * The entry's tier when it is one the approval table has (1, 2 or 3, as a number or the same digit as text), else "",
+ * as the core reads it (Shutter.Util.ProfileSetup.Tier).
+ */
+export const tierOf = (r: SiteReceiver): string => {
+  const t: unknown = r.tier;
+  return (typeof t === 'number' || typeof t === 'string') && ['1', '2', '3'].includes(String(t))
+    ? String(t)
+    : '';
+};
 
 /**
  * Whether the gate could let a write from a case through at this receiver, as the profile declares it: never at an

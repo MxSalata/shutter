@@ -4,8 +4,8 @@ import { IconPlus } from '@tabler/icons-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useBlocker, useNavigate, useSearchParams } from 'react-router';
 import { saveLocked } from '@/api/saveLocked';
-import { useCan, useMe, useSiteProfile } from '@/api/hooks';
-import type { SiteProfileView } from '@/api/types';
+import { isAnswering, useCan, useMe, useSetupTurn, useSiteProfile } from '@/api/hooks';
+import type { SetupTurnView, SiteProfileView } from '@/api/types';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { KeyValueList } from '@/components/KeyValueList';
@@ -17,12 +17,14 @@ import { Timestamp } from '@/components/Timestamp';
 import { TRIAL } from '@/env/mode';
 import { usePageAccess } from '@/features/assistant/access';
 import { ASK_HERE_EVENT, ASSISTANT_WIDE_QUERY } from '@/features/assistant/panel';
-import { isApiError } from '@/lib/errors';
+import { LiveUnavailableNotice } from '@/components/LiveUnavailableNotice';
+import { describeError, isApiError } from '@/lib/errors';
 import { plural } from '@/lib/format';
 import { SITE_ICON } from '@/lib/hues';
 import { checkDraft, describePath, isDemoPolicy, isShipped, problemField } from '../profile';
 import { SaveBar } from '../SaveBar';
 import { ASK_HERE_ID, cardTitleId, focusLater } from './cards';
+import { TYPED_NOTE, draftingLine, useDrafting, type Drafting } from './drafting';
 import { questionOfKey, type QuestionId } from './fields';
 import { AskHere, SetupConversation } from './SetupConversation';
 import { SetupDraftPane } from './SetupDraftPane';
@@ -38,18 +40,17 @@ import {
 } from './setupStore';
 import './setup.css';
 
-/** What Ask Shutter does on this page in this version, said under the lead. */
-const EXPLAINS_ONLY = 'Ask Shutter explains each question here. It does not fill in answers in this version.';
-
-/** The header's lead: one sentence. */
+/** The header's lead, one sentence: with the controls, and in the person's own words where Ask Shutter can read them. */
 const LEAD =
   'Answer each question about a receiver with its control; nothing is saved until an approver reviews and saves.';
+const LEAD_TYPED =
+  'Answer each question about a receiver with its control, or in your own words where a question offers it.';
 
 /** What stopped the last review, and the draft it was about: a later change to the draft clears it. */
 type Stopped = { revision: number; stop?: ReviewStop; other?: { path: string; message: string } };
 
 /** The four facts of the page's state, each in words. */
-function StatusBand({ view }: { view: SiteProfileView }) {
+function StatusBand({ view, drafting }: { view: SiteProfileView; drafting: Drafting }) {
   const can = useCan();
   const access = usePageAccess();
   const locked = saveLocked(can);
@@ -61,6 +62,15 @@ function StatusBand({ view }: { view: SiteProfileView }) {
       : access.trial
         ? 'Explains each question in writing. Its suggested questions have sample answers.'
         : `Explains each question in writing. ${access.short}`;
+  // What it does with a typed answer, in each state: said plainly, with no promise about what reaches the model
+  const reads =
+    drafting.state === 'on'
+      ? 'It reads an answer typed in your own words and drafts the description, kind and tier for you to review.'
+      : drafting.state === 'off'
+        ? 'It does not read typed answers: that is switched off in the site profile.'
+        : drafting.state === 'trial'
+          ? 'It does not read typed answers in the trial.'
+          : 'It cannot read typed answers now. The controls work without it.';
   return (
     <Card withBorder padding="md" component="section" aria-label="Where this page stands">
       <KeyValueList
@@ -79,7 +89,8 @@ function StatusBand({ view }: { view: SiteProfileView }) {
               {enabled ? 'Recovery is enabled.' : 'Shadow mode: Shutter investigates and sends nothing.'}
             </Text>,
           ],
-          ['Ask Shutter here', `${explains} It does not fill in answers in this version.`],
+          ['Ask Shutter here', `${explains} ${reads}`],
+          ...(drafting.can ? [['What you type', TYPED_NOTE] as [string, ReactNode]] : []),
           [
             'You',
             locked ? (
@@ -171,7 +182,7 @@ function Pane({
   );
 }
 
-function Setup({ view }: { view: SiteProfileView }) {
+function Setup({ view, drafting }: { view: SiteProfileView; drafting: Drafting }) {
   const s = useSetup();
   const open = s.open;
   useEffect(() => open(view), [open, view]);
@@ -214,6 +225,23 @@ function Setup({ view }: { view: SiteProfileView }) {
     window.addEventListener(ASK_HERE_EVENT, here);
     return () => window.removeEventListener(ASK_HERE_EVENT, here);
   }, []);
+
+  // The turn Ask Shutter is reading, looked at every 2 s until it is answered or refused; what comes back enters the
+  // draft only through the store's own re-check (settle)
+  const pendingId = s.pending?.turnId;
+  const turn = useSetupTurn(pendingId);
+  const { settle } = s;
+  useEffect(() => {
+    if (!pendingId) return;
+    if (turn.data && turn.data.turnId === pendingId && !isAnswering(turn.data.state)) settle(turn.data);
+    else if (turn.isError)
+      settle({
+        turnId: pendingId,
+        state: 'failed',
+        error: `the answer could not be read (${describeError(turn.error)})`,
+        turn: null,
+      } as SetupTurnView);
+  }, [pendingId, turn.data, turn.isError, turn.error, settle]);
 
   // Leaving with changes: asked once. The hand-over to the review is not a leave
   const dirty = isDirty(s);
@@ -293,6 +321,7 @@ function Setup({ view }: { view: SiteProfileView }) {
       openId={openId}
       setOpenId={setOpenId}
       stop={shown?.stop ?? null}
+      drafting={drafting}
       onReview={review}
       onAnother={() => {
         setOpenId(null);
@@ -308,7 +337,8 @@ function Setup({ view }: { view: SiteProfileView }) {
 
   return (
     <Stack gap="lg">
-      <StatusBand view={s.base} />
+      <StatusBand view={s.base} drafting={drafting} />
+      {drafting.notice ? <LiveUnavailableNotice state={drafting.notice} /> : null}
       {s.moved ? (
         <StatusNotice tone="attention" title="The stored profile has changed">
           Version {view.version} was saved while this draft was being made from version {s.base.version}.
@@ -463,17 +493,21 @@ function Setup({ view }: { view: SiteProfileView }) {
 export default function SetupPage() {
   const view = useSiteProfile();
   const me = useMe();
+  // Whether Ask Shutter reads typed answers here is the stored profile's own switch, then the reader's rights
+  const drafting = useDrafting(view.data ?? null);
   return (
     <>
       <PageHeader
         title="Set up the site"
         icon={SITE_ICON}
         hue="teal"
-        lead={LEAD}
+        lead={drafting.can ? LEAD_TYPED : LEAD}
         meta={
-          <Text size="sm" c="dimmed">
-            {EXPLAINS_ONLY}
-          </Text>
+          view.data && !me.isPending ? (
+            <Text size="sm" c="dimmed" data-testid="setup-ask-shutter-does">
+              {draftingLine(drafting)}
+            </Text>
+          ) : null
         }
       />
       {view.isPending || me.isPending ? <PageSkeleton label="Loading the site profile…" /> : null}
@@ -488,7 +522,7 @@ export default function SetupPage() {
           onRetry={() => void view.refetch()}
         />
       ) : null}
-      {view.data && !me.isPending ? <Setup view={view.data} /> : null}
+      {view.data && !me.isPending ? <Setup view={view.data} drafting={drafting} /> : null}
     </>
   );
 }

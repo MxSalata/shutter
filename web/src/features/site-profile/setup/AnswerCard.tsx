@@ -19,6 +19,7 @@ function Choice({
   options,
   onChange,
   error,
+  disabled = false,
 }: {
   id: string;
   label: string;
@@ -26,13 +27,14 @@ function Choice({
   options: [value: string, label: string, description?: string][];
   onChange: (v: string) => void;
   error?: string;
+  disabled?: boolean;
 }) {
   const known = !value || options.some(([v]) => v === value);
   return (
     <Radio.Group id={id} label={label} value={value} onChange={onChange} error={error}>
       <Stack gap={6} mt={4}>
         {options.map(([v, l, d]) => (
-          <Radio key={v} value={v} label={l} description={d} />
+          <Radio key={v} value={v} label={l} description={d} disabled={disabled} />
         ))}
         {!known ? <Radio value={value} label={`Kept as stored: ${value}`} disabled /> : null}
       </Stack>
@@ -50,6 +52,7 @@ export function AnswerControl({
   fixedName,
   set,
   error,
+  disabled = false,
 }: {
   q: SetupQuestion;
   r: SiteReceiver;
@@ -57,6 +60,8 @@ export function AnswerControl({
   fixedName: boolean;
   set: (key: string, value: unknown) => void;
   error?: string;
+  /** Ask Shutter is reading a typed answer about this receiver: the answers it may draft wait for it. */
+  disabled?: boolean;
 }) {
   const name = r.name.trim() || 'this receiver';
   switch (q.id) {
@@ -86,6 +91,7 @@ export function AnswerControl({
           label="What it does in the hospital's workflow"
           description="A few words, such as the ward whiteboard"
           maxLength={120}
+          disabled={disabled}
           value={r.system ?? ''}
           onChange={(e) => set('system', e.currentTarget.value === '' ? undefined : e.currentTarget.value)}
           error={error}
@@ -104,6 +110,7 @@ export function AnswerControl({
           ])}
           onChange={(v) => set('category', v)}
           error={error}
+          disabled={disabled}
         />
       );
     case 'tier':
@@ -115,6 +122,7 @@ export function AnswerControl({
           options={TIERS.map((t) => [t, TIER_LABELS[t], TIER_HINTS[t]])}
           onChange={(v) => set('tier', Number(v))}
           error={error}
+          disabled={disabled}
         />
       );
     case 'applies':
@@ -224,6 +232,9 @@ export function AnswerCard({
   onLeave,
   onWhy,
   extra,
+  log,
+  disabled = false,
+  personOnly,
 }: {
   q: SetupQuestion;
   r: SiteReceiver;
@@ -243,8 +254,14 @@ export function AnswerCard({
   /** Absent where the question holds an answer: there is nothing to leave. */
   onLeave?: () => void;
   onWhy: () => void;
-  /** What a later build adds to an open card (an answer in the person's own words). */
+  /** Under the control of an open card: an answer in the person's own words, where Ask Shutter may draft it. */
   extra?: ReactNode;
+  /** What was typed on this card and what came of it: shown open or closed. */
+  log?: ReactNode;
+  /** Ask Shutter is reading a typed answer: this card's control waits for it. */
+  disabled?: boolean;
+  /** Said where Ask Shutter reads typed answers on the page, of a question it never drafts. */
+  personOnly?: string;
 }) {
   const whyId = `${cardId(q.id)}-why`;
   const words = STATUS_WORDS[status];
@@ -279,7 +296,12 @@ export function AnswerCard({
         </Group>
         {open ? (
           <>
-            <AnswerControl q={q} r={r} fixedName={fixedName} set={set} error={error} />
+            {personOnly ? (
+              <Text size="sm" c="dimmed">
+                {personOnly}
+              </Text>
+            ) : null}
+            <AnswerControl q={q} r={r} fixedName={fixedName} set={set} error={error} disabled={disabled} />
             {extra}
             <Text size="sm" data-testid={`setup-consequence-${q.id}`}>
               {consequence(q, r, profile)}
@@ -321,6 +343,7 @@ export function AnswerCard({
             </Button>
           </Group>
         )}
+        {log}
         {open && whyOpen ? <AskAboutRegion id={whyId} focus={whyFocus(q, r, profile)} /> : null}
       </Stack>
     </Paper>

@@ -89,17 +89,45 @@ function Row({
 export function SetupDraftPane({
   rid,
   onEdit,
-  rowExtra,
 }: {
   rid: string;
   onEdit: (q: QuestionId, why: boolean) => void;
-  rowExtra?: (q: SetupQuestion) => ReactNode;
 }) {
   const s = useSetup();
   const r = receiverOf(s, rid);
   if (!r || !s.draft || !s.base) return null;
   const draft = s.draft;
   const version = s.base.version;
+  /** Under a drafted answer: the person's own words it was read from, the way to the turn, and Undo. */
+  const drafted = (q: SetupQuestion): ReactNode => {
+    const p = q.keys.map((k) => s.prov[`${rid}/${k}`]).find((x) => x?.by === 'ask');
+    if (!p || p.by !== 'ask' || statusOf(s, rid, q) !== 'ask') return null;
+    return (
+      <Stack gap={4} data-testid={`setup-quote-${q.id}`}>
+        <Text size="sm" style={{ overflowWrap: 'anywhere' }}>
+          Read from your words: &ldquo;{p.quote}&rdquo;
+        </Text>
+        <Group gap="xs">
+          <Button
+            size="compact-sm"
+            variant="subtle"
+            aria-label={`Show the answer it was read from: ${q.short}`}
+            onClick={() => onEdit(q.id, false)}
+          >
+            Show the whole answer
+          </Button>
+          <Button
+            size="compact-sm"
+            variant="default"
+            aria-label={`Undo the drafted answer: ${q.short}`}
+            onClick={() => s.undo(p.turnId)}
+          >
+            Undo
+          </Button>
+        </Group>
+      </Stack>
+    );
+  };
   const rows = (ids: QuestionId[]) =>
     QUESTIONS.filter((q) => ids.includes(q.id)).map((q) => (
       <Row
@@ -109,7 +137,7 @@ export function SetupDraftPane({
         status={statusOf(s, rid, q)}
         version={version}
         note={consequence(q, r, draft)}
-        extra={rowExtra?.(q)}
+        extra={drafted(q)}
         onEdit={() => onEdit(q.id, false)}
         onWhy={() => onEdit(q.id, true)}
       />

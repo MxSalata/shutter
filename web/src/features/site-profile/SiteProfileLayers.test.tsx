@@ -482,8 +482,9 @@ describe('the word budget', () => {
     await screen.findByRole('table', { name: 'Who releases each write' });
     const inTechnical = words(technical.container);
     // The page held 2,776 words before the restyle; it is a questionnaire, so it stays long (1,775 when measured). The
-    // limit was 2,000, which the page had reached, until the Orders and results card's 35 words more (2,035)
-    expect(inPlain).toBeLessThanOrEqual(2040);
+    // limit was 2,000, which the page had reached, until the Orders and results card's 35 words more (2,035), and
+    // 2,040 until question 11's second switch, for typed answers in Set up the site, with its 16 words (2,055)
+    expect(inPlain).toBeLessThanOrEqual(2056);
     expect(inTechnical).toBeGreaterThan(inPlain);
     expect(inTechnical).toBeLessThanOrEqual(Math.round(inPlain * 1.5));
   });

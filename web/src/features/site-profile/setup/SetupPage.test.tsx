@@ -142,17 +142,18 @@ function draftInStore(baseVersion = recorded.version) {
 }
 
 describe('Set up the site', () => {
-  it('says what the page does, where it stands, and that Ask Shutter does not fill in answers', async () => {
+  it('says what the page does, where it stands, and that Ask Shutter reads no typed answer here', async () => {
     renderApp();
     expect(await screen.findByRole('heading', { name: 'Set up the site', level: 1 })).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        'Ask Shutter explains each question here. It does not fill in answers in this version.',
-      ),
-    ).toBeInTheDocument();
+    // Off unless the site's approver switched it on: the page says so, and offers no box for a typed answer
+    expect(await screen.findByTestId('setup-ask-shutter-does')).toHaveTextContent(
+      'Ask Shutter explains each question here. It does not read typed answers: reading typed answers is switched off in the site profile (question 11, What the model sees).',
+    );
     const band = within(await screen.findByRole('region', { name: 'Where this page stands' }));
     expect(band.getByText(new RegExp(`version ${recorded.version}`))).toBeInTheDocument();
-    expect(band.getByText(/It does not fill in answers in this version\./)).toBeInTheDocument();
+    expect(
+      band.getByText(/It does not read typed answers: that is switched off in the site profile\./),
+    ).toBeInTheDocument();
     expect(band.getByText('You can save, through the review.')).toBeInTheDocument();
     const list = within(screen.getByRole('list', { name: 'The receivers in this draft' }));
     expect(list.getByText('Downstream Out')).toBeInTheDocument();

@@ -76,6 +76,7 @@ import { VersionsPanel } from './VersionsPanel';
 import { SuggestionCard } from './SuggestionCard';
 import { SetupDraftCard } from './SetupDraftCard';
 import { SETUP_DRAFT_TITLE_ID, draftRows } from './setup/draftRows';
+import { answerText, questionOfKey } from './setup/fields';
 import { SetupLink } from './setup/SetupLink';
 import { useSetup } from './setup/setupStore';
 import {
@@ -956,6 +957,16 @@ function Profile({
     setReviewing(0);
   };
 
+  // The answers Ask Shutter drafted in Set up the site that the form still holds as drafted: one changed here since is
+  // the person's own, and leaves the list
+  const drafted =
+    handed && handedHere && showHanded
+      ? handed.drafted.filter((d) => {
+          const r = draft.receivers.find((x) => x.name === d.receiver);
+          const q = questionOfKey(d.key);
+          return !!r && !!q && answerText(q, r) === d.value;
+        })
+      : [];
   const dirty = changes.length > 0;
   // Something to say about the answer a review refused: in the save bar while it shows, else on its own
   const problemAlert = problem ? (
@@ -1145,6 +1156,7 @@ function Profile({
             body={body}
             saving={save.isPending || checking}
             locked={locked}
+            drafted={drafted}
             problem={saveProblem}
             onCancel={() => {
               refocus.current = true;

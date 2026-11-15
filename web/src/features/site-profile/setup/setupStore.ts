@@ -1,8 +1,17 @@
 import { create } from 'zustand';
 import { SIGNED_OUT } from '@/api/hooks';
-import type { SiteProfile, SiteProfileView, SiteReceiver } from '@/api/types';
+import type { SetupTurnAsked, SetupTurnView, SiteProfile, SiteProfileView, SiteReceiver } from '@/api/types';
 import { diffProfiles } from '../profile';
-import { QUESTIONS, holdsAnswer, questionOfKey, type QuestionId, type SetupQuestion } from './fields';
+import {
+  QUESTIONS,
+  answerText,
+  consequence,
+  holdsAnswer,
+  questionOfKey,
+  type QuestionId,
+  type SetupQuestion,
+} from './fields';
+import { applyBatch, checkTurn } from './proposals';
 
 /**
  * Set up the site's draft: a copy of the stored profile that lives in this tab's memory and nowhere else. Nothing here
@@ -19,10 +28,65 @@ export type Provenance = { by: 'you' } | { by: 'ask'; turnId: string; quote: str
 /** How a question stands for one receiver, as its badge says it. */
 export type AnswerStatus = 'in_force' | 'you' | 'ask' | 'onboarding' | 'unanswered' | 'left';
 
+/** One answer Ask Shutter drafted, as the review lists it: the page's words for it, never the model's. */
+export interface DraftedAnswer {
+  /** The receiver, by its name in the draft, and the key the value is stored under. */
+  receiver: string;
+  key: string;
+  /** What the answer is: "Kind of system". */
+  label: string;
+  /** The value in the page's words: "Current state". */
+  value: string;
+  /** The person's own words it was read from. */
+  quote: string;
+  /** What the answer does, read from the draft. */
+  consequence: string;
+}
+
 /** A draft handed to the Site profile page for its review: the draft as it was, and the version it was made against. */
 export interface Handover {
   draft: SiteProfile;
   baseVersion: number;
+  /** The answers in it that Ask Shutter drafted and the person has not changed since. */
+  drafted: DraftedAnswer[];
+}
+
+/** What a drafted answer replaced, kept for Undo. */
+interface Replaced {
+  key: string;
+  to: unknown;
+  from: unknown;
+  provenance?: Provenance;
+}
+
+/** One exchange with Ask Shutter: what the person typed on a question's card, and what came of it. */
+export interface TurnEntry {
+  /** The turn's id on the server. */
+  id: string;
+  rid: string;
+  /** The question whose card the text was typed on. */
+  question: QuestionId;
+  text: string;
+  /**
+   * reading: sent, not answered yet. used: its answers are in the draft. nothing: read, with nothing to draft. unused:
+   * answered, and dropped by the page's own checks. failed: refused by the core, or no answer. cancelled: dropped by
+   * the person, a discard or the review.
+   */
+  state: 'reading' | 'used' | 'nothing' | 'unused' | 'failed' | 'cancelled';
+  /** Ask Shutter's own sentences. */
+  say?: string;
+  /** What entered the draft from this turn. */
+  drafted?: Replaced[];
+  /** Why nothing was used. */
+  note?: string;
+  undone?: boolean;
+}
+
+/** The turn being read: one at a time. */
+export interface PendingTurn {
+  turnId: string;
+  rid: string;
+  question: QuestionId;
 }
 
 export interface SetupData {
@@ -46,6 +110,19 @@ export interface SetupData {
   /** The stored version moved while this draft had changes. */
   moved: boolean;
   handover: Handover | null;
+  /** The conversation with Ask Shutter, as the server names it; null before the first turn and after a discard. */
+  conversation: string | null;
+  turns: TurnEntry[];
+  pending: PendingTurn | null;
+  /** How often a typed answer drafted nothing for a question, by `rid/question`: after two, the control answers. */
+  misses: Record<string, number>;
+  /** The question Ask Shutter's last turn suggested next, when it is an unanswered one of the checklist. */
+  suggested: { rid: string; question: QuestionId } | null;
+  /**
+   * What is typed in a card's box and not sent yet, by `rid/question`: kept here so it outlives the page's two layouts
+   * (a window that crosses the wide breakpoint draws the panes afresh). It is sent nowhere until the person sends it.
+   */
+  typed: Record<string, string>;
 }
 
 interface SetupActions {
@@ -67,6 +144,21 @@ interface SetupActions {
   takeHandover: () => Handover | null;
   /** The Site profile page hands a draft back: receivers keep their ids by name, and a changed answer is the person's. */
   adopt: (draft: SiteProfile) => void;
+  /** A typed answer was sent: the server opened its turn. */
+  sent: (rid: string, question: QuestionId, text: string, asked: SetupTurnAsked) => void;
+  /** The turn being read is dropped: whatever comes back for it is not used. */
+  cancelPending: () => void;
+  /**
+   * A turn came back. Its answers enter the draft only when it is still the turn being read, the conversation, the
+   * receiver and the stored version are the ones it was sent for, each field still holds what the turn replaced, and
+   * the page's own copy of the core's checks passes on the draft as it is now. Otherwise the whole batch is dropped.
+   */
+  settle: (view: SetupTurnView) => void;
+  /** Puts back what a turn's drafted answers replaced, where they are still the drafted ones. */
+  undo: (turnId: string) => void;
+  tookSuggestion: () => void;
+  /** What stands in a card's box as the person types. */
+  type: (rid: string, question: QuestionId, text: string) => void;
 }
 
 export type SetupState = SetupData & SetupActions;
@@ -89,7 +181,16 @@ const EMPTY: SetupData = {
   focus: null,
   moved: false,
   handover: null,
+  conversation: null,
+  turns: [],
+  pending: null,
+  misses: {},
+  suggested: null,
+  typed: {},
 };
+
+/** What the page says of a turn whose answers could not be used because the draft is no longer the one it was sent for. */
+export const CHANGED_MEANWHILE = 'Not used: the draft changed meanwhile.';
 
 function seeded(view: SiteProfileView, revision: number): SetupData {
   const rids = view.profile.receivers.map(newRid);
@@ -176,7 +277,13 @@ export const useSetup = create<SetupState>((set, get) => ({
   saved: (view) => set((s) => seeded(view, s.revision)),
   handOver: () =>
     set((s) =>
-      s.draft && s.base ? { handover: { draft: clone(s.draft), baseVersion: s.base.version } } : s,
+      s.draft && s.base
+        ? {
+            // A turn still being read is dropped: the draft under review cannot change
+            ...dropPending(s),
+            handover: { draft: clone(s.draft), baseVersion: s.base.version, drafted: draftedAnswers(s) },
+          }
+        : s,
     ),
   takeHandover: () => {
     const h = get().handover;
@@ -227,7 +334,143 @@ export const useSetup = create<SetupState>((set, get) => ({
         revision: s.revision + 1,
       };
     }),
+  sent: (rid, question, text, asked) =>
+    set((s) => ({
+      conversation: asked.conversation,
+      turns: [...s.turns, { id: asked.turnId, rid, question, text, state: 'reading' }],
+      pending: { turnId: asked.turnId, rid, question },
+    })),
+  cancelPending: () => set((s) => dropPending(s)),
+  settle: (view) =>
+    set((s) => {
+      const p = s.pending;
+      // Not the turn being read (cancelled, discarded, signed out since): nothing of it is used
+      if (!p || p.turnId !== view.turnId || !s.draft || !s.base) return s;
+      const end = (entry: Partial<TurnEntry>, more: Partial<SetupData> = {}): Partial<SetupData> => ({
+        turns: s.turns.map((t) => (t.id === view.turnId ? { ...t, ...entry } : t)),
+        pending: null,
+        ...more,
+      });
+      const missed = {
+        ...s.misses,
+        [`${p.rid}/${p.question}`]: (s.misses[`${p.rid}/${p.question}`] ?? 0) + 1,
+      };
+      if (view.state !== 'answered' || !view.turn)
+        return end({ state: 'failed', note: view.error || 'no answer came back' }, { misses: missed });
+      const i = s.rids.indexOf(p.rid);
+      const r = i < 0 ? undefined : s.draft.receivers[i];
+      if (
+        !r ||
+        r.name !== view.receiver ||
+        view.conversation !== s.conversation ||
+        view.baseVersion !== s.base.version
+      )
+        return end({ state: 'unused', note: CHANGED_MEANWHILE });
+      const checked = checkTurn(view.turn, s.base.profile, s.draft, r.name);
+      if (!checked.ok) return end({ state: 'unused', note: `Not used: ${checked.problem}.` });
+      const entry = r as Record<string, unknown>;
+      const proposals = checked.turn.proposals;
+      // Each field still holds what the core saw when the turn was sent
+      const moved = (view.turn.proposals ?? []).some((sent) => {
+        const now = entry[sent.field.split('.')[1]];
+        return !same(now ?? null, sent.from ?? null);
+      });
+      if (moved) return end({ state: 'unused', note: CHANGED_MEANWHILE });
+      const ask = checked.turn.ask ? questionOfKey(checked.turn.ask.field.split('.')[1]) : undefined;
+      if (!proposals.length)
+        return end(
+          { state: 'nothing', say: checked.turn.say },
+          { misses: missed, suggested: suggestion(s, p.rid, ask) },
+        );
+      const draft = applyBatch(s.draft, r.name, proposals);
+      const prov = { ...s.prov };
+      const left = { ...s.left };
+      const drafted: Replaced[] = proposals.map((x) => {
+        const key = x.field.split('.')[1];
+        const at = `${p.rid}/${key}`;
+        const replaced: Replaced = { key, to: x.to, from: entry[key], provenance: s.prov[at] };
+        prov[at] = { by: 'ask', turnId: view.turnId, quote: x.quote };
+        const q = questionOfKey(key);
+        if (q) delete left[`${p.rid}/${q.id}`];
+        return replaced;
+      });
+      const next = { ...s, draft, prov, left };
+      return end(
+        { state: 'used', say: checked.turn.say, drafted },
+        { draft, prov, left, revision: s.revision + 1, suggested: suggestion(next, p.rid, ask) },
+      );
+    }),
+  undo: (turnId) =>
+    set((s) => {
+      const turn = s.turns.find((t) => t.id === turnId);
+      const i = turn ? s.rids.indexOf(turn.rid) : -1;
+      if (!turn?.drafted || turn.undone || !s.draft || i < 0) return s;
+      const draft = clone(s.draft);
+      const r = draft.receivers[i] as Record<string, unknown>;
+      const prov = { ...s.prov };
+      for (const d of turn.drafted) {
+        const at = `${turn.rid}/${d.key}`;
+        const now = prov[at];
+        // Only an answer that is still this turn's: a hand edit since is the person's and stays
+        if (!now || now.by !== 'ask' || now.turnId !== turnId) continue;
+        if (d.from === undefined || d.from === null) delete r[d.key];
+        else r[d.key] = d.from;
+        if (d.provenance) prov[at] = d.provenance;
+        else delete prov[at];
+      }
+      return {
+        draft,
+        prov,
+        turns: s.turns.map((t) => (t.id === turnId ? { ...t, undone: true } : t)),
+        revision: s.revision + 1,
+      };
+    }),
+  tookSuggestion: () => set({ suggested: null }),
+  type: (rid, question, text) => set((s) => ({ typed: { ...s.typed, [`${rid}/${question}`]: text } })),
 }));
+
+/** The turn being read marked as dropped, so whatever comes back for it is ignored. */
+function dropPending(s: SetupData): Partial<SetupData> {
+  if (!s.pending) return {};
+  const id = s.pending.turnId;
+  return {
+    pending: null,
+    turns: s.turns.map((t) =>
+      t.id === id ? { ...t, state: 'cancelled' as const, note: 'Dropped: nothing of it is used.' } : t,
+    ),
+  };
+}
+
+/** The question a turn suggested next, when it is an unanswered question of this receiver's checklist. */
+function suggestion(
+  s: SetupData,
+  rid: string,
+  q: SetupQuestion | undefined,
+): { rid: string; question: QuestionId } | null {
+  return q && statusOf(s, rid, q) === 'unanswered' ? { rid, question: q.id } : null;
+}
+
+/** The answers of the draft that Ask Shutter drafted and nobody has changed since, in the page's words. */
+export function draftedAnswers(s: SetupData): DraftedAnswer[] {
+  if (!s.draft) return [];
+  const out: DraftedAnswer[] = [];
+  for (const [at, p] of Object.entries(s.prov)) {
+    if (p.by !== 'ask') continue;
+    const [rid, key] = at.split('/');
+    const r = receiverOf(s, rid);
+    const q = questionOfKey(key);
+    if (!r || !q) continue;
+    out.push({
+      receiver: r.name,
+      key,
+      label: q.short,
+      value: answerText(q, r),
+      quote: p.quote,
+      consequence: consequence(q, r, s.draft),
+    });
+  }
+  return out;
+}
 
 function without<T>(o: Record<string, T>, rid: string): Record<string, T> {
   return Object.fromEntries(Object.entries(o).filter(([at]) => !at.startsWith(`${rid}/`)));

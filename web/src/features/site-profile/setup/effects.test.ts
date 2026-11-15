@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { SiteProfile, SiteReceiver } from '@/api/types';
+import { coreTable } from '@/test/coreTables';
 import { approvalText, effectsOf, lessStrict, type EffectId } from './effects';
 import { blankReceiver } from './setupStore';
 
@@ -132,5 +133,38 @@ describe('What Shutter will do here', () => {
       receiver({ category: 'history_of_record', ...blankReceiver(), name: 'R' }),
     );
     expect(lessStrict(blocked, writes)?.id).toBe('case_write');
+  });
+});
+
+describe('What Shutter will do here, the table Shutter.Test.ProfileSetup runs at the server', () => {
+  const rows = coreTable<{
+    name: string;
+    profile?: Partial<SiteProfile>;
+    receiver: SiteReceiver;
+    expect: Record<string, number>;
+  }>('ProfileSetup', 'EffectRows');
+
+  it('has the rows of the server class', () => {
+    expect(rows.length).toBeGreaterThan(12);
+  });
+
+  it.each(rows.map((row) => [row.name, row] as const))('%s', (_name, row) => {
+    const base: SiteProfile = {
+      receivers: [],
+      policy: {
+        '1': { single: 'approval' },
+        '2': { single: 'approval', ordered: 'approval', interleaved: 'board' },
+        '3': { single: 'approval', ordered: 'per_chain' },
+      },
+      ...row.profile,
+    };
+    const ranks = Object.fromEntries(
+      effectsOf(base, row.receiver)
+        .filter((l) => l.rank !== null)
+        .map((l) => [l.id, l.rank]),
+    );
+    expect(ranks).toEqual(row.expect);
+    // In the lines' own order, as the core compares them
+    expect(Object.keys(ranks)).toEqual(Object.keys(row.expect));
   });
 });

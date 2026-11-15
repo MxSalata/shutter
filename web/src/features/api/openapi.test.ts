@@ -100,6 +100,8 @@ describe('the API document', () => {
       'get',
       'put',
       'get',
+      'post',
+      'get',
     ]);
   });
 });
@@ -115,6 +117,8 @@ describe('the filter', () => {
       'siteProfileGet',
       'siteProfilePut',
       'siteProfileHistory',
+      'setupTurnAsk',
+      'setupTurnGet',
     ]);
   });
 

@@ -6,6 +6,7 @@ import type {
   AgentRun,
   ApprovalDecision,
   AskPageQuestion,
+  SendSetupTurn,
   AskQuestion,
   CaseQuestion,
   PageQuestion,
@@ -37,12 +38,14 @@ import {
   controlProblem,
   validateProfile,
 } from '@/features/site-profile/profile';
+import { cleanText } from '@/features/site-profile/setup/proposals';
 import { digest, draftEscalation, teamFor } from './escalation';
 import { receiverCheckFor, type RecordedCase } from './receiverCheck';
 import { freshHolds, heldView, type CaseFixture, type Hold } from './hold';
 import { onboardingHandlers, resetOnboarding } from './onboarding';
 import { recordedSiteProfile, recordedSiteProfileHistory } from './profile';
 import { pageAnswerFor, resetPageQuestionIds, samplePageQuestion } from './pageQuestions';
+import { MAX_TURNS, answerTurn, newConversation, resetSetupTurns, turnById, turnsOf } from './setupTurns';
 import {
   questionDetail,
   recordedQuestion,
@@ -263,7 +266,23 @@ export function resetMock(signedInAs: keyof typeof USERS | null = 'approver') {
   resetQuestionIds();
   pageQuestions = {};
   resetPageQuestionIds();
+  resetSetupTurns();
   resetOnboarding();
+}
+
+/**
+ * The site's switch for typed answers in Set up the site (CONTRACTS 14.7), as a site whose approver saved it on or off:
+ * the stored profile's model_content.setup_answers, at the version it has. Off in the recording, as on a new install.
+ */
+export function mockSetupAnswers(on: boolean) {
+  if (!siteProfile) return;
+  siteProfile = {
+    ...siteProfile,
+    profile: {
+      ...siteProfile.profile,
+      model_content: { ...(siteProfile.profile.model_content ?? {}), setup_answers: on },
+    },
+  };
 }
 
 /** The questions asked about a page here (CONTRACTS 14.6), by id; the trial answers its suggested ones with sample answers. */
@@ -1446,6 +1465,91 @@ export const handlers = [
         ? HttpResponse.json(siteProfile)
         : error(404, 'not_found', 'No site profile was recorded'),
   ),
+  // A typed answer of Set up the site (CONTRACTS 14.7), refused in the server's order: the body, the site's own switch
+  // (off unless the stored profile says true), the live agents' resource, the stored version, the conversation's owner
+  // and its 24 turns. No model: the reading is by keyword, marked [mock], and checked as the core checks it. Nothing
+  // here stores a profile or a draft.
+  http.post(`${BASE}/site-profile/setup-turns`, async ({ request }) => {
+    const denied = csrf(request) ?? guard('operator');
+    if (denied) return denied;
+    if (!siteProfile) return error(404, 'not_found', 'No site profile was recorded');
+    const body = (await request.json().catch(() => null)) as Partial<SendSetupTurn> | null;
+    if (!body || typeof body !== 'object' || Array.isArray(body))
+      return error(
+        400,
+        'bad_request',
+        'The body must be a JSON object: {conversation, receiver, text, draft, baseVersion, draftRevision}',
+      );
+    if (typeof body.receiver !== 'string' || !body.receiver)
+      return error(400, 'bad_request', 'receiver must name the receiver the answer is about');
+    if (typeof body.text !== 'string') return error(400, 'bad_request', 'text must be text');
+    const clean = cleanText(body.text);
+    if (clean.problem) return error(400, 'bad_request', clean.problem);
+    const draft = body.draft;
+    if (!draft || typeof draft !== 'object' || !Array.isArray(draft.receivers))
+      return error(400, 'bad_request', 'draft must be the profile as a JSON object');
+    if (!draft.receivers.some((r) => r.name === body.receiver))
+      return error(400, 'bad_request', `draft has no receiver named ${body.receiver}`);
+    if (typeof body.baseVersion !== 'number')
+      return error(
+        400,
+        'bad_request',
+        "baseVersion must be the stored profile's version the draft was made from",
+      );
+    if (siteProfile.profile.model_content?.setup_answers !== true)
+      return error(
+        409,
+        'setup_drafting_off',
+        'Reading typed answers is switched off in the site profile (model_content.setup_answers): Set up the site works with its controls and written explanations, and no model is called',
+      );
+    if (session?.can?.liveAgents === false)
+      return error(
+        403,
+        'live_agents_only',
+        "Typed answers are read live only: that needs Shutter_LiveAgents, which the judges' account has",
+      );
+    if (body.baseVersion !== siteProfile.version)
+      return HttpResponse.json(
+        {
+          error: 'stale_version',
+          detail: "baseVersion is not the stored profile's version",
+          currentVersion: siteProfile.version,
+        },
+        { status: 409 },
+      );
+    let conversation = body.conversation ?? '';
+    if (conversation) {
+      const earlier = turnsOf(conversation);
+      if (!earlier.length || earlier[0].askedBy !== session!.username)
+        return error(404, 'not_found', `No conversation ${conversation} of yours`);
+      if (earlier.length >= MAX_TURNS)
+        return error(
+          409,
+          'conversation_full',
+          `This conversation has its ${MAX_TURNS} turns: discard the draft or go on with the page's controls`,
+        );
+    } else conversation = newConversation();
+    await delay();
+    const view = answerTurn(
+      conversation,
+      body.receiver,
+      clean.text,
+      siteProfile.profile,
+      draft,
+      body.baseVersion,
+      Number(body.draftRevision ?? 0),
+      session!.username,
+      stamp(),
+    );
+    return HttpResponse.json({ turnId: view.turnId, conversation, state: 'pending' }, { status: 202 });
+  }),
+  http.get(`${BASE}/site-profile/setup-turns/:id`, ({ params }) => {
+    if (!session) return signedOut();
+    const view = turnById(String(params.id));
+    return view && view.askedBy === session.username
+      ? HttpResponse.json(view)
+      : error(404, 'not_found', `No turn ${String(params.id)} of yours`);
+  }),
   http.get(`${BASE}/site-profile/history`, ({ request }) => {
     if (!session) return signedOut();
     const limit = Number(new URL(request.url).searchParams.get('limit') ?? 50);

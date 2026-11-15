@@ -150,7 +150,7 @@ describe("Set up the site's draft", () => {
     state().setKey(rid, 'category', 'current_state');
     state().setKey(rid, 'tier', 2);
     state().handOver();
-    expect(state().handover).toEqual({ draft: state().draft, baseVersion: view.version });
+    expect(state().handover).toEqual({ draft: state().draft, baseVersion: view.version, drafted: [] });
     expect(state().takeHandover()?.baseVersion).toBe(view.version);
     expect(state().handover).toBeNull();
     // The Site profile page changed the tier and added a receiver of its own

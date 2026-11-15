@@ -44,6 +44,9 @@ import {
   type CaseQuestions,
   type PageQuestion,
   type PageQuestionAsked,
+  type SendSetupTurn,
+  type SetupTurnAsked,
+  type SetupTurnView,
   type QuestionAsked,
   type QuestionState,
   type SuggestedQuestions,
@@ -89,6 +92,7 @@ export const keys = {
   question: (id: string, qid: string) => ['case', id, 'questions', qid] as const,
   suggested: (id: string) => ['case', id, 'suggested-questions'] as const,
   pageQuestion: (qid: string) => ['page-question', qid] as const,
+  setupTurn: (id: string) => ['setup-turn', id] as const,
   whatif: (id: string) => ['case', id, 'whatif'] as const,
 };
 
@@ -947,6 +951,28 @@ export function usePageQuestion(questionId: string | undefined) {
     queryKey: keys.pageQuestion(questionId ?? ''),
     enabled: !!questionId,
     queryFn: () => api.get<PageQuestion>(`/page-questions/${seg(questionId!)}`),
+    refetchInterval: (q) => (isAnswering(q.state.data?.state) ? 2_000 : false),
+  });
+}
+
+// ---- Set up the site: a typed answer read by an agent (CONTRACTS 14.7; nothing is stored but the turn's own row) ----
+
+/** Sends what a person typed about a receiver: 202 with the turn's id, then useSetupTurn reads what was drafted. */
+export function useSendSetupTurn() {
+  return useMutation({
+    mutationFn: ({ turn, idempotencyKey }: { turn: SendSetupTurn; idempotencyKey?: string }) =>
+      api.post<SetupTurnAsked>('/site-profile/setup-turns', turn, {
+        idempotencyKey: idempotencyKey ?? newIdempotencyKey(),
+      }),
+  });
+}
+
+/** One turn of Set up the site, read every 2 s until it is answered or refused. */
+export function useSetupTurn(turnId: string | undefined) {
+  return useQuery({
+    queryKey: keys.setupTurn(turnId ?? ''),
+    enabled: !!turnId,
+    queryFn: () => api.get<SetupTurnView>(`/site-profile/setup-turns/${seg(turnId!)}`),
     refetchInterval: (q) => (isAnswering(q.state.data?.state) ? 2_000 : false),
   });
 }

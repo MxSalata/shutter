@@ -1,9 +1,12 @@
 import { Button, Group, List, Loader, Paper, Stack, Text, Title, VisuallyHidden } from '@mantine/core';
-import { lazy, Suspense, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
 import { FoldToggle } from '../controls';
 import { AnswerCard } from './AnswerCard';
 import { ASK_HERE_ID, SUMMARY_TITLE_ID, cardTitleId, focusLater } from './cards';
+import type { Drafting } from './drafting';
 import { effectsOf } from './effects';
+import { Exchanges, OwnWords } from './OwnWords';
+import { draftRefusal } from './proposals';
 import { QUESTIONS, SETUP_PAGE, answerText, holdsAnswer, type QuestionId } from './fields';
 import {
   inForce,
@@ -30,6 +33,7 @@ export function SetupConversation({
   openId,
   setOpenId,
   stop,
+  drafting,
   onReview,
   onAnother,
   onDiscard,
@@ -41,6 +45,8 @@ export function SetupConversation({
   setOpenId: (q: QuestionId | null) => void;
   /** What the last review refused about this receiver, shown on its question's control. */
   stop: ReviewStop | null;
+  /** Whether Ask Shutter can read a typed answer here now. */
+  drafting: Drafting;
   onReview: () => void;
   onAnother: () => void;
   onDiscard: () => void;
@@ -53,12 +59,33 @@ export function SetupConversation({
   const toggleWhy = (q: QuestionId) => setWhy((w) => (w === q ? null : q));
   const [said, setSaid] = useState('');
   const r = receiverOf(s, rid);
+  // The question Ask Shutter's last turn suggested next opens, when it is an unanswered one of this checklist
+  const { suggested, tookSuggestion } = s;
+  useEffect(() => {
+    if (!suggested) return;
+    if (suggested.rid === rid) {
+      setOpenId(suggested.question);
+      focusLater(cardTitleId(suggested.question));
+    }
+    tookSuggestion();
+  }, [suggested, rid, setOpenId, tookSuggestion]);
   if (!r || !s.draft || !s.base) return null;
+  const base = s.base.profile;
+  const settled = s.turns.filter((t) => t.rid === rid && t.state !== 'reading').length;
   const draft = s.draft;
   const existing = inForce(s, rid);
   const next = nextQuestion(s, rid);
   const current = openId ?? next?.id ?? null;
-  const shown = QUESTIONS.filter((q) => existing || q.id === current || statusOf(s, rid, q) !== 'unanswered');
+  // A receiver being added shows its questions as far as the one being answered, and any later one that holds an
+  // answer or an exchange with Ask Shutter: a card never leaves the page once it has been there
+  const reached = QUESTIONS.findIndex((q) => q.id === current);
+  const shown = QUESTIONS.filter(
+    (q, i) =>
+      existing ||
+      i <= reached ||
+      statusOf(s, rid, q) !== 'unanswered' ||
+      s.turns.some((t) => t.rid === rid && t.question === q.id),
+  );
   const toGo = QUESTIONS.length - shown.length;
   const name = r.name.trim() || 'the receiver being added';
 
@@ -78,9 +105,19 @@ export function SetupConversation({
   return (
     <Stack gap="md">
       <VisuallyHidden aria-live="polite">{said}</VisuallyHidden>
+      {/* One short announcement per turn, never the turn read out whole */}
+      <VisuallyHidden aria-live="polite">
+        {settled ? `Ask Shutter answered (${settled}).` : ''}
+      </VisuallyHidden>
       {shown.map((q) => {
         const status = statusOf(s, rid, q);
         const answered = holdsAnswer(q, r);
+        // Ask Shutter may draft this answer for this receiver: a description, or the kind and tier of one being added
+        const mine =
+          q.who === 'A' &&
+          r.name.trim() !== '' &&
+          draftRefusal(`receivers[].${q.keys[0]}`, base, draft, existing) === '';
+        const reading = !!s.pending && s.pending.rid === rid;
         return (
           <AnswerCard
             key={q.id}
@@ -118,6 +155,22 @@ export function SetupConversation({
                   }
             }
             onWhy={() => toggleWhy(q.id)}
+            disabled={reading && q.who === 'A'}
+            personOnly={
+              !drafting.can || mine || q.id === 'name'
+                ? undefined
+                : q.who === 'A'
+                  ? existing
+                    ? 'Only a person changes this on a receiver in force.'
+                    : 'Only a person sets this here.'
+                  : 'Only a person sets this.'
+            }
+            extra={
+              q.who === 'A' ? (
+                <OwnWords q={q} r={r} rid={rid} drafting={mine ? drafting : { ...drafting, can: false }} />
+              ) : undefined
+            }
+            log={q.who === 'A' ? <Exchanges q={q} rid={rid} /> : undefined}
           />
         );
       })}

@@ -63,7 +63,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
       await expect(page.getByRole('heading', { name: 'Set up the site', level: 1 })).toBeVisible();
       await expect(
         page.getByText(
-          'Ask Shutter explains each question here. It does not fill in answers in this version.',
+          'Ask Shutter explains each question here. It does not read typed answers in the trial, which has no model.',
         ),
       ).toBeVisible();
       await describeReceiver(page);

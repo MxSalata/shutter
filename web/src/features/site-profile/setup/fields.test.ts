@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { SiteProfile, SiteReceiver } from '@/api/types';
 import { recordedSiteProfile } from '@/mocks/profile';
+import { coreTable } from '@/test/coreTables';
 import { layer1WordCount } from '@/test/words';
 import { validateProfile } from '../profile';
 import {
@@ -63,7 +64,7 @@ const EVERYTHING = {
   policy: { '1': { single: 'approval', ordered: 'approval', interleaved: 'board' } },
   approvers: { role: 'Approvers', escalation: 'On call', close_needs_approver: false },
   incident: { threshold: 5, window_minutes: 10, quiet_seconds: 60, max_intake_seconds: 600 },
-  model_content: { free_text: false },
+  model_content: { free_text: false, setup_answers: false },
   teams: [
     {
       id: 'integration',
@@ -107,6 +108,10 @@ describe('the field table', () => {
     for (const path of paths) expect([path, rowsFor(path).length]).toEqual([path, 1]);
   });
 
+  it('is the table the core holds, row for row (Shutter.Test.ProfileSetup)', () => {
+    expect(FIELD_TABLE).toEqual(coreTable<[string, string]>('ProfileSetup', 'Fields'));
+  });
+
   it('lets a model draft three keys and no other', () => {
     expect(FIELD_TABLE.filter(([, cls]) => cls === 'A').map(([path]) => path)).toEqual([
       'receivers[].system',
@@ -126,6 +131,7 @@ describe('the field table', () => {
       'authoritative_source',
       'feed.time_zone',
       'model_content.free_text',
+      'model_content.setup_answers',
       'further_messages.a08_location',
       'approvers.close_needs_approver',
       'approvers.role',
