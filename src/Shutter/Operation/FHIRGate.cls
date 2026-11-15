@@ -45,18 +45,8 @@ Method OnGateRequest(request As Shutter.Msg.FHIRGateRequest, Output response As 
         Quit $$$OK
     }
 
-    // The outcome is the worst check, answered and stored as the gate does (Shutter.Operation.Gate, lines 386-402 of
-    // version 1.4.4).
-    Set outcome = "pass"
-    Set iter = checks.%GetIterator()
-    While iter.%GetNext(.i, .c) {
-        If c.result = "block" Set outcome = "block"
-        If (c.result = "unknown") && (outcome '= "block") Set outcome = "unknown"
-    }
-    Set blocks = ""
-    Set iter = checks.%GetIterator()
-    While iter.%GetNext(.i, .c) { If c.result '= "pass" Set blocks = blocks _ $SELECT(blocks = "": "", 1: ", ") _ c.check _ " " _ c."reason_code" }
-    Set text = $CASE(outcome, "pass": "Every check passed", "block": "Blocked: " _ blocks, : "Unknown: " _ blocks) _ " (policy " _ policy _ ", stage " _ request.Stage _ ")"
+    // The outcome is the worst check, answered and stored as the gate does (Shutter.Operation.Gate's Outcome).
+    Set outcome = ##class(Shutter.Operation.Gate).Outcome(checks, policy, request.Stage, .text)
     Set sc = ##class(Shutter.Store.GateDecision).Create(case, plan, request.Stage, policy, outcome, checks, text, .decision)
     If $$$ISERR(sc) Set response.Error = $SYSTEM.Status.GetErrorText(sc)
     Set response.Outcome = outcome, response.ChecksJSON = checks.%ToJSON(), response.Summary = text
@@ -164,7 +154,7 @@ ClassMethod Decide(stage As %String, case As Shutter.Store.Case, plan As Shutter
     Set noEncounter = ..Identity(checks, case, fhir, block)
     Set enc = ..Obj(fhir, "encounter")
 
-    Do ..Conformance(checks, case, view)
+    Do ##class(Shutter.Operation.Gate).ConformanceRows(checks, case, view.%Get("validation"))
     Do ..Intent(checks, case, plan, view)
 
     // Enablement: the receiver's entry turns recovery on, as Shutter.FHIR.Profile's Enabled reads it.
@@ -321,7 +311,7 @@ ClassMethod Decide(stage As %String, case As Shutter.Store.Case, plan As Shutter
         Do ..Check(checks, "evidence", $SELECT(fresh: "pass", 1: "unknown"), $SELECT(fresh: "FRESH", 1: "STALE_EVIDENCE"), $SELECT(fresh: "The read before the write is no older than " _ ..#DISPATCHSECONDS _ " seconds", 1: "The read before the write is older than " _ ..#DISPATCHSECONDS _ " seconds, or carries no time"))
     }
 
-    Do ..Catalogue(checks, case, plan, view, isWrite)
+    Do ##class(Shutter.Operation.Gate).CatalogueRows(checks, case, plan, view.%Get("catalogue"), isWrite)
 
     // Rehearsal: no dry run exists for this receiver, and every decision says what stands in its place.
     Do ..Check(checks, "rehearsal", "pass", "FHIR_NO_DRY_RUN_SUBSTITUTED", $SELECT(isWrite: "No dry run exists for this receiver. Substituted: a complete versioned read, a bounded change, If-Match on the version read, this case's own approval by a person, and a search of the returned history for the marked version, read back by id when the answer named it.", 1: "No dry run exists for this receiver. This plan sends nothing."))
@@ -391,48 +381,16 @@ ClassMethod Identity(checks As %DynamicArray, case As Shutter.Store.Case, fhir A
     Quit ""
 }
 
-/// The conformance rows, as the gate gives them (Shutter.Operation.Gate, lines 51-65 of version 1.4.4).
-ClassMethod Conformance(checks As %DynamicArray, case As Shutter.Store.Case, view As %DynamicObject) [ Private ]
-{
-    Set validation = view.%Get("validation")
-    Set parsed = ##class(Shutter.Util.Json).Bool(validation, "parsed")
-    If (case.FailureKind = "unmappable") || ($EXTRACT(case.OperationKey, 1, 9) = "UNMAPPED^") Do ..Check(checks, "conformance", "block", "UNMAPPABLE", $SELECT(case.NotModelled(): "There is no operation to resend. ", 1: "The message could not be mapped to an operation for the downstream system: ") _ $EXTRACT(##class(Shutter.Store.Case).ShownFailureText(case.FailureText), 1, 300))
-    If (case.FailureKind = "unreadable") && (case.HeldSchema '= "") && (case.SourceNamespace '= "") && $ISOBJECT(validation) && ##class(Shutter.Util.Json).Bool(validation, "schema_known", 1) && '##class(Shutter.Util.Schemas).KnownIn(case.SourceNamespace, case.HeldSchema) {
-        Do ..Check(checks, "conformance", "block", "SCHEMA_UNKNOWN", "The message was held in " _ case.SourceNamespace _ ": its schema category " _ case.HeldSchema _ " is not loaded there, so the production that received it cannot read it; import the schema in that namespace and set the inbound item's category, and the case is released")
-    }
-    If $ISOBJECT(validation) && validation.%IsDefined("schema_known") && '##class(Shutter.Util.Json).Bool(validation, "schema_known", 1) {
-        Do ..Check(checks, "conformance", "block", "SCHEMA_UNKNOWN", "The message's schema category " _ ##class(Shutter.Util.Json).Str(validation, "schema_category", "(none)") _ " is not loaded in this namespace, so it could not be validated" _ ##class(Shutter.Util.SecondParser).Verdict(validation) _ "; " _ ##class(Shutter.Util.Json).Str(validation, "schema_fix", "import the schema and reinvestigate"))
-    } Else {
-        Do ..Check(checks, "conformance", $SELECT(parsed: "pass", 1: "block"), $SELECT(parsed: "PARSED", 1: "PARSE_FAILED"), $SELECT(parsed: "The message parses against its schema", 1: "The message does not parse: " _ ##class(Shutter.Util.Json).Str(validation, "error") _ ##class(Shutter.Util.SecondParser).Verdict(validation)))
-    }
-}
-
-/// The intent rows, as the gate gives them (Shutter.Operation.Gate, lines 70-99 of version 1.4.4) without its two
-/// lines about a receiver the profile does not describe or does not model, and with two of this gate's own for a
+/// The intent rows: the gate's own (Shutter.Operation.Gate's IntentOpening, MergeCancelRows and ExactRow) without its
+/// two lines about a receiver the profile does not describe or does not model, and with two of this gate's own for a
 /// write: only a ward move, and only one whose delivery failed or is uncertain.
 ClassMethod Intent(checks As %DynamicArray, case As Shutter.Store.Case, plan As Shutter.Store.Plan, view As %DynamicObject) [ Private ]
 {
-    Set gate = "Shutter.Operation.Gate"
-    If case.FailureKind = "withheld" Do ..Check(checks, "intent", "block", $SELECT(case.Event = "merge": "MERGE_WITHHELD", 1: "CANCEL_UNSUPPORTED"), $SELECT(case.Event = "merge": "Withheld by the site's policy: a merge goes to the PAS team", 1: "Withheld: the receiver cannot reverse the " _ $CLASSMETHOD(gate, "Reversed", case.Event)))
-    Set okDisp = $LISTFIND($LISTBUILD("resend", "reconcile", "superseded", "more_evidence", "escalate"), plan.Disposition) > 0
-    If 'okDisp {
-        Do ..Check(checks, "intent", "block", "UNKNOWN_DISPOSITION", "Disposition '" _ plan.Disposition _ "' is not one the gate knows")
-    } ElseIf plan.IsWrite() {
-        If (case.FailureKind '= "withheld") && (case.Event = "merge") {
-            Set siteAllows = ##class(Shutter.Store.SiteProfile).MergesAllowed(), receiverTakes = ##class(Shutter.Store.SiteProfile).ReceiverFlag(case.Receiver, "merges")
-            If '(siteAllows && receiverTakes) Do ..Check(checks, "intent", "block", "MERGE_WITHHELD", "A merge is not sent through Shutter: " _ $SELECT('siteAllows: "the site's policy forbids merges (merges: forbidden)", 1: "the receiver's entry does not take merges") _ "; the PAS team decides it")
-        } ElseIf (case.FailureKind '= "withheld") && ($EXTRACT(case.Event, 1, 7) = "cancel_") {
-            If '##class(Shutter.Store.SiteProfile).ReceiverFlag(case.Receiver, "cancels") Do ..Check(checks, "intent", "block", "CANCEL_UNSUPPORTED", "The receiver's entry says it cannot reverse a " _ $CLASSMETHOD(gate, "Reversed", case.Event) _ " (cancels: false)")
-        }
-        If case.Event '= "transfer" Do ..Check(checks, "intent", "block", "FHIR_EVENT_UNSUPPORTED", "Over FHIR Shutter makes one kind of change, a ward move on an existing Encounter; this message's event is '" _ case.Event _ "'")
-        If (case.FailureKind '= "delivery_failed") && (case.FailureKind '= "uncertain_outcome") Do ..Check(checks, "intent", "block", "FHIR_FAILURE_KIND_UNSUPPORTED", "Over FHIR Shutter repairs only a delivery that failed or whose outcome is uncertain; this message's failure is '" _ case.FailureKind _ "', so the receiver or the site already said no to it")
-        Set exact = (plan.OperationKey = case.OperationKey)
-        Set op = view.%Get("operation")
-        Set digestOk = (plan.PayloadDigest = "") || (plan.PayloadDigest = ##class(Shutter.Util.Json).Str(op, "payload_digest"))
-        Do ..Check(checks, "intent", $SELECT(exact && digestOk: "pass", 1: "block"), $SELECT(exact && digestOk: "EXACT_OPERATION", 'exact: "DIFFERENT_OPERATION", 1: "PAYLOAD_CHANGED"), $SELECT('exact || 'digestOk: "The plan's action is not the case's operation unchanged", 1: "The plan makes the one change the failed message asked for; the HL7 message is not sent again"))
-    } Else {
-        Do ..Check(checks, "intent", "pass", "NO_WRITE", "The plan writes nothing to the receiver")
-    }
+    If '##class(Shutter.Operation.Gate).IntentOpening(checks, case, plan, plan.IsWrite()) Quit
+    Do ##class(Shutter.Operation.Gate).MergeCancelRows(checks, case)
+    If case.Event '= "transfer" Do ..Check(checks, "intent", "block", "FHIR_EVENT_UNSUPPORTED", "Over FHIR Shutter makes one kind of change, a ward move on an existing Encounter; this message's event is '" _ case.Event _ "'")
+    If (case.FailureKind '= "delivery_failed") && (case.FailureKind '= "uncertain_outcome") Do ..Check(checks, "intent", "block", "FHIR_FAILURE_KIND_UNSUPPORTED", "Over FHIR Shutter repairs only a delivery that failed or whose outcome is uncertain; this message's failure is '" _ case.FailureKind _ "', so the receiver or the site already said no to it")
+    Do ##class(Shutter.Operation.Gate).ExactRow(checks, case, plan, view.%Get("operation"), "The plan makes the one change the failed message asked for; the HL7 message is not sent again")
 }
 
 /// The ordering row for what the engine shows about the case's message, from what Shutter.Util.EngineCheck's Read
@@ -474,67 +432,19 @@ ClassMethod EngineRow(engine As %DynamicObject) As %DynamicObject
     Quit ..Row("ordering", "pass", code, detail)
 }
 
-/// The ordering rows the feed gives a write: further messages for the patient, a newer message of the encounter still
-/// pending, and a later event. Copied from Shutter.Operation.Gate, lines 132-149 and 155-165 of version 1.4.4, whose
-/// class is not edited; <var>further</var> and <var>pending</var> come from the facts in place of its reads. One
-/// sentence is this gate's own: a pending newer message holds no case of a FHIR receiver until it is delivered, so
-/// its row promises no wait.
+/// The ordering rows the feed gives a write, as the gate gives them (Shutter.Operation.Gate's FurtherRows and
+/// LaterEventRow): further messages for the patient, a newer message of the encounter still pending, and a later event.
+/// <var>further</var> and <var>pending</var> come from the facts in place of the gate's reads. One sentence is this
+/// gate's own: a pending newer message holds no case of a FHIR receiver until it is delivered, so its row promises no
+/// wait.
 ClassMethod Feed(checks As %DynamicArray, stage As %String, case As Shutter.Store.Case, view As %DynamicObject, further, pending, chainKind As %String) [ Private ]
 {
-    If ##class(Shutter.Util.FurtherMessages).Unreadable(further) {
-        Do ..Check(checks, "ordering", "block", "PATIENT_UNREADABLE", "The case's patient identifier could not be read, so what else has happened to this patient is not known; a person decides")
-    } ElseIf ##class(Shutter.Util.FurtherMessages).Released(case, further) {
-        Do ..Check(checks, "ordering", "pass", "FURTHER_MOVEMENT_RELEASED", "Another visit's movement, released by a person who read these rows; this read gives the same ones. " _ ##class(Shutter.Util.FurtherMessages).Describe(case, further))
-    } ElseIf ##class(Shutter.Util.FurtherMessages).Count(further, "stops") > 0 {
-        Do ..Check(checks, "ordering", "block", "FURTHER_MOVEMENT", ##class(Shutter.Util.FurtherMessages).Describe(case, further) _ ". Nothing is sent; a person reads both and decides" _ $SELECT(case.FurtherReleaseJSON '= "": ". An earlier release no longer holds: these aren't the rows that person read", 1: ""))
-    } ElseIf ##class(Shutter.Util.FurtherMessages).Unread(further) '= "" {
-        Do ..Check(checks, "ordering", "block", "FURTHER_NOT_READ", "Further messages for this patient could not all be read: " _ ##class(Shutter.Util.FurtherMessages).Unread(further) _ ". Nothing is sent until they can be, or a person decides")
-    } ElseIf (stage '= "proposal") && (##class(Shutter.Util.FurtherNew).Rows(further, view.%Get("further_messages")).%Size() > 0) {
-        Do ..Check(checks, "ordering", "unknown", "FURTHER_MOVEMENT_NEW", ##class(Shutter.Util.FurtherNew).Describe(case, further, view.%Get("further_messages")) _ ". Nothing is sent on this approval: the evidence is read again and the plan made afresh with it shown, or a person decides")
-    } ElseIf $ISOBJECT(further) {
-        Do ..Check(checks, "ordering", "pass", "NO_FURTHER_MOVEMENT", $SELECT(##class(Shutter.Util.FurtherMessages).Count(further, "shows") > 0: "No further message stops this write for this patient; " _ ##class(Shutter.Util.FurtherMessages).Count(further, "shows") _ " other message(s) on file, shown on the plan", 1: "No further in-patient movement for this patient"))
-    }
+    Do ##class(Shutter.Operation.Gate).FurtherRows(checks, stage, case, further, view.%Get("further_messages"))
     If $ISOBJECT(pending) && (pending.%Size() > 0) Do ..Check(checks, "ordering", "block", "NEWER_MESSAGE_PENDING", "A newer message of this encounter is pending in Shutter: " _ ##class(Shutter.Util.ResendGuard).Describe(pending) _ ". Nothing is sent. Over FHIR the case does not wait for that message: it stops for a person, who can reinvestigate it once the message has been delivered")
 
     // The event's time and the later events, by the matcher's own reading and with the chain kind the evidence used.
-    Set cat = view.%Get("catalogue"), conds = $SELECT($ISOBJECT(cat): cat.%Get("conditions"), 1: "")
-    Set eventTime = $SELECT($ISOBJECT(conds): ##class(Shutter.Util.Json).Str(conds, "event_time"), 1: "")
-    Set timeDoubt = (eventTime '= "") && (eventTime '= "plausible")
-    Set whose = $SELECT(eventTime = "later_event_future": "A later event's time", 1: "The event's time")
-    Set kind = $SELECT($ISOBJECT(conds): ##class(Shutter.Util.Json).Str(conds, "chain"), 1: "")
-    If kind = "" Set kind = chainKind
-    Set superseding = ..Superseding(view, case, kind, .delivered)
-    If timeDoubt {
-        Do ..Check(checks, "ordering", "block", "EVENT_TIME_IMPLAUSIBLE", whose _ " is not plausible (" _ eventTime _ "): " _ $CASE(eventTime, "before_admission": "it precedes the admission", "future": "it lies in the future", "far_from_recorded": "it is more than a day from when the event was recorded", "clock_change": "it lies within an hour of a clock change and came without an offset", "later_event_future": "it lies in the future, so it cannot settle the order", : eventTime) _ "; a person decides")
-    } ElseIf superseding = "" {
-        Do ..Check(checks, "ordering", "pass", "NO_LATER_EVENT", "No later transfer or discharge was applied for this encounter, nor a later cancel, merge or admission")
-    } ElseIf delivered {
-        Do ..Check(checks, "ordering", "block", "SUPERSEDED_BY_LATER_EVENT", "A later event was applied: " _ superseding)
-    } Else {
-        Do ..Check(checks, "ordering", "block", "SUPERSEDED_BY_LATER_EVENT", "A later movement was sent after it: " _ superseding)
-    }
-}
-
-/// A later event that supersedes the case's operation, described, or "". Copied from Shutter.Operation.Gate's
-/// Superseding, lines 510-527 of version 1.4.4, as it reads for a write: a later applied transfer, discharge, cancel,
-/// merge or admission supersedes, and one whose time is not plausible supersedes nothing.
-ClassMethod Superseding(view As %DynamicObject, case As Shutter.Store.Case, chainKind As %String, Output delivered As %Boolean) As %String [ Private ]
-{
-    Set found = "", delivered = 1
-    Set later = ##class(Shutter.Catalogue.Matcher).Later(view, case, chainKind)
-    Set words = $LISTBUILD("transfer", "discharge", "cancelled", "cancel_other", "merge", "admit")
-    For pass = $LISTBUILD("timeline", 1), $LISTBUILD("history", 1), $LISTBUILD("timeline", 0) {
-        Set from = $LIST(pass, 1), want = $LIST(pass, 2)
-        Set iter = later.%GetIterator()
-        While iter.%GetNext(.i, .ev) {
-            Continue:((ev.from '= from) || (ev.delivered '= want) || 'ev.plausible)
-            Continue:'$LISTFIND(words, ev.word)
-            Set found = ##class(Shutter.Catalogue.Matcher).Describe(ev)
-            Set delivered = want
-        }
-        Quit:found'=""
-    }
-    Quit found
+    Do ##class(Shutter.Operation.Gate).Conditions(view, chainKind, .eventTime, .kind)
+    Do ##class(Shutter.Operation.Gate).LaterEventRow(checks, view, case, kind, eventTime)
 }
 
 /// The ordering rows the receiver's own record gives a write: a location entry whose start cannot be ordered against
@@ -688,53 +598,6 @@ ClassMethod Capability(checks As %DynamicArray, fhir As %DynamicObject, proof As
     } Else {
         Do ..Check(checks, "capability", "pass", "FHIR_CAPABLE", "The server offers read, version read, update and instance history with versioned updates, and the conformance run recorded for " _ name _ " " _ version _ " shows it refuses a stale and an unknown If-Match and keeps a version's tags")
     }
-}
-
-/// The catalogue rows: the plan's entry and outcome against the matcher's result in the evidence. Copied from
-/// Shutter.Operation.Gate, lines 351-383 of version 1.4.4.
-ClassMethod Catalogue(checks As %DynamicArray, case As Shutter.Store.Case, plan As Shutter.Store.Plan, view As %DynamicObject, isWrite As %Boolean) [ Private ]
-{
-    Set gate = "Shutter.Operation.Gate"
-    Set cat = view.%Get("catalogue")
-    Set decision = $SELECT($ISOBJECT(cat): ##class(Shutter.Util.Json).Str(cat, "decision"), 1: "")
-    If (decision = "") || (decision = "not_configured") {
-        Do ..Check(checks, "catalogue", "pass", "NOT_CONFIGURED", "No catalogue is installed, or the matcher gave no result")
-    } ElseIf decision = "error" {
-        Do ..Check(checks, "catalogue", "unknown", "MATCHER_ERROR", "The matcher failed on this evidence: " _ $EXTRACT(##class(Shutter.Util.Json).Str(cat, "error"), 1, 200))
-    } ElseIf decision = "new_pattern" {
-        Do ..Check(checks, "catalogue", "block", "NEW_PATTERN", "No catalogue entry matches this evidence: a candidate entry for a reviewer")
-    } ElseIf (plan.CatalogueEntry = "") && isWrite && '((case.Mode = "rules") && (plan.CreatedBy = "rules") && case.ScenarioRecorded) && ($CLASSMETHOD(gate, "EntriesThatStop", cat) '= "") {
-        Do ..Check(checks, "catalogue", "block", "ENTRY_NOT_NAMED_WRITE", "The plan writes and names no catalogue entry, but the evidence matched " _ $CLASSMETHOD(gate, "EntriesThatStop", cat) _ ", which calls for no resend")
-    } ElseIf plan.CatalogueEntry = "" {
-        Do ..Check(checks, "catalogue", "pass", "ENTRY_NOT_NAMED", "The plan names no catalogue entry; the evidence matched " _ $SELECT(##class(Shutter.Util.Json).Str(cat, "entry") '= "": ##class(Shutter.Util.Json).Str(cat, "entry"), 1: "several entries"))
-    } Else {
-        Set matched = "", mi = cat.%Get("matches").%GetIterator()
-        While mi.%GetNext(.i, .m) { If ##class(Shutter.Util.Json).Str(m, "id") = plan.CatalogueEntry Set matched = m Quit }
-        If '$ISOBJECT(matched) {
-            Set exists = $ISOBJECT(##class(Shutter.Catalogue.Entry).ById(plan.CatalogueEntry))
-            Do ..Check(checks, "catalogue", "block", $SELECT(exists: "PATTERN_NOT_MATCHED", 1: "ENTRY_UNKNOWN"), $SELECT(exists: "The plan follows " _ plan.CatalogueEntry _ ", but its pattern does not hold on this evidence", 1: "The plan names " _ plan.CatalogueEntry _ ", which is not in the catalogue"))
-        } ElseIf $EXTRACT(plan.Outcome, 1, 12) = "alternative:" {
-            Set n = +$PIECE(plan.Outcome, ":", 2), alts = matched.%Get("alternatives")
-            Set alt = $SELECT($ISOBJECT(alts) && (n >= 1) && (n <= alts.%Size()): alts.%Get(n - 1), 1: "")
-            Set when = $SELECT($ISOBJECT(alt): ##class(Shutter.Util.Json).Str(alt, "when", "always"), 1: "")
-            Set allowed = $ISOBJECT(alt) && ##class(Shutter.Catalogue.Matcher).WhenHolds(when, cat.%Get("facts"))
-            Do ..Check(checks, "catalogue", $SELECT(allowed: "pass", 1: "block"), $SELECT(allowed: "OUTCOME_ALLOWED", 1: "OUTCOME_NOT_ALLOWED"), $SELECT(allowed: "Entry " _ plan.CatalogueEntry _ " matches and the site allows alternative " _ n, 1: "Entry " _ plan.CatalogueEntry _ "'s alternative " _ n _ " is not allowed for this site (" _ when _ ")"))
-            If allowed Do ..OutcomeConsistency(checks, plan, ##class(Shutter.Util.Json).Str(alt, "outcome"))
-        } Else {
-            Do ..Check(checks, "catalogue", "pass", "ENTRY_MATCHED", "Entry " _ plan.CatalogueEntry _ " matches the evidence; the preferred outcome")
-            Do ..OutcomeConsistency(checks, plan, ##class(Shutter.Util.Json).Str(matched.%Get("preferred"), "outcome"))
-        }
-    }
-}
-
-/// A plan that follows an entry's outcome must act accordingly, or it is blocked with OUTCOME_MISMATCH. Copied from
-/// Shutter.Operation.Gate's OutcomeConsistency, lines 495-501 of version 1.4.4.
-ClassMethod OutcomeConsistency(checks As %DynamicArray, plan As Shutter.Store.Plan, outcome As %String) [ Private ]
-{
-    Set allowed = ##class(Shutter.Operation.Gate).DispositionFor(outcome)
-    If (allowed = "") || (plan.Disposition = allowed) Quit
-    If (allowed = "escalate") && (plan.Disposition = "more_evidence") Quit
-    Do ..Check(checks, "catalogue", "block", "OUTCOME_MISMATCH", "The outcome " _ outcome _ " calls for " _ allowed _ ", but the plan's disposition is " _ plan.Disposition)
 }
 
 /// True when an open location entry of the Encounter view is on that ward.

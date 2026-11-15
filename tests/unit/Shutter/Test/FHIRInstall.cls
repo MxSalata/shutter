@@ -8,6 +8,9 @@ Parameter PRODUCTION = "ShutterTest.FhirInstall";
 
 Parameter RECEIVER = "UT FHIR Install Out";
 
+/// The base of the receiver the sign-in test reads, which no other receiver's reads use.
+Parameter SIGNINBASE = "/ut-fhir-sign-in/r4";
+
 Property HadNode As %Boolean [ InitialExpression = 0 ];
 
 Property Node As %String;
@@ -19,6 +22,9 @@ Property ProfileChanged As %Boolean [ InitialExpression = 0 ];
 Property HadProfileRow As %Boolean [ InitialExpression = 0 ];
 
 Property Made As %String [ MultiDimensional ];
+
+/// The reads of FHIR Receiver a test put on record (Shutter.Msg.FHIRReadResult ids), removed after it.
+Property Reads As %String [ MultiDimensional ];
 
 /// How many of the four Shutter's own production held before the test: none on a site install, all four on a demo install
 /// with S35's receiver. The tests here never change that.
@@ -45,6 +51,13 @@ Method OnAfterOneTest() As %Status
         Do ##class(Shutter.Store.Case).PurgeCase(id)
     }
     Kill i%Made
+    Set id = ""
+    For {
+        Set id = $ORDER(i%Reads(id))
+        Quit:id=""
+        Do ##class(Shutter.Msg.FHIRReadResult).%DeleteId(id)
+    }
+    Kill i%Reads
     Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM Shutter_Store.FHIRProof WHERE Receiver = ?", ..#RECEIVER)
     Quit $$$OK
 }
@@ -286,6 +299,84 @@ Method TestDoctorOnTheDemo()
     Do $$$AssertEquals(d."items_problem", "", "the four items are placed")
     Do $$$AssertEquals(d.%GetTypeOf("endpoints_agree") _ d."endpoints_agree", "boolean1", "and name one server")
     Do $$$AssertEquals(row.%GetTypeOf("credential") _ row.credential, "boolean1", "with a stored credential")
+}
+
+/// The Doctor names a refused sign-in to a FHIR receiver (Shutter.FHIR.Install.SignIn), from the receiver's newest read
+/// on record. As on the demo whose FHIR user had been disabled: every read an HTTP 404 that is not the receiver's answer,
+/// with a status of 0. Also a 401, the receiver's own answers, no answer at all, and no read on record.
+Method TestDoctorSaysWhenTheSignInIsRefused()
+{
+    Set c = "Shutter.FHIR.Install", html = "text/html", fhir = "application/fhir+json"
+    Set statement = {"resourceType": "CapabilityStatement"}.%ToJSON()
+    Set demo = {"observed_at": "2026-11-14T22:40:00Z", "base": (..#SIGNINBASE)}
+    Do demo.%Set("metadata", ..ReadPart("metadata", 404, html, "<html>Not Found</html>"))
+    Do demo.%Set("search", ..ReadPart("search", 404, html, "<html>Not Found</html>"))
+    Do demo.%Set("encounter", ..ReadPart("encounter", 0, "", ""))
+    Do demo.%Set("locations", [(..ReadPart("location", 404, html, ""))])
+    Do $$$AssertEquals($CLASSMETHOD(c, "SignIn", demo, .detail), "refused", "every read a 404 that is not the receiver's answer: refused")
+    Do $$$AssertTrue((detail [ "the metadata read had HTTP 404") && (detail [ "sign-in it refuses") && (detail [ "web application"), "named, with what to check: " _ detail)
+    Set four01 = {"metadata": (..ReadPart("metadata", 200, fhir, statement)), "encounter": (..ReadPart("encounter", 401, fhir, ""))}
+    Do $$$AssertEquals($CLASSMETHOD(c, "SignIn", four01, .detail), "refused", "a 401 is refused, whatever else was read")
+    Do $$$AssertTrue(detail [ "the encounter read had HTTP 401", "and names that read: " _ detail)
+    Set own = {"observed_at": "2026-11-14T23:00:00Z", "base": (..#SIGNINBASE), "metadata": (..ReadPart("metadata", 200, fhir, statement)), "search": (..ReadPart("search", 404, html, ""))}
+    Do $$$AssertEquals($CLASSMETHOD(c, "SignIn", own, .detail), "accepted", "beside the receiver's own answer, a 404 that is not its answer is no refused sign-in")
+    Set silent = {"metadata": (..ReadPart("metadata", 0, "", "")), "search": (..ReadPart("search", 0, "", ""))}
+    Do $$$AssertEquals($CLASSMETHOD(c, "SignIn", silent, .detail), "unknown", "no answer says nothing of the sign-in: " _ detail)
+    Do $$$AssertEquals($CLASSMETHOD(c, "SignIn", "", .detail), "unknown", "nor does a read with no parts")
+
+    // The Doctor's row: the receiver's newest read, by the entry's base without its last slash. An install has one FHIR
+    // receiver, so a demo's own (S35's) is left out of the profile while the test runs.
+    Set entry = ..Entry()
+    Do entry.fhir.%Set("base", ..#SIGNINBASE _ "/")
+    Set receivers = [], li = ##class(Shutter.Store.SiteProfile).Current().receivers.%GetIterator()
+    While li.%GetNext(, .r) { Do:'$ISOBJECT(r)||'$ISOBJECT(r.%Get("fhir")) receivers.%Push(r) }
+    Do receivers.%Push(entry)
+    Do ..ChangeProfile({"receivers": (receivers)})
+    Set row = ..DoctorRow()
+    Do $$$AssertEquals(row."sign_in" _ "|" _ row."sign_in_at", "none|", "no read on record: none")
+    Do ..SaveRead(demo)
+    Set row = ..DoctorRow()
+    Do $$$AssertEquals(row."sign_in" _ "|" _ row."sign_in_at", "refused|2026-11-14T22:40:00Z", "the Doctor names the refused sign-in, with the read's time")
+    Do $$$AssertTrue(row."sign_in_detail" [ "HTTP 404 that is not the receiver's answer", "and what was seen: " _ row."sign_in_detail")
+    Do ..SaveRead(own)
+    Do $$$AssertEquals(..DoctorRow()."sign_in", "accepted", "a newer read the receiver answered")
+    Do ..SaveRead({"observed_at": "2026-11-14T23:10:00Z", "base": "/another-receiver/r4", "metadata": (..ReadPart("metadata", 401, fhir, ""))})
+    Do $$$AssertEquals(..DoctorRow()."sign_in", "accepted", "another receiver's read is not this one's")
+    Set whole = ##class(Shutter.Util.Json).Parse(##class(Shutter.Setup).Doctor(), .sc), found = ""
+    Set iter = whole.fhir.receivers.%GetIterator()
+    While iter.%GetNext(, .one) { Set:one.receiver=..#RECEIVER found = one."sign_in" }
+    Do $$$AssertEquals(found, "accepted", "the Doctor carries it under fhir")
+}
+
+/// A part as FHIR Receiver makes it of an answer with that status, judged by Shutter.FHIR.Trust.
+ClassMethod ReadPart(kind As %String, status As %Integer, contentType As %String, body As %String) As %DynamicObject
+{
+    Set part = ##class(Shutter.FHIR.Wire).Blank()
+    Do part.%Set("raw_status", status, "number")
+    Do part.%Set("http_status", status, "number")
+    Do part.%Set("content_type", contentType, "string")
+    Do part.%Set("body", body, "string")
+    If 'status Do part.%Set("error", "no answer", "string")
+    Do ##class(Shutter.FHIR.Trust).Part(kind, part)
+    Quit part
+}
+
+/// This test's receiver's row of the Doctor's FHIR part, or {}.
+Method DoctorRow() As %DynamicObject
+{
+    Set row = {}
+    Set iter = ##class(Shutter.FHIR.Install).Doctor().receivers.%GetIterator()
+    While iter.%GetNext(, .one) { Set:one.receiver=..#RECEIVER row = one }
+    Quit row
+}
+
+/// A read of FHIR Receiver put on record with those parts, removed after the test.
+Method SaveRead(parts As %DynamicObject)
+{
+    Set read = ##class(Shutter.Msg.FHIRReadResult).%New()
+    Set read.PartsJSON = parts.%ToJSON()
+    Do $$$AssertStatusOK(read.%Save(), "a read of FHIR Receiver is on record")
+    Set i%Reads(read.%Id()) = ""
 }
 
 /// The entry of DESIGN 2.1 under this test's name.

@@ -70,10 +70,7 @@ Method ReadParts(request As Shutter.Msg.FHIRRead, Output error As %String) As %D
     If (purpose '= "evidence") && (purpose '= "dispatch") && (purpose '= "verify") Set error = "unknown purpose of a FHIR read" Quit ""
     Set block = ##class(Shutter.FHIR.Profile).Block(case.Receiver)
     If '$ISOBJECT(block) Set error = "the case's receiver has no fhir block in the site profile" Quit ""
-    Set base = $SELECT(block.%GetTypeOf("base") = "string": block.%Get("base"), 1: "")
-    While $EXTRACT(base, *) = "/" {
-        Set base = $EXTRACT(base, 1, * - 1)
-    }
+    Set base = ##class(Shutter.FHIR.Wire).Base(block)
     // The Location reads: the whole map for evidence, the request's own list otherwise.
     Set refs = []
     If purpose = "evidence" {
@@ -183,27 +180,19 @@ Method ReadParts(request As Shutter.Msg.FHIRRead, Output error As %String) As %D
 }
 
 /// One GET, as a part: the status as it came and as it can be trusted, the ETag and Location verbatim, the content
-/// type, and the body as characters. The body is read as bytes and decoded here: UTF-8 when the content type names it
-/// or names no charset; any other charset, bytes that are not UTF-8 and a body over the limit are not trusted. The
-/// body is read into a bounded stream (<class>Shutter.FHIR.BoundedStream</class>), so a body over the limit, or one
-/// still arriving when the request's time is up, is not the receiver read.
+/// type, and the body as characters. The body is read as bytes and decoded as FHIR Execute's own read decodes it
+/// (<class>Shutter.FHIR.Wire</class>): UTF-8 when the content type names it or names no charset; any other charset,
+/// bytes that are not UTF-8 and a body over the limit are not trusted. The body is read into a bounded stream
+/// (<class>Shutter.FHIR.BoundedStream</class>), so a body over the limit, or one still arriving when the request's
+/// time is up, is not the receiver read.
 Method Get(path As %String, kind As %String, type As %String = "", id As %String = "") As %DynamicObject
 {
     Set left = ..Budget - ($ZHOROLOG - ..Started)
     If left <= 0 Quit ..Unread(..#OUTOFTIME)
-    Set part = ..Blank()
-    Set http = ##class(%Net.HttpRequest).%New()
-    Set http.ReadRawMode = 1
-    // A redirect is never followed: the credential would go with it to another host, whose answer would be read as
-    // the receiver's. A 3xx is carried as it came.
-    Set http.FollowRedirect = 0
-    Do http.SetHeader("Accept", "application/fhir+json")
-    // The body is bounded while it is read: three bytes are the most one character takes, so more bytes than that are
-    // more characters than the limit and end the read, and nothing is taken once the request's time is up.
-    Set limit = 3 * ..MaxBody
-    If limit > 3600000 Set limit = 3600000
-    Set bounded = ##class(Shutter.FHIR.BoundedStream).Within(limit, left)
-    Set http.ResponseStream = bounded
+    Set part = ##class(Shutter.FHIR.Wire).Blank()
+    // The body is bounded while it is read: more bytes than three for each character of the limit end the read, and
+    // nothing is taken once the request's time is up.
+    Set http = ##class(Shutter.FHIR.Wire).Request(##class(Shutter.FHIR.Wire).ByteLimit(..MaxBody), left, .bounded)
     // The adapter waits no longer for this answer than the request has left.
     Set wait = ..Adapter.ResponseTimeout
     If (wait < 0) || (wait > left) Set ..Adapter.ResponseTimeout = $SELECT(left < 1: 1, 1: left \ 1)
@@ -224,42 +213,7 @@ Method Get(path As %String, kind As %String, type As %String = "", id As %String
         Do part.%Set("error", $EXTRACT("no answer" _ $SELECT($$$ISERR(sc): ": " _ $SYSTEM.Status.GetErrorText(sc), 1: ""), 1, 400), "string")
         Quit part
     }
-    Set raw = +answer.StatusCode
-    Do part.%Set("raw_status", raw, "number")
-    Do part.%Set("http_status", raw, "number")
-    Do part.%Set("etag", answer.GetHeader("ETag"), "string")
-    Do part.%Set("location", answer.GetHeader("Location"), "string")
-    Set contentType = answer.GetHeader("Content-Type")
-    If contentType = "" Set contentType = answer.ContentType
-    Do part.%Set("content_type", contentType, "string")
-    Set bytes = "", over = 0
-    If $ISOBJECT(answer.Data) {
-        Do answer.Data.Rewind()
-        While 'answer.Data.AtEnd {
-            Set chunk = answer.Data.Read(32000)
-            If ($LENGTH(bytes) + $LENGTH(chunk)) > limit Set over = 1 Quit
-            Set bytes = bytes _ chunk
-        }
-    } ElseIf $LENGTH(answer.Data) > limit {
-        Set over = 1
-    } Else {
-        Set bytes = answer.Data
-    }
-    Set charset = ..Charset(contentType)
-    If over {
-        Do ##class(Shutter.FHIR.Trust).Fail(part, "the answer's body is over " _ ..MaxBody _ " characters")
-    } ElseIf (charset '= "") && (charset '= "utf-8") && (charset '= "utf8") {
-        Do ##class(Shutter.FHIR.Trust).Fail(part, "the answer's charset is not UTF-8")
-    } Else {
-        Set text = $ZCONVERT(bytes, "I", "UTF8")
-        If $ZCONVERT(text, "O", "UTF8") '= bytes {
-            Do ##class(Shutter.FHIR.Trust).Fail(part, "the answer's body is not UTF-8")
-        } ElseIf $LENGTH(text) > ..MaxBody {
-            Do ##class(Shutter.FHIR.Trust).Fail(part, "the answer's body is over " _ ..MaxBody _ " characters")
-        } Else {
-            Do part.%Set("body", text, "string")
-        }
-    }
+    Do ##class(Shutter.FHIR.Wire).Take(part, answer, ..MaxBody)
     Do ##class(Shutter.FHIR.Trust).Part(kind, part, type, id)
     If (kind = "patient") || (kind = "location") Do ..Keep(part, kind)
     Set ..Carried = ..Carried + $LENGTH(part.body)
@@ -371,29 +325,12 @@ ClassMethod Statement(body As %String) As %DynamicObject
     Quit out
 }
 
-/// A part with nothing read.
-ClassMethod Blank() As %DynamicObject [ Private ]
-{
-    Quit {"http_status": 0, "raw_status": 0, "etag": "", "location": "", "content_type": "", "body": "", "error": ""}
-}
-
 /// A part that was asked for and not read, with the reason.
 ClassMethod Unread(why As %String) As %DynamicObject [ Private ]
 {
-    Set part = ..Blank()
+    Set part = ##class(Shutter.FHIR.Wire).Blank()
     Do part.%Set("error", "not read: " _ why, "string")
     Quit part
-}
-
-/// The charset a content type names, in lower case without quotes; "" when it names none.
-ClassMethod Charset(contentType As %String) As %String
-{
-    Set charset = ""
-    For i = 2:1:$LENGTH(contentType, ";") {
-        Set parameter = $ZSTRIP($PIECE(contentType, ";", i), "<>W")
-        If $ZCONVERT($PIECE(parameter, "=", 1), "L") = "charset" Set charset = $ZCONVERT($TRANSLATE($ZSTRIP($PIECE(parameter, "=", 2, *), "<>W"), """'"), "L")
-    }
-    Quit charset
 }
 
 /// Whether a text is a FHIR id: 1 to 64 of A-Z, a-z, 0-9, "." and "-".
