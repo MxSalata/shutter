@@ -150,11 +150,13 @@ ClassMethod Capture(production As %String, node As %String, installed As %Boolea
 
 /// After the install: what the site changed since the last install learnt from the capture (Learn), what the install
 /// itself owns dropped from the record (owned, from InstallOwns; Forget), the site's values put back on the definition
-/// (Apply), the definition saved and written to the class (so a later compile, a restart through
-/// Shutter.Setup.RestartProduction included, rebuilds the same definition), the running production updated when anything
-/// changed, the record and the definition left kept, and the capture removed. out holds mode ("record", "no record",
-/// "nothing captured" or "no production"), changes, and the lists kept, restored, removed, skipped and warnings, which name
-/// the items, properties and settings but never a setting's value.
+/// (Apply), the definition saved and, when the class does not hold it already, written to the class (so a later compile,
+/// a restart through Shutter.Setup.RestartProduction included, rebuilds the same definition), the running production
+/// updated when anything changed, the record and the definition left kept, and the capture removed. out holds mode
+/// ("record", "no record", "nothing captured" or "no production"), changes, and the lists kept, restored, removed,
+/// skipped and warnings, which name the items, properties and settings but never a setting's value. A class that refuses
+/// the write (a source-control hook, say) or a running production that does not take the update is a warning, not a
+/// failure: the definition is saved, and the next restart or install takes it.
 ClassMethod Keep(production As %String, node As %String, Output out As %DynamicObject, ByRef owned) As %Status
 {
     Set sc = $$$OK, out = {"mode": "", "changes": 0, "kept": [], "restored": [], "removed": [], "skipped": [], "warnings": []}
@@ -179,7 +181,10 @@ ClassMethod Keep(production As %String, node As %String, Output out As %DynamicO
         Do ..Forget(.site, .owned, out)
         Set changes = ..Apply(prod, .site, out)
         If changes Set sc = prod.%Save() Quit:$$$ISERR(sc)
-        Set sc = prod.SaveToClass() Quit:$$$ISERR(sc)
+        If changes || '..Synced(prod) {
+            Set saved = prod.SaveToClass()
+            If $$$ISERR(saved) Do out.warnings.%Push("the definition could not be written to the class " _ production _ " (" _ $SYSTEM.Status.GetErrorText(saved) _ "): compiling it before the next install puts Shutter's values back")
+        }
         Do ..Read(prod, .now)
         Kill @node@("left"), @node@("site")
         Merge @node@("left") = now, @node@("site") = site
@@ -188,13 +193,73 @@ ClassMethod Keep(production As %String, node As %String, Output out As %DynamicO
         Set out.changes = changes
         // An image build starts no production; elsewhere a running production takes the change at once.
         If changes && ($SYSTEM.Util.GetEnviron("SHUTTER_BUILD") '= "1") {
-            Set sc = ##class(Ens.Director).GetProductionStatus(.running, .state) Quit:$$$ISERR(sc)
-            If ($GET(running) = production) && ($GET(state) = 1) Set sc = ##class(Ens.Director).UpdateProduction()
+            Set updated = ##class(Ens.Director).GetProductionStatus(.running, .state)
+            If $$$ISOK(updated) && ($GET(running) = production) && ($GET(state) = 1) Set updated = ##class(Ens.Director).UpdateProduction(30, 0)
+            If $$$ISERR(updated) Do out.warnings.%Push("the running production was not updated (" _ $SYSTEM.Status.GetErrorText(updated) _ "): it takes the site's values when it next starts")
         }
     } Catch ex {
         Set sc = ex.AsStatus()
     }
     Quit sc
+}
+
+/// Whether the class's XData reads as this definition (Read of each alike), so that writing it again would change
+/// nothing. Anything in doubt reads as not.
+ClassMethod Synced(prod As %RegisteredObject) As %Boolean
+{
+    Set same = 0
+    Try {
+        Set x = ##class(%Dictionary.XDataDefinition).%OpenId(prod.Name _ "||ProductionDefinition", 0)
+        Quit:'$ISOBJECT(x)
+        Set reader = ##class(%XML.Reader).%New()
+        Quit:$$$ISERR(reader.OpenStream(x.Data))
+        Do reader.Correlate("Production", "Ens.Config.Production")
+        Quit:'reader.Next(.copy, .sc)
+        Quit:'$ISOBJECT(copy)
+        Do ..Read(copy, .a), ..Read(prod, .b)
+        Set same = (..Flat(.a) = ..Flat(.b))
+    } Catch ex {
+        Set same = 0
+    }
+    Quit same
+}
+
+/// A definition as Read gives it, as one string in a fixed order, for comparing two.
+ClassMethod Flat(ByRef def) As %String [ Private ]
+{
+    Set out = $LISTBUILD("p") _ ..FlatNode(.def, "p"), name = ""
+    For {
+        Set name = $ORDER(def("i", name), 1, class)
+        Quit:name=""
+        Kill one
+        Merge one = def("i", name)
+        Set out = out _ $LISTBUILD("i", name, class) _ ..FlatNode(.one)
+    }
+    Quit out
+}
+
+ClassMethod FlatNode(ByRef node, top As %String = "") As %String [ Private ]
+{
+    Kill n
+    If top '= "" { Merge n = node(top) } Else { Merge n = node }
+    Set out = "", p = ""
+    For {
+        Set p = $ORDER(n("p", p), 1, v)
+        Quit:p=""
+        Set out = out _ $LISTBUILD("p", p, v)
+    }
+    Set t = ""
+    For {
+        Set t = $ORDER(n("s", t))
+        Quit:t=""
+        Set k = ""
+        For {
+            Set k = $ORDER(n("s", t, k), 1, v)
+            Quit:k=""
+            Set out = out _ $LISTBUILD("s", t, k, v)
+        }
+    }
+    Quit out
 }
 
 /// Adds to site, the record of the site's own values, what the capture (before) has and left, the definition the last

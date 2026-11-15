@@ -271,6 +271,25 @@ Method TestInstallOwns()
     Do $$$AssertEquals($GET(o("i", "ADT to Records", "p", "Enabled")), $LISTBUILD("always"), "a site turned demo: the install's")
 }
 
+/// Synced: whether the class holds the definition; Keep writes the class only when it does not.
+Method TestSynced()
+{
+    Set c = ..#CLASS, prod = ..#PRODUCTION, node = ..#NODE
+    Do $$$AssertStatusOK(..WriteClass(..Earlier()), "the production compiles")
+    Do $$$AssertTrue($CLASSMETHOD(c, "Synced", ##class(Ens.Config.Production).%OpenId(prod)), "a class just compiled holds its definition")
+    Do $$$AssertStatusOK(..Switch("UT Gate", 0), "a change saved on the definition alone")
+    Do $$$AssertNotTrue($CLASSMETHOD(c, "Synced", ##class(Ens.Config.Production).%OpenId(prod)), "is not in the class")
+    Do $$$AssertStatusOK($CLASSMETHOD(c, "Keep", prod, node, .out), "Keep with nothing captured")
+    Do $$$AssertEquals(out.changes, 0, "changes nothing")
+    Do $$$AssertTrue($CLASSMETHOD(c, "Synced", ##class(Ens.Config.Production).%OpenId(prod)), "but writes the definition to the class")
+    Set was = ##class(%Dictionary.ClassDefinition).%OpenId(prod, 0).TimeChanged
+    Hang 1.1
+    Do $$$AssertStatusOK($CLASSMETHOD(c, "Keep", prod, node, .out), "Keep again")
+    Do $$$AssertEquals(##class(%Dictionary.ClassDefinition).%OpenId(prod, 0).TimeChanged, was, "leaves a class that holds the definition alone")
+    Do $$$AssertStatusOK($SYSTEM.OBJ.Compile(prod, "ck-d"), "a compile")
+    Do $$$AssertEquals(..Prop("UT Gate", "Enabled"), 0, "rebuilds the definition the class holds")
+}
+
 /// Read's shape.
 Method TestRead()
 {
