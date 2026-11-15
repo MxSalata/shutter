@@ -14,8 +14,10 @@
 ///   items off on a site's install, the Second Parser following its jar, the receivers' and the FHIR items put back), so
 ///   new items, new settings and changed defaults arrive and the site's values stand.
 /// With no record of the last install (one over 1.4.7 or earlier), the capture is compared with the definition this
-/// install made: every value that differs is the site's, but the descriptions (DESCRIPTIVE), nothing counts as taken out,
-/// and an added item of a Shutter class is left out, since it may be one Shutter no longer ships.
+/// install made: a value that differs is the site's, but the descriptions (DESCRIPTIVE) and a value the earlier release
+/// shipped, which the module's capture reads from the class as it was still compiled (Shipped); nothing counts as taken
+/// out; and an added item is the site's unless the earlier release shipped it (or, with no compiled class to read, a run
+/// by hand after the class was replaced, unless its class is a Shutter one, since it may be one Shutter no longer ships).
 /// Shape B (Shutter's items in a site's own production) needs none of this: that production's class is the site's.
 /// The class uses only the system's classes, so the module can load it before its other classes.
 Class Shutter.Util.SiteItems [ Abstract ]
@@ -77,8 +79,9 @@ ClassMethod ShapeB() As %Boolean [ CodeMode = expression ]
 $GET(^Shutter.Config("production")) '= ""
 }
 
-/// Takes the capture into @node@("before"): the production's definition (Read), and as the node's value
-/// $LISTBUILD(seconds, UTC time, job, found). A capture no install has used, younger than PENDINGSECONDS, is kept as it
+/// Takes the capture into @node@("before"): the production's definition (Read), with no record of the last install
+/// the compiled class's definition under "shipped" (Shipped), and as the node's value $LISTBUILD(seconds, UTC time, job,
+/// found). A capture no install has used, younger than PENDINGSECONDS, is kept as it
 /// is. On an instance no install has run on (installed 0) nothing is read: what is there is the shipped class freshly
 /// compiled, not a site's. Returns "captured", "pending" (one kept), "no definition" or "first install".
 ClassMethod Capture(production As %String, node As %String, installed As %Boolean) As %String
@@ -90,6 +93,9 @@ ClassMethod Capture(production As %String, node As %String, installed As %Boolea
     If installed {
         Set found = ..Read(production, .def)
         Merge:found @node@("before") = def
+        // With no record of the last install, the definition the compiled class holds: before IPM reloads the classes, the
+        // earlier release's as shipped, which tells its values from the site's (Learn).
+        If found && '($DATA(@node@("left")) \ 10) && ..Shipped(production, .old) Merge @node@("before", "shipped") = old
     }
     Set @node@("before") = $LISTBUILD(..Seconds(), ..Stamp(), $JOB, found)
     Quit $SELECT(found: "captured", installed: "no definition", 1: "first install")
@@ -144,12 +150,16 @@ ClassMethod Keep(production As %String, node As %String, Output out As %DynamicO
 /// Adds to site, the record of the site's own values, what the capture (before) has and left, the definition the last
 /// install left (record 1) or this install made (record 0), has not: a property or setting changed or added, a setting
 /// taken out (record 1 only), an item added (whole, with "added" 1). An item the site added and then deleted leaves the
-/// record. With no record, the descriptions are not learnt, and an added item of a Shutter class is left out (skipped).
+/// record. With no record, the descriptions are not learnt, nor a value the compiled class's definition (before("shipped"),
+/// the earlier release's when the module's capture took it) also has; an item that definition has is not taken to be the
+/// site's, and with none, nor is an item of a Shutter class (skipped).
 ClassMethod Learn(ByRef before, ByRef left, record As %Boolean, ByRef site, out As %DynamicObject)
 {
-    Kill s, b, d
+    Set shipped = 'record && ($DATA(before("shipped")) \ 10)
+    Kill s, b, d, o
     Merge s = before("p"), b = left("p"), d = site("p")
-    Do ..LearnNode(.s, .b, ..#PRODUCTIONPROPERTIES, record, .d)
+    Merge:'record o = before("shipped", "p")
+    Do ..LearnNode(.s, .b, ..#PRODUCTIONPROPERTIES, record, .d, .o)
     Kill site("p")
     Merge site("p") = d
     Set name = ""
@@ -165,14 +175,19 @@ ClassMethod Learn(ByRef before, ByRef left, record As %Boolean, ByRef site, out 
                 Set site("i", name, "added") = 1
                 Continue
             }
-            Kill s, b, d
+            Kill s, b, d, o
             Merge s = before("i", name), b = left("i", name), d = site("i", name)
-            Do ..LearnNode(.s, .b, ..#ITEMPROPERTIES, record, .d)
+            Merge:'record o = before("shipped", "i", name)
+            Do ..LearnNode(.s, .b, ..#ITEMPROPERTIES, record, .d, .o)
             Kill site("i", name)
             If $DATA(d) > 1 Merge site("i", name) = d Set site("i", name) = class
             Continue
         }
-        If 'record && ($EXTRACT(class, 1, 8) = "Shutter.") {
+        If shipped && $DATA(before("shipped", "i", name)) {
+            Do out.skipped.%Push(name _ ": not put back: the earlier release shipped it, and this one does not")
+            Continue
+        }
+        If 'record && 'shipped && ($EXTRACT(class, 1, 8) = "Shutter.") {
             Do out.skipped.%Push(name _ ": not put back: with no record of the earlier install, an item of a Shutter class may be one Shutter no longer ships")
             Continue
         }
@@ -189,14 +204,16 @@ ClassMethod Learn(ByRef before, ByRef left, record As %Boolean, ByRef site, out 
 }
 
 /// One node (the production's, or an item's): s the capture's, b the definition left, d the record, each with ("p",
-/// property) and ("s", target, name); the record also has ("x", target, name) for a setting taken out.
-ClassMethod LearnNode(ByRef s, ByRef b, list As %String, record As %Boolean, ByRef d) [ Private ]
+/// property) and ("s", target, name); the record also has ("x", target, name) for a setting taken out. o, with no record,
+/// is the compiled class's node: a value it has too is the earlier release's, not the site's.
+ClassMethod LearnNode(ByRef s, ByRef b, list As %String, record As %Boolean, ByRef d, ByRef o) [ Private ]
 {
     For k = 1:1:$LENGTH(list, ",") {
         Set p = $PIECE(list, ",", k)
         Continue:'($DATA(s("p", p), v) # 2)
         Continue:'record && $LISTFIND($LISTFROMSTRING(..#DESCRIPTIVE), p)
         If ($DATA(b("p", p), was) # 2) && (was = v) Continue
+        If 'record && ($DATA(o("p", p), was) # 2) && (was = v) Continue
         Set d("p", p) = v
     }
     Set t = ""
@@ -208,6 +225,7 @@ ClassMethod LearnNode(ByRef s, ByRef b, list As %String, record As %Boolean, ByR
             Set n = $ORDER(s("s", t, n), 1, v)
             Quit:n=""
             If ($DATA(b("s", t, n), was) # 2) && (was = v) Continue
+            If 'record && ($DATA(o("s", t, n), was) # 2) && (was = v) Continue
             Set d("s", t, n) = v
             Kill d("x", t, n)
         }
@@ -333,6 +351,17 @@ ClassMethod ApplyNode(obj As %RegisteredObject, ByRef d, list As %String, label 
         Do:$ISOBJECT(out) out.removed.%Push(label _ ": " _ what)
     }
     Quit changes
+}
+
+/// The definition the production's compiled class holds (its XData as last compiled), read as Read reads one; 0 when
+/// the class has none.
+ClassMethod Shipped(production As %String, Output def) As %Boolean
+{
+    Kill def
+    Set sc = ##class(Ens.Util.XML.Reader).ObjectFromXData(.obj, production, "ProductionDefinition", "Ens.Config.Production")
+    Quit:$$$ISERR(sc) 0
+    Quit:'$ISOBJECT($GET(obj)) 0
+    Quit ..Read(obj, .def)
 }
 
 /// A production's definition (an Ens.Config.Production, or the name of a saved one) as an array: def("p", "p", property)

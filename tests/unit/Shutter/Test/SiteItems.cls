@@ -91,25 +91,46 @@ Method TestUpgradeKeepsTheSitesValues()
     Do $$$AssertEquals(..Prop("UT Gate", "Enabled"), 0, "while its other values stand")
 }
 
-/// An upgrade over an install that left no record (1.4.7 and earlier): every value that differs is the site's, but the
-/// descriptions; nothing counts as taken out; an added item of a Shutter class is left out.
+/// An upgrade over an install that left no record (1.4.7 and earlier). The module's capture, taken before the class is
+/// replaced, reads the earlier release's definition from the class as compiled: a value that differs from the new
+/// definition is the site's unless that release shipped it; the descriptions are the release's; nothing counts as taken
+/// out; an item the earlier release did not ship is the site's.
 Method TestUpgradeWithNoRecord()
 {
     Set c = ..#CLASS, prod = ..#PRODUCTION, node = ..#NODE
     Do $$$AssertStatusOK(..WriteClass(..Earlier()), "the earlier release's production compiles")
     Do $$$AssertStatusOK(..SiteEdits(), "the site's own edits save")
     Do $$$AssertEquals($CLASSMETHOD(c, "Capture", prod, node, 1), "captured", "the upgrade captures")
+    Do $$$AssertEquals($GET(@node@("before", "shipped", "i", "UT Gate", "s", "Host", "FailureTimeout")), 0, "with the earlier release's definition, from its compiled class")
     Do $$$AssertStatusOK(..WriteClass(..Newer()), "the newer release's class compiles")
     Do $$$AssertStatusOK($CLASSMETHOD(c, "Keep", prod, node, .out), "the upgrade keeps")
     Do $$$AssertEquals(out.mode, "no record", "with no record of the earlier install")
     Do ..SiteKept("with no record", 0)
     Do ..NewArrived("with no record")
     Do $$$AssertEquals(..Prop("UT Gate", "Comment"), "The gate, newer text", "the release's own description stands")
-    Do $$$AssertEquals(..Value("UT Gate", "Host", "FailureTimeout"), 0, "a value that differs is taken to be the site's, a change of the release's included")
+    Do $$$AssertEquals(..Value("UT Gate", "Host", "FailureTimeout"), 30, "the release's changed value arrives: the earlier one was shipped, not set")
     Do $$$AssertEquals(..Value("UT Watch", "Host", "AlertOnError"), 1, "nothing counts as taken out")
+    Do $$$AssertEquals(..Count("UT Site Own"), 1, "an item the earlier release did not ship is the site's, of a Shutter class too")
+    Do $$$AssertEquals($DATA(@node@("left")) \ 10, 1, "the install leaves a record for the next one")
+}
+
+/// The same with no compiled class to read: the install run by hand after the class was replaced (a rebuilt container).
+/// Every value that differs is then the site's, but the descriptions, and an added item of a Shutter class is left out.
+Method TestUpgradeWithNoRecordByHand()
+{
+    Set c = ..#CLASS, prod = ..#PRODUCTION, node = ..#NODE
+    Do $$$AssertStatusOK(..WriteClass(..Earlier()), "the earlier release's production compiles")
+    Do $$$AssertStatusOK(..SiteEdits(), "the site's own edits save")
+    Do $$$AssertEquals($CLASSMETHOD(c, "Capture", prod, node, 1), "captured", "the install captures")
+    Kill @node@("before", "shipped")
+    Do $$$AssertStatusOK(..WriteClass(..Newer()), "the newer release's class compiles")
+    Do $$$AssertStatusOK($CLASSMETHOD(c, "Keep", prod, node, .out), "the install keeps")
+    Do ..SiteKept("by hand with no record", 0)
+    Do ..NewArrived("by hand with no record")
+    Do $$$AssertEquals(..Value("UT Gate", "Host", "FailureTimeout"), 0, "a value that differs is taken to be the site's, a change of the release's included")
+    Do $$$AssertEquals(..Prop("UT Gate", "Comment"), "The gate, newer text", "the release's own description stands")
     Do $$$AssertEquals(..Count("UT Site Own"), 0, "the added item of a Shutter class is left out")
     Do $$$AssertTrue($CLASSMETHOD(c, "Account", out) [ "UT Site Own: not put back", "and the account says so")
-    Do $$$AssertEquals($DATA(@node@("left")) \ 10, 1, "the install leaves a record for the next one")
 }
 
 /// When a capture is taken, kept or skipped.
