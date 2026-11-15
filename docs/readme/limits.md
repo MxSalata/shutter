@@ -2,7 +2,7 @@
 
 For a clinical safety officer: [the hazards, data flow, threats and what a site still owes](https://github.com/MxSalata/shutter/blob/main/docs/SAFETY.md).
 
-The README's "Limits, plainly" states eight; this page has every limit, in full, with its effect, what a site can do about it, and its status. Scenarios: [scenarios.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/scenarios.md); what each row of "What can go wrong when you resend" doesn't cover: [edge-cases.md](https://github.com/MxSalata/shutter/blob/main/docs/edge-cases.md); limits of a running instance: [running.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/running.md#other-limits).
+The README's "Limits, plainly" states nine; this page has every limit, in full, with its effect, what a site can do about it, and its status. Scenarios: [scenarios.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/scenarios.md); what each row of "What can go wrong when you resend" doesn't cover: [edge-cases.md](https://github.com/MxSalata/shutter/blob/main/docs/edge-cases.md); limits of a running instance: [running.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/running.md#other-limits).
 
 **Status:** *By design*, Shutter does this on purpose; *Open*, not handled yet; *Measured*, the effect was measured, as the row says; *Untested*, nobody has tried it.
 
