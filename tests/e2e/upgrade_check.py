@@ -8,7 +8,8 @@ uninstall (the module's Clean phase) never runs.
 DIR is the earlier release's tree (git archive v1.0.0, say). The shapes:
 
     site  A hospital namespace runs its own production and is onboarded; Shutter, with the demo off, has its own namespace.
-          A case is opened through the onboarding's marked test failure and a person saves the site profile.
+          A case is opened through the onboarding's marked test failure and a person saves the site profile, and the site
+          sets Receiver Watch's pool size and switches Failure Census off; both must stand after the upgrade (1.4.9).
     demo  The demo in USER, as a plain load does; a scenario opens a case and a person saves the site profile.
     into  Shutter's items inside a hospital's own running production (-Ddemo=0 -Dproduction=), in the hospital's namespace;
           a case is opened in the store and a person saves the site profile. The site's own items must come through the
@@ -33,6 +34,8 @@ HOME = "/home/irisowner"
 PKG = f"{HOME}/pkg"
 # The names of the items an install into a site's production adds (Setup.cls, INSTALLITEMS, in 1.0.0 and since).
 INSTALL_ITEMS = ["HL7 Index", "Case Releaser", "Receiver Watch", "Engine Resend", "Escalation Mail", "Case Workflow", "Case Review", "Case Question", "Incident Workflow", "Evidence Collector", "Agent Conformance", "Agent Encounter", "Agent Impact", "Agent Coordinator", "Agent Board", "Gate", "Shutter Approvers", "Shutter API", "Verifier", "Case Intake", "Case Intake Store", "Second Parser"]
+# The demo's items of Shutter.Production, which a site's install switches off (Setup.cls, DEMOITEMS).
+DEMO_ITEMS = ["ADT In", "ADT to Downstream", "Downstream Out", "ADT to Records", "Records Out", "Scenario Player"]
 PW = "Upgrade-2026x"
 
 ap = argparse.ArgumentParser()
@@ -163,6 +166,32 @@ def site_items(ns, production):
     return sorted(re.findall(r"<<<(.*?)>>>", out))
 
 
+def item_prop(ns, production, name, prop):
+    """One property of an item in a production's definition, or "(no item)"."""
+    out = session(ns, f'Set p=##class(Ens.Config.Production).%OpenId("{production}",0), v="(no item)" For i=1:1:p.Items.Count() {{ If p.Items.GetAt(i).Name="{name}" Set v=$PROPERTY(p.Items.GetAt(i),"{prop}") }} Write !,"<<<",v,">>>",!')
+    m = re.findall(r"<<<(.*?)>>>", out)
+    return m[-1] if m else out[-400:]
+
+
+def site_tunes(ns):
+    """The site's own choices on Shutter.Production's items: Receiver Watch's pool size 3, saved on the definition, and
+    Failure Census switched off, saved as the Production Configuration page saves (Ens.Production.ApplySettings)."""
+    out = session(ns, 'Set p=##class(Ens.Config.Production).%OpenId("Shutter.Production") For i=1:1:p.Items.Count() { Set it=p.Items.GetAt(i) Set:it.Name="Receiver Watch" it.PoolSize=3 }\n'
+                      'Write !,"[pool] ",p.%Save(),! Kill p, it Set set("Failure Census","Item","Enabled")=0\n'
+                      'Write !,"[apply] ",##class(Ens.Production).ApplySettings("Shutter.Production",.set),!')
+    check("the site sets Receiver Watch's pool size 3 and switches Failure Census off", "[pool] 1" in out and "[apply] 1" in out, out[-500:])
+
+
+def site_tunes_kept(ns, out):
+    """After the upgrade: the site's choices stand (1.4.9), and the demo's items stay off on a site."""
+    check("Receiver Watch's pool size is still the site's 3", item_prop(ns, "Shutter.Production", "Receiver Watch", "PoolSize") == "3", item_prop(ns, "Shutter.Production", "Receiver Watch", "PoolSize"))
+    check("Failure Census is still switched off", item_prop(ns, "Shutter.Production", "Failure Census", "Enabled") == "0", item_prop(ns, "Shutter.Production", "Failure Census", "Enabled"))
+    demo = {n: item_prop(ns, "Shutter.Production", n, "Enabled") for n in DEMO_ITEMS}
+    check("the demo's six items are still off", all(v == "0" for v in demo.values()), demo)
+    said = [x.strip() for x in out.splitlines() if "Shutter: on Shutter.Production" in x]
+    check("the load says what it put back", said and "Receiver Watch: PoolSize 3" in said[-1] and "Failure Census: Enabled 0" in said[-1], said)
+
+
 def save_profile(ns):
     """A person saves the site profile: the current one, stored again under a person's source."""
     out = session(ns, 'Set row=##class(Shutter.Store.SiteProfile).Row() Set sc=##class(Shutter.Store.SiteProfile).Store(row.Json,"saved by a person","siteapprover","",.v) Write !,"<<<",sc,"|",v,">>>",!')
@@ -241,8 +270,10 @@ Set sc=$SYSTEM.OBJ.Delete("Shutter.Setup","-d")''')
     gate_before = jobs("SHUTTER").get("Gate")
     before_onboard = value("SHUTTER", '$GET(^Shutter.Config("onboard","PATHOLOGY"))')
     print("before:", before_cases, before_profile, before_status, before_onboard, site_jobs, flush=True)
+    site_tunes("SHUTTER")
 
-    the_upgrade("SHUTTER", " -Ddemo=0", old_version)
+    out = the_upgrade("SHUTTER", " -Ddemo=0", old_version)
+    site_tunes_kept("SHUTTER", out)
     check("the case is still there", case_line("SHUTTER") == before_cases, (before_cases, case_line("SHUTTER")))
     same_case("SHUTTER", before_first)
     receiver_watch("SHUTTER", "Shutter.Production")
