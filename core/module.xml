@@ -65,6 +65,15 @@
       <!-- zpm "uninstall": before the classes go, everything the install and the onboarding added goes too, with no production
            of the site's stopped (Shutter.Util.Uninstall). A failed run stops the uninstall with the classes still there. -->
       <Invoke Class="Shutter.Util.Uninstall" Method="ModuleStatus" Phase="Clean" When="Before" CheckStatus="true"/>
+      <!-- Before IPM reloads the classes: what a site set on Shutter.Production's items (pool sizes, enabled flags,
+           settings, items it added) is noted while the definition is still the site's, since compiling the reloaded class
+           rebuilds it from the package; the install puts it back at its end (1.4.9). Shutter.Util.SiteItems is loaded
+           first for it (it uses only the system's classes), and its capture never stops a load. -->
+      <Invoke Class="%SYSTEM.OBJ" Method="Load" Phase="Reload" When="Before">
+        <Arg>${root}../src/Shutter/Util/SiteItems.cls</Arg>
+        <Arg>ck-d/multicompile=0</Arg>
+      </Invoke>
+      <Invoke Class="Shutter.Util.SiteItems" Method="CaptureStatus" Phase="Reload" When="Before"/>
       <!-- Folders, security, the library, prices, recorded runs, the web applications and the production.
            InstallStatus returns a %Status and the Invoke checks it, so a failed install stops the load. -->
       <Invoke Class="Shutter.Setup" Method="InstallStatus" CheckStatus="true">

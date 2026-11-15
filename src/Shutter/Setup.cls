@@ -119,6 +119,10 @@ ClassMethod InstallStatus(root As %String = "", demo As %Boolean = "", productio
     Set sc = $$$OK
     Try {
         Set ns = $NAMESPACE
+        // What the site set on Shutter.Production's items, before anything here changes the definition, and while the
+        // version is still the earlier install's (Shutter.Util.SiteItems). A load took it before IPM reloaded the classes;
+        // run by hand (a rebuilt container), the install takes it now. KeepStatus puts it back at the end.
+        Do ##class(Shutter.Util.SiteItems).CaptureStatus()
         // SQL hands an empty argument to a procedure as $CHAR(0). An empty demo keeps the stored flag: an upgrade without
         // -Ddemo leaves a site a site and a demo a demo (1.4.8); only a first install takes the demo.
         If root = $CHAR(0) Set root = ""
@@ -193,6 +197,9 @@ ClassMethod InstallStatus(root As %String = "", demo As %Boolean = "", productio
         Set sc = ##class(Shutter.FHIR.Install).RestoreItems() Quit:$$$ISERR(sc)
         // Scenario S35: the demo's FHIR receiver entry, its four items and the proof of an in-process conformance run.
         If demo && ##class(%Dictionary.CompiledClass).%ExistsId("FHIRFacade.Kit") Set sc = ##class(Shutter.FHIR.Install).Demo(root _ "knowledge/site/profile.json") Quit:$$$ISERR(sc)
+        // The compile rewrote the definition from the package: the pool sizes, enabled flags, settings and items the site
+        // set go back on it, after the install's own changes above; new items and settings keep the package's values (1.4.9).
+        Set sc = ##class(Shutter.Util.SiteItems).KeepStatus() Quit:$$$ISERR(sc)
         If demo Set sc = ..InstallDemoHospital(ns) Quit:$$$ISERR(sc)
     } Catch ex {
         Set sc = ex.AsStatus()
@@ -1619,11 +1626,14 @@ ClassMethod StartProduction() As %Status
     Quit sc
 }
 
+/// The demo's items of Shutter.Production, which a site's install switches off (DisableDemoItems).
+Parameter DEMOITEMS = "ADT In,ADT to Downstream,Downstream Out,ADT to Records,Records Out,Scenario Player";
+
 /// On a site install (demo = 0): the demo's items of Shutter.Production are switched off, so the production runs
 /// with no feed of its own: "ADT In", "ADT to Downstream", "Downstream Out", "ADT to Records", "Records Out" and
-/// "Scenario Player". A site adds its own feed items or uses the intake route. The definition is saved, and a running
-/// production takes the change at once. A demo install leaves the items as the class defines them; a reinstall compiles
-/// the class afresh (the items enabled again) and switches them off again.
+/// "Scenario Player" (DEMOITEMS). A site adds its own feed items or uses the intake route. The definition is saved, and a
+/// running production takes the change at once. A demo install leaves the items as the class defines them; a reinstall
+/// compiles the class afresh (the items enabled again) and switches them off again.
 ClassMethod DisableDemoItems() As %Status
 {
     Set sc = $$$OK
@@ -1631,7 +1641,7 @@ ClassMethod DisableDemoItems() As %Status
     Try {
         Set prod = ##class(Ens.Config.Production).%OpenId("Shutter.Production", , .sc)
         If '$ISOBJECT(prod) Quit
-        Set demoItems = $LISTBUILD("ADT In", "ADT to Downstream", "Downstream Out", "ADT to Records", "Records Out", "Scenario Player"), changed = 0
+        Set demoItems = $LISTFROMSTRING(..#DEMOITEMS), changed = 0
         For i = 1:1:prod.Items.Count() {
             Set item = prod.Items.GetAt(i)
             If $LISTFIND(demoItems, item.Name) && item.Enabled {
