@@ -69,7 +69,7 @@ The steps: create the `SHUTTER` namespace and load IPM in it ([INSTALL 3.1](../I
 
 **`-Ddemo=0` is not optional.** A first install without it is the demo: demo users with a documented password, the demo receiver, the scenario player and a namespace-wide message purge. With `-Ddemo=0` there are no demo users, no demo receiver and no credential of Shutter's (on IRIS for Health the platform's own web applications and `HS_Services` credential in a new namespace are not Shutter's, [INSTALL 3.1](../INSTALL.md#3-shape-a-shutter-in-its-own-namespace)); the feed, records and scenario items are switched off; and any `automatic` in the policy it starts from is turned to `approval`, so every write waits for a person until a profile you save says otherwise. A load in a namespace running another production is refused. The registry's published version can lag the repository: for an exact version, load a clone of that tag by path.
 
-**A non-demo install makes no users.** An operator holds `Shutter_Operator`. An approver holds `Shutter_Approver` and must also be a member of the Workflow role "Shutter Approvers", or an approval answers 403. These are the calls the installer itself uses for the demo's approver, with a user of your own:
+**A non-demo install makes no users.** An operator holds `Shutter_Operator`. An approver holds `Shutter_Approver` and must also be a member of the Workflow role "Shutter Approvers", or its approval is refused with 403 (the last check an approval meets, below). These are the calls the installer itself uses for the demo's approver, with a user of your own:
 
 ```objectscript
 Set $NAMESPACE="%SYS"
@@ -79,7 +79,7 @@ Set sc=##class(EnsLib.Workflow.UserDefinition).CreateUser("appr1","An approver")
 Set sc=##class(EnsLib.Workflow.RoleDefinition).AddUserToRole("Shutter Approvers","appr1",1,"Approver") Write $SYSTEM.Status.GetErrorText(sc),!
 ```
 
-Each line prints nothing when it worked. Then sign in as each role at `/shutter/index.html` and check that the operator can't approve. Leave the provider key out for now ([section 8](#8-the-budget-and-the-model-provider)).
+Replace `<password>` with the user's own password. Each `Set sc` line prints nothing when it worked. An operator is the same first call with `Shutter_Operator` and no Workflow lines; [INSTALL 9.3](../INSTALL.md#9-onboarding-several-namespaces) makes the forwarder's user, and stops its password expiring. An approver outside the Workflow role is refused 403 only when the approval gets that far: the case must be awaiting approval (otherwise 409 `wrong_state`, because the state check comes first), the request must carry the plan's current digest and the case's current version (otherwise 409 `stale_version`), and recovery must be enabled (in shadow mode or stopped, an approval answers 409 `recovery_shadow` or `recovery_stopped` first). A new install is in shadow mode until you enable recovery, so check the Workflow role in the test environment after that ([INSTALL 5](../INSTALL.md#5-the-steps-for-the-integration-team), steps 8 and 9). Then sign in as each role at `/shutter/index.html` and check that the operator can't approve. Leave the provider key out for now ([section 8](#8-the-budget-and-the-model-provider)).
 
 ## 3. Shadow mode first
 

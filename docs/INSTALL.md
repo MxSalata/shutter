@@ -36,7 +36,7 @@ the case page (`POST /api/shutter/cases/{id}/escalations` through the API); unti
   `Downstream Out`, `ADT to Records`, `Records Out` and `Scenario Player`) are present but switched off in shape A (the
   installer disables them in `Shutter.Production`), and not added at all in shape B (`InstallInto`). A namespace made on IRIS for
   Health also gets a few things of the platform's own (3.1).
-- **A new install starts in shadow mode.** Shutter investigates and records what it would propose, and sends no rehearsal, recovery write, resend preview or outage resend, and no escalation or reminder email (unless the profile says `"notifications": {"shadow_delivery": "enabled"}`, which lets both go while recovery stays off); the hospital's ordinary feed goes on as before. An approver enables recovery by saving `"recovery": {"mode": "enabled"}` in the site profile, as a step of its own (section 5, step 9): the save releases no plan made before it and sends no escalation email held before it. Settings has "Stop Shutter recovery", for any operator or approver, and the shadow report (`docs/CONTRACTS.md`, 18).
+- **A new site install (`-Ddemo=0`) starts in shadow mode; the demo seeds recovery as enabled (`docs/CONTRACTS.md`, 18), so a demo install is not in shadow.** In shadow mode Shutter investigates and records what it would propose, and sends no rehearsal, recovery write, resend preview or outage resend, and no escalation or reminder email (unless the profile says `"notifications": {"shadow_delivery": "enabled"}`, which lets both go while recovery stays off); the hospital's ordinary feed goes on as before. An approver enables recovery by saving `"recovery": {"mode": "enabled"}` in the site profile, as a step of its own (section 5, step 9): the save releases no plan made before it and sends no escalation email held before it. Settings has "Stop Shutter recovery", for any operator or approver, and the shadow report (`docs/CONTRACTS.md`, 18).
 - **A case at a receiver with no API is escalated, never resent.** A case resends only to a receiver whose site profile
   entry describes its API (state, receipt, capabilities and operations paths), and that write is verified in the
   receiver's receipt and history. A ward system that takes HL7 over TCP and keeps no receipts is investigated and
@@ -257,6 +257,14 @@ zpm "install iris-shutter -Ddemo=0"
 
 `repo -reset-defaults` prints IPM's own warning about `-password`; the command passes none and the public registry needs none. An install from the registry or by path builds no Second Parser jar (section 2).
 
+**Playing the scenarios from a terminal, on a demo installed by hand.** The web app plays them with nothing more to do. `tests/e2e/scenario_check.py` also reads the demo receiver as `_SYSTEM` / `SYS`, and on a stock image `_SYSTEM` still has its password-change flag set, so that read is refused (HTTP 401) and each scenario reports `DIFFERS ... downstream None None: the downstream system holds None None, ...`, for example `expected admitted WARD-B` for S2, though the cases themselves ran as designed. The Docker image (`iris.script`) and `scripts/stock-install-check.sh` clear the flag; a load by hand does not. On a demo instance only (the call clears the flag for every user), run in `%SYS`:
+
+```
+Do ##class(Security.Users).UnExpireUserPasswords("*")
+```
+
+Then `python3 tests/e2e/scenario_check.py --url http://localhost:52773 --approve S2 S3 S8` plays three scenarios as the demo's `operator` and `approver` (password `shutter`, or `SHUTTER_PASSWORD`), so it needs the demo: a `-Ddemo=0` install has neither user.
+
 **3.2 The hook.** A failure reaches Shutter through `POST /api/shutter/intake`. The caller signs in with HTTP Basic
 authentication as a user holding `Shutter_Forwarder` (the resource `Shutter_Intake`), sends the header
 `X-Requested-With: Shutter`, and the body:
@@ -370,11 +378,15 @@ Shape A:
 1. On the integration server, create the SHUTTER namespace with its data database on backed-up storage.
 2. On an AI Hub build, `zpm "install iris-shutter"` with `-Ddemo=0`, or `zpm "load <repository> -Ddemo=0"` by path (the provider
    key in the environment); on a plain 2026.2, `zpm "load <repository>/core -Ddemo=0"`. IPM goes in that namespace first (3.1).
-   Check `/api/shutter/health`. These installs are checked on IRIS for Health only (Community 2026.2 for the core; AI Hub builds 154
+   Check `/api/shutter/health`. That route says the production runs; its `mode` is the scenario run mode (`board` unless
+   changed), not the recovery mode, so it stays `board` on a site install that is in shadow mode. To see the recovery mode, read
+   the banner "Shadow mode." on any page of the web app, or `GET /api/shutter/recovery-control` signed in as an operator or approver (so from
+   step 3 on), which answers `"mode":"shadow"`, or in `SHUTTER` run `Write ##class(Shutter.Util.RecoveryControl).Mode()`, which
+   answers `shadow`. These installs are checked on IRIS for Health only (Community 2026.2 for the core; AI Hub builds 154
    and 109 for the whole package); plain InterSystems IRIS has not been tried. An IPM install builds no Second Parser jar: to
    have that item, run `pex/build.sh` on the server and then the install again (section 2).
 3. Map the trust's users to `Shutter_Operator` and `Shutter_Approver`; add the approvers to the Workflow role; create
-   the forwarder's user with `Shutter_Forwarder`. An operator escalates a case (the escalation is the sign-off),
+   the forwarder's user with `Shutter_Forwarder` (9.3 does). An operator escalates a case (the escalation is the sign-off),
    marks it handled once the team has corrected the systems and starts a production review (3.6); an approver also
    approves plans and incident releases, saves the site profile, changes the agent library and marks a review's
    finding intended. A trust that wants only an approver to close a case handled
@@ -384,7 +396,27 @@ Shape A:
    inbox pastes the plan digest from the task's message (it is **Plan digest** on the case page too) into its `PlanDigest` field (the field starts empty, and an
    approval without it, or with another digest, blocks the case; the recovery is a reinvestigation); the web
    application sends it for them. Whoever approves must hold `Shutter_Approve` and be a member of the Workflow role
-   "Shutter Approvers": a holder outside the role is refused (403).
+   "Shutter Approvers". The role check is the last one an approval meets, so a holder outside the role is refused (403) only
+   when the approval gets that far: the case must be awaiting approval (otherwise 409 `wrong_state`), the request must carry the
+   plan's current digest and the case's current version (otherwise 409 `stale_version`), and recovery must be enabled (in shadow
+   mode or stopped, an approval answers 409 `recovery_shadow` or `recovery_stopped` first). A new site install is in shadow mode
+   until step 9, so check the Workflow role in the test environment once recovery is enabled there (step 8), not before.
+   From a terminal, the users are made in `%SYS` (`Security.Users` is a `%SYS` class: from `SHUTTER` the call answers
+   `<CLASS DOES NOT EXIST>`), and the Workflow membership in `SHUTTER`, for each approver, so the block switches namespace
+   between them; replace `<password>` with the user's own password. `Shutter_Operator` makes an operator, with no Workflow
+   lines. Make the forwarder's user with [9.3](#9-onboarding-several-namespaces), not with this call: 9.3 also stops its
+   password expiring, which a lapsed one would turn every forward into a refused one:
+
+   ```
+   Set $NAMESPACE="%SYS"
+   Set sc=##class(Security.Users).Create("jsmith", "Shutter_Approver", "<password>", "J Smith", "SHUTTER", "", "", 0, 1) Write $SYSTEM.Status.GetErrorText(sc),!
+   Set $NAMESPACE="SHUTTER"
+   Set sc=##class(EnsLib.Workflow.UserDefinition).CreateUser("jsmith", "J Smith") Write $SYSTEM.Status.GetErrorText(sc),!
+   Set sc=##class(EnsLib.Workflow.RoleDefinition).AddUserToRole("Shutter Approvers", "jsmith", 1, "Approver") Write $SYSTEM.Status.GetErrorText(sc),!
+   ```
+
+   Each `Set sc` line prints nothing when it worked (the trust guide's
+   [section 2](readme/integrating-at-your-trust.md#2-install-beside-the-production-without-the-demo) has the same calls).
 4. Fill in the site profile (the web application's questionnaire): receivers, tiers, what each takes, API paths or
    none, the policy per tier, teams and mailboxes, and the mail domains they must lie in (`mail.allowed_domains`: every
    team mailbox and every address a person types must be one bare address in one of those domains or under one; with
@@ -409,7 +441,19 @@ Shape A:
    a plan made before the enable is void already. With that plan waiting, press **Stop Shutter recovery** in Settings. The plan can no longer be
    approved and nothing is sent, and at a receiver with `engine_resend` an outage's resend can't be approved either.
    Clearing the stop takes an approver and releases nothing: reject the plan and reinvestigate the case. The pilot pack has
-   [a stop drill](https://github.com/MxSalata/shutter/blob/main/docs/pilot/07-stop-and-withdraw.md).
+   [a stop drill](https://github.com/MxSalata/shutter/blob/main/docs/pilot/07-stop-and-withdraw.md). The repository's own
+   boundary scripts, `tests/e2e/boundary_check.py` (the approval attacks) and `tests/e2e/shadow_pilot_check.py` (counting what
+   reaches a receiver in shadow mode), run on a throwaway Docker demo of the same release, not on an instance anyone else uses:
+   `shadow_pilot_check.py` changes the demo and restarts it (it takes the container's name, `--ctr`, and needs the docker CLI),
+   and `boundary_check.py` resets the receiving system on every run. They sign in as the demo's `operator` and
+   `approver` and play scenarios against the demo receiver, so on a `-Ddemo=0` install they stop at the first sign-in
+   (`sign-in as operator failed: HTTP 401` from `boundary_check.py`; `shadow_pilot_check.py` prints `sign-in as operator: 401 ...`). On the site install, check the refusals through the REST API as step 3's users.
+   An operator's `POST /cases/{id}/approvals` is 403 ("This needs Shutter_Approve"). With recovery enabled in the test
+   environment and a plan waiting, an approval (with the plan's digest and the case's version) from an approver who is not in the
+   Workflow role "Shutter Approvers" is 403 too (step 3). `PUT /site-profile` and
+   `POST /recovery-control/clear` need `Shutter_Configure`: 403 for an operator. `GET /recovery-control` says `shadow`. A case
+   posted to `POST /intake` sends nothing: it ends escalated ("Shadow observation: nothing sent.") or, at a receiver Shutter
+   cannot read or that has no API, blocked, and `GET /shadow-observations` counts what it would have proposed.
 9. Enable recovery, as a step of its own and only once you mean Shutter to write to a receiver: an approver turns on
    **Enable recovery** on the Site profile page (question 14) and saves the profile through the page's review, which
    stores `"recovery": {"mode": "enabled"}`. The switch alone changes nothing until the profile is saved. A plan
