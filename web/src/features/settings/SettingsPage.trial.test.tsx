@@ -1,6 +1,7 @@
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -55,6 +56,33 @@ describe('SettingsPage in the trial', () => {
     renderTrial();
     await screen.findByRole('button', { name: /^Every case/ });
     expect(layer1Words(document.body).join(' ')).not.toMatch(/\blive\b/i);
+  });
+
+  it('says what the trial lets you do: everything is tried in this browser, and a question of your own needs a model', async () => {
+    renderTrial();
+    await userEvent.click(await screen.findByRole('button', { name: 'Each task, and whether it is ready' }));
+    expect(await screen.findByTestId('tasks-summary')).toHaveTextContent(
+      '5 of 6 ready for you. Not now: your own questions.',
+    );
+    const list = await screen.findByRole('list', { name: 'Your tasks' });
+    const states = within(list)
+      .getAllByRole('listitem')
+      .map((r) => `${r.getAttribute('data-testid')} ${r.getAttribute('data-state')}`);
+    expect(states).toEqual([
+      'task-read ready',
+      'task-scenario ready',
+      'task-ask blocked',
+      'task-approve ready',
+      'task-escalate ready',
+      'task-close ready',
+    ]);
+    const ask = screen.getByTestId('task-ask');
+    expect(within(ask).getByTestId('task-condition')).toHaveTextContent(
+      'The trial has no model: every answer here is a recording.',
+    );
+    expect(within(ask).getByTestId('task-next')).toHaveTextContent(/pick a suggested question/);
+    // The trial's times are a recording's: no evidence line, so no time, is shown
+    expect(list.querySelectorAll('[data-kind]')).toHaveLength(0);
   });
 
   it('keeps "live" for the second layer, where the expert expects it', async () => {

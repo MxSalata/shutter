@@ -472,9 +472,10 @@ describe('the words on the page', () => {
    * sources 24 before a single heading, so the page as built reads about 300 for the recorded instance, and some 310
    * since it was recorded on the AI Hub instance (three more badges, AI Hub, its runner and a model provider, and the
    * day's budget line). The budget here is that figure with a little room (the page was 478 before), and the Technical
-   * page (`layer1Words` leaves out the API's JSON, a data dump, not prose) may read half as many again.
+   * page (`layer1Words` leaves out the API's JSON, a data dump, not prose) may read half as many again. Your tasks adds
+   * its heading and its one line, 9 words, so 330 since 15 November; its list opens from that line.
    */
-  const PLAIN_BUDGET = 320;
+  const PLAIN_BUDGET = 330;
 
   it('keeps the first layer within its budget in Plain, and Technical within half as much again', async () => {
     const plain = renderSettings();
