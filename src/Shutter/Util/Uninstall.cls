@@ -54,6 +54,7 @@ ClassMethod Plan() As %String [ SqlProc ]
     Do ..UsersPlan(out)
     If ##class(%File).DirectoryExists(..CacheFolder()) Do out.removes.%Push("The folder " _ ..CacheFolder())
     Do out.removes.%Push(..PageQuestionsLine(..PageQuestionCount()))
+    Do out.removes.%Push(##class(Shutter.Catalogue.SiteEntry).CountLine())
     Do out.removes.%Push("Every case, approval, incident and setting of Shutter's, and the folders under " _ ..Folder() _ ": cases are not kept, so export what you must keep first")
     Do out.keeps.%Push("The namespace " _ $NAMESPACE _ " itself and its databases: it may hold other things, and removing it is yours to do")
     Do out.%Set("ok", out.refused = "", "boolean")
@@ -98,7 +99,7 @@ ClassMethod Run() As %String [ SqlProc ]
         Set out.stopped = "Items"
         Do out.kept.%Push("Everything: the uninstall stopped before its first step, and can be run again")
     } Else {
-        Do ..RunSteps(out, $LISTBUILD("Watched", "Production", "Portal", "DemoNamespacesOff", "Workflow", "Messages", "Interop", "Provider", "Tasks", "Applications", "Grants", "Users", "Roles", "Resources", "Folders", "PageQuestions", "Globals"))
+        Do ..RunSteps(out, $LISTBUILD("Watched", "Production", "Portal", "DemoNamespacesOff", "Workflow", "Messages", "Interop", "Provider", "Tasks", "Applications", "Grants", "Users", "Roles", "Resources", "Folders", "PageQuestions", "SiteEntries", "Globals"))
     }
     Do out.%Set("ok", out.errors.%Size() = 0, "boolean")
     Quit out.%ToJSON()
@@ -1016,6 +1017,16 @@ ClassMethod PageQuestionCount() As %Integer
     Set n = 0
     &sql(SELECT COUNT(*) INTO :n FROM Shutter_Store.PageQuestion)
     Quit +n
+}
+
+/// The site's own catalogue entries (CONTRACTS 6.8), named and then removed with their versions, proofs and events. They
+/// are the site's configuration and go with the uninstall, as the site profile does; the run's report keeps their count.
+ClassMethod TakeSiteEntries(out As %DynamicObject)
+{
+    Set line = ##class(Shutter.Catalogue.SiteEntry).CountLine()
+    Set sc = ##class(Shutter.Catalogue.SiteEntry).RemoveAll()
+    If $$$ISERR(sc) Do out.errors.%Push("SiteEntries: " _ $SYSTEM.Status.GetErrorText(sc)) Quit
+    Do out.removed.%Push(line)
 }
 
 /// Last of all: every global of Shutter's in this namespace, the tables' data and the configuration with them.

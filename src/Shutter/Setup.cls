@@ -2055,6 +2055,23 @@ ClassMethod TailLog(lines As %Integer = 40) As %String [ SqlProc ]
     Quit out
 }
 
+/// Lift (1) or restore (0) the two-person rule for the site's own catalogue entries (CONTRACTS 6.8, R6): with it lifted,
+/// the person who wrote or proposed an entry may approve it too. For a site with one approver, and only for as long as
+/// it must be: it is recorded as an event, and the Site profile page and the Doctor say so for as long as it holds.
+/// From the terminal only, by an IRIS administrator (%Admin_Manage): it is neither a route nor an SQL procedure, and it is
+/// not a site profile field, since one person with Shutter_Configure could then switch off their own second check.
+///
+///     Write ##class(Shutter.Setup).SiteEntriesOnePerson(1, "One approver until the second is trained, change record CR-12")
+ClassMethod SiteEntriesOnePerson(on As %Boolean, reason As %String = "") As %String
+{
+    If $ISOBJECT($GET(%request)) || $ISOBJECT($GET(%sqlcontext)) Quit "ERROR: from the terminal only"
+    If '$SYSTEM.Security.Check("%Admin_Manage", "USE") Quit "ERROR: %Admin_Manage is required"
+    If on && ($ZSTRIP(reason, "<>W") = "") Quit "ERROR: a reason is required"
+    Set sc = ##class(Shutter.Catalogue.SiteEntry).SetOnePerson(''on, $USERNAME, $ZSTRIP(reason, "<>W"))
+    If $$$ISERR(sc) Quit "ERROR: " _ $SYSTEM.Status.GetErrorText(sc)
+    Quit $SELECT(on: "ok: one person may propose and approve a site entry until this is restored", 1: "ok: a second person approves every site entry again")
+}
+
 /// A readiness report as JSON: what is installed, what runs, what is missing.
 ClassMethod Doctor(refresh As %Boolean = 0) As %String [ SqlProc ]
 {
@@ -2154,6 +2171,10 @@ ClassMethod Doctor(refresh As %Boolean = 0) As %String [ SqlProc ]
     // The receivers' outages (CONTRACTS 17): what each watched item's settings read, the set gate's and the hold's lines when
     // the build has them, and the blocks a profile declares that no part of this build acts on.
     Try { Set r.outages = ..OutageDoctor() } Catch ex { Set r.outages = {"error": (ex.DisplayString())} }
+    // The site's own catalogue entries (CONTRACTS 6.8): how many are active, which are suspended or flagged for review,
+    // whether the two-person rule is lifted, and what a downgrade would cost ("N site entries active: they stop applying
+    // below this release"). Each warning stays for as long as what it warns of lasts.
+    Try { Set r."site_entries" = ##class(Shutter.Catalogue.SiteEntry).Status() } Catch ex { Set r."site_entries" = {"error": (ex.DisplayString())} }
     // What each receiver last answered, and whether every watched namespace can be heard; no probe.
     Do ##class(Shutter.Util.ReceiverHealth).AddTo(r)
     // The hold for a schema not loaded (v1.34, "prevent failures"): the profile's setting and the held cases by category.

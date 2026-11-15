@@ -160,6 +160,12 @@ ClassMethod Store(json As %String, source As %String = "", user As %String = "",
         If $TLEVEL > 0 TROLLBACK
     }
     LOCK -^Shutter.SiteProfile
+    // A receiver or a team the profile no longer names would silently disable a site entry that names it (CONTRACTS 6.8):
+    // the site's own entries are checked after every save, and one the change touched is flagged for a person. It still
+    // applies. Never a reason for the save to fail.
+    If $$$ISOK(sc) {
+        Try { Do ##class(Shutter.Catalogue.SiteEntry).Recheck("profile") } Catch ex { }
+    }
     Quit sc
 }
 

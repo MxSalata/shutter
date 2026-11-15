@@ -66,6 +66,16 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
   <Route Url="/settings/namespaces/:ns/remove" Method="POST" Call="Shutter.API.Onboarding:Remove"/>
   <Route Url="/site-profile" Method="GET" Call="SiteProfileGet"/>
   <Route Url="/site-profile" Method="PUT" Call="SiteProfilePut"/>
+  <Route Url="/catalogue" Method="GET" Call="Shutter.API.SiteEntries:Catalogue"/>
+  <Route Url="/site-entries" Method="GET" Call="Shutter.API.SiteEntries:List"/>
+  <Route Url="/site-entries" Method="POST" Call="Shutter.API.SiteEntries:Create"/>
+  <Route Url="/site-entries/validate" Method="POST" Call="Shutter.API.SiteEntries:Validate"/>
+  <Route Url="/site-entries/:id" Method="GET" Call="Shutter.API.SiteEntries:Get"/>
+  <Route Url="/site-entries/:id" Method="PUT" Call="Shutter.API.SiteEntries:Change"/>
+  <Route Url="/site-entries/:id/proof" Method="POST" Call="Shutter.API.SiteEntries:Proof"/>
+  <Route Url="/site-entries/:id/propose" Method="POST" Call="Shutter.API.SiteEntries:Propose"/>
+  <Route Url="/site-entries/:id/approvals" Method="POST" Call="Shutter.API.SiteEntries:Approve"/>
+  <Route Url="/site-entries/:id/suspend" Method="POST" Call="Shutter.API.SiteEntries:Suspend"/>
   <Route Url="/recovery-control" Method="GET" Call="Shutter.API.Recovery:ControlGet"/>
   <Route Url="/recovery-control/stop" Method="POST" Call="Shutter.API.Recovery:ControlStop"/>
   <Route Url="/recovery-control/clear" Method="POST" Call="Shutter.API.Recovery:ControlClear"/>
