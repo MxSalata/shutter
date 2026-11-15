@@ -99,6 +99,16 @@ describe('the case outcome, the first rule that matches', () => {
     const rows: [OutcomeCase, string, string, string][] = [
       [resolved({ disposition: 'handled_by_hand' }), 'neutral', 'Handled by hand', 'Handled by hand'],
       [{ state: 'blocked', disposition: 'abandoned' }, 'neutral', 'Abandoned', 'Abandoned'],
+      [
+        {
+          state: 'failed',
+          disposition: 'abandoned',
+          headline: 'Abandoned: another scenario run reset the receiver',
+        },
+        'neutral',
+        'Closed when another scenario run reset the receiver',
+        'Closed by a reset',
+      ],
       // An outage's resend the receiver refused as already held: its word, never a verification
       [
         resolved({ disposition: 'already_delivered', writes: 0, verification: '' }),

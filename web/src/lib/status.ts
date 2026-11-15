@@ -509,7 +509,7 @@ const RUNNING_STATES: readonly CaseState[] = [
 
 /** What a case needs for its outcome: the summary's state and disposition, and what it wrote and verified when sent. */
 export type OutcomeCase = Pick<CaseSummary, 'state' | 'disposition'> &
-  Partial<Pick<CaseSummary, 'writes' | 'verification' | 'receiver'>> & { mode?: Mode | string };
+  Partial<Pick<CaseSummary, 'writes' | 'verification' | 'receiver' | 'headline'>> & { mode?: Mode | string };
 
 /** The part of a scenario its cases are compared with. */
 export type ExpectedScenario = Pick<Scenario, 'id' | 'expected'>;
@@ -557,6 +557,7 @@ export function expectationOf(c: OutcomeCase, scenario?: ExpectedScenario | null
 export type CaseOutcomeKey =
   | 'handled-by-hand'
   | 'abandoned'
+  | 'closed-by-reset'
   | 'already-delivered'
   | 'awaiting-approval'
   | 'escalated'
@@ -593,6 +594,18 @@ const o = (
 export function caseOutcome(c: OutcomeCase, scenario?: ExpectedScenario | null): CaseOutcome {
   if (c.disposition === 'handled_by_hand')
     return o('handled-by-hand', 'neutral', 'Handled by hand', 'Handled by hand', IconTool);
+  // A later scenario run's reset closed it (Shutter.Store.Case Open, 1.4.8): abandoned by the system, not by a person
+  if (
+    c.disposition === 'abandoned' &&
+    (c.headline ?? '').startsWith('Abandoned: another scenario run reset the receiver')
+  )
+    return o(
+      'closed-by-reset',
+      'neutral',
+      'Closed when another scenario run reset the receiver',
+      'Closed by a reset',
+      IconCircleOff,
+    );
   if (c.disposition === 'abandoned')
     return o('abandoned', 'neutral', 'Abandoned', 'Abandoned', IconCircleOff);
   // An outage's resend the receiver refused as already held (v1.53): its word, not a verification

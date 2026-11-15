@@ -453,11 +453,18 @@ describe('the closed outcomes', () => {
     expect(counts.unexpected).toBe(1);
   });
 
-  it('put a hand fix and an abandoned case in "By hand", and both kinds of nothing to send in one', () => {
+  it('put a hand fix and an abandoned case in "By hand", a reset-closed case apart, and both kinds of nothing to send in one', () => {
     const base = { state: 'resolved', scenario: '' } as CaseSummary;
     const items = [
       { ...base, caseId: 'a', disposition: 'handled_by_hand' },
       { ...base, caseId: 'b', disposition: 'abandoned' },
+      {
+        ...base,
+        caseId: 'f',
+        state: 'failed',
+        disposition: 'abandoned',
+        headline: 'Abandoned: another scenario run reset the receiver',
+      },
       { ...base, caseId: 'c', disposition: 'superseded', writes: 0, verification: 'verified' },
       { ...base, caseId: 'd', disposition: 'superseded', writes: 0, verification: '' },
       { ...base, caseId: 'e', disposition: 'resend', writes: 1, verification: 'verified' },
@@ -467,6 +474,7 @@ describe('the closed outcomes', () => {
       delivered: 1,
       nothing: 2,
       'by-hand': 2,
+      reset: 1,
     });
   });
 });

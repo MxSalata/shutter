@@ -16,6 +16,7 @@ import {
 import {
   IconCircleCheck,
   IconCircleMinus,
+  IconCircleOff,
   IconListDetails,
   IconTargetOff,
   IconTool,
@@ -425,7 +426,7 @@ export function AttentionTile({
  * or not, since both say the receiver needed nothing), and a case a person handled or gave up.
  */
 export const CLOSED_GROUPS: {
-  id: 'unexpected' | 'delivered' | 'nothing' | 'by-hand';
+  id: 'unexpected' | 'delivered' | 'nothing' | 'by-hand' | 'reset';
   label: string;
   tone: Tone;
   icon: TablerIcon;
@@ -459,6 +460,13 @@ export const CLOSED_GROUPS: {
     icon: IconTool,
     keys: ['handled-by-hand', 'abandoned'],
   },
+  {
+    id: 'reset',
+    label: 'Closed by a reset',
+    tone: 'neutral',
+    icon: IconCircleOff,
+    keys: ['closed-by-reset'],
+  },
 ];
 
 export type ClosedGroupId = (typeof CLOSED_GROUPS)[number]['id'];
@@ -483,6 +491,7 @@ export function closedCounts(
     delivered: casesOfGroup(items, 'delivered', scenarioOf).length,
     nothing: casesOfGroup(items, 'nothing', scenarioOf).length,
     'by-hand': casesOfGroup(items, 'by-hand', scenarioOf).length,
+    reset: casesOfGroup(items, 'reset', scenarioOf).length,
   };
 }
 
@@ -623,8 +632,9 @@ export default function CasesPage() {
     [newestItems, scenarios.isPending, byId],
   );
   // A chosen tile stays, or the filter on show could not be turned off where it was turned on
+  // The unexpected and the reset tiles show only when they have cases (a reset happens on a demo install only)
   const closedShown = CLOSED_GROUPS.filter(
-    (g) => g.id !== 'unexpected' || outcome === g.id || (counts?.unexpected ?? 0) > 0,
+    (g) => (g.id !== 'unexpected' && g.id !== 'reset') || outcome === g.id || (counts?.[g.id] ?? 0) > 0,
   );
   // More cases than the read holds: the Closed tiles count the newest ones only, and say so
   const overBase = (newest.data?.total ?? 0) > NEWEST;
