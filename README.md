@@ -38,6 +38,8 @@ On an ordinary day a hospital's integration engine can see hundreds of failed me
 
 **Why I built it:** the failures above are the ones I met in my interoperability work with 28 NHS hospitals. At one trust we checked every interface daily for failed messages, and I wrote a 30-page guide to handling them. Not every clinical system checks what it receives. When a bed transfer from I.PM failed to reach NerveCentre and clinicians corrected the history there by hand, resending the failures in order could displace several patients, because NerveCentre won't put two patients in one bed and moves the other to the waiting area. Blindly resending coding messages from NerveCentre to Careflow would overwrite a patient's coding and end-date it as of today, and on older PAS systems a resent A02 for a past spell could reopen it, leaving two active spells. That is why Shutter reads the receiver before it writes. While building Shutter I filed AI Hub bug reports [#11](https://github.com/intersystems-community/ai-hub-eap-bugreports/issues/11), [#12](https://github.com/intersystems-community/ai-hub-eap-bugreports/issues/12), [#22](https://github.com/intersystems-community/ai-hub-eap-bugreports/issues/22) and [#23](https://github.com/intersystems-community/ai-hub-eap-bugreports/issues/23).
 
+![One failed delivery in four steps: a delivery fails, the evidence is sealed, the agents propose, the gate decides. Then one of three plans: resend it after a person approves, with one conditional write verified at the receiver (S2); close it with nothing sent because the receiver already holds the movement (S3); or stop with nothing sent so that a person decides (S8)](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/one-failed-delivery.png)
+
 ## For judges
 
 **Five minutes, nothing to install and no key.** The trial plays recorded runs in your browser. Each **Run** plays for several seconds, then a banner above the cards on **Scenarios** names the case to open; from a case, **Scenarios** in the left menu takes you back to the cards.
@@ -98,6 +100,8 @@ Live spending on the demo is capped at 5 USD an hour and 15 USD a day. Within th
 - **Built on IRIS.** An Interoperability production with AI Hub, Workflow, Vector Search, Embedded Python, a custom adapter, Java PEX, IPM and Docker. [Technology bonuses](https://github.com/MxSalata/shutter#technology-bonuses)
 
 ## What a plain Resend cannot know
+
+![Scenario S8 as a diagram: the PAS transfer to WARD-B fails while the bed manager holds its own move to WARD-C. A plain Resend sends the old transfer again and the receiver ends with WARD-B over WARD-C; Shutter reads the receiver first, escalates with 0 writes, and the receiver keeps WARD-C](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/s8-plain-resend-or-shutter.png)
 
 A plain **Resend** sends the same message again without reading the receiver first, so it can repeat something the receiver already holds or revive a cancelled movement. The S numbers are scenarios on the trial's **Scenarios** page; F09 is a held-out test case.
 
