@@ -495,6 +495,11 @@ def setup_turn_checks(args, operator, approver, demo_password, judge_password, c
           status == 400 and error_of(body) == "bad_request" and "a link" in (body or {}).get("detail", ""), f"{status} {body}")
     status, body = approver.call("POST", "/site-profile/setup-turns", {**turn("it is a whiteboard"), "receiver": "Nobody"}, idempotent=True)
     check("a receiver the draft does not name is 400 bad_request", status == 400 and error_of(body) == "bad_request", f"{status} {body}")
+    status, body = approver.call("POST", "/site-profile/setup-turns", {**turn("it is a whiteboard"), "receiver": "Ward 7, ask j.smith@trust.nhs.uk"}, idempotent=True)
+    check("a receiver whose name holds an address is 400 bad_request, saying so",
+          status == 400 and error_of(body) == "bad_request" and "name holds an address" in (body or {}).get("detail", ""), f"{status} {body}")
+    status, body = approver.call("POST", "/site-profile/setup-turns", turn("NHS number 943 476 5919"), idempotent=True)
+    check("a text with an NHS number as printed is 400 bad_request", status == 400 and error_of(body) == "bad_request" and "a long number" in (body or {}).get("detail", ""), f"{status} {body}")
     status, body = Session(args.url).call("POST", "/site-profile/setup-turns", turn("it is a whiteboard"))
     check("signed out: 401", status == 401, f"{status} {body}")
 

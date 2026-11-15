@@ -80,7 +80,7 @@ describe('the site switch for typed answers in Set up the site', () => {
     );
     const control = await screen.findByRole('switch', { name: /^Read typed answers in Set up the site/ });
     expect(control).not.toBeChecked();
-    expect(screen.getByText('Off: no typed answer goes to a model.')).toBeInTheDocument();
+    expect(screen.getByText('Off: no box for your own words.')).toBeInTheDocument();
     await user.click(control);
     await user.click(
       within(screen.getByRole('region', { name: 'Unsaved changes' })).getByRole('button', {

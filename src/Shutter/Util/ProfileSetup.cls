@@ -514,12 +514,17 @@ ClassMethod Frame(draft As %DynamicObject, receiver As %String, Output problem A
 /// checklist its field, its label, whether the agent may draft it here ("you") or only a person answers it ("person"),
 /// its options and whether it is answered; the draft's value for the description, the kind, the tier and the yes or no
 /// answers. Not shown: mail addresses and domains, API paths, approvers' names, runbook and call lines, any other
-/// receiver's answers, any case, any message. A receiver's name and description are shown.
+/// receiver's answers, any case, any message. A receiver's name and description are shown only when they pass the text
+/// rule a typed answer is held to (TextProblem, and a description of at most MAXSYSTEM characters), since a person may
+/// have typed anything into either with the page's controls; a value that fails is left out, and "left_out" names it.
 ClassMethod View(base As %DynamicObject, draft As %DynamicObject, receiver As %String) As %DynamicObject
 {
     Set entry = ..Find(draft, receiver)
-    Set view = {"page": (..#PAGE), "receiver": {"name": (receiver)}, "fields": []}
+    Set view = {"page": (..#PAGE), "receiver": {}, "fields": []}
+    Set leftOut = []
+    If ..TextProblem(receiver) = "" { Set view.receiver.name = receiver } Else { Do leftOut.%Push("receivers[].name") }
     Do view.receiver.%Set("being_added", '$ISOBJECT(..Find(base, receiver)), "boolean")
+    If leftOut.%Size() > 0 Set view."left_out" = leftOut
     If '$ISOBJECT(entry) Quit view
     Set labels = {"name": "Production item", "system": "What the system is, in a few words", "category": "What kind of system it is", "tier": "Its tier", "applies": "Arrival order or event time", "resend_timestamp": "What time a resend carries", "cancels": "Accepts cancels", "merges": "Takes merges"}
     For key = "name", "system", "category", "tier", "applies", "resend_timestamp", "cancels", "merges" {
@@ -536,9 +541,12 @@ ClassMethod View(base As %DynamicObject, draft As %DynamicObject, receiver As %S
             For t = 1:1:3 { If '..RowAutomatic(base, t) && '..RowAutomatic(draft, t) Do f.options.%Push(t) }
             If f.options.%Size() = 0 Set f.who = "person"
         }
-        If answered && $LISTFIND($LISTBUILD("system", "category", "tier", "cancels", "merges"), key) && (type '= "object") && (type '= "array") Do f.%Set("value", entry.%Get(key), type)
+        Set shown = answered && $LISTFIND($LISTBUILD("system", "category", "tier", "cancels", "merges"), key) && (type '= "object") && (type '= "array")
+        If shown && (key = "system") && ((type '= "string") || ($LENGTH(entry.%Get(key)) > ..#MAXSYSTEM) || (..TextProblem(entry.%Get(key)) '= "")) Set shown = 0 Do leftOut.%Push(field)
+        If shown Do f.%Set("value", entry.%Get(key), type)
         Do view.fields.%Push(f)
     }
+    If leftOut.%Size() > 0 Set view."left_out" = leftOut
     Quit view
 }
 
@@ -570,7 +578,7 @@ ClassMethod Request(turnId As %String, receiver As %String, context As %DynamicO
     Set req.RequestedBy = askedBy
     If $ZCONVERT(resolvedMode, "L") = "record" Set req.ModeOverride = "live"
     Set req.TokenBudget = ..#TOKENBUDGET, req.MaxIterations = ..#MAXITERATIONS
-    Set req.Goal = "Read what the person typed about the receiver " _ receiver _ " and draft answers only for the fields the request marks as yours, each with the person's own words quoted; say in a sentence or two what you read; name the next unanswered question if one is left; call " _ ..#TERMINAL _ " once with caseId " _ turnId _ "."
+    Set req.Goal = "Read what the person typed about the receiver " _ $SELECT(..TextProblem(receiver) = "": receiver, 1: "in focus") _ " and draft answers only for the fields the request marks as yours, each with the person's own words quoted; say in a sentence or two what you read; name the next unanswered question if one is left; call " _ ..#TERMINAL _ " once with caseId " _ turnId _ "."
     Set req.Context = ##class(Shutter.Util.PageQuestion).AsData(context)
     Quit req
 }

@@ -2296,6 +2296,9 @@ ClassMethod SetupTurnAsk() As %Status
     Set ps = "Shutter.Util.ProfileSetup"
     Set receiver = $SELECT(body.%GetTypeOf("receiver") = "string": body.%Get("receiver"), 1: "")
     If receiver = "" Quit ..Fail("400 Bad Request", "bad_request", "receiver must name the receiver the answer is about")
+    // The agent is shown the receiver's name and drafts for it by that name: a name that fails the text rule is never sent.
+    Set problem = $CLASSMETHOD(ps, "NameProblem", receiver)
+    If problem '= "" Quit ..Fail("400 Bad Request", "bad_request", problem)
     If body.%GetTypeOf("text") '= "string" Quit ..Fail("400 Bad Request", "bad_request", "text must be text")
     Set text = $CLASSMETHOD(ps, "CleanText", body.%Get("text"), .problem)
     If problem '= "" Quit ..Fail("400 Bad Request", "bad_request", problem)

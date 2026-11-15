@@ -38,7 +38,7 @@ import {
   controlProblem,
   validateProfile,
 } from '@/features/site-profile/profile';
-import { cleanText } from '@/features/site-profile/setup/proposals';
+import { cleanText, nameProblem } from '@/features/site-profile/setup/proposals';
 import { digest, draftEscalation, teamFor } from './escalation';
 import { receiverCheckFor, type RecordedCase } from './receiverCheck';
 import { freshHolds, heldView, type CaseFixture, type Hold } from './hold';
@@ -1482,6 +1482,8 @@ export const handlers = [
       );
     if (typeof body.receiver !== 'string' || !body.receiver)
       return error(400, 'bad_request', 'receiver must name the receiver the answer is about');
+    const named = nameProblem(body.receiver);
+    if (named) return error(400, 'bad_request', named);
     if (typeof body.text !== 'string') return error(400, 'bad_request', 'text must be text');
     const clean = cleanText(body.text);
     if (clean.problem) return error(400, 'bad_request', clean.problem);

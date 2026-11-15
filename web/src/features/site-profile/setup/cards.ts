@@ -9,6 +9,7 @@ import {
   type QuestionId,
   type SetupQuestion,
 } from './fields';
+import { textProblem } from './proposals';
 import type { AnswerStatus } from './setupStore';
 
 /** What the cards of Set up the site share: their badges' words, their ids, and what "Why does this matter?" asks. */
@@ -32,14 +33,20 @@ export const cardId = (q: QuestionId) => `setup-card-${q}`;
 export const cardTitleId = (q: QuestionId) => `setup-card-${q}-title`;
 export const controlId = (key: string) => `setup-${key}`;
 
-/** What "Why does this matter?" opens: the question, the answer on the page and what it does, in the page's words. */
+/**
+ * What "Why does this matter?" opens: the question, the answer on the page and what it does, in the page's words. It goes
+ * to a model whether or not the site reads typed answers, so the receiver's name and the answer are held to the text
+ * rule a typed answer is (`textProblem`): a name that fails is not named, and an answer that fails is left out.
+ */
 export function whyFocus(q: SetupQuestion, r: SiteReceiver, profile: SiteProfile): PageFocus {
+  const shown = answerText(q, r);
+  const left = shown ? textProblem(shown) : '';
   return {
     page: SETUP_PAGE,
     id: cardId(q.id),
     title: q.text,
-    question: whyQuestion(q, r.name),
-    answer: answerText(q, r) || 'Not answered',
+    question: whyQuestion(q, textProblem(r.name) ? '' : r.name, !!r.name.trim()),
+    answer: !shown ? 'Not answered' : left ? `Not sent: the answer holds ${left}` : shown,
     consequence: consequence(q, r, profile),
     written: q.written,
   };

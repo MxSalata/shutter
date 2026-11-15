@@ -331,7 +331,7 @@ export function consequence(q: SetupQuestion, r: SiteReceiver, profile: SiteProf
 export const SETUP_PAGE = 'site-setup';
 
 /** What "Why does this matter?" asks of the Explain agent about one question: an explanation, never a choice. */
-export function whyQuestion(q: SetupQuestion, name: string): string {
-  const of = name.trim() || 'a receiver being added';
+export function whyQuestion(q: SetupQuestion, name: string, named = false): string {
+  const of = name.trim() || (named ? 'this receiver' : 'a receiver being added');
   return `Set up the site asks "${q.text}" about ${of}. Why does this answer matter, and what does each choice change? Explain; do not recommend one.`;
 }

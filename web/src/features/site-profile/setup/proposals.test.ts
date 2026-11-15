@@ -201,3 +201,25 @@ describe('a text refused before it is sent, the table Shutter.Test.ProfileSetup 
     expect(cleanText('a'.repeat(501)).problem).toBe('text is at most 500 characters');
   });
 });
+
+describe('"Why does this matter?" on Set up the site', () => {
+  const system = QUESTIONS.find((q) => q.id === 'system')!;
+  const name = QUESTIONS.find((q) => q.id === 'name')!;
+
+  it("sends the receiver's name and the answer only when they pass the text rule, whatever the site's switch", () => {
+    const plain = { name: 'Bed Board', system: 'the ward whiteboard' } as SiteReceiver;
+    expect(whyFocus(system, plain, BASE)).toMatchObject({ answer: 'the ward whiteboard' });
+    expect(whyFocus(system, plain, BASE).question).toContain('about Bed Board');
+    // The review's case: a description typed with the control, with an address in it
+    const loud = { name: 'Bed Board', system: 'Ward 7 board, ask j.smith@trust.nhs.uk' } as SiteReceiver;
+    const focus = whyFocus(system, loud, BASE);
+    expect(focus.answer).toBe('Not sent: the answer holds an address');
+    expect(JSON.stringify(focus)).not.toContain('j.smith');
+    const badName = { name: 'Ward 7, ask j.smith@trust.nhs.uk', system: 'the board' } as SiteReceiver;
+    for (const q of [system, name]) {
+      const f = whyFocus(q, badName, BASE);
+      expect(JSON.stringify(f)).not.toContain('j.smith');
+      expect(f.question).toContain('about this receiver');
+    }
+  });
+});

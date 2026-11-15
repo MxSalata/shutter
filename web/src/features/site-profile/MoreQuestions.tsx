@@ -389,7 +389,7 @@ function Model({ draft, setDraft }: { draft: SiteProfile; setDraft: SetDraft }) 
       <Switch
         id="site-model_content-setup_answers"
         label="Read typed answers in Set up the site"
-        description="Off: no typed answer goes to a model."
+        description="Off: no box for your own words."
         checked={draft.model_content?.setup_answers === true}
         onChange={(e) => {
           const v = e.currentTarget.checked;
