@@ -199,6 +199,12 @@ function ReviewBody({
   // No answer came: the page can't tell whether the decision was recorded, so it never says it was not, and the next
   // press resends exactly this decision (its comment held as sent) under the same key
   const lost = answerLost(decide.error);
+  // Once an answer is lost it stays lost for this review: a later press refused (the first still running at the server,
+  // or cut off before its reply was kept) never makes the first one not recorded. The key it was lost under holds the
+  // comment as sent; "Reject instead" takes a new key, and its comment is free again.
+  const [lostKey, setLostKey] = useState<string | null>(null);
+  const lostOnce = lost || lostKey !== null;
+  const held = lost || lostKey === key;
   // Once stopped, the review stays stopped, closing included: its decision can't be sent again, and the reason it
   // became invalid stays to be read until the person moves on
   const [stopped, setStopped] = useState(false);
@@ -258,8 +264,8 @@ function ReviewBody({
         view={view}
         snapshot={snapshot}
         opened={opened}
-        why={lost ? LOST_MOVED_WORDS : stale ? STALE_WORDS : refused || MOVED_WORDS}
-        lost={lost}
+        why={lostOnce ? LOST_MOVED_WORDS : stale ? STALE_WORDS : refused || MOVED_WORDS}
+        lost={lostOnce}
         binding={bindingLine(opened, encounter)}
         live={live}
         onClose={onClose}
@@ -268,6 +274,7 @@ function ReviewBody({
     );
   const submit = () => {
     if (moved) return;
+    const sentKey = key;
     onSending(true);
     decide.mutate(
       {
@@ -277,9 +284,12 @@ function ReviewBody({
           expectedVersion: opened.c.version,
           comment,
         },
-        idempotencyKey: key,
+        idempotencyKey: sentKey,
       },
       {
+        onError: (e) => {
+          if (answerLost(e)) setLostKey(sentKey);
+        },
         onSuccess: (reply) => {
           onClose();
           // In the trial the page itself plays out what came next, and announces it once
@@ -375,12 +385,13 @@ function ReviewBody({
         <Textarea
           label="Comment"
           description={
-            lost ? 'Kept as sent, so pressing again sends the same decision' : 'Recorded with your decision'
+            held ? 'Kept as sent, so pressing again sends the same decision' : 'Recorded with your decision'
           }
           autosize
           minRows={2}
           value={comment}
-          readOnly={lost}
+          // Held while the decision is on its way too: what is typed then would ride the same key with another body
+          readOnly={held || decide.isPending}
           onChange={(e) => setComment(e.currentTarget.value)}
         />
         {/* The decision's controls stay in view while the review scrolls, with whatever stops them said beside them */}

@@ -1622,11 +1622,19 @@ describe('CasePage', () => {
 
   it('says a decision whose answer never came may be recorded, and sends the same one again under the same key', async () => {
     const sent: { key: string | null; body: unknown }[] = [];
+    // The first request waits at the server until the test lets it go, then its answer is lost on the way back
+    let release = () => {};
+    const held = new Promise<void>((done) => {
+      release = done;
+    });
     server.use(
       http.post('/api/shutter/cases/C-000002/approvals', async ({ request }) => {
         sent.push({ key: request.headers.get('Idempotency-Key'), body: await request.clone().json() });
         // The first answer is lost on the way back; the second press is answered
-        if (sent.length === 1) return HttpResponse.error();
+        if (sent.length === 1) {
+          await held;
+          return HttpResponse.error();
+        }
         return HttpResponse.json(
           { taskId: '77', decision: 'approve', caseId: 'C-000002', approver: 'approver' },
           { status: 202 },
@@ -1640,6 +1648,13 @@ describe('CasePage', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Approve the resend: plan v1' });
     await userEvent.type(within(dialog).getByRole('textbox', { name: /Comment/ }), 'Checked at the ward');
     await userEvent.click(within(dialog).getByRole('button', { name: 'Approve the resend' }));
+    // While the decision is on its way the comment can't be changed: the next press must send the same body
+    await waitFor(() => expect(sent).toHaveLength(1));
+    const pending = within(dialog).getByRole('textbox', { name: /Comment/ });
+    expect(pending).toHaveAttribute('readonly');
+    await userEvent.type(pending, ' plus more');
+    expect(pending).toHaveValue('Checked at the ward');
+    release();
     const said = await within(dialog).findByTestId('review-error');
     expect(said).toHaveTextContent(
       /^No answer came back \(.+\), so this page can't tell whether your decision was recorded\. Pressing "Approve the resend" again sends the same decision under the same key: if the first was recorded, the server answers with that record and nothing is decided twice\.$/,
@@ -1694,6 +1709,61 @@ describe('CasePage', () => {
     );
     expect(dialog).not.toHaveTextContent(/Nothing was decided/);
   });
+
+  it.each([
+    [
+      'refused as decided',
+      409,
+      { error: 'wrong_state', detail: 'Task already decided; reject by approver at 2026-11-15T03:00:00Z' },
+      'blocked',
+    ],
+    [
+      'refused as stale',
+      409,
+      { error: 'stale_version', detail: 'The case version has changed since it was read' },
+      'awaiting_approval',
+    ],
+  ])(
+    'keeps a lost answer said as lost when the next press is %s and the case moves',
+    async (_, status, refusal, state) => {
+      const detail = (await (await fetch('/api/shutter/cases/C-000002')).json()) as { version: number };
+      let moved = false;
+      const sent: unknown[] = [];
+      server.use(
+        http.get('/api/shutter/cases/C-000002', () =>
+          HttpResponse.json(moved ? { ...detail, state, version: detail.version + 1 } : detail),
+        ),
+        // The first answer is lost; the next press is refused (the first was still running at the server, or cut off
+        // before its reply was kept), and the case has moved by then: the move may be the first decision
+        http.post('/api/shutter/cases/C-000002/approvals', async ({ request }) => {
+          sent.push(await request.clone().json());
+          if (sent.length === 1) return HttpResponse.error();
+          moved = true;
+          return HttpResponse.json(refusal, { status });
+        }),
+      );
+      renderCase('C-000002');
+      await screen.findByTestId('case-proposal');
+      await userEvent.click(screen.getByTestId('case-action'));
+      const dialog = await screen.findByRole('dialog', { name: 'Approve the resend: plan v1' });
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Approve the resend' }));
+      await within(dialog).findByTestId('review-error');
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Approve the resend' }));
+      const stopped = await within(dialog).findByTestId('review-refusal');
+      expect(stopped).toHaveTextContent(
+        /^No answer came back for your decision, and the case has changed since: the change may be your decision, recorded\. The Audit trail says who decided\./,
+      );
+      expect(sent).toHaveLength(2);
+      expect(dialog).not.toHaveTextContent(/Nothing was decided|was not recorded|can't be recorded/);
+      if (state === 'blocked') {
+        await userEvent.click(within(dialog).getByRole('button', { name: 'Review current plan' }));
+        expect(await within(dialog).findByTestId('review-current-gone')).toHaveTextContent(
+          'The case is no longer waiting for a decision: it is blocked now. Your decision may be what moved it: the Audit trail says who decided.',
+        );
+        expect(dialog).not.toHaveTextContent(/Nothing was decided|was not recorded|can't be recorded/);
+      }
+    },
+  );
 
   it('opens the current plan after a lost answer without saying the earlier decision was not recorded', async () => {
     const view = (await (await fetch('/api/shutter/cases/C-000002/plan')).json()) as {
