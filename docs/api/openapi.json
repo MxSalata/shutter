@@ -9881,7 +9881,7 @@
           "site entries"
         ],
         "summary": "Change a site entry's draft",
-        "description": "Rewrites the open draft, or begins the next version as a draft beside the active one, which keeps applying until the new one is approved. expectedVersion is the entry's revision as the caller read it.\n\nNeeds Shutter_Configure. A change: send X-Requested-With: Shutter.\n\nCONTRACTS 6.8.",
+        "description": "Rewrites the open draft, or begins the next version as a draft beside the active one, which keeps applying until the new one is approved. expectedVersion is the entry's revision as the caller read it, and is required.\n\nNeeds Shutter_Configure. A change: send X-Requested-With: Shutter.\n\nCONTRACTS 6.8.",
         "x-contract": "docs/CONTRACTS.md section 6.8",
         "x-required-resource": "Shutter_Configure",
         "x-writes": true,
@@ -10016,7 +10016,7 @@
             }
           },
           "409": {
-            "description": "Conflict. stale_version: expectedVersion is not the entry's revision (with currentVersion). wrong_state: The proposed version is frozen until it is approved or rejected, or the entry is retired.",
+            "description": "Conflict. stale_version: expectedVersion is missing or not the entry's revision (with currentVersion). wrong_state: The proposed version is frozen until it is approved or rejected, or the entry is retired.",
             "x-error-codes": [
               "stale_version",
               "wrong_state"
@@ -10030,7 +10030,7 @@
                   "stale_version": {
                     "value": {
                       "error": "stale_version",
-                      "detail": "expectedVersion is not the entry's revision (with currentVersion)"
+                      "detail": "expectedVersion is missing or not the entry's revision (with currentVersion)"
                     }
                   },
                   "wrong_state": {
@@ -18751,7 +18751,7 @@
           },
           "expectedVersion": {
             "type": "integer",
-            "description": "PUT only: the entry's revision as the caller read it."
+            "description": "PUT only, and required there: the entry's revision as the caller read it."
           },
           "title": {
             "type": "string"

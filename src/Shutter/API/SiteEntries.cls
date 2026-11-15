@@ -78,7 +78,7 @@ ClassMethod Create() As %Status
 }
 
 /// PUT /site-entries/{id}: the draft changed, or a draft begun beside the active version. expectedVersion is the
-/// entry's revision as the caller read it (409 stale_version).
+/// entry's revision as the caller read it, and is required (409 stale_version when it is missing or another).
 ClassMethod Change(id As %String) As %Status
 {
     Set body = ..BodyOr400()
@@ -89,7 +89,7 @@ ClassMethod Change(id As %String) As %Status
     If code = "stale_version" {
         Set extra = {}
         Do extra.%Set("currentVersion", +detail, "number")
-        Quit ##class(Shutter.API.Dispatch).Fail("409 Conflict", "stale_version", "expectedVersion is not the entry's revision", extra)
+        Quit ##class(Shutter.API.Dispatch).Fail("409 Conflict", "stale_version", "expectedVersion is missing or not the entry's revision", extra)
     }
     If code '= "" Quit ..Refuse(code, detail, problems)
     Set o = ##class(Shutter.Catalogue.SiteEntry).ById(id).Describe(1)

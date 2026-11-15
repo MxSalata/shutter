@@ -90,7 +90,7 @@ Method TestFromDraftToActive()
     Do $$$AssertEquals(##class(Shutter.Test.SiteKit).Snapshot(near).SummaryObject().catalogue.entry, "E2", "the near miss is still E2's")
     Do $$$AssertEquals(##class(Shutter.Catalogue.SiteEntry).CasesSent(id), 0, "no case sent to a person yet")
     // An approved version is never written again.
-    Do $$$AssertEquals($CLASSMETHOD(site, "Change", id, ##class(Shutter.Test.SiteKit).Body(match.CaseId, near.CaseId), "", "ut-author", "api", .e2, .problems, .warnings, .detail), "", "a change of an active entry begins version 2 as a draft: " _ detail)
+    Do $$$AssertEquals($CLASSMETHOD(site, "Change", id, ##class(Shutter.Test.SiteKit).Body(match.CaseId, near.CaseId), $CLASSMETHOD(site, "ById", id).Revision, "ut-author", "api", .e2, .problems, .warnings, .detail), "", "a change of an active entry begins version 2 as a draft: " _ detail)
     Set entry = $CLASSMETHOD(site, "ById", id)
     Do $$$AssertEquals(entry.DraftVersion, 2, "version 2")
     Do $$$AssertEquals(entry.ActiveVersion, 1, "beside the active version 1, which keeps applying")
@@ -227,6 +227,79 @@ Method TestAChangeChecksTheRevision()
     Do $$$AssertEquals(##class(Shutter.Catalogue.SiteEntryEvent).For(id).%Get(0).kind, "rejected", "with the event")
     Do $$$AssertTrue(##class(Shutter.Catalogue.SiteEntryEvent).For(id).%Get(0).text [ "Too broad", "and the reason")
     Do $$$AssertEquals($CLASSMETHOD(site, "Decide", id, reject, "ut-author", "api", .e2, .detail, .extra), "wrong_state", "no proposal is left to decide")
+}
+
+/// expectedVersion is required: a change that does not say which revision it read is refused, as a stale one is.
+Method TestAChangeNeedsTheRevision()
+{
+    Set site = "Shutter.Catalogue.SiteEntry", kit = "Shutter.Test.SiteKit"
+    Set id = ..Draft(.match, .near)
+    Set entry = $CLASSMETHOD(site, "ById", id)
+    Set body = $CLASSMETHOD(kit, "Body", match.CaseId, near.CaseId)
+    Set body.title = "A changed title"
+    For none = "", " " {
+        Do $$$AssertEquals($CLASSMETHOD(site, "Change", id, body, none, "ut-author-2", "api", .e2, .problems, .warnings, .detail), "stale_version", "no revision given (""" _ none _ """)")
+        Do $$$AssertEquals(+detail, +entry.Revision, "the refusal carries the current one")
+    }
+    Do $$$AssertEquals(##class(Shutter.Catalogue.SiteEntryVersion).Find(id, 1).Content().title, $CLASSMETHOD(kit, "Body").title, "and the draft is unchanged")
+}
+
+/// A proposal whose frozen version was rewritten under it (a change that raced the proposal) is never approved, and can
+/// always be rejected back to a draft, so the entry is never stuck.
+Method TestARewrittenProposalCanBeRejected()
+{
+    Set site = "Shutter.Catalogue.SiteEntry"
+    Set id = ..Draft(.match, .near)
+    Do $$$AssertEquals($CLASSMETHOD(site, "Prove", id, "activate", "ut-author", "api", .result, .detail), "", "proved")
+    Do $$$AssertEquals($CLASSMETHOD(site, "Propose", id, "activate", "ut-author", "api", .entry, .detail), "", "proposed")
+    Set digest = entry.ProposalDigest
+    // The frozen version rewritten, as a change that slipped past the proposal would leave it.
+    Set v = ##class(Shutter.Catalogue.SiteEntryVersion).Find(id, 1)
+    Set content = v.Content()
+    Set content.title = "Rewritten after the proposal"
+    Set v.Json = ##class(Shutter.Util.Digest).Canonical(content), v.Digest = ##class(Shutter.Catalogue.SiteEntryVersion).DigestOf(content)
+    Do $$$AssertStatusOK(v.%Save(), "the frozen version is rewritten")
+    Set approve = {"action": "activate", "version": 1, "digest": (digest), "decision": "approve", "reason": "ok"}
+    Do $$$AssertEquals($CLASSMETHOD(site, "Decide", id, approve, "ut-approver", "api", .e2, .detail, .extra), "digest_mismatch", "it is not approved")
+    Set reject = {"action": "activate", "version": 1, "digest": (digest), "decision": "reject", "reason": "The version changed after it was proposed"}
+    Do $$$AssertEquals($CLASSMETHOD(site, "Decide", id, reject, "ut-approver", "api", .e2, .detail, .extra), "", "it is rejected: " _ detail)
+    Set entry = $CLASSMETHOD(site, "ById", id)
+    Do $$$AssertEquals(entry.ShownState(), "draft", "a draft again")
+    Do $$$AssertEquals(##class(Shutter.Catalogue.SiteEntryEvent).For(id).%Get(0).kind, "rejected", "with the event")
+    Do $$$AssertEquals($CLASSMETHOD(site, "Change", id, ##class(Shutter.Test.SiteKit).Body(match.CaseId, near.CaseId), entry.Revision, "ut-author", "api", .e2, .problems, .warnings, .detail), "", "and the draft can be changed again: " _ detail)
+}
+
+/// The two-person rule reads a user name whatever its letters' case: IRIS signs in ALICE and alice as one user.
+Method TestTheTwoPersonRuleIgnoresTheLettersCase()
+{
+    Set site = "Shutter.Catalogue.SiteEntry"
+    Set id = ..Draft(.match, .near)
+    Do $$$AssertEquals($CLASSMETHOD(site, "Prove", id, "activate", "ut-author", "api", .result, .detail), "", "proved")
+    Do $$$AssertEquals($CLASSMETHOD(site, "Propose", id, "activate", "ut-proposer", "api", .entry, .detail), "", "proposed by another")
+    Set approve = {"action": "activate", "version": 1, "digest": (entry.ProposalDigest), "decision": "approve", "reason": "ok"}
+    Do $$$AssertEquals($CLASSMETHOD(site, "Decide", id, approve, "UT-PROPOSER", "api", .e2, .detail, .extra), "same_person", "the proposer in capitals is the proposer")
+    Do $$$AssertEquals($CLASSMETHOD(site, "Decide", id, approve, "Ut-Author", "api", .e2, .detail, .extra), "same_person", "the version's author in mixed case is its author")
+    Do $$$AssertEquals($CLASSMETHOD(site, "Decide", id, approve, "ut-approver", "api", .e2, .detail, .extra), "", "a second person approves: " _ detail)
+}
+
+/// A proposal and a rejection are each written with their event, or not at all: here the event cannot be written (a
+/// source word longer than the event allows), and the entry is left as it was.
+Method TestAProposalAndARejectionKeepTheirEvent()
+{
+    Set site = "Shutter.Catalogue.SiteEntry", long = "a-source-longer-than-an-event-takes"
+    Set id = ..Draft(.match, .near)
+    Do $$$AssertEquals($CLASSMETHOD(site, "Prove", id, "activate", "ut-author", "api", .result, .detail), "", "proved")
+    Set revision = $CLASSMETHOD(site, "ById", id).Revision
+    Do $$$AssertEquals($CLASSMETHOD(site, "Propose", id, "activate", "ut-author", long, .entry, .detail), "failed", "a proposal whose event fails")
+    Set entry = $CLASSMETHOD(site, "ById", id)
+    Do $$$AssertEquals(entry.ProposalAction, "", "is not made")
+    Do $$$AssertEquals(entry.Revision, revision, "and the row is as it was")
+    Do $$$AssertNotEquals(##class(Shutter.Catalogue.SiteEntryEvent).For(id).%Get(0).kind, "proposed", "with no event")
+    Do $$$AssertEquals($CLASSMETHOD(site, "Propose", id, "activate", "ut-author", "api", .entry, .detail), "", "proposed")
+    Set reject = {"action": "activate", "version": 1, "digest": (entry.ProposalDigest), "decision": "reject", "reason": "Too broad"}
+    Do $$$AssertEquals($CLASSMETHOD(site, "Decide", id, reject, "ut-approver", long, .e2, .detail, .extra), "failed", "a rejection whose event fails")
+    Do $$$AssertEquals($CLASSMETHOD(site, "ById", id).ProposalAction, "activate", "is not made: the proposal still waits")
+    Do $$$AssertEquals(##class(Shutter.Catalogue.SiteEntryEvent).For(id).%Get(0).kind, "proposed", "and its event is the last")
 }
 
 /// The two-person rule is lifted only from the terminal by an IRIS administrator: never over SQL or a route. With it

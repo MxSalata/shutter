@@ -445,15 +445,16 @@ ClassMethod WriteDraft(entryId As %String, version As %Integer, content As %Dyna
     Quit v.%Save()
 }
 
-/// Change the draft, or begin one beside the active version. expectedVersion is the revision the caller read.
+/// Change the draft, or begin one beside the active version. expectedVersion is the revision the caller read, and is
+/// required (stale_version when it is missing or not the entry's). The state, an open proposal and the revision are
+/// read again under the lock, so a change racing a proposal never rewrites the version that was frozen.
 ClassMethod Change(id As %String, body As %DynamicObject, expectedVersion As %String, actor As %String, source As %String, Output entry As Shutter.Catalogue.SiteEntry, Output problems As %DynamicArray, Output warnings As %DynamicArray, Output detail As %String) As %String
 {
     Set problems = [], warnings = [], detail = ""
     Set entry = ..ById(id)
     If '$ISOBJECT(entry) Quit "not_found"
-    If entry.State = "retired" Set detail = id _ " is retired: its history is kept and it is not changed again" Quit "wrong_state"
-    If entry.ProposalAction = "activate" Set detail = "Version " _ entry.ProposalVersion _ " of " _ id _ " waits for approval and is frozen until it is approved or rejected" Quit "wrong_state"
-    If (expectedVersion '= "") && (+expectedVersion '= +entry.Revision) Set detail = entry.Revision Quit "stale_version"
+    Set code = ..Changeable(entry, expectedVersion, .detail)
+    If code '= "" Quit code
     Do ##class(Shutter.Catalogue.SiteEntryVersion).Normalise(body, id, .content, .problems, .warnings)
     If problems.%Size() > 0 Quit "bad_request"
     If '..Lock() Quit "busy"
@@ -461,7 +462,8 @@ ClassMethod Change(id As %String, body As %DynamicObject, expectedVersion As %St
     Try {
         TSTART
         Set entry = ..ById(id)
-        If (expectedVersion '= "") && (+expectedVersion '= +entry.Revision) { Set detail = entry.Revision, code = "stale_version" } Else {
+        Set code = $SELECT('$ISOBJECT(entry): "not_found", 1: ..Changeable(entry, expectedVersion, .detail))
+        If code = "" {
             If entry.DraftVersion = 0 Set entry.DraftVersion = ..NextVersion(id)
             $$$ThrowOnError(..WriteDraft(id, entry.DraftVersion, content, actor))
             $$$ThrowOnError(entry.Touch())
@@ -471,9 +473,24 @@ ClassMethod Change(id As %String, body As %DynamicObject, expectedVersion As %St
     } Catch ex {
         If $TLEVEL > 0 TROLLBACK
         Set code = "failed", detail = ex.DisplayString()
+        // The copy in memory is the stored row again, as the rollback left it.
+        If $ISOBJECT($GET(entry)) {
+            Try { Do entry.%Reload() } Catch reload { }
+        }
     }
     Do ..Unlock()
     Quit code
+}
+
+/// Whether the entry's draft may be changed now by a caller who read <var>expectedVersion</var>: "" when it may, else
+/// the code, with the words (or the revision, for stale_version) in <var>detail</var>.
+ClassMethod Changeable(entry As Shutter.Catalogue.SiteEntry, expectedVersion As %String, Output detail As %String) As %String [ Private ]
+{
+    Set detail = ""
+    If entry.State = "retired" Set detail = entry.EntryId _ " is retired: its history is kept and it is not changed again" Quit "wrong_state"
+    If entry.ProposalAction = "activate" Set detail = "Version " _ entry.ProposalVersion _ " of " _ entry.EntryId _ " waits for approval and is frozen until it is approved or rejected" Quit "wrong_state"
+    If ($ZSTRIP(expectedVersion, "<>W") = "") || (+expectedVersion '= +entry.Revision) Set detail = entry.Revision Quit "stale_version"
+    Quit ""
 }
 
 /// The number the next version takes: one more than the highest the entry has had.
@@ -546,12 +563,20 @@ ClassMethod Propose(id As %String, action As %String, actor As %String, source A
         If '$ISOBJECT(proof) Set code = "no_proof", detail = "No proof of this version's digest for " _ action _ ": run the proof first" Quit
         If 'proof.Passed Set code = "no_proof", detail = "The latest proof of this digest did not pass" Quit
         If 'proof.Current() Set code = "no_proof", detail = "The proof is stale: the catalogue, the site profile, the gate's policy or the release changed since it ran. Run it again" Quit
+        // The proposal and its event together, or neither.
+        TSTART
         Set entry.ProposalAction = action, entry.ProposalVersion = v.Version, entry.ProposalDigest = v.Digest
         Set entry.ProposalBy = $EXTRACT(actor, 1, 160), entry.ProposalAt = ##class(Shutter.Util.Time).NowUTC(), entry.ProposalProofId = proof.%Id()
         $$$ThrowOnError(entry.Touch())
         $$$ThrowOnError(##class(Shutter.Catalogue.SiteEntryEvent).Record(id, v.Version, "proposed", actor, source, "Proposed: " _ action _ " version " _ v.Version, v.Digest))
+        TCOMMIT
     } Catch ex {
+        If $TLEVEL > 0 TROLLBACK
         Set code = "failed", detail = ex.DisplayString()
+        // The copy in memory is the stored row again, as the rollback left it.
+        If $ISOBJECT($GET(entry)) {
+            Try { Do entry.%Reload() } Catch reload { }
+        }
     }
     Do ..Unlock()
     Quit code
@@ -591,18 +616,25 @@ ClassMethod Decide(id As %String, body As %DynamicObject, actor As %String, sour
             Set code = "digest_mismatch", detail = "The proposal is to " _ action _ " version " _ entry.ProposalVersion _ " with digest " _ entry.ProposalDigest _ ": the action, version and digest sent are not all those"
             Quit
         }
-        Set v = ##class(Shutter.Catalogue.SiteEntryVersion).Find(id, entry.ProposalVersion)
-        Set content = $SELECT($ISOBJECT(v): v.Content(), 1: "")
-        If '$ISOBJECT(content) || (v.Digest '= entry.ProposalDigest) Set code = "digest_mismatch", detail = "The proposed version is no longer the one proposed" Quit
+        // A rejection returns the entry to its draft, and its event is written with it. It is taken even when the stored
+        // version no longer has the digest proposed, so a proposal can never be left stuck.
         If decision = "reject" {
+            Set version = entry.ProposalVersion, digest = entry.ProposalDigest
+            TSTART
             Set entry.ProposalAction = "", entry.ProposalVersion = "", entry.ProposalDigest = "", entry.ProposalBy = "", entry.ProposalAt = "", entry.ProposalProofId = ""
             $$$ThrowOnError(entry.Touch())
-            $$$ThrowOnError(##class(Shutter.Catalogue.SiteEntryEvent).Record(id, v.Version, "rejected", actor, source, "Rejected (" _ action _ "): " _ reason, v.Digest))
+            $$$ThrowOnError(##class(Shutter.Catalogue.SiteEntryEvent).Record(id, version, "rejected", actor, source, "Rejected (" _ action _ "): " _ reason, digest))
+            TCOMMIT
             Quit
         }
+        Set v = ##class(Shutter.Catalogue.SiteEntryVersion).Find(id, entry.ProposalVersion)
+        Set content = $SELECT($ISOBJECT(v): v.Content(), 1: "")
+        If '$ISOBJECT(content) || (v.Digest '= entry.ProposalDigest) Set code = "digest_mismatch", detail = "The proposed version is no longer the one proposed: reject the proposal, and the draft can be changed and proposed again" Quit
         // Two people (R6): the approver neither proposed this nor last changed the version, unless an IRIS administrator
-        // lifted the rule from the terminal, which every such approval then says.
-        Set alone = (actor = entry.ProposalBy) || ((action = "activate") && (actor = v.WrittenBy))
+        // lifted the rule from the terminal, which every such approval then says. A user name is the same person whatever
+        // its letters' case, as IRIS reads it at sign-in.
+        Set who = $ZCONVERT(actor, "U")
+        Set alone = (who = $ZCONVERT(entry.ProposalBy, "U")) || ((action = "activate") && (who = $ZCONVERT(v.WrittenBy, "U")))
         If alone && '$ISOBJECT(..OnePerson()) Set code = "same_person", detail = "A second person approves a site entry: " _ actor _ " proposed this or wrote the version" Quit
         If action '= "retire" {
             Set detail = ..StillValid(content, id)
@@ -653,6 +685,10 @@ ClassMethod Decide(id As %String, body As %DynamicObject, actor As %String, sour
     } Catch ex {
         If $TLEVEL > 0 TROLLBACK
         Set code = "failed", detail = ex.DisplayString()
+        // The copy in memory is the stored row again, as the rollback left it.
+        If $ISOBJECT($GET(entry)) {
+            Try { Do entry.%Reload() } Catch reload { }
+        }
     }
     Do ..Unlock()
     Quit code
@@ -690,6 +726,10 @@ ClassMethod Suspend(id As %String, reason As %String, actor As %String, source A
     } Catch ex {
         If $TLEVEL > 0 TROLLBACK
         Set code = "failed", detail = ex.DisplayString()
+        // The copy in memory is the stored row again, as the rollback left it.
+        If $ISOBJECT($GET(entry)) {
+            Try { Do entry.%Reload() } Catch reload { }
+        }
     }
     Do ..Unlock()
     Quit code
