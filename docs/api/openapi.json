@@ -66,6 +66,10 @@
       "description": "The site's answers that drive the policy path (CONTRACTS 6.4)."
     },
     {
+      "name": "site entries",
+      "description": "The catalogue in force and the site's own entries: stop entries that can only send a case to a person (CONTRACTS 6.8)."
+    },
+    {
       "name": "settings",
       "description": "The agent library, the instance's settings, schemas and the live hospital."
     },
@@ -9408,6 +9412,1341 @@
           }
         }
       }
+    },
+    "/api/shutter/catalogue": {
+      "get": {
+        "operationId": "catalogue",
+        "tags": [
+          "site entries"
+        ],
+        "summary": "The catalogue in force",
+        "description": "The shipped entries, the site's own active entries as the matcher reads them (a person, escalate, no alternatives), the catalogue's version with its generation, and the condition vocabulary.\n\nNeeds Shutter_Operate.\n\nCONTRACTS 6.8.",
+        "x-contract": "docs/CONTRACTS.md section 6.8",
+        "x-required-resource": "Shutter_Operate",
+        "x-writes": false,
+        "x-idempotent": false,
+        "x-dispatch": "Shutter.API.Dispatch.Catalogue",
+        "responses": {
+          "200": {
+            "description": "The catalogue.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogueView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in. unauthenticated: Sign in first.",
+            "x-error-codes": [
+              "unauthenticated"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "unauthenticated": {
+                    "value": {
+                      "error": "unauthenticated",
+                      "detail": "Sign in first"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden. forbidden: This needs Shutter_Operate.",
+            "x-error-codes": [
+              "forbidden"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "forbidden": {
+                    "value": {
+                      "error": "forbidden",
+                      "detail": "This needs Shutter_Operate"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/shutter/site-entries": {
+      "get": {
+        "operationId": "siteEntries",
+        "tags": [
+          "site entries"
+        ],
+        "summary": "The site's own catalogue entries",
+        "description": "Every site entry with its state, and the site's status, whose warnings stay for as long as what they warn of lasts (a suspended entry, an entry flagged for review, the two-person rule lifted).\n\nNeeds Shutter_Operate.\n\nCONTRACTS 6.8.",
+        "x-contract": "docs/CONTRACTS.md section 6.8",
+        "x-required-resource": "Shutter_Operate",
+        "x-writes": false,
+        "x-idempotent": false,
+        "x-dispatch": "Shutter.API.Dispatch.SiteEntries",
+        "responses": {
+          "200": {
+            "description": "The entries and the status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteEntriesView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in. unauthenticated: Sign in first.",
+            "x-error-codes": [
+              "unauthenticated"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "unauthenticated": {
+                    "value": {
+                      "error": "unauthenticated",
+                      "detail": "Sign in first"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden. forbidden: This needs Shutter_Operate.",
+            "x-error-codes": [
+              "forbidden"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "forbidden": {
+                    "value": {
+                      "error": "forbidden",
+                      "detail": "This needs Shutter_Operate"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "siteEntryCreate",
+        "tags": [
+          "site entries"
+        ],
+        "summary": "Make a draft of a site entry",
+        "description": "A stop entry: a pattern, a scope and words. It has no field for who decides or the outcome, and a body that carries one is refused. fromCase fills the pattern, the scope and the first fixture from a stored, closed case. A draft changes nothing.\n\nNeeds Shutter_Configure. A change: send X-Requested-With: Shutter.\n\nCONTRACTS 6.8.",
+        "x-contract": "docs/CONTRACTS.md section 6.8",
+        "x-required-resource": "Shutter_Configure",
+        "x-writes": true,
+        "x-idempotent": false,
+        "x-dispatch": "Shutter.API.Dispatch.SiteEntryCreate",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XRequestedWith"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SiteEntryBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The draft.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteEntry"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request. bad_request: The body is not a JSON object, or the entry is not valid (with problems, each naming its rule and field).",
+            "x-error-codes": [
+              "bad_request"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "bad_request": {
+                    "value": {
+                      "error": "bad_request",
+                      "detail": "The body is not a JSON object, or the entry is not valid (with problems, each naming its rule and field)"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in. unauthenticated: Sign in first.",
+            "x-error-codes": [
+              "unauthenticated"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "unauthenticated": {
+                    "value": {
+                      "error": "unauthenticated",
+                      "detail": "Sign in first"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden. forbidden: This needs Shutter_Configure. csrf: Changes need the header X-Requested-With: Shutter.",
+            "x-error-codes": [
+              "forbidden",
+              "csrf"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "forbidden": {
+                    "value": {
+                      "error": "forbidden",
+                      "detail": "This needs Shutter_Configure"
+                    }
+                  },
+                  "csrf": {
+                    "value": {
+                      "error": "csrf",
+                      "detail": "Changes need the header X-Requested-With: Shutter"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/shutter/site-entries/validate": {
+      "post": {
+        "operationId": "siteEntryValidate",
+        "tags": [
+          "site entries"
+        ],
+        "summary": "Check a site entry's body",
+        "description": "The body checked against the rules R1 to R5 and R15, with the sentence it comes to and the shipped entries its pattern can displace. Stores nothing and reads no case.\n\nNeeds Shutter_Operate. A change: send X-Requested-With: Shutter.\n\nCONTRACTS 6.8.",
+        "x-contract": "docs/CONTRACTS.md section 6.8",
+        "x-required-resource": "Shutter_Operate",
+        "x-writes": true,
+        "x-idempotent": false,
+        "x-dispatch": "Shutter.API.Dispatch.SiteEntryValidate",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XRequestedWith"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SiteEntryBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The problems, the warnings, the sentence and the overlap.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteEntryValidation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request. bad_request: The body must be a JSON object.",
+            "x-error-codes": [
+              "bad_request"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "bad_request": {
+                    "value": {
+                      "error": "bad_request",
+                      "detail": "The body must be a JSON object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in. unauthenticated: Sign in first.",
+            "x-error-codes": [
+              "unauthenticated"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "unauthenticated": {
+                    "value": {
+                      "error": "unauthenticated",
+                      "detail": "Sign in first"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden. forbidden: This needs Shutter_Operate. csrf: Changes need the header X-Requested-With: Shutter.",
+            "x-error-codes": [
+              "forbidden",
+              "csrf"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "forbidden": {
+                    "value": {
+                      "error": "forbidden",
+                      "detail": "This needs Shutter_Operate"
+                    }
+                  },
+                  "csrf": {
+                    "value": {
+                      "error": "csrf",
+                      "detail": "Changes need the header X-Requested-With: Shutter"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/shutter/site-entries/{id}": {
+      "get": {
+        "operationId": "siteEntryGet",
+        "tags": [
+          "site entries"
+        ],
+        "summary": "One site entry",
+        "description": "The entry with every version, its proofs and its events.\n\nNeeds Shutter_Operate.\n\nCONTRACTS 6.8.",
+        "x-contract": "docs/CONTRACTS.md section 6.8",
+        "x-required-resource": "Shutter_Operate",
+        "x-writes": false,
+        "x-idempotent": false,
+        "x-dispatch": "Shutter.API.Dispatch.SiteEntryGet",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^L[1-9][0-9]*$"
+            },
+            "description": "The site entry's id, such as L1.",
+            "example": "L1"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The entry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteEntry"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in. unauthenticated: Sign in first.",
+            "x-error-codes": [
+              "unauthenticated"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "unauthenticated": {
+                    "value": {
+                      "error": "unauthenticated",
+                      "detail": "Sign in first"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden. forbidden: This needs Shutter_Operate.",
+            "x-error-codes": [
+              "forbidden"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "forbidden": {
+                    "value": {
+                      "error": "forbidden",
+                      "detail": "This needs Shutter_Operate"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found. not_found: No such site entry.",
+            "x-error-codes": [
+              "not_found"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "not_found": {
+                    "value": {
+                      "error": "not_found",
+                      "detail": "No such site entry"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "siteEntryChange",
+        "tags": [
+          "site entries"
+        ],
+        "summary": "Change a site entry's draft",
+        "description": "Rewrites the open draft, or begins the next version as a draft beside the active one, which keeps applying until the new one is approved. expectedVersion is the entry's revision as the caller read it.\n\nNeeds Shutter_Configure. A change: send X-Requested-With: Shutter.\n\nCONTRACTS 6.8.",
+        "x-contract": "docs/CONTRACTS.md section 6.8",
+        "x-required-resource": "Shutter_Configure",
+        "x-writes": true,
+        "x-idempotent": false,
+        "x-dispatch": "Shutter.API.Dispatch.SiteEntryChange",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^L[1-9][0-9]*$"
+            },
+            "description": "The site entry's id, such as L1.",
+            "example": "L1"
+          },
+          {
+            "$ref": "#/components/parameters/XRequestedWith"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SiteEntryBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The entry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteEntry"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request. bad_request: The body is not a JSON object, or the entry is not valid (with problems, each naming its rule and field).",
+            "x-error-codes": [
+              "bad_request"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "bad_request": {
+                    "value": {
+                      "error": "bad_request",
+                      "detail": "The body is not a JSON object, or the entry is not valid (with problems, each naming its rule and field)"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in. unauthenticated: Sign in first.",
+            "x-error-codes": [
+              "unauthenticated"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "unauthenticated": {
+                    "value": {
+                      "error": "unauthenticated",
+                      "detail": "Sign in first"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden. forbidden: This needs Shutter_Configure. csrf: Changes need the header X-Requested-With: Shutter.",
+            "x-error-codes": [
+              "forbidden",
+              "csrf"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "forbidden": {
+                    "value": {
+                      "error": "forbidden",
+                      "detail": "This needs Shutter_Configure"
+                    }
+                  },
+                  "csrf": {
+                    "value": {
+                      "error": "csrf",
+                      "detail": "Changes need the header X-Requested-With: Shutter"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found. not_found: No such site entry.",
+            "x-error-codes": [
+              "not_found"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "not_found": {
+                    "value": {
+                      "error": "not_found",
+                      "detail": "No such site entry"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict. stale_version: expectedVersion is not the entry's revision (with currentVersion). wrong_state: The proposed version is frozen until it is approved or rejected, or the entry is retired.",
+            "x-error-codes": [
+              "stale_version",
+              "wrong_state"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "stale_version": {
+                    "value": {
+                      "error": "stale_version",
+                      "detail": "expectedVersion is not the entry's revision (with currentVersion)"
+                    }
+                  },
+                  "wrong_state": {
+                    "value": {
+                      "error": "wrong_state",
+                      "detail": "The proposed version is frozen until it is approved or rejected, or the entry is retired"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/shutter/site-entries/{id}/proof": {
+      "post": {
+        "operationId": "siteEntryProof",
+        "tags": [
+          "site entries"
+        ],
+        "summary": "Prove a site entry on stored cases",
+        "description": "Replays the entry's fixtures through the matcher (P1: it matches and leads alone; P2: it leaves the near miss alone), matches the last stored cases with and without it (P4) and keeps the proof with what it is bound to (P5). Nothing is sent and nothing is written on any case.\n\nNeeds Shutter_Configure. A change: send X-Requested-With: Shutter.\n\nCONTRACTS 6.8.",
+        "x-contract": "docs/CONTRACTS.md section 6.8",
+        "x-required-resource": "Shutter_Configure",
+        "x-writes": true,
+        "x-idempotent": false,
+        "x-dispatch": "Shutter.API.Dispatch.SiteEntryProof",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^L[1-9][0-9]*$"
+            },
+            "description": "The site entry's id, such as L1.",
+            "example": "L1"
+          },
+          {
+            "$ref": "#/components/parameters/XRequestedWith"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SiteEntryAction"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The proof.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteEntryProofResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request. bad_request: The action is activate, retire or resume.",
+            "x-error-codes": [
+              "bad_request"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "bad_request": {
+                    "value": {
+                      "error": "bad_request",
+                      "detail": "The action is activate, retire or resume"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in. unauthenticated: Sign in first.",
+            "x-error-codes": [
+              "unauthenticated"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "unauthenticated": {
+                    "value": {
+                      "error": "unauthenticated",
+                      "detail": "Sign in first"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden. forbidden: This needs Shutter_Configure. csrf: Changes need the header X-Requested-With: Shutter.",
+            "x-error-codes": [
+              "forbidden",
+              "csrf"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "forbidden": {
+                    "value": {
+                      "error": "forbidden",
+                      "detail": "This needs Shutter_Configure"
+                    }
+                  },
+                  "csrf": {
+                    "value": {
+                      "error": "csrf",
+                      "detail": "Changes need the header X-Requested-With: Shutter"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found. not_found: No such site entry.",
+            "x-error-codes": [
+              "not_found"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "not_found": {
+                    "value": {
+                      "error": "not_found",
+                      "detail": "No such site entry"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict. wrong_state: The entry has no draft to activate, or is not in the state the action needs.",
+            "x-error-codes": [
+              "wrong_state"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "wrong_state": {
+                    "value": {
+                      "error": "wrong_state",
+                      "detail": "The entry has no draft to activate, or is not in the state the action needs"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/shutter/site-entries/{id}/propose": {
+      "post": {
+        "operationId": "siteEntryPropose",
+        "tags": [
+          "site entries"
+        ],
+        "summary": "Propose an action on a site entry",
+        "description": "Fixes the action, the version and its digest for a second person. Needs a passing proof of that digest made under the catalogue, site profile, gate policy and release in force.\n\nNeeds Shutter_Configure. A change: send X-Requested-With: Shutter.\n\nCONTRACTS 6.8.",
+        "x-contract": "docs/CONTRACTS.md section 6.8",
+        "x-required-resource": "Shutter_Configure",
+        "x-writes": true,
+        "x-idempotent": false,
+        "x-dispatch": "Shutter.API.Dispatch.SiteEntryPropose",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^L[1-9][0-9]*$"
+            },
+            "description": "The site entry's id, such as L1.",
+            "example": "L1"
+          },
+          {
+            "$ref": "#/components/parameters/XRequestedWith"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SiteEntryAction"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The entry, with its proposal.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteEntry"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request. bad_request: The body is not a JSON object, or the entry is not valid (with problems, each naming its rule and field).",
+            "x-error-codes": [
+              "bad_request"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "bad_request": {
+                    "value": {
+                      "error": "bad_request",
+                      "detail": "The body is not a JSON object, or the entry is not valid (with problems, each naming its rule and field)"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in. unauthenticated: Sign in first.",
+            "x-error-codes": [
+              "unauthenticated"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "unauthenticated": {
+                    "value": {
+                      "error": "unauthenticated",
+                      "detail": "Sign in first"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden. forbidden: This needs Shutter_Configure. csrf: Changes need the header X-Requested-With: Shutter.",
+            "x-error-codes": [
+              "forbidden",
+              "csrf"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "forbidden": {
+                    "value": {
+                      "error": "forbidden",
+                      "detail": "This needs Shutter_Configure"
+                    }
+                  },
+                  "csrf": {
+                    "value": {
+                      "error": "csrf",
+                      "detail": "Changes need the header X-Requested-With: Shutter"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found. not_found: No such site entry.",
+            "x-error-codes": [
+              "not_found"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "not_found": {
+                    "value": {
+                      "error": "not_found",
+                      "detail": "No such site entry"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict. no_proof: No passing, current proof of this version's digest: run the proof first. wrong_state: A proposal already waits for approval, or the entry is not in the state the action needs. too_many: The site has its 50 active site entries already.",
+            "x-error-codes": [
+              "no_proof",
+              "wrong_state",
+              "too_many"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "no_proof": {
+                    "value": {
+                      "error": "no_proof",
+                      "detail": "No passing, current proof of this version's digest: run the proof first"
+                    }
+                  },
+                  "wrong_state": {
+                    "value": {
+                      "error": "wrong_state",
+                      "detail": "A proposal already waits for approval, or the entry is not in the state the action needs"
+                    }
+                  },
+                  "too_many": {
+                    "value": {
+                      "error": "too_many",
+                      "detail": "The site has its 50 active site entries already"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/shutter/site-entries/{id}/approvals": {
+      "post": {
+        "operationId": "siteEntryApprove",
+        "tags": [
+          "site entries"
+        ],
+        "summary": "Approve or reject a proposed action on a site entry",
+        "description": "A second person's decision on the exact action, version and digest they read. On approve the proof is run again and must answer as the proposal's did; then the change is made, the catalogue's generation raised and the events written together. The answer carries catalogueVersion, approver and waitingPlans, the open cases whose plan was made under the old catalogue version, none of which completes under it.\n\nNeeds Shutter_Approve; on a demo instance Shutter_Configure as well, since the public demo's roles hold Shutter_Approve and change nothing of the site. A change: send X-Requested-With: Shutter.\n\nCONTRACTS 6.8.",
+        "x-contract": "docs/CONTRACTS.md section 6.8",
+        "x-required-resource": "Shutter_Approve",
+        "x-writes": true,
+        "x-idempotent": false,
+        "x-dispatch": "Shutter.API.Dispatch.SiteEntryApprove",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^L[1-9][0-9]*$"
+            },
+            "description": "The site entry's id, such as L1.",
+            "example": "L1"
+          },
+          {
+            "$ref": "#/components/parameters/XRequestedWith"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SiteEntryApproval"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The entry after the decision.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteEntryDecided"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request. bad_request: decision is approve or reject, and a reason is required.",
+            "x-error-codes": [
+              "bad_request"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "bad_request": {
+                    "value": {
+                      "error": "bad_request",
+                      "detail": "decision is approve or reject, and a reason is required"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in. unauthenticated: Sign in first.",
+            "x-error-codes": [
+              "unauthenticated"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "unauthenticated": {
+                    "value": {
+                      "error": "unauthenticated",
+                      "detail": "Sign in first"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden. forbidden: This needs Shutter_Approve. csrf: Changes need the header X-Requested-With: Shutter.",
+            "x-error-codes": [
+              "forbidden",
+              "csrf"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "forbidden": {
+                    "value": {
+                      "error": "forbidden",
+                      "detail": "This needs Shutter_Approve"
+                    }
+                  },
+                  "csrf": {
+                    "value": {
+                      "error": "csrf",
+                      "detail": "Changes need the header X-Requested-With: Shutter"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found. not_found: No such site entry.",
+            "x-error-codes": [
+              "not_found"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "not_found": {
+                    "value": {
+                      "error": "not_found",
+                      "detail": "No such site entry"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict. same_person: A second person approves a site entry: the caller proposed this or wrote the version. digest_mismatch: The action, version and digest sent are not all the proposal's. proof_failed: The proof is stale, or run again at approval it did not answer as the proposal's did. wrong_state: No proposal waits for approval. too_many: The site has its 50 active site entries already.",
+            "x-error-codes": [
+              "same_person",
+              "digest_mismatch",
+              "proof_failed",
+              "wrong_state",
+              "too_many"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "same_person": {
+                    "value": {
+                      "error": "same_person",
+                      "detail": "A second person approves a site entry: the caller proposed this or wrote the version"
+                    }
+                  },
+                  "digest_mismatch": {
+                    "value": {
+                      "error": "digest_mismatch",
+                      "detail": "The action, version and digest sent are not all the proposal's"
+                    }
+                  },
+                  "proof_failed": {
+                    "value": {
+                      "error": "proof_failed",
+                      "detail": "The proof is stale, or run again at approval it did not answer as the proposal's did"
+                    }
+                  },
+                  "wrong_state": {
+                    "value": {
+                      "error": "wrong_state",
+                      "detail": "No proposal waits for approval"
+                    }
+                  },
+                  "too_many": {
+                    "value": {
+                      "error": "too_many",
+                      "detail": "The site has its 50 active site entries already"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/shutter/site-entries/{id}/suspend": {
+      "post": {
+        "operationId": "siteEntrySuspend",
+        "tags": [
+          "site entries"
+        ],
+        "summary": "Suspend an active site entry at once",
+        "description": "One person switches one entry off, with a reason: the cases it caught are the shipped catalogue's again. The suspension is recorded, raises the catalogue's generation and is warned about for as long as it lasts. Resuming is a proposal and a second person's approval.\n\nNeeds Shutter_Approve and Shutter_Configure. A change: send X-Requested-With: Shutter.\n\nCONTRACTS 6.8.",
+        "x-contract": "docs/CONTRACTS.md section 6.8",
+        "x-required-resource": "Shutter_Approve",
+        "x-writes": true,
+        "x-idempotent": false,
+        "x-dispatch": "Shutter.API.Dispatch.SiteEntrySuspend",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^L[1-9][0-9]*$"
+            },
+            "description": "The site entry's id, such as L1.",
+            "example": "L1"
+          },
+          {
+            "$ref": "#/components/parameters/XRequestedWith"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SiteEntrySuspension"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The entry, suspended.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteEntry"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request. bad_request: A reason is required.",
+            "x-error-codes": [
+              "bad_request"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "bad_request": {
+                    "value": {
+                      "error": "bad_request",
+                      "detail": "A reason is required"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in. unauthenticated: Sign in first.",
+            "x-error-codes": [
+              "unauthenticated"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "unauthenticated": {
+                    "value": {
+                      "error": "unauthenticated",
+                      "detail": "Sign in first"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden. forbidden: This needs Shutter_Approve. csrf: Changes need the header X-Requested-With: Shutter.",
+            "x-error-codes": [
+              "forbidden",
+              "csrf"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "forbidden": {
+                    "value": {
+                      "error": "forbidden",
+                      "detail": "This needs Shutter_Approve"
+                    }
+                  },
+                  "csrf": {
+                    "value": {
+                      "error": "csrf",
+                      "detail": "Changes need the header X-Requested-With: Shutter"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found. not_found: No such site entry.",
+            "x-error-codes": [
+              "not_found"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "not_found": {
+                    "value": {
+                      "error": "not_found",
+                      "detail": "No such site entry"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict. wrong_state: Only an active entry is suspended.",
+            "x-error-codes": [
+              "wrong_state"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "wrong_state": {
+                    "value": {
+                      "error": "wrong_state",
+                      "detail": "Only an active entry is suspended"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -17302,6 +18641,616 @@
             "description": "v1.54: why the recovery control halted the run before this row was sent (CONTRACTS 18); null otherwise."
           }
         }
+      },
+      "SiteEntryContent": {
+        "description": "A site entry's content (CONTRACTS 6.8): a stop entry. No field says who decides or the outcome.",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "const": "stop"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "priority": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 999,
+            "description": "Among site entries that match the same case, the lowest leads."
+          },
+          "scope": {
+            "type": "object",
+            "description": "receiver, source_system, ward, reason_code: each a list of the values allowed; every fact listed must hold.",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "pattern": {
+            "type": "object",
+            "description": "Conditions of the vocabulary (CONTRACTS 6.1), each a list of the values allowed.",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "why": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "team": {
+            "type": "string"
+          },
+          "instructions": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "prose": {
+            "type": "string",
+            "maxLength": 4000
+          },
+          "fixtures": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "case": {
+                  "type": "string"
+                },
+                "expect": {
+                  "type": "string",
+                  "enum": [
+                    "match",
+                    "no_match"
+                  ]
+                },
+                "snapshot_digest": {
+                  "type": "string"
+                },
+                "chain": {
+                  "type": "string"
+                },
+                "conditions": {
+                  "type": "object"
+                },
+                "scope": {
+                  "type": "object"
+                }
+              },
+              "required": [
+                "case",
+                "expect"
+              ]
+            }
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "pattern",
+          "why"
+        ]
+      },
+      "SiteEntryBody": {
+        "description": "A site entry as a person writes it. scope and pattern values may be one value or a list. A body with decides, preferred, alternatives, checks or outcome is refused.",
+        "type": "object",
+        "properties": {
+          "fromCase": {
+            "type": "string",
+            "description": "POST /site-entries only: a stored, closed case to start from."
+          },
+          "expectedVersion": {
+            "type": "integer",
+            "description": "PUT only: the entry's revision as the caller read it."
+          },
+          "title": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "integer"
+          },
+          "scope": {
+            "type": "object"
+          },
+          "pattern": {
+            "type": "object"
+          },
+          "why": {
+            "type": "string"
+          },
+          "team": {
+            "type": "string"
+          },
+          "instructions": {
+            "type": "string"
+          },
+          "prose": {
+            "type": "string"
+          },
+          "fixtures": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "case": {
+                  "type": "string"
+                },
+                "expect": {
+                  "type": "string",
+                  "enum": [
+                    "match",
+                    "no_match"
+                  ]
+                }
+              },
+              "required": [
+                "case",
+                "expect"
+              ]
+            }
+          }
+        }
+      },
+      "SiteEntry": {
+        "description": "A site entry and its state (CONTRACTS 6.8). GET /site-entries/{id} and the routes that change an entry add versions, proofs and events.",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "proposed",
+              "active",
+              "suspended",
+              "retired"
+            ]
+          },
+          "kind": {
+            "type": "string",
+            "const": "stop"
+          },
+          "title": {
+            "type": "string"
+          },
+          "sentence": {
+            "type": "string",
+            "description": "The entry in one sentence."
+          },
+          "version": {
+            "type": "integer"
+          },
+          "digest": {
+            "type": "string"
+          },
+          "content": {
+            "$ref": "#/components/schemas/SiteEntryContent"
+          },
+          "activeVersion": {
+            "type": "integer"
+          },
+          "draftVersion": {
+            "type": "integer"
+          },
+          "revision": {
+            "type": "integer"
+          },
+          "approvedBy": {
+            "type": "string"
+          },
+          "approvedAt": {
+            "type": "string"
+          },
+          "draft": {
+            "type": "object",
+            "description": "The draft beside an active version."
+          },
+          "proposal": {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "activate",
+                  "retire",
+                  "resume"
+                ]
+              },
+              "version": {
+                "type": "integer"
+              },
+              "digest": {
+                "type": "string"
+              },
+              "by": {
+                "type": "string"
+              },
+              "at": {
+                "type": "string"
+              },
+              "proofId": {
+                "type": "string"
+              }
+            }
+          },
+          "needsReview": {
+            "type": "boolean"
+          },
+          "review": {
+            "type": "object"
+          },
+          "effectivePattern": {
+            "type": "object",
+            "description": "The pattern the matcher uses when the recheck dropped a predicate (R14)."
+          },
+          "suspended": {
+            "type": "object",
+            "properties": {
+              "by": {
+                "type": "string"
+              },
+              "at": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              }
+            }
+          },
+          "casesSent": {
+            "type": "integer"
+          },
+          "casesSent30": {
+            "type": "integer"
+          },
+          "versions": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "proofs": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "state",
+          "activeVersion",
+          "draftVersion",
+          "revision",
+          "needsReview"
+        ]
+      },
+      "SiteEntryDecided": {
+        "description": "The entry after a decision, with the catalogue's version, who decided and the open cases whose plan was made under the old version.",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/SiteEntry"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "catalogueVersion": {
+                "type": "string"
+              },
+              "approver": {
+                "type": "string"
+              },
+              "waitingPlans": {
+                "type": "integer"
+              }
+            }
+          }
+        ]
+      },
+      "SiteEntriesView": {
+        "description": "GET /site-entries.",
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SiteEntry"
+            }
+          },
+          "status": {
+            "type": "object",
+            "properties": {
+              "active": {
+                "type": "integer"
+              },
+              "proposed": {
+                "type": "integer"
+              },
+              "generation": {
+                "type": "integer"
+              },
+              "limit": {
+                "type": "integer"
+              },
+              "suspended": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "needsReview": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "onePerson": {
+                "type": [
+                  "object",
+                  "null"
+                ]
+              },
+              "warnings": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "downgrade": {
+                "type": "string"
+              }
+            }
+          },
+          "catalogueVersion": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "items",
+          "status"
+        ]
+      },
+      "CatalogueView": {
+        "description": "GET /catalogue.",
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string",
+            "description": "The shipped list and, once a site has activated an entry, ;g<n>: and the active site entries."
+          },
+          "shippedVersion": {
+            "type": "string"
+          },
+          "generation": {
+            "type": "integer"
+          },
+          "shipped": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "site": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "vocabulary": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "version",
+          "shipped",
+          "site"
+        ]
+      },
+      "SiteEntryValidation": {
+        "description": "POST /site-entries/validate.",
+        "type": "object",
+        "properties": {
+          "valid": {
+            "type": "boolean"
+          },
+          "problems": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "rule": {
+                  "type": "string"
+                },
+                "field": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "sentence": {
+            "type": "string"
+          },
+          "overlap": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        },
+        "required": [
+          "valid",
+          "problems"
+        ]
+      },
+      "SiteEntryAction": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "activate",
+              "retire",
+              "resume"
+            ]
+          }
+        }
+      },
+      "SiteEntryApproval": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "activate",
+              "retire",
+              "resume"
+            ]
+          },
+          "version": {
+            "type": "integer"
+          },
+          "digest": {
+            "type": "string"
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "approve",
+              "reject"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "safetyReference": {
+            "type": "string",
+            "description": "The trust's own safety record for the change; stored, not checked."
+          }
+        },
+        "required": [
+          "action",
+          "version",
+          "digest",
+          "decision",
+          "reason"
+        ]
+      },
+      "SiteEntrySuspension": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ]
+      },
+      "SiteEntryProofResult": {
+        "description": "A proof (CONTRACTS 6.8).",
+        "type": "object",
+        "properties": {
+          "passed": {
+            "type": "boolean"
+          },
+          "action": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer"
+          },
+          "digest": {
+            "type": "string"
+          },
+          "fixtures": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "case": {
+                  "type": "string"
+                },
+                "expect": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string",
+                  "enum": [
+                    "evidence",
+                    "frozen"
+                  ]
+                },
+                "holds": {
+                  "type": "boolean"
+                },
+                "lead": {
+                  "type": "string"
+                },
+                "ok": {
+                  "type": "boolean"
+                },
+                "text": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "counts": {
+            "type": "object"
+          },
+          "impact": {
+            "type": "object"
+          },
+          "problems": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "context": {
+            "type": "object"
+          },
+          "proofId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "passed",
+          "fixtures"
+        ]
       }
     }
   },

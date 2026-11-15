@@ -66,16 +66,16 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
   <Route Url="/settings/namespaces/:ns/remove" Method="POST" Call="Shutter.API.Onboarding:Remove"/>
   <Route Url="/site-profile" Method="GET" Call="SiteProfileGet"/>
   <Route Url="/site-profile" Method="PUT" Call="SiteProfilePut"/>
-  <Route Url="/catalogue" Method="GET" Call="Shutter.API.SiteEntries:Catalogue"/>
-  <Route Url="/site-entries" Method="GET" Call="Shutter.API.SiteEntries:List"/>
-  <Route Url="/site-entries" Method="POST" Call="Shutter.API.SiteEntries:Create"/>
-  <Route Url="/site-entries/validate" Method="POST" Call="Shutter.API.SiteEntries:Validate"/>
-  <Route Url="/site-entries/:id" Method="GET" Call="Shutter.API.SiteEntries:Get"/>
-  <Route Url="/site-entries/:id" Method="PUT" Call="Shutter.API.SiteEntries:Change"/>
-  <Route Url="/site-entries/:id/proof" Method="POST" Call="Shutter.API.SiteEntries:Proof"/>
-  <Route Url="/site-entries/:id/propose" Method="POST" Call="Shutter.API.SiteEntries:Propose"/>
-  <Route Url="/site-entries/:id/approvals" Method="POST" Call="Shutter.API.SiteEntries:Approve"/>
-  <Route Url="/site-entries/:id/suspend" Method="POST" Call="Shutter.API.SiteEntries:Suspend"/>
+  <Route Url="/catalogue" Method="GET" Call="Catalogue"/>
+  <Route Url="/site-entries" Method="GET" Call="SiteEntries"/>
+  <Route Url="/site-entries" Method="POST" Call="SiteEntryCreate"/>
+  <Route Url="/site-entries/validate" Method="POST" Call="SiteEntryValidate"/>
+  <Route Url="/site-entries/:id" Method="GET" Call="SiteEntryGet"/>
+  <Route Url="/site-entries/:id" Method="PUT" Call="SiteEntryChange"/>
+  <Route Url="/site-entries/:id/proof" Method="POST" Call="SiteEntryProof"/>
+  <Route Url="/site-entries/:id/propose" Method="POST" Call="SiteEntryPropose"/>
+  <Route Url="/site-entries/:id/approvals" Method="POST" Call="SiteEntryApprove"/>
+  <Route Url="/site-entries/:id/suspend" Method="POST" Call="SiteEntrySuspend"/>
   <Route Url="/recovery-control" Method="GET" Call="Shutter.API.Recovery:ControlGet"/>
   <Route Url="/recovery-control/stop" Method="POST" Call="Shutter.API.Recovery:ControlStop"/>
   <Route Url="/recovery-control/clear" Method="POST" Call="Shutter.API.Recovery:ControlClear"/>
@@ -1675,6 +1675,74 @@ ClassMethod SiteProfileHistory() As %Status
     If limit < 1 Set limit = 50
     If limit > 500 Set limit = 500
     Quit ..Json(##class(Shutter.Store.SiteProfileVersion).History(limit))
+}
+
+// ---- the catalogue and the site's own entries (CONTRACTS 6.8) ----
+
+/// Each route checks the caller here and hands the work to Shutter.API.SiteEntries. Reading needs Shutter_Operate; a
+/// draft, a proof and a proposal need Shutter_Configure; an approval needs Shutter_Approve and, on a demo instance,
+/// Shutter_Configure too; a suspension needs both.
+ClassMethod Catalogue() As %Status
+{
+    If '..Allow() Quit $$$OK
+    Quit ##class(Shutter.API.SiteEntries).Catalogue()
+}
+
+ClassMethod SiteEntries() As %Status
+{
+    If '..Allow() Quit $$$OK
+    Quit ##class(Shutter.API.SiteEntries).List()
+}
+
+ClassMethod SiteEntryGet(id As %String) As %Status
+{
+    If '..Allow() Quit $$$OK
+    Quit ##class(Shutter.API.SiteEntries).Get(id)
+}
+
+ClassMethod SiteEntryValidate() As %Status
+{
+    If '..Allow("Shutter_Operate", 1) Quit $$$OK
+    Quit ##class(Shutter.API.SiteEntries).Validate()
+}
+
+ClassMethod SiteEntryCreate() As %Status
+{
+    If '..Allow("Shutter_Configure", 1) Quit $$$OK
+    Quit ##class(Shutter.API.SiteEntries).Create()
+}
+
+ClassMethod SiteEntryChange(id As %String) As %Status
+{
+    If '..Allow("Shutter_Configure", 1) Quit $$$OK
+    Quit ##class(Shutter.API.SiteEntries).Change(id)
+}
+
+ClassMethod SiteEntryProof(id As %String) As %Status
+{
+    If '..Allow("Shutter_Configure", 1) Quit $$$OK
+    Quit ##class(Shutter.API.SiteEntries).Proof(id)
+}
+
+ClassMethod SiteEntryPropose(id As %String) As %Status
+{
+    If '..Allow("Shutter_Configure", 1) Quit $$$OK
+    Quit ##class(Shutter.API.SiteEntries).Propose(id)
+}
+
+/// The public demo's roles approve plans, so they hold Shutter_Approve; of the site's entries they change nothing
+/// (R16), so on a demo instance an approval needs Shutter_Configure as well (Shutter.API.SiteEntries.Approve).
+ClassMethod SiteEntryApprove(id As %String) As %Status
+{
+    If '..Allow("Shutter_Approve", 1) Quit $$$OK
+    Quit ##class(Shutter.API.SiteEntries).Approve(id)
+}
+
+/// One person holding Shutter_Approve and Shutter_Configure (R12): the second is checked in Shutter.API.SiteEntries.Suspend.
+ClassMethod SiteEntrySuspend(id As %String) As %Status
+{
+    If '..Allow("Shutter_Approve", 1) Quit $$$OK
+    Quit ##class(Shutter.API.SiteEntries).Suspend(id)
 }
 
 // ---- the exact index (CONTRACTS 8) ----

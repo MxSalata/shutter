@@ -648,6 +648,30 @@ Management Portal (System Administration, Security, Users), or run `zpm "uninsta
 `-Ddemo=0`, which also loses the cases; afterwards check in the Management Portal that the demo users, roles and web
 applications are gone.
 
+**The site's own catalogue entries, across an upgrade and a downgrade** (CONTRACTS 6.8). A site entry is a brake the trust
+wrote: when it matches a failed message, the case goes to a person. They live in tables the shipped seed never touches,
+so an upgrade keeps them, and checks each active one before any case is matched: a condition the new release no longer
+knows, or one that reads differently on the entry's own stored case, is dropped from the entry, which then matches more
+and never less and is flagged for review on the Site profile page and in the Doctor (`site_entries.needsReview`). An
+upgrade also plans again any closure that was planned under the earlier catalogue and not yet verified.
+
+A downgrade to a release from before site entries is different: that release does not read the tables, so every entry
+stops applying, and the older code can say nothing about it. Before you downgrade:
+
+1. Read the Doctor's line, `GET /api/shutter/health`, `site_entries.downgrade`: "N site entries active: they stop
+   applying below this release". `GET /api/shutter/site-entries` lists them with their instructions.
+2. Decide, with whoever owns each entry, how the cases it stops are handled by hand while it does not apply, and accept
+   that in writing in your own change record. Nothing in the product can hold the brake on across a downgrade.
+3. After upgrading again, read the Site profile page's **Our own scenarios**: the entries apply again from the first
+   match, each rechecked first.
+
+Who may do what with them: writing a draft, proving it on stored cases and proposing it need `Shutter_Configure`;
+approving the proposal needs `Shutter_Approve` and a second person, never the one who wrote or proposed it. The installer's
+approver role holds both rights, so two approvers are enough. A site with one approver can have an IRIS administrator lift
+the second person from the terminal, for as long as it must and no longer:
+`Write ##class(Shutter.Setup).SiteEntriesOnePerson(1, "why, and your change record")`, and `0` to restore it. It is
+recorded, and warned about on the page and in the Doctor for as long as it holds.
+
 **Upgrading to 1.2.0.** Run the install once, or load the newer tree, and restart the production as above. Then:
 
 - **An upgrade keeps the further-movement stop.** On a new install another visit's in-patient movement shows on the

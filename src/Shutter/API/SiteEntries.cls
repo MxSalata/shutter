@@ -1,15 +1,13 @@
-/// The routes of the catalogue and of the site's own entries (CONTRACTS 6.8), called from Shutter.API.Dispatch's map.
-/// The actor is always the signed-in user, never a name from the body. Reading needs Shutter_Operate; writing a draft,
-/// proving and proposing need Shutter_Configure; approving needs Shutter_Approve (and on a demo instance
-/// Shutter_Configure too, since the public demo's roles hold Shutter_Approve and must not activate anything);
-/// suspending needs both. Every change carries X-Requested-With.
+/// The work of the catalogue's and the site's own entries' routes (CONTRACTS 6.8). Shutter.API.Dispatch's route methods
+/// check the caller first (its Allow: the resource and, for a change, X-Requested-With) and then call these; the second
+/// resource an approval needs on a demo, and a suspension always, is asked here. The actor is always the signed-in user,
+/// never a name from the body.
 Class Shutter.API.SiteEntries Extends %RegisteredObject
 {
 
 /// GET /catalogue: the shipped entries and the active site entries, with the catalogue's version.
 ClassMethod Catalogue() As %Status
 {
-    If '##class(Shutter.API.Dispatch).Allow() Quit $$$OK
     Set o = {}
     Set o.version = ##class(Shutter.Catalogue.Entry).CatalogueVersion()
     Set o.shippedVersion = ##class(Shutter.Catalogue.Entry).ShippedVersion()
@@ -37,7 +35,6 @@ ClassMethod Catalogue() As %Status
 /// GET /site-entries: every site entry with its state, and the site's status (the generation, the warnings).
 ClassMethod List() As %Status
 {
-    If '##class(Shutter.API.Dispatch).Allow() Quit $$$OK
     Set o = {}
     Set o.items = ##class(Shutter.Catalogue.SiteEntry).List()
     Set o.status = ##class(Shutter.Catalogue.SiteEntry).Status()
@@ -48,7 +45,6 @@ ClassMethod List() As %Status
 /// GET /site-entries/{id}: one entry with its versions, proofs and events.
 ClassMethod Get(id As %String) As %Status
 {
-    If '##class(Shutter.API.Dispatch).Allow() Quit $$$OK
     Set entry = ##class(Shutter.Catalogue.SiteEntry).ById(id)
     If '$ISOBJECT(entry) Quit ##class(Shutter.API.Dispatch).Fail("404 Not Found", "not_found", "No site entry " _ id)
     Quit ##class(Shutter.API.Dispatch).Json(entry.Describe(1))
@@ -58,7 +54,6 @@ ClassMethod Get(id As %String) As %Status
 /// pattern can displace. Stores nothing and reads no case.
 ClassMethod Validate() As %Status
 {
-    If '##class(Shutter.API.Dispatch).Allow("Shutter_Operate", 1) Quit $$$OK
     Set body = ..BodyOr400()
     If '$ISOBJECT(body) Quit $$$OK
     Do ##class(Shutter.Catalogue.SiteEntryVersion).Normalise(body, ##class(Shutter.Util.Json).Str(body, "id"), .content, .problems, .warnings, 0)
@@ -73,7 +68,6 @@ ClassMethod Validate() As %Status
 /// POST /site-entries: a draft from a body, or from a stored case ({fromCase}). 201 with the entry.
 ClassMethod Create() As %Status
 {
-    If '##class(Shutter.API.Dispatch).Allow("Shutter_Configure", 1) Quit $$$OK
     Set body = ..BodyOr400()
     If '$ISOBJECT(body) Quit $$$OK
     Set code = ##class(Shutter.Catalogue.SiteEntry).Create(body, ##class(Shutter.API.Dispatch).User(), "api", .entry, .problems, .warnings)
@@ -87,7 +81,6 @@ ClassMethod Create() As %Status
 /// entry's revision as the caller read it (409 stale_version).
 ClassMethod Change(id As %String) As %Status
 {
-    If '##class(Shutter.API.Dispatch).Allow("Shutter_Configure", 1) Quit $$$OK
     Set body = ..BodyOr400()
     If '$ISOBJECT(body) Quit $$$OK
     Set expected = ##class(Shutter.Util.Json).Str(body, "expectedVersion")
@@ -107,7 +100,6 @@ ClassMethod Change(id As %String) As %Status
 /// POST /site-entries/{id}/proof: {action?} (activate when none). Runs P1, P2 and P4 and keeps the proof.
 ClassMethod Proof(id As %String) As %Status
 {
-    If '##class(Shutter.API.Dispatch).Allow("Shutter_Configure", 1) Quit $$$OK
     Set body = ##class(Shutter.API.Dispatch).Body()
     Set:$ISOBJECT($GET(%response)) %response.Timeout = 120
     Set code = ##class(Shutter.Catalogue.SiteEntry).Prove(id, ##class(Shutter.Util.Json).Str(body, "action"), ##class(Shutter.API.Dispatch).User(), "api", .result, .detail)
@@ -118,7 +110,6 @@ ClassMethod Proof(id As %String) As %Status
 /// POST /site-entries/{id}/propose: {action: activate, retire or resume}. 409 no_proof without a passing, current proof.
 ClassMethod Propose(id As %String) As %Status
 {
-    If '##class(Shutter.API.Dispatch).Allow("Shutter_Configure", 1) Quit $$$OK
     Set body = ##class(Shutter.API.Dispatch).Body()
     Set code = ##class(Shutter.Catalogue.SiteEntry).Propose(id, ##class(Shutter.Util.Json).Str(body, "action"), ##class(Shutter.API.Dispatch).User(), "api", .entry, .detail)
     If code '= "" Quit ..Refuse(code, detail)
@@ -128,7 +119,6 @@ ClassMethod Propose(id As %String) As %Status
 /// POST /site-entries/{id}/approvals: {action, version, digest, decision, reason, safetyReference?}.
 ClassMethod Approve(id As %String) As %Status
 {
-    If '##class(Shutter.API.Dispatch).Allow("Shutter_Approve", 1) Quit $$$OK
     // The public demo's roles approve plans, so they hold Shutter_Approve; they change nothing of the site (R16).
     If $GET(^Shutter.Config("demo")) && '##class(Shutter.API.Dispatch).Allow("Shutter_Configure", 1) Quit $$$OK
     Set body = ##class(Shutter.API.Dispatch).Body()
@@ -145,7 +135,6 @@ ClassMethod Approve(id As %String) As %Status
 /// POST /site-entries/{id}/suspend: {reason}. One person holding both rights switches one entry off at once (R12).
 ClassMethod Suspend(id As %String) As %Status
 {
-    If '##class(Shutter.API.Dispatch).Allow("Shutter_Approve", 1) Quit $$$OK
     If '##class(Shutter.API.Dispatch).Allow("Shutter_Configure", 1) Quit $$$OK
     Set body = ##class(Shutter.API.Dispatch).Body()
     Set code = ##class(Shutter.Catalogue.SiteEntry).Suspend(id, ##class(Shutter.Util.Json).Str(body, "reason"), ##class(Shutter.API.Dispatch).User(), "api", .entry, .detail)

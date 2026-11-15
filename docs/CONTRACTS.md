@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.65, 14 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.66, 15 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -467,11 +467,11 @@ caller's process passes; the operator and the approver read the watched hospital
 | none | `POST` and `DELETE /session`; `GET /health` (its summary; the full report needs `Shutter_Operate`) |
 | signed in | `GET /me`, which answers `{username, operator, approver, can: {operate, approve, configure, scenarios, reset, liveAgents, stopRecovery}}` from the resources the user holds (`can` since v1.34: the app shows only what the user may do; `scenarios` is `Shutter_Scenarios` and, since v1.57, `reset` is `Shutter_ScenarioReset`, so the app shows a judge Run on and Reset off; `liveAgents` is `Shutter_LiveAgents`, below); `GET /access` (v1.2.0), what each role Shutter installs may do beside what the caller may, for the Settings page's Your access table: `{demo, portalHardened, read, recordedAt?, roles: [{role, installed}], rows: [{id, needs, available, roles, you}]}`, read only, naming roles and resources and never a user (`Shutter.API.Access`; the roles' columns from Security.Roles for a caller with `%Admin_Secure`, `read` `now`, otherwise from the record the install, the portal's hardening and each start write, `recorded` with `recordedAt`, or `none` before any) |
 | `Shutter_Operate` | every other `GET`; `POST /cases/{id}/bundle`; `POST /cases/{id}/preview-blind-resend`, `/reinvestigate` (v1.39: the reopened case's agent runs count against the requester's share, and without `Shutter_LiveAgents`, or while the provider refuses the key, they answer from recordings only, `ModeOverride` `replay` as a question's do in 14, and a board with no recording leaves the case escalated for a person, with the reason, and plans nothing; the 202 `{caseId, state: "reopening", requestedBy, liveAgents}` says which) and `/close` (unless the site keeps the two-person rule, below); `POST /cases/{id}/escalations`, `PATCH /cases/{id}/escalations/{seq}` and `POST /cases/{id}/escalations/{seq}/send`; `GET /production-reviews`, `GET /production-reviews/targets` and `GET /production-reviews/{id}`; `POST /production-reviews` (section 13: the review reads only; its agent part takes `Shutter_LiveAgents`, below, and is skipped without it); `GET /cases/{id}/whatif`, `GET /cases/{id}/questions`, `GET /cases/{id}/questions/suggested`, `GET /cases/{id}/questions/{qid}` and `POST /cases/{id}/questions` (section 14: a question reads only, and a live run spends model credit); `GET /settings/schemas` (section 12) |
-| `Shutter_Approve` | `POST /cases/{id}/approvals`; `POST /incidents/{id}/approvals` and `/incidents/{id}/chains/{seq}/approvals`; `POST /cases/{id}/close` where the site profile's `approvers.close_needs_approver` is true; `POST /cases/{id}/abandon` (always an approver's); `POST /cases/{id}/further-release` (6.5); `POST /cases/{id}/bundle-unredacted` |
+| `Shutter_Approve` | `POST /site-entries/{id}/approvals` and `/suspend` (6.8); `POST /cases/{id}/approvals`; `POST /incidents/{id}/approvals` and `/incidents/{id}/chains/{seq}/approvals`; `POST /cases/{id}/close` where the site profile's `approvers.close_needs_approver` is true; `POST /cases/{id}/abandon` (always an approver's); `POST /cases/{id}/further-release` (6.5); `POST /cases/{id}/bundle-unredacted` |
 | `Shutter_Scenarios` | `POST /scenarios/{id}/run` (v1.34: the demo controls; the operator and approver roles hold it, since v1.57 the role `Shutter_Judge` too, and since v1.58 the public demo's role `Shutter_Demo`, whose runs replay, as it has no `Shutter_LiveAgents` (4.2); on an instance that is not a demo, `^Shutter.Config("demo")` 0, the route answers 403 `not_a_demo_instance` and changes nothing). A run is one at a time (409 `wrong_state` while one is queued or playing, 4.2), and the cases it opens carry who started it, so their live agent runs count against that user's share of the day's budget, as a convened board does (9, v1.57); a starter without `Shutter_LiveAgents` runs replay only, with no model call and nothing spent, and is refused the single investigator, 409 `not_recorded` (4.2, v1.58) |
 | `Shutter_ScenarioReset` | `POST /scenarios/reset` and `Shutter.Setup_PurgeStore` (v1.57: resetting the shared demo and emptying its store were `Shutter_Scenarios` before; the operator and approver roles hold it, the roles `Shutter_Judge` and `Shutter_Demo` do not, so one judge never clears the demo under another; on an instance that is not a demo the reset answers 403 `not_a_demo_instance` and the purge refuses, changing nothing). An install or an upgrade creates it and gives it to the operator and the approver, so an upgraded operator keeps resetting; the uninstall removes it with Shutter's other resources |
 | `Shutter_LiveAgents` | Spending the model budget (v1.34, the judges): `POST /cases/{id}/board` (the board convenes live on a blocked, escalated or failed case, 14.5), `POST /cases/{id}/questions` running live, the agent part of `POST /production-reviews` (13.5, v1.39: skipped without it, never refused) and a reinvestigation's live runs (v1.39: recordings only without it); without it a question is answered from recordings only, and one with no recording is refused `409 no_recorded_answer` at once. Operators, approvers and the role `Shutter_Judge` (the public demo's role plus this; both hold `Shutter_Scenarios`, the judge's since v1.57 and the demo's since v1.58) hold it; `Shutter_Demo` does not, so a scenario run it starts replays (4.2). Every live run counts against the day's budget and the caller's share (9) |
-| `Shutter_Configure` | `PUT /site-profile`; `PATCH /library/{code}`; `POST /settings/schemas` (section 12); `GET /settings/namespaces` and the routes under it (11.1; an apply and a removal need `%Admin_Manage` as well); `POST /production-reviews/{id}/annotations` and `DELETE /production-reviews/annotations/{annotationId}` (section 13) (v1.34: what changes the site; the approver role holds it, the public demo's role does not) |
+| `Shutter_Configure` | `POST /site-entries`, `PUT /site-entries/{id}`, `POST /site-entries/{id}/proof` and `/propose` (6.8; `POST /site-entries/{id}/suspend` needs it beside `Shutter_Approve`, and on a demo instance so does `POST /site-entries/{id}/approvals`); `PUT /site-profile`; `PATCH /library/{code}`; `POST /settings/schemas` (section 12); `GET /settings/namespaces` and the routes under it (11.1; an apply and a removal need `%Admin_Manage` as well); `POST /production-reviews/{id}/annotations` and `DELETE /production-reviews/annotations/{annotationId}` (section 13) (v1.34: what changes the site; the approver role holds it, the public demo's role does not) |
 | `Shutter_StopRecovery` | `POST /recovery-control/stop` (18; operators and approvers hold it, the public demo's roles do not). `POST /recovery-control/clear` needs `Shutter_Configure` and `Shutter_Approve` |
 | `Shutter_Intake` | `POST /intake` (section 11) |
 
@@ -671,6 +671,7 @@ conditions that matter; an unlisted condition is a wildcard. A listed condition 
 | `receiver_category` | `current_state`, `history_of_record`, `orders_results` | the case's receiver's category in the site profile (6.4, v1.23); `current_state` when its entry names none |
 | `bed_conflict` | `none`, `occupant_leaving`, `occupant_left`, `occupant_staying`, `unknown` | who holds the bed a `bed_occupied` refusal (1.1) named, from the `bed_conflict` section the evidence adds for such a refusal (v1.28): `occupant_left` (the occupant's encounter is discharged or placed elsewhere now), `occupant_leaving` (a transfer or discharge of the occupant after `since` was sent and not applied: failed, uncertain or pending, in another case when one was opened), `occupant_staying` (they still hold the bed and no movement out is known), `unknown` (no occupant named, or they could not be read, or the refusal named no ward or bed to compare the read with, v1.35); `none` without such a refusal. The fact `occupant_case` names the case about the occupant's movement, or is empty |
 | `death_recorded` | `no`, `yes`, `cleared`, `unreadable` | the failed message's PID-29 and PID-30, as the word the evidence's message section carries: `yes` when PID-30 says Y or PID-29 holds a time, `cleared` when either holds the HL7 null, `unreadable` when a read fails, `no` otherwise. The entry that names it (E19) answers alone, whatever else matches, and goes to a person in Board and Site policy mode; Rules only is unchanged. Only this message's own fields are read |
+| `a08_location` | `none`, `same`, `different` | a failed A08's own PV1-3 (the evidence's `a08_ward` and `a08_bed`) against the ward and bed the receiver holds: `different` or `same`, and `none` for any other event, for an A08 that names no location, when the receiver could not be read or has discharged the patient, or when a later movement was applied since; an A08 that repeats an earlier admission or transfer which failed too reads `same`, since that movement's own case delivers it. The gate acts on it by the site's profile (`further_messages.a08_location`, 6.4) |
 
 **Flags read per receiver** (v1.23). An entry's `when` names a flag (`history_policy: correct`, `authoritative_source:
 other_source`). The matcher's facts carry `history_policy` and `receiver_category` for the case's receiver, from its site
@@ -1216,6 +1217,193 @@ cannot drop it (an item whose classpath the install had written died at its next
 `SyncSecondParser` only enables or disables the item as the jar is there or not. The build never fails the image: without a JDK, a framework, network or a matching checksum it prints why, leaves
 no jar and the item stays off (`PEX_STRICT=1`, CI's image job, turns such a skip into a failure on an image known to carry
 the framework). The Dockerfile runs it, and a site with Java runs it once by hand.
+
+### 6.8 A site's own entries (v1.66)
+
+A trust adds its own scenarios to the catalogue as **site entries**. A site entry is a brake and never an accelerator: when
+its pattern holds on a case's evidence, the case goes to a person with the trust's own words, and Shutter neither sends nor
+closes anything by itself. It cannot resend, close, reconcile, release automatically or offer the board a choice. The gate
+(6.5), its policy version and `knowledge/block-reasons.json` are unchanged by this section.
+
+**The entry.** Its id is `L<n>`, given by Shutter, never reused and never an `E` id. It has one kind, `stop`.
+
+```yaml
+id: L1
+kind: stop
+title: A failed transfer into the isolation ward
+priority: 10                # among site entries that match the same case, the lowest number leads, then the older id
+scope:                      # optional: facts of the case that are not conditions; every one listed must hold
+  receiver: [Downstream Out]        # a receiver of the site profile
+  source_system: [PAS]              # the sending application
+  ward: [WARD-ISO]                  # the ward the failed message names
+  reason_code: [bed_occupied]       # the receiver's own reason word, read whatever its case
+pattern:                    # 6.1's vocabulary and nothing else; at least one condition
+  event: transfer
+  delivery: [failed, rejected, uncertain]
+why: Infection control places every patient in this ward by hand, so a resend can't know the bed is right.
+team: infection-control     # optional: a team id of the site profile
+instructions: Ring the ward's nurse in charge before anything is entered. Do not resend.
+prose: ""                   # optional: what a board should know when a person convenes one on such a case
+fixtures:
+  - case: C-000123          # a stored, closed case of this site's; the entry must match its evidence
+    expect: match
+  - case: C-000101          # a near miss it must leave alone
+    expect: no_match
+```
+
+There is no `decides`, `preferred`, `alternatives`, `checks` or `outcome`: a body that carries one is refused, not ignored.
+The matcher writes `person`, `escalate` and no alternatives for every site entry it reads (R1), so no stored row, however
+it got there, can authorise a write or a closure.
+
+**The rules.**
+
+- **R1.** One kind, `stop`. The three fields that decide are the matcher's, never a row's.
+- **R2.** A site entry answers alone when it matches, after E19 (a death on the message) and before every other shipped
+  entry. In `policy`, `board` and `single` mode the case is escalated naming it, with no board and no investigator; a
+  real case in `rules` mode is blocked by the gate (`ENTRY_NOT_NAMED_WRITE`) and waits for a person. The one place a
+  plain resend still passes is the recorded Rules only baseline of the scenario runner (6.5), which needs a demo instance.
+- **R3.** The pattern names only 6.1's conditions and values, as `knowledge/catalogue/vocabulary.json` lists them
+  (`scripts/build-catalogue.py` writes that file and checks the shipped entries against it; `Shutter.Catalogue.Vocabulary`
+  reads it for a site's entries, so the two validators cannot disagree); at least one condition; not `death_recorded`.
+- **R4.** The scope names only `receiver`, `source_system`, `ward` and `reason_code`, each a fact fixed when the case opens
+  (`Shutter.Catalogue.Matcher.Scope`). A receiver or a team named must be in the site profile.
+- **R5.** The words are plain text within limits (title 200, why 500, instructions 2,000, prose 4,000 characters), cleaned as
+  stored model text is, and refused when they hold a valid NHS number; any other run of six or more digits is a warning.
+  The words can reach a model (a board a person convenes, Ask about this case), so they follow section 9.
+- **R6.** Writing, proving and proposing need `Shutter_Configure`; approving needs `Shutter_Approve`; the approver is
+  neither the person who proposed the action nor the person who last changed the proposed version (409 `same_person`).
+  Only an IRIS administrator lifts this, from the terminal (`Shutter.Setup.SiteEntriesOnePerson(1, reason)`, which needs
+  `%Admin_Manage` and answers "from the terminal only" over SQL or HTTP); it is recorded as an event and warned about for
+  as long as it holds. It is not a site profile field.
+- **R7.** The approver sends the action, the version and the digest they read; another is 409 `digest_mismatch`.
+- **R8.** No activation or resumption without a passing proof of that digest with at least one `match` fixture and at
+  least one `no_match` fixture (a near miss), run again at the approval.
+- **R9.** Every approved change is a new version; an approved version is never written again; ids are never reused.
+- **R10.** Retiring an entry, or changing an active one, goes through the same proposal and approval.
+- **R11.** There is no switch that turns every site entry off together.
+- **R12.** One person holding `Shutter_Approve` and `Shutter_Configure` may suspend one entry at once, with a reason. Each
+  suspension is recorded and raises a warning on `GET /site-entries`, the Site profile page and the Doctor
+  (`site_entries.warnings`) for as long as it lasts. Resuming is a proposal and an approval.
+- **R13.** An active entry that can't be read makes the matcher answer `decision: error` (the gate's `MATCHER_ERROR`,
+  unknown), for every case. It is never skipped.
+- **R14.** After an upgrade and after every save of the site profile the active and suspended entries are checked, before
+  any case is matched (`Shutter.Catalogue.SiteEntry.Recheck`: at the end of the catalogue's seed, at the first match
+  under a release that has not checked yet, and in `Shutter.Store.SiteProfile.Store`). A predicate that names a condition
+  or a value the vocabulary no longer knows is dropped whole, and so is a predicate whose value on one of the entry's own
+  `match` fixtures reads differently now than when the version was written. The entry then matches more and never less
+  (`effectivePattern`), and is flagged `needsReview` with what was dropped. A receiver or a team the profile no longer
+  names, a near miss the entry now matches, and a shipped entry that asks for a person on every case the pattern matches
+  are flagged and change nothing. Nothing is retired or narrowed by an upgrade; a newly approved version clears the flag.
+- **R15.** At most 50 active site entries, so the catalogue's version stays within a plan's field.
+- **R16.** The public demo's roles read site entries and validate a body; they save, prove, propose, approve and suspend
+  nothing: on a demo instance an approval needs `Shutter_Configure` as well, since those roles hold `Shutter_Approve`.
+- **R17.** A plan made under another catalogue version is never completed. A write is void at dispatch
+  (`APPROVAL_CATALOGUE_CHANGED`, 6.4). A closure has no approval to void, so the workflow checks it
+  (`Shutter.Process.CaseWorkflow.ClosureHeld`), at the proposal gate and again before the verification closes the case: a
+  plan that writes nothing and was made under another version than the current one is not verified and closed; the evidence
+  is collected again and the case planned afresh, up to the refresh limit, then the case blocks for a person. This holds
+  at every site: a catalogue upgrade between a closure's plan and its verification plans it again. A plan that records no
+  catalogue version is treated so only on a site that has ever activated an entry.
+- **R18.** On a case a site entry matched, a closure never happens without a person. A board a person convenes on such a
+  case (14.5) may plan to close it, naming no entry, which the gate passes (`ENTRY_NOT_NAMED`): the workflow sends the
+  case to a person with the board's reasoning, as a partial board's closure goes (6.6).
+
+**The match.** `Shutter.Catalogue.Matcher.Match(conditions, facts, scope)` evaluates the shipped entries as before. Then,
+unless E19 matched, and also when the shipped catalogue is empty, it reads the active site entries in order (the priority,
+then the id's number). The first whose scope and pattern hold becomes the only match: `{id, version, title, origin:
+"site", decides: "person", preferred: {outcome: "escalate", why}, alternatives: [], instructions, team, prose?}`, and the
+result gains `scope` (the case's four facts), `overridden` (the shipped matches it displaced, each `{id, decides,
+outcome}`: the outcome the site's flags choose when one matched alone, else its preferred one) and `site_also` (the other
+site entries that matched, each `{id, version, title, instructions, team}`). The decision is then `person`, `entry` the
+site entry's id and `outcome` `escalate`. A site with no active entry gets the result it always got, key for key, with no
+`scope`, `overridden` or `site_also`. The workflow takes such a match's person decision (`PersonByCatalogue`) in every
+mode but `rules`, before the FHIR flow plans (20), before an incident's release takes its chain's path (7.4) and before
+the case can follow another's board (6.6); a board a person convened still convenes, except over FHIR, where none plans.
+The escalate plan names the entry; its event names what the shipped catalogue alone would have done and the entry's
+instructions. The gate's catalogue check then answers `ENTRY_MATCHED` for that plan and blocks every write: one that
+names the site entry (`OUTCOME_MISMATCH`), one that names nothing (`ENTRY_NOT_NAMED_WRITE`), one that names another entry
+(`PATTERN_NOT_MATCHED`, also for a site entry whose pattern does not hold, since `Shutter.Catalogue.Entry.ById` answers
+for an `L` id, or `ENTRY_UNKNOWN`).
+
+**The catalogue's version.** `Shutter.Catalogue.Entry.CatalogueVersion()` is the shipped list and, once a site has
+activated an entry, `;g<n>:` and the active site entries: `E1@5,...,E9@1;g7:L1@2,L4@1`. `<n>` is a generation that rises
+at every activation, suspension, resumption and retirement and never comes down, so an approval voided by one change is
+not made valid again by undoing it. The suffix stays, with no entry after the colon, when none is active. A site that
+never activated one keeps the shipped string. Every plan records the string, so which version of which site entry decided
+a case can be read back.
+
+**The lifecycle.** A draft (version n; anyone with `Shutter_Configure` rewrites it and runs proofs); a proposal (the
+action `activate`, `retire` or `resume`, the version and its digest are fixed, and a passing proof of that digest made
+under the catalogue, profile, gate policy and release in force is attached; the proposed draft is frozen); `active` (a
+second person approved it); `suspended`; `retired` (history kept). A rejection, with a reason, clears the proposal and
+leaves the draft. Changing an active entry begins the next version as a draft beside it; the active version applies until
+the new one is approved. The digest is the SHA-256 of the version's canonical JSON (`Shutter.Util.Digest.Canonical`): id,
+kind, title, priority, scope, pattern, why, team, instructions, prose and the fixtures as frozen. The states an entry
+shows are `draft`, `proposed` (never active yet and waiting for approval), `active`, `suspended` and `retired`; an active
+or suspended entry with an open proposal carries `proposal`.
+
+**The fixtures and the proof.** A fixture is a stored, closed case. When the draft is written each is frozen: the case id,
+the digest of the snapshot it was read from, the chain kind the case had, and a copy of its conditions and scope facts
+(words, no patient data). A proof replays the stored snapshot through this release's matcher, sending nothing and writing
+nothing on any case; when the case or that snapshot is no longer stored (the retention task, a demo's reset) the frozen
+copy answers and the row says `source: "frozen"`.
+
+- **P1.** On each `match` fixture the entry's own scope and pattern hold, and with the entry laid over the active ones it
+  leads alone: `person`, `escalate`. A row names what leads otherwise.
+- **P2.** On each `no_match` fixture the entry's own scope and pattern do not hold.
+- **P4.** The last 200 stored cases (10 s at most) are matched now with and without the entry: `impact` is `{scanned,
+  caught, unread, capped, groups, cases}`, the cases it would lead counted and listed by id under what each would have done
+  without it (`automatic_resend`, `approved_resend`, `closure`, `board`, `person`, `new_pattern`, `other_site_entry`). A
+  retirement's proof is this list read the other way and needs no fixture.
+- **P5.** The proof's `context` is what it is bound to: the action, the digest, the shipped catalogue's version, the other
+  active site entries, the gate's policy version, the site profile's version and the release. A proof under another
+  context is stale: 409 `no_proof` at the proposal, 409 `proof_failed` at the approval unless a person has run the proof
+  again since. The approval runs P1 and P2 again and refuses (409 `proof_failed`) unless the fixtures answer as the
+  proposal's proof recorded.
+
+The gate is not run per entry: every stop entry has the same gate behaviour, which the release's own tests prove
+(`Shutter.Test.SiteSafety`, `Shutter.Test.Gate`).
+
+**The store.** `Shutter.Catalogue.SiteEntry` (the entry's state, its flags, the open proposal), `SiteEntryVersion` (the
+content, its digest, who wrote and who approved it, the approver's reason, an optional `safetyReference` to the trust's
+own safety record, which Shutter stores and does not check, the proof it was activated on and the release),
+`SiteEntryProof` (every proof run: words, codes and case ids only) and `SiteEntryEvent` (`created`, `edited`, `proved`,
+`proposed`, `approved`, `rejected`, `activated`, `suspended`, `resumed`, `retired`, `rechecked`, and for the site
+`two_person_lifted` and `two_person_restored`, each with who, when and from where: `api`, `upgrade`, `profile` or
+`terminal`). The shipped seed never touches these tables, and refuses an id that is not `E<n>`. They are the site's
+configuration, as the site profile is: the scenario reset and the store's purge leave them, and the uninstall names and
+removes them. A fixture's case can go with a purge; its frozen copy stays. `Shutter.Catalogue.Entry.SeedFromJSON`, which
+replaces the shipped catalogue from any JSON, answers on a demo instance only.
+
+**The routes.** All under `/api/shutter`, each change with `X-Requested-With`; the actor is the signed-in user.
+
+| Route | Needs | What it does |
+| --- | --- | --- |
+| `GET /catalogue` | `Shutter_Operate` | `{version, shippedVersion, generation, shipped, site, vocabulary}`: the shipped entries, the active site entries as the matcher reads them, and the vocabulary |
+| `GET /site-entries` | `Shutter_Operate` | `{items, status, catalogueVersion}`: every entry (`id`, `state`, `title`, `sentence`, `version`, `digest`, `content`, `activeVersion`, `draftVersion`, `revision`, `approvedBy`, `approvedAt`, `proposal`, `needsReview`, `review`, `effectivePattern`, `suspended`, `casesSent`, `casesSent30`, and `draft` for a draft beside an active version) and the site's status (`active`, `proposed`, `generation`, `limit`, `suspended`, `needsReview`, `onePerson`, `warnings`, `downgrade`) |
+| `GET /site-entries/{id}` | `Shutter_Operate` | The entry with `versions`, `proofs` and `events`; 404 `not_found` |
+| `POST /site-entries/validate` | `Shutter_Operate` | `{valid, problems, warnings, sentence, overlap}` for a body: each problem `{rule, field, text}`; `overlap` lists the shipped entries the pattern can displace, condition by condition, with `covers` and `leads`. Stores nothing and reads no case |
+| `POST /site-entries` | `Shutter_Configure` | 201 with a draft. `{fromCase}` fills the pattern with that closed case's conditions (the reserved one aside), the scope with its facts and the first fixture with the case; what the body gives stands. 400 `bad_request` with `problems` |
+| `PUT /site-entries/{id}` | `Shutter_Configure` | Rewrites the draft, or begins one beside the active version. `expectedVersion` is the entry's `revision` (409 `stale_version` with `currentVersion`); 409 `wrong_state` for a proposed draft or a retired entry |
+| `POST /site-entries/{id}/proof` | `Shutter_Configure` | `{action?}` (`activate` when none). Runs P1, P2 and P4 and keeps the proof: `{passed, fixtures, counts, impact, problems, context, proofId}` |
+| `POST /site-entries/{id}/propose` | `Shutter_Configure` | `{action}`. 409 `no_proof` without a passing, current proof of the version's digest; 409 `wrong_state` when a proposal already waits; 409 `too_many` (R15) |
+| `POST /site-entries/{id}/approvals` | `Shutter_Approve`; on a demo `Shutter_Configure` too | `{action, version, digest, decision: approve or reject, reason, safetyReference?}`. 409 `same_person`, `digest_mismatch`, `proof_failed`, `too_many`, `wrong_state`. On approve the change is made, the generation raised and the events written together; the answer is the entry with `catalogueVersion`, `approver` and `waitingPlans`, the open cases whose plan was made under the old version (R17) |
+| `POST /site-entries/{id}/suspend` | `Shutter_Approve` and `Shutter_Configure` | `{reason}` (R12); 409 `wrong_state` unless the entry is active |
+
+`GET /cases/{id}` gains no field: the match, `overridden` and `site_also` are in the snapshot summary's `catalogue`. The
+case's `catalogueEntry` and `planCreatedBy` (`policy:L1`) name the entry. The app shows a badge "Our own scenario L1" on
+such a case, the entry's instructions and those of every other site entry that matched, and "Without it: E2, a resend by
+site policy"; the Site profile page lists the entries read only (**Our own scenarios**). Not in this release: a preview
+that stores nothing, export and import, and the page that writes, proves and approves an entry; the routes above do.
+
+**Three limits.** The recorded Rules only baseline resends past a site entry on a demo instance, as it does past E1. An
+activation is in force for every dispatch gate that starts after it commits: a write whose dispatch gate passed just before
+may still go, as with any catalogue upgrade. And R18 covers site entries: a board a person convenes on a case a shipped
+`person` entry escalated can still close it where the gate's evidence supports the closure.
+
+**Downgrade.** A release from before this section ignores the tables: the entries stop applying and the older code says
+nothing of it. The Doctor's `site_entries.downgrade` line ("N site entries active: they stop applying below this release")
+is what to read first (`docs/INSTALL.md`, section 8).
 
 ## 7. Incidents: many failures to one receiver (v1.6, as built in v1.7)
 
@@ -3118,6 +3306,17 @@ That `If-Match` or an approval makes the write idempotent; that a verified versi
 
 ## Changes
 
+- v1.66, 15 Nov 2026 (a site's own entries): 6.8 is new: a trust's own stop entries `L<n>` in tables of their own, the
+  rules R1 to R18, the overlay in the matcher (`origin: "site"`, `overridden`, `site_also`, `scope`), the catalogue
+  version's generation (`;g<n>:`), the proof on stored cases, the two-person approval of an action, a version and a
+  digest, suspension, the recheck after an upgrade and a profile save, and the routes `GET /catalogue` and
+  `/site-entries`. The gate, its policy version and the block reasons are unchanged. Two workflow rules about closures
+  hold at every site (6.8, R17 and R18): a plan that writes nothing and was made under another catalogue version is
+  planned again on fresh evidence, and a case a site entry matched is never closed without a person. 6.1: the table gains
+  `a08_location`, which the matcher computes and the table lacked. 6.2: a shipped entry's id is `E<n>`,
+  which the build script and the seed now refuse to be otherwise; `knowledge/catalogue/vocabulary.json` is the vocabulary
+  both validators read. `Shutter.Catalogue.Entry.SeedFromJSON` answers on a demo instance only. 5: the resources of the
+  new routes.
 - v1.65, 14 Nov 2026 (the FHIR review's fixes): 20.2: stop 1 is split by stage: at the proposal it is as it was ("Nothing
   was read or sent", no approval to revoke), and at the dispatch it revokes the approval and says "The approval is void and
   nothing was sent". 20.4: the settle schedule is the verifier's own (10, 20 and 40 s, `RETRYWAITS`), whatever Case

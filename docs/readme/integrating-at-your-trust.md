@@ -196,11 +196,13 @@ Going back to shadow mode is the same save the other way. An upgrade from a vers
 | Who | Holds | May |
 | --- | --- | --- |
 | Operator | `Shutter_Operator` | Read every case; reinvestigate; draft and send an escalation email; mark a case handled, unless the profile says an approver must; stop Shutter recovery |
-| Approver | `Shutter_Approver`, and membership of the Workflow role "Shutter Approvers" | All of that, and: approve or reject a plan, an incident's release and an outage's resend; save the site profile; clear a stop; abandon a stuck case |
+| Approver | `Shutter_Approver`, and membership of the Workflow role "Shutter Approvers" | All of that, and: approve or reject a plan, an incident's release and an outage's resend; save the site profile; clear a stop; abandon a stuck case; write, prove and propose one of the trust's own scenarios, approve another person's, and suspend one at once |
 | Forwarder (`shutter-fwd`) | `Shutter_Forwarder` | Open a case, for any receiver, and nothing else. Its password does not expire: give it an integration credential's care |
 | A site administrator | Interoperability rights of your own | Disable an item or stop a production. Shutter's roles aren't given this |
 
 **An approval** binds one plan at one receiver version, lasts an hour, and is void once the plan, the material evidence, the receiver's version, the site profile, the catalogue or the gate's policy moves. An approver who decides in the Workflow inbox pastes the plan digest into the task's `PlanDigest` field; without it the case blocks.
+
+**The trust's own scenarios** ([CONTRACTS 6.8](../CONTRACTS.md#68-a-sites-own-entries-v166), [a worked example](local-rules.md)). A site entry stops a pattern of your own (a ward, a receiver, a sending system): a case it matches goes to a person with your instructions, and nothing is sent or closed by itself. It can never allow a resend. Writing, proving and proposing one needs `Shutter_Configure`; approving it needs `Shutter_Approve` and a second person, who sends the exact version and digest they read; the approver role holds both rights, so you need two approvers. One approver can suspend an entry at once if it floods people, which switches its protection off until a second person approves resuming it. Only an IRIS administrator, from the terminal, can lift the second person for a site with one approver ([INSTALL 8](../INSTALL.md#8-upgrading-in-place)). In this release the steps are API routes; the Site profile page lists the entries read only.
 
 **A plan nobody decides** waits 24 hours, then its task is cancelled and the case moves to escalated. Nothing tells anyone unless you turn the reminders on, and Shutter has no field for who owns a case, so keep your own list ([roles and handover](../pilot/03-roles-and-handover.md)).
 
@@ -269,8 +271,11 @@ Smallest first. The first three rows change only Shutter, and the ordinary feed 
 | Recovery, at once | Stop Shutter recovery | The cases, open as they were. An admitted call may complete |
 | Recovery, as a decision | An approver saves the profile with recovery off | Shadow mode. Earlier plans are void |
 | One receiver's recovery | An approver takes `api` out of its entry, with its features false, and sets `engine_resend` false where the entry has it | Its cases stop for a person, and approvals not yet dispatched are void. An outage's set there stops being approvable when Shutter next reads it, within about a minute; a resend run already approved is halted by the stop above, not by this |
+| One of the trust's own scenarios | An approver suspends it, with a reason (`POST /api/shutter/site-entries/{id}/suspend`) | The shipped catalogue alone for the cases it caught, and a warning until a second person approves resuming or retiring it. Plans made while it applied do not complete |
 | One watched namespace | `SELECT Shutter.Setup_OnboardRemove('<NAMESPACE>')`; purge under your own rules; then again with `{"unmap": true, "credential": true}` (INSTALL 9.7) | Shutter's cases and the imported schemas. Send a test alert and check your own consumer receives it |
 | Shutter itself | `SELECT Shutter_Util.Uninstall_Plan()`, which changes nothing, then `zpm "uninstall iris-shutter"` ([INSTALL 2](../INSTALL.md#2-what-an-install-creates)) | Nothing of Shutter's, so export what you must keep first. The namespace and its database stay, as do the package manager and the users you made, with Shutter's roles taken off: remove or disable them yourself |
+
+**A downgrade switches the trust's own scenarios off.** A release from before them does not read their tables, so every entry stops applying and nothing says so. Read the Doctor's line first ("N site entries active: they stop applying below this release"), decide how those cases are handled by hand meanwhile, and accept it in your change record ([INSTALL 8](../INSTALL.md#8-upgrading-in-place)).
 
 **Rolling back Shutter is not a clinical rollback.** A record already changed needs the receiver's own correction procedure. Don't restore an old database just to undo Shutter's state.
 

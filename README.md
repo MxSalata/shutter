@@ -342,7 +342,7 @@ Before enabling it:
 
 The failure census can compare watched failures with opened cases. A redacted case bundle supports audit and handover; warehouse history can inform a person without enabling writes.
 
-**A trust's own rules are not supported yet.** [A worked example](https://github.com/MxSalata/shutter/blob/main/docs/readme/local-rules.md) shows the proposed design of a local stop rule, which sends a trust's own pattern to a person; none of it is implemented.
+**A trust's own scenarios can stop a case, and never release one.** A site entry sends the trust's own pattern (a ward, a receiver, a sending system) to a person with the trust's instructions; it has no field that could allow a resend or a closure. One person writes it and proves it on stored cases, a second approves the exact version, through the API in this release ([CONTRACTS 6.8](https://github.com/MxSalata/shutter/blob/main/docs/CONTRACTS.md#68-a-sites-own-entries-v166)). [A worked example](https://github.com/MxSalata/shutter/blob/main/docs/readme/local-rules.md) follows one rule from the case to its approval.
 
 [Five-step pilot](https://github.com/MxSalata/shutter/blob/main/docs/readme/first-steps.md#pilot-it-first) · [Pilot decision pack](https://github.com/MxSalata/shutter/blob/main/docs/pilot/00-decision-record.md) · [Clinical safety, hazards and data flow (a review of 1.0.0, current controls at its top)](https://github.com/MxSalata/shutter/blob/main/docs/SAFETY.md)
 
