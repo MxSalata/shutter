@@ -56,14 +56,28 @@ ClassMethod CreateNamespaceStatus(ns As %String) As %Status
 /// library, prices, recordings, the downstream system's installer when present, the web applications and the
 /// production. The names from before the downstream system's rename are removed when they exist. root is the
 /// module's directory (IPM passes ${root}); demo marks the instance as a demo (reset allowed, demo users created).
-/// The module's manifest passes ${demo} (default 1; zpm "load <dir> -Ddemo=0" for a site). With demo = 0 nothing of
+/// The module's manifest passes ${demo}, empty unless zpm "load <dir> -Ddemo=0" (or -Ddemo=1) gives it: an empty demo
+/// keeps the flag the instance already holds, and is 1 only on a first install (DemoSetting). With demo = 0 nothing of
 /// the demo is made: no demo users, nothing of the demo receiver's (its resource, role, web application, client user
 /// and credential), no recorded runs, the message purge task only when SHUTTER_MESSAGE_PURGE is 1, and the
 /// production's feed, downstream and scenario items switched off (DisableDemoItems). Returns "ok" or the error.
-ClassMethod Install(root As %String = "", demo As %Boolean = 1, production As %String = "") As %String [ SqlProc ]
+ClassMethod Install(root As %String = "", demo As %Boolean = "", production As %String = "") As %String [ SqlProc ]
 {
     Set sc = ..InstallStatus(root, demo, production)
     Quit $SELECT($$$ISOK(sc): "ok", 1: $SYSTEM.Status.GetErrorText(sc))
+}
+
+/// The demo flag an install writes (1.4.8). An explicit demo, 1 or 0 (zpm "load <dir> -Ddemo=0", or Install's second
+/// argument), always wins. An empty one keeps <var>stored</var>, the flag the instance already holds
+/// (^Shutter.Config("demo")), so an upgrade with no -Ddemo keeps a site's install a site's; with nothing stored, a first
+/// install, it is 1 and installs the demo, as a plain zpm "load" always has. SQL hands an empty argument over as
+/// $CHAR(0), read as empty.
+ClassMethod DemoSetting(demo As %String = "", stored As %String = "") As %Boolean
+{
+    Set demo = $ZSTRIP($GET(demo), "<>WC"), stored = $ZSTRIP($GET(stored), "<>WC")
+    If demo '= "" Quit ''demo
+    If stored '= "" Quit ''stored
+    Quit 1
 }
 
 /// Refuses a module root that will not outlive the install. IPM 0.10.0 to 0.10.3 extract a packaged module (the
@@ -85,7 +99,7 @@ ClassMethod RootStatus(root As %String = "") As %Status [ Private ]
 /// the environment of the process that runs the install (EnsureRetentionTasks).
 /// With a production named (IPM: -Dproduction=Your.Production), the install is shape B: Shutter's items go into that
 /// production (InstallIntoStatus) and Shutter.Production is neither started nor made the auto-start production.
-ClassMethod InstallStatus(root As %String = "", demo As %Boolean = 1, production As %String = "") As %Status
+ClassMethod InstallStatus(root As %String = "", demo As %Boolean = "", production As %String = "") As %Status
 {
     // IPM runs the install inside a transaction of its own and commits it after the Activate phase, but starting a
     // production (Ens.Director) commits every open transaction: IPM's commit then fails (<COMMAND> *NoTransaction) and
@@ -105,10 +119,10 @@ ClassMethod InstallStatus(root As %String = "", demo As %Boolean = 1, production
     Set sc = $$$OK
     Try {
         Set ns = $NAMESPACE
-        // SQL hands an empty argument to a procedure as $CHAR(0); an empty demo keeps the default.
+        // SQL hands an empty argument to a procedure as $CHAR(0). An empty demo keeps the stored flag: an upgrade without
+        // -Ddemo leaves a site a site and a demo a demo (1.4.8); only a first install takes the demo.
         If root = $CHAR(0) Set root = ""
-        If (demo = "") || (demo = $CHAR(0)) Set demo = 1
-        Set demo = ''demo
+        Set demo = ..DemoSetting(demo, $GET(^Shutter.Config("demo")))
         If root '= "" Set root = ##class(%File).NormalizeDirectory(root)
         Set ^Shutter.Config("root") = root
         Set ^Shutter.Config("demo") = demo
