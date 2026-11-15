@@ -279,8 +279,11 @@ is five well-aimed needless stops avoided and three defensible stops turned righ
     E17, and that entries exist for an overtaken transfer, "not delivered, still current", a clock change, an occupied
     bed, a withheld merge, a withheld cancel and a committed merge. Second, the author knew the 26 demo scenarios and
     used them to keep the cases away from them; F02, F03, F08 and F09 are named as nearest to some of them.
-  - **Where the cases come from:** the author started from 25 seed ideas, dropped most and reshaped the rest. The cases
-    come from inside the project, not from an outside reviewer.
+  - **Where the cases come from:** the author, a separate AI assistant session, started from 25 seed ideas from another
+    model, dropped most and reshaped the rest, then wrote the cases, the reference outcomes and the scoring rule and
+    hashed them; it ran no mode. The model that suggested the seeds had been shown the README, the evaluation and
+    comparison pages, some of the code and screenshots of the app, but not the catalogue's files. The cases come from
+    inside the project, not from an outside reviewer.
 - **The seal rests on our word.** The hashes were written before any run, but nobody outside held them; they bind only
   once published. The first run without a model had its results before these live runs. The product code under test
   did not change after the cases were sealed, and the harness's last change (23:04 on 6 November) came before any
@@ -297,8 +300,8 @@ is five well-aimed needless stops avoided and three defensible stops turned righ
   That has not been done, so a right answer given for a wrong reason, or an invented fact, would not show here.
 - **Blinding is partial.** Board summaries say "All three specialists agree" and single runs log "Board convened:
   generalist", so a reader can tell the modes apart. The categories rest on mechanical fields (plan, gate, attempts,
-  receiver history), not on prose. The re-grade was done inside the project, not by an independent person, and no one
-  outside the project has repeated the runs.
+  receiver history), not on prose. The re-grade was done inside the project by a separate AI assistant session, not by
+  an independent person, and no one outside the project has repeated the runs.
 - **Always escalate was computed, not played.** It is 1.25 by the rule's text, or 1.333 if F10's own condition is
   applied; the agent modes beat both.
 
@@ -527,8 +530,8 @@ The Opus 5.5 figures come from another build and from recorded runs, so they com
 - **Approval is the rig's,** as above.
 - **Reasons are only partly graded.** The re-grade checked that each plan cites a decisive fact (all 72 do) and read
   the F03, F04, F05, F09 and F12 plans in full. Invented facts were not graded run by run. The grading was done inside
-  the project, not by an independent person, and the blinding is partial: record ids rise across the instance, so the
-  run order, and so the model, could be recovered.
+  the project, by `grade.py` and a separate AI assistant session, not by an independent person, and the blinding is
+  partial: record ids rise across the instance, so the run order, and so the model, could be recovered.
 - **Cost is at seeded list prices,** not an invoice, and Sonnet 5.5's cache-read price is set too low (above).
 
 ## Release 1.1.x

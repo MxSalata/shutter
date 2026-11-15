@@ -4,6 +4,12 @@ A held-out set of twelve cases for Shutter's three ways of deciding a failed ADT
 investigator, the board), with the reference outcomes and the scoring rule fixed before any mode runs. The author
 worked blind to the catalogue and the recorded results, so this is an exam set before the answers were seen.
 
+The author was a separate AI assistant session ([how Shutter was
+developed](https://github.com/MxSalata/shutter#how-shutter-was-developed)), given only the files listed below, and "I"
+in this note is that session. It wrote the three sealed files and this note on 6 November 2026, and hashed the three
+itself. This copy was edited for publication to take out private paths and internal details and to list the results
+file.
+
 ## The files
 
 | File | What |
@@ -39,7 +45,9 @@ the ranking with and without that allowance.
 
 Read, as permitted:
 
-- A list of 25 seed ideas: most were dropped, several were reshaped, none was taken as given.
+- A list of 25 seed ideas from another model, which had been shown the README, the evaluation and comparison pages, some
+  of the code and screenshots of the app, but not the catalogue's files: most were dropped, several were reshaped, none
+  was taken as given.
 - `docs/readme/scenarios.md` (the demo scenarios in prose).
 - `docs/CONTRACTS.md`, sections 1 to 4 (the receiver's API, the operation key and HL7 mapping, the fixture format, the
   scenario runner and its steps), 5.1 (attempts and verification), 6.4 (the site profile's fields) and 9 (what leaves
