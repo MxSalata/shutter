@@ -31,7 +31,9 @@ export function RecoveryControlSection() {
         {c.stopped ? (
           <Text size="sm">
             {`Recovery is stopped (by ${c.stoppedBy}, ${formatZoned(c.stoppedAt) || c.stoppedAt}${c.stopReason ? `: ${c.stopReason}` : ''}).`}{' '}
-            {c.mode === 'enabled' ? 'Clearing the stop resumes recovery.' : 'Shadow mode: recovery is off.'}
+            {c.mode === 'enabled'
+              ? 'Recovery is enabled; clearing the stop releases no plan made before it.'
+              : 'Shadow mode: recovery is off.'}
           </Text>
         ) : (
           <Text size="sm">

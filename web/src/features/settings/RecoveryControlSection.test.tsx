@@ -99,7 +99,7 @@ describe('the recovery control', () => {
     page(<RecoveryControlSection />);
     expect(
       await screen.findByText(
-        /^Recovery is stopped \(by approver, 15 Nov, 03:53:49 GMT: checking\)\. Clearing the stop resumes recovery\.$/,
+        /^Recovery is stopped \(by approver, 15 Nov, 03:53:49 GMT: checking\)\. Recovery is enabled; clearing the stop releases no plan made before it\.$/,
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText(/2026-11-15T03:53/)).toBeNull();
