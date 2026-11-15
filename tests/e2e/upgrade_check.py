@@ -19,7 +19,10 @@ DIR is the earlier release's tree (git archive v1.0.0, say). The shapes:
 keeps the instance's own demo setting, so the site must still read "demo":false and have none of the demo's users.
 
 After the upgrade it checks the case (the count, and that the first one still opens with its state), the profile, the running productions (a site's production keeps its job numbers),
-the module's version, and then that a real uninstall still takes Shutter off the upgraded instance. It needs Docker and
+the module's version, and then that a real uninstall still takes Shutter off the upgraded instance. In the demo shape a
+site's own entry (CONTRACTS 6.8) is then made active on the upgraded instance, and the tree is loaded over it once more,
+as the next release would be: the catalogue's reseed leaves the entry active, rechecks it under the release (recorded
+before the load as an earlier one) and the entry still answers for its case. It needs Docker and
 no API key: no model is called. Run from the repository's root. Exit status 1 when a check fails.
 """
 import argparse
@@ -258,6 +261,38 @@ def site_not_demo(ns, when, ask_health=True):
         check(f'GET /api/shutter/health reads "demo":false {when}', h.get("demo") is False, h)
 
 
+def site_entry_through_reseed(ns, extra):
+    """A site entry made on the upgraded instance, then this tree loaded over it again. The entry is made in process by
+    the unit tests' kit (two stored, closed cases, one person's draft and proof, a second person's approval), which is
+    loaded for this step and removed after it."""
+    step("A site entry, active on the upgraded instance, through the next load's reseed")
+    kit = f"{PKG}/tests/unit/Shutter/Test/SiteKit.cls"
+    out = session(ns, f'Set sc=$SYSTEM.OBJ.Load("{kit}","ck-d") Write !,"[kit] ",sc,!\nSet id=##class(Shutter.Test.SiteKit).ActiveEntry(.m,.n,.p) Write !,"<<<",id,"|",p,"|",$SELECT($ISOBJECT(m):m.CaseId,1:""),">>>",!')
+    found = re.findall(r"<<<(.*?)>>>", out)
+    parts = found[-1].split("|", 2) if found else ["", "no answer", ""]
+    entry, problem, case_id = parts[0], parts[1], parts[2] if len(parts) > 2 else ""
+    check("a site entry is made active by two people", "[kit] 1" in out and entry.startswith("L") and problem == "" and case_id, out[-1200:])
+    if not entry.startswith("L"):
+        return
+    version = value(ns, "##class(Shutter.Catalogue.Entry).CatalogueVersion()")
+    check("the catalogue's version carries it", version.endswith(f":{entry}@1"), version[-60:])
+    match = f'##class(Shutter.Test.SiteKit).Snapshot(##class(Shutter.Store.Case).ByCaseId("{case_id}")).SummaryObject().catalogue'
+    check("its case is the entry's", value(ns, f"{match}.entry") == entry)
+    # The release it was last checked under, as an earlier one: the next load must check it again.
+    session(ns, 'Set ^Shutter.Catalogue.Site("checked")="1.0.0"')
+    load(ns, extra)
+    release = value(ns, '$PARAMETER("Shutter.Setup","VERSION")')
+    check("after the load the entry is still active", value(ns, f'##class(Shutter.Catalogue.SiteEntry).ById("{entry}").State') == "active")
+    check(f"and was rechecked under {release} by the reseed", value(ns, '$GET(^Shutter.Catalogue.Site("checked"))') == release, value(ns, '$GET(^Shutter.Catalogue.Site("checked"))'))
+    check("with nothing to review", value(ns, f'##class(Shutter.Catalogue.SiteEntry).ById("{entry}").NeedsReview') == "0")
+    check("the catalogue's version is the same", value(ns, "##class(Shutter.Catalogue.Entry).CatalogueVersion()") == version, value(ns, "##class(Shutter.Catalogue.Entry).CatalogueVersion()")[-60:])
+    out = session(ns, f'Set sc=$SYSTEM.OBJ.Load("{kit}","ck-d") Write !,"<<<",{match}.entry,">>>",!')
+    found = re.findall(r"<<<(.*?)>>>", out)
+    check("its case is still the entry's", found and found[-1] == entry, out[-600:])
+    out = session(ns, 'Write !,"<<<",##class(Shutter.Catalogue.SiteEntry).CountLine(),">>>",!\nSet sc=$SYSTEM.OBJ.Delete("Shutter.Test.SiteKit","-d")')
+    print("  note ", (re.findall(r"<<<(.*?)>>>", out) or [""])[-1], flush=True)
+
+
 def uninstall_after(ns):
     step("A real uninstall of the upgraded instance")
     start = time.time()
@@ -362,6 +397,7 @@ def demo_shape():
     check("Shutter.Production runs after the upgrade", status("USER") == "Shutter.Production|1", status("USER"))
     check("the demo hospital still runs", status("HOSPITAL").startswith("Hospital.Production|1"), status("HOSPITAL"))
     check("the HOSPITAL namespace is still there", value("%SYS", '##class(Config.Namespaces).Exists("HOSPITAL")') == "1")
+    site_entry_through_reseed("USER", "")
     uninstall_after("USER")
     check("the HOSPITAL namespace went with the demo", value("%SYS", '##class(Config.Namespaces).Exists("HOSPITAL")') == "0")
 
