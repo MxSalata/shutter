@@ -46,13 +46,15 @@ export interface Condition {
 /**
  * A fact the readiness rests on, kept apart by kind (the review's U145-04): `set up`, what the installation is configured
  * to do; `now`, what holds at the moment the page read it (`at`, an ISO UTC time); `seen`, what the store shows happened,
- * with `started`, the ISO UTC time the run it names started, where it names one.
+ * with `started`, the ISO UTC time the run it names started, where it names one, and `code`, that run's status as the
+ * store keeps it, said on Technical only.
  */
 export interface Evidence {
   kind: 'set up' | 'now' | 'seen';
   words: string;
   at?: string;
   started?: string;
+  code?: string;
 }
 
 export interface TaskReadiness {
@@ -81,8 +83,9 @@ export interface ReadinessInput {
   /** GET /costs `totals.liveRuns`: the board's runs that reached a real model, all time. */
   liveRuns?: number;
   /**
-   * GET /health `last_live_run`: the newest run that reached a model (live or record, never the API mimic), null when none
-   * has; undefined when it was not read. When read it is said instead of the count, which leaves out reviews' runs.
+   * GET /health `last_live_run`: the newest run for a real model (live or record, never the API mimic), null when none
+   * has; undefined when it was not read or has not answered yet. When read it is said instead of the count, which leaves
+   * out reviews' runs.
    */
   lastLive?: { at: string; status: string } | null;
   now?: number;
@@ -196,7 +199,7 @@ function scenario(i: ReadinessInput): TaskReadiness {
       next: 'Play them in the trial instead: Help, Open the trial environment.',
     });
   const answering = scenarioAnswering(i, s);
-  if ('code' in answering) return task('scenario', title, does, [...conditions, answering]);
+  if ('effect' in answering) return task('scenario', title, does, [...conditions, answering]);
   return task('scenario', title, does, conditions, [{ ...answering, at: i.settingsAt }]);
 }
 
@@ -294,15 +297,8 @@ function ask(i: ReadinessInput): TaskReadiness {
       evidence.push({ kind: 'now', words: 'The model cannot be asked.', at: i.settingsAt });
     } else evidence.push({ kind: 'now', words: 'The model can be asked.', at: i.settingsAt });
   }
-  if (i.lastLive)
-    evidence.push({
-      kind: 'seen',
-      words: `The newest run that reached a real model ${
-        i.lastLive.status === 'ok' ? 'answered' : `ended without a usable answer (${i.lastLive.status})`
-      }.`,
-      started: i.lastLive.at,
-    });
-  // Health not read: the board's count, which the costs give
+  if (i.lastLive) evidence.push(lastLiveSeen(i.lastLive));
+  // Health not read, or not answered yet: the board's count, which the costs give
   else if (i.lastLive === null || typeof i.liveRuns === 'number')
     evidence.push({
       kind: 'seen',
@@ -312,6 +308,32 @@ function ask(i: ReadinessInput): TaskReadiness {
           : 'No agent run has reached a real model on this instance yet.',
     });
   return task('ask', title, does, conditions, evidence);
+}
+
+/**
+ * Why a run was stopped before any call to the model, by the status the Agent operation stores for it: the day's budget
+ * or the requester's share of it spent (`budget_exhausted`), the budget not checked in time (`budget_busy`), the provider
+ * refusing the key (`provider_auth`). Such a run is kept with the item's mode and model, so the health report can name it.
+ */
+const REFUSED_BEFORE_CALL: Record<string, string> = {
+  budget_exhausted: "the day's live AI budget, or its requester's share of it, was used up",
+  budget_busy: 'the budget could not be checked in time',
+  provider_auth: 'the model provider refused the key',
+};
+
+/** The health report's newest run, in words: answered, refused before any call, or ended without a usable answer. */
+function lastLiveSeen(run: { at: string; status: string }): Evidence {
+  if (run.status === 'ok')
+    return { kind: 'seen', words: 'The newest run that reached a real model answered.', started: run.at };
+  const why = Object.hasOwn(REFUSED_BEFORE_CALL, run.status) ? REFUSED_BEFORE_CALL[run.status] : undefined;
+  return {
+    kind: 'seen',
+    words: why
+      ? `The newest run meant for a real model was refused before any call to it: ${why}.`
+      : 'The newest run that reached a real model ended without a usable answer.',
+    started: run.at,
+    code: run.status,
+  };
 }
 
 function approve(i: ReadinessInput): TaskReadiness {

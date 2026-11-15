@@ -197,8 +197,10 @@ test.describe('Your tasks on a live server @settings', () => {
     // The last observed live call, apart from what holds now, with when it started
     const seen = ask.locator('[data-kind="seen"]');
     await expect(seen).toContainText(
-      'Seen: The newest run that reached a real model ended without a usable answer (budget_exceeded). Started ',
+      'Seen: The newest run that reached a real model ended without a usable answer. Started ',
     );
+    // The status as the store keeps it is for Technical, not the plain words
+    await expect(seen).not.toContainText('budget_exceeded');
     await expect(seen.locator('time')).toHaveAttribute('datetime', '2026-11-15T09:12:00Z');
     const approve = section.getByTestId('task-approve');
     await expect(approve.getByTestId('task-condition')).toHaveText(

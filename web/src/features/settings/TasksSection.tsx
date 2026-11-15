@@ -9,11 +9,13 @@ import {
   useSettings,
   useSiteProfile,
 } from '@/api/hooks';
+import { CodeChip } from '@/components/CodeChip';
 import { Section } from '@/components/Section';
 import { StatusBadge } from '@/components/StatusBadge';
 import { TechDetail } from '@/components/TechDetail';
 import { Timestamp } from '@/components/Timestamp';
 import { TRIAL } from '@/env/mode';
+import { useTechnical } from '@/stores/appearance';
 import { STATE_BADGES, summaryLine, taskReadiness, type Evidence, type TaskReadiness } from './tasks';
 
 /** When the page last read a query, as an ISO UTC time; undefined before the first answer. */
@@ -23,13 +25,20 @@ const readAt = (q: Pick<UseQueryResult, 'dataUpdatedAt' | 'data'>) =>
 const KIND_WORDS: Record<Evidence['kind'], string> = { 'set up': 'Set up', now: 'Now', seen: 'Seen' };
 
 /**
- * One fact behind a task, by its kind, with when the run it names started, and the time the page read it where an old
- * reading could pass for current.
+ * One fact behind a task, by its kind, with the status the store keeps for the run it names (on Technical only), when
+ * that run started, and the time the page read it where an old reading could pass for current.
  */
 function EvidenceLine({ e }: { e: Evidence }) {
+  const technical = useTechnical();
   return (
     <Text size="xs" c="dimmed" data-kind={e.kind}>
       {KIND_WORDS[e.kind]}: {e.words}
+      {technical && e.code ? (
+        <>
+          {' '}
+          Status <CodeChip>{e.code}</CodeChip>.
+        </>
+      ) : null}
       {e.started ? (
         <>
           {' '}

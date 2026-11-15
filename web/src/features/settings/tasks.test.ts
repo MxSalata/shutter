@@ -136,9 +136,12 @@ describe('taskReadiness', () => {
     // A failing afternoon shows as such beside the configured mode and what holds now
     const failed = tasks(live({ lastLive: { at: STARTED, status: 'model_error' } })).ask;
     expect(failed.evidence.map((e) => e.kind)).toEqual(['set up', 'now', 'seen']);
-    expect(failed.evidence[2].words).toBe(
-      'The newest run that reached a real model ended without a usable answer (model_error).',
-    );
+    expect(failed.evidence[2]).toEqual({
+      kind: 'seen',
+      words: 'The newest run that reached a real model ended without a usable answer.',
+      started: STARTED,
+      code: 'model_error',
+    });
     expect(failed.state).toBe('ready');
     // None yet, whatever the board's count says
     expect(tasks(live({ lastLive: null })).ask.evidence[2]).toEqual({
@@ -150,6 +153,29 @@ describe('taskReadiness', () => {
       live({ settings: settings({ providerConfigured: false }), lastLive: { at: STARTED, status: 'ok' } }),
     ).ask;
     expect(noKey.evidence.map((e) => e.kind)).toEqual(['set up', 'seen']);
+  });
+
+  it('says a run refused before any call was refused, never that it reached a model, with its status kept for Technical', () => {
+    const STARTED = '2026-11-15T09:12:00Z';
+    const seen = (status: string) => tasks(live({ lastLive: { at: STARTED, status } })).ask.evidence[2];
+    const refused = {
+      budget_exhausted:
+        "The newest run meant for a real model was refused before any call to it: the day's live AI budget, or its requester's share of it, was used up.",
+      budget_busy:
+        'The newest run meant for a real model was refused before any call to it: the budget could not be checked in time.',
+      provider_auth:
+        'The newest run meant for a real model was refused before any call to it: the model provider refused the key.',
+    };
+    for (const [status, words] of Object.entries(refused)) {
+      expect(seen(status), status).toEqual({ kind: 'seen', words, started: STARTED, code: status });
+      expect(seen(status).words, status).not.toMatch(/reached/);
+      // The status as the store keeps it is not in the words
+      expect(seen(status).words, status).not.toContain(status);
+    }
+    // A status of the same name on the object's prototype is not a refusal
+    expect(seen('constructor').words).toBe(
+      'The newest run that reached a real model ended without a usable answer.',
+    );
   });
 
   describe("the review's acceptance states, each with a truthful next step", () => {

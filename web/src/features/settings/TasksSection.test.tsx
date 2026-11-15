@@ -1,10 +1,10 @@
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, within } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import fixtures from '@/mocks/fixtures.json';
 import { resetMock } from '@/mocks/handlers';
 import { server } from '@/mocks/node';
@@ -147,6 +147,33 @@ describe('TasksSection', () => {
       /^Seen: The newest run that reached a real model answered\. Started .+\.$/,
     );
     expect(seen.querySelector('time')).toHaveAttribute('dateTime', fixtures.health.last_live_run.at);
+  });
+
+  it('says a run refused before any call in plain words, and its status only on Technical', async () => {
+    answer({});
+    server.use(
+      http.get('/api/shutter/health', () =>
+        HttpResponse.json({
+          recorded: fixtures.source,
+          ...fixtures.health,
+          last_live_run: { ...fixtures.health.last_live_run, status: 'budget_exhausted' },
+        }),
+      ),
+    );
+    renderTasks();
+    await open();
+    const ask = await row('ask');
+    await vi.waitFor(() =>
+      expect(ask.querySelector('[data-kind="seen"]')).toHaveTextContent(
+        /^Seen: The newest run meant for a real model was refused before any call to it: the day's live AI budget, or its requester's share of it, was used up\. Started .+\.$/,
+      ),
+    );
+    const seen = ask.querySelector('[data-kind="seen"]')!;
+    expect(seen).not.toHaveTextContent('reached');
+    expect(seen).not.toHaveTextContent('budget_exhausted');
+    act(() => useAppearance.setState({ detail: 'technical' }));
+    expect(seen).toHaveTextContent(/Status budget_exhausted\. Started /);
+    expect(seen.querySelector('code')).toHaveTextContent('budget_exhausted');
   });
 
   it('in shadow mode: the approval is not now and says how recovery is enabled; an escalation reads Not sent', async () => {
