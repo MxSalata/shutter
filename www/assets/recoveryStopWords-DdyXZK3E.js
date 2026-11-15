@@ -1,0 +1,1 @@
+const e="In the trial the stop is recorded but not enforced: approving a case still plays its recording.",s=`${e} On IRIS it refuses Shutter’s recovery calls, so an approved write is not sent.`;export{s as T,e as a};
