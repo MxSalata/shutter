@@ -219,6 +219,31 @@ ClassMethod ActiveList(Output problem As %String, exceptId As %String = "") As %
     Quit ..Ordered(list)
 }
 
+/// Which of the site's own entries stopped a case: the match its current evidence carries, when that match is a site
+/// entry's (origin site; it is then the case's only match). {entry, title, instructions}, or "" for a case no site entry
+/// matched. Read by the closures that run outside the case workflow (the outage close, the engine's delivery read and
+/// the resend set), so that none of them settles such a case, or offers its message, without a person seeing the brake.
+ClassMethod StoppedCase(case As Shutter.Store.Case) As %DynamicObject
+{
+    Set json = "Shutter.Util.Json"
+    If '$ISOBJECT(case) Quit ""
+    Set snap = case.CurrentSnapshot
+    Set summary = $SELECT($ISOBJECT(snap): snap.SummaryObject(), 1: "")
+    Set cat = $SELECT($ISOBJECT(summary): summary.%Get("catalogue"), 1: "")
+    If '$ISOBJECT(cat) || (cat.%GetTypeOf("matches") '= "array") || (cat.%Get("matches").%Size() = 0) Quit ""
+    Set m = cat.%Get("matches").%Get(0)
+    If '$ISOBJECT(m) || ($CLASSMETHOD(json, "Str", m, "origin") '= "site") Quit ""
+    Quit {"entry": ($CLASSMETHOD(json, "Str", m, "id")), "title": ($CLASSMETHOD(json, "Str", m, "title")), "instructions": ($CLASSMETHOD(json, "Str", m, "instructions"))}
+}
+
+/// The words for a case one of the site's own entries stopped: the entry, and its instructions when it has them.
+ClassMethod StoppedWords(stopped As %DynamicObject) As %String
+{
+    Set words = "the site's own scenario " _ stopped.entry _ " asks a person"
+    If stopped.instructions '= "" Set words = words _ ": " _ stopped.instructions
+    Quit words
+}
+
 /// How many cases an entry sent to a person: the cases with a plan that names it, in all or since a number of days.
 ClassMethod CasesSent(id As %String, days As %Integer = 0) As %Integer
 {

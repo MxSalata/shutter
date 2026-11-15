@@ -161,6 +161,37 @@ Method Case(caseId As %String, ns As %String, origin As %String, source As %Stri
     Quit c.%Id()
 }
 
+/// A message whose case one of the site's own entries stopped (CONTRACTS 6.8) is held, never offered: refused with the
+/// entry and its instructions, for the person who decides on its case. A send run reads it again and skips it.
+Method TestASiteEntrysCaseIsHeld()
+{
+    Do ..Failed("9990000351^^^NHS^NH", 8, ..#NEVER, "SA")
+    Set held = ..Failed("9990000352^^^NHS^NH", 8, ..#NEVER, "SB")
+    Do $$$AssertEquals(..Controls(..Run().lists.offered), "SA,SB", "both offered while no site entry stopped a case")
+    Set c = ..Case("RS-SITE-1", $NAMESPACE, held, "")
+    Set case = ##class(Shutter.Store.Case).%OpenId(c)
+    Set summary = {"catalogue": {"decision": "person", "entry": "L7", "outcome": "escalate", "matches": [{"id": "L7", "version": 1, "origin": "site", "decides": "person", "title": "Results for the renal unit", "instructions": "Ring the renal registrar before anything is sent."}]}}
+    Set snap = ##class(Shutter.Store.Snapshot).Begin(case, 300)
+    Do $$$AssertStatusOK(snap.Seal(summary), "the case's evidence names the site entry")
+    Do $$$AssertStatusOK(case.SetSnapshot(snap), "as its current evidence")
+    Try {
+        Set out = ..Run()
+        Do $$$AssertEquals(..Controls(out.lists.offered), "SA", "the stopped case's message is not offered")
+        Do $$$AssertEquals(..Controls(out.lists.refused), "SB", "it is held")
+        Set reason = out.lists.refused.%Get(0).reason
+        Do $$$AssertTrue(reason [ "held by the site's own scenario L7 on case RS-SITE-1", "naming the entry and the case: " _ reason)
+        Do $$$AssertTrue(reason [ "Ring the renal registrar", "with the site's instructions")
+        Set check = ##class(Shutter.Operation.EngineResend).Recheck($NAMESPACE, ..Item, held, "Results Out", "")
+        Do $$$AssertEquals(check.verdict, "skip", "a send run reads it again and skips it")
+        Do $$$AssertTrue(check.why [ "L7", "saying why: " _ check.why)
+    } Catch ex {
+        Do $$$AssertTrue(0, "failed: " _ ex.DisplayString())
+    }
+    Do ##class(Shutter.Store.Case).%OpenId(c).SetSnapshot("")
+    Do ##class(Shutter.Store.Snapshot).%DeleteId(snap.%Id())
+    Kill ^Shutter.Counter("snapshot", c)
+}
+
 /// The digest moves with the set and stands still without a change.
 Method TestDigest()
 {
@@ -209,7 +240,7 @@ Method TestOtherOrdersOffered()
     Do $$$AssertEquals(..Controls(out.lists.offered), five, "the five never-opened results are offered: " _ out.lists.refused.%ToJSON())
     Do $$$AssertEquals(..Controls(out.lists.reached), "T5", "the read timeout reached the receiver")
     Do $$$AssertTrue(out.lists.offered.%Get(0).reason [ ##class(Shutter.Util.ResendSet).#OLDER, "the row says it is older: " _ out.lists.offered.%Get(0).reason)
-    Do $$$AssertEquals(out.set.setPolicyVersion, "2026-11-09.3", "the rules' version moved")
+    Do $$$AssertEquals(out.set.setPolicyVersion, "2026-11-15.1", "the rules' version moved")
 }
 
 /// A resend of Shutter's that failed (its clone Suspended): read again, the message is refused and never offered again.

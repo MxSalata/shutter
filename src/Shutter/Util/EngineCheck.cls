@@ -139,6 +139,8 @@ ClassMethod Judge(facts As %DynamicObject) As %DynamicObject
 /// What the gate's engine blocks mean for the case. Still trying: blocked, waiting on the engine. May hold it: blocked for a
 /// person, the receiver's screen in the headline. Delivered: resolved with the engine's words and the plan's disposition kept, or
 /// blocked for a person when those words can't establish acceptance or the case is one a Completed header doesn't settle.
+/// A case one of the site's own entries stopped is never resolved here: the delivery is noted on it and it is blocked for
+/// the person, with the site's instructions (CONTRACTS 6.8).
 ClassMethod Settle(case As Shutter.Store.Case, row As %DynamicObject, checks As %DynamicArray, ref As %String) As %Status
 {
     Set code = ##class(Shutter.Util.Json).Str(row, "reason_code")
@@ -156,6 +158,16 @@ ClassMethod Settle(case As Shutter.Store.Case, row As %DynamicObject, checks As 
     Set words = ##class(Shutter.Util.Json).Str(engine, "words")
     Set case.Outcome = words
     If ##class(Shutter.Util.Json).Bool(engine, "established") && ..Resolvable(case, checks) {
+        // A case one of the site's own entries stopped is never closed without a person (CONTRACTS 6.8, R18): what the
+        // engine did goes on the case as a note, and the case waits for the person with the site's instructions.
+        Set stopped = ##class(Shutter.Catalogue.SiteEntry).StoppedCase(case)
+        If $ISOBJECT(stopped) {
+            Set note = "The engine delivered this message (" _ words _ "); " _ ##class(Shutter.Catalogue.SiteEntry).StoppedWords(stopped) _ ". The case is left for them"
+            Set sc = case.Note("note", note, "gate", ref)
+            Quit:$$$ISERR(sc) sc
+            Set case.Headline = "Stopped for a person: the engine delivered this message, and the site's own scenario " _ stopped.entry _ " asks a person"
+            Quit case.Transition("blocked", "The site's own scenario " _ stopped.entry _ " matched this case, so the engine's delivery does not close it: a person decides", "gate", ref)
+        }
         Set case.Headline = words
         Quit case.Transition("resolved", words, "gate", ref)
     }

@@ -15,12 +15,13 @@
 /// a queue since it was created, which is when an attempt can go unlogged; no copy resent by hand; no resend of Shutter's
 /// but a never-opened clone, which then stands in the origin's place; and the patient check passed), reached (the receiver
 /// took it on an attempt: a reply, a lost read, a read timeout) or refused (anything else, with its reason, Suspended and
-/// the other set-aside statuses included).
+/// the other set-aside statuses included). A candidate whose case one of the site's own entries stopped is refused, with the
+/// entry and its instructions (SiteHold).
 Class Shutter.Util.ResendSet [ Abstract ]
 {
 
 /// The version of these rules, which the set's digest and an approval bind.
-Parameter SETPOLICYVERSION = "2026-11-09.3";
+Parameter SETPOLICYVERSION = "2026-11-15.1";
 
 /// The words every surface shows with the set.
 Parameter NOTSENT = "Shutter will not send these messages. Review them in the Message Viewer using the site's recovery procedure.";
@@ -72,6 +73,13 @@ ClassMethod Lists(ns As %String, item As %String, from As %String, to As %String
         Set row = ..Row(ns, h)
         Set list = ..Place(ns, h, row)
         Continue:list=""
+        // A message whose case one of the site's own entries stopped is held, with the entry and its instructions, for
+        // the person who decides on its case (CONTRACTS 6.8): it never joins a set in silence.
+        If list = "candidate" {
+            Set why = ..SiteHold(ns, h.id)
+            If (why = "") && (row.headerId '= h.id) Set why = ..SiteHold(ns, row.headerId)
+            If why '= "" Set row.reason = why, list = "refused"
+        }
         If list = "candidate" { Do candidates.%Push(row) Set members = members _ $LISTBUILD(row.headerId) } Else { Do out.lists.%Get(list).%Push(row) }
     }
     Set exclude = ..CasesOf(ns, candidates)
@@ -226,6 +234,22 @@ ClassMethod AttemptsOf(ns As %String, headerId As %String) As %String
 {
     Set rows = ##class(Shutter.Util.EngineRead).LogRows(ns, headerId)
     Quit $SELECT(rows.answer = "ok": ##class(Shutter.Util.EngineWords).Attempts(rows.rows), 1: "unknown")
+}
+
+/// Why a message is held for its case: "held by the site's own scenario L1 on case C-000123: " and the entry's
+/// instructions, when one of the site's own entries stopped a case on the header, else "". Read when the set is listed and
+/// again before each send.
+ClassMethod SiteHold(ns As %String, headerId As %String) As %String
+{
+    Set cases = ..CaseRows(ns, headerId), iter = cases.%GetIterator()
+    While iter.%GetNext(, .one) {
+        Set stopped = ##class(Shutter.Catalogue.SiteEntry).StoppedCase(##class(Shutter.Store.Case).%OpenId(one.id))
+        Continue:'$ISOBJECT(stopped)
+        Set why = "held by the site's own scenario " _ stopped.entry _ " on case " _ one.caseId _ ": a person decides on its case"
+        If stopped.instructions '= "" Set why = why _ ". The site's instructions: " _ stopped.instructions
+        Return why
+    }
+    Quit ""
 }
 
 /// The case ids of the candidates' messages: Shutter's cases on those headers in ns, which the patient check leaves out.

@@ -248,7 +248,8 @@ ClassMethod Late(outage As Shutter.Store.Outage, row As Shutter.Store.ResendReco
 }
 
 /// The set's rules for one message again: {"verdict": "go", "headerId"} (the header to send: the origin, or Shutter's
-/// never-opened clone in its place), {"verdict": "skip", "why"} (the patient check holds it) or {"verdict": "stop", "why"}.
+/// never-opened clone in its place), {"verdict": "skip", "why"} (the patient check holds it, or one of the site's own entries
+/// stopped its case) or {"verdict": "stop", "why"}.
 /// members are the run's origin header ids, which the order rule leaves out of its newer read.
 ClassMethod Recheck(ns As %String, item As %String, headerId As %String, receiver As %String, exclude As %List, members As %List = "") As %DynamicObject
 {
@@ -259,6 +260,10 @@ ClassMethod Recheck(ns As %String, item As %String, headerId As %String, receive
     // Closed without a send of its own since the approval (already handled by hand, or held already): nothing goes.
     If place = "closed" Quit {"verdict": "stop", "why": ("header " _ headerId _ " no longer qualifies: " _ $SELECT(row.closure = "handled_by_hand": "handled by hand, recorded by " _ row.closedBy _ $SELECT(row.closedAt '= "": " at " _ ..Clock(row.closedAt), 1: ""), 1: "the receiver reported it already holds it"))}
     If place = "candidate" {
+        // A site entry activated after the approval stops its case's message too (CONTRACTS 6.8).
+        Set held = ##class(Shutter.Util.ResendSet).SiteHold(ns, headerId)
+        If (held = "") && (row.headerId '= headerId) Set held = ##class(Shutter.Util.ResendSet).SiteHold(ns, row.headerId)
+        If held '= "" Quit {"verdict": "skip", "why": (held)}
         Set check = ##class(Shutter.Util.PatientCheck).Check(ns, item, row.headerId, receiver, exclude, members)
         If check.hold Quit {"verdict": "skip", "why": (check.why)}
         Quit {"verdict": "go", "headerId": (row.headerId)}

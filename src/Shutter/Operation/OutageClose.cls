@@ -541,6 +541,8 @@ ClassMethod Judge(case As Shutter.Store.Case, outage As Shutter.Store.Outage) As
 {
     Set c = {"state": (case.State), "failureKind": (case.FailureKind), "failureReasonCode": (case.FailureReasonCode), "deliveryHeader": "", "deliveryCustody": "", "deliveryStatus": "", "effectiveAck": "", "words": ""}
     Do c.%Set("identity", ..IdentityException(case), "boolean")
+    Set stopped = ##class(Shutter.Catalogue.SiteEntry).StoppedCase(case)
+    Set c.site = $SELECT($ISOBJECT(stopped): stopped.entry, 1: "")
     Set first = ..LinkVerdict(c)
     If first.decided Quit ..Verdict(first, "")
     Set facts = ##class(Shutter.Util.EngineCheck).Read(case)
@@ -562,10 +564,14 @@ ClassMethod Judge(case As Shutter.Store.Case, outage As Shutter.Store.Outage) As
         If $$$ISERR(sc) Quit ..Verdict({"finished": 0, "resolved": 0, "reason": ("it could not be resolved: " _ $EXTRACT($SYSTEM.Status.GetErrorText(sc), 1, 200))}, c.deliveryHeader)
         Quit ..Verdict({"finished": 1, "resolved": 1, "reason": ""}, c.deliveryHeader)
     }
-    // At not_established the sentence goes on the case once, and the case stays for a person.
+    // At not_established the sentence goes on the case once, and the case stays for a person. On a case one of the
+    // site's own entries stopped the engine's delivery is noted the same way, with the entry and its instructions, and the
+    // case stays for the person too (CONTRACTS 6.8).
     If (c.words '= "") && (case.Outcome '= c.words) {
         Set case.Outcome = c.words
-        Do case.Note("note", c.words, ..#ACTOR, "outage:" _ outage.%Id())
+        Set note = c.words
+        If verdict.%Get("site") Set note = "The engine delivered this message (" _ c.words _ "); " _ ##class(Shutter.Catalogue.SiteEntry).StoppedWords(stopped) _ ". The case is left for them"
+        Do case.Note("note", note, ..#ACTOR, "outage:" _ outage.%Id())
         Do case.%Save()
     }
     Quit ..Verdict(verdict, c.deliveryHeader)
@@ -593,7 +599,7 @@ ClassMethod IdentityException(case As Shutter.Store.Case) As %Boolean [ Private 
 /// deliveryCustody (EngineRead.Custody's answer for its own delivery header), deliveryStatus, effectiveAck, words. Answers {
 /// "decided" (known before the engine is read), "finished", "resolve", "resolved", "reason" }. Membership of the outage is no
 /// authority: only an engine delivery failure whose own header reads Completed, with an acknowledgement level established, is
-/// resolved.
+/// resolved, and never one a site's own entry stopped (c.site, its id): that case stays for a person with "site" set.
 ClassMethod LinkVerdict(c As %DynamicObject) As %DynamicObject
 {
     Set state = c.state
@@ -607,6 +613,11 @@ ClassMethod LinkVerdict(c As %DynamicObject) As %DynamicObject
     If c.%Get("deliveryCustody") = "" Quit {"decided": 0, "finished": 0, "resolve": 0, "resolved": 0, "reason": ""}
     If c.deliveryCustody '= "delivered" Quit ..Open("its own delivery header" _ $SELECT(c.deliveryHeader '= "": " (" _ c.deliveryHeader _ ")", 1: "") _ " reads " _ $SELECT(c.deliveryStatus '= "": c.deliveryStatus, 1: c.deliveryCustody) _ ", not Completed", 0)
     If (c.effectiveAck = "not_established") || (c.effectiveAck = "") Quit ..Open(c.words, 0)
+    If c.%Get("site") '= "" {
+        Set v = ..Open("the engine delivered it, but the site's own scenario " _ c.site _ " stopped its case: a person decides on its case", 0)
+        Do v.%Set("site", 1, "boolean")
+        Quit v
+    }
     Quit {"decided": 0, "finished": 1, "resolve": 1, "resolved": 0, "reason": ""}
 }
 
