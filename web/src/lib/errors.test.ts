@@ -26,12 +26,14 @@ describe('describeError', () => {
     ).toBe('The API service is not running (no_service)');
   });
 
-  it("says a run in the way may be another visitor's, without the code", () => {
+  it("says a run in the way may be another user's or the hospital's, without the code", () => {
     expect(
       describeError(apiError(409, { error: 'wrong_state', detail: 'a run of S3 is still playing' })),
-    ).toBe("A run of S3 is still playing; another visitor's run, or the hospital's. Try again when it ends.");
+    ).toBe(
+      "A run of S3 is still playing; perhaps another user's, or the hospital's. Try again when it ends.",
+    );
     expect(describeError(apiError(409, { error: 'wrong_state', detail: 'a run of S8 is queued' }))).toBe(
-      "A run of S8 is queued; another visitor's run, or the hospital's. Try again when it ends.",
+      "A run of S8 is queued; perhaps another user's, or the hospital's. Try again when it ends.",
     );
     // Any other refusal keeps its own words and its code
     expect(

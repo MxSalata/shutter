@@ -106,9 +106,9 @@ export function describeError(e: unknown): string {
   if (e instanceof ApiError) {
     // A rate limit's page (a proxy's, worded for its owner) and a 503 with no word of its own: said for the reader
     if (e.status === 429 || (e.status === 503 && !e.detail)) return httpStatusText(e.status);
-    // On a shared instance the run in the way may be anyone's: who to wait for, without the code
+    // The run in the way may be anyone's: who to wait for, without the code
     if (e.code === 'wrong_state' && RUN_IN_THE_WAY.test(e.detail))
-      return `${e.detail.charAt(0).toUpperCase()}${e.detail.slice(1)}; another visitor's run, or the hospital's. Try again when it ends.`;
+      return `${e.detail.charAt(0).toUpperCase()}${e.detail.slice(1)}; perhaps another user's, or the hospital's. Try again when it ends.`;
     const what = e.detail || httpStatusText(e.status);
     return e.code && !what.includes(e.code) ? `${what} (${e.code})` : what;
   }
