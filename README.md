@@ -7,26 +7,35 @@
 <p align="center">
   <a href="https://github.com/MxSalata/shutter/actions/workflows/ci.yml"><img src="https://github.com/MxSalata/shutter/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
   <a href="https://github.com/MxSalata/shutter/tags"><img src="https://img.shields.io/github/v/tag/MxSalata/shutter?label=version&color=0e7299" alt="Version" /></a>
+  <a href="https://github.com/MxSalata/shutter#ipm-on-a-stock-ai-hub-image"><img src="https://img.shields.io/badge/IPM-iris--shutter-095c7c" alt="IPM package iris-shutter" /></a>
+  <a href="https://github.com/MxSalata/shutter#docker-replay-first-no-key"><img src="https://img.shields.io/badge/docker-replay%2C%20no%20key-2496ed?logo=docker&logoColor=white" alt="Docker install with replay and no key" /></a>
+  <a href="https://github.com/MxSalata/shutter/blob/main/docs/readme/ai-hub.md"><img src="https://img.shields.io/badge/IRIS%20AI%20Hub-build%20154-6f42c1" alt="IRIS AI Hub build 154" /></a>
+  <a href="https://github.com/MxSalata/shutter/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT licence" /></a>
+</p>
+<p align="center">
   <a href="https://mxsalata.github.io/shutter/"><img src="https://img.shields.io/badge/trial-try%20it-45acd1" alt="Trial" /></a>
   <a href="https://shutter.mxsalata.com"><img src="https://img.shields.io/badge/online%20demo-live-2f9e6b" alt="Online demo" /></a>
+  <a href="https://youtu.be/InZx2MYJ47k"><img src="https://img.shields.io/badge/walkthrough-13%20minutes-c4302b?logo=youtube&logoColor=white" alt="Walkthrough video, 13 minutes" /></a>
+  <a href="https://youtu.be/ZBnAqKTfdvM"><img src="https://img.shields.io/badge/video-2%20minutes-c4302b?logo=youtube&logoColor=white" alt="Two-minute video" /></a>
+  <a href="https://openexchange.intersystems.com/package/Shutter"><img src="https://img.shields.io/badge/Open%20Exchange-Shutter-00b2a9" alt="Open Exchange" /></a>
 </p>
 <p align="center">
   <a href="https://mxsalata.github.io/shutter/"><b>Trial</b> (no IRIS)</a> ·
   <a href="https://shutter.mxsalata.com"><b>Online demo</b> (real IRIS)</a> ·
   <a href="https://github.com/MxSalata/shutter#for-judges">For judges</a> ·
-  <a href="https://github.com/MxSalata/shutter#what-has-been-measured">Results</a> ·
-  <a href="https://github.com/MxSalata/shutter#where-the-agents-sit">The agents</a> ·
-  <a href="https://youtu.be/ZBnAqKTfdvM">Two-minute video</a>
+  <a href="https://youtu.be/InZx2MYJ47k"><b>Walkthrough</b> (13 minutes)</a> ·
+  <a href="https://youtu.be/ZBnAqKTfdvM">Two-minute video</a> ·
+  <a href="https://github.com/MxSalata/shutter/blob/main/docs/readme/how-shutter-works.md">How Shutter works (guide)</a> ·
+  <a href="https://github.com/MxSalata/shutter/blob/main/docs/readme/integrating-at-your-trust.md">At your trust (guide)</a>
 </p>
 <p align="center"><sub>
-  <a href="https://github.com/MxSalata/shutter/blob/main/docs/readme/how-shutter-works.md">How Shutter works (guide)</a> ·
-  <a href="https://github.com/MxSalata/shutter/blob/main/docs/readme/integrating-at-your-trust.md">At your trust (guide)</a> ·
+  <a href="https://github.com/MxSalata/shutter#what-has-been-measured">Results</a> ·
+  <a href="https://github.com/MxSalata/shutter#where-the-agents-sit">The agents</a> ·
   <a href="https://github.com/MxSalata/shutter#try-it">Install (Docker or IPM)</a> ·
   <a href="https://github.com/MxSalata/shutter#limits-plainly">Limits</a> ·
   <a href="https://openexchange.intersystems.com/package/Shutter">Open Exchange</a> ·
   <a href="https://github.com/MxSalata/shutter/blob/main/CHANGELOG.md">What's new</a> ·
-  <a href="https://github.com/MxSalata/shutter/releases/download/v1.4.5/shutter-overview.mp4">Two-minute video (MP4)</a> ·
-  <a href="https://youtu.be/InZx2MYJ47k">Full demo video (13 minutes, recorded on 1.4.4)</a>
+  <a href="https://github.com/MxSalata/shutter/releases/download/v1.4.5/shutter-overview.mp4">Two-minute video (MP4)</a>
 </sub></p>
 <p align="center"><sub>Current release 1.4.8; the videos and measurements were recorded on the releases named beside them.</sub></p>
 
@@ -34,7 +43,11 @@
 
 On an ordinary day a hospital's integration engine can see hundreds of failed messages. Engineers put right what they can by hand, and the rest can go unactioned. Shutter won't fix them all, but it helps with most: in my work on interoperability with 28 NHS hospitals, most failures were of the kinds it knows. It resends the failed patient movements that pass its checks, closes those the receiver already has, and for the rest stops, writes nothing, and identifies the patient for a person to review.
 
-**Watch it on a real IRIS production:** I recorded a [13-minute walkthrough](https://youtu.be/InZx2MYJ47k) live on the online demo and narrated it myself: the running product, not slides, from an escalated case to an approved resend verified at the receiver. A [two-minute cut](https://youtu.be/ZBnAqKTfdvM) shows one recovery.
+<p align="center">
+  <a href="https://youtu.be/InZx2MYJ47k"><img src="https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/walkthrough.jpg" width="760" alt="A frame of the 13-minute walkthrough: case C-000002 on the live demo hospital, delivered and verified at the receiver, with the author narrating. Opens the video on YouTube" /></a>
+</p>
+
+**Watch it on a real IRIS production:** I recorded this [13-minute walkthrough](https://youtu.be/InZx2MYJ47k) and narrated it myself: the running product, not slides. After a short start in the trial it runs live on the online demo, from an escalated case to an approved resend verified at the receiver (recorded on release 1.4.4). A [two-minute cut](https://youtu.be/ZBnAqKTfdvM) shows one recovery.
 
 **When a hospital's HL7 delivery fails, the usual fix is Resend, and when two systems move a patient at the same moment, that resend can write over the bed manager's newer ward. Shutter's IRIS AI Hub agents decide how to put the failure right; a deterministic gate decides whether anything is written.**
 
@@ -43,6 +56,17 @@ On an ordinary day a hospital's integration engine can see hundreds of failed me
 *S8, the same failure played twice on the same evidence. The Rules only run is exempted on purpose from one gate check, `ENTRY_NOT_NAMED_WRITE`, to show what a plain resend writes: WARD-B over the bed manager's WARD-C. The board escalates and writes nothing. On a real case the whole gate runs and holds that resend, so "every check passed" in the picture means every check but the one lifted.*
 
 **Why I built it:** the failures above are the ones I met in my interoperability work with 28 NHS hospitals. At one trust we checked every interface daily for failed messages, and I wrote a 30-page guide to handling them. Not every clinical system checks what it receives. When a bed transfer from I.PM failed to reach NerveCentre and clinicians corrected the history there by hand, resending the failures in order could displace several patients, because NerveCentre won't put two patients in one bed and moves the other to the waiting area. Blindly resending coding messages from NerveCentre to Careflow would overwrite a patient's coding and end-date it as of today, and on older PAS systems a resent A02 for a past spell could reopen it, leaving two active spells. That is why Shutter reads the receiver before it writes. While building Shutter I filed AI Hub bug reports [#11](https://github.com/intersystems-community/ai-hub-eap-bugreports/issues/11), [#12](https://github.com/intersystems-community/ai-hub-eap-bugreports/issues/12), [#22](https://github.com/intersystems-community/ai-hub-eap-bugreports/issues/22) and [#23](https://github.com/intersystems-community/ai-hub-eap-bugreports/issues/23).
+
+**Find your way:**
+
+| If you are | Start here |
+| --- | --- |
+| **A judge with five minutes** | [For judges](https://github.com/MxSalata/shutter#for-judges): five steps in the trial, then the same on real IRIS |
+| **Installing it** | [Try it](https://github.com/MxSalata/shutter#try-it): two IPM commands, or Docker with replay and no key |
+| **An integration engineer** | [At your site](https://github.com/MxSalata/shutter#at-your-site-investigate-first-enable-recovery-deliberately) and the guide [Integrating at your trust](https://github.com/MxSalata/shutter/blob/main/docs/readme/integrating-at-your-trust.md) |
+| **An architect** | [The gate](https://github.com/MxSalata/shutter#the-gate-is-complex-because-the-problem-is), the guide [How Shutter works](https://github.com/MxSalata/shutter/blob/main/docs/readme/how-shutter-works.md) and the [contracts](https://github.com/MxSalata/shutter/blob/main/docs/CONTRACTS.md) |
+| **Asking what the agents add** | [Where the agents sit](https://github.com/MxSalata/shutter#where-the-agents-sit) and [What has been measured](https://github.com/MxSalata/shutter#what-has-been-measured) |
+| **Checking the claims** | [How it is tested](https://github.com/MxSalata/shutter#how-it-is-tested), [Limits, plainly](https://github.com/MxSalata/shutter#limits-plainly) and [the fair test](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md) |
 
 ## For judges
 
@@ -343,13 +367,21 @@ These failures sit outside patient movements. In both kinds no agent is convened
 
 ### Documents: MDM exceptions without a blind resend
 
+<details>
+<summary><b>In short:</b> a failed MDM, or an ORU^R01 carrying a document, becomes an exception a person reviews; Shutter keeps no copy of the document. What qualifies and what the case shows</summary>
+
 Where document handling is switched on in both places, the receiver's site profile entry and its source's Shutter Forwarder, a failed **MDM^T01 to T11**, including **MDM^T02**, becomes a document exception at any size: the Forwarder posts the document's metadata, not the message, so the ordinary 2 MB forwarding limit is lifted. So does an **ORU^R01** with an OBX whose OBX-2 says ED or RP; a report sent as Base64 under TX or ST takes the ordinary path. Without a document profile, a failed MDM gets the ordinary case instead, with the message copied into Shutter's store, and one over 2 MB gets no case.
 
 The case shows the document's identity, status and chain for a person to review, never its content: the document number, the parent, every PID-3 identifier, the statuses and the delivery, and what the message store holds for that document. Shutter keeps no copy of the message: an **MDM^T02's Base64 document** stays in the source's message store. A drafted email supports the handoff; a draft is not proof that anyone was notified.
 
+</details>
+
 <a id="pathology"></a>
 
 ### Pathology: ORU^R01 results, findings and outage recovery
+
+<details>
+<summary><b>In short:</b> an individual failure is investigated, never resent; an eligible outage is recovered through the engine under one approval. The rules, what is held, and P1 and P2 on the demo</summary>
 
 **An individual failure is investigated, not resent.** Its case carries the receiver's own response, the OBX it names and findings about characters above plain ASCII. The escalation draft names the relevant fields but takes no result value, units or comment.
 
@@ -361,22 +393,33 @@ The case shows the document's identity, status and chain for a person to review,
 
 ![A pathology outage after recovery: each ORU^R01 resent under one approval, its new header completed, and the two handled by hand](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/pathology-oru-r01-outage-recovery.png)
 
+</details>
+
 [Document exceptions and their contract](https://github.com/MxSalata/shutter/blob/main/docs/CONTRACTS.md#112-document-exceptions) · [Outage recovery contract](https://github.com/MxSalata/shutter/blob/main/docs/CONTRACTS.md#178-the-send-v151-to-v154) · [Release history](https://github.com/MxSalata/shutter/blob/main/CHANGELOG.md)
 
 ## FHIR R4: one ward move on an existing Encounter
 
 An optional FHIR R4 profile repairs one failed A02 as a ward-location update to an existing, in-progress Encounter. It sends at most one person-approved PUT per approval, with the ETag the receiver returned in `If-Match`, and closes the case only after finding the version that carries its marker in the Encounter's history. This profile has no receiver-side dry run, and says so on every decision. A 412 is not retried. A lost answer is reconciled through the receiver's history and never resent, and an incomplete or untrusted history may leave it unknown for good. Verification concerns the Encounter record, not the patient's physical location or delivery to any downstream system. No agent plans a FHIR case. In this release the receiver must be InterSystems IRIS for Health's own FHIR R4 server.
 
+<details>
+<summary><b>Where it is proved, and what it never does</b></summary>
+
 It runs end to end in CI on IRIS for Health 2026.2 against Shutter's own test FHIR server, which is held to the answers IRIS for Health's FHIR server gave when measured. It was also run against IRIS for Health's own FHIR server on 14 November 2026: the request, the answers and the history are in [receipt-fhir.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt-fhir.md). On the online demo (not the trial), scenario S35 plays it against Shutter's own test FHIR server.
 
 No other recovery writes over FHIR: no create, no admission or discharge, no merge, no documents, no Provenance, no `$validate` as a rehearsal. Details and limits: [fhir.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/fhir.md).
 
+</details>
+
 ## How it is tested
 
-**Release checks and agent evaluations are different evidence.** The latest release checks below are for the 1.4.7 tag; the latest comparative agent evaluation remains the 1.4.3 rerun.
+**Release checks and agent evaluations are different evidence.** The latest release checks are for release 1.4.8; the latest comparative agent evaluation remains the 1.4.3 rerun.
+
+<details>
+<summary><b>The recorded checks, release by release</b></summary>
 
 | Scope | Recorded checks |
 | --- | --- |
+| **Release 1.4.8** | CI on the release commit ([run](https://github.com/MxSalata/shutter/actions/runs/43727898797)): the web and browser suites and three IRIS shards; the tag adds two documentation fixes after it. On a stock AI Hub build 154 image, `zpm "install iris-shutter"` installed 1.4.8 from the public registry in 130 seconds, with no API key, and the health route answered 1.4.8 with the production running (15 November 2026) |
 | **Release 1.4.7** | CI on the tagged commit ([run 49](https://github.com/MxSalata/shutter/actions/runs/43624412267)): the web and browser suites and three IRIS shards, 1,276 unit tests, the scenario checks with FHIR's S35 among them, the FHIR conformance kit (244 exchanges) and the pathology check. The same IRIS job ran 13 full rounds on the tag with no failure. A fresh install on AI Hub build 154 is recorded step by step in [its receipt](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt-1.4.7.md) |
 | **Release 1.4.3** | 1,083 unit tests passed on AI Hub build 154 and 1,074 on IRIS 2026.2, none failed. Role checks covered judges running but not resetting, upgraded permissions and attribution of scenario runs. Web and relevant browser suites included accessibility checks |
 | **Pathology, release 1.4.0** | All 56 pathology-rig rows passed on build 154. An end-to-end check counted receiver sends under shadow mode and the recovery stop |
@@ -385,9 +428,16 @@ No other recovery writes over FHIR: no create, no admission or discharge, no mer
 
 The approval boundary tests stale versions, wrong digests, insufficient roles, repeated approval and a receiver changed after approval. Privacy checks inspect recordings.
 
+</details>
+
 [Release-specific checks](https://github.com/MxSalata/shutter/blob/main/CHANGELOG.md) · [Approval boundary](https://github.com/MxSalata/shutter/blob/main/docs/readme/first-steps.md#the-approval-boundary-attacked-over-http) · [Build 109 evidence](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt-109.md) · [Build 154 evidence](https://github.com/MxSalata/shutter/blob/main/docs/readme/receipt.md)
 
 ## Technology bonuses
+
+Workflow Engine, IRIS Vector Search, Embedded Python, a custom adapter, Java PEX, Docker, IPM, Community Opportunity DPI-I-689, the online demo, AI Hub and Embedded Python bug reports, three articles, the questionnaire and the video.
+
+<details>
+<summary><b>What each one does and where to inspect it</b></summary>
 
 | Technology | What it does and where to inspect it |
 | --- | --- |
@@ -405,6 +455,8 @@ The approval boundary tests stale versions, wrong digests, insufficient roles, r
 | **Articles** | [Building on AI Hub](https://community.intersystems.com/post/building-shutter-iris-ai-hub-what-worked-what-was-hard-and-what-it-cost), [testing the recovery gate](https://community.intersystems.com/post/what-failed-when-i-tested-my-hl7-recovery-gate), [integrating at a site](https://community.intersystems.com/post/integrating-shutter-your-organisation-one-namespace-time) |
 | **Questionnaire** | Submitted on 3 November 2026 |
 | **Video** | [Demo video on YouTube](https://youtu.be/InZx2MYJ47k); the [MP4 with captions](https://github.com/MxSalata/shutter/releases/download/v1.4.4/shutter-demo.mp4) is attached to the [1.4.4 release](https://github.com/MxSalata/shutter/releases/tag/v1.4.4) |
+
+</details>
 
 [AI Hub features, constraints and implementation experience](https://github.com/MxSalata/shutter/blob/main/docs/readme/building-on-ai-hub.md)
 
