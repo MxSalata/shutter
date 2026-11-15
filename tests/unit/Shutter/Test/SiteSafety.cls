@@ -178,6 +178,24 @@ Method TestTheScope()
     Do $$$AssertNotTrue(snap.SummaryObject().catalogue.%IsDefined("scope"), "which the result does not carry while no site entry matched")
 }
 
+/// A site entry's pattern, read as the matcher reads it: every condition listed must have one of its values, a single
+/// value is one value, a condition the case does not carry at all is passed over (R14: the entry then matches more), and
+/// a pattern that is not there holds nowhere.
+Method TestThePattern()
+{
+    Set matcher = "Shutter.Catalogue.Matcher"
+    Set conditions = {"event": "transfer", "delivery": "failed", "receipt": "absent"}
+    Do $$$AssertTrue($CLASSMETHOD(matcher, "SiteHolds", {"delivery": ["failed", "rejected"]}, conditions), "a value in the list holds")
+    Do $$$AssertNotTrue($CLASSMETHOD(matcher, "SiteHolds", {"delivery": ["rejected", "uncertain"]}, conditions), "none in the list, and it does not")
+    Do $$$AssertTrue($CLASSMETHOD(matcher, "SiteHolds", {"event": "transfer"}, conditions), "a single value that is the case's")
+    Do $$$AssertNotTrue($CLASSMETHOD(matcher, "SiteHolds", {"event": "admit"}, conditions), "a single value that is not")
+    Do $$$AssertTrue($CLASSMETHOD(matcher, "SiteHolds", {"event": "transfer", "delivery": ["failed"]}, conditions), "every condition holds")
+    Do $$$AssertNotTrue($CLASSMETHOD(matcher, "SiteHolds", {"event": "transfer", "receipt": ["present"]}, conditions), "one does not, and the pattern does not")
+    Do $$$AssertTrue($CLASSMETHOD(matcher, "SiteHolds", {"event": "transfer", "later_applied": ["none"]}, conditions), "a condition the case does not carry is passed over")
+    Do $$$AssertNotTrue($CLASSMETHOD(matcher, "SiteHolds", "", conditions), "no pattern holds nowhere")
+    Do $$$AssertTrue($CLASSMETHOD(matcher, "SiteHolds", {}, conditions), "an empty pattern holds (the rules refuse one: R3)")
+}
+
 /// A stored row cannot decide. Rows that claim to decide by policy, to resend, to offer alternatives or to be another
 /// kind are written straight into the tables, past every rule: the matcher still answers person, escalate, no
 /// alternatives for each.
@@ -194,6 +212,15 @@ Method TestStoredRowsThatClaimToDecide()
     Set content.origin = "shipped", content.checks = []
     Set v.Json = content.%ToJSON()
     Do $$$AssertStatusOK(v.%Save(), "the active version's row is overwritten with a row that claims to resend by policy")
+    // The overwritten row alone, leading on its own case.
+    Set cat = $CLASSMETHOD(kit, "Snapshot", match).SummaryObject().catalogue
+    Do $$$AssertEquals(cat.entry, id, "the overwritten entry leads on its case")
+    Do $$$AssertEquals(cat.decision, "person", "the overwritten entry: a person decides")
+    Do $$$AssertEquals(cat.outcome, "escalate", "the overwritten entry: escalate")
+    Do $$$AssertEquals(cat.matches.%Size(), 1, "the overwritten entry: one match")
+    Do $$$AssertEquals(cat.matches.%Get(0).decides, "person", "the overwritten entry: the match says person")
+    Do $$$AssertEquals(cat.matches.%Get(0).preferred.outcome, "escalate", "the overwritten entry: and escalate")
+    Do $$$AssertEquals(cat.matches.%Get(0).alternatives.%Size(), 0, "the overwritten entry: with no alternatives")
     // And a row nobody approved, inserted beside it.
     Set e = ##class(Shutter.Catalogue.SiteEntry).%New()
     Set e.EntryId = "L77", e.State = "active", e.ActiveVersion = 1, e.Priority = 1
