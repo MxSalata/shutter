@@ -4,6 +4,104 @@ Versions follow `major.minor.patch`: a minor release for new features, a patch r
 updates. The version in both `module.xml` files (the one the package manager publishes) is always the version of the
 GitHub tag on the same commit; `scripts/check-versions.py` checks every place the version is written.
 
+## 1.4.8 (15 November 2026)
+
+An upgrade with no `-Ddemo` keeps a site's install a site's, a stale approval leads to the current plan, and the case,
+the review and the Scenarios page say more in plain words and keep the keyboard's focus where the page changes, with the
+fixes from two reviews of the judges' path.
+
+- **An upgrade keeps the install's own demo setting.** A site's install upgraded with `zpm "load"` or
+  `zpm "install iris-shutter"` and no `-Ddemo` no longer becomes a demo. Before 1.4.8 such an upgrade set the instance's
+  demo flag and made the demo's users, which sign in with the documented password. The `demo` parameter is now empty by
+  default, and an empty one keeps the flag the instance already holds (`Shutter.Setup.DemoSetting`). A first install, or
+  a load after `zpm "uninstall iris-shutter"`, with no `-Ddemo` is still the demo, and an explicit `-Ddemo=0` or
+  `-Ddemo=1` always wins. A load of 1.4.7 or earlier still needs `-Ddemo=0`. `docs/INSTALL.md`, section 8, says how to
+  tell a site an earlier load made a demo (`GET /api/shutter/health` reads `"demo": true`), that a load with `-Ddemo=0`
+  sets the flag back but leaves what that load made, and how to take off the demo users `operator`, `approver`,
+  `forwarder`, `downstream-client` and `fhir-client`.
+- **A stale approval leads to the current plan.** A review whose plan or case changed under it keeps its refusal, says
+  what changed (state, plan, action, receiver version, evidence, case version) and offers Review current plan, which
+  reads the case again and opens a new review that needs its own press; nothing of the earlier review carries over, a
+  read that fails offers to try again, not a decision, and a case decided elsewhere is said to be no longer waiting. The
+  approval request and its binding are unchanged.
+- **A case another scenario run closed says so.** On a demo install, an earlier run's case still open for the same
+  delivery after a later scenario run reset the receiver is now closed as abandoned, by the system, with the headline
+  "Abandoned: another scenario run reset the receiver", so it counts as finished, as after Abandon: it needs no person,
+  header action or reminder, and retention may purge it. Its page reads "Closed when another scenario run reset the
+  receiver", says what it sent, if anything, and that no person gave it up. An approver's abandon keeps its words.
+- **Keyboard and screen readers, where the page changes.** A refused approval leaves the focus on Cancel in the review,
+  and a stopped one on Review current plan (on Cancel when the case no longer waits); Reject instead and Approve instead
+  say what the turned review does. A pressed Run gives the focus to the run's status, where its case link appears, and a
+  run started here is said once as it starts, plays and has played, not at every step, pathology paths included. Cases
+  says its count when a filter empties the list or a failed read is tried again, and Show every case and Try again give
+  the focus to the State filter. The trial's notice on a held case and the demo's site-profile notice on Scenarios are
+  notes, not alerts.
+- **Plain words for Shutter's own terms.** Under Plain, Home's first step, the case's stage line (Plan and checks, Test
+  run, Sending) and its outcome say what the gate, the rehearsal and the dispatch are, and a scenario's expected write
+  reads "1 write if unchanged"; the receiver's receipt is named as the receiver's, apart from Shutter's decision
+  receipt, which, like the receipt's Gate and the Scenarios lead's case, is a term with its definition one press away; a
+  receipt the receiver lacks reads "the receiver has no receipt for this operation". Technical keeps its words.
+- **Plain words when something is in the way.** A rate limit (429) and a 503 with no detail say what to do in the
+  reader's words, and a scenario run in the way says it may be another user's or the hospital's. A page whose code a new
+  release replaced says "Shutter was just updated", and Reload opens the new release. On the live app, the first-run
+  offer of the trial shows on Home only.
+- **The case and the board.** A running case's next action and header button say what Shutter is doing ("Shutter is
+  collecting evidence"), not its state's label. The decision receipt of a case with no plan says "Not yet: no plan", not
+  that the plan writes nothing; a passed gate on a plan that writes nothing has a neutral badge; "Escalate to a team" is
+  "Notify a team". The board calls each agent's confidence self-reported, and a citation's accessible name gives its
+  agent's name in brackets.
+- **A stopped recovery says who, when and why.** Settings leads with "Recovery is stopped (by <who>, <time>: <reason>)",
+  in the feed's time as the banner gives it too, and with recovery enabled adds that the mode stays enabled and that
+  clearing the stop releases no plan made before it. In the trial, Settings and the banner say the stop is recorded but
+  not enforced there, since approving a case still plays its recording; Settings adds that on IRIS a plan can't be
+  approved while recovery is stopped.
+- **Site profile.** The note under the approval table says policy releases only plans Site policy builds from the
+  catalogue, and a plan from agents or Rules only waits for a person; Technical names the gate's check,
+  `APPROVAL_PLAN_ORIGIN`. A receiver's tier help says the clinical safety officer sets the tier from the site's hazard
+  assessment, that a demo install puts the bed manager at tier 2 to show a release by policy, and that the online demo
+  asks a person there too.
+- **Scenarios, Evaluation and the sign-in page.** Under Plain, a played run names its HL7 messages by event ("Delivered
+  2 HL7 messages: A01, A02."); Technical keeps the file names. A featured card whose latest case ran in another mode
+  names that mode. S8's lines, on its case, its card, Evaluation and the tour, say Rules only wrote with every other
+  check passed, since it is exempted there on purpose. Evaluation says the board escalates S8, and that the held-out
+  cases were held out at 1.0.0 and 1.4.3 is a regression rerun. The sign-in page's Safety tile says every write is
+  gated, then explicitly released, no longer that every write is rehearsed and verified.
+- **The trial says what its recordings are.** The Audit trail says its times are the recording's, made on the day its
+  first line carries, and, on a case the agents worked, that they first answered earlier; the approval time a replayed
+  case cites is in the feed's time. Health reads "this build" for the version and "report recorded" for its time. The
+  Ask panel says once that it gives no live answers, with no badge under it. The board's intro says a recording answers
+  in turn, and S8's trace picture says this case's own session has another number and opens at full size. On the online
+  demo, the Management Portal link names IRIS's read-only sign-in after Cloudflare's.
+- **Install guide.** How to read the recovery mode (the health route's `mode` is the scenario mode;
+  `GET /api/shutter/recovery-control` or the "Shadow mode." banner gives it), that a new site install (`-Ddemo=0`)
+  starts in shadow mode and a demo does not, the commands that make an approver and its Workflow membership (in `%SYS`,
+  then `SHUTTER`), and that the Workflow role's refusal (403) comes only after the case's state, the plan's digest and
+  the case's version and the recovery mode pass (409 before it). The boundary and shadow-pilot scripts run on a
+  throwaway Docker demo; a site install checks its refusals through the REST API instead. On a demo installed by hand,
+  `tests/e2e/scenario_check.py` needs the stock `_SYSTEM` password-change flag cleared, as the Docker image does. What
+  an install creates names the task "Shutter case reminders" (in the trust integration guide and CONTRACTS too); the
+  guide lists what `pex/build.sh` needs and says the installs are checked on IRIS for Health only. Making the `SHUTTER`
+  namespace starts from a namespace with no Shutter in it, since the block deletes the `Shutter.Setup` copy there, and
+  on IRIS for Health the new namespace also gets the platform's own web applications and an `HS_Services` credential,
+  which are not Shutter's. The registry can lag this repository (it served 1.4.6 on 14 November): `zpm "load"` from a
+  clone installs the exact version.
+- **Docs.** The README walks the judges' path step by step: both sign-ins before the demo's message trace, what the
+  `demo` account can do, the one hospital every visitor shares and its hourly reset, the demo's bed manager
+  (`Downstream.API` behind `Downstream Out`), build `2027.1.0AI.109.0` in full, the trace picture as a replay, S35 on
+  the online demo, and the held-out case where the agents beat the catalogue. It says that only a plan Site policy
+  builds is released by policy, that every recorded investigation searches IRIS Vector Search at least once and where to
+  see it, and, first among the limits, that there is no clinical safety case. It names the 1.4.3 rerun a regression
+  test, links the 13-minute demo video at its new YouTube address, and leads its testing section with release 1.4.7's
+  checks and a fresh-install receipt on AI Hub build 154 ([receipt-1.4.7.md](docs/readme/receipt-1.4.7.md)). Three
+  short recipes: for judges in the README, for an integration engineer's first look in the install guide, and for an
+  approver in First steps. SAFETY.md's superseded 1.0.0 lines each say what changed them.
+- **The judges' share on the online demo is 4 USD an hour**, up from 2, for the last day of voting; the demo's cap
+  stays 5 USD an hour and 15 USD a day (README, first-steps, limits).
+- **Tests.** Unit tests pin the demo flag on a first install, an upgrade and an explicit `-Ddemo`, and the reset that
+  closes an earlier run's case as abandoned, by the system. `tests/e2e/upgrade_check.py --plain-upgrade` upgrades a
+  site's install with no `-Ddemo` and checks that it stays a site, with `"demo":false` and no `operator`, `approver` or
+  `forwarder`. Browser specs walk the keyboard through the states that change, and a stale approval across two tabs.
+
 ## 1.4.7 (14 November 2026)
 
 A FHIR R4 receiver, proved against InterSystems IRIS for Health's own FHIR server and playable on the online demo as S35, with the fixes from two reviews of 1.4.6 and FHIR (CONTRACTS 1.63 to 1.65).
