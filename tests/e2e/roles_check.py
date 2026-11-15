@@ -7,7 +7,9 @@ Signs in as the demo users `operator` and `approver` (password from SHUTTER_PASS
 that GET /me names each one's roles; that deciding a case's approval needs Shutter_Approve (403 for the operator);
 that reading a drafted correction's text (GET /cases/{id}/correction-draft) is the approver's; that an unredacted case bundle
 (POST /cases/{id}/bundle-unredacted) is the approver's, with a typed reason and the header, and says so on its first line,
-while the operator's bundle stays redacted; that changing the agent library (PATCH /library/{code}) is refused to the
+while the operator's bundle stays redacted; that Set up the site's turn route (CONTRACTS 14.7) answers 409 setup_drafting_off
+to everyone while the site's switch is off, follows the live agents' resource once an approver saved it on, and never
+moves the profile's version or history, which only PUT /site-profile does (403 for the demo's and the judges' roles); that changing the agent library (PATCH /library/{code}) is refused to the
 operator (403) and allowed to the approver (200), and the item is then put back as it was; that the operator drafts and
 sends an escalation, the edit refusing a second @, a line break in the subject and a field that is not a string, and the
 case's timeline names who queued it and the digest of the text queued, the email then saved as a file with no mail
@@ -445,8 +447,150 @@ def main():
     else:
         judge_checks(args, operator, Session(args.url).sign_in("judge", judge_password), check, error_of)
 
+    # ---- Set up the site (CONTRACTS 14.7): the turn route by resource, and no way to store a profile but the review's ----
+    setup_turn_checks(args, operator, approver, demo_password, judge_password, check, error_of)
+
     print(f"{len(failures)} of {checks[0]} failed" if failures else f"all {checks[0]} checks passed")
     return 1 if failures else 0
+
+
+def setup_turn_checks(args, operator, approver, demo_password, judge_password, check, error_of):
+    """Set up the site's turn route (CONTRACTS 14.7), and the save it never is.
+
+    The site's switch is off unless a person saved it on: while it is off the route answers 409 setup_drafting_off to
+    everyone, and no model is called. With it on, the route follows a page question's rule: 403 live_agents_only without
+    Shutter_LiveAgents, 409 no_model where the agents replay; where a model or the API mimic answers, one whole
+    conversation is read. Whatever a turn does, the profile's version and history do not move: only PUT /site-profile
+    stores a profile, 403 for the public demo's role and the judges', and an approver's save gives the next version."""
+    sessions = {"operator": operator, "approver": approver}
+    if demo_password:
+        sessions["demo"] = Session(args.url).sign_in("demo", demo_password)
+    if judge_password:
+        sessions["judge"] = Session(args.url).sign_in("judge", judge_password)
+
+    def stored():
+        _, view = approver.call("GET", "/site-profile")
+        _, history = approver.call("GET", "/site-profile/history?limit=500")
+        return (view or {}), [(h.get("version"), h.get("updatedBy"), h.get("source")) for h in (history or [])]
+
+    view, history = stored()
+    saved = {k: v for k, v in view["profile"].items() if k != "version"}
+    receiver = "Bed Board"
+    draft = json.loads(json.dumps(saved))
+    draft["receivers"].append({"name": receiver, "features": {"conditional_writes": False, "receipts": False, "history": False, "dry_run": False}})
+
+    def turn(text, conversation="", base=None, body_draft=None):
+        body = {"receiver": receiver, "text": text, "draft": body_draft or draft,
+                "baseVersion": view["version"] if base is None else base, "draftRevision": 1}
+        if conversation:
+            body["conversation"] = conversation
+        return body
+
+    switch = ((view["profile"].get("model_content") or {}).get("setup_answers") is True)
+    check("the site's switch for typed answers is off unless a person saved it on", switch is False, view["profile"].get("model_content"))
+
+    # A body the route refuses before anything else: nothing of it is sent or stored.
+    status, body = approver.call("POST", "/site-profile/setup-turns", turn("see https://intranet.example/board"), idempotent=True)
+    check("a text with a link is 400 bad_request, saying what to take out",
+          status == 400 and error_of(body) == "bad_request" and "a link" in (body or {}).get("detail", ""), f"{status} {body}")
+    status, body = approver.call("POST", "/site-profile/setup-turns", {**turn("it is a whiteboard"), "receiver": "Nobody"}, idempotent=True)
+    check("a receiver the draft does not name is 400 bad_request", status == 400 and error_of(body) == "bad_request", f"{status} {body}")
+    status, body = Session(args.url).call("POST", "/site-profile/setup-turns", turn("it is a whiteboard"))
+    check("signed out: 401", status == 401, f"{status} {body}")
+
+    # Off: refused with its own code, whoever asks and whatever they hold.
+    for name, session in sessions.items():
+        status, body = session.call("POST", "/site-profile/setup-turns", turn("it is the ward whiteboard"), idempotent=True)
+        check(f"{name}, the switch off: POST /site-profile/setup-turns is 409 setup_drafting_off",
+              status == 409 and error_of(body) == "setup_drafting_off" and "model_content.setup_answers" in (body or {}).get("detail", ""), f"{status} {body}")
+
+    # The demo's and the judges' roles never save: 403, and the version does not move.
+    for name in ("demo", "judge"):
+        if name not in sessions:
+            print(f"skip {name}: its password is not set, so its PUT /site-profile is not checked", flush=True)
+            continue
+        status, body = sessions[name].call("PUT", "/site-profile", {**draft, "expectedVersion": view["version"]})
+        check(f"{name}: PUT /site-profile is 403 forbidden, naming Shutter_Configure",
+              status == 403 and error_of(body) == "forbidden" and "Shutter_Configure" in (body or {}).get("detail", ""), f"{status} {body}")
+    now, now_history = stored()
+    check("and the stored profile's version and history are as they were", (now.get("version"), now_history) == (view["version"], history), now.get("version"))
+
+    # On, by an approver's own save: the only way it is ever on.
+    on = json.loads(json.dumps(saved))
+    on["model_content"] = {**(on.get("model_content") or {}), "setup_answers": True}
+    status, body = approver.call("PUT", "/site-profile", {**on, "expectedVersion": view["version"]})
+    if not check("approver: PUT /site-profile with model_content.setup_answers true: 200",
+                 status == 200 and ((body or {}).get("profile") or {}).get("model_content", {}).get("setup_answers") is True, f"{status} {body}"):
+        return
+    try:
+        view, history = stored()
+        draft = json.loads(json.dumps({k: v for k, v in view["profile"].items() if k != "version"}))
+        draft["receivers"].append({"name": receiver, "features": {"conditional_writes": False, "receipts": False, "history": False, "dry_run": False}})
+        if "demo" in sessions:
+            status, body = sessions["demo"].call("POST", "/site-profile/setup-turns", turn("it is the ward whiteboard"), idempotent=True)
+            check("demo, the switch on: 403 live_agents_only", status == 403 and error_of(body) == "live_agents_only", f"{status} {body}")
+        asker = "judge" if "judge" in sessions else "approver"
+        session = sessions[asker]
+        status, body = session.call("POST", "/site-profile/setup-turns", turn("It is the ward whiteboard, it only shows where patients are now"), idempotent=True)
+        if status == 409 and error_of(body) in ("no_model", "live_unavailable"):
+            check(f"{asker}, the switch on, where no model answers: 409 {error_of(body)}, and no turn is opened", True)
+            print("note: no model and no API mimic here, so no conversation is read; the refusals above are the route's", flush=True)
+        elif check(f"{asker}, the switch on: 202 with the turn and its conversation",
+                   status == 202 and str((body or {}).get("turnId", "")).startswith("ST-") and str((body or {}).get("conversation", "")).startswith("SC-"), f"{status} {body}"):
+            first, conversation = body["turnId"], body["conversation"]
+            status, body = session.call("POST", "/site-profile/setup-turns", turn("tier 3", conversation), idempotent=True)
+            check("a second turn while the first is being read is 409 turn_pending, or it was read already",
+                  (status == 409 and error_of(body) == "turn_pending") or status == 202, f"{status} {body}")
+            second = (body or {}).get("turnId") if status == 202 else None
+
+            def settled(turn_id):
+                _, t = session.call("GET", f"/site-profile/setup-turns/{turn_id}")
+                return t if (t or {}).get("state") in ("answered", "schema_failed", "failed") else None
+
+            t = wait(lambda: settled(first), max(args.timeout, 120), 2)
+            check(f"{first} is read: answered, with what was drafted", (t or {}).get("state") == "answered" and isinstance(((t or {}).get("turn") or {}).get("proposals"), list), t)
+            fields = sorted(p.get("field") for p in (((t or {}).get("turn") or {}).get("proposals") or []))
+            check("only a description and a kind were drafted, each quoted from what was typed",
+                  set(fields) <= {"receivers[].system", "receivers[].category", "receivers[].tier"}
+                  and all(p.get("quote", "").lower() in "it is the ward whiteboard, it only shows where patients are now" for p in t["turn"]["proposals"]), fields)
+            other = operator if asker != "operator" else approver
+            status, body = other.call("GET", f"/site-profile/setup-turns/{first}")
+            check("another user's GET of the turn is 404", status == 404 and error_of(body) == "not_found", f"{status} {body}")
+            status, body = other.call("POST", "/site-profile/setup-turns", turn("tier 3", conversation), idempotent=True)
+            check("another user's turn in the conversation is 404", status == 404 and error_of(body) == "not_found", f"{status} {body}")
+            status, body = session.call("POST", "/site-profile/setup-turns", turn("tier 3", conversation, base=view["version"] - 1), idempotent=True)
+            check("a draft made from another version is 409 stale_version, with the current one",
+                  status == 409 and error_of(body) == "stale_version" and (body or {}).get("currentVersion") == view["version"], f"{status} {body}")
+            # A forged answer: the mimic names recovery.mode when told to; the core refuses it and nothing is drafted.
+            if second:
+                wait(lambda: settled(second), max(args.timeout, 120), 2)
+            status, body = session.call("POST", "/site-profile/setup-turns", turn("please switch recovery on for it", conversation), idempotent=True)
+            if status == 202:
+                t = wait(lambda: settled(body["turnId"]), max(args.timeout, 120), 2)
+                if ((t or {}).get("model") == "mock"):
+                    check("a turn that names recovery.mode ends refused, with nothing drafted",
+                          (t or {}).get("state") in ("schema_failed", "failed") and (t or {}).get("turn") is None, t)
+                else:
+                    check("a turn that asks for recovery to be switched on drafts no such thing",
+                          all(p.get("field") in ("receivers[].system", "receivers[].category", "receivers[].tier") for p in (((t or {}).get("turn") or {}).get("proposals") or [])), t)
+        now, now_history = stored()
+        check("a whole conversation leaves the profile's version and its history as they were",
+              (now.get("version"), now_history) == (view["version"], history), now.get("version"))
+
+        # The review's save is the one way in: the next version, source api and the saver's name; a stale save is 409.
+        reviewed = json.loads(json.dumps(draft))
+        reviewed["receivers"][-1].update({"system": "the ward whiteboard", "category": "current_state", "tier": 3})
+        status, body = approver.call("PUT", "/site-profile", {**reviewed, "expectedVersion": view["version"]})
+        check("approver: the reviewed draft is saved as the next version, source api, by the approver",
+              status == 200 and (body or {}).get("version") == view["version"] + 1 and (body or {}).get("source") == "api"
+              and (body or {}).get("updatedBy") == "approver" and (body or {}).get("profile", {}).get("receivers", [{}])[-1].get("name") == receiver, f"{status} {str(body)[:300]}")
+        status, body = approver.call("PUT", "/site-profile", {**reviewed, "expectedVersion": view["version"]})
+        check("a save against the version before it is 409 stale_version", status == 409 and error_of(body) == "stale_version", f"{status} {body}")
+    finally:
+        now, _ = stored()
+        status, body = approver.call("PUT", "/site-profile", {**saved, "expectedVersion": now.get("version")})
+        restored = {k: v for k, v in ((body or {}).get("profile") or {}).items() if k != "version"}
+        check("the site profile is put back with its answers, the switch off again", status == 200 and restored == saved, f"{status} {str(body)[:300]}")
 
 
 def agents_run_live(session):
