@@ -12,9 +12,9 @@ import {
   Text,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { IconChevronDown, IconPlus, IconTrash, IconVersions } from '@tabler/icons-react';
+import { IconChevronDown, IconPlus, IconPrinter, IconTrash, IconVersions } from '@tabler/icons-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { useSearchParams } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { RunbookField } from './RunbookField';
 import { api } from '@/api/client';
@@ -969,6 +969,16 @@ function Profile({
           </>
         }
         details={<HeaderDetails />}
+        actions={
+          <Button
+            component={Link}
+            to="/site-guide"
+            variant="light"
+            leftSection={<IconPrinter size={16} aria-hidden />}
+          >
+            Export this site&apos;s guide (PDF)
+          </Button>
+        }
         meta={
           !shipped && base.updatedAt ? (
             <Text size="sm" c="dimmed">

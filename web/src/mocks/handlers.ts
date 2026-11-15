@@ -1,6 +1,8 @@
 import { delay, http, HttpResponse } from 'msw';
 import fixtures from './fixtures.json';
 import definitions from '../../../fixtures/scenarios.json';
+import shippedCatalogue from '../../../knowledge/catalogue/catalogue.json';
+import catalogueVocabulary from '../../../knowledge/catalogue/vocabulary.json';
 import type {
   SiteEntriesView,
   AccessReport,
@@ -775,6 +777,26 @@ export const NO_SITE_ENTRIES: SiteEntriesView = {
   catalogueVersion: '',
 };
 
+/**
+ * GET /catalogue (CONTRACTS 6.8) as an install with no site entry answers it: the shipped entries of this release's
+ * knowledge/catalogue/catalogue.json in id order as the store sorts them (the file's source name left out, as the
+ * store keeps none), the version string the core builds from them, and the vocabulary.
+ */
+export function catalogueView() {
+  const shipped = (shippedCatalogue as { id: string; version: number; source?: string }[])
+    .map(({ source: _source, ...e }) => e)
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const version = shipped.map((e) => `${e.id}@${e.version}`).join(',');
+  return {
+    version,
+    shippedVersion: version,
+    generation: 0,
+    shipped,
+    site: [],
+    vocabulary: catalogueVocabulary,
+  };
+}
+
 /** The worked example of docs/readme/local-rules.md as GET /site-entries would list it, active. Synthetic. */
 export const SITE_ENTRIES_EXAMPLE: SiteEntriesView = {
   items: [
@@ -1514,6 +1536,7 @@ export const handlers = [
   // The site's own scenarios (CONTRACTS 6.8), read only: the recorded cases were made with none, so the list is empty
   // unless a test answers with the example (SITE_ENTRIES_EXAMPLE).
   http.get(`${BASE}/site-entries`, () => (!session ? signedOut() : HttpResponse.json(NO_SITE_ENTRIES))),
+  http.get(`${BASE}/catalogue`, () => (!session ? signedOut() : HttpResponse.json(catalogueView()))),
   http.get(`${BASE}/site-profile/history`, ({ request }) => {
     if (!session) return signedOut();
     const limit = Number(new URL(request.url).searchParams.get('limit') ?? 50);

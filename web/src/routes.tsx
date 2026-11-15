@@ -1,8 +1,9 @@
-import { lazy } from 'react';
+import { lazy, Suspense } from 'react';
 import { createHashRouter, Navigate, type RouteObject } from 'react-router';
 import { AppLayout } from './features/shell/AppLayout';
 import { RequireAuth } from './features/shell/RequireAuth';
 import { RouteError } from './features/shell/RouteError';
+import { PageSkeleton } from './components/PageSkeleton';
 import { TRIAL } from './env/mode';
 
 // A trial page signs in with the trial's own roles and no password; a live page with the instance's sign-in
@@ -26,6 +27,7 @@ const EvaluationPage = lazy(() => import('./features/evaluation/EvaluationPage')
 const HealthPage = lazy(() => import('./features/health/HealthPage'));
 const ApiPage = lazy(() => import('./features/api/ApiPage'));
 const NotFoundPage = lazy(() => import('./features/shell/NotFoundPage'));
+const SiteGuidePage = lazy(() => import('./features/site-guide/SiteGuidePage'));
 
 // Hash routing: IRIS serves the files at /shutter/ without rewriting unknown paths to index.html, so a deep link
 // must not depend on the server.
@@ -35,6 +37,16 @@ export const routes: RouteObject[] = [
     element: <RequireAuth />,
     errorElement: <RouteError />,
     children: [
+      // This site's guide prints as a document of its own: signed in, but outside the shell, so no navigation prints
+      {
+        path: 'site-guide',
+        element: (
+          <Suspense fallback={<PageSkeleton label="Opening this site's guide…" />}>
+            <SiteGuidePage />
+          </Suspense>
+        ),
+        errorElement: <RouteError />,
+      },
       {
         element: <AppLayout />,
         children: [

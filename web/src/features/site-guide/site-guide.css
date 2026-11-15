@@ -1,0 +1,154 @@
+/*
+ * This site's guide on screen and on paper. On screen: one column of prose at 68ch, the toolbar at the top. On paper
+ * (the browser's print to PDF): A4, no toolbar, every part on a new page, and the stamp at the foot of every page. Each
+ * part is a layout table whose footer group repeats the stamp on every page the part runs to; on screen the table is
+ * laid out as plain blocks and its footer is hidden.
+ */
+
+.site-guide {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: var(--mantine-spacing-md);
+}
+
+.site-guide-prose {
+  max-width: 68ch;
+}
+
+.site-guide-sheet,
+.site-guide-sheet > tbody,
+.site-guide-sheet > tbody > tr,
+.site-guide-sheet > tbody > tr > td {
+  display: block;
+  width: 100%;
+}
+
+.site-guide-sheet {
+  border-collapse: collapse;
+  margin-block-end: var(--mantine-spacing-xl);
+}
+
+.site-guide-sheet > tbody > tr > td {
+  padding: 0;
+}
+
+.site-guide-sheet > tfoot {
+  display: none;
+}
+
+.site-guide-block {
+  break-inside: avoid;
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-md);
+  padding: var(--mantine-spacing-md);
+}
+
+.site-guide-stamp-value {
+  overflow-wrap: anywhere;
+}
+
+.site-guide-checks {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.site-guide-checks th,
+.site-guide-checks td {
+  text-align: start;
+  vertical-align: top;
+  padding: 6px 8px;
+  border-block-end: 1px solid var(--mantine-color-default-border);
+}
+
+@media (max-width: 36em) {
+  /* On a phone each check is a short block: its name, then its question and when it decides */
+  .site-guide-checks thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+  .site-guide-checks tr,
+  .site-guide-checks td,
+  .site-guide-checks th {
+    display: block;
+  }
+  .site-guide-checks th,
+  .site-guide-checks td {
+    border: 0;
+    padding: 2px 0;
+  }
+  .site-guide-checks tr {
+    padding-block: 8px;
+    border-block-end: 1px solid var(--mantine-color-default-border);
+  }
+}
+
+@page {
+  size: A4;
+  margin: 16mm 14mm 14mm;
+}
+
+@media print {
+  /* Paper is white: the guide prints dark text on white whatever the screen's colour scheme */
+  :root {
+    color-scheme: light;
+  }
+  html,
+  body {
+    background: #fff !important;
+  }
+  .site-guide,
+  .site-guide * {
+    color: #111 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+  .site-guide .site-guide-block,
+  .site-guide .site-guide-checks th,
+  .site-guide .site-guide-checks td {
+    border-color: #999 !important;
+  }
+  .site-guide {
+    max-width: none;
+    padding: 0;
+    font-size: 10.5pt;
+  }
+  .site-guide-prose {
+    max-width: none;
+  }
+  .site-guide-toolbar,
+  .mantine-Notifications-root {
+    display: none !important;
+  }
+  .site-guide-sheet {
+    display: table;
+    width: 100%;
+    margin: 0;
+  }
+  .site-guide-sheet > tbody {
+    display: table-row-group;
+  }
+  .site-guide-sheet > tbody > tr {
+    display: table-row;
+  }
+  .site-guide-sheet > tbody > tr > td {
+    display: table-cell;
+  }
+  .site-guide-sheet > tfoot {
+    display: table-footer-group;
+  }
+  .site-guide-sheet + .site-guide-sheet {
+    break-before: page;
+  }
+  .site-guide-foot {
+    padding-block-start: 6mm;
+    font-size: 8pt;
+    line-height: 1.3;
+    color: #333 !important;
+  }
+  .site-guide a {
+    text-decoration: none;
+  }
+}
