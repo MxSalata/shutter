@@ -210,4 +210,43 @@ Method TestTheSiteEntryAnswersInEveryMode()
     Do $$$AssertEquals(case.State, "verifying", "goes on to close")
 }
 
+/// R18 after a reopening: the case records the site entry that matched its evidence, so a closure planned on fresh
+/// evidence that no longer matches the entry still goes to a person. Before, the hold read the plan's own snapshot only.
+Method TestAReopenedCaseIsStillTheEntrys()
+{
+    Set kit = "Shutter.Test.SiteKit"
+    Set id = $CLASSMETHOD(kit, "ActiveEntry", .match, .near, .problem)
+    Do $$$AssertEquals(problem, "", "a site entry is active")
+    Set case = $CLASSMETHOD(kit, "Case", {"ward": "WARD-ISO", "state": "collecting", "mode": "policy"}, .snap)
+    Set wf = ##class(Shutter.Test.SiteWorkflow).%New("Case Workflow")
+    Set wf.CaseId = case.CaseId, wf.Mode = case.Mode
+    Set result = ##class(Shutter.Msg.EvidenceResult).%New()
+    Set result.SnapshotId = snap.%Id(), result.Digest = snap.Digest, result.SummaryJSON = snap.SummaryObject().%ToJSON()
+    Do $$$AssertStatusOK(wf.OnEvidence(case, result), "the evidence is taken")
+    Do $$$AssertEquals(##class(Shutter.Store.Case).ByCaseId(case.CaseId).SiteEntry, id, "the case records the entry that matched it")
+    Set pass = ##class(Shutter.Msg.GateResult).%New()
+    Set pass.Outcome = "pass", pass.Summary = "Every check passed", pass.ChecksJSON = "[]"
+    Do $$$AssertStatusOK(wf.OnGateProposal(case, pass), "the gate answers")
+    Do $$$AssertEquals(case.State, "escalated", "the case is escalated")
+    // The system reopens it, and the fresh evidence no longer matches the entry.
+    Set stored = ##class(Shutter.Store.Case).%OpenId(case.%Id())
+    Set stored.Ward = "WARD-B"
+    Do $$$AssertStatusOK(stored.%Save(), "the case's ward now reads otherwise")
+    Do $$$AssertEquals(stored.SiteEntry, id, "a whole save keeps what the case recorded")
+    Set fresh = $CLASSMETHOD(kit, "Snapshot", stored)
+    Do $$$AssertNotEquals(fresh.SummaryObject().catalogue.entry, id, "the fresh evidence is not the entry's")
+    Do $$$AssertStatusOK(stored.Transition("investigating", "Reopened by the system", "system"), "reopened")
+    Set wf2 = ##class(Shutter.Test.SiteWorkflow).%New("Case Workflow")
+    Set wf2.CaseId = stored.CaseId, wf2.Mode = "policy"
+    Do $$$AssertStatusOK(wf2.AdoptPlan(stored, {"disposition": "superseded", "action": {"type": "none"}, "summary": "A later transfer moved the encounter on"}, "run:9"), "a plan to close it on the fresh evidence")
+    Do $$$AssertStatusOK(wf2.OnGateProposal(stored, pass), "the gate passes it")
+    Do $$$AssertEquals(stored.State, "escalated", "the case goes to a person, not to the verifier")
+    Do $$$AssertTrue(stored.Headline [ id, "naming the entry: " _ stored.Headline)
+    // The engine's own delivery does not close it either, whatever its current evidence says.
+    Set row = {"check": "ordering", "result": "block", "reason_code": "ENGINE_DELIVERED", "detail": "delivered", "engine": {"words": "The engine delivered this message (header 77)"}}
+    Do row.engine.%Set("established", 1, "boolean")
+    Do $$$AssertStatusOK(##class(Shutter.Util.EngineCheck).Settle(stored, row, [(row)], "gate:ut"), "the engine's delivery read")
+    Do $$$AssertEquals(##class(Shutter.Store.Case).ByCaseId(stored.CaseId).State, "blocked", "is left for a person")
+}
+
 }

@@ -200,6 +200,11 @@ Property CurrentPlan As Shutter.Store.Plan(%JSONFIELDNAME = "currentPlanId", %JS
 
 Property CurrentApproval As Shutter.Store.Approval(%JSONFIELDNAME = "currentApprovalId", %JSONREFERENCE = "ID");
 
+/// The first of the site's own entries (CONTRACTS 6.8) whose match any evidence of this case carried, kept for the case's
+/// life: a closure of the case then needs a person whatever later evidence matches (R18). Written only by
+/// MarkSiteEntry, and kept as stored by every whole save.
+Property SiteEntry As %String(%JSONINCLUDE = "none", MAXLEN = 16);
+
 /// Open a case for an operation, or return the open one for the same key. The operation is the
 /// downstream operation as built by Shutter.Util.OperationKey.FromHL7.
 ClassMethod Open(op As %DynamicObject, failureKind As %String, failureText As %String, ensSessionId As %String, sourceHeaderId As %String, mode As %String, Output case As Shutter.Store.Case, Output opened As %Boolean, receiver As %String = "", heldSchema As %String = "") As %Status
@@ -567,16 +572,46 @@ Method SetSnapshot(snapshot As Shutter.Store.Snapshot) As %Status
     Quit sc
 }
 
+/// Record that one of the site's own entries matched this case's evidence (CONTRACTS 6.8, R18): the first one stays,
+/// written alone under the case's lock, in the stored case and in this copy, and never cleared.
+Method MarkSiteEntry(entryId As %String) As %Status
+{
+    Set id = ..%Id()
+    If (id = "") || (entryId = "") Quit $$$ERROR($$$GeneralError, "The case is not saved yet, or no entry is named")
+    Set sc = ..Lock()
+    Quit:$$$ISERR(sc) sc
+    &sql(UPDATE Shutter_Store."Case" SET SiteEntry = :entryId WHERE ID = :id AND (SiteEntry IS NULL OR SiteEntry = ''))
+    If SQLCODE < 0 {
+        Set sc = $$$ERROR($$$SQLError, SQLCODE, $GET(%msg))
+    } Else {
+        Set stored = ""
+        &sql(SELECT SiteEntry INTO :stored FROM Shutter_Store."Case" WHERE ID = :id)
+        Set i%SiteEntry = stored
+    }
+    Do ..Unlock()
+    Quit sc
+}
+
+/// The site entry MarkSiteEntry recorded, as stored now (another process may have recorded it since this copy was read).
+Method StoredSiteEntry() As %String
+{
+    Set id = ..%Id(), stored = ""
+    If id = "" Quit i%SiteEntry
+    &sql(SELECT SiteEntry INTO :stored FROM Shutter_Store."Case" WHERE ID = :id)
+    Quit $SELECT(SQLCODE = 0: stored, 1: i%SiteEntry)
+}
+
 /// A whole save keeps the incident and the current snapshot as stored: only SetIncident and SetSnapshot write them, so
 /// a copy read before either changed never writes back the older value.
 Method %OnBeforeSave(insert As %Boolean) As %Status [ Private, ServerOnly = 1 ]
 {
     If insert Quit $$$OK
-    Set id = ..%Id(), inc = "", snap = ""
-    &sql(SELECT Incident, CurrentSnapshot INTO :inc, :snap FROM Shutter_Store."Case" WHERE ID = :id)
+    Set id = ..%Id(), inc = "", snap = "", site = ""
+    &sql(SELECT Incident, CurrentSnapshot, SiteEntry INTO :inc, :snap, :site FROM Shutter_Store."Case" WHERE ID = :id)
     If SQLCODE '= 0 Quit $$$OK
     If inc '= ..IncidentGetObjectId() Do ..IncidentSetObjectId(inc)
     If snap '= ..CurrentSnapshotGetObjectId() Do ..CurrentSnapshotSetObjectId(snap)
+    If site '= i%SiteEntry Set i%SiteEntry = site
     Quit $$$OK
 }
 
@@ -1024,6 +1059,9 @@ Storage Default
 </Value>
 <Value name="56">
 <Value>ScenarioReplay</Value>
+</Value>
+<Value name="57">
+<Value>SiteEntry</Value>
 </Value>
 </Data>
 <DataLocation>^Shutter.Store.CaseD</DataLocation>

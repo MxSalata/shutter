@@ -366,6 +366,12 @@ Method OnEvidence(case As Shutter.Store.Case, result As Shutter.Msg.EvidenceResu
     Set summary = ##class(Shutter.Util.Json).Parse(result.SummaryJSON, .psc)
     Set cat = $SELECT($ISOBJECT(summary): summary.%Get("catalogue"), 1: "")
     Set decision = $SELECT($ISOBJECT(cat): ##class(Shutter.Util.Json).Str(cat, "decision"), 1: "")
+    // One of the site's own entries matched (CONTRACTS 6.8): the case keeps that for good, in every mode, so a closure
+    // planned on later evidence that no longer matches the entry still needs a person (R18, ClosureHeld).
+    If ..SiteMatched(cat) && (case.SiteEntry = "") {
+        Set sc = case.MarkSiteEntry(##class(Shutter.Util.Json).Str(cat, "entry"))
+        Quit:$$$ISERR(sc) sc
+    }
     // A refresh under an approval (A1): the approval stands when nothing material changed, and the dispatch goes on
     // from the preflight read; otherwise the approval is void and the case is planned again on the fresh evidence.
     If ..Refreshing {
@@ -1489,9 +1495,11 @@ ClassMethod SiteMatched(cat As %DynamicObject) As %Boolean
 /// The two rules about closures (CONTRACTS 6.8), asked wherever a plan that writes nothing is about to be verified and
 /// closed, and again before the verification closes it. A closure has no approval for the catalogue's version to void, so
 /// the workflow checks it here. held is 1 when the closure does not go ahead and this method has moved the case on.
-/// - R18: on a case one of the site's own entries matched, a closure never happens without a person. It can only come
-///   from a board a person convened on the escalated case; convening a board is not approving its closure, so the case
-///   goes to a person with the board's reasoning, as a partial board's closure does.
+/// - R18: on a case one of the site's own entries matched, a closure never happens without a person. It can come from a
+///   board a person convened on the escalated case (convening a board is not approving its closure), or from a plan made
+///   on fresh evidence after the case was reopened, which may no longer match the entry: the case records the entry
+///   (Case.SiteEntry) the first time one matches, and the hold reads that too. The case goes to a person with the plan's
+///   reasoning, as a partial board's closure does.
 /// - R17: a plan made under another catalogue version than the current one is never completed. The evidence is collected
 ///   again and the case planned afresh, up to the refresh limit; then a person looks. A plan that records no version is
 ///   treated so only on a site that has ever activated an entry of its own.
@@ -1502,9 +1510,12 @@ Method ClosureHeld(case As Shutter.Store.Case, plan As Shutter.Store.Plan, Outpu
     Set snap = $SELECT($ISOBJECT(plan.Snapshot): plan.Snapshot, 1: case.CurrentSnapshot)
     Set summary = $SELECT($ISOBJECT(snap): snap.SummaryObject(), 1: "")
     Set cat = $SELECT($ISOBJECT(summary): summary.%Get("catalogue"), 1: "")
-    If ..SiteMatched(cat) {
+    // The plan's own evidence, and what the case recorded of every earlier evidence: a case the system reopened on
+    // evidence that no longer matches the entry is still the entry's.
+    Set marked = case.StoredSiteEntry()
+    If ..SiteMatched(cat) || (marked '= "") {
         Set held = 1
-        Set entry = ##class(Shutter.Util.Json).Str(cat, "entry")
+        Set entry = $SELECT(..SiteMatched(cat): ##class(Shutter.Util.Json).Str(cat, "entry"), 1: marked)
         Set case.Headline = "A person checks this: the site's own scenario " _ entry _ " matched, and the plan would close the case with nothing sent"
         Quit case.Transition("escalated", "The plan (" _ plan.Disposition _ ") writes nothing and would close the case, but the site's own scenario " _ entry _ " matched it, and such a case is never closed without a person. Nothing was sent. " _ plan.Summary, "system", "plan:" _ plan.%Id())
     }

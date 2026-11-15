@@ -230,10 +230,20 @@ ClassMethod StoppedCase(case As Shutter.Store.Case) As %DynamicObject
     Set snap = case.CurrentSnapshot
     Set summary = $SELECT($ISOBJECT(snap): snap.SummaryObject(), 1: "")
     Set cat = $SELECT($ISOBJECT(summary): summary.%Get("catalogue"), 1: "")
-    If '$ISOBJECT(cat) || (cat.%GetTypeOf("matches") '= "array") || (cat.%Get("matches").%Size() = 0) Quit ""
-    Set m = cat.%Get("matches").%Get(0)
-    If '$ISOBJECT(m) || ($CLASSMETHOD(json, "Str", m, "origin") '= "site") Quit ""
-    Quit {"entry": ($CLASSMETHOD(json, "Str", m, "id")), "title": ($CLASSMETHOD(json, "Str", m, "title")), "instructions": ($CLASSMETHOD(json, "Str", m, "instructions"))}
+    Set m = $SELECT($ISOBJECT(cat) && (cat.%GetTypeOf("matches") = "array") && (cat.%Get("matches").%Size() > 0): cat.%Get("matches").%Get(0), 1: "")
+    If $ISOBJECT(m) && ($CLASSMETHOD(json, "Str", m, "origin") = "site") {
+        Quit {"entry": ($CLASSMETHOD(json, "Str", m, "id")), "title": ($CLASSMETHOD(json, "Str", m, "title")), "instructions": ($CLASSMETHOD(json, "Str", m, "instructions"))}
+    }
+    // Earlier evidence of the case matched one (the case keeps it, Shutter.Store.Case.SiteEntry): its words as the
+    // entry's version in force (or last in force) gives them.
+    Set marked = case.StoredSiteEntry()
+    If marked = "" Quit ""
+    Set out = {"entry": (marked), "title": "", "instructions": ""}
+    Set e = ..ById(marked)
+    Set v = $SELECT($ISOBJECT(e) && (e.ActiveVersion > 0): ##class(Shutter.Catalogue.SiteEntryVersion).Find(marked, e.ActiveVersion), 1: "")
+    Set content = $SELECT($ISOBJECT(v): v.Content(), 1: "")
+    If $ISOBJECT(content) Set out.title = $CLASSMETHOD(json, "Str", content, "title"), out.instructions = $CLASSMETHOD(json, "Str", content, "instructions")
+    Quit out
 }
 
 /// The words for a case one of the site's own entries stopped: the entry, and its instructions when it has them.
