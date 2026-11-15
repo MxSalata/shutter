@@ -18,8 +18,9 @@
       <SystemRequirements Version=">=2026.3" Interoperability="enabled"/>
       <!-- demo = 1 installs the demo: the demo users, the demo receiver's web application and client, the recorded
            runs, the feed and scenario items enabled, the message purge task. A site install passes 0:
-           zpm "load <dir> -Ddemo=0" (the IPM parameter overrides this default). -->
-      <Default Name="demo" Value="1"/>
+           zpm "load <dir> -Ddemo=0". Empty by default (1.4.8): the install keeps the flag the instance already holds, so
+           an upgrade with no -Ddemo keeps a site's install a site's, and a first install with none is the demo. -->
+      <Default Name="demo" Value=""/>
       <!-- Empty: Shutter.Production in this namespace (shape A). A production's name: Shutter's items go into that production (shape B). -->
       <Default Name="production" Value=""/>
       <!-- The core's classes, listed one by one so that core/module.xml (the core alone, for 2026.2) can name the same
