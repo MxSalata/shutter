@@ -178,7 +178,7 @@ def site_tunes(ns):
     Failure Census switched off, saved as the Production Configuration page saves (Ens.Production.ApplySettings)."""
     out = session(ns, 'Set p=##class(Ens.Config.Production).%OpenId("Shutter.Production") For i=1:1:p.Items.Count() { Set it=p.Items.GetAt(i) Set:it.Name="Receiver Watch" it.PoolSize=3 }\n'
                       'Write !,"[pool] ",p.%Save(),! Kill p, it Set set("Failure Census","Item","Enabled")=0\n'
-                      'Write !,"[apply] ",##class(Ens.Production).ApplySettings("Shutter.Production",.set),!')
+                      'Set sc=##class(Ens.Production).ApplySettings("Shutter.Production",.set) Write !,"[apply] ",sc,!')
     check("the site sets Receiver Watch's pool size 3 and switches Failure Census off", "[pool] 1" in out and "[apply] 1" in out, out[-500:])
 
 
