@@ -90,10 +90,6 @@ const REPLAYED = 'Approved in the trial. The recording shows it delivered and ve
 /** The event the guide waits for once the trial has played out what came of a reader's approval (`@/lib/events`). */
 export { REPLAY_DONE };
 
-/**
- * A tab panel clears the header and the sticky tab bar when it is scrolled to, as `.case-tab-panel` makes the
- * sections and steps inside it do.
- */
 const RECORDING_DAY = new Intl.DateTimeFormat('en-GB', {
   day: 'numeric',
   month: 'short',
@@ -115,6 +111,10 @@ export function trialAuditTimes(firstAt: string | undefined, agents: boolean): s
     : `These times are the recording's, made on ${day}.`;
 }
 
+/**
+ * A tab panel clears the header and the sticky tab bar when it is scrolled to, as `.case-tab-panel` makes the
+ * sections and steps inside it do.
+ */
 const PANEL = {
   className: 'case-tab-panel',
   style: { scrollMarginTop: 'calc(var(--shutter-header-h) + 3.5rem)' },

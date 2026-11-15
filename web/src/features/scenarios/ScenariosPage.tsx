@@ -269,10 +269,6 @@ function RunStarting({ scenario, mode }: { scenario: string; mode: Mode }) {
 }
 
 /**
- * The run's state above the cards: who proposes (the mode, in its title) apart from how it executes (`RunExecuted`),
- * and once done its own case and the next step (`RunNext`).
- */
-/**
  * What a run has delivered: in Plain the count and each file's HL7 event, "2 HL7 messages: A01, A02" (a file whose name
  * names no event stays as it is); Technical keeps the file names.
  */
@@ -282,6 +278,10 @@ function deliveredWords(files: string[], technical: boolean): string {
   return `${files.length} HL7 message${files.length === 1 ? '' : 's'}: ${events.join(', ')}`;
 }
 
+/**
+ * The run's state above the cards: who proposes (the mode, in its title) apart from how it executes (`RunExecuted`),
+ * and once done its own case and the next step (`RunNext`).
+ */
 function RunBanner({ run, cases }: { run: ScenarioRun; cases: CaseSummary[] | undefined }) {
   const technical = useTechnical();
   const own = cases && run.state === 'done' ? runCase(cases, run, TRIAL) : undefined;
