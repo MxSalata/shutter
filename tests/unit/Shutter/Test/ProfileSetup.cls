@@ -418,6 +418,39 @@ Method TestTheConversationsLimits()
     Do $$$AssertStatusNotOK($CLASSMETHOD(st, "Create", conversation, "Another", "tier 2", {}, frame, 7, 1, "ut-setup", .bad), "a receiver the draft does not name")
 }
 
+/// Two requests on one conversation sent at once cannot both pass the one-turn-at-a-time and 24-turn checks: the route
+/// holds the conversation (Claim) from those checks until the Case Question item has opened the row. Another process holds
+/// it here, and this one is refused until it lets go.
+Method TestOneTurnAtATime()
+{
+    Set st = "Shutter.Store.SetupTurn"
+    Set conversation = $CLASSMETHOD(st, "NewConversation")
+    Kill ^Shutter.Test.SetupHold(conversation)
+    Job ##class(Shutter.Test.ProfileSetup).HoldConversation(conversation)
+    Set job = $ZCHILD
+    For i = 1:1:100 { Quit:$GET(^Shutter.Test.SetupHold(conversation, "held"))  Hang 0.1 }
+    Do $$$AssertEquals($GET(^Shutter.Test.SetupHold(conversation, "held")), 1, "another process holds the conversation (job " _ job _ ")")
+    Do $$$AssertNotTrue($CLASSMETHOD(st, "Claim", conversation, 0), "so this one cannot claim it")
+    Set ^Shutter.Test.SetupHold(conversation, "go") = 1
+    For i = 1:1:100 { Quit:$GET(^Shutter.Test.SetupHold(conversation, "released"))  Hang 0.1 }
+    Do $$$AssertTrue($CLASSMETHOD(st, "Claim", conversation, 5), "once it lets go, this one can")
+    Do $CLASSMETHOD(st, "Release", conversation)
+    Kill ^Shutter.Test.SetupHold(conversation)
+    Set other = $CLASSMETHOD(st, "NewConversation")
+    Do $$$AssertTrue($CLASSMETHOD(st, "Claim", other, 0), "another conversation is not held by the first's claim")
+    Do $CLASSMETHOD(st, "Release", other)
+}
+
+/// The other process of TestOneTurnAtATime: it claims the conversation, says so, and lets go when told (or after 20 s).
+ClassMethod HoldConversation(conversation As %String)
+{
+    If '##class(Shutter.Store.SetupTurn).Claim(conversation, 5) Quit
+    Set ^Shutter.Test.SetupHold(conversation, "held") = 1
+    For i = 1:1:200 { Quit:$GET(^Shutter.Test.SetupHold(conversation, "go"))  Hang 0.1 }
+    Do ##class(Shutter.Store.SetupTurn).Release(conversation)
+    Set ^Shutter.Test.SetupHold(conversation, "released") = 1
+}
+
 /// The part of the draft kept with a turn is the receiver's own entry and what its checks read, never the whole draft.
 Method TestTheFrameIsNotTheDraft()
 {

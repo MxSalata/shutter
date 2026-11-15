@@ -2325,6 +2325,26 @@ ClassMethod SetupTurnAsk() As %Status
     }
     Set r = ..Idempotent(bodyText, .replayed)
     If replayed Quit $$$OK
+    // A later turn holds its conversation from the checks below until its row is opened, so two requests sent at once
+    // cannot both pass them; a first turn's conversation is new, and no one else can name it yet.
+    If conversation = "" Quit ..SetupTurnSend(conversation, receiver, text, draft, frame, version, body, bodyText)
+    If '##class(Shutter.Store.SetupTurn).Claim(conversation) {
+        Quit ..Fail("409 Conflict", "turn_pending", "Another turn of this conversation is being sent: one turn at a time")
+    }
+    Try {
+        Set sc = ..SetupTurnSend(conversation, receiver, text, draft, frame, version, body, bodyText)
+    } Catch ex {
+        Set sc = ex.AsStatus()
+    }
+    Do ##class(Shutter.Store.SetupTurn).Release(conversation)
+    Quit sc
+}
+
+/// The rest of POST /site-profile/setup-turns, once the body, the switch, the reader and the version have passed: the
+/// conversation's own checks, then the turn sent to the Case Question item, which opens its row before it answers.
+ClassMethod SetupTurnSend(conversation As %String, receiver As %String, text As %String, draft As %DynamicObject, frame As %DynamicObject, version As %Integer, body As %DynamicObject, bodyText As %String) As %Status [ Private ]
+{
+    Set ps = "Shutter.Util.ProfileSetup"
     // The conversation is the server's: a first turn gets its id here, a later one must be the caller's own, with no
     // turn still being read and fewer than the limit behind it.
     If conversation = "" {

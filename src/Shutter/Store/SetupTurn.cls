@@ -156,6 +156,20 @@ ClassMethod Said(conversation As %String, askedBy As %String) As %DynamicArray
     Quit said
 }
 
+/// Hold a conversation while a turn is admitted and its row is opened, so two requests sent at once cannot both pass the
+/// one-turn-at-a-time and 24-turn checks: 1 when held, 0 when another process holds it after <var>wait</var> seconds.
+/// The route releases it (Release) once the Case Question item has opened the row or refused.
+ClassMethod Claim(conversation As %String, wait As %Integer = 5) As %Boolean
+{
+    Lock +^Shutter.Lock("setupconversation", conversation):wait
+    Quit $TEST
+}
+
+ClassMethod Release(conversation As %String)
+{
+    Lock -^Shutter.Lock("setupconversation", conversation)
+}
+
 /// The earlier turns of the conversation as the agent reads them: what the person typed and, where a turn was accepted,
 /// the agent's own sentence. The turn <var>before</var> and any after it are left out.
 ClassMethod Earlier(conversation As %String, askedBy As %String, before As %String) As %DynamicArray
