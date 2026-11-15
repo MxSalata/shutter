@@ -82,6 +82,19 @@ describe('CaseHeader', () => {
     expect(screen.queryByText(/Escalate$/)).not.toBeInTheDocument();
   });
 
+  it("names one of the site's own scenarios when the plan follows it, and no shipped entry", () => {
+    const { unmount } = renderHeader({
+      ...base,
+      state: 'escalated',
+      disposition: 'escalate',
+      catalogueEntry: 'L1',
+    });
+    expect(screen.getByText('Our own scenario L1')).toBeInTheDocument();
+    unmount();
+    renderHeader({ ...base, catalogueEntry: 'E2' });
+    expect(screen.queryByText(/Our own scenario/)).not.toBeInTheDocument();
+  });
+
   it('says nothing about the catalogue when an entry fits', () => {
     renderHeader({ ...base, candidateEntry: false });
     expect(screen.queryByText('New pattern')).not.toBeInTheDocument();

@@ -1368,6 +1368,83 @@ export interface SiteProfileView {
   catalogueEntries: number;
 }
 
+/**
+ * One of the site's own catalogue entries (CONTRACTS 6.8): a stop entry, id L<n>. When its scope and pattern hold on a
+ * case, the case goes to a person with the site's words; it has no field for who decides or the outcome.
+ */
+export interface SiteEntryContent {
+  id: string;
+  kind: 'stop';
+  title: string;
+  priority: number;
+  /** Facts of the case that are not conditions: receiver, source_system, ward, reason_code. Every one listed must hold. */
+  scope: Record<string, string[]>;
+  /** The vocabulary's conditions (6.1), each with the values allowed. */
+  pattern: Record<string, string[]>;
+  why: string;
+  team: string;
+  instructions: string;
+  prose: string;
+  fixtures: { case: string; expect: 'match' | 'no_match' }[];
+}
+
+export type SiteEntryState = 'draft' | 'proposed' | 'active' | 'suspended' | 'retired';
+
+/** An item of GET /site-entries. */
+export interface SiteEntryItem {
+  id: string;
+  state: SiteEntryState;
+  kind: 'stop';
+  title: string;
+  /** The entry in one sentence: "When a transfer to ... fails ...: a person decides". */
+  sentence: string;
+  /** The version shown (the active one, or the draft of an entry never active), its digest and its content. */
+  version?: number;
+  digest?: string;
+  content?: SiteEntryContent;
+  activeVersion: number;
+  draftVersion: number;
+  /** Counts every change of the entry: a PUT sends it back as expectedVersion. */
+  revision: number;
+  approvedBy?: string;
+  approvedAt?: string;
+  /** The open proposal, waiting for a second person. */
+  proposal?: {
+    action: 'activate' | 'retire' | 'resume';
+    version: number;
+    digest: string;
+    by: string;
+    at: string;
+  };
+  /** Set by the recheck after an upgrade or a profile save: the entry still applies, and a person should look. */
+  needsReview: boolean;
+  review?: { dropped?: { condition: string; why: string }[]; notes?: string[] };
+  suspended?: { by: string; at: string; reason: string };
+  /** The cases the entry sent to a person, in all and in the last 30 days. */
+  casesSent: number;
+  casesSent30: number;
+  createdBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+/** GET /site-entries: every site entry and the site's status, whose warnings stay for as long as they hold. */
+export interface SiteEntriesView {
+  items: SiteEntryItem[];
+  status: {
+    active: number;
+    proposed: number;
+    generation: number;
+    limit: number;
+    suspended: string[];
+    needsReview: string[];
+    /** Who lifted the two-person rule from the terminal, when someone did. */
+    onePerson: { by: string; at: string; reason: string } | null;
+    warnings: string[];
+  };
+  catalogueVersion: string;
+}
+
 export interface SiteProfileVersionEntry {
   version: number;
   source: string;

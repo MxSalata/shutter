@@ -54,6 +54,7 @@ import {
   type Settings,
   type SiteProfile,
   type SiteProfileVersionEntry,
+  type SiteEntriesView,
   type SiteProfileView,
   type Snapshot,
   type StormStarted,
@@ -77,6 +78,7 @@ export const keys = {
   recoveryControl: ['recovery-control'] as const,
   siteProfile: ['site-profile'] as const,
   siteProfileHistory: ['site-profile', 'history'] as const,
+  siteEntries: ['site-entries'] as const,
   library: ['library'] as const,
   settings: ['settings'] as const,
   access: ['access'] as const,
@@ -659,6 +661,11 @@ export function useRecoveryControl() {
 
 export function useSiteProfile() {
   return useQuery({ queryKey: keys.siteProfile, queryFn: () => api.get<SiteProfileView>('/site-profile') });
+}
+
+/** The site's own catalogue entries (CONTRACTS 6.8) and the warnings that hold for them: read only. */
+export function useSiteEntries() {
+  return useQuery({ queryKey: keys.siteEntries, queryFn: () => api.get<SiteEntriesView>('/site-entries') });
 }
 
 export function useSiteProfileHistory() {

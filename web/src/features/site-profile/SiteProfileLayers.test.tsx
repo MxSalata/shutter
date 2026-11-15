@@ -380,6 +380,7 @@ describe('On this page', () => {
       'Recovery, 14',
       'Reminders, 15',
       'An A08 location, 16',
+      'Our own scenarios',
       'Versions',
     ]);
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'On this page' }), 'site-approvals');
@@ -482,8 +483,9 @@ describe('the word budget', () => {
     await screen.findByRole('table', { name: 'Who releases each write' });
     const inTechnical = words(technical.container);
     // The page held 2,776 words before the restyle; it is a questionnaire, so it stays long (1,775 when measured). The
-    // limit was 2,000, which the page had reached, until the Orders and results card's 35 words more (2,035)
-    expect(inPlain).toBeLessThanOrEqual(2040);
+    // limit was 2,000, which the page had reached, until the Orders and results card's 35 words more (2,035), and then
+    // the section Our own scenarios: its heading, its intro and what it says on a site with none, 41 words (2,076)
+    expect(inPlain).toBeLessThanOrEqual(2080);
     expect(inTechnical).toBeGreaterThan(inPlain);
     expect(inTechnical).toBeLessThanOrEqual(Math.round(inPlain * 1.5));
   });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import fixtures from '@/mocks/fixtures.json';
-import { clampHeadline } from './headline';
+import { clampHeadline, cutEscalation } from './headline';
 
 const recorded = (id: string) =>
   (fixtures.cases as unknown as Record<string, { summary: { headline: string } }>)[id].summary.headline;
@@ -98,5 +98,25 @@ describe('clampHeadline', () => {
       const shown = clampHeadline(c.summary.headline);
       expect(shown === c.summary.headline || /[^\s.,;:(-]…$/.test(shown)).toBe(true);
     }
+  });
+});
+
+describe('an escalation the server cut', () => {
+  it('splits at the entry, for a shipped entry and for one of the site own', () => {
+    const cut = 'the rest of the reason, which the server cut…';
+    expect(
+      cutEscalation(`Escalated to a person. Catalogue E17, Two patients are allocated to one bed: ${cut}`),
+    ).toEqual({
+      first: 'Escalated to a person. Catalogue E17, Two patients are allocated to one bed.',
+      rest: 'The rest of the reason, which the server cut…',
+    });
+    expect(
+      cutEscalation(`Escalated to a person. Catalogue L1, A failed transfer into the isolation ward: ${cut}`),
+    ).toEqual({
+      first: 'Escalated to a person. Catalogue L1, A failed transfer into the isolation ward.',
+      rest: 'The rest of the reason, which the server cut…',
+    });
+    expect(cutEscalation('Escalated to a person. Catalogue L1, A title: a whole reason.')).toBeUndefined();
+    expect(cutEscalation(`Escalated to a person. Catalogue X1, A title: ${cut}`)).toBeUndefined();
   });
 });

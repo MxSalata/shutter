@@ -72,6 +72,7 @@ import {
 import { kindFocus, tierFocus } from './askAbout';
 import { ReviewModal, type SaveProblem } from './ReviewModal';
 import { SaveBar } from './SaveBar';
+import { OwnScenarios } from './OwnScenarios';
 import { VersionsPanel } from './VersionsPanel';
 import { SuggestionCard } from './SuggestionCard';
 import {
@@ -1064,6 +1065,7 @@ function Profile({
                 ))}
               </ul>
               <ProfileForm draft={draft} setDraft={setDraft} problem={problem} />
+              <OwnScenarios />
               <VersionsPanel current={base.version} />
               <OtherSettings profile={draft} base={base} />
             </Stack>

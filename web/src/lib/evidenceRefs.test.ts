@@ -38,6 +38,8 @@ describe("the evidence the board's members and the plan cite", () => {
       'E9@1',
     ]);
     expect(catalogueEntriesOf(['EVENT', 'E', 'catalogue:'])).toEqual([]);
+    // One of the site's own entries is cited as a shipped one is (CONTRACTS 6.8).
+    expect(catalogueEntriesOf(['catalogue:L1', 'L4@2', 'catalogue', 'LAB', 'L'])).toEqual(['L1', 'L4@2']);
   });
 
   it('counts only the round whose runs made the plan, and names the plan alone when no member cites a section', () => {

@@ -2,6 +2,7 @@ import { delay, http, HttpResponse } from 'msw';
 import fixtures from './fixtures.json';
 import definitions from '../../../fixtures/scenarios.json';
 import type {
+  SiteEntriesView,
   AccessReport,
   AgentRun,
   ApprovalDecision,
@@ -758,6 +759,70 @@ async function decideIncident(request: Request, id: string, seq: number | null) 
   );
 }
 
+/** A site with no entry of its own, as the recorded build is: GET /site-entries there. */
+export const NO_SITE_ENTRIES: SiteEntriesView = {
+  items: [],
+  status: {
+    active: 0,
+    proposed: 0,
+    generation: 0,
+    limit: 50,
+    suspended: [],
+    needsReview: [],
+    onePerson: null,
+    warnings: [],
+  },
+  catalogueVersion: '',
+};
+
+/** The worked example of docs/readme/local-rules.md as GET /site-entries would list it, active. Synthetic. */
+export const SITE_ENTRIES_EXAMPLE: SiteEntriesView = {
+  items: [
+    {
+      id: 'L1',
+      state: 'active',
+      kind: 'stop',
+      title: 'A failed transfer into the isolation ward',
+      sentence:
+        'When a transfer to Downstream Out from PAS fails, is rejected or gets no answer, and the ward is WARD-ISO: a person decides',
+      version: 1,
+      digest: 'sha256:5d2c1f0a9b7e4c3d8a6f1e0b9c8d7a6f5e4d3c2b1a0f9e8d7c6b5a4f3e2d1c0b',
+      activeVersion: 1,
+      draftVersion: 0,
+      revision: 4,
+      approvedBy: 'approver',
+      approvedAt: '2026-11-15T10:20:00Z',
+      needsReview: false,
+      casesSent: 0,
+      casesSent30: 0,
+      content: {
+        id: 'L1',
+        kind: 'stop',
+        title: 'A failed transfer into the isolation ward',
+        priority: 10,
+        scope: { receiver: ['Downstream Out'], source_system: ['PAS'], ward: ['WARD-ISO'] },
+        pattern: { delivery: ['failed', 'rejected', 'uncertain'], event: ['transfer'] },
+        why: "Infection control places every patient in this ward by hand, so a resend can't know the bed is right.",
+        team: '',
+        instructions: "Ring the ward's nurse in charge before anything is entered. Do not resend.",
+        prose: '',
+        fixtures: [],
+      },
+    },
+  ],
+  status: {
+    active: 1,
+    proposed: 0,
+    generation: 1,
+    limit: 50,
+    suspended: [],
+    needsReview: [],
+    onePerson: null,
+    warnings: [],
+  },
+  catalogueVersion: '',
+};
+
 export const handlers = [
   ...onboardingHandlers(csrf, guard),
   http.post(`${BASE}/session`, async ({ request }) => {
@@ -1446,6 +1511,9 @@ export const handlers = [
         ? HttpResponse.json(siteProfile)
         : error(404, 'not_found', 'No site profile was recorded'),
   ),
+  // The site's own scenarios (CONTRACTS 6.8), read only: the recorded cases were made with none, so the list is empty
+  // unless a test answers with the example (SITE_ENTRIES_EXAMPLE).
+  http.get(`${BASE}/site-entries`, () => (!session ? signedOut() : HttpResponse.json(NO_SITE_ENTRIES))),
   http.get(`${BASE}/site-profile/history`, ({ request }) => {
     if (!session) return signedOut();
     const limit = Number(new URL(request.url).searchParams.get('limit') ?? 50);

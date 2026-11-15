@@ -99,8 +99,11 @@ export function citationsOf(
   }));
 }
 
-/** A catalogue entry's id, with its version or without: E7, E9@1. */
-const ENTRY = /^E\d+(@\d+)?$/;
+/**
+ * A catalogue entry's id, with its version or without: a shipped entry's (E7, E9@1) or one of the site's own
+ * (L1, L4@2; CONTRACTS 6.8).
+ */
+const ENTRY = /^[EL]\d+(@\d+)?$/;
 
 /**
  * The catalogue entries a list of refs names: "E7", "E9@1" from `catalogue:E7` and `catalogue:E9@1`, or from the entry's

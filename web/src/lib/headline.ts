@@ -74,7 +74,8 @@ export function clampHeadline(headline: string | undefined | null): string {
  * patients are allocated to one bed." and the rest, still marked as cut. Undefined for any other headline.
  */
 export function cutEscalation(text: string): { first: string; rest: string } | undefined {
-  const m = /^(Escalated to a person\. Catalogue E\d+, [^:]+): (.+…)$/s.exec(text);
+  // A shipped entry (E17) or one of the site's own (L1, CONTRACTS 6.8): the workflow words both alike.
+  const m = /^(Escalated to a person\. Catalogue [EL]\d+, [^:]+): (.+…)$/s.exec(text);
   if (!m) return undefined;
   return { first: `${m[1]}.`, rest: m[2].charAt(0).toUpperCase() + m[2].slice(1) };
 }

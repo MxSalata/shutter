@@ -42,6 +42,7 @@ describe('ApiPage', () => {
       'Outages',
       'Intake',
       'Site profile',
+      'Site entries',
       'Settings',
       'Index',
       'Costs',

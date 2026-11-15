@@ -11,6 +11,7 @@ const PAGE_INDEX: { id: string; label: string }[] = [
   { id: 'site-recovery', label: 'Recovery, 14' },
   { id: 'site-reminders', label: 'Reminders, 15' },
   { id: 'site-a08', label: 'An A08 location, 16' },
+  { id: 'site-own-scenarios', label: 'Our own scenarios' },
   { id: 'site-versions', label: 'Versions' },
 ];
 

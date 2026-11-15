@@ -22,6 +22,7 @@ import { Term } from '@/components/Term';
 import { Timestamp } from '@/components/Timestamp';
 import { displayZone, humanize } from '@/lib/format';
 import { asObject } from '@/lib/json';
+import { isSiteEntryId } from '@/lib/siteEntry';
 import { HINT_EVENTS } from '@/theme';
 import { caseOutcome, caseState, type ExpectedScenario, type OutcomeCase } from '@/lib/status';
 import { toneText, type Status, type Tone } from '@/lib/tone';
@@ -231,6 +232,14 @@ export function CaseHeader({
               tone="attention"
               label="Held"
               hint="The site prevents failures: this message's HL7 schema is not loaded here, so Shutter held it and sent nothing"
+              icon={IconHandStop}
+            />
+          ) : null}
+          {isSiteEntryId(c.catalogueEntry) ? (
+            <StatusBadge
+              tone="info"
+              label={`Our own scenario ${c.catalogueEntry}`}
+              hint="One of this site's own scenarios matched this case, so a person decides: Shutter sends nothing and closes nothing by itself"
               icon={IconHandStop}
             />
           ) : null}
