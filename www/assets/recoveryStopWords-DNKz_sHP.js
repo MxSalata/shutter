@@ -1,0 +1,1 @@
+const e="In the trial the stop is recorded but not enforced: approving a case still plays its recording.",a=`${e} On IRIS a plan can't be approved while recovery is stopped, and no new recovery call is admitted.`;export{a as T,e as a};
