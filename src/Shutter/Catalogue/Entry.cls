@@ -37,6 +37,21 @@ Property Source As %String(%JSONFIELDNAME = "source", MAXLEN = 300);
 
 ClassMethod ById(id As %String) As Shutter.Catalogue.Entry
 {
+    // A site's own entry (L<n>, CONTRACTS 6.8) answers here too, as an entry that is never stored in this table: the
+    // gate's lookup then words a plan that names a site entry whose pattern does not hold as PATTERN_NOT_MATCHED.
+    If ##class(Shutter.Catalogue.SiteEntry).IsSiteId(id) {
+        Set site = ##class(Shutter.Catalogue.SiteEntry).ById(id)
+        If '$ISOBJECT(site) Quit ""
+        Set e = ..%New()
+        Set e.EntryId = id, e.Version = site.ActiveVersion, e.Decides = "person", e.Source = "site"
+        Quit e
+    }
+    Quit ..Shipped(id)
+}
+
+/// A shipped entry's row, or "".
+ClassMethod Shipped(id As %String) As Shutter.Catalogue.Entry [ Private ]
+{
     Set rid = ""
     &sql(SELECT ID INTO :rid FROM Shutter_Catalogue.Entry WHERE EntryId = :id)
     If (SQLCODE '= 0) || (rid = "") Quit ""
@@ -51,8 +66,17 @@ ClassMethod Count() As %Integer
     Quit +n
 }
 
-/// A version string for the whole catalogue: the entries' ids and versions, in order.
+/// A version string for the whole catalogue: the shipped entries' ids and versions, in order, and, on a site that has
+/// ever activated an entry of its own (CONTRACTS 6.8), ";g<n>:" and the active site entries ("...,E9@1;g7:L1@2,L4@1").
+/// <n> is a generation that rises at every activation, suspension, resumption and retirement and never comes down, so an
+/// approval voided by one change is not made valid again by undoing it. A site that never had one keeps the shipped string.
 ClassMethod CatalogueVersion() As %String
+{
+    Quit ..ShippedVersion() _ ##class(Shutter.Catalogue.SiteEntry).VersionSuffix()
+}
+
+/// The shipped entries' ids and versions, in order.
+ClassMethod ShippedVersion() As %String
 {
     Set parts = ""
     Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT EntryId, Version FROM Shutter_Catalogue.Entry ORDER BY EntryId")
@@ -101,7 +125,10 @@ ClassMethod SeedFromFile(path As %String, Output count As %Integer) As %Status
     While iter.%GetNext(.i, .d) {
         Set id = ##class(Shutter.Util.Json).Str(d, "id")
         Continue:id=""
-        Set e = ..ById(id)
+        // A shipped entry is E<n>. Any other id is refused: L<n> is a site's own entry, which lives in its own tables
+        // and can only ever send a case to a person (CONTRACTS 6.8).
+        If '$MATCH(id, "E[1-9][0-9]*") Set sc = $$$ERROR($$$GeneralError, "catalogue.json names the entry " _ id _ ": a shipped entry's id is E<n>") Quit
+        Set e = ..Shipped(id)
         If '$ISOBJECT(e) Set e = ..%New(), e.EntryId = id
         Set e.Version = +##class(Shutter.Util.Json).Str(d, "version", 1)
         Set e.Title = ##class(Shutter.Util.Json).Str(d, "title"), e.Decides = ##class(Shutter.Util.Json).Str(d, "decides", "board")
@@ -119,13 +146,21 @@ ClassMethod SeedFromFile(path As %String, Output count As %Integer) As %Status
     // Entries no longer in the file go.
     Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID, EntryId FROM Shutter_Catalogue.Entry")
     While rs.%Next() { If '$LISTFIND(keep, rs.%Get("EntryId")) Do ..%DeleteId(rs.%Get("ID")) }
+    // The vocabulary that came with the file, and the site's own entries checked against it and against this release's
+    // matcher before any case is matched (CONTRACTS 6.8, R14). The seed never touches their tables. A recheck that fails
+    // is tried again at the first match, so it never stops an install.
+    Do ##class(Shutter.Catalogue.Vocabulary).Load(##class(%File).GetDirectory(path) _ "vocabulary.json")
+    Try { Do ##class(Shutter.Catalogue.SiteEntry).Recheck("upgrade", 0) } Catch ex { Kill ^Shutter.Catalogue.Site("checked") }
     Quit sc
 }
 
-/// Seed (replace) the catalogue from JSON text, for tests and tools. Returns the count or the error.
+/// Seed (replace) the catalogue from JSON text, for tests and tools, on a demo instance only. Returns the count or the error.
 ClassMethod SeedFromJSON(json As %String) As %String [ SqlProc ]
 {
     If '$SYSTEM.Security.Check("Shutter_Approve", "USE") Quit "Shutter_Approve is required to replace the catalogue"
+    // Replacing the whole catalogue from any JSON, with no validation, version record or audit, is a demo's and a
+    // test's tool: a site's catalogue is the shipped file and its own approved entries (CONTRACTS 6.8).
+    If '$GET(^Shutter.Config("demo")) Quit "error: not a demo instance: a site's catalogue is the shipped file and its own approved entries"
     Set path = ##class(%File).NormalizeDirectory($SYSTEM.Util.ManagerDirectory() _ "shutter") _ "catalogue-seed.json"
     Set stream = ##class(%Stream.FileCharacter).%New()
     Set stream.TranslateTable = "UTF8"

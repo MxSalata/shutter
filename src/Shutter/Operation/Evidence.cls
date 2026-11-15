@@ -207,7 +207,7 @@ Method OnEvidenceRequest(request As Shutter.Msg.EvidenceRequest, Output response
     Set chainKind = ##class(Shutter.Store.ChainItem).KindFor(case)
     // The catalogue: the condition vocabulary this snapshot shows, and the entries whose pattern holds (CONTRACTS 6).
     Try {
-        Set summary.catalogue = ##class(Shutter.Catalogue.Matcher).Match(##class(Shutter.Catalogue.Matcher).Conditions(case, summary, chainKind), ##class(Shutter.Catalogue.Matcher).Facts(summary, case))
+        Set summary.catalogue = ##class(Shutter.Catalogue.Matcher).Match(##class(Shutter.Catalogue.Matcher).Conditions(case, summary, chainKind), ##class(Shutter.Catalogue.Matcher).Facts(summary, case), ##class(Shutter.Catalogue.Matcher).Scope(case, summary))
     } Catch ex {
         Set summary.catalogue = {"decision": "error", "error": (ex.DisplayString())}
     }

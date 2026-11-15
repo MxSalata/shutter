@@ -414,6 +414,11 @@ Method OnEvidence(case As Shutter.Store.Case, result As Shutter.Msg.EvidenceResu
     // A receiver of category orders_results (v1.23) keeps orders and results, which the ADT catalogue does not model:
     // the case goes to a person at once, in every mode, and no model runs for it.
     If ##class(Shutter.Store.SiteProfile).ReceiverCategory($SELECT(case.Receiver '= "": case.Receiver, 1: ..WardTarget)) = "orders_results" Quit ..NotModelledToPerson(case)
+    // One of the site's own entries matched (CONTRACTS 6.8): a brake, so the case goes to a person naming it in every mode
+    // but Rules only, before the FHIR flow plans, before an incident's release takes its chain's path and before the case
+    // can follow another's board. A person may still convene the board on such a case; over FHIR no board plans, so there
+    // the case goes to a person either way. Rules only stays the baseline: its plain resend is the gate's to block.
+    If (..Mode '= "rules") && (decision = "person") && ..SiteMatched(cat) && ('..ForceBoard || ..IsFHIR(case)) Quit ..PersonByCatalogue(case, cat)
     If ..IsFHIR(case) Quit ##class(Shutter.FHIR.Flow).Plan($THIS, case, summary, cat)
     // A death on the message (catalogue E19) goes to a person in Board mode as in Site policy mode, and no board is asked what
     // only a person can check. Rules only is the baseline and stays as it is; a judge's forced board still convenes.
@@ -1288,10 +1293,24 @@ Method PersonByCatalogue(case As Shutter.Store.Case, cat As %DynamicObject) As %
     Set entry = $CLASSMETHOD(json, "Str", cat, "entry")
     Set m = cat.%Get("matches").%Get(0)
     Set title = $CLASSMETHOD(json, "Str", m, "title"), why = $CLASSMETHOD(json, "Str", m.%Get("preferred"), "why")
+    Set site = ..SiteMatched(cat)
     // An order, a result or a document (v1.45): the entry speaks of a mapping that failed, which isn't what happened here.
-    If case.NotModelled() Set why = "Shutter does not resend this message by itself, and the message itself may be sound." _ $SELECT(case.FailureOutcome = "uncertain": " The receiver did not answer, so it may hold the message already.", 1: "") _ " An operation that retries delivers it by itself once the receiver is back, so check the source's Message Viewer before anyone re-enters it."
+    // A site's own entry keeps its own words: the site wrote them for the cases it names.
+    If 'site && case.NotModelled() Set why = "Shutter does not resend this message by itself, and the message itself may be sound." _ $SELECT(case.FailureOutcome = "uncertain": " The receiver did not answer, so it may hold the message already.", 1: "") _ " An operation that retries delivers it by itself once the receiver is back, so check the source's Message Viewer before anyone re-enters it."
     Set ..CatalogueEntry = entry, ..CatalogueOutcome = "preferred", ..Policy = "person"
-    Do case.Note("note", "Catalogue " _ entry _ " (" _ title _ ") matched alone and asks for a person", "system")
+    If site {
+        // The trail says which of the site's entries stopped the case, what the shipped catalogue alone would have done,
+        // and what the site asks the person to do.
+        Set without = "", oi = cat.%Get("overridden")
+        If $ISOBJECT(oi) {
+            Set oi = oi.%GetIterator()
+            While oi.%GetNext(, .o) { Set without = without _ $SELECT(without = "": "", 1: "; ") _ $CLASSMETHOD(json, "Str", o, "id") _ " (" _ $CLASSMETHOD(json, "Str", o, "decides") _ ", " _ $CLASSMETHOD(json, "Str", o, "outcome") _ ")" }
+        }
+        Set instructions = $CLASSMETHOD(json, "Str", m, "instructions")
+        Do case.Note("note", "The site's own scenario " _ entry _ " version " _ $CLASSMETHOD(json, "Str", m, "version") _ " (" _ title _ ") matched and answers alone: a person decides. Without it: " _ $SELECT(without = "": "no shipped entry matched (a new pattern)", 1: without) _ $SELECT(instructions '= "": ". Instructions: " _ instructions, 1: ""), "system")
+    } Else {
+        Do case.Note("note", "Catalogue " _ entry _ " (" _ title _ ") matched alone and asks for a person", "system")
+    }
     Set plan = {}
     Set plan.disposition = "escalate", plan.action = {"type": "none"}
     Set plan."catalogue_entry" = entry, plan.outcome = "preferred", plan.why = why
@@ -1410,6 +1429,8 @@ Method OnGateProposal(case As Shutter.Store.Case, result As Shutter.Msg.GateResu
             Set case.CandidateEntry = 1
             Do case.Note("note", "The catalogue has no entry for this pattern; the case is flagged as a candidate entry for a reviewer", "gate", "gate:" _ result.DecisionId)
             If 'plan.IsWrite() {
+                Set sc = ..ClosureHeld(case, plan, .held)
+                If held || $$$ISERR(sc) Quit sc
                 If ..ThinClosure(plan) '= "" Quit ..ThinClosureToPerson(case, plan)
                 Set sc = case.Transition("verifying", "No write; verifying the receiver's state (new pattern, candidate entry)", "system")
                 Quit:$$$ISERR(sc) sc
@@ -1446,11 +1467,59 @@ Method OnGateProposal(case As Shutter.Store.Case, result As Shutter.Msg.GateResu
         Quit ..SendRequestAsync(..WardTargetFor(case), ..WardOperationFor(case, plan, 1), 1, "rehearsal")
     }
     // superseded or reconcile: nothing is written; verify what the receiver holds and close. A board with a member missing
-    // doesn't close a case: a person reads what it found.
+    // doesn't close a case: a person reads what it found. Nor does a plan made under another catalogue version, or any plan
+    // on a case one of the site's own entries matched (ClosureHeld).
+    Set sc = ..ClosureHeld(case, plan, .held)
+    If held || $$$ISERR(sc) Quit sc
     If ..ThinClosure(plan) '= "" Quit ..ThinClosureToPerson(case, plan)
     Set sc = case.Transition("verifying", "No write; verifying the receiver's state", "system")
     Quit:$$$ISERR(sc) sc
     Quit ..SendVerify(case)
+}
+
+/// Whether the catalogue's result names one of the site's own entries as its match (CONTRACTS 6.8): the matcher marks
+/// such a match with origin "site", and it is then the case's only match.
+ClassMethod SiteMatched(cat As %DynamicObject) As %Boolean
+{
+    If '$ISOBJECT(cat) || (cat.%GetTypeOf("matches") '= "array") || (cat.%Get("matches").%Size() = 0) Quit 0
+    Set m = cat.%Get("matches").%Get(0)
+    Quit $ISOBJECT(m) && (##class(Shutter.Util.Json).Str(m, "origin") = "site")
+}
+
+/// The two rules about closures (CONTRACTS 6.8), asked wherever a plan that writes nothing is about to be verified and
+/// closed, and again before the verification closes it. A closure has no approval for the catalogue's version to void, so
+/// the workflow checks it here. held is 1 when the closure does not go ahead and this method has moved the case on.
+/// - R18: on a case one of the site's own entries matched, a closure never happens without a person. It can only come
+///   from a board a person convened on the escalated case; convening a board is not approving its closure, so the case
+///   goes to a person with the board's reasoning, as a partial board's closure does.
+/// - R17: a plan made under another catalogue version than the current one is never completed. The evidence is collected
+///   again and the case planned afresh, up to the refresh limit; then a person looks. A plan that records no version is
+///   treated so only on a site that has ever activated an entry of its own.
+Method ClosureHeld(case As Shutter.Store.Case, plan As Shutter.Store.Plan, Output held As %Boolean) As %Status
+{
+    Set held = 0
+    If '$ISOBJECT(plan) || plan.IsWrite() Quit $$$OK
+    Set snap = $SELECT($ISOBJECT(plan.Snapshot): plan.Snapshot, 1: case.CurrentSnapshot)
+    Set summary = $SELECT($ISOBJECT(snap): snap.SummaryObject(), 1: "")
+    Set cat = $SELECT($ISOBJECT(summary): summary.%Get("catalogue"), 1: "")
+    If ..SiteMatched(cat) {
+        Set held = 1
+        Set entry = ##class(Shutter.Util.Json).Str(cat, "entry")
+        Set case.Headline = "A person checks this: the site's own scenario " _ entry _ " matched, and the plan would close the case with nothing sent"
+        Quit case.Transition("escalated", "The plan (" _ plan.Disposition _ ") writes nothing and would close the case, but the site's own scenario " _ entry _ " matched it, and such a case is never closed without a person. Nothing was sent. " _ plan.Summary, "system", "plan:" _ plan.%Id())
+    }
+    Set current = ##class(Shutter.Catalogue.Entry).CatalogueVersion()
+    If plan.CatalogueVersion = current Quit $$$OK
+    If (plan.CatalogueVersion = "") && (##class(Shutter.Catalogue.SiteEntry).Generation() = 0) Quit $$$OK
+    Set held = 1
+    If ..Refreshes >= ..MaxRefreshes {
+        Set case.Headline = "Blocked: the catalogue kept changing while this case was planned"
+        Quit case.Transition("blocked", "The plan (" _ plan.Disposition _ ") was made under another catalogue version than the current one, and the case was planned again " _ ..Refreshes _ " times already. A plan made under another version is never completed; nothing was sent, and a person must look", "system", "plan:" _ plan.%Id())
+    }
+    Set ..Refreshes = ..Refreshes + 1, ..Refreshing = 0
+    Set ..PlanId = "", ..PendingJSON = "[]", ..Policy = "", ..CatalogueEntry = "", ..CatalogueOutcome = ""
+    Do case.Note("note", "The catalogue changed after this plan was made (the plan's version is not the current one). A plan made under another catalogue version is never completed, and a closure has no approval to void: the evidence is collected again and the case planned afresh (" _ ..Refreshes _ " of " _ ..MaxRefreshes _ ")", "system", "plan:" _ plan.%Id())
+    Quit ..StartEvidence(case)
 }
 
 /// The board members a plan that writes nothing lacks, by name, or "" when the board was whole. A write is untouched: a
@@ -2195,6 +2264,16 @@ Method OnVerify(case As Shutter.Store.Case, result As Shutter.Msg.VerifyResult) 
         If $ISOBJECT(attempt) && '$ISOBJECT(attempt.Approval) {
             Set case.Headline = "Escalated: the receiver wrote during a rehearsal, with no release"
             Quit case.Transition("escalated", "A write made during a rehearsal, with no release: " _ result.Summary _ ". The receiver does not honour dry_run and the operation is in effect; a person must check it at the receiver", "system", "verification:" _ result.VerificationId)
+        }
+        // A plan that writes nothing closes here. The two rules about closures hold to the last step: the catalogue may have
+        // changed, or a site entry been activated, while the verifier read the receiver (ClosureHeld).
+        Set closing = $SELECT('$ISOBJECT(attempt): ##class(Shutter.Store.Plan).%OpenId(..PlanId), 1: "")
+        If $ISOBJECT(closing) && 'closing.IsWrite() {
+            // The verification's words are the outcome of a case that closes; one that is held has none yet.
+            Set case.Outcome = ""
+            Set sc = ..ClosureHeld(case, closing, .held)
+            If held || $$$ISERR(sc) Quit sc
+            Set case.Outcome = result.Summary
         }
         // A closure on a later transfer the feed sent whose delivery failed or is uncertain is written on that transfer's
         // case too (CONTRACTS 6.1): the person handling it sees what was dropped on its account.

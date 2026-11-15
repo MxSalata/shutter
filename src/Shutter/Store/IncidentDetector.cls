@@ -253,7 +253,7 @@ ClassMethod Rematch(case As Shutter.Store.Case, chainKind As %String, projectedS
         Set summary."ward_state" = ws
     }
     Try {
-        Set cat = ##class(Shutter.Catalogue.Matcher).Match(##class(Shutter.Catalogue.Matcher).Conditions(case, summary, chainKind), ##class(Shutter.Catalogue.Matcher).Facts(summary, case))
+        Set cat = ##class(Shutter.Catalogue.Matcher).Match(##class(Shutter.Catalogue.Matcher).Conditions(case, summary, chainKind), ##class(Shutter.Catalogue.Matcher).Facts(summary, case), ##class(Shutter.Catalogue.Matcher).Scope(case, summary))
     } Catch ex {
         Set cat = summary.%Get("catalogue")
     }

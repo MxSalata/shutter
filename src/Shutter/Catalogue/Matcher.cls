@@ -96,34 +96,100 @@ ClassMethod Conditions(case As Shutter.Store.Case, summary As %DynamicObject, ch
     Quit c
 }
 
-/// Match the conditions against every catalogue entry (6.3). Returns the result the summary carries.
-ClassMethod Match(conditions As %DynamicObject, facts As %DynamicObject = "") As %DynamicObject
+/// Match the conditions against every catalogue entry (6.3) and, unless a death on the message answered, against the
+/// site's own active entries (6.8). Returns the result the summary carries. <var>scope</var> is the case's scope facts
+/// (Scope), which only a site entry reads.
+ClassMethod Match(conditions As %DynamicObject, facts As %DynamicObject = "", scope As %DynamicObject = "") As %DynamicObject
+{
+    Quit ..MatchWith(conditions, facts, scope, "")
+}
+
+/// Match with the site entries given instead of the stored ones: an array of Shutter.Catalogue.SiteEntry.MatchItem in
+/// the matcher's order (the proof lays a draft over the active entries this way; an empty array is a site with none).
+/// "" reads the active entries from the store.
+///
+/// A site entry is a brake and nothing else. When one matches, it is the case's only match, and the three fields that
+/// decide (decides, preferred.outcome, alternatives) are written here, never read from its row: person, escalate, none.
+/// So no stored row, however it got there, can authorise a write or a closure. The shipped entries it displaced are kept
+/// in overridden and the other site entries that matched in site_also, for the reader. A site with no active entry gets
+/// the result it always got, key for key.
+ClassMethod MatchWith(conditions As %DynamicObject, facts As %DynamicObject = "", scope As %DynamicObject = "", site As %DynamicArray = "") As %DynamicObject
 {
     Set out = {}
     Set out.conditions = conditions
     Set out.facts = $SELECT($ISOBJECT($GET(facts)): facts, 1: {"other_source": ""})
     Set out."catalogue_version" = ##class(Shutter.Catalogue.Entry).CatalogueVersion()
-    Set matches = []
-    If ##class(Shutter.Catalogue.Entry).Count() = 0 {
-        Set out.matches = matches, out.decision = "not_configured"
-        Do out.%Set("entry", "", "null"), out.%Set("outcome", "", "null")
-        Quit out
+    Set matches = [], death = 0
+    Set shipped = (##class(Shutter.Catalogue.Entry).Count() > 0)
+    If shipped {
+        Set entries = ##class(Shutter.Catalogue.Entry).All()
+        Set iter = entries.%GetIterator()
+        While iter.%GetNext(.i, .e) {
+            If ..Holds(e.%Get("pattern"), conditions) {
+                Set m = {}
+                Set m.id = e.id, m.version = e.version, m.title = e.title, m.decides = e.decides
+                If e.%IsDefined("prose") Set m.prose = e.prose
+                Set m.preferred = e.%Get("preferred"), m.alternatives = e.%Get("alternatives")
+                Do matches.%Push(m)
+                // A death on the message (E19) answers alone, whatever else matches: no resend or closure can follow it, and
+                // two matches would give it to the board.
+                If e.%Get("pattern").%IsDefined("death_recorded") Set matches = [(m)], death = 1 Quit
+            }
+        }
     }
-    Set entries = ##class(Shutter.Catalogue.Entry).All()
-    Set iter = entries.%GetIterator()
-    While iter.%GetNext(.i, .e) {
-        If ..Holds(e.%Get("pattern"), conditions) {
+    // The site's own entries (6.8), after E19 and before every other shipped entry, and on an empty shipped catalogue too.
+    If 'death {
+        If '$ISOBJECT(site) {
+            Set site = ##class(Shutter.Catalogue.SiteEntry).ActiveList(.problem)
+            // An active entry that cannot be read is never skipped: the matcher answers error, which the gate treats as
+            // unknown, so no write and no closure follows.
+            If problem '= "" {
+                Set out.matches = [], out.decision = "error", out.error = "A site entry cannot be read: " _ problem
+                Do out.%Set("entry", "", "null"), out.%Set("outcome", "", "null")
+                Quit out
+            }
+        }
+        Set lead = "", also = []
+        Set si = site.%GetIterator()
+        While si.%GetNext(, .s) {
+            Continue:'(..ScopeHolds(s.%Get("scope"), scope) && ..SiteHolds(s.%Get("pattern"), conditions))
+            If '$ISOBJECT(lead) { Set lead = s } Else { Do also.%Push({"id": (s.id), "version": (s.version), "title": (s.title), "instructions": (s.instructions), "team": (s.team)}) }
+        }
+        If $ISOBJECT(lead) {
+            // What the shipped catalogue alone would have said, for the reader: each displaced entry with who decides and
+            // its outcome (the one the site's flags choose, when it matched alone).
+            Set without = {"facts": (out.facts)}
+            Do ..Settle(without, matches)
+            Set overridden = [], mi = matches.%GetIterator()
+            While mi.%GetNext(, .old) {
+                Set o = {}
+                Set o.id = old.id, o.decides = old.decides
+                Set o.outcome = $SELECT(matches.%Size() = 1: ##class(Shutter.Util.Json).Str(without, "outcome"), 1: ##class(Shutter.Util.Json).Str(old.%Get("preferred"), "outcome"))
+                Do overridden.%Push(o)
+            }
             Set m = {}
-            Set m.id = e.id, m.version = e.version, m.title = e.title, m.decides = e.decides
-            If e.%IsDefined("prose") Set m.prose = e.prose
-            Set m.preferred = e.%Get("preferred"), m.alternatives = e.%Get("alternatives")
-            Do matches.%Push(m)
-            // A death on the message (E19) answers alone, whatever else matches: no resend or closure can follow it, and
-            // two matches would give it to the board.
-            If e.%Get("pattern").%IsDefined("death_recorded") Set matches = [(m)] Quit
+            Set m.id = lead.id, m.version = lead.version, m.title = lead.title, m.origin = "site", m.decides = "person"
+            Set m.preferred = {"outcome": "escalate", "why": (lead.why)}, m.alternatives = []
+            Set m.instructions = lead.instructions, m.team = lead.team
+            If lead.prose '= "" Set m.prose = lead.prose
+            Set matches = [(m)]
+            Set out.scope = $SELECT($ISOBJECT(scope): scope, 1: {}), out.overridden = overridden, out."site_also" = also
         }
     }
     Set out.matches = matches
+    If 'shipped && (matches.%Size() = 0) {
+        Set out.decision = "not_configured"
+        Do out.%Set("entry", "", "null"), out.%Set("outcome", "", "null")
+        Quit out
+    }
+    Do ..Settle(out, matches)
+    Quit out
+}
+
+/// The decision a list of matches gives (6.3), written on the result: none is a new pattern, several are the board's,
+/// one decides by its own word, with its preferred outcome or the alternative the site's flags choose.
+ClassMethod Settle(out As %DynamicObject, matches As %DynamicArray) [ Private ]
+{
     If matches.%Size() = 0 {
         Set out.decision = "new_pattern"
         Do out.%Set("entry", "", "null"), out.%Set("outcome", "", "null")
@@ -151,7 +217,66 @@ ClassMethod Match(conditions As %DynamicObject, facts As %DynamicObject = "") As
             }
         }
     }
-    Quit out
+}
+
+/// The scope facts of a case (6.8), which a site entry's scope names: the receiver, the sending application, the ward the
+/// failed message names and the receiver's own reason word. Each is fixed when the case opens, and none names a patient.
+ClassMethod Scope(case As Shutter.Store.Case, summary As %DynamicObject) As %DynamicObject
+{
+    Set json = "Shutter.Util.Json", s = {}
+    Set s.receiver = case.Receiver
+    Set op = $SELECT($ISOBJECT(summary): summary.%Get("operation"), 1: "")
+    Set source = $SELECT($ISOBJECT(op): $CLASSMETHOD(json, "Str", op, "source_system"), 1: "")
+    Set s."source_system" = $SELECT(source '= "": source, 1: $PIECE(case.OperationKey, "^", 1))
+    Set s.ward = case.Ward
+    Set error = $SELECT($ISOBJECT(summary): ..Item(summary, "error"), 1: "")
+    Set reason = $SELECT($ISOBJECT(error): $CLASSMETHOD(json, "Str", error, "reason_code"), 1: "")
+    Set s."reason_code" = $ZCONVERT($SELECT(reason '= "": reason, 1: case.FailureReasonCode), "L")
+    Quit s
+}
+
+/// Whether a site entry's scope holds: every fact it lists has one of the values allowed (the reason word whatever its
+/// case). A fact the case does not have never holds, and an entry with no scope holds everywhere.
+ClassMethod ScopeHolds(scope As %DynamicObject, facts As %DynamicObject) As %Boolean
+{
+    If '$ISOBJECT(scope) Quit 1
+    Set iter = scope.%GetIterator()
+    While iter.%GetNext(.name, .allowed) {
+        Set fact = $SELECT($ISOBJECT(facts): ##class(Shutter.Util.Json).Str(facts, name), 1: "")
+        If fact = "" Return 0
+        If name = "reason_code" Set fact = $ZCONVERT(fact, "L")
+        Set ok = 0
+        If $ISOBJECT(allowed) {
+            Set it2 = allowed.%GetIterator()
+            While it2.%GetNext(, .v) { If $SELECT(name = "reason_code": $ZCONVERT("" _ v, "L"), 1: "" _ v) = fact Set ok = 1 Quit }
+        } Else {
+            Set ok = ($SELECT(name = "reason_code": $ZCONVERT("" _ allowed, "L"), 1: "" _ allowed) = fact)
+        }
+        If 'ok Return 0
+    }
+    Quit 1
+}
+
+/// Whether a site entry's pattern holds. As Holds, except that a condition these conditions do not carry at all is passed
+/// over: a brake written for a condition this release no longer computes applies more widely, never less (R14).
+ClassMethod SiteHolds(pattern As %DynamicObject, conditions As %DynamicObject) As %Boolean
+{
+    If '$ISOBJECT(pattern) Quit 0
+    If '$ISOBJECT(conditions) Quit 1
+    Set iter = pattern.%GetIterator()
+    While iter.%GetNext(.name, .allowed) {
+        Continue:'conditions.%IsDefined(name)
+        Set observed = ##class(Shutter.Util.Json).Str(conditions, name)
+        If $ISOBJECT(allowed) {
+            Set ok = 0
+            Set it2 = allowed.%GetIterator()
+            While it2.%GetNext(.j, .v) { If ("" _ v) = observed Set ok = 1 Quit }
+            If 'ok Return 0
+        } Else {
+            If ("" _ allowed) '= observed Return 0
+        }
+    }
+    Quit 1
 }
 
 /// Whether a pattern holds: every listed condition's observed value is among the allowed ones.
@@ -643,7 +768,7 @@ ClassMethod ForCase(caseId As %String, chainKind As %String = "") As %String [ S
     Set snap = case.CurrentSnapshot
     If '$ISOBJECT(snap) Quit {"error": "The case has no snapshot"}.%ToJSON()
     Set summary = snap.SummaryObject()
-    Set result = ..Match(..Conditions(case, summary, chainKind), ..Facts(summary, case))
+    Set result = ..Match(..Conditions(case, summary, chainKind), ..Facts(summary, case), ..Scope(case, summary))
     Set result."case_id" = caseId, result.scenario = case.Scenario
     Quit result.%ToJSON()
 }
