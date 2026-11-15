@@ -79,7 +79,7 @@ Set sc=##class(EnsLib.Workflow.UserDefinition).CreateUser("appr1","An approver")
 Set sc=##class(EnsLib.Workflow.RoleDefinition).AddUserToRole("Shutter Approvers","appr1",1,"Approver") Write $SYSTEM.Status.GetErrorText(sc),!
 ```
 
-Each line prints nothing when it worked. Then sign in as each role at `/shutter/index.html` and check that the operator can't approve. Leave the provider key out for now ([section 8](#8-the-budget-and-the-model-provider)).
+Each line prints nothing when it worked. An operator is the same first call with `Shutter_Operator` and no Workflow lines; [INSTALL 9.3](../INSTALL.md#9-onboarding-several-namespaces) makes the forwarder's user. An approver outside the Workflow role is refused 403 only on a case awaiting approval: with no plan waiting, any approval answers 409 `wrong_state`, because the state check comes first. Then sign in as each role at `/shutter/index.html` and check that the operator can't approve. Leave the provider key out for now ([section 8](#8-the-budget-and-the-model-provider)).
 
 ## 3. Shadow mode first
 
