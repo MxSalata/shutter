@@ -735,6 +735,15 @@ ClassMethod SourceCodes(ByRef codes)
         Set matcher = ##class(%Regex.Matcher).%New("""([A-Z][A-Z_]*[A-Z])""", source)
         While matcher.Locate() { Set codes(matcher.Group(1)) = "" }
     }
+    // The rows this gate gives through the main gate's class methods.
+    For name = "ConformanceRows", "IntentOpening", "MergeCancelRows", "ExactRow", "FurtherRows", "LaterEventRow", "CatalogueRows", "OutcomeConsistency" {
+        Set m = ##class(%Dictionary.MethodDefinition).%OpenId("Shutter.Operation.Gate||" _ name), source = ""
+        Continue:'$ISOBJECT(m)
+        Do m.Implementation.Rewind()
+        While 'm.Implementation.AtEnd { Set source = source _ m.Implementation.ReadLine() _ $CHAR(10) }
+        Set matcher = ##class(%Regex.Matcher).%New("""([A-Z][A-Z_]*[A-Z])""", source)
+        While matcher.Locate() { Set codes(matcher.Group(1)) = "" }
+    }
 }
 
 /// What is wrong with the shape of a decision, or "": a check without exactly its four keys, a result that is not

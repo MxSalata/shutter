@@ -516,7 +516,7 @@ Method TestEveryReasonCodeHasARow()
         While it2.%GetNext(.j, .e) { Set asserted(e.%Get(2)) = "" }
     }
     Set codes = ""
-    For method = "OnGateRequest", "OutcomeConsistency", "BedConflictCheck" {
+    For method = "OnGateRequest", "OutcomeConsistency", "BedConflictCheck", "ConformanceRows", "IntentOpening", "MergeCancelRows", "ExactRow", "FurtherRows", "LaterEventRow", "CatalogueRows" {
         Set source = ..Source("Shutter.Operation.Gate", method)
         Set m = ##class(%Regex.Matcher).%New("""([A-Z][A-Z_]*[A-Z])""", source)
         While m.Locate() { Set codes(m.Group(1)) = "" }
