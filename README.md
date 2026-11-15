@@ -161,7 +161,9 @@ For an API-recovery incident, one approval binds the incident's plan. Its cases 
 
 ### Two recovery contracts
 
-**What Shutter may do depends on the receiver.** A case resends a patient movement only to a receiver that offers the API in the first column; a FHIR R4 entry allows the one narrower update described under the table. The demo's bed manager offers that API; a site's own receiver must be shown to. Until a receiver of yours has it, help means a case and a drafted email, never a resend from the case. That includes every plain MLLP receiver with no API and no FHIR entry: an ACK says a message arrived, not what the receiver now holds. The one resend such a receiver can get is an outage's, through the engine (second column), where its site profile entry is set up for it. [What each kind of receiver gets](https://github.com/MxSalata/shutter/blob/main/docs/readme/first-steps.md#what-a-receiver-gets)
+![What Shutter may do depends on the receiver, in four columns. A receiver with the recovery API (S2): one mapped operation is sent, released by a person or by site policy, an agent's plan always by a person, and verified at the receiver from its receipt and history. A FHIR R4 receiver, IRIS for Health's own server (S35): one PUT with If-Match to an existing Encounter, released by a person every time, verified in the Encounter's history, with no dry run and no receipt. An engine outage at a receiver set to engine_resend (P2): the stored HL7 messages, unchanged and in order, under one approval bound to the offered set, completed in the engine and not verified at the receiver. Any other receiver, plain MLLP included: nothing is sent from the case; a person sends the drafted email, because an ACK says a message arrived, not what the receiver holds](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/what-each-receiver-gets.png)
+
+**What Shutter may do depends on the receiver.** A case resends a patient movement only to a receiver that offers the API in the first column; a FHIR R4 entry allows the one narrower update described under the table. The demo's bed manager offers that API; a site's own receiver must be shown to. A plain MLLP receiver with no API and no FHIR entry gets no resend from a case; the one resend it can get is an outage's, through the engine (second column), where its site profile entry is set up for it. [What each kind of receiver gets](https://github.com/MxSalata/shutter/blob/main/docs/readme/first-steps.md#what-a-receiver-gets)
 
 | | Case recovery through the receiver's API | Outage recovery through the engine |
 | --- | --- | --- |
@@ -178,14 +180,9 @@ The [receiver contract](https://github.com/MxSalata/shutter/blob/main/docs/readm
 
 ## Where the agents sit
 
-The board is four business operations inside the production, not an external service attached to its logs. Each is a `Shutter.Bridge.Operation.Agent` item (Agent Conformance, Agent Encounter, Agent Impact, Agent Coordinator) running the `%AI.Agent` subclass named in its `AgentClass` setting:
+![Where the agents sit, as a diagram. In the hospital's production a delivery fails and the Shutter Forwarder posts it to Shutter's production on IRIS for Health with AI Hub. There Case Workflow runs one instance per case and every step is a message to another item: Case Intake, the Evidence Collector, the board, the Gate with its twelve checks run twice, the Shutter Approvers Workflow task, Downstream Out with one conditional write, and the Verifier. The board is the only part that calls a model: Agent Conformance, Agent Encounter and Agent Impact run in parallel and Agent Coordinator makes one plan with the dissent kept, and none has a write tool. A reduced copy leaves IRIS for the model provider, with tokens such as MRN-T1, demographics dropped, and nothing sent if the token map cannot be built. The receiver gets a dry run, one write and a read back](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/where-the-agents-sit.png)
 
-| Member | Its view |
-| --- | --- |
-| Conformance specialist | The message |
-| Encounter specialist | The encounter's history |
-| Impact specialist | The effect on the receiver |
-| Coordinator | The specialists' findings, combined into one plan with reasons and recorded dissent |
+The board is four business operations inside the production, not an external service attached to its logs. Each is a `Shutter.Bridge.Operation.Agent` item (Agent Conformance, Agent Encounter, Agent Impact, Agent Coordinator) running the `%AI.Agent` subclass named in its `AgentClass` setting. The coordinator combines the specialists' findings into one plan with its reasons and any dissent recorded.
 
 The specialists run in parallel. Their typed tools read the sealed evidence and search interface knowledge, and each run ends with a submit tool that returns a finding or a plan; no tool writes to a receiver. Case-scoped authorisation, a pinned list of tool names and evidence-reference checks constrain each run. Every tool call is audited in the production's **Visual Trace**.
 
