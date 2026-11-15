@@ -20,23 +20,14 @@
   <a href="https://openexchange.intersystems.com/package/Shutter"><img src="https://img.shields.io/badge/Open%20Exchange-Shutter-00b2a9" alt="Open Exchange" /></a>
 </p>
 <p align="center">
-  <a href="https://mxsalata.github.io/shutter/"><b>Trial</b> (no IRIS)</a> ·
-  <a href="https://shutter.mxsalata.com"><b>Online demo</b> (real IRIS)</a> ·
-  <a href="https://github.com/MxSalata/shutter#for-judges">For judges</a> ·
-  <a href="https://youtu.be/InZx2MYJ47k"><b>Walkthrough</b> (13 minutes)</a> ·
-  <a href="https://youtu.be/ZBnAqKTfdvM">Two-minute video</a> ·
+  <a href="https://github.com/MxSalata/shutter#for-judges"><b>For judges</b></a> ·
   <a href="https://github.com/MxSalata/shutter/blob/main/docs/readme/how-shutter-works.md">How Shutter works (guide)</a> ·
-  <a href="https://github.com/MxSalata/shutter/blob/main/docs/readme/integrating-at-your-trust.md">At your trust (guide)</a>
-</p>
-<p align="center"><sub>
+  <a href="https://github.com/MxSalata/shutter/blob/main/docs/readme/integrating-at-your-trust.md">At your trust (guide)</a> ·
   <a href="https://github.com/MxSalata/shutter#what-has-been-measured">Results</a> ·
   <a href="https://github.com/MxSalata/shutter#where-the-agents-sit">The agents</a> ·
-  <a href="https://github.com/MxSalata/shutter#try-it">Install (Docker or IPM)</a> ·
   <a href="https://github.com/MxSalata/shutter#limits-plainly">Limits</a> ·
-  <a href="https://openexchange.intersystems.com/package/Shutter">Open Exchange</a> ·
-  <a href="https://github.com/MxSalata/shutter/blob/main/CHANGELOG.md">What's new</a> ·
-  <a href="https://github.com/MxSalata/shutter/releases/download/v1.4.5/shutter-overview.mp4">Two-minute video (MP4)</a>
-</sub></p>
+  <a href="https://github.com/MxSalata/shutter/blob/main/CHANGELOG.md">What's new</a>
+</p>
 <p align="center"><sub>Current release 1.4.8; the videos and measurements were recorded on the releases named beside them.</sub></p>
 
 **Shutter is my vision for the hundreds of failed HL7 messages that go unactioned, or that system administrators and integration engineers have to review by hand. Its main point is to pick up those failures, so that integration engineers can do their projects instead of firefighting failures every day.**
@@ -47,11 +38,7 @@ On an ordinary day a hospital's integration engine can see hundreds of failed me
 - **Integration engineers:** [what a receiver must offer](https://github.com/MxSalata/shutter#two-recovery-contracts) · [Integrating at your trust](https://github.com/MxSalata/shutter/blob/main/docs/readme/integrating-at-your-trust.md) · [at your site](https://github.com/MxSalata/shutter#at-your-site-investigate-first-enable-recovery-deliberately) · [limits](https://github.com/MxSalata/shutter#limits-plainly)
 - **Installing:** [two IPM commands, or Docker](https://github.com/MxSalata/shutter#try-it) · [How Shutter works](https://github.com/MxSalata/shutter/blob/main/docs/readme/how-shutter-works.md) · [contracts](https://github.com/MxSalata/shutter/blob/main/docs/CONTRACTS.md)
 
-<p align="center">
-  <a href="https://youtu.be/InZx2MYJ47k"><img src="https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/walkthrough.jpg" width="640" alt="A frame of the 13-minute walkthrough: case C-000002 on the live demo hospital, delivered and verified at the receiver, with the author narrating. Opens the video on YouTube" /></a>
-</p>
-
-**Watch it on a real IRIS production:** I recorded this [13-minute walkthrough](https://youtu.be/InZx2MYJ47k) and narrated it myself. After a short start in the trial it runs live on the online demo, from an escalated case to an approved resend verified at the receiver (recorded on release 1.4.4). A [two-minute cut](https://youtu.be/ZBnAqKTfdvM) shows one recovery.
+**Watch it on a real IRIS production:** I recorded a [13-minute walkthrough](https://youtu.be/InZx2MYJ47k) and narrated it myself. After a short start in the trial it runs live on the online demo, from an escalated case to an approved resend verified at the receiver (recorded on release 1.4.4). A [two-minute cut](https://youtu.be/ZBnAqKTfdvM) shows one recovery ([MP4](https://github.com/MxSalata/shutter/releases/download/v1.4.5/shutter-overview.mp4)).
 
 **When a hospital's HL7 delivery fails, the usual fix is Resend, and when two systems move a patient at the same moment, that resend can write over the bed manager's newer ward. Shutter's IRIS AI Hub agents decide how to put the failure right; a deterministic gate decides whether anything is written.**
 
