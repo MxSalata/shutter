@@ -32,8 +32,8 @@ decision on a case already decided is refused with who decided first.
   the review stops and says the change may be that decision: the Audit trail says who decided. It never says nothing was
   decided.
 - **The approval of an outage's resend** whose answer never came says it can't tell whether it was recorded, and points to
-  the card, which is read again. Only an offered set can be approved, so a second approval of a set already approved is
-  refused ([CONTRACTS 17.8](https://github.com/MxSalata/shutter/blob/main/docs/CONTRACTS.md#178-the-send-v151-to-v154)).
+  the card, which is read again. Its confirming button stays off until the dialog is opened again, and "Already handled by
+  hand" does the same. Only an offered set can be approved, so a second approval of a set already approved is refused ([CONTRACTS 17.8](https://github.com/MxSalata/shutter/blob/main/docs/CONTRACTS.md#178-the-send-v151-to-v154)).
 - **A recovery write whose answer was lost** is recorded as `uncertain`, never as sent or not sent, and the verification
   reads the receiver's receipt and history to settle it
   ([CONTRACTS 5.1](https://github.com/MxSalata/shutter/blob/main/docs/CONTRACTS.md#51-attempts-and-verification-v121)).

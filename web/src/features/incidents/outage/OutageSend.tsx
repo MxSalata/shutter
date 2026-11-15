@@ -157,7 +157,8 @@ export function ApproveResend({ outage: o }: { outage: Outage }) {
               leftSection={<IconSend size={16} aria-hidden />}
               onClick={submit}
               loading={approve.isPending}
-              disabled={!note.trim() || (needsCheck && !checked)}
+              // After an answer that never came the approval may stand: the words say to close this, so no second press
+              disabled={!note.trim() || (needsCheck && !checked) || answerLost(approve.error)}
             >
               Approve and resend
             </Button>
@@ -256,7 +257,12 @@ export function HandledByHand({ outage: o, row }: { outage: Outage; row: OutageR
             <Button variant="default" onClick={() => setOpened(false)} disabled={act.isPending}>
               Cancel
             </Button>
-            <Button onClick={submit} loading={act.isPending} disabled={!note.trim()}>
+            <Button
+              onClick={submit}
+              loading={act.isPending}
+              // After an answer that never came the closure may be recorded: the words say to close this, so no second press
+              disabled={!note.trim() || answerLost(act.error)}
+            >
               Close it, send nothing
             </Button>
           </Group>
