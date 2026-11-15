@@ -19244,6 +19244,13 @@
               "type": "string"
             }
           },
+          "warnings": {
+            "type": "array",
+            "description": "What the impact could not count: cases that could not be read, a scan stopped at its time limit.",
+            "items": {
+              "type": "string"
+            }
+          },
           "context": {
             "type": "object"
           },

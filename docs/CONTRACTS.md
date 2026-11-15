@@ -1273,8 +1273,8 @@ it got there, can authorise a write or a closure.
 - **R6.** Writing, proving and proposing need `Shutter_Configure`; approving needs `Shutter_Approve`; the approver is
   neither the person who proposed the action nor the person who last changed the proposed version (409 `same_person`),
   user names compared whatever their letters' case, as IRIS signs them in. Only an IRIS administrator lifts this, from the terminal (`Shutter.Setup.SiteEntriesOnePerson(1, reason)`, which needs
-  `%Admin_Manage` and answers "from the terminal only" over SQL or HTTP); it is recorded as an event and warned about for
-  as long as it holds. It is not a site profile field.
+  `%Admin_Manage` and answers "from the terminal only" over SQL or HTTP); it is recorded as an event, written in one
+  transaction with the lift (a lift whose event cannot be written is not made), and warned about for as long as it holds. It is not a site profile field.
 - **R7.** The approver sends the action, the version and the digest they read; another is 409 `digest_mismatch`.
 - **R8.** No activation or resumption without a passing proof of that digest with at least one `match` fixture and at
   least one `no_match` fixture (a near miss), run again at the approval.
@@ -1298,7 +1298,8 @@ it got there, can authorise a write or a closure.
   fact's row has `part: "scope"`). A `match` fixture the entry, as it now stands, no longer matches as a whole, a receiver
   or a team the profile no longer names, a near miss the entry now matches, and a shipped entry that asks for a person on
   every case the pattern matches are flagged and change nothing. A fixture whose case is no longer stored is checked
-  against the vocabulary only, and is noted. Nothing is retired or narrowed by an upgrade or a profile save: what one
+  against the vocabulary only, and is noted. A fixture whose case is stored but whose evidence this release cannot read
+  is a failure, never taken for a purge: the entry is flagged with "Case C-... is stored, but ...". Nothing is retired or narrowed by an upgrade or a profile save: what one
   recheck dropped stays dropped and the flag stays set, through every later recheck, until a newly approved version of
   the entry clears them (a resumption keeps them). A recheck that widens an active entry raises the generation, so a plan
   made before it is not completed (R17), as after an activation. The release is recorded as checked only when every entry
@@ -1316,7 +1317,11 @@ it got there, can authorise a write or a closure.
   catalogue version is treated so only on a site that has ever activated an entry.
 - **R18.** On a case a site entry matched, a closure never happens without a person. A board a person convenes on such a
   case (14.5) may plan to close it, naming no entry, which the gate passes (`ENTRY_NOT_NAMED`): the workflow sends the
-  case to a person with the board's reasoning, as a partial board's closure goes (6.6). The two closures that run outside
+  case to a person with the board's reasoning, as a partial board's closure goes (6.6). The case records the first site
+  entry whose match any of its evidence carried (`Shutter.Store.Case.SiteEntry`, set when the evidence is taken in every
+  mode, kept for the case's life and by every whole save), and the hold reads that as well as the plan's own snapshot:
+  a case the system or a person reopens, whose fresh evidence no longer matches the entry, is still never closed without
+  a person, and the closures below read the record too. The two closures that run outside
   the case workflow hold to it too. When the engine itself delivered the message (the gate's `ENGINE_DELIVERED` at the
   proposal or the dispatch gate, or the releaser's read of a case waiting on the engine, `Shutter.Util.EngineCheck.Settle`),
   or an outage closes over the case (`Shutter.Operation.OutageClose`, 17), the delivery is recorded as a note on the case
@@ -1366,7 +1371,8 @@ or suspended entry with an open proposal carries `proposal`.
 the digest of the snapshot it was read from, the chain kind the case had, and a copy of its conditions and scope facts
 (words, no patient data). A proof replays the stored snapshot through this release's matcher, sending nothing and writing
 nothing on any case; when the case or that snapshot is no longer stored (the retention task, a demo's reset) the frozen
-copy answers and the row says `source: "frozen"`.
+copy answers and the row says `source: "frozen"`. A stored case whose evidence this release cannot read answers
+`source: "error"` with `why`, and the proof does not pass.
 
 - **P1.** On each `match` fixture the entry's own scope and pattern hold, and with the entry laid over the active ones it
   leads alone: `person`, `escalate`. A row names what leads otherwise.
@@ -1374,7 +1380,8 @@ copy answers and the row says `source: "frozen"`.
 - **P4.** The last 200 stored cases (10 s at most) are matched now with and without the entry: `impact` is `{scanned,
   caught, unread, capped, groups, cases}`, the cases it would lead counted and listed by id under what each would have done
   without it (`automatic_resend`, `approved_resend`, `closure`, `board`, `person`, `new_pattern`, `other_site_entry`). A
-  retirement's proof is this list read the other way and needs no fixture.
+  retirement's proof is this list read the other way and needs no fixture; it does not pass when none of the cases it
+  scanned could be read. `warnings` says how many could not be read, and when the scan stopped at its time limit.
 - **P5.** The proof's `context` is what it is bound to: the action, the digest, the shipped catalogue's version, the other
   active site entries, the gate's policy version, the site profile's version and the release. A proof under another
   context is stale: 409 `no_proof` at the proposal, 409 `proof_failed` at the approval unless a person has run the proof
