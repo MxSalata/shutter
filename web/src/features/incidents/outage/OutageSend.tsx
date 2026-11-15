@@ -7,7 +7,7 @@ import { newIdempotencyKey } from '@/api/client';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { StatusBadge, StatusNotice } from '@/components/StatusBadge';
 import { Timestamp } from '@/components/Timestamp';
-import { isApiError } from '@/lib/errors';
+import { answerLost, isApiError } from '@/lib/errors';
 import { useApproveOutage, useOutageAct } from './hooks';
 import { TechDetail } from '@/components/TechDetail';
 import {
@@ -140,7 +140,12 @@ export function ApproveResend({ outage: o }: { outage: Outage }) {
             is sent.
           </Text>
           {approve.isError ? (
-            <StatusNotice tone="blocking" title="Not approved" role="alert">
+            // An answer that never came is no refusal: the approval may stand, so it is never headed "Not approved"
+            <StatusNotice
+              tone={answerLost(approve.error) ? 'attention' : 'blocking'}
+              title={answerLost(approve.error) ? 'No answer came back' : 'Not approved'}
+              role="alert"
+            >
               <Text size="sm">{refusalWords(approve.error)}</Text>
             </StatusNotice>
           ) : null}
@@ -236,7 +241,12 @@ export function HandledByHand({ outage: o, row }: { outage: Outage; row: OutageR
             data-autofocus
           />
           {act.isError ? (
-            <StatusNotice tone="blocking" title="Not recorded" role="alert">
+            // An answer that never came is no refusal: the closure may be recorded, so it is never headed "Not recorded"
+            <StatusNotice
+              tone={answerLost(act.error) ? 'attention' : 'blocking'}
+              title={answerLost(act.error) ? 'No answer came back' : 'Not recorded'}
+              role="alert"
+            >
               <Text size="sm">
                 {refusalWords(act.error).replace('Nothing was sent', 'Nothing was recorded')}
               </Text>

@@ -382,6 +382,44 @@ describe('OutageSection', () => {
     );
   });
 
+  it('heads an approval whose answer never came "No answer came back", never "Not approved", as a warning', async () => {
+    serve({ items: [offeredAtUnknown()], receivers: [] });
+    server.use(http.post('/api/shutter/outages/7/approvals', () => HttpResponse.error()));
+    renderSection();
+    const card = await screen.findByRole('region', { name: 'Outage 7, Results Out' });
+    await userEvent.click(await within(card).findByRole('button', { name: 'Approve the resend…' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Approve the resend' });
+    await userEvent.type(within(dialog).getByRole('textbox', { name: /What was checked/ }), 'Checked');
+    await userEvent.click(within(dialog).getByRole('checkbox'));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Approve and resend' }));
+    const notice = await within(dialog).findByRole('alert');
+    expect(notice).toHaveAttribute('data-tone', 'attention');
+    expect(notice).toHaveTextContent(
+      /^No answer came back.*No answer came back \(.+\), so this page can't tell whether it was recorded\. Close this and check the card once it is read again: it shows what was recorded\.$/,
+    );
+    expect(notice).not.toHaveTextContent(/Not approved|Nothing was sent/);
+  });
+
+  it('heads a hand closure whose answer never came "No answer came back", never "Not recorded", as a warning', async () => {
+    serve({ items: [offeredAtUnknown()], receivers: [] });
+    server.use(http.post('/api/shutter/outages/7/acts', () => HttpResponse.error()));
+    renderSection();
+    const card = await screen.findByRole('region', { name: 'Outage 7, Results Out' });
+    await userEvent.click(
+      await within(card).findByRole('button', { name: 'Already handled by hand: control id CF' }),
+    );
+    const dialog = await screen.findByRole('dialog', { name: 'Already handled by hand' });
+    await userEvent.type(
+      within(dialog).getByRole('textbox', { name: /What you checked at the receiver/ }),
+      'Entered by hand',
+    );
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Close it, send nothing' }));
+    const notice = await within(dialog).findByRole('alert');
+    expect(notice).toHaveAttribute('data-tone', 'attention');
+    expect(notice).toHaveTextContent(/^No answer came back.*can't tell whether it was recorded/);
+    expect(notice).not.toHaveTextContent(/Not recorded|Nothing was recorded/);
+  });
+
   it.each([
     [
       'stopped',
