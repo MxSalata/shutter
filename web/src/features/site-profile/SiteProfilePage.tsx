@@ -291,7 +291,7 @@ function ReceiverFields({
         />
         <QuestionDetails
           keys={[[at('tier'), r.tier]]}
-          more="The tier is how sensitive the receiver is. It picks the row of the approval table: who releases a write to it. Your clinical safety officer sets the tier from the site's hazard assessment. The examples are only examples: a receiver clinicians act on, such as a bed manager they read, may belong at tier 3. The demo's bed manager is tier 2 to show a release by policy."
+          more="The tier is how sensitive the receiver is. It picks the row of the approval table: who releases a write to it. Your clinical safety officer sets the tier from the site's hazard assessment. The examples are only examples: a receiver clinicians act on, such as a bed manager they read, may belong at tier 3. On a demo install the bed manager is tier 2 to show a release by policy; the online demo asks a person there too."
         />
         <Question n={4} text="Does it apply messages in arrival order or by event time?" acts={false} />
         <Choice
