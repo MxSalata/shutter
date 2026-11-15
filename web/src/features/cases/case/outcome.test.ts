@@ -15,6 +15,7 @@ import { caseOutcome, ranOnIris } from '@/lib/status';
 import {
   actionHead,
   actionHeadline,
+  closedByReset,
   decisionSummary,
   evidenceSummary,
   failedSummary,
@@ -129,6 +130,59 @@ describe('the outcome sentence', () => {
       role: '',
       escalate: false,
     });
+  });
+
+  it('says another scenario run closed a case its reset left behind, never that an approver gave it up', () => {
+    // The labels Shutter.Store.Case Open gives a case a later run's reset closes (Shutter.Test.Abandon pins them)
+    const reset = (id: Id, change: Partial<CaseFacts> = {}): CaseFacts => {
+      const f = factsOf(id, change);
+      return {
+        ...f,
+        c: {
+          ...f.c,
+          state: 'failed',
+          disposition: 'abandoned',
+          headline: 'Abandoned: another scenario run reset the receiver',
+          outcome:
+            'Abandoned: a new scenario run reset the downstream system after this case was opened; nothing more is sent',
+        },
+      };
+    };
+    const waiting = reset('C-000008');
+    expect(closedByReset(waiting.c)).toBe(true);
+    expect(actionHeadline(waiting)).toBe('Closed when another scenario run reset the receiver; sent nothing');
+    expect(actionHeadline(waiting, false)).toBe(
+      'Closed when another scenario run reset the receiver; sent nothing',
+    );
+    expect(outcomeReason(waiting)).toBe(
+      'Another scenario run reset the receiver after this case was opened, so Shutter closed the case; no person gave it up, and nothing more is sent.',
+    );
+    expect(nextAction(waiting)).toMatchObject({ kind: 'none', role: '' });
+    // A write already out stays said, and a write count not read yet is never guessed
+    expect(actionHeadline(reset('C-000002'))).toBe(
+      'Sent the transfer again, once, after a test run; then closed when another scenario run reset the receiver',
+    );
+    expect(actionHeadline(reset('C-000008', { attempts: undefined }))).toBe(
+      'Closed when another scenario run reset the receiver; what it sent is not read yet',
+    );
+    // An approver's abandon keeps its own words
+    const f = factsOf('C-000008');
+    const byApprover = {
+      ...f,
+      c: {
+        ...f.c,
+        state: 'failed' as const,
+        disposition: 'abandoned' as const,
+        headline: 'Abandoned by approver. the instance died in the restart',
+        outcome:
+          'Abandoned, recorded by approver: the instance died in the restart. The workflow stopped in collecting; nothing more is sent',
+      },
+    };
+    expect(closedByReset(byApprover.c)).toBe(false);
+    expect(actionHeadline(byApprover)).toBe('Gave the case up when its workflow stopped moving');
+    expect(outcomeReason(byApprover)).toMatch(
+      /^An approver gave the case up after its workflow stopped moving; /,
+    );
   });
 
   it('says whether the hand-off went out', () => {

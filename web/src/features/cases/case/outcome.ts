@@ -104,6 +104,21 @@ const personRejected = (f: CaseFacts) =>
 
 const lowerFirst = (t: string) => t.charAt(0).toLowerCase() + t.slice(1);
 
+/**
+ * Whether a later scenario run closed the case (Shutter.Store.Case Open): that run's reset of the receiver left the case
+ * nothing to act on, so the server closed it with disposition abandoned, though no person acted. Told apart from an
+ * approver's abandon ("Abandoned by <who>. <reason>") by the server's own headline, or its outcome.
+ */
+export function closedByReset(c: Pick<CaseDetail, 'disposition' | 'headline' | 'outcome'>): boolean {
+  return (
+    c.disposition === 'abandoned' &&
+    ((c.headline ?? '').startsWith('Abandoned: another scenario run reset the receiver') ||
+      (c.outcome ?? '').startsWith('Abandoned: a new scenario run reset the downstream system'))
+  );
+}
+
+const CLOSED_BY_RESET = 'Closed when another scenario run reset the receiver';
+
 /** The write the receiver acknowledged, as "version 1 to 2", from the attempt's receipt. */
 function appliedVersions(attempts: AttemptView[] | null | undefined): string {
   for (const x of [...(attempts ?? [])].reverse()) {
@@ -203,6 +218,13 @@ export function actionHeadline(f: CaseFacts, technical = true): string {
     ? fhirUpdated(sent)
     : `Sent the ${event} again, ${times(sent)}${rehearsed(f) ? ', after a test run' : ''}`;
   if (c.disposition === 'handled_by_hand') return 'Handed it to the team, who corrected it by hand';
+  // Closed by another run's reset, not given up by a person: what it had sent, as a failed case says it
+  if (closedByReset(c)) {
+    if (unknown) return `${CLOSED_BY_RESET}; what it sent is not read yet`;
+    return sent > 0
+      ? `${sentAgain}; then ${lowerFirst(CLOSED_BY_RESET)}`
+      : `${CLOSED_BY_RESET}; sent nothing`;
+  }
   if (c.disposition === 'abandoned') return 'Gave the case up when its workflow stopped moving';
   if (c.disposition === 'already_delivered')
     return 'Already delivered: resent with the outage, and the receiver reported it already holds it';
@@ -318,6 +340,9 @@ export function outcomeReason(f: CaseFacts, technical = true): string {
       ]);
     }
     case 'failed':
+      // The server's outcome says "Abandoned", but no person acted: say who closed it
+      if (closedByReset(c))
+        return 'Another scenario run reset the receiver after this case was opened, so Shutter closed the case; no person gave it up, and nothing more is sent.';
       return sentence([
         c.disposition === 'abandoned'
           ? 'an approver gave the case up after its workflow stopped moving'

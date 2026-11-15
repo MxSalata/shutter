@@ -67,7 +67,8 @@ function SideCard({
 }) {
   const verdict = caseOutcome(side.outcome, scenario);
   const wrong = verdict.key === 'not-as-expected';
-  // A person closing the case isn't the scenario's outcome, right or wrong: its expected disposition no longer applies
+  // A person closing the case isn't the scenario's outcome, right or wrong: its expected disposition no longer applies.
+  // Nor is another run's reset closing it, which the server also labels abandoned (outcome.ts closedByReset)
   const closedByPerson = verdict.key === 'handled-by-hand' || verdict.key === 'abandoned';
   // Which side did what the scenario asks: the edge of its card, so the two can be told apart at a glance
   const edge: Tone | undefined = wrong
