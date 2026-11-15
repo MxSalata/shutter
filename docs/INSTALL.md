@@ -534,16 +534,33 @@ back as shipped: a pool size raised in the Production Configuration page (`Recei
   production: its actor pool size, testing and trace flags, description and settings. And the items the site added, whole.
 - **What still arrives.** A new item, a new setting, and a new value for a setting the site never set take the package's
   values. An item whose class changed is the package's.
+- **What stays the install's.** The six demo items' enabled flags follow the demo flag: a site's install switches them
+  off, and when an install changes the flag (`-Ddemo`), what was recorded for them goes. The Second Parser's flag follows its
+  jar on the first upgrade to 1.4.9. The four server settings of `FHIR Receiver` and `FHIR Out` and of each receiver's
+  connector item come from their records at every install (`docs/CONTRACTS.md`, `RestoreItems`; section 9), so move those
+  through the calls that keep the records, not in the Production Configuration page.
 - **How.** The module notes the definition before IPM reloads the classes; the install, run by hand as above, notes it
   at its start. After its own changes the install puts the site's values back, updates the running production, and prints
   one line, such as `Shutter: on Shutter.Production, the site's values put back: Receiver Watch: PoolSize 3; ...`. It
   records the site's values and the definition it left in `^Shutter.Config("siteItems")`, and that line's account as JSON
-  in `^Shutter.Config("siteItems", "last")`.
+  in `^Shutter.Config("siteItems", "last")`. Between the production's update with the package's definition and this one,
+  a few seconds, an item the site switched off runs and the pool sizes are the package's. When the class cannot be written
+  (a source-control hook, say) or the running production does not take the update, the line says so after `to check:`; the
+  definition is saved, and the next restart or install applies it.
+- **A load that stops partway** keeps the definition it noted until an install completes, however long that takes, so run
+  the load again (or the install by hand) before changing the production's items; a note more than a day old is named in
+  the line.
 - **Over 1.4.8 or earlier** there is no record yet, so the install takes every value that differs from the new definition
-  to be the site's, apart from comments, categories and the production's description. 1.4.9's production is 1.4.8's and
-  1.4.7's, so nothing of Shutter's is taken for the site's. A later release installed straight over 1.4.8 or earlier would
-  keep the earlier value of any setting that release changed, so upgrade to 1.4.9 first. With no record nothing counts as taken out, and an added
-  item of a Shutter class is left out (the line says so).
+  to be the site's, apart from comments, categories, the production's description and the values above that stay the
+  install's. That holds while 1.4.9's `Shutter.Production` is 1.4.8's (unchanged since 1.4.7): a change to it in 1.4.9 would
+  be kept at its earlier value on every instance upgraded from 1.4.8 or earlier. A later release installed straight over
+  1.4.8 or earlier would keep the earlier value of any setting that release changed, so upgrade to 1.4.9 first. With no
+  record nothing counts as taken out, and an added item of a Shutter class is left out (the line says so).
+- **Giving a value back to Shutter.** A value the site set stays the site's, even one set back to Shutter's own, so a
+  later release's new value for it does not arrive. To hand an item of Shutter's back, remove its record in the SHUTTER
+  namespace, `Kill ^Shutter.Config("siteItems", "site", "i", "Receiver Watch")` (or one property,
+  `Kill ^Shutter.Config("siteItems", "site", "i", "Receiver Watch", "p", "PoolSize")`), and set the value back in the
+  Production Configuration page if it differs: the next install takes the package's.
 - **Not kept.** The system default settings Shutter writes ("Set by Shutter.Setup": the feed's folders and the receiver's
   address, from Shutter's own configuration), the demo hospital's production, and an item of Shutter's that the site
   deleted, which comes back: switch it off instead. In shape B (section 4) the install never rebuilds the site's
