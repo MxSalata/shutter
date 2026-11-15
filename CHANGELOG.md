@@ -4,6 +4,41 @@ Versions follow `major.minor.patch`: a minor release for new features, a patch r
 updates. The version in both `module.xml` files (the one the package manager publishes) is always the version of the
 GitHub tag on the same commit; `scripts/check-versions.py` checks every place the version is written.
 
+## 1.4.9 (16 November 2026)
+
+An upgrade keeps the settings a site gave Shutter's production items, a change whose answer never reached the page is
+said as lost rather than refused, Settings says what each task needs, `docker compose up` builds on the contest's build
+154, and the 1.4.3 grading can be repeated by command.
+
+- **An upgrade keeps a site's item settings.** A pool size or a switched-off item that a site set on
+  `Shutter.Production` stands after an upgrade, where the install used to put the shipped values back. What the install
+  sets itself is not taken for the site's, an item whose class changed is said, and `docs/INSTALL.md`, section 8, says
+  what an upgrade keeps and how to give a value back.
+- **A lost answer is not a refusal.** When a write's answer never reaches the page (the connection dropped, or a gateway
+  answered for the API), the approval and outage dialogs say "No answer came back", keep the confirming press off and
+  hold the comment; a retry is answered with the first record, or refused naming who decided. The case page says when
+  the case has not moved on since a restart.
+- **Settings: Your tasks.** One line per task (inspect, investigate live, deliver an escalation, recover) says whether
+  it is ready now, its next step and when its facts were read, from what the app already reads; a run refused before any
+  model call is said as refused.
+- **A case another scenario run's reset closed** has its own outcome and Cases tile, Closed by a reset, apart from By
+  hand.
+- **Budget:** a live run's reservation holds its cost until its row is saved, so no moment passes with the run's cost
+  counted nowhere.
+- **FHIR, tidied:** one class reads the FHIR items, one helper runs the gate's retries, the read before the write and
+  the verifier, and the Doctor says when the FHIR items' sign-in to the receiver is refused.
+- **Docker:** `docker compose up`, the Dockerfile and `.env.example` default to the contest's build 154
+  (`irishealth-community:2026.3.0AI.154.0`); on build 109 set `SHUTTER_IMAGE`. `./install.sh` still picks whichever
+  build is loaded.
+- **Fair test:** the blind exports the 1.4.3 table was graded from are published, and `regrade.py` re-grades a
+  published set offline by two versioned policies.
+- **Fixes:** page answers link their run under the namespace's own portal path; the pathology paths keep the results
+  route's check between polls.
+- **Tests.** Unit tests for the item settings over an upgrade with and without a record; `upgrade_check.py` checks that
+  a site's pool size and a switched-off item stand; browser specs for Your tasks and a dropped answer on the live case
+  page; the AlertIntake tests each take a session no header holds yet, which removes a rare clash with another class's
+  random session.
+
 ## 1.4.8 (15 November 2026)
 
 An upgrade with no `-Ddemo` keeps a site's install a site's, a stale approval leads to the current plan, and the case,
