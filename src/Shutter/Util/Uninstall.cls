@@ -54,6 +54,7 @@ ClassMethod Plan() As %String [ SqlProc ]
     Do ..UsersPlan(out)
     If ##class(%File).DirectoryExists(..CacheFolder()) Do out.removes.%Push("The folder " _ ..CacheFolder())
     Do out.removes.%Push(..PageQuestionsLine(..PageQuestionCount()))
+    If ..SetupTurnCount() > 0 Do out.removes.%Push(..SetupTurnsLine(..SetupTurnCount()))
     Do out.removes.%Push("Every case, approval, incident and setting of Shutter's, and the folders under " _ ..Folder() _ ": cases are not kept, so export what you must keep first")
     Do out.keeps.%Push("The namespace " _ $NAMESPACE _ " itself and its databases: it may hold other things, and removing it is yours to do")
     Do out.%Set("ok", out.refused = "", "boolean")
@@ -1002,6 +1003,24 @@ ClassMethod TakePageQuestions(out As %DynamicObject, cutoff As %String = "9999-1
     Set n = ##class(Shutter.Store.PageQuestion).PurgeBefore(cutoff, .failed)
     If failed > 0 Do out.errors.%Push("PageQuestions: " _ failed _ " page question(s) could not be taken") Quit
     Do out.removed.%Push(..PageQuestionsLine(n))
+    // The turns of Set up the site (CONTRACTS 14.7), which no case holds either: named only when there were any.
+    Set turns = ##class(Shutter.Store.SetupTurn).PurgeBefore(cutoff, .failed)
+    If failed > 0 Do out.errors.%Push("PageQuestions: " _ failed _ " turn(s) of Set up the site could not be taken") Quit
+    If turns > 0 Do out.removed.%Push(..SetupTurnsLine(turns))
+}
+
+/// The plan's and the run's line for the turns of Set up the site.
+ClassMethod SetupTurnsLine(n As %Integer) As %String
+{
+    Quit "The set-up turn store Shutter.Store.SetupTurn: " _ n _ " typed answer(s) from Set up the site, with their runs and tool calls"
+}
+
+/// How many turns of Set up the site there are here.
+ClassMethod SetupTurnCount() As %Integer
+{
+    Set n = 0
+    &sql(SELECT COUNT(*) INTO :n FROM Shutter_Store.SetupTurn)
+    Quit +n
 }
 
 /// The plan's and the run's line for the page questions.

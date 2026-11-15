@@ -21,10 +21,10 @@ Method Run(spec As Shutter.Bridge.RunSpec, ByRef response As Shutter.Bridge.Msg.
     Set response.Mode = $SELECT(spec.Mode = "": "live", 1: spec.Mode)
     Set agent = "", session = "", monitor = "", submit = "", trace = "", scope = ""
     Set turns = $SELECT(+spec.MaxIterations > 0: +spec.MaxIterations, 1: 8)
-    // The terminal tool by its name: a board answer's (before an answer's, which it contains), an answer's, a review's,
-    // a plan's, else a specialist's findings.
+    // The terminal tool by its name: a set-up turn's, a board answer's (before an answer's, which it contains), an
+    // answer's, a review's, a plan's, else a specialist's findings.
     Set lowerTerminal = $ZCONVERT(spec.TerminalTool, "L")
-    Set terminal = $SELECT(lowerTerminal [ "boardanswer": "SubmitBoardAnswer", lowerTerminal [ "answer": "SubmitAnswer", lowerTerminal [ "review": "SubmitReview", lowerTerminal [ "plan": "SubmitPlan", 1: "SubmitFindings")
+    Set terminal = $SELECT(lowerTerminal [ "setupturn": "SubmitSetupTurn", lowerTerminal [ "boardanswer": "SubmitBoardAnswer", lowerTerminal [ "answer": "SubmitAnswer", lowerTerminal [ "review": "SubmitReview", lowerTerminal [ "plan": "SubmitPlan", 1: "SubmitFindings")
     // A question's run is keyed by its question id; its agent, tools and scope work on the question's case.
     Set caseKey = ..CaseKeyOf(spec, .question)
     // The mimic as the run was resolved, not as the switch is now, so such a run never reaches another provider.
@@ -182,6 +182,11 @@ ClassMethod CaseKeyOf(spec As Shutter.Bridge.RunSpec, Output question As %Regist
     // A question about a page (CONTRACTS 14.6) has no case: the run is keyed by the question's own id, in the tier page.
     If ($EXTRACT(key, 1, 2) = "P-") && ##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Store.PageQuestion") {
         Set question = $CLASSMETHOD("Shutter.Store.PageQuestion", "ByQuestionId", key)
+        Quit key
+    }
+    // A turn of Set up the site (CONTRACTS 14.7) has no case either: keyed by the turn's own id, in the tier setup.
+    If ($EXTRACT(key, 1, 3) = "ST-") && ##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Store.SetupTurn") {
+        Set question = $CLASSMETHOD("Shutter.Store.SetupTurn", "ByTurnId", key)
         Quit key
     }
     If ($EXTRACT(key, 1, 2) '= "Q-") || '##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Store.CaseQuestion") Quit key

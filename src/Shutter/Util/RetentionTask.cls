@@ -3,8 +3,9 @@
 /// keys older than a day go; the text of each escalation email goes EscalationDays days after its case closed, since
 /// it is the one copy of the patient's identifiers Shutter keeps outside the message store; closed cases older than the
 /// retention go only when PurgeClosedCases is on, because the record of what was decided is the product; the questions
-/// asked about a page from the Ask Shutter panel, their runs and tool calls go after the same retention days whatever
-/// PurgeClosedCases says, since they hang off no case and decide nothing.
+/// asked about a page from the Ask Shutter panel and the turns of Set up the site (what a person typed there), their runs
+/// and tool calls go after the same retention days whatever PurgeClosedCases says, since they hang off no case and decide
+/// nothing.
 Class Shutter.Util.RetentionTask Extends %SYS.Task.Definition
 {
 
@@ -38,11 +39,13 @@ Method OnTask() As %Status
             Set cases = ##class(Shutter.Store.Case).PurgeClosedBefore(cutoff)
         }
         Set pages = ##class(Shutter.Store.PageQuestion).PurgeBefore(cutoff)
+        // The turns of Set up the site (CONTRACTS 14.7): what a person typed, with their runs, under the same days.
+        Set turns = ##class(Shutter.Store.SetupTurn).PurgeBefore(cutoff)
         Set escalations = 0
         If ..EscalationDays > 0 {
             Set escalations = ##class(Shutter.Store.Escalation).PurgeTextBefore(##class(Shutter.Util.Time).FromNow(-86400 * ..EscalationDays), ..EscalationDays)
         }
-        Set ^Shutter.Retention("last") = $LISTBUILD(##class(Shutter.Util.Time).NowUTC(), keys, cases, escalations, pages)
+        Set ^Shutter.Retention("last") = $LISTBUILD(##class(Shutter.Util.Time).NowUTC(), keys, cases, escalations, pages, turns)
     } Catch ex {
         Set sc = ex.AsStatus()
         Set ^Shutter.Retention("last_error") = $LISTBUILD(##class(Shutter.Util.Time).NowUTC(), $SYSTEM.Status.GetErrorText(sc))
