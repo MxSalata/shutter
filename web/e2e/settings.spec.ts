@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { audit } from './axe';
 import { skipWelcome } from './guide';
 import { go, signIn } from './helpers';
 
@@ -183,5 +184,45 @@ for (const { width, height } of [
         );
         expect(sideways).toBeLessThanOrEqual(0);
         await accessShot(page, `access-${width}-${colorScheme}`);
+      });
+    });
+
+for (const { width, height } of [
+  { width: 1280, height: 900 },
+  { width: 390, height: 844 },
+])
+  for (const colorScheme of ['light', 'dark'] as const)
+    test.describe(`Your tasks at ${width}, ${colorScheme} @settings`, () => {
+      test.use({ viewport: { width, height }, colorScheme });
+
+      test('says what the trial lets you do, task by task, read only', async ({ page }) => {
+        await signIn(page);
+        await go(page, '/settings');
+        const section = page.getByRole('region', { name: 'Your tasks', exact: true });
+        // One line on the first layer, closed, which opens the list
+        const line = section.getByRole('button', { name: 'Each task, and whether it is ready' });
+        await expect(line).toHaveAttribute('aria-expanded', 'false');
+        await line.click();
+        await expect(section.getByTestId('tasks-summary')).toHaveText(
+          '5 of 6 ready for you. Not now: your own questions.',
+        );
+        const rows = section.getByRole('list', { name: 'Your tasks' }).getByRole('listitem');
+        await expect(rows).toHaveCount(6);
+        await expect(section.getByTestId('task-ask')).toHaveAttribute('data-state', 'blocked');
+        await expect(section.getByTestId('task-ask').getByTestId('task-next')).toContainText(
+          'pick a suggested question',
+        );
+        await expect(section.getByTestId('task-approve')).toContainText('Ready');
+        // The trial's words never call it live, and nothing in it changes anything
+        await expect(section).not.toContainText(/\blive\b/i, { useInnerText: true });
+        await expect(section.getByRole('button')).toHaveCount(1);
+        await expect(section.getByRole('textbox')).toHaveCount(0);
+        const sideways = await page.evaluate(
+          () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+        );
+        expect(sideways).toBeLessThanOrEqual(0);
+        expect(await audit(page)).toEqual([]);
+        if (process.env.E2E_SHOTS)
+          await section.screenshot({ path: `${process.env.E2E_SHOTS}/tasks-${width}-${colorScheme}.png` });
       });
     });
