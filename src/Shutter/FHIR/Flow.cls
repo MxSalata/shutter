@@ -234,12 +234,11 @@ ClassMethod OnGateProposal(p As Shutter.Process.CaseWorkflow, case As Shutter.St
     }
     If result.Outcome '= "pass" {
         // A read that failed is not a verdict: the evidence is collected again and the case planned afresh, up to the limit.
-        If ..OnlyRefreshable(result) && (p.Refreshes < p.MaxRefreshes) {
-            Set p.Refreshes = p.Refreshes + 1, p.Refreshing = 0
+        Set wait = $SELECT(..OnlyRefreshable(result): ..NextWait(p), 1: "")
+        If wait '= "" {
+            Set p.Refreshing = 0
             Set p.PlanId = "", p.PendingJSON = "[]", p.FHIRBindingId = ""
-            Set wait = 10 * (2 ** (p.Refreshes - 1))
-            Do case.Note("note", "The FHIR gate could not decide at the proposal (" _ result.Summary _ "); collecting the evidence again in " _ wait _ " s and planning afresh (" _ p.Refreshes _ " of " _ p.MaxRefreshes _ ")", "gate", "gate:" _ result.DecisionId)
-            Quit ..Alarm(p, wait, "refresh:retry")
+            Quit ..Retry(p, case, wait, p.MaxRefreshes, "The FHIR gate could not decide at the proposal (" _ result.Summary _ "); collecting the evidence again in ", " and planning afresh", "refresh:retry", "gate", "gate:" _ result.DecisionId)
         }
         Set case.Headline = "Blocked by the FHIR gate: " _ result.Summary
         Quit case.Transition("blocked", "The FHIR gate did not pass the plan; a person must decide", "gate", "gate:" _ result.DecisionId)
@@ -435,12 +434,8 @@ ClassMethod OnPreflight(p As Shutter.Process.CaseWorkflow, case As Shutter.Store
         If '$ISOBJECT(encounter) || (+##class(Shutter.Util.Json).Str(encounter, "http_status") = 0) Set why = "the Encounter could not be read" _ $SELECT($ISOBJECT(encounter) && (##class(Shutter.Util.Json).Str(encounter, "error") '= ""): " (" _ ##class(Shutter.Util.Json).Str(encounter, "error") _ ")", 1: "")
     }
     If why '= "" {
-        If p.Refreshes < p.MaxRefreshes {
-            Set p.Refreshes = p.Refreshes + 1
-            Set wait = 10 * (2 ** (p.Refreshes - 1))
-            Do case.Note("note", "The read before the write failed (" _ $EXTRACT(why, 1, 400) _ "); reading again in " _ wait _ " s (" _ p.Refreshes _ " of " _ p.MaxRefreshes _ ")", "system")
-            Quit ..Alarm(p, wait, "fhir:preflight:retry")
-        }
+        Set wait = ..NextWait(p)
+        If wait '= "" Quit ..Retry(p, case, wait, p.MaxRefreshes, "The read before the write failed (" _ $EXTRACT(why, 1, 400) _ "); reading again in ", "", "fhir:preflight:retry")
         Quit ..Stop(p, case, "blocked", "Blocked at dispatch: the receiver could not be read", "The receiver could not be read just before the write, in " _ (p.MaxRefreshes + 1) _ " tries. The approval is void and nothing was sent (FHIR_RECEIVER_UNREADABLE)", "", "the receiver could not be read before the write")
     }
     // The gate reads this result by its id.
@@ -459,12 +454,8 @@ ClassMethod OnGateDispatch(p As Shutter.Process.CaseWorkflow, case As Shutter.St
     If '$ISOBJECT(result) Quit ..ItemFailed(p, case, "the FHIR gate gave no answer")
     If (result.Error '= "") && (result.DecisionId = "") Quit ..ItemFailed(p, case, result.Error)
     If result.Outcome '= "pass" {
-        If ..OnlyRefreshable(result) && (p.Refreshes < p.MaxRefreshes) {
-            Set p.Refreshes = p.Refreshes + 1
-            Set wait = 10 * (2 ** (p.Refreshes - 1))
-            Do case.Note("note", "The FHIR gate could not decide at the dispatch (" _ result.Summary _ "); reading the receiver again in " _ wait _ " s (" _ p.Refreshes _ " of " _ p.MaxRefreshes _ ")", "gate", "gate:" _ result.DecisionId)
-            Quit ..Alarm(p, wait, "fhir:preflight:retry")
-        }
+        Set wait = $SELECT(..OnlyRefreshable(result): ..NextWait(p), 1: "")
+        If wait '= "" Quit ..Retry(p, case, wait, p.MaxRefreshes, "The FHIR gate could not decide at the dispatch (" _ result.Summary _ "); reading the receiver again in ", "", "fhir:preflight:retry", "gate", "gate:" _ result.DecisionId)
         Do ..Revoke(p, "the FHIR gate did not pass the plan at dispatch")
         Set case.Headline = "Blocked at dispatch: " _ result.Summary
         Quit case.Transition("blocked", "The FHIR gate did not pass the plan at dispatch. The approval is void; a reinvestigation reads fresh evidence and asks again", "gate", "gate:" _ result.DecisionId)
@@ -604,8 +595,7 @@ ClassMethod OnVerify(p As Shutter.Process.CaseWorkflow, case As Shutter.Store.Ca
     Set wait = $SELECT(retry: ##class(Shutter.Operation.FHIRVerify).RetryWait(p.Refreshes + 1, .of), 1: "")
     If wait '= "" {
         Set p.Refreshes = p.Refreshes + 1
-        Do case.Note("note", "The verification established nothing yet (" _ result.Summary _ "); verifying again in " _ wait _ " s (" _ p.Refreshes _ " of " _ of _ ")", "system", ref)
-        Quit ..Alarm(p, wait, "fhir:verify:retry")
+        Quit ..Retry(p, case, wait, of, "The verification established nothing yet (" _ result.Summary _ "); verifying again in ", "", "fhir:verify:retry", "system", ref)
     }
     Set case.Outcome = result.Summary
     Set text = ..Plain(result.Summary)
@@ -670,6 +660,25 @@ ClassMethod Sent(p As Shutter.Process.CaseWorkflow) As %Boolean
 {
     Set fence = ..Fence(p)
     Quit $ISOBJECT(fence) && (fence.State = "sent")
+}
+
+/// The wait before one more try within the budget the evidence refreshes and the read before the write share
+/// (MaxRefreshes): 10, 20, 40 and so on seconds, with the try counted; "" when the budget is spent, and then nothing is
+/// counted.
+ClassMethod NextWait(p As Shutter.Process.CaseWorkflow) As %String
+{
+    If p.Refreshes >= p.MaxRefreshes Quit ""
+    Set p.Refreshes = p.Refreshes + 1
+    Quit 10 * (2 ** (p.Refreshes - 1))
+}
+
+/// One more try after <var>wait</var> seconds, the try already counted: a note on the case says why, when, and which
+/// try of <var>of</var> it is (<var>before</var>, the wait, <var>after</var>), and an alarm comes back under
+/// <var>key</var>.
+ClassMethod Retry(p As Shutter.Process.CaseWorkflow, case As Shutter.Store.Case, wait As %Integer, of As %Integer, before As %String, after As %String, key As %String, source As %String = "system", ref As %String = "") As %Status
+{
+    Do case.Note("note", before _ wait _ " s" _ after _ " (" _ p.Refreshes _ " of " _ of _ ")", source, ref)
+    Quit ..Alarm(p, wait, key)
 }
 
 /// An alarm back to the workflow after that many seconds, under that key.
