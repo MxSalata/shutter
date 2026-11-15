@@ -324,12 +324,14 @@ Method TestDoctorSaysWhenTheSignInIsRefused()
     Do $$$AssertEquals($CLASSMETHOD(c, "SignIn", silent, .detail), "unknown", "no answer says nothing of the sign-in: " _ detail)
     Do $$$AssertEquals($CLASSMETHOD(c, "SignIn", "", .detail), "unknown", "nor does a read with no parts")
 
-    // The Doctor's row: the receiver's newest read, by the entry's base without its last slash.
+    // The Doctor's row: the receiver's newest read, by the entry's base without its last slash. An install has one FHIR
+    // receiver, so a demo's own (S35's) is left out of the profile while the test runs.
     Set entry = ..Entry()
     Do entry.fhir.%Set("base", ..#SIGNINBASE _ "/")
-    Set profile = ##class(Shutter.Store.SiteProfile).Current()
-    Do profile.receivers.%Push(entry)
-    Do ..ChangeProfile({"receivers": (profile.receivers)})
+    Set receivers = [], li = ##class(Shutter.Store.SiteProfile).Current().receivers.%GetIterator()
+    While li.%GetNext(, .r) { Do:'$ISOBJECT(r)||'$ISOBJECT(r.%Get("fhir")) receivers.%Push(r) }
+    Do receivers.%Push(entry)
+    Do ..ChangeProfile({"receivers": (receivers)})
     Set row = ..DoctorRow()
     Do $$$AssertEquals(row."sign_in" _ "|" _ row."sign_in_at", "none|", "no read on record: none")
     Do ..SaveRead(demo)
