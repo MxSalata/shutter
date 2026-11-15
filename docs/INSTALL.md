@@ -599,10 +599,10 @@ and an explicit `-Ddemo=0` or `-Ddemo=1` always wins. Before 1.4.8 the parameter
 so a load of 1.4.7 or earlier without `-Ddemo=0` sets a site up as a demo: pass it there. After any upgrade,
 `GET /api/shutter/health` should read `"demo": false` on a site's install; if it reads `true`, an earlier load without
 `-Ddemo=0` set the flag, and a load with `-Ddemo=0` sets it back, though it does not remove the demo users, roles, web
-applications or namespaces that load made. The demo users `operator`, `approver` and `forwarder` sign in with the demo's
-documented password, so take them off: delete them in the Management Portal (System Administration, Security, Users), or
-run `zpm "uninstall iris-shutter"` and install again with `-Ddemo=0`, which removes everything the demo load made but also
-loses the cases.
+applications or namespaces that load made. The demo users `operator`, `approver`, `forwarder`, `downstream-client` and
+`fhir-client`, where they exist, sign in with the demo's documented password, so take them off: delete them in the
+Management Portal (System Administration, Security, Users), or run `zpm "uninstall iris-shutter"` and install again with
+`-Ddemo=0`, which removes everything the demo load made but also loses the cases.
 
 **Upgrading to 1.2.0.** Run the install once, or load the newer tree, and restart the production as above. Then:
 
