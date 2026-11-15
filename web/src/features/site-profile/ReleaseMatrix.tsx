@@ -81,7 +81,14 @@ export function ReleaseMatrix({ profile }: { profile: SiteProfile }) {
         </StackTable>
       </Table.ScrollContainer>
       <Text size="sm" c="dimmed" maw="68ch">
-        When the board decides, a board of agents weighs the case and a person releases its plan.
+        Policy releases only plans Site policy builds from the catalogue; a plan from agents or Rules only
+        waits for a person.
+        {technical ? (
+          <>
+            {' '}
+            The gate checks the plan&apos;s origin at dispatch: <CodeChip>APPROVAL_PLAN_ORIGIN</CodeChip>.
+          </>
+        ) : null}
       </Text>
     </Stack>
   );
