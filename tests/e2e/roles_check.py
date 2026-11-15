@@ -97,6 +97,67 @@ def wait(check, timeout, every=1):
     return None
 
 
+def site_entry_checks(args, operator, approver, check, error_of):
+    """The site's own catalogue entries (CONTRACTS 6.8): reading is Shutter_Operate, a draft, a proof and a proposal are
+    Shutter_Configure, an approval is Shutter_Approve and, on a demo, Shutter_Configure too, a suspension is both. The
+    public demo's roles read and validate; they save, propose, approve and suspend nothing (R16). It leaves one draft,
+    which changes nothing."""
+    quote = urllib.parse.quote
+    signed_out = Session(args.url)
+    for method, path in (("GET", "/catalogue"), ("GET", "/site-entries"), ("POST", "/site-entries"), ("POST", "/site-entries/validate")):
+        status, body = signed_out.call(method, path, {} if method == "POST" else None)
+        check(f"{method} {path} signed out: 401 unauthenticated", status == 401 and error_of(body) == "unauthenticated", f"{status} {body}")
+    entry = {"title": "Roles check: a failed transfer", "pattern": {"event": "transfer"}, "why": "The roles check made this draft; it changes nothing."}
+    status, body = operator.call("GET", "/catalogue")
+    check("operator: GET /catalogue: 200 with the shipped entries", status == 200 and len((body or {}).get("shipped") or []) > 0, f"{status} {str(body)[:200]}")
+    status, body = operator.call("GET", "/site-entries")
+    check("operator: GET /site-entries: 200", status == 200 and isinstance((body or {}).get("items"), list) and "status" in (body or {}), f"{status} {str(body)[:200]}")
+    status, body = operator.call("POST", "/site-entries/validate", entry)
+    check("operator: POST /site-entries/validate: 200, and nothing is stored", status == 200 and (body or {}).get("valid") is True, f"{status} {str(body)[:200]}")
+    status, body = operator.call("POST", "/site-entries/validate", entry, csrf=False)
+    check("operator: POST /site-entries/validate without X-Requested-With is 403 csrf", status == 403 and error_of(body) == "csrf", f"{status} {body}")
+    status, body = operator.call("POST", "/site-entries", entry)
+    check("operator: POST /site-entries is 403 forbidden, naming Shutter_Configure", status == 403 and error_of(body) == "forbidden" and "Shutter_Configure" in (body or {}).get("detail", ""), f"{status} {body}")
+    status, made = approver.call("POST", "/site-entries", entry)
+    check("approver: POST /site-entries: 201, a draft", status == 201 and (made or {}).get("state") == "draft" and str((made or {}).get("id", "")).startswith("L"), f"{status} {str(made)[:200]}")
+    if status != 201:
+        return
+    entry_id, revision = made["id"], made.get("revision")
+    status, body = approver.call("PUT", f"/site-entries/{quote(entry_id)}", dict(entry, expectedVersion=revision + 7))
+    check("approver: PUT /site-entries/{id} with another revision is 409 stale_version", status == 409 and error_of(body) == "stale_version" and (body or {}).get("currentVersion") == revision, f"{status} {body}")
+    status, body = approver.call("POST", f"/site-entries/{quote(entry_id)}/propose", {"action": "activate"})
+    check("approver: POST /site-entries/{id}/propose with no proof is 409 no_proof", status == 409 and error_of(body) == "no_proof", f"{status} {body}")
+    status, body = approver.call("POST", f"/site-entries/{quote(entry_id)}/suspend", {"reason": "roles check"})
+    check("approver: POST /site-entries/{id}/suspend on a draft is 409 wrong_state", status == 409 and error_of(body) == "wrong_state", f"{status} {body}")
+    approval = {"action": "activate", "version": 1, "digest": made.get("digest"), "decision": "approve", "reason": "roles check"}
+    status, body = approver.call("POST", f"/site-entries/{quote(entry_id)}/approvals", approval)
+    check("approver: POST /site-entries/{id}/approvals with no proposal is 409 wrong_state", status == 409 and error_of(body) == "wrong_state", f"{status} {body}")
+    changes = (("PUT", f"/site-entries/{quote(entry_id)}", entry, "Shutter_Configure"), ("POST", f"/site-entries/{quote(entry_id)}/proof", {}, "Shutter_Configure"),
+               ("POST", f"/site-entries/{quote(entry_id)}/propose", {"action": "activate"}, "Shutter_Configure"), ("POST", "/site-entries", entry, "Shutter_Configure"))
+    for method, path, body_sent, resource in changes + (("POST", f"/site-entries/{quote(entry_id)}/approvals", approval, "Shutter_Approve"), ("POST", f"/site-entries/{quote(entry_id)}/suspend", {"reason": "roles check"}, "Shutter_Approve")):
+        status, body = operator.call(method, path, body_sent)
+        check(f"operator: {method} {path.replace(entry_id, '{id}')} is 403 forbidden, naming {resource}", status == 403 and error_of(body) == "forbidden" and resource in (body or {}).get("detail", ""), f"{status} {body}")
+    status, body = approver.call("POST", f"/site-entries/{quote(entry_id)}/approvals", approval, csrf=False)
+    check("approver: POST /site-entries/{id}/approvals without X-Requested-With is 403 csrf", status == 403 and error_of(body) == "csrf", f"{status} {body}")
+    # The public demo's roles hold Shutter_Approve, to approve plans; of the site's entries they change nothing.
+    for name, variable in (("demo", "SHUTTER_PUBLIC_DEMO_PASSWORD"), ("judge", "SHUTTER_JUDGE_PASSWORD")):
+        password = os.environ.get(variable, "")
+        if not password:
+            print(f"skip {name}: {variable} is not set, so its site entry checks do not run", flush=True)
+            continue
+        public = Session(args.url).sign_in(name, password)
+        for path in ("/catalogue", "/site-entries", f"/site-entries/{quote(entry_id)}"):
+            status, body = public.call("GET", path)
+            check(f"{name}: GET {path.replace(entry_id, '{id}')}: 200", status == 200, f"{status} {str(body)[:200]}")
+        status, body = public.call("POST", "/site-entries/validate", entry)
+        check(f"{name}: POST /site-entries/validate: 200", status == 200 and (body or {}).get("valid") is True, f"{status} {str(body)[:200]}")
+        for method, path, body_sent, resource in changes + (("POST", f"/site-entries/{quote(entry_id)}/approvals", approval, "Shutter_Configure"), ("POST", f"/site-entries/{quote(entry_id)}/suspend", {"reason": "roles check"}, "Shutter_Configure")):
+            status, body = public.call(method, path, body_sent)
+            check(f"{name}: {method} {path.replace(entry_id, '{id}')} is 403 forbidden, naming {resource}", status == 403 and error_of(body) == "forbidden" and resource in (body or {}).get("detail", ""), f"{status} {body}")
+    status, after = operator.call("GET", f"/site-entries/{quote(entry_id)}")
+    check("after every refusal the draft is as it was made", status == 200 and (after or {}).get("revision") == revision and (after or {}).get("state") == "draft", f"{status} {str(after)[:200]}")
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--url", default="http://localhost:52773")
@@ -437,6 +498,8 @@ def main():
         check("demo: POST /scenarios/reset is 403 forbidden, naming Shutter_ScenarioReset",
               status == 403 and error_of(body) == "forbidden" and "Shutter_ScenarioReset" in (body or {}).get("detail", ""), f"{status} {body}")
         demo_run_checks(args, operator, demo, check, error_of)
+
+    site_entry_checks(args, operator, approver, check, error_of)
 
     # ---- the judges' account (1.4.3): runs scenarios, never resets the shared demo or purges its store ----
     judge_password = os.environ.get("SHUTTER_JUDGE_PASSWORD", "")

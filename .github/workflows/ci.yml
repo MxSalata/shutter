@@ -437,6 +437,14 @@ jobs:
       - name: S35, a failed transfer to a FHIR R4 ward system, in site-policy mode
         if: matrix.shard == 'policy'
         run: python3 tests/e2e/scenario_check.py --url "$IRIS_URL" --modes policy --approve S35
+      # A site's own catalogue entry, the brake, end to end (CONTRACTS 6.8): made from S2's case by one person, proved on
+      # S2's and S1's cases, approved by a second; then S2 in site-policy, board and single-investigator mode is escalated
+      # naming it with nothing written, and in rules-only mode the recorded baseline resends; a second entry leads by its
+      # priority; one approver suspends, two resume and retire, and S2 resends again. It retires what it made, so it can
+      # run between the scenarios.
+      - name: A site's own catalogue entry, end to end
+        if: matrix.shard == 'policy'
+        run: python3 tests/e2e/site_entry_check.py --url "$IRIS_URL"
       # The roles over HTTP: the library is the approver's to change, an operator escalates a case and closes it by hand,
       # and under the site profile's two-person rule only an approver closes it. It closes two of the cases the
       # scenarios left escalated or blocked, so it runs after them.
