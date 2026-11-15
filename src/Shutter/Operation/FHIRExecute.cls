@@ -182,7 +182,7 @@ Method Write(request As Shutter.Msg.FHIRWrite, response As Shutter.Msg.FHIRWrite
         Set status = +answer.StatusCode, etag = answer.GetHeader("ETag"), location = answer.GetHeader("Location")
         Set contentType = answer.GetHeader("Content-Type")
         If contentType = "" Set contentType = answer.ContentType
-        Set body = ..Text(..Bytes(answer, .over))
+        Set body = ..Text(##class(Shutter.FHIR.Wire).Bytes(answer, ..Limit(), .over))
     }
     Set outcome = ..Classify(sc, status, etag, location, contentType, body, id, .reason, .diagnostics)
     // An answer whose body was cut short shows its status, never that what was applied is the update.
@@ -388,27 +388,15 @@ ClassMethod Words(outcome As %String, status As %Integer, diagnostics As %String
 /// The path in front of every request: the base of the receiver's fhir block, with no slash at its end.
 ClassMethod Base(receiver As %String) As %String [ Private ]
 {
-    Set block = ##class(Shutter.FHIR.Profile).Block(receiver)
-    Set base = $SELECT($ISOBJECT(block) && (block.%GetTypeOf("base") = "string"): block.%Get("base"), 1: "")
-    While $EXTRACT(base, *) = "/" {
-        Set base = $EXTRACT(base, 1, * - 1)
-    }
-    Quit base
+    Quit ##class(Shutter.FHIR.Wire).Base(##class(Shutter.FHIR.Profile).Block(receiver))
 }
 
-/// This item's own GET of the Encounter, as a part judged by Shutter.FHIR.Trust: read as bytes and decoded here, as
-/// FHIR Receiver reads, so that one version read through either item gives the same characters.
+/// This item's own GET of the Encounter, as a part judged by Shutter.FHIR.Trust: made, read as bytes and decoded by
+/// Shutter.FHIR.Wire, as FHIR Receiver reads, so that one version read through either item gives the same characters.
 Method Read(path As %String, id As %String) As %DynamicObject [ Private ]
 {
-    Set part = {"http_status": 0, "raw_status": 0, "etag": "", "location": "", "content_type": "", "body": "", "error": ""}
-    Set http = ##class(%Net.HttpRequest).%New()
-    Set http.ReadRawMode = 1
-    // A redirect is never followed: the credential would go with it to another host, and that host's answer would
-    // stand as this item's own read.
-    Set http.FollowRedirect = 0
-    Do http.SetHeader("Accept", "application/fhir+json")
-    Set bounded = ##class(Shutter.FHIR.BoundedStream).Within(..Limit(), ..ReadSeconds)
-    Set http.ResponseStream = bounded
+    Set part = ##class(Shutter.FHIR.Wire).Blank()
+    Set http = ##class(Shutter.FHIR.Wire).Request(..Limit(), ..ReadSeconds, .bounded)
     Set sc = $$$OK, answer = ""
     Try {
         Set sc = ..Adapter.SendFormDataArray(.answer, "GET", http, "", "", path)
@@ -424,61 +412,15 @@ Method Read(path As %String, id As %String) As %DynamicObject [ Private ]
         Do part.%Set("error", $EXTRACT("no answer" _ $SELECT($$$ISERR(sc): ": " _ $SYSTEM.Status.GetErrorText(sc), 1: ""), 1, 400), "string")
         Quit part
     }
-    Set raw = +answer.StatusCode
-    Do part.%Set("raw_status", raw, "number")
-    Do part.%Set("http_status", raw, "number")
-    Do part.%Set("etag", answer.GetHeader("ETag"), "string")
-    Do part.%Set("location", answer.GetHeader("Location"), "string")
-    Set contentType = answer.GetHeader("Content-Type")
-    If contentType = "" Set contentType = answer.ContentType
-    Do part.%Set("content_type", contentType, "string")
-    Set bytes = ..Bytes(answer, .over)
-    Set charset = ##class(Shutter.Operation.FHIRReceiver).Charset(contentType)
-    If over {
-        Do ##class(Shutter.FHIR.Trust).Fail(part, "the answer's body is over " _ ..#MAXBODY _ " characters")
-    } ElseIf (charset '= "") && (charset '= "utf-8") && (charset '= "utf8") {
-        Do ##class(Shutter.FHIR.Trust).Fail(part, "the answer's charset is not UTF-8")
-    } Else {
-        Set text = $ZCONVERT(bytes, "I", "UTF8")
-        If $ZCONVERT(text, "O", "UTF8") '= bytes {
-            Do ##class(Shutter.FHIR.Trust).Fail(part, "the answer's body is not UTF-8")
-        } ElseIf $LENGTH(text) > ..#MAXBODY {
-            Do ##class(Shutter.FHIR.Trust).Fail(part, "the answer's body is over " _ ..#MAXBODY _ " characters")
-        } Else {
-            Do part.%Set("body", text, "string")
-        }
-    }
+    Do ##class(Shutter.FHIR.Wire).Take(part, answer, ..#MAXBODY)
     Do ##class(Shutter.FHIR.Trust).Part("encounter", part, "Encounter", id)
     Quit part
 }
 
-/// An answer's body as the bytes that came, up to three bytes for each character of MAXBODY; <var>over</var> says
-/// there were more, and then what is returned is only the start.
-ClassMethod Bytes(answer As %Net.HttpResponse, Output over As %Boolean) As %String [ Private ]
-{
-    Set limit = ..Limit()
-    Set bytes = "", over = 0
-    If $ISOBJECT(answer.Data) {
-        Do answer.Data.Rewind()
-        While 'answer.Data.AtEnd {
-            Set chunk = answer.Data.Read(32000)
-            If ($LENGTH(bytes) + $LENGTH(chunk)) > limit Set over = 1 Quit
-            Set bytes = bytes _ chunk
-        }
-    } ElseIf $LENGTH(answer.Data) > limit {
-        Set over = 1
-    } Else {
-        Set bytes = answer.Data
-    }
-    Quit bytes
-}
-
-/// The most bytes of an answer's body that are read: three are the most one character takes here, so more bytes
-/// than that are more characters than MAXBODY.
+/// The most bytes of an answer's body that are read for MAXBODY characters (Shutter.FHIR.Wire's ByteLimit).
 ClassMethod Limit() As %Integer [ Private ]
 {
-    Set limit = 3 * ..#MAXBODY
-    Quit $SELECT(limit > 3600000: 3600000, 1: limit)
+    Quit ##class(Shutter.FHIR.Wire).ByteLimit(..#MAXBODY)
 }
 
 /// Bytes as characters when they are UTF-8, and as they came when they are not.
