@@ -1,8 +1,8 @@
 /// Set up the site (Shutter.Util.ProfileSetup, Shutter.Store.SetupTurn; CONTRACTS 14.7) with no production and no agent:
 /// the field table, "What Shutter will do here" as the server reads a profile, the checks on a turn, the person's text,
-/// who may send one, what the agent is shown, the conversation's limits and the row's life. The three XData tables are
+/// who may send one, what the agent is shown, the conversation's limits and the row's life. The four XData tables are
 /// the one copy the core and the web app are both held to: web/src/features/site-profile/setup/fields.test.ts,
-/// effects.test.ts and proposals.test.ts read them from this file, so the two agree row for row or one suite fails.
+/// effects.test.ts and proposals.test.ts read them (Fields, EffectRows, TextRows, TurnRows) from this file, so the two agree row for row or one suite fails.
 /// Every row made here is deleted after each test, and the counters are put back when nothing else moved them
 /// meanwhile. No test here stores a profile, and one of them proves it.
 Class Shutter.Test.ProfileSetup Extends %UnitTest.TestCase
@@ -110,12 +110,32 @@ Method TestEffectRows()
         Do $$$AssertEquals(##class(Shutter.Util.ProfileSetup).Effects(profile, row.receiver).%ToJSON(), row.expect.%ToJSON(), row.name)
     }
     Do $$$AssertTrue(n > 12, "the table has its rows, " _ n)
-    Set strict = {"overtaken": 1, "approval.single": 1, "case_write": 1}
-    Do $$$AssertEquals(##class(Shutter.Util.ProfileSetup).LessStrict(strict, {"overtaken": 0, "approval.single": 1, "case_write": 1}), "overtaken", "a line that falls is named")
-    Do $$$AssertEquals(##class(Shutter.Util.ProfileSetup).LessStrict(strict, {"overtaken": 1, "approval.single": 0, "case_write": 0}), "approval.single", "the first of them, in the lines' order")
-    Do $$$AssertEquals(##class(Shutter.Util.ProfileSetup).LessStrict({"overtaken": 0}, strict), "", "stricter is never refused")
-    Do $$$AssertEquals(##class(Shutter.Util.ProfileSetup).LessStrict({"overtaken": 1}, {"overtaken": 1, "approval.single": 0}), "", "a line with no answer on one side is not compared")
-    Do $$$AssertEquals(##class(Shutter.Util.ProfileSetup).LessStrict("", {"overtaken": 0}), "", "a receiver that is not in the other profile is compared with nothing")
+    Set ps = "Shutter.Util.ProfileSetup"
+    Set strict = {"overtaken": 1, "approval.single": "approval", "case_write": 1}
+    Do $$$AssertEquals($CLASSMETHOD(ps, "LessStrict", strict, {"overtaken": 0, "approval.single": "approval", "case_write": 1}), "overtaken", "a line that falls is named")
+    Do $$$AssertEquals($CLASSMETHOD(ps, "LessStrict", strict, {"overtaken": 1, "approval.single": "automatic", "case_write": 0}), "approval.single", "the first of them, in the lines' order")
+    Do $$$AssertEquals($CLASSMETHOD(ps, "LessStrict", {"overtaken": 0}, strict), "", "stricter is never refused")
+    Do $$$AssertEquals($CLASSMETHOD(ps, "LessStrict", {"overtaken": 1}, {"overtaken": 1, "approval.single": "automatic"}), "", "a line with no answer on one side is not compared")
+    Do $$$AssertEquals($CLASSMETHOD(ps, "LessStrict", "", {"overtaken": 0}), "", "a receiver that is not in the other profile is compared with nothing")
+    // Who approves is compared by the policy's own values: per_chain, approval and board are not points on one scale.
+    For pair = "per_chain>approval", "approval>per_chain", "approval>board", "board>approval", "per_chain>board", "approval>automatic", "board>automatic", "person>automatic" {
+        Set was = $PIECE(pair, ">", 1), now = $PIECE(pair, ">", 2)
+        Do $$$AssertEquals($CLASSMETHOD(ps, "LessStrict", {"approval.ordered": (was)}, {"approval.ordered": (now)}), "approval.ordered", was _ " to " _ now _ " is refused")
+    }
+    For pair = "automatic>per_chain", "automatic>approval", "automatic>board", "board>board", "per_chain>per_chain" {
+        Set was = $PIECE(pair, ">", 1), now = $PIECE(pair, ">", 2)
+        Do $$$AssertEquals($CLASSMETHOD(ps, "LessStrict", {"approval.ordered": (was)}, {"approval.ordered": (now)}), "", was _ " to " _ now _ " is not")
+    }
+    // The review's case, on Base(): a receiver moved from tier 3 to tier 2 goes from one approval per chain to one for the
+    // incident, with no line at automatic on either side; the comparison now names it.
+    Set base = ..Base()
+    Set three = $CLASSMETHOD(ps, "Effects", base, {"name": "Lab Out", "tier": 3}), two = $CLASSMETHOD(ps, "Effects", base, {"name": "Lab Out", "tier": 2})
+    Do $$$AssertEquals($CLASSMETHOD(ps, "LessStrict", three, two), "approval.ordered", "tier 3 to tier 2 on Base() is refused")
+    Do $$$AssertEquals($CLASSMETHOD(ps, "LineWords", "approval.ordered", three, two), "the approval a resend of ordered chains needs would change from per_chain to approval: only a person chooses it", "in words")
+    Do $$$AssertEquals($CLASSMETHOD(ps, "LessStrict", two, three), "approval.ordered", "and so is tier 2 to tier 3: only a person moves a receiver between rows")
+    Set base.policy."2".interleaved = "approval"
+    Do $$$AssertEquals($CLASSMETHOD(ps, "LessStrict", $CLASSMETHOD(ps, "Effects", base, {"name": "Lab Out", "tier": 1}), $CLASSMETHOD(ps, "Effects", base, {"name": "Lab Out", "tier": 2})), "approval.interleaved", "a site whose interleaved values differ by tier keeps board")
+    Do $$$AssertEquals($CLASSMETHOD(ps, "LineWords", "approval.single", {"approval.single": "approval"}, {"approval.single": "automatic"}), "a resend of single failures would need no person's approval", "automatic in words")
 }
 
 /// The checks on a turn, one table for the core and the web app: used only when every proposal is class A with its
@@ -254,7 +274,7 @@ Method TestWhatTheAgentIsShown()
         Set who = who _ $PIECE(f.id, ".", 2) _ ":" _ f.who _ " "
         If f.%IsDefined("value") Set values = values _ $PIECE(f.id, ".", 2) _ " "
     }
-    Do $$$AssertEquals(who, "name:person system:you category:you tier:you applies:person resend_timestamp:person cancels:person merges:person ", "three fields are the agent's, on a receiver being added")
+    Do $$$AssertEquals(who, "name:person system:you category:person tier:you applies:person resend_timestamp:person cancels:person merges:person ", "on a receiver being added, the description and the unanswered tier are the agent's; the kind is answered")
     Do $$$AssertEquals(values, "system category cancels ", "the description, the kind and a yes or no answer carry their value")
     // On a receiver in force only the description is the agent's.
     Set inForce = $CLASSMETHOD(ps, "View", base, draft, "Downstream Out")
@@ -483,25 +503,65 @@ XData Fields [ MimeType = application/json ]
 XData EffectRows [ MimeType = application/json ]
 {
 [
- {"name": "no kind reads as current state: closes, a person approves at tier 2, a write on the defaults", "receiver": {"name": "R", "tier": 2}, "expect": {"overtaken": 0, "approval.single": 1, "approval.ordered": 1, "approval.interleaved": 1, "case_write": 0, "engine_resend": 1, "mode": 1}},
- {"name": "history of record asks a person", "receiver": {"name": "R", "tier": 2, "category": "history_of_record"}, "expect": {"overtaken": 1, "approval.single": 1, "approval.ordered": 1, "approval.interleaved": 1, "case_write": 0, "engine_resend": 1, "mode": 1}},
- {"name": "orders and results: a person, and no write from a case", "receiver": {"name": "R", "tier": 2, "category": "orders_results"}, "expect": {"overtaken": 1, "approval.single": 1, "approval.ordered": 1, "approval.interleaved": 1, "case_write": 1, "engine_resend": 1, "mode": 1}},
- {"name": "its own policy over its kind: current on a history of record receiver", "receiver": {"name": "R", "tier": 2, "category": "history_of_record", "history_policy": "current"}, "expect": {"overtaken": 0, "approval.single": 1, "approval.ordered": 1, "approval.interleaved": 1, "case_write": 0, "engine_resend": 1, "mode": 1}},
- {"name": "its own policy over its kind: correct on a current state receiver", "receiver": {"name": "R", "tier": 2, "category": "current_state", "history_policy": "correct"}, "expect": {"overtaken": 1, "approval.single": 1, "approval.ordered": 1, "approval.interleaved": 1, "case_write": 0, "engine_resend": 1, "mode": 1}},
- {"name": "no kind under an older profile's site-wide correct", "profile": {"history_policy": "correct"}, "receiver": {"name": "R", "tier": 2}, "expect": {"overtaken": 1, "approval.single": 1, "approval.ordered": 1, "approval.interleaved": 1, "case_write": 0, "engine_resend": 1, "mode": 1}},
- {"name": "a kind beats the site-wide policy", "profile": {"history_policy": "correct"}, "receiver": {"name": "R", "tier": 2, "category": "current_state"}, "expect": {"overtaken": 0, "approval.single": 1, "approval.ordered": 1, "approval.interleaved": 1, "case_write": 0, "engine_resend": 1, "mode": 1}},
- {"name": "a kind the profile does not know reads as current state", "receiver": {"name": "R", "tier": 2, "category": "something_else"}, "expect": {"overtaken": 0, "approval.single": 1, "approval.ordered": 1, "approval.interleaved": 1, "case_write": 0, "engine_resend": 1, "mode": 1}},
- {"name": "a policy row made automatic", "profile": {"policy": {"2": {"single": "automatic", "ordered": "approval"}}}, "receiver": {"name": "R", "tier": 2}, "expect": {"overtaken": 0, "approval.single": 0, "approval.ordered": 1, "approval.interleaved": 1, "case_write": 0, "engine_resend": 1, "mode": 1}},
- {"name": "tier 3 made automatic is read as written", "profile": {"policy": {"3": {"single": "automatic", "ordered": "automatic", "interleaved": "automatic"}}}, "receiver": {"name": "R", "tier": 3}, "expect": {"overtaken": 0, "approval.single": 0, "approval.ordered": 0, "approval.interleaved": 0, "case_write": 0, "engine_resend": 1, "mode": 1}},
- {"name": "a tier given as text", "receiver": {"name": "R", "tier": "3"}, "expect": {"overtaken": 0, "approval.single": 1, "approval.ordered": 1, "approval.interleaved": 1, "case_write": 0, "engine_resend": 1, "mode": 1}},
+ {"name": "no kind reads as current state: closes, a person approves at tier 2, a write on the defaults", "receiver": {"name": "R", "tier": 2}, "expect": {"overtaken": 0, "approval.single": "approval", "approval.ordered": "approval", "approval.interleaved": "board", "case_write": 0, "engine_resend": 1, "mode": 1}},
+ {"name": "history of record asks a person", "receiver": {"name": "R", "tier": 2, "category": "history_of_record"}, "expect": {"overtaken": 1, "approval.single": "approval", "approval.ordered": "approval", "approval.interleaved": "board", "case_write": 0, "engine_resend": 1, "mode": 1}},
+ {"name": "orders and results: a person, and no write from a case", "receiver": {"name": "R", "tier": 2, "category": "orders_results"}, "expect": {"overtaken": 1, "approval.single": "approval", "approval.ordered": "approval", "approval.interleaved": "board", "case_write": 1, "engine_resend": 1, "mode": 1}},
+ {"name": "its own policy over its kind: current on a history of record receiver", "receiver": {"name": "R", "tier": 2, "category": "history_of_record", "history_policy": "current"}, "expect": {"overtaken": 0, "approval.single": "approval", "approval.ordered": "approval", "approval.interleaved": "board", "case_write": 0, "engine_resend": 1, "mode": 1}},
+ {"name": "its own policy over its kind: correct on a current state receiver", "receiver": {"name": "R", "tier": 2, "category": "current_state", "history_policy": "correct"}, "expect": {"overtaken": 1, "approval.single": "approval", "approval.ordered": "approval", "approval.interleaved": "board", "case_write": 0, "engine_resend": 1, "mode": 1}},
+ {"name": "no kind under an older profile's site-wide correct", "profile": {"history_policy": "correct"}, "receiver": {"name": "R", "tier": 2}, "expect": {"overtaken": 1, "approval.single": "approval", "approval.ordered": "approval", "approval.interleaved": "board", "case_write": 0, "engine_resend": 1, "mode": 1}},
+ {"name": "a kind beats the site-wide policy", "profile": {"history_policy": "correct"}, "receiver": {"name": "R", "tier": 2, "category": "current_state"}, "expect": {"overtaken": 0, "approval.single": "approval", "approval.ordered": "approval", "approval.interleaved": "board", "case_write": 0, "engine_resend": 1, "mode": 1}},
+ {"name": "a kind the profile does not know reads as current state", "receiver": {"name": "R", "tier": 2, "category": "something_else"}, "expect": {"overtaken": 0, "approval.single": "approval", "approval.ordered": "approval", "approval.interleaved": "board", "case_write": 0, "engine_resend": 1, "mode": 1}},
+ {"name": "a policy row made automatic", "profile": {"policy": {"2": {"single": "automatic", "ordered": "approval"}}}, "receiver": {"name": "R", "tier": 2}, "expect": {"overtaken": 0, "approval.single": "automatic", "approval.ordered": "approval", "approval.interleaved": "approval", "case_write": 0, "engine_resend": 1, "mode": 1}},
+ {"name": "tier 3 made automatic is read as written", "profile": {"policy": {"3": {"single": "automatic", "ordered": "automatic", "interleaved": "automatic"}}}, "receiver": {"name": "R", "tier": 3}, "expect": {"overtaken": 0, "approval.single": "automatic", "approval.ordered": "automatic", "approval.interleaved": "automatic", "case_write": 0, "engine_resend": 1, "mode": 1}},
+ {"name": "a tier given as text", "receiver": {"name": "R", "tier": "3"}, "expect": {"overtaken": 0, "approval.single": "approval", "approval.ordered": "per_chain", "approval.interleaved": "approval", "case_write": 0, "engine_resend": 1, "mode": 1}},
  {"name": "a tier that is not answered names nobody", "receiver": {"name": "R"}, "expect": {"overtaken": 0, "case_write": 0, "engine_resend": 1, "mode": 1}},
  {"name": "a tier the table does not have names nobody", "receiver": {"name": "R", "tier": 4}, "expect": {"overtaken": 0, "case_write": 0, "engine_resend": 1, "mode": 1}},
  {"name": "a receiver that starts in Set up the site is never written to", "receiver": {"name": "R", "features": {"conditional_writes": false, "receipts": false, "history": false, "dry_run": false}}, "expect": {"overtaken": 0, "case_write": 1, "engine_resend": 1, "mode": 1}},
- {"name": "all four features declared: a write is possible", "receiver": {"name": "R", "tier": 2, "features": {"conditional_writes": true, "receipts": true, "history": true, "dry_run": true}}, "expect": {"overtaken": 0, "approval.single": 1, "approval.ordered": 1, "approval.interleaved": 1, "case_write": 0, "engine_resend": 1, "mode": 1}},
- {"name": "one feature missing: no write", "receiver": {"name": "R", "tier": 2, "features": {"conditional_writes": true, "receipts": true, "history": true}}, "expect": {"overtaken": 0, "approval.single": 1, "approval.ordered": 1, "approval.interleaved": 1, "case_write": 1, "engine_resend": 1, "mode": 1}},
- {"name": "an engine resend declared, recovery enabled", "profile": {"recovery": {"mode": "enabled"}}, "receiver": {"name": "R", "tier": 2, "category": "orders_results", "engine_resend": true}, "expect": {"overtaken": 1, "approval.single": 1, "approval.ordered": 1, "approval.interleaved": 1, "case_write": 1, "engine_resend": 0, "mode": 0}},
- {"name": "a FHIR receiver stops for a person whatever the tier, and writes only with its switch on", "profile": {"history_policy": "correct", "policy": {"1": {"single": "automatic"}}}, "receiver": {"name": "R", "tier": 1, "fhir": {"base": "/fhir", "recovery_enabled": true}}, "expect": {"overtaken": 1, "approval.single": 1, "approval.ordered": 1, "approval.interleaved": 1, "case_write": 0, "engine_resend": 1, "mode": 1}},
- {"name": "a FHIR receiver with its switch off", "receiver": {"name": "R", "tier": 1, "fhir": {"base": "/fhir"}}, "expect": {"overtaken": 1, "approval.single": 1, "approval.ordered": 1, "approval.interleaved": 1, "case_write": 1, "engine_resend": 1, "mode": 1}}
+ {"name": "all four features declared: a write is possible", "receiver": {"name": "R", "tier": 2, "features": {"conditional_writes": true, "receipts": true, "history": true, "dry_run": true}}, "expect": {"overtaken": 0, "approval.single": "approval", "approval.ordered": "approval", "approval.interleaved": "board", "case_write": 0, "engine_resend": 1, "mode": 1}},
+ {"name": "one feature missing: no write", "receiver": {"name": "R", "tier": 2, "features": {"conditional_writes": true, "receipts": true, "history": true}}, "expect": {"overtaken": 0, "approval.single": "approval", "approval.ordered": "approval", "approval.interleaved": "board", "case_write": 1, "engine_resend": 1, "mode": 1}},
+ {"name": "an engine resend declared, recovery enabled", "profile": {"recovery": {"mode": "enabled"}}, "receiver": {"name": "R", "tier": 2, "category": "orders_results", "engine_resend": true}, "expect": {"overtaken": 1, "approval.single": "approval", "approval.ordered": "approval", "approval.interleaved": "board", "case_write": 1, "engine_resend": 0, "mode": 0}},
+ {"name": "a FHIR receiver stops for a person whatever the tier, and writes only with its switch on", "profile": {"history_policy": "correct", "policy": {"1": {"single": "automatic"}}}, "receiver": {"name": "R", "tier": 1, "fhir": {"base": "/fhir", "recovery_enabled": true}}, "expect": {"overtaken": 1, "approval.single": "person", "approval.ordered": "person", "approval.interleaved": "person", "case_write": 0, "engine_resend": 1, "mode": 1}},
+ {"name": "a FHIR receiver with its switch off", "receiver": {"name": "R", "tier": 1, "fhir": {"base": "/fhir"}}, "expect": {"overtaken": 1, "approval.single": "person", "approval.ordered": "person", "approval.interleaved": "person", "case_write": 1, "engine_resend": 1, "mode": 1}}
+]
+}
+
+XData TextRows [ MimeType = application/json ]
+{
+[
+ ["see https://intranet.example/boards", "a link"],
+ ["ask www.example.nhs.uk", "a link"],
+ ["the board is at intranet.trust.nhs.uk/board", "a link"],
+ ["ask at intranet.trust.nhs.uk", "a link"],
+ ["see example.com for it", "a link"],
+ ["the PAS.local/beds page", "a link"],
+ ["mail ward.clerk@example.nhs.uk about it", "an address"],
+ ["its number is 4857261930", "a run of six or more digits"],
+ ["NHS number 943 476 5919", "a long number"],
+ ["NHS number 943-476-5919", "a long number"],
+ ["call 0800 123 4567 first", "a long number"],
+ ["call 07700 900 123", "a long number"],
+ ["password: hunter2", "what looks like a credential"],
+ ["api key = abc", "what looks like a credential"],
+ [["the key is ghp_", "Ab12Cd34Ef56Gh78Ij90Kl12Mn34Op56Qr78"], "what looks like a credential"],
+ [["it uses sk-ant-", "api03-Ab12Cd34Ef56Gh78Ij90Kl12"], "what looks like a credential"],
+ [["key AKIA", "ABCDEFGH12345678"], "what looks like a credential"],
+ [["hash 5f4dcc3b5aa765d6", "1d8327deb882cf99aa11"], "what looks like a credential"],
+ [["dGhpcyBpcyBh", "IHRlc3Qgb2YgYmFzZTY0IHJ1bg=="], "what looks like a credential"],
+ ["the ward\u0007board", "a control character"],
+ ["the ward\u0085board", "a control character"],
+ ["the ward\u009bboard", "a control character"],
+ ["the ward \u202eboard", "an invisible or direction-changing character"],
+ ["the ward\u200bboard", "an invisible or direction-changing character"],
+ ["\ufeffthe ward board", "an invisible or direction-changing character"],
+ ["the ward \u2066board\u2069", "an invisible or direction-changing character"],
+ ["bay 12345, ward 7", ""],
+ ["It is the ward whiteboard, it only shows where patients are now. Tier 2 I think.", ""],
+ ["tier 2 or 3, e.g. the PAS or the EPR", ""],
+ ["version 1.4/2 of the feed", ""],
+ ["the HL7-ADT-Feed-Out-Bed-Board-Ward-7", ""],
+ ["the caf\u00e9 board, A&E's tracking list", ""],
+ ["wards 1-2-3 and 4 5 6", ""],
+ ["the Downstream_Out_Operation", ""]
 ]
 }
 
@@ -531,9 +591,12 @@ XData TurnRows [ MimeType = application/json ]
  {"name": "a tier whose row is automatic only in the draft", "draft": {"policy": {"1": {"single": "approval"}, "2": {"single": "approval", "ordered": "automatic"}, "3": {"single": "approval"}}}, "turn": {"say": "Tier 2.", "proposals": [{"field": "receivers[].tier", "receiver": "Bed Board", "to": 2, "quote": "tier 2"}]}, "expect": "proposals[0].to: must not be 2, a tier that releases without a person under the policy in force or in the draft: only a person chooses it"},
  {"name": "another tier, while one row is automatic in the draft", "draft": {"policy": {"1": {"single": "approval"}, "2": {"single": "approval", "ordered": "automatic"}, "3": {"single": "approval"}}}, "turn": {"say": "Tier 3.", "proposals": [{"field": "receivers[].tier", "receiver": "Bed Board", "to": 3, "quote": "tier 2"}]}, "expect": ""},
  {"name": "a kind while the draft holds a site-wide history policy", "draft": {"history_policy": "correct"}, "turn": {"say": "A whiteboard.", "proposals": [{"field": "receivers[].category", "receiver": "Bed Board", "to": "history_of_record", "quote": "whiteboard"}]}, "expect": "proposals[0].field: receivers[].category is not drafted while the profile holds a site-wide history_policy"},
- {"name": "a stricter hand edit the batch would undo: the kind", "added": {"category": "history_of_record"}, "turn": {"say": "A whiteboard.", "proposals": [{"field": "receivers[].category", "receiver": "Bed Board", "to": "current_state", "quote": "whiteboard"}]}, "expect": "proposals: less strict than the draft: an overtaken failure would no longer ask a person"},
- {"name": "a stricter hand edit kept: orders and results over current state", "added": {"category": "current_state", "tier": 2}, "turn": {"say": "A laboratory system.", "proposals": [{"field": "receivers[].category", "receiver": "Bed Board", "to": "orders_results", "quote": "whiteboard"}]}, "expect": ""},
- {"name": "a kind that would undo the person's own history policy is not less strict: the policy stays", "added": {"category": "history_of_record", "history_policy": "correct"}, "turn": {"say": "A whiteboard.", "proposals": [{"field": "receivers[].category", "receiver": "Bed Board", "to": "current_state", "quote": "whiteboard"}]}, "expect": ""},
+ {"name": "a kind the person answered is never redrafted, even to one less strict", "added": {"category": "history_of_record"}, "turn": {"say": "A whiteboard.", "proposals": [{"field": "receivers[].category", "receiver": "Bed Board", "to": "current_state", "quote": "whiteboard"}]}, "expect": "proposals[0].field: receivers[].category is answered in the draft: only a person changes it, with the page's control"},
+ {"name": "a kind the person answered is never redrafted, even to one more strict", "added": {"category": "current_state", "tier": 2}, "turn": {"say": "A laboratory system.", "proposals": [{"field": "receivers[].category", "receiver": "Bed Board", "to": "orders_results", "quote": "whiteboard"}]}, "expect": "proposals[0].field: receivers[].category is answered in the draft: only a person changes it, with the page's control"},
+ {"name": "a kind over the person's own history policy is not less strict: the policy stays", "added": {"history_policy": "correct"}, "turn": {"say": "A whiteboard.", "proposals": [{"field": "receivers[].category", "receiver": "Bed Board", "to": "current_state", "quote": "whiteboard"}]}, "expect": ""},
+ {"name": "the review's case: a tier the person chose is never redrafted, so tier 3's per_chain stays", "added": {"tier": 3}, "turn": {"say": "Tier 2.", "proposals": [{"field": "receivers[].tier", "receiver": "Bed Board", "to": 2, "quote": "Tier 2"}]}, "expect": "proposals[0].field: receivers[].tier is answered in the draft: only a person changes it, with the page's control"},
+ {"name": "a tier the person chose as text is an answer too", "added": {"tier": "3"}, "turn": {"say": "Tier 3.", "proposals": [{"field": "receivers[].tier", "receiver": "Bed Board", "to": 3, "quote": "Tier 2"}]}, "expect": "proposals[0].field: receivers[].tier is answered in the draft: only a person changes it, with the page's control"},
+ {"name": "a kind left empty is unanswered", "added": {"category": ""}, "turn": {"say": "A whiteboard.", "proposals": [{"field": "receivers[].category", "receiver": "Bed Board", "to": "current_state", "quote": "whiteboard"}]}, "expect": "", "accepted": [{"field": "receivers[].category", "receiver": "Bed Board", "quote": "whiteboard", "to": "current_state", "from": ""}]},
  {"name": "a kind that is not one", "turn": {"say": "A board.", "proposals": [{"field": "receivers[].category", "receiver": "Bed Board", "to": "whiteboard", "quote": "whiteboard"}]}, "expect": "proposals[0].to: must be current_state, history_of_record or orders_results"},
  {"name": "a tier that is not one", "turn": {"say": "Tier 4.", "proposals": [{"field": "receivers[].tier", "receiver": "Bed Board", "to": 4, "quote": "tier 2"}]}, "expect": "proposals[0].to: must be 1, 2 or 3"},
  {"name": "a tier as a word", "turn": {"say": "Operations.", "proposals": [{"field": "receivers[].tier", "receiver": "Bed Board", "to": "operations", "quote": "tier 2"}]}, "expect": "proposals[0].to: must be 1, 2 or 3"},

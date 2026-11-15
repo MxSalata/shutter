@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { SiteProfile, SiteReceiver } from '@/api/types';
 import { coreTable } from '@/test/coreTables';
-import { approvalText, effectsOf, lessStrict, type EffectId } from './effects';
+import { approvalText, effectsOf, lessStrict, type EffectId, type EffectLine } from './effects';
 import { blankReceiver } from './setupStore';
 
 const POLICY = {
@@ -134,6 +134,42 @@ describe('What Shutter will do here', () => {
     );
     expect(lessStrict(blocked, writes)?.id).toBe('case_write');
   });
+
+  it("compares who approves by the policy's own values, which are not points on one scale", () => {
+    const lines = (policy: string): EffectLine[] => [
+      { id: 'approval.ordered', label: '', text: '', rank: policy === 'automatic' ? 0 : 1, policy },
+    ];
+    for (const [was, now] of [
+      ['per_chain', 'approval'],
+      ['approval', 'per_chain'],
+      ['approval', 'board'],
+      ['board', 'approval'],
+      ['per_chain', 'board'],
+      ['approval', 'automatic'],
+      ['person', 'automatic'],
+    ])
+      expect([was, now, lessStrict(lines(was), lines(now))?.id]).toEqual([was, now, 'approval.ordered']);
+    for (const [was, now] of [
+      ['automatic', 'per_chain'],
+      ['automatic', 'board'],
+      ['board', 'board'],
+    ])
+      expect([was, now, lessStrict(lines(was), lines(now))]).toEqual([was, now, null]);
+  });
+
+  it("refuses the review's case: tier 3 to tier 2 on the core's Base() policy, with no line at automatic", () => {
+    const three = effectsOf(profile(), receiver({ name: 'Lab Out', tier: 3 }));
+    const two = effectsOf(profile(), receiver({ name: 'Lab Out', tier: 2 }));
+    expect(three.find((l) => l.id === 'approval.ordered')).toMatchObject({ rank: 1, policy: 'per_chain' });
+    expect(two.find((l) => l.id === 'approval.ordered')).toMatchObject({ rank: 1, policy: 'approval' });
+    expect(lessStrict(three, two)?.id).toBe('approval.ordered');
+    expect(lessStrict(two, three)?.id).toBe('approval.ordered');
+    // A site whose interleaved values differ by tier keeps board
+    const mixed = profile({ policy: { ...POLICY, '2': { ...POLICY['2'], interleaved: 'approval' } } });
+    expect(
+      lessStrict(effectsOf(mixed, receiver({ tier: 1 })), effectsOf(mixed, receiver({ tier: 2 })))?.id,
+    ).toBe('approval.interleaved');
+  });
 });
 
 describe('What Shutter will do here, the table Shutter.Test.ProfileSetup runs at the server', () => {
@@ -141,7 +177,7 @@ describe('What Shutter will do here, the table Shutter.Test.ProfileSetup runs at
     name: string;
     profile?: Partial<SiteProfile>;
     receiver: SiteReceiver;
-    expect: Record<string, number>;
+    expect: Record<string, number | string>;
   }>('ProfileSetup', 'EffectRows');
 
   it('has the rows of the server class', () => {
@@ -158,10 +194,11 @@ describe('What Shutter will do here, the table Shutter.Test.ProfileSetup runs at
       },
       ...row.profile,
     };
+    // An approval line by the policy's own value, as the core keeps it; every other line by its rank
     const ranks = Object.fromEntries(
       effectsOf(base, row.receiver)
         .filter((l) => l.rank !== null)
-        .map((l) => [l.id, l.rank]),
+        .map((l) => [l.id, l.policy ?? l.rank]),
     );
     expect(ranks).toEqual(row.expect);
     // In the lines' own order, as the core compares them

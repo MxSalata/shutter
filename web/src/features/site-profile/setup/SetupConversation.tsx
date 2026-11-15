@@ -116,7 +116,7 @@ export function SetupConversation({
         const mine =
           q.who === 'A' &&
           r.name.trim() !== '' &&
-          draftRefusal(`receivers[].${q.keys[0]}`, base, draft, existing) === '';
+          draftRefusal(`receivers[].${q.keys[0]}`, base, draft, existing, r) === '';
         const reading = !!s.pending && s.pending.rid === rid;
         return (
           <AnswerCard

@@ -1,6 +1,6 @@
 import type { SetupProposal, SetupTurnBody, SiteProfile, SiteReceiver } from '@/api/types';
 import { KINDS, validateProfile } from '../profile';
-import { effectsOf, lessStrict, type EffectId } from './effects';
+import { effectsOf, lessStrict, type EffectId, type EffectLine } from './effects';
 import { classOf } from './fields';
 
 /**
@@ -12,7 +12,8 @@ import { classOf } from './fields';
  *
  * What an agent may draft is the field table's class A with its conditions: a receiver's description; the kind and the
  * tier only of a receiver that is not in the profile in force; no kind while the draft holds a site-wide
- * history_policy; never a tier whose policy row, in force or in the draft, releases any chain kind with no person.
+ * history_policy; never a tier whose policy row, in force or in the draft, releases any chain kind with no person; and
+ * never a kind or a tier the draft already answers.
  */
 
 export const MAX_TEXT = 500;
@@ -50,6 +51,12 @@ export function cleanText(raw: string): { text: string; problem: string } {
   return what ? { text: '', problem: textRefusal(what) } : { text, problem: '' };
 }
 
+/** Whether an entry answers a key: a value that is neither absent, null nor empty text (ProfileSetup.Answered). */
+export function answered(entry: SiteReceiver | undefined, key: string): boolean {
+  const v: unknown = (entry as Record<string, unknown> | undefined)?.[key];
+  return v !== undefined && v !== null && v !== '';
+}
+
 /** A key path with every index written "[]". */
 const plain = (path: string) => path.replace(/\[\d+\]/g, '[]');
 
@@ -75,14 +82,16 @@ const jsonType = (v: unknown): string =>
 const asText = (v: unknown) => (typeof v === 'number' || typeof v === 'string' ? String(v) : '');
 
 /**
- * Why Ask Shutter may not draft a field of a receiver, or "" when it may: the port of ProfileSetup.DraftRefusal. A
- * refusal is the end of a problem's path and its words. With `checkValue` the value is checked too.
+ * Why Ask Shutter may not draft a field of a receiver, or "" when it may: the port of ProfileSetup.DraftRefusal. `entry`
+ * is the receiver's entry in `draft`. A refusal is the end of a problem's path and its words. With `checkValue` the
+ * value is checked too.
  */
 export function draftRefusal(
   field: string,
   base: SiteProfile,
   draft: SiteProfile,
   inForce: boolean,
+  entry: SiteReceiver | undefined,
   to?: unknown,
   checkValue = false,
 ): string {
@@ -104,6 +113,9 @@ export function draftRefusal(
     return what ? `.to: must not hold ${what}` : '';
   }
   if (inForce) return `${at}is changed only by a person on a receiver in force`;
+  // Only an unanswered kind or tier: a person's answer, or one already drafted, is changed only with the page's control
+  if (answered(entry, key))
+    return `${at}is answered in the draft: only a person changes it, with the page's control`;
   if (key === 'category') {
     if ('history_policy' in draft)
       return `${at}is not drafted while the profile holds a site-wide history_policy`;
@@ -120,14 +132,18 @@ export function draftRefusal(
   return '';
 }
 
-/** A line of "What Shutter will do here" in words, for a refusal: the port of ProfileSetup.LineWords. */
-export function lineWords(id: EffectId): string {
+/**
+ * A line of "What Shutter will do here" in words, for a refusal: the port of ProfileSetup.LineWords. For an approval
+ * line, the policy's values before and after.
+ */
+export function lineWords(id: EffectId, was?: string, now?: string): string {
   if (id === 'overtaken') return 'an overtaken failure would no longer ask a person';
   if (id.startsWith('approval.')) {
     const kind = id.split('.')[1];
     const words =
       kind === 'single' ? 'single failures' : kind === 'ordered' ? 'ordered chains' : 'interleaved chains';
-    return `a resend of ${words} would need no person's approval`;
+    if (now === 'automatic' || !was || !now) return `a resend of ${words} would need no person's approval`;
+    return `the approval a resend of ${words} needs would change from ${was} to ${now}: only a person chooses it`;
   }
   if (id === 'case_write') return 'a write to the receiver from a case would become possible';
   if (id === 'engine_resend') return 'an engine resend would become possible';
@@ -184,7 +200,7 @@ export function checkTurn(turn: unknown, base: SiteProfile, draft: SiteProfile, 
     if (seen.has(field)) return fail(`${at}.field: ${field} is named twice`);
     seen.add(field);
     if (p.to === undefined || p.to === null) return fail(`${at}.to: required`);
-    const why = draftRefusal(field, base, draft, inForce, p.to, true);
+    const why = draftRefusal(field, base, draft, inForce, entry, p.to, true);
     if (why) return fail(`${at}${why}`);
     // eslint-disable-next-line no-control-regex
     const quote = typeof p.quote === 'string' ? p.quote.replace(/[\x00-\x1f\x7f-\x9f]/g, '') : '';
@@ -207,10 +223,15 @@ export function checkTurn(turn: unknown, base: SiteProfile, draft: SiteProfile, 
       applied.receivers.find((r) => r.name === receiver)!,
     );
     const was = base.receivers.find((r) => r.name === receiver);
-    let line = lessStrict(was ? effectsOf(base, was) : null, after);
-    if (line) return fail(`proposals: less strict than the profile in force: ${lineWords(line.id)}`);
-    line = lessStrict(effectsOf(draft, entry), after);
-    if (line) return fail(`proposals: less strict than the draft: ${lineWords(line.id)}`);
+    const words = (line: EffectLine, before: EffectLine[]) =>
+      lineWords(line.id, before.find((b) => b.id === line.id)?.policy, line.policy);
+    const inForceLines = was ? effectsOf(base, was) : null;
+    let line = lessStrict(inForceLines, after);
+    if (line && inForceLines)
+      return fail(`proposals: less strict than the profile in force: ${words(line, inForceLines)}`);
+    const draftLines = effectsOf(draft, entry);
+    line = lessStrict(draftLines, after);
+    if (line) return fail(`proposals: less strict than the draft: ${words(line, draftLines)}`);
     const invalid = validateProfile(applied);
     if (invalid && invalid !== validateProfile(draft))
       return fail(`proposals: the profile would not be valid: ${invalid}`);

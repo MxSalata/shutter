@@ -9,9 +9,11 @@ import { FHIR_OVERTAKEN_LINE, KINDS, KIND_LABELS, OVERTAKEN_LINE, POLICY_SHORT }
  * profile, an approval is the policy row of the entry's tier, and declared features decide whether the gate can let a
  * write through.
  *
- * Each line has a rank, 1 when a person or a block stands in the way and 0 when not, so two readings of the same
- * receiver can be compared line by line: a change is less strict when a line's rank falls (`lessStrict`). A line with
- * no rank (a tier that is not answered yet) is compared with nothing.
+ * Each line has a rank, 1 when a person or a block stands in the way and 0 when not, and an approval line also has the
+ * policy's own value for its chain kind (`policy`), since automatic, per_chain, approval and board are not points on one
+ * scale. Two readings of the same receiver are compared line by line (`lessStrict`): a change is less strict when a
+ * line's rank falls, or when an approval line's value changes to anything but a stricter value in place of automatic. A
+ * line with no rank (a tier that is not answered yet) is compared with nothing.
  */
 
 export type EffectId =
@@ -31,6 +33,12 @@ export interface EffectLine {
   text: string;
   /** 1: a person decides, or nothing is sent. 0: no person, or a send is possible. null: not answered. */
   rank: 0 | 1 | null;
+  /**
+   * An approval line's value as the core compares it (ProfileSetup.Effects): the policy row's value for its chain kind,
+   * approval where the row does not name it, "person" at a FHIR receiver. Absent on the other lines and while the tier is
+   * not answered.
+   */
+  policy?: string;
 }
 
 const FEATURES = ['conditional_writes', 'receipts', 'history', 'dry_run'] as const;
@@ -95,7 +103,8 @@ export function effectsOf(profile: SiteProfile, r: SiteReceiver): EffectLine[] {
       rank: person ? 1 : 0,
     },
     ...KINDS.map((kind): EffectLine => {
-      const value = tier ? (profile.policy?.[tier]?.[kind] ?? 'approval') : '';
+      const set: unknown = tier ? profile.policy?.[tier]?.[kind] : undefined;
+      const value = tier ? (typeof set === 'string' && set !== '' ? set : 'approval') : '';
       return {
         id: `approval.${kind}`,
         label: `A resend of ${KIND_LABELS[kind]}`,
@@ -105,6 +114,7 @@ export function effectsOf(profile: SiteProfile, r: SiteReceiver): EffectLine[] {
             ? `Tier ${tier}: ${POLICY_SHORT[value] ?? value}.`
             : 'The tier is not answered.',
         rank: fhir ? 1 : tier ? (value === 'automatic' ? 0 : 1) : null,
+        ...(fhir ? { policy: 'person' } : tier ? { policy: value } : {}),
       };
     }),
     {
@@ -133,15 +143,23 @@ export function effectsOf(profile: SiteProfile, r: SiteReceiver): EffectLine[] {
 }
 
 /**
- * The first line that is less strict in `after` than in `before`, or null: a person's approval removed, a write or an
- * engine resend made possible, an overtaken failure no longer asking a person. A line without a rank on either side is
- * not compared, and an absent `before` (the receiver is not in that profile) compares with nothing.
+ * The first line that is less strict in `after` than in `before`, or null: the port of ProfileSetup.LessStrict. A
+ * person's approval removed or the way a person approves changed, a write or an engine resend made possible, an
+ * overtaken failure no longer asking a person. An approval line compares the policy's values: the same value is the
+ * same, anything in place of automatic is stricter, and any other change is refused, since only a person chooses how
+ * approvals are given. A line without a rank on either side is not compared, and an absent `before` (the receiver is not
+ * in that profile) compares with nothing.
  */
 export function lessStrict(before: EffectLine[] | null, after: EffectLine[]): EffectLine | null {
   if (!before) return null;
   for (const line of after) {
     const was = before.find((b) => b.id === line.id);
     if (!was || was.rank === null || line.rank === null) continue;
+    if (line.id.startsWith('approval.')) {
+      if (was.policy === undefined || line.policy === undefined) continue;
+      if (line.policy === was.policy || was.policy === 'automatic') continue;
+      return line;
+    }
     if (line.rank < was.rank) return line;
   }
   return null;

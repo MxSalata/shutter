@@ -1,4 +1,4 @@
-import type { SetupTurnBody, SetupTurnView, SiteProfile } from '@/api/types';
+import type { SetupTurnBody, SetupTurnView, SiteProfile, SiteReceiver } from '@/api/types';
 import { draftRefusal, checkTurn, rowAutomatic } from '@/features/site-profile/setup/proposals';
 
 /**
@@ -73,7 +73,8 @@ export function readByKeyword(
       from: null,
     });
   } else {
-    const mine = (key: string) => draftRefusal(`receivers[].${key}`, base, draft, inForce) === '';
+    const mine = (key: string) =>
+      draftRefusal(`receivers[].${key}`, base, draft, inForce, entry as SiteReceiver | undefined) === '';
     if (mine('system')) {
       const m = /\b(?:it is|it's|this is) ((?:the |a |an )?[a-z][a-z -]{2,60})/i.exec(text);
       if (m) {

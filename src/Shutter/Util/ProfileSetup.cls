@@ -223,10 +223,13 @@ ClassMethod RowAutomatic(profile As %DynamicObject, tier As %String) As %Boolean
     Quit 0
 }
 
-/// "What Shutter will do here" for one receiver entry under a profile, as ranks: 1 where a person decides or nothing is
-/// sent, 0 where no person stands in the way or a send is possible; a line with no answer (a tier not answered yet) is
-/// absent. Read as the server reads the profile: the kind's default, the entry's own history policy, an older profile's
-/// site-wide one, the policy row of the tier, the declared features.
+/// "What Shutter will do here" for one receiver entry under a profile. Each approval line holds the policy's own value for
+/// its chain kind (automatic, per_chain, approval or board; approval where the row does not name the kind, as the policy
+/// reads it; "person" at a FHIR receiver, whose update only a person releases), since the values are not points on one
+/// scale. Every other line is a rank: 1 where a person decides or nothing is sent, 0 where no person stands in the way or
+/// a send is possible. A line with no answer (a tier not answered yet) is absent. Read as the server reads the profile:
+/// the kind's default, the entry's own history policy, an older profile's site-wide one, the policy row of the tier, the
+/// declared features.
 ClassMethod Effects(profile As %DynamicObject, r As %DynamicObject) As %DynamicObject
 {
     Set fx = {}
@@ -238,10 +241,10 @@ ClassMethod Effects(profile As %DynamicObject, r As %DynamicObject) As %DynamicO
     Set policy = $SELECT($ISOBJECT(profile): profile.%Get("policy"), 1: "")
     Set row = $SELECT((tier '= "") && $ISOBJECT(policy) && policy.%IsA("%Library.DynamicObject"): policy.%Get(tier), 1: "")
     For kind = "single", "ordered", "interleaved" {
-        If fhir Do fx.%Set("approval." _ kind, 1, "number") Continue
+        If fhir Do fx.%Set("approval." _ kind, "person") Continue
         Continue:tier=""
-        Set value = $SELECT($ISOBJECT(row) && row.%IsA("%Library.DynamicObject"): row.%Get(kind), 1: "")
-        Do fx.%Set("approval." _ kind, $SELECT(value = "automatic": 0, 1: 1), "number")
+        Set value = $SELECT($ISOBJECT(row) && row.%IsA("%Library.DynamicObject") && (row.%GetTypeOf(kind) = "string"): row.%Get(kind), 1: "")
+        Do fx.%Set("approval." _ kind, $SELECT(value = "": "approval", 1: value))
     }
     // A write from a case: never at orders and results; at a FHIR receiver only with its own switch on; with declared
     // features only when all four are true; with neither, on the downstream system's defaults, which declare all four.
@@ -265,34 +268,48 @@ ClassMethod Effects(profile As %DynamicObject, r As %DynamicObject) As %DynamicO
     Quit fx
 }
 
-/// The first line that is less strict in <var>after</var> than in <var>before</var>, or "": a person's approval removed, a
-/// write or an engine resend made possible, an overtaken failure no longer asking a person. A line absent on either side
-/// is not compared, and no <var>before</var> at all (the receiver is not in that profile) compares with nothing.
+/// The first line that is less strict in <var>after</var> than in <var>before</var>, or "": a person's approval removed or
+/// the way a person approves changed, a write or an engine resend made possible, an overtaken failure no longer asking a
+/// person. An approval line compares the policy's values: the same value is the same, anything in place of automatic is
+/// stricter, and any other change (automatic in place of a person, or per_chain, approval and board for one another) is
+/// refused, since only a person chooses how approvals are given. A line absent on either side is not compared, and no
+/// <var>before</var> at all (the receiver is not in that profile) compares with nothing.
 ClassMethod LessStrict(before As %DynamicObject, after As %DynamicObject) As %String
 {
     If '$ISOBJECT(before) || '$ISOBJECT(after) Quit ""
     For i = 1:1:$LENGTH(..#LINES, ",") {
         Set id = $PIECE(..#LINES, ",", i)
+        If $EXTRACT(id, 1, 9) = "approval." {
+            Continue:(before.%GetTypeOf(id)'="string")||(after.%GetTypeOf(id)'="string")
+            Set was = before.%Get(id), now = after.%Get(id)
+            Continue:(now=was)||(was="automatic")
+            Return id
+        }
         Continue:(before.%GetTypeOf(id)'="number")||(after.%GetTypeOf(id)'="number")
         If after.%Get(id) < before.%Get(id) Return id
     }
     Quit ""
 }
 
-/// A line of "What Shutter will do here" in words, for a refusal.
-ClassMethod LineWords(id As %String) As %String
+/// A line of "What Shutter will do here" in words, for a refusal; for an approval line, with the values before and after.
+ClassMethod LineWords(id As %String, before As %DynamicObject = "", after As %DynamicObject = "") As %String
 {
     If id = "overtaken" Quit "an overtaken failure would no longer ask a person"
-    If $EXTRACT(id, 1, 9) = "approval." Quit "a resend of " _ $CASE($PIECE(id, ".", 2), "single": "single failures", "ordered": "ordered chains", : "interleaved chains") _ " would need no person's approval"
+    If $EXTRACT(id, 1, 9) = "approval." {
+        Set chains = $CASE($PIECE(id, ".", 2), "single": "single failures", "ordered": "ordered chains", : "interleaved chains")
+        Set was = $SELECT($ISOBJECT(before): before.%Get(id), 1: ""), now = $SELECT($ISOBJECT(after): after.%Get(id), 1: "")
+        If (now = "automatic") || (was = "") || (now = "") Quit "a resend of " _ chains _ " would need no person's approval"
+        Quit "the approval a resend of " _ chains _ " needs would change from " _ was _ " to " _ now _ ": only a person chooses it"
+    }
     If id = "case_write" Quit "a write to the receiver from a case would become possible"
     If id = "engine_resend" Quit "an engine resend would become possible"
     Quit "recovery would be enabled"
 }
 
 /// Why the agent may not draft a field of a receiver, or "" when it may: the field is class A, and its conditions hold.
-/// The description of any receiver; the kind and the tier only of a receiver that is not in the profile in force; no kind
-/// while the draft holds a site-wide history_policy; and never a tier whose policy row, in force or in the draft, releases
-/// any chain kind with no person. The value is checked too when its JSON type is given. A refusal is the end of a
+/// The description of any receiver; the kind and the tier only of a receiver that is not in the profile in force, and only
+/// while the draft leaves them unanswered; no kind while the draft holds a site-wide history_policy; and never a tier whose
+/// policy row, in force or in the draft, releases any chain kind with no person. The value is checked too when its JSON type is given. A refusal is the end of a
 /// problem's path and its words: ".field: <field> is ..." for the field itself, ".to: must be ..." for its value.
 ClassMethod DraftRefusal(field As %String, base As %DynamicObject, draft As %DynamicObject, receiver As %String, to = "", type As %String = "") As %String
 {
@@ -312,6 +329,8 @@ ClassMethod DraftRefusal(field As %String, base As %DynamicObject, draft As %Dyn
         Quit ""
     }
     If $ISOBJECT(..Find(base, receiver)) Quit at _ "is changed only by a person on a receiver in force"
+    // Only an unanswered kind or tier: a person's answer, or one already drafted, is changed only with the page's control.
+    If ..Answered(..Find(draft, receiver), key) Quit at _ "is answered in the draft: only a person changes it, with the page's control"
     If key = "category" {
         If draft.%IsDefined("history_policy") Quit at _ "is not drafted while the profile holds a site-wide history_policy"
         If type = "" Quit ""
@@ -323,6 +342,16 @@ ClassMethod DraftRefusal(field As %String, base As %DynamicObject, draft As %Dyn
     If ((type '= "number") && (type '= "string")) || '$LISTFIND($LISTBUILD("1", "2", "3"), to) Quit ".to: must be 1, 2 or 3"
     If ..RowAutomatic(base, to) || ..RowAutomatic(draft, to) Quit ".to: must not be " _ to _ ", a tier that releases without a person under the policy in force or in the draft: only a person chooses it"
     Quit ""
+}
+
+/// Whether an entry answers a key: a value that is neither absent, null nor empty text.
+ClassMethod Answered(entry As %DynamicObject, key As %String) As %Boolean
+{
+    If '$ISOBJECT(entry) Quit 0
+    Set type = entry.%GetTypeOf(key)
+    If (type = "unassigned") || (type = "null") Quit 0
+    If (type = "object") || (type = "array") Quit 1
+    Quit entry.%Get(key) '= ""
 }
 
 /// A text with its case folded and each run of spaces as one, for the quote check.
@@ -404,10 +433,12 @@ ClassMethod CheckTurn(turn As %DynamicObject, base As %DynamicObject, draft As %
         Set applied = ..Apply(draft, receiver, out.proposals)
         Set after = ..Effects(applied, ..Find(applied, receiver))
         Set inForce = ..Find(base, receiver)
-        Set line = $SELECT($ISOBJECT(inForce): ..LessStrict(..Effects(base, inForce), after), 1: "")
-        If line '= "" Set problem = "proposals: less strict than the profile in force: " _ ..LineWords(line) Quit 0
-        Set line = ..LessStrict(..Effects(draft, entry), after)
-        If line '= "" Set problem = "proposals: less strict than the draft: " _ ..LineWords(line) Quit 0
+        Set was = $SELECT($ISOBJECT(inForce): ..Effects(base, inForce), 1: "")
+        Set line = ..LessStrict(was, after)
+        If line '= "" Set problem = "proposals: less strict than the profile in force: " _ ..LineWords(line, was, after) Quit 0
+        Set was = ..Effects(draft, entry)
+        Set line = ..LessStrict(was, after)
+        If line '= "" Set problem = "proposals: less strict than the draft: " _ ..LineWords(line, was, after) Quit 0
         // 5. The validator on a copy: nothing, or exactly what it says of the draft as sent (its own unfinished state).
         Set invalid = ##class(Shutter.Store.SiteProfile).Validate(applied)
         If (invalid '= "") && (invalid '= ##class(Shutter.Store.SiteProfile).Validate(draft)) Set problem = "proposals: the profile would not be valid: " _ invalid Quit 0

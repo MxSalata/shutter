@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import type { SetupProposal, SiteProfile, SiteReceiver } from '@/api/types';
 import { coreTable } from '@/test/coreTables';
-import { applyBatch, checkTurn, cleanText, draftRefusal, rowAutomatic, textProblem } from './proposals';
+import {
+  applyBatch,
+  checkTurn,
+  cleanText,
+  draftRefusal,
+  nameProblem,
+  rowAutomatic,
+  textProblem,
+} from './proposals';
+import { whyFocus } from './cards';
+import { QUESTIONS } from './fields';
 
 /**
  * The web app's copy of the core's checks on a turn (Shutter.Util.ProfileSetup.CheckTurn), held to the core's own table:
@@ -87,18 +97,29 @@ describe('the checks on a turn, the table Shutter.Test.ProfileSetup runs at the 
 
 describe('what Ask Shutter may draft', () => {
   const draft = stage({ name: '', turn: null, expect: '' }).draft;
+  const added = draft.receivers[1];
 
   it('is a description, and the kind and tier of a receiver being added, and nothing else', () => {
     for (const field of ['receivers[].system', 'receivers[].category', 'receivers[].tier'])
-      expect([field, draftRefusal(field, BASE, draft, false)]).toEqual([field, '']);
+      expect([field, draftRefusal(field, BASE, draft, false, added)]).toEqual([field, '']);
     // On a receiver in force, the description alone
-    expect(draftRefusal('receivers[].system', BASE, draft, true)).toBe('');
-    expect(draftRefusal('receivers[].category', BASE, draft, true)).toMatch(
+    const own = draft.receivers[0];
+    expect(draftRefusal('receivers[].system', BASE, draft, true, own)).toBe('');
+    expect(draftRefusal('receivers[].category', BASE, draft, true, own)).toMatch(
       /only by a person on a receiver in force$/,
     );
-    expect(draftRefusal('receivers[].tier', BASE, draft, true)).toMatch(
+    expect(draftRefusal('receivers[].tier', BASE, draft, true, own)).toMatch(
       /only by a person on a receiver in force$/,
     );
+    // A kind or a tier the draft already answers is a person's to change, whoever gave it
+    for (const [field, entry] of [
+      ['receivers[].category', { ...added, category: 'history_of_record' }],
+      ['receivers[].tier', { ...added, tier: 3 }],
+    ] as const)
+      expect(draftRefusal(field, BASE, draft, false, entry as SiteReceiver)).toBe(
+        `.field: ${field} is answered in the draft: only a person changes it, with the page's control`,
+      );
+    expect(draftRefusal('receivers[].system', BASE, draft, false, { ...added, system: 'a board' })).toBe('');
     for (const field of [
       'recovery.mode',
       'policy.1.single',
@@ -114,7 +135,7 @@ describe('what Ask Shutter may draft', () => {
       'receivers[].engine_resend',
       'receivers[].name',
     ])
-      expect([field, draftRefusal(field, BASE, draft, false)]).toEqual([
+      expect([field, draftRefusal(field, BASE, draft, false, added)]).toEqual([
         field,
         `.field: ${field} is answered only by a person, with the page's control`,
       ]);
