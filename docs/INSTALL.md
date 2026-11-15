@@ -115,7 +115,8 @@ nothing sent.
 - **What the manifests run.** Both run `Shutter.Setup.InstallStatus(root, demo, production)`, and the full package then
   `Shutter.Setup.InstallAIHubStatus(root)` (the provider configuration, the knowledge bases, the agent mode, the publisher's
   web application). A failed install stops the load.
-- **The parameters.** `demo` defaults to 1, and `zpm "load /path/to/module -Ddemo=0"` installs without the demo; `production`
+- **The parameters.** `demo` is empty by default: a first install is then the demo, and an upgrade keeps the flag the
+  instance holds (section 8). `zpm "load /path/to/module -Ddemo=0"` installs without the demo; `production`
   (empty by default) names a production of the site's own to install Shutter's items into instead (section 4), as in
   `zpm "load /path/to/module -Ddemo=0 -Dproduction=Your.Production"`.
 - **A packaged install** (an archive made by `zpm "package"`, the form the registry serves) carries the `knowledge/`,
@@ -545,9 +546,14 @@ production, its cases and the saved site profile, and never runs the uninstall. 
 (stop and start it in the Production Configuration page): the load does not restart a running production, so its
 long-lived jobs keep the earlier code until then.
 
-**On a site's install, pass `-Ddemo=0` on every upgrade too:** `zpm "load <folder> -Ddemo=0"`, or `zpm "install
-iris-shutter -Ddemo=0"` from the registry. Every install, an upgrade included, writes the demo flag from the `demo`
-parameter, and the parameter's default is 1, so a site upgraded without it would be set up as a demo.
+**From 1.4.8 an upgrade keeps the install's own demo setting.** The `demo` parameter is empty unless you give it, and an
+install with it empty keeps the flag the instance already holds: `zpm "load <folder>"`, or `zpm "install iris-shutter"`
+from the registry, with no `-Ddemo` leaves a site's install a site's and a demo a demo. Only a first install with no
+`-Ddemo` installs the demo. `-Ddemo=0` on a site's upgrade is still harmless, and an explicit `-Ddemo=0` or `-Ddemo=1`
+always wins. Before 1.4.8 the parameter defaulted to 1 and every install wrote it, so a load of 1.4.7 or earlier without
+`-Ddemo=0` sets a site up as a demo: pass it there. After any upgrade, `GET /api/shutter/health` should read
+`"demo": false` on a site's install; if it reads `true`, an earlier load without `-Ddemo=0` set the flag, and a load with
+`-Ddemo=0` sets it back, though it does not remove the demo users, roles, web applications or namespaces that load made.
 
 **Upgrading to 1.2.0.** Run the install once, or load the newer tree, and restart the production as above. Then:
 
