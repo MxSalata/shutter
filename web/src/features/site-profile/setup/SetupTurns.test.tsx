@@ -262,6 +262,8 @@ describe('a typed answer read by Ask Shutter', () => {
     );
     expect(await exchange.findByText(/Drafted: What it is, Kind of system, Tier\./)).toBeInTheDocument();
     expect(exchange.getByText(/\[mock\] Read from your words about Bed Board/)).toBeInTheDocument();
+    // Who read it is said under what it said: here the mock, which calls no model
+    expect(exchange.getByText('Read by the API mimic: no model was called.')).toBeInTheDocument();
     expect(added()).toMatchObject({ system: 'the ward whiteboard', category: 'current_state', tier: 3 });
     const s = useSetup.getState();
     for (const q of ['system', 'category', 'tier'] as const)
@@ -630,6 +632,15 @@ describe('an answer that must not be used', () => {
     await nameBedBoard(user);
     await sendTyped(user);
     expect(await screen.findByText(/<img src=x onerror="alert\(1\)"> see \[the docs\]/)).toBeInTheDocument();
+    // A live run names its agent and its model, and links to the run's message in the Management Portal
+    const run = await screen.findByRole('link', { name: 'message 77' });
+    expect(run.parentElement).toHaveTextContent(
+      'Read live by the Set-up guide agent on IRIS AI Hub, with claude-opus-5-5. Its run is message 77 in the Management Portal.',
+    );
+    expect(run).toHaveAttribute(
+      'href',
+      '/csp/healthshare/shutter/EnsPortal.MessageContents.zen?HeaderClass=Ens.MessageHeader&HeaderId=77',
+    );
     await waitFor(() => expect(added().system).toBe('a board'));
     expect(container.querySelector('img')).toBeNull();
     expect(container.querySelector('a[href*="evil.example"]')).toBeNull();

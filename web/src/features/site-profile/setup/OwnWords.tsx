@@ -4,15 +4,18 @@ import { useSendSetupTurn, useSettings } from '@/api/hooks';
 import type { SiteReceiver } from '@/api/types';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { LiveUnavailableNotice } from '@/components/LiveUnavailableNotice';
+import { PortalLink } from '@/components/PortalLink';
+import { TRIAL } from '@/env/mode';
 import { isApiError } from '@/lib/errors';
 import { liveRefusal } from '@/lib/liveAgents';
+import { messageContentsLink } from '@/lib/messageLink';
 import { DRAFTING_OFF, TYPED_NOTE, type Drafting } from './drafting';
 import { QUESTIONS, type SetupQuestion } from './fields';
 import { MAX_TEXT, cleanText } from './proposals';
 import { useSetup, type TurnEntry } from './setupStore';
 
 /** How many typed answers may draft nothing for one question before the card asks for its control instead. */
-export const MAX_MISSES = 2;
+const MAX_MISSES = 2;
 
 /** Why a typed answer was not sent, as the route refuses it (CONTRACTS 14.7). */
 function SendError({ error }: { error: unknown }) {
@@ -58,6 +61,42 @@ function SendError({ error }: { error: unknown }) {
       </Alert>
     );
   return <ErrorAlert error={error} title="The answer was not sent" />;
+}
+
+/** The agent that reads a typed answer, as an exchange names it. */
+const SETUP_AGENT = 'the Set-up guide agent on IRIS AI Hub';
+
+/** The Management Portal's base path in Shutter's own namespace, where the agent runs (features/assistant/PageChat.tsx). */
+const SHUTTER_PORTAL = '/csp/healthshare/shutter/';
+
+/**
+ * Who read a typed answer, in a sentence, with the run's message in the Management Portal: the agent's request and its
+ * answer, as a page question's run is linked. Under the API mimic no model was called, and the line says so.
+ */
+function ReadBy({ turn }: { turn: TurnEntry }) {
+  if (turn.state === 'reading' || turn.state === 'cancelled' || (!turn.model && !turn.run)) return null;
+  return (
+    <Text size="xs" c="dimmed">
+      {turn.model === 'mock'
+        ? 'Read by the API mimic: no model was called.'
+        : turn.model
+          ? `Read live by ${SETUP_AGENT}, with ${turn.model}.`
+          : `Read live by ${SETUP_AGENT}.`}
+      {!TRIAL && turn.run ? (
+        <>
+          {' Its run is '}
+          <PortalLink
+            href={messageContentsLink(SHUTTER_PORTAL, turn.run)}
+            what={`message ${turn.run}, the agent's request and answer`}
+            size="xs"
+          >
+            message {turn.run}
+          </PortalLink>
+          {' in the Management Portal.'}
+        </>
+      ) : null}
+    </Text>
+  );
 }
 
 /** One exchange under a question's card: what the person typed, then what came of it. */
@@ -117,6 +156,7 @@ function Exchange({ turn, onCancel }: { turn: TurnEntry; onCancel: () => void })
           Ask Shutter&apos;s reading was not used: {turn.note}. Choose here instead, with the control above.
         </Text>
       ) : null}
+      <ReadBy turn={turn} />
     </Stack>
   );
 }

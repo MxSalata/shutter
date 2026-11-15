@@ -80,6 +80,9 @@ export interface TurnEntry {
   /** Why nothing was used. */
   note?: string;
   undone?: boolean;
+  /** Who read it: the run's model (`mock` under the API mimic) and its message in the production, for the trace. */
+  model?: string | null;
+  run?: string | null;
 }
 
 /** The turn being read: one at a time. */
@@ -347,7 +350,9 @@ export const useSetup = create<SetupState>((set, get) => ({
       // Not the turn being read (cancelled, discarded, signed out since): nothing of it is used
       if (!p || p.turnId !== view.turnId || !s.draft || !s.base) return s;
       const end = (entry: Partial<TurnEntry>, more: Partial<SetupData> = {}): Partial<SetupData> => ({
-        turns: s.turns.map((t) => (t.id === view.turnId ? { ...t, ...entry } : t)),
+        turns: s.turns.map((t) =>
+          t.id === view.turnId ? { ...t, model: view.model, run: view.ensMessageId, ...entry } : t,
+        ),
         pending: null,
         ...more,
       });
