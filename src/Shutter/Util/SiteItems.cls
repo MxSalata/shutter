@@ -42,8 +42,9 @@ Parameter PRODUCTIONPROPERTIES = "ActorPoolSize,TestingEnabled,LogGeneralTraceEv
 /// text is taken to be Shutter's older one, and the new definition's stands.
 Parameter DESCRIPTIVE = "Comment,Category,Description";
 
-/// A capture no install has used yet is used by the next one for this many seconds: an upgrade that stopped partway may
-/// already have rebuilt the definition, and the capture taken before it is the site's. After that a capture is taken again.
+/// A capture no install has used yet stands until an install uses it, however old: a load that stopped partway may
+/// already have rebuilt the definition from the package, and a capture taken then would read the package's values as the
+/// site's. One older than this many seconds is named in the account, since an item changed after it has its value from it.
 Parameter PENDINGSECONDS = 86400;
 
 /// The module's Invoke, before IPM's Reload phase: the capture (Capture), while the definition is still the site's. Also
@@ -131,13 +132,12 @@ ClassMethod InstallOwns(Output owned, demoBefore As %String, demoNow As %Boolean
 
 /// Takes the capture into @node@("before"): the production's definition (Read), and as the node's value
 /// $LISTBUILD(seconds, UTC time, job, found, demo), demo being the stored demo flag of the earlier install. A capture no
-/// install has used, younger than PENDINGSECONDS, is kept as it is. On an instance no install has run on (installed 0)
+/// install has used is kept as it is, however old (PENDINGSECONDS). On an instance no install has run on (installed 0)
 /// nothing is read: what is there is the shipped class freshly compiled, not a site's. Returns "captured", "pending" (one
 /// kept), "no definition" or "first install".
 ClassMethod Capture(production As %String, node As %String, installed As %Boolean, demo As %String = "") As %String
 {
-    Set meta = $GET(@node@("before"))
-    If (meta '= "") && ((..Seconds() - $LISTGET(meta, 1)) < ..#PENDINGSECONDS) Quit "pending"
+    If $GET(@node@("before")) '= "" Quit "pending"
     Kill @node@("before")
     Set found = 0
     If installed {
@@ -153,11 +153,11 @@ ClassMethod Capture(production As %String, node As %String, installed As %Boolea
 /// (Apply), the definition saved and written to the class (so a later compile, a restart through
 /// Shutter.Setup.RestartProduction included, rebuilds the same definition), the running production updated when anything
 /// changed, the record and the definition left kept, and the capture removed. out holds mode ("record", "no record",
-/// "nothing captured" or "no production"), changes, and the lists kept, restored, removed and skipped, which name the
-/// items, properties and settings but never a setting's value.
+/// "nothing captured" or "no production"), changes, and the lists kept, restored, removed, skipped and warnings, which name
+/// the items, properties and settings but never a setting's value.
 ClassMethod Keep(production As %String, node As %String, Output out As %DynamicObject, ByRef owned) As %Status
 {
-    Set sc = $$$OK, out = {"mode": "", "changes": 0, "kept": [], "restored": [], "removed": [], "skipped": []}
+    Set sc = $$$OK, out = {"mode": "", "changes": 0, "kept": [], "restored": [], "removed": [], "skipped": [], "warnings": []}
     Try {
         Set prod = ##class(Ens.Config.Production).%OpenId(production)
         If '$ISOBJECT(prod) Kill @node@("before") Set out.mode = "no production" Quit
@@ -171,6 +171,7 @@ ClassMethod Keep(production As %String, node As %String, Output out As %DynamicO
                 Do ..Read(prod, .left)
             }
             Set out.mode = $SELECT(record: "record", 1: "no record")
+            If (..Seconds() - $LISTGET(meta, 1)) > ..#PENDINGSECONDS Do out.warnings.%Push("the items' settings were noted at " _ $LISTGET(meta, 2) _ " by a load that stopped partway: an item changed since then has the value it had then")
             Do ..Learn(.before, .left, record, .site, out, .owned)
         } Else {
             Set out.mode = "nothing captured"
@@ -497,11 +498,11 @@ ClassMethod TargetKey(target As %String) As %String [ CodeMode = expression, Pri
 $SELECT(target = "": "-", 1: target)
 }
 
-/// One line for the install's output: what Keep put back, removed and left out, or "" when nothing.
+/// One line for the install's output: what Keep put back, removed and left out, and what to check, or "" when nothing.
 ClassMethod Account(out As %DynamicObject) As %String
 {
     Set said = ""
-    For list = $LISTBUILD("kept", "the site's values put back: "), $LISTBUILD("restored", "the site's items put back: "), $LISTBUILD("removed", "settings the site took out taken out: "), $LISTBUILD("skipped", "not kept: ") {
+    For list = $LISTBUILD("kept", "the site's values put back: "), $LISTBUILD("restored", "the site's items put back: "), $LISTBUILD("removed", "settings the site took out taken out: "), $LISTBUILD("skipped", "not kept: "), $LISTBUILD("warnings", "to check: ") {
         Set a = out.%Get($LIST(list, 1)), text = ""
         Continue:'$ISOBJECT(a)
         Set last = a.%Size() - 1

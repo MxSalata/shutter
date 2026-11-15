@@ -121,10 +121,12 @@ Method TestCapture()
     Do $$$AssertStatusOK(..WriteClass(..Earlier()), "the production compiles")
     Set now = $CLASSMETHOD(c, "Seconds")
     Set @node@("before") = $LISTBUILD(now - 60, "earlier", 1, 0)
-    Do $$$AssertEquals($CLASSMETHOD(c, "Capture", prod, node, 1), "pending", "a capture younger than a day, which no install used, is kept")
+    Do $$$AssertEquals($CLASSMETHOD(c, "Capture", prod, node, 1), "pending", "a capture no install used is kept")
     Do $$$AssertEquals($LIST(@node@("before"), 2), "earlier", "as it was")
-    Set @node@("before") = $LISTBUILD(now - 90000, "earlier", 1, 0)
-    Do $$$AssertEquals($CLASSMETHOD(c, "Capture", prod, node, 1, 0), "captured", "one older than a day is taken again")
+    Set @node@("before") = $LISTBUILD(now - 900000, "earlier", 1, 0)
+    Do $$$AssertEquals($CLASSMETHOD(c, "Capture", prod, node, 1), "pending", "however old: a load that stopped partway may have rebuilt the definition since")
+    Kill @node
+    Do $$$AssertEquals($CLASSMETHOD(c, "Capture", prod, node, 1, 0), "captured", "with none pending, the definition is captured")
     Do $$$AssertEquals($LIST(@node@("before"), 3) _ "/" _ $LIST(@node@("before"), 4) _ "/" _ $LIST(@node@("before"), 5), $JOB _ "/1/0", "by this job, with the definition and the earlier install's demo flag")
     Do $$$AssertEquals(@node@("before", "i", "UT Watch", "p", "PoolSize"), 1, "which it holds")
     Kill @node
@@ -135,6 +137,27 @@ Method TestCapture()
     Do $$$AssertStatusOK($CLASSMETHOD(c, "Keep", "ShutterTest.NoSuchProduction", node, .out), "Keep with no production")
     Do $$$AssertEquals(out.mode, "no production", "does nothing")
     Do $$$AssertEquals($DATA(@node@("before")), 0, "but use up the capture")
+}
+
+/// A load that stopped after its compile (the definition already the package's) and is retried more than a day later:
+/// the capture taken before it stands, so the site's values come back, and the account names its time.
+Method TestRetryADayLater()
+{
+    Set c = ..#CLASS, prod = ..#PRODUCTION, node = ..#NODE
+    Do $$$AssertStatusOK(..WriteClass(..Earlier()), "the earlier release's production compiles")
+    Do $CLASSMETHOD(c, "Capture", prod, node, 0)
+    Do $$$AssertStatusOK($CLASSMETHOD(c, "Keep", prod, node, .out), "the first install keeps a record")
+    Do $$$AssertStatusOK(..SiteEdits(), "the site's own edits save")
+    Do $$$AssertEquals($CLASSMETHOD(c, "Capture", prod, node, 1), "captured", "the load captures")
+    Do $$$AssertStatusOK(..WriteClass(..Newer()), "and compiles the newer class, then stops")
+    Set meta = @node@("before"), $LIST(meta, 1) = $LIST(meta, 1) - 90000, @node@("before") = meta
+    Do $$$AssertEquals($CLASSMETHOD(c, "Capture", prod, node, 1), "pending", "the retry, a day and more later, keeps the capture")
+    Do $$$AssertStatusOK($CLASSMETHOD(c, "Keep", prod, node, .out), "and keeps")
+    Do $$$AssertEquals(out.mode, "record", "against the record")
+    Do ..SiteKept("after a retry a day later")
+    Do ..NewArrived("after a retry a day later")
+    Do $$$AssertEquals(..Value("UT Watch", "Host", "AlertOnError"), "(none)", "the setting the site took out stays out")
+    Do $$$AssertTrue($CLASSMETHOD(c, "Account", out) [ "noted at", "the account names when the settings were noted")
 }
 
 /// An item whose class changed in the newer release is the package's, and what the site set on it leaves the record.
