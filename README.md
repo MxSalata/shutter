@@ -71,7 +71,7 @@ Open the [trial](https://mxsalata.github.io/shutter/) and choose **Start with S2
 
 1. **S2: recover a transfer that never arrived.** Press **Run S2**, then open the case named by the banner, C-000002 in the trial. Choose **Decide on the resend**, then **Approve the resend** in the review that opens. One conditional write, then **Delivered: verified at the receiver**.
 
-   The two-minute video plays S2 in Site policy mode: the site's policy proposes the resend from the catalogue, with no agent, and a person approves it. In Board mode, as here, the board investigates first.
+   The two-minute video shows a failure like S2's that the demo hospital played, in Site policy mode: the site's policy proposes the resend from the catalogue, with no agent, and a person approves it. In Board mode, as here, the board investigates first.
 
 2. **S3: recognise a delivery that already arrived.** Press **Run S3**. Its case, C-000003 in the trial, reads the receiver's receipt. Only the acknowledgement was lost. Nothing is written.
 3. **S8: stop an ambiguous movement.** Press **Run S8 in Board**. Two systems moved the same patient at the same recorded time. Its case, C-000008 in the trial, escalates with **0 writes**. A person must decide. Its **In IRIS:** line opens **Message trace**, the agents' steps in IRIS's Visual Trace (a screenshot in the trial). On the online demo, **Message trace** first asks for a Cloudflare Access sign-in (GitHub or an emailed code), then IRIS's read-only sign-in, `demo-trace` / `Shutter-Demo-IRIS-Portal`; the trial's screenshot needs neither.
@@ -367,7 +367,7 @@ Each technology has a job in the workflow.
 | Technology | What it does and where to inspect it |
 | --- | --- |
 | **Workflow Engine** | `EnsLib.Workflow` tasks bind approvals to the plan digest: [case workflow](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Process/CaseWorkflow.cls), [incident workflow](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Process/IncidentWorkflow.cls) |
-| **IRIS Vector Search** | Agents search interface knowledge in IRIS vector tables through `%AI.RAG.VectorStore.IRIS`: [Library.cls](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Knowledge/Library.cls). Every recorded agent run searches at least once. In the trial, open S8's case (C-000008), then an agent's **Recorded tool calls**: the Coordinator's first call is `search_playbooks`, the Encounter specialist's `search_lifecycle` |
+| **IRIS Vector Search** | Agents search interface knowledge in IRIS vector tables through `%AI.RAG.VectorStore.IRIS`: [Library.cls](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Knowledge/Library.cls). Every recorded investigation searches at least once. In the trial, open S8's case (C-000008), then an agent's **Recorded tool calls**: the Coordinator's first call is `search_playbooks`, Encounter Integrity's `search_lifecycle` |
 | **Embedded Python** | `zoneinfo` resolves IANA feed time zones for event ordering: [Time.cls](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Util/Time.cls) |
 | **Custom Adapter** | An inbound adapter walks the HL7 index for the encounter's other messages: [Adapter.cls](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Index/Adapter.cls) |
 | **Java PEX** | HAPI 2.6.0 provides an independent Second Parser when IRIS cannot read a message: [PEX implementation](https://github.com/MxSalata/shutter/tree/main/pex). An IPM install needs `pex/build.sh` before this item runs |
