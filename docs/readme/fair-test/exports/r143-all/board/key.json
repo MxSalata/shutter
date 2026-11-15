@@ -1,0 +1,326 @@
+{
+ "Rda520d": {
+  "mode": "board",
+  "repetition": 1,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 123,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 4
+ },
+ "R189893": {
+  "mode": "board",
+  "repetition": 3,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 111,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 4
+ },
+ "Re4dc70": {
+  "mode": "board",
+  "repetition": 3,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 117,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 4
+ },
+ "R4e3a26": {
+  "mode": "board",
+  "repetition": 1,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 111,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 4
+ },
+ "R45853b": {
+  "mode": "board",
+  "repetition": 2,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 112,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 4
+ },
+ "R42dde5": {
+  "mode": "board",
+  "repetition": 2,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 111,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 4
+ },
+ "R253ad4": {
+  "mode": "board",
+  "repetition": 1,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 117,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 4
+ },
+ "Reb35fb": {
+  "mode": "board",
+  "repetition": 2,
+  "no_model_answer": false,
+  "approved_by_rig": true,
+  "profile_version": 111,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 4
+ },
+ "Rd2a0c1": {
+  "mode": "board",
+  "repetition": 1,
+  "no_model_answer": false,
+  "approved_by_rig": true,
+  "profile_version": 111,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 4
+ },
+ "R33e0bd": {
+  "mode": "board",
+  "repetition": 2,
+  "no_model_answer": false,
+  "approved_by_rig": true,
+  "profile_version": 117,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 4
+ },
+ "Rec3a54": {
+  "mode": "board",
+  "repetition": 2,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 123,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 4
+ },
+ "Rdcad6d": {
+  "mode": "board",
+  "repetition": 3,
+  "no_model_answer": false,
+  "approved_by_rig": true,
+  "profile_version": 123,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 4
+ },
+ "R697967": {
+  "mode": "board",
+  "repetition": 3,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 123,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 4
+ },
+ "R449277": {
+  "mode": "board",
+  "repetition": 3,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 117,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 4
+ },
+ "R219366": {
+  "mode": "board",
+  "repetition": 3,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 116,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 4
+ },
+ "Rf7ca5b": {
+  "mode": "board",
+  "repetition": 1,
+  "no_model_answer": false,
+  "approved_by_rig": true,
+  "profile_version": 117,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 4
+ },
+ "R7135e6": {
+  "mode": "board",
+  "repetition": 1,
+  "no_model_answer": false,
+  "approved_by_rig": true,
+  "profile_version": 123,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 4
+ },
+ "R367980": {
+  "mode": "board",
+  "repetition": 2,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 111,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 4
+ },
+ "R05ee56": {
+  "mode": "board",
+  "repetition": 3,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 123,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 4
+ },
+ "R85957d": {
+  "mode": "board",
+  "repetition": 2,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 123,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 4
+ },
+ "Rb2f3ec": {
+  "mode": "board",
+  "repetition": 3,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 123,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 4
+ },
+ "Ra25b71": {
+  "mode": "board",
+  "repetition": 1,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 114,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 4
+ },
+ "Rb80d74": {
+  "mode": "board",
+  "repetition": 3,
+  "no_model_answer": false,
+  "approved_by_rig": true,
+  "profile_version": 122,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 4
+ },
+ "Ree9941": {
+  "mode": "board",
+  "repetition": 2,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 123,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 4
+ },
+ "R0b8fe1": {
+  "mode": "board",
+  "repetition": 1,
+  "no_model_answer": false,
+  "approved_by_rig": true,
+  "profile_version": 120,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 4
+ },
+ "R95bb33": {
+  "mode": "board",
+  "repetition": 3,
+  "no_model_answer": false,
+  "approved_by_rig": true,
+  "profile_version": 117,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 4
+ },
+ "Rbf2ba0": {
+  "mode": "board",
+  "repetition": 3,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 111,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 4
+ },
+ "R91cd5e": {
+  "mode": "board",
+  "repetition": 1,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 123,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 4
+ },
+ "R042463": {
+  "mode": "board",
+  "repetition": 2,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 117,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 4
+ },
+ "R02045b": {
+  "mode": "board",
+  "repetition": 1,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 117,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 4
+ },
+ "R7f6b6d": {
+  "mode": "board",
+  "repetition": 2,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 117,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 4
+ },
+ "R62078f": {
+  "mode": "board",
+  "repetition": 2,
+  "no_model_answer": false,
+  "approved_by_rig": true,
+  "profile_version": 123,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 4
+ },
+ "R762e86": {
+  "mode": "board",
+  "repetition": 1,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 111,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 4
+ },
+ "R528681": {
+  "mode": "board",
+  "repetition": 3,
+  "no_model_answer": false,
+  "approved_by_rig": true,
+  "profile_version": 111,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 4
+ },
+ "Re7c01f": {
+  "mode": "board",
+  "repetition": 2,
+  "no_model_answer": false,
+  "approved_by_rig": true,
+  "profile_version": 118,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 4
+ },
+ "Rd84686": {
+  "mode": "board",
+  "repetition": 1,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 123,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 4
+ }
+}

@@ -1,0 +1,326 @@
+{
+ "Rda520d": {
+  "mode": "rules",
+  "repetition": 1,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 87,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 0
+ },
+ "R189893": {
+  "mode": "rules",
+  "repetition": 3,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 75,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 0
+ },
+ "Re4dc70": {
+  "mode": "rules",
+  "repetition": 3,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 81,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 0
+ },
+ "R4e3a26": {
+  "mode": "rules",
+  "repetition": 1,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 75,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 0
+ },
+ "R45853b": {
+  "mode": "rules",
+  "repetition": 2,
+  "no_model_answer": false,
+  "approved_by_rig": true,
+  "profile_version": 76,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 0
+ },
+ "R42dde5": {
+  "mode": "rules",
+  "repetition": 2,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 75,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 0
+ },
+ "R253ad4": {
+  "mode": "rules",
+  "repetition": 1,
+  "no_model_answer": false,
+  "approved_by_rig": true,
+  "profile_version": 81,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 0
+ },
+ "Reb35fb": {
+  "mode": "rules",
+  "repetition": 2,
+  "no_model_answer": false,
+  "approved_by_rig": true,
+  "profile_version": 75,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 0
+ },
+ "Rd2a0c1": {
+  "mode": "rules",
+  "repetition": 1,
+  "no_model_answer": false,
+  "approved_by_rig": true,
+  "profile_version": 75,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 0
+ },
+ "R33e0bd": {
+  "mode": "rules",
+  "repetition": 2,
+  "no_model_answer": false,
+  "approved_by_rig": true,
+  "profile_version": 81,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 0
+ },
+ "Rec3a54": {
+  "mode": "rules",
+  "repetition": 2,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 87,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 0
+ },
+ "Rdcad6d": {
+  "mode": "rules",
+  "repetition": 3,
+  "no_model_answer": false,
+  "approved_by_rig": true,
+  "profile_version": 87,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 0
+ },
+ "R697967": {
+  "mode": "rules",
+  "repetition": 3,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 87,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 0
+ },
+ "R449277": {
+  "mode": "rules",
+  "repetition": 3,
+  "no_model_answer": false,
+  "approved_by_rig": true,
+  "profile_version": 81,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 0
+ },
+ "R219366": {
+  "mode": "rules",
+  "repetition": 3,
+  "no_model_answer": false,
+  "approved_by_rig": true,
+  "profile_version": 80,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 0
+ },
+ "Rf7ca5b": {
+  "mode": "rules",
+  "repetition": 1,
+  "no_model_answer": false,
+  "approved_by_rig": true,
+  "profile_version": 81,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 0
+ },
+ "R7135e6": {
+  "mode": "rules",
+  "repetition": 1,
+  "no_model_answer": false,
+  "approved_by_rig": true,
+  "profile_version": 87,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 0
+ },
+ "R367980": {
+  "mode": "rules",
+  "repetition": 2,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 75,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 0
+ },
+ "R05ee56": {
+  "mode": "rules",
+  "repetition": 3,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 87,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 0
+ },
+ "R85957d": {
+  "mode": "rules",
+  "repetition": 2,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 87,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 0
+ },
+ "Rb2f3ec": {
+  "mode": "rules",
+  "repetition": 3,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 87,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 0
+ },
+ "Ra25b71": {
+  "mode": "rules",
+  "repetition": 1,
+  "no_model_answer": false,
+  "approved_by_rig": true,
+  "profile_version": 78,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 0
+ },
+ "Rb80d74": {
+  "mode": "rules",
+  "repetition": 3,
+  "no_model_answer": false,
+  "approved_by_rig": true,
+  "profile_version": 86,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 0
+ },
+ "Ree9941": {
+  "mode": "rules",
+  "repetition": 2,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 87,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 0
+ },
+ "R0b8fe1": {
+  "mode": "rules",
+  "repetition": 1,
+  "no_model_answer": false,
+  "approved_by_rig": true,
+  "profile_version": 84,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 0
+ },
+ "R95bb33": {
+  "mode": "rules",
+  "repetition": 3,
+  "no_model_answer": false,
+  "approved_by_rig": true,
+  "profile_version": 81,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 0
+ },
+ "Rbf2ba0": {
+  "mode": "rules",
+  "repetition": 3,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 75,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 0
+ },
+ "R91cd5e": {
+  "mode": "rules",
+  "repetition": 1,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 87,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 0
+ },
+ "R042463": {
+  "mode": "rules",
+  "repetition": 2,
+  "no_model_answer": false,
+  "approved_by_rig": true,
+  "profile_version": 81,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 0
+ },
+ "R02045b": {
+  "mode": "rules",
+  "repetition": 1,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 81,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 0
+ },
+ "R7f6b6d": {
+  "mode": "rules",
+  "repetition": 2,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 81,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 0
+ },
+ "R62078f": {
+  "mode": "rules",
+  "repetition": 2,
+  "no_model_answer": false,
+  "approved_by_rig": true,
+  "profile_version": 87,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 0
+ },
+ "R762e86": {
+  "mode": "rules",
+  "repetition": 1,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 75,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 0
+ },
+ "R528681": {
+  "mode": "rules",
+  "repetition": 3,
+  "no_model_answer": false,
+  "approved_by_rig": true,
+  "profile_version": 75,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 0
+ },
+ "Re7c01f": {
+  "mode": "rules",
+  "repetition": 2,
+  "no_model_answer": false,
+  "approved_by_rig": true,
+  "profile_version": 82,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 0
+ },
+ "Rd84686": {
+  "mode": "rules",
+  "repetition": 1,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 87,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 0
+ }
+}
