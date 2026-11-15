@@ -874,7 +874,7 @@ describe('ScenariosPage, as each role has it', () => {
     expect(await screen.findByRole('button', { name: 'Run S5' })).toBeDisabled();
     expect(screen.getAllByText('A run of S2 is still playing').length).toBeGreaterThan(0);
     expect(screen.getByRole('group', { name: 'Playing S2 (Board)' })).toHaveTextContent(
-      'Now delivering S2-01-A01.hl7. Files delivered so far: none.',
+      'Now delivering S2-01-A01.hl7. Nothing delivered yet.',
     );
   });
 });
@@ -929,6 +929,16 @@ describe("ScenariosPage, a finished run's own case and Home's way in", () => {
 
   const banner = async () =>
     (await screen.findByText(/^S2 played \(Board\), /)).closest<HTMLElement>('[role="group"]')!;
+
+  it('names what it delivered by HL7 event in Plain, and by file name in Technical', async () => {
+    serve(finished(), () => [earlier()]);
+    renderScenarios();
+    expect(await banner()).toHaveTextContent('Delivered 2 HL7 messages: A01, A02.');
+    cleanup();
+    serve(finished(), () => [earlier()]);
+    renderScenarios('technical');
+    expect(await banner()).toHaveTextContent('Delivered S2-01-A01.hl7, S2-02-A02.hl7.');
+  });
 
   it("offers no case until the run's own has opened: never the previous run's, never the Cases list", async () => {
     let cases = [earlier()];
