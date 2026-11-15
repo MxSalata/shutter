@@ -1271,8 +1271,8 @@ it got there, can authorise a write or a closure.
   stored model text is, and refused when they hold a valid NHS number; any other run of six or more digits is a warning.
   The words can reach a model (a board a person convenes, Ask about this case), so they follow section 9.
 - **R6.** Writing, proving and proposing need `Shutter_Configure`; approving needs `Shutter_Approve`; the approver is
-  neither the person who proposed the action nor the person who last changed the proposed version (409 `same_person`).
-  Only an IRIS administrator lifts this, from the terminal (`Shutter.Setup.SiteEntriesOnePerson(1, reason)`, which needs
+  neither the person who proposed the action nor the person who last changed the proposed version (409 `same_person`),
+  user names compared whatever their letters' case, as IRIS signs them in. Only an IRIS administrator lifts this, from the terminal (`Shutter.Setup.SiteEntriesOnePerson(1, reason)`, which needs
   `%Admin_Manage` and answers "from the terminal only" over SQL or HTTP); it is recorded as an event and warned about for
   as long as it holds. It is not a site profile field.
 - **R7.** The approver sends the action, the version and the digest they read; another is 409 `digest_mismatch`.
@@ -1285,15 +1285,25 @@ it got there, can authorise a write or a closure.
   suspension is recorded and raises a warning on `GET /site-entries`, the Site profile page and the Doctor
   (`site_entries.warnings`) for as long as it lasts. Resuming is a proposal and an approval.
 - **R13.** An active entry that can't be read makes the matcher answer `decision: error` (the gate's `MATCHER_ERROR`,
-  unknown), for every case. It is never skipped.
+  unknown), for every case. It is never skipped. So does a query of the entries that fails or stops at a row it cannot
+  read (never taken as "no entries"; the catalogue's version then ends `:unreadable`), and a site with active entries
+  that no recheck has completed under this release yet (R14).
 - **R14.** After an upgrade and after every save of the site profile the active and suspended entries are checked, before
   any case is matched (`Shutter.Catalogue.SiteEntry.Recheck`: at the end of the catalogue's seed, at the first match
   under a release that has not checked yet, and in `Shutter.Store.SiteProfile.Store`). A predicate that names a condition
   or a value the vocabulary no longer knows is dropped whole, and so is a predicate whose value on one of the entry's own
-  `match` fixtures reads differently now than when the version was written. The entry then matches more and never less
-  (`effectivePattern`), and is flagged `needsReview` with what was dropped. A receiver or a team the profile no longer
-  names, a near miss the entry now matches, and a shipped entry that asks for a person on every case the pattern matches
-  are flagged and change nothing. Nothing is retired or narrowed by an upgrade; a newly approved version clears the flag.
+  `match` fixtures reads differently now than when the version was written, and so is a scope fact (receiver, sending
+  system, ward, reason word) that such a fixture reads differently now than when it was frozen. The entry then matches
+  more and never less (`effectivePattern`, `effectiveScope`), and is flagged `needsReview` with what was dropped (a scope
+  fact's row has `part: "scope"`). A `match` fixture the entry, as it now stands, no longer matches as a whole, a receiver
+  or a team the profile no longer names, a near miss the entry now matches, and a shipped entry that asks for a person on
+  every case the pattern matches are flagged and change nothing. A fixture whose case is no longer stored is checked
+  against the vocabulary only, and is noted. Nothing is retired or narrowed by an upgrade or a profile save: what one
+  recheck dropped stays dropped and the flag stays set, through every later recheck, until a newly approved version of
+  the entry clears them (a resumption keeps them). A recheck that widens an active entry raises the generation, so a plan
+  made before it is not completed (R17), as after an activation. The release is recorded as checked only when every entry
+  was checked and each change saved with its `rechecked` event; a recheck that could not take the lock or save is tried
+  again at the next match, and until one completes the matcher answers `error` on a site with active entries.
 - **R15.** At most 50 active site entries, so the catalogue's version stays within a plan's field.
 - **R16.** The public demo's roles read site entries and validate a body; they save, prove, propose, approve and suspend
   nothing: on a demo instance an approval needs `Shutter_Configure` as well, since those roles hold `Shutter_Approve`.
@@ -1306,7 +1316,13 @@ it got there, can authorise a write or a closure.
   catalogue version is treated so only on a site that has ever activated an entry.
 - **R18.** On a case a site entry matched, a closure never happens without a person. A board a person convenes on such a
   case (14.5) may plan to close it, naming no entry, which the gate passes (`ENTRY_NOT_NAMED`): the workflow sends the
-  case to a person with the board's reasoning, as a partial board's closure goes (6.6).
+  case to a person with the board's reasoning, as a partial board's closure goes (6.6). The two closures that run outside
+  the case workflow hold to it too. When the engine itself delivered the message (the gate's `ENGINE_DELIVERED` at the
+  proposal or the dispatch gate, or the releaser's read of a case waiting on the engine, `Shutter.Util.EngineCheck.Settle`),
+  or an outage closes over the case (`Shutter.Operation.OutageClose`, 17), the delivery is recorded as a note on the case
+  ("The engine delivered this message (...); the site's own scenario L1 asks a person: <instructions>"), the case is not
+  resolved, and it waits for the person (blocked, or as it was; the outage's card lists it open). An outage's resend set
+  holds such a case's message (17.8, rule 7).
 
 **The match.** `Shutter.Catalogue.Matcher.Match(conditions, facts, scope)` evaluates the shipped entries as before. Then,
 unless E19 matched, and also when the shipped catalogue is empty, it reads the active site entries in order (the priority,
@@ -1327,7 +1343,8 @@ for an `L` id, or `ENTRY_UNKNOWN`).
 
 **The catalogue's version.** `Shutter.Catalogue.Entry.CatalogueVersion()` is the shipped list and, once a site has
 activated an entry, `;g<n>:` and the active site entries: `E1@5,...,E9@1;g7:L1@2,L4@1`. `<n>` is a generation that rises
-at every activation, suspension, resumption and retirement and never comes down, so an approval voided by one change is
+at every activation, suspension, resumption and retirement, and at a recheck that widens an active entry (R14), and never
+comes down, so an approval voided by one change is
 not made valid again by undoing it. The suffix stays, with no entry after the colon, when none is active. A site that
 never activated one keeps the shipped string. Every plan records the string, so which version of which site entry decided
 a case can be read back.
@@ -1336,7 +1353,10 @@ a case can be read back.
 action `activate`, `retire` or `resume`, the version and its digest are fixed, and a passing proof of that digest made
 under the catalogue, profile, gate policy and release in force is attached; the proposed draft is frozen); `active` (a
 second person approved it); `suspended`; `retired` (history kept). A rejection, with a reason, clears the proposal and
-leaves the draft. Changing an active entry begins the next version as a draft beside it; the active version applies until
+leaves the draft, and is taken even when the stored version no longer has the digest proposed, so a proposal is never
+stuck. A change of the draft names the revision it read (`expectedVersion`, required), and the entry's state, an open
+proposal and the revision are read again under the entry lock, so a change that races a proposal never rewrites the
+frozen version. A proposal and a rejection are each written with their event, or not at all. Changing an active entry begins the next version as a draft beside it; the active version applies until
 the new one is approved. The digest is the SHA-256 of the version's canonical JSON (`Shutter.Util.Digest.Canonical`): id,
 kind, title, priority, scope, pattern, why, team, instructions, prose and the fixtures as frozen. The states an entry
 shows are `draft`, `proposed` (never active yet and waiting for approval), `active`, `suspended` and `retired`; an active
@@ -1380,11 +1400,11 @@ replaces the shipped catalogue from any JSON, answers on a demo instance only.
 | Route | Needs | What it does |
 | --- | --- | --- |
 | `GET /catalogue` | `Shutter_Operate` | `{version, shippedVersion, generation, shipped, site, vocabulary}`: the shipped entries, the active site entries as the matcher reads them, and the vocabulary |
-| `GET /site-entries` | `Shutter_Operate` | `{items, status, catalogueVersion}`: every entry (`id`, `state`, `title`, `sentence`, `version`, `digest`, `content`, `activeVersion`, `draftVersion`, `revision`, `approvedBy`, `approvedAt`, `proposal`, `needsReview`, `review`, `effectivePattern`, `suspended`, `casesSent`, `casesSent30`, and `draft` for a draft beside an active version) and the site's status (`active`, `proposed`, `generation`, `limit`, `suspended`, `needsReview`, `onePerson`, `warnings`, `downgrade`) |
+| `GET /site-entries` | `Shutter_Operate` | `{items, status, catalogueVersion}`: every entry (`id`, `state`, `title`, `sentence`, `version`, `digest`, `content`, `activeVersion`, `draftVersion`, `revision`, `approvedBy`, `approvedAt`, `proposal`, `needsReview`, `review`, `effectivePattern`, `effectiveScope`, `suspended`, `casesSent`, `casesSent30`, and `draft` for a draft beside an active version) and the site's status (`active`, `proposed`, `generation`, `limit`, `suspended`, `needsReview`, `onePerson`, `warnings`, `downgrade`) |
 | `GET /site-entries/{id}` | `Shutter_Operate` | The entry with `versions`, `proofs` and `events`; 404 `not_found` |
 | `POST /site-entries/validate` | `Shutter_Operate` | `{valid, problems, warnings, sentence, overlap}` for a body: each problem `{rule, field, text}`; `overlap` lists the shipped entries the pattern can displace, condition by condition, with `covers` and `leads`. Stores nothing and reads no case |
 | `POST /site-entries` | `Shutter_Configure` | 201 with a draft. `{fromCase}` fills the pattern with that closed case's conditions (the reserved one aside), the scope with its facts and the first fixture with the case; what the body gives stands. 400 `bad_request` with `problems` |
-| `PUT /site-entries/{id}` | `Shutter_Configure` | Rewrites the draft, or begins one beside the active version. `expectedVersion` is the entry's `revision` (409 `stale_version` with `currentVersion`); 409 `wrong_state` for a proposed draft or a retired entry |
+| `PUT /site-entries/{id}` | `Shutter_Configure` | Rewrites the draft, or begins one beside the active version. `expectedVersion` is the entry's `revision` and is required (409 `stale_version` with `currentVersion` when it is missing or another); 409 `wrong_state` for a proposed draft or a retired entry |
 | `POST /site-entries/{id}/proof` | `Shutter_Configure` | `{action?}` (`activate` when none). Runs P1, P2 and P4 and keeps the proof: `{passed, fixtures, counts, impact, problems, context, proofId}` |
 | `POST /site-entries/{id}/propose` | `Shutter_Configure` | `{action}`. 409 `no_proof` without a passing, current proof of the version's digest; 409 `wrong_state` when a proposal already waits; 409 `too_many` (R15) |
 | `POST /site-entries/{id}/approvals` | `Shutter_Approve`; on a demo `Shutter_Configure` too | `{action, version, digest, decision: approve or reject, reason, safetyReference?}`. 409 `same_person`, `digest_mismatch`, `proof_failed`, `too_many`, `wrong_state`. On approve the change is made, the generation raised and the events written together; the answer is the entry with `catalogueVersion`, `approver` and `waitingPlans`, the open cases whose plan was made under the old version (R17) |
@@ -1398,8 +1418,11 @@ that stores nothing, export and import, and the page that writes, proves and app
 
 **Three limits.** The recorded Rules only baseline resends past a site entry on a demo instance, as it does past E1. An
 activation is in force for every dispatch gate that starts after it commits: a write whose dispatch gate passed just before
-may still go, as with any catalogue upgrade. And R18 covers site entries: a board a person convenes on a case a shipped
-`person` entry escalated can still close it where the gate's evidence supports the closure.
+may still go, as with any catalogue upgrade. And R18 covers site entries only: shipped `person` entries (E8, E11 to E15,
+E17, E19) keep today's behaviour, so a board a person convenes on a case one escalated can still close it where the
+gate's evidence supports the closure, the engine's own delivery still resolves such a case (`EngineCheck.Settle`), the
+outage close still resolves it when its own header reads Completed with the acknowledgement established, and an outage's
+resend set still offers its message.
 
 **Downgrade.** A release from before this section ignores the tables: the entries stop applying and the older code says
 nothing of it. The Doctor's `site_entries.downgrade` line ("N site entries active: they stop applying below this release")
@@ -2949,7 +2972,11 @@ in header id order, goes to one list, by the first rule that places it:
    `reached`, words it can't read are `refused`.
 5. The log reaching back past it.
 6. No production start and no active message put back on a queue since it was created (`EngineRead.Interrupted`, v1.53).
-7. The patient check passes; a message it holds is `refused` with "held by the patient check: <why>".
+7. The patient check passes; a message it holds is `refused` with "held by the patient check: <why>". (v1.66) Before it,
+   a message with a case one of the site's own entries stopped (6.8, R18) is `refused` with "held by the site's own
+   scenario L1 on case C-000123: a person decides on its case. The site's instructions: <instructions>"
+   (`ResendSet.SiteHold`, reading the origin header and a clone standing in for it), and Engine Resend reads it again
+   before each send and skips it the same way. `SETPOLICYVERSION` is `2026-11-15.1`.
 
 The rest are `offered`. `set.digest` is the SHA-256 of `SETPOLICYVERSION` and the offered header ids in order, so a new
 rule version voids an approval not yet sent.
@@ -3312,7 +3339,9 @@ That `If-Match` or an approval makes the write idempotent; that a verified versi
   digest, suspension, the recheck after an upgrade and a profile save, and the routes `GET /catalogue` and
   `/site-entries`. The gate, its policy version and the block reasons are unchanged. Two workflow rules about closures
   hold at every site (6.8, R17 and R18): a plan that writes nothing and was made under another catalogue version is
-  planned again on fresh evidence, and a case a site entry matched is never closed without a person. 6.1: the table gains
+  planned again on fresh evidence, and a case a site entry matched is never closed without a person, by the engine's own
+  delivery or an outage's close either; an outage's resend set holds its message (17.8, `SETPOLICYVERSION`
+  `2026-11-15.1`). 6.1: the table gains
   `a08_location`, which the matcher computes and the table lacked. 6.2: a shipped entry's id is `E<n>`,
   which the build script and the seed now refuse to be otherwise; `knowledge/catalogue/vocabulary.json` is the vocabulary
   both validators read. `Shutter.Catalogue.Entry.SeedFromJSON` answers on a demo instance only. 5: the resources of the
