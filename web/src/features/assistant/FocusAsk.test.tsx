@@ -68,7 +68,13 @@ const FOCUS: PageFocus = {
 const ANSWER = 'Tier 2 is operations: a write to Records Out is released by one approval here.';
 
 /** A live instance's page question route: 202, then the answer, with its run's message. */
-function answersLive() {
+/**
+ * The run's message as the server links it: under the portal path of the namespace the agent ran in. A site's own
+ * namespace on plain IRIS here (Setup.InstallInto), so a link built from a fixed path would show.
+ */
+const RUN_LINK = '/csp/trust/EnsPortal.MessageContents.zen?HeaderClass=Ens.MessageHeader&HeaderId=4321';
+
+function answersLive(messageLink: string | null = RUN_LINK) {
   server.use(
     http.post(`${BASE}/page-questions`, () =>
       HttpResponse.json(
@@ -91,6 +97,7 @@ function answersLive() {
         model: 'claude-opus-5-5',
         costUsd: 0.004,
         ensMessageId: '4321',
+        messageLink,
         answer: { answer: ANSWER, cites: ['page'], confidence: 'high' },
       }),
     ),
@@ -152,12 +159,10 @@ describe('Ask Shutter about one of the page’s questions, in the panel', () => 
     expect(card.getByText(FOCUS.consequence)).toBeInTheDocument();
     expect(await card.findByText(FOCUS_NOTE_LIVE)).toBeInTheDocument();
     expect(await card.findByText(ANSWER)).toBeInTheDocument();
-    // The run's message is a link into the Management Portal, as a case's agent runs are
+    // The run's message is a link into the Management Portal, as a case's agent runs are: the server's link, under the
+    // portal path of the namespace the agent ran in, never a fixed one
     const run = card.getByRole('link', { name: 'message 4321' });
-    expect(run).toHaveAttribute(
-      'href',
-      '/csp/healthshare/shutter/EnsPortal.MessageContents.zen?HeaderClass=Ens.MessageHeader&HeaderId=4321',
-    );
+    expect(run).toHaveAttribute('href', RUN_LINK);
     expect(run).toHaveAttribute('target', '_blank');
     expect(run.parentElement).toHaveTextContent(
       'Answered live by the Explain agent on IRIS AI Hub, with claude-opus-5-5. Its run is message 4321 in the Management Portal.',
@@ -184,6 +189,18 @@ describe('Ask Shutter about one of the page’s questions, in the panel', () => 
     expect(requests.filter((r) => r.path.includes('site-profile') && r.method !== 'GET')).toEqual([]);
     // The written explanation is one click away under a live answer
     expect(card.getByRole('button', { name: WRITTEN_LABEL })).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it("names the run's message without a link when the server gives none, and never builds one from a fixed path", async () => {
+    answersLive(null);
+    const card = await askAbout();
+    expect(await card.findByText(ANSWER)).toBeInTheDocument();
+    expect(card.queryByRole('link', { name: 'message 4321' })).not.toBeInTheDocument();
+    expect(
+      card.getByText(/^Answered live by the Explain agent on IRIS AI Hub, with claude-opus-5-5\./),
+    ).toHaveTextContent(
+      'Answered live by the Explain agent on IRIS AI Hub, with claude-opus-5-5. Its run is message 4321 in the Management Portal.',
+    );
   });
 
   it('does not ask again when opened again on the same question', async () => {

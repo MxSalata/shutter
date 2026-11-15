@@ -14112,6 +14112,13 @@
             ],
             "description": "The Visual Trace link's message id."
           },
+          "messageLink": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The run's message in the Management Portal, under this namespace's own portal path (Dispatch.MessageLink); null with ensMessageId."
+          },
           "answer": {
             "oneOf": [
               {
@@ -14138,6 +14145,7 @@
           "model",
           "costUsd",
           "ensMessageId",
+          "messageLink",
           "answer"
         ]
       },

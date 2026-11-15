@@ -26,7 +26,7 @@ import { TRIAL } from '@/env/mode';
 import { isApiError } from '@/lib/errors';
 import { parseTime } from '@/lib/format';
 import { liveRefusal, liveRefusalInText, liveUnavailable } from '@/lib/liveAgents';
-import { messageContentsLink } from '@/lib/messageLink';
+import { withHeaderClass } from '@/lib/messageLink';
 import { MAIN_ID } from '@/features/shell/SkipLink';
 import { AnswerText, focusSoon } from '@/features/cases/ask/AskPanel';
 import { guideFor } from './guides';
@@ -58,12 +58,6 @@ const day = new Intl.DateTimeFormat('en-GB', {
 
 /** The agent that answers a question about a page, as an answer names it. */
 export const PAGE_AGENT = 'the Explain agent on IRIS AI Hub';
-
-/**
- * The Management Portal's base path in Shutter's own namespace, where the Explain agent runs: a page answer's run is a
- * message there. On IRIS for Health a namespace's default application is /csp/healthshare/<namespace>/ (reviews/review.ts).
- */
-const SHUTTER_PORTAL = '/csp/healthshare/shutter/';
 
 /**
  * Where a page answer came from, in a sentence: sample data in the trial until its answers are recordings; the API mimic
@@ -172,17 +166,21 @@ export function Turn({
             <Text size="xs" c="dimmed">
               {pageProvenance(a)}.
               {!TRIAL && a.ensMessageId ? (
-                <>
-                  {' Its run is '}
-                  <PortalLink
-                    href={messageContentsLink(SHUTTER_PORTAL, a.ensMessageId)}
-                    what={`message ${a.ensMessageId}, the agent's request and answer`}
-                    size="xs"
-                  >
-                    message {a.ensMessageId}
-                  </PortalLink>
-                  {' in the Management Portal.'}
-                </>
+                a.messageLink ? (
+                  <>
+                    {' Its run is '}
+                    <PortalLink
+                      href={withHeaderClass(a.messageLink)}
+                      what={`message ${a.ensMessageId}, the agent's request and answer`}
+                      size="xs"
+                    >
+                      message {a.ensMessageId}
+                    </PortalLink>
+                    {' in the Management Portal.'}
+                  </>
+                ) : (
+                  ` Its run is message ${a.ensMessageId} in the Management Portal.`
+                )
               ) : null}
             </Text>
           </Stack>

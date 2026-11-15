@@ -2436,8 +2436,10 @@ missing answer `failed`; the item's alarm (600 s) fails it with what is missing.
   a question missing or over 500 characters, or a context out of shape or over 4000 characters; then 403 and 409 as above;
   503 `no_service` and `not_queued`, 502 `no_answer`, 500 `question_failed` as the case question's route answers them.
 - `GET /page-questions/{qid}` -> `{questionId, tier: "page", page, question, state, askedBy, askedAt, answeredAt, error,
-  mode, model, costUsd, ensMessageId, answer}` for the one who asked it; `404 not_found` for anyone else, as for an id that
-  is not there. The summary is not sent back: the asker sent it.
+  mode, model, costUsd, ensMessageId, messageLink, answer}` for the one who asked it; `404 not_found` for anyone else, as for
+  an id that is not there. `messageLink` is the run's message in the Management Portal under this namespace's own portal
+  path (`Dispatch.MessageLink`, as a case's runs carry it), null with `ensMessageId`. The summary is not sent back: the
+  asker sent it.
 
 **The web app.** Without `Shutter_LiveAgents` the panel shows the page's written guide (`features/assistant/guides.ts`:
 what the page is and what to try next, with links) and says live answers need the judges' account; with no model key and

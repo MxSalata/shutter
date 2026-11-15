@@ -125,6 +125,7 @@ function answersLive() {
         model: 'claude-opus-5-5',
         costUsd: 0.004,
         ensMessageId: null,
+        messageLink: null,
         answer: { answer: ANSWER, cites: ['page'], confidence: 'high' },
       }),
     ),

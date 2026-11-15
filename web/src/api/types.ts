@@ -2085,6 +2085,11 @@ export interface PageQuestion {
   model: string | null;
   costUsd: number | null;
   ensMessageId: string | null;
+  /**
+   * The run's message in the Management Portal, under the portal path of the namespace the agent ran in, as the server
+   * builds it (Dispatch.MessageLink); null with `ensMessageId`. The app never builds it from a fixed path.
+   */
+  messageLink: string | null;
   /** The accepted answer, null until answered; its cites are ids the summary listed, or `page`. */
   answer: Answer | null;
   /** When the trial's answer was made, when it carries it (the mock does; the server does not send it). */
