@@ -382,14 +382,24 @@ ClassMethod OnePerson() As %DynamicObject
 
 /// Lift or restore the two-person rule, recorded as an event. Called by Shutter.Setup.SiteEntriesOnePerson, which an
 /// IRIS administrator runs from the terminal; no route and no SQL procedure reaches it.
-ClassMethod SetOnePerson(on As %Boolean, who As %String, reason As %String) As %Status [ Internal ]
+/// The lift and its event are written together, or neither.
+ClassMethod SetOnePerson(on As %Boolean, who As %String, reason As %String, source As %String = "terminal") As %Status [ Internal ]
 {
+    Set level = $TLEVEL
+    TSTART
     If on {
-        Set ^Shutter.Catalogue.Site("onePerson") = $LISTBUILD(who, ##class(Shutter.Util.Time).NowUTC(), reason)
-        Quit ##class(Shutter.Catalogue.SiteEntryEvent).Record("", "", "two_person_lifted", who, "terminal", "The two-person rule for site entries is lifted: " _ reason)
+        Set sc = ##class(Shutter.Catalogue.SiteEntryEvent).Record("", "", "two_person_lifted", who, source, "The two-person rule for site entries is lifted: " _ reason)
+        If $$$ISOK(sc) Set ^Shutter.Catalogue.Site("onePerson") = $LISTBUILD(who, ##class(Shutter.Util.Time).NowUTC(), reason)
+    } Else {
+        Set sc = ##class(Shutter.Catalogue.SiteEntryEvent).Record("", "", "two_person_restored", who, source, "The two-person rule for site entries holds again" _ $SELECT(reason '= "": ": " _ reason, 1: ""))
+        If $$$ISOK(sc) Kill ^Shutter.Catalogue.Site("onePerson")
     }
-    Kill ^Shutter.Catalogue.Site("onePerson")
-    Quit ##class(Shutter.Catalogue.SiteEntryEvent).Record("", "", "two_person_restored", who, "terminal", "The two-person rule for site entries holds again" _ $SELECT(reason '= "": ": " _ reason, 1: ""))
+    If $$$ISOK(sc) {
+        TCOMMIT
+    } Else {
+        While $TLEVEL > level { TROLLBACK 1 }
+    }
+    Quit sc
 }
 
 // ---- changes ----
@@ -930,8 +940,10 @@ Method Review(vocabulary As %DynamicObject, trigger As %String, Output widened A
         Set fi = fixtures.%GetIterator()
         While fi.%GetNext(, .f) {
             Set caseId = $CLASSMETHOD(json, "Str", f, "case"), expect = $CLASSMETHOD(json, "Str", f, "expect")
-            Set now = ##class(Shutter.Catalogue.SiteEntryProof).Replay(f, .source)
+            Set now = ##class(Shutter.Catalogue.SiteEntryProof).Replay(f, .source, .why)
             If source = "frozen" Do ..AddNote(notes, .said, "Case " _ caseId _ " is no longer stored, so its evidence was not read again: only the vocabulary was checked for it") Continue
+            // A stored case this release cannot read is a failure, never a case that is gone: it flags the entry.
+            If source = "error" Do ..AddNote(notes, .said, "Case " _ caseId _ " is stored, but " _ why _ ": the entry is not checked against it until a person looks") Continue
             If expect = "match" {
                 Set frozen = f.%Get("conditions")
                 If $ISOBJECT(frozen) {

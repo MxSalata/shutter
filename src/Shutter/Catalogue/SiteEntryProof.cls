@@ -96,10 +96,12 @@ ClassMethod Freeze(caseId As %String, expect As %String, Output why As %String) 
 /// A fixture read again now: the conditions and the scope facts computed by this release's matcher from the stored
 /// snapshot the fixture was frozen from, with the chain kind it had (source "evidence"). When the case or that snapshot
 /// is no longer stored (the retention task, a demo's reset) the frozen copy answers (source "frozen"): it then proves the
-/// pattern's logic, not the reading of evidence. Returns {conditions, scope, facts}.
-ClassMethod Replay(fixture As %DynamicObject, Output source As %String) As %DynamicObject
+/// pattern's logic, not the reading of evidence. When the case and its snapshot are stored but this release cannot read
+/// them (an exception computing the conditions, say), the source is "error" with the reason in <var>why</var>: that is
+/// a failure to report, never taken for a case that is gone. Returns {conditions, scope, facts}.
+ClassMethod Replay(fixture As %DynamicObject, Output source As %String, Output why As %String) As %DynamicObject
 {
-    Set json = "Shutter.Util.Json", source = "frozen"
+    Set json = "Shutter.Util.Json", source = "frozen", why = ""
     Set out = {}
     Set out.conditions = fixture.%Get("conditions"), out.scope = fixture.%Get("scope"), out.facts = {"other_source": ""}
     If '$ISOBJECT(out.conditions) Set out.conditions = {}
@@ -110,10 +112,10 @@ ClassMethod Replay(fixture As %DynamicObject, Output source As %String) As %Dyna
     Set cid = case.%Id(), sid = ""
     &sql(SELECT TOP 1 ID INTO :sid FROM Shutter_Store.Snapshot WHERE "Case" = :cid AND Digest = :digest ORDER BY ID DESC)
     If (SQLCODE '= 0) || (sid = "") Quit out
-    Set snap = ##class(Shutter.Store.Snapshot).%OpenId(sid)
-    Set summary = $SELECT($ISOBJECT(snap): snap.SummaryObject(), 1: "")
-    If '$ISOBJECT(summary) Quit out
     Try {
+        Set snap = ##class(Shutter.Store.Snapshot).%OpenId(sid)
+        Set summary = $SELECT($ISOBJECT(snap): snap.SummaryObject(), 1: "")
+        If '$ISOBJECT(summary) || 'summary.%IsA("%Library.DynamicObject") $$$ThrowStatus($$$ERROR($$$GeneralError, "snapshot " _ sid _ " does not read as evidence"))
         Set chain = $CLASSMETHOD(json, "Str", fixture, "chain", "single")
         Set live = {}
         Set live.conditions = ##class(Shutter.Catalogue.Matcher).Conditions(case, summary, chain)
@@ -121,7 +123,7 @@ ClassMethod Replay(fixture As %DynamicObject, Output source As %String) As %Dyna
         Set live.facts = ##class(Shutter.Catalogue.Matcher).Facts(summary, case)
         Set out = live, source = "evidence"
     } Catch ex {
-        Set source = "frozen"
+        Set source = "error", why = "its stored evidence cannot be read under this release: " _ $EXTRACT(ex.DisplayString(), 1, 300)
     }
     Quit out
 }
@@ -169,11 +171,21 @@ ClassMethod Run(entryId As %String, version As %Integer, content As %DynamicObje
     Set fi = fixtures.%GetIterator()
     While fi.%GetNext(, .f) {
         Set expect = $CLASSMETHOD(json, "Str", f, "expect")
-        Set now = ..Replay(f, .source)
+        Set now = ..Replay(f, .source, .why)
         Set own = $CLASSMETHOD(matcher, "ScopeHolds", content.%Get("scope"), now.scope) && $CLASSMETHOD(matcher, "SiteHolds", content.%Get("pattern"), now.conditions)
         Set row = {}
         Set row.case = $CLASSMETHOD(json, "Str", f, "case"), row.expect = expect, row.source = source
         Do row.%Set("holds", own, "boolean")
+        If source = "error" {
+            // A stored case that cannot be read is no proof either way.
+            Set row.why = why, row.text = "Case " _ row.case _ " is stored, but " _ why
+            Do row.%Set("ok", 0, "boolean")
+            Set allOk = 0
+            Do problems.%Push("Case " _ row.case _ " is stored, but " _ why)
+            If expect = "match" { Set matchCount = matchCount + 1 } Else { Set nearCount = nearCount + 1 }
+            Do rows.%Push(row)
+            Continue
+        }
         If expect = "match" {
             Set matchCount = matchCount + 1
             Set r = $CLASSMETHOD(matcher, "MatchWith", now.conditions, now.facts, now.scope, with)
@@ -201,6 +213,13 @@ ClassMethod Run(entryId As %String, version As %Integer, content As %DynamicObje
     If impact {
         Try {
             Set result.impact = ..Impact(entryId, others, with)
+            // A retirement stands on its impact alone: one no stored case could be read for is no proof.
+            Set read = result.impact.scanned - result.impact.unread
+            If (action = "retire") && (result.impact.scanned > 0) && (read = 0) Do problems.%Push("None of the " _ result.impact.scanned _ " stored cases could be read under this release, so what retiring the entry changes is not known")
+            Set warnings = []
+            If result.impact.unread > 0 Do warnings.%Push(result.impact.unread _ " of the " _ result.impact.scanned _ " stored cases could not be read, so they are not counted")
+            If result.impact.capped Do warnings.%Push("The scan stopped at its time limit, after " _ result.impact.scanned _ " cases")
+            If warnings.%Size() > 0 Set result.warnings = warnings
         } Catch ex {
             Do problems.%Push("The impact could not be computed: " _ ex.DisplayString())
         }

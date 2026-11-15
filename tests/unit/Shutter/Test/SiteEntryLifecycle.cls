@@ -367,4 +367,55 @@ Method TestThePurgeLeavesThemAndTheUninstallTakesThem()
     Do $$$AssertEquals(##class(Shutter.Catalogue.Entry).CatalogueVersion(), ##class(Shutter.Catalogue.Entry).ShippedVersion(), "and the catalogue's version is the shipped one")
 }
 
+/// The administrator's lift of the two-person rule and its event are written together: when the event cannot be
+/// written (here a source word longer than the event takes), the rule still holds and the call says so.
+Method TestTheLiftIsWrittenWithItsEvent()
+{
+    Set site = "Shutter.Catalogue.SiteEntry"
+    Set sc = $CLASSMETHOD(site, "SetOnePerson", 1, "ut-admin", "One approver this month", "a-source-longer-than-an-event-takes")
+    Do $$$AssertNotTrue($SYSTEM.Status.IsOK(sc), "the lift whose event fails is refused")
+    Do $$$AssertNotTrue($ISOBJECT($CLASSMETHOD(site, "OnePerson")), "and the rule still holds")
+    Do $$$AssertStatusOK($CLASSMETHOD(site, "SetOnePerson", 1, "ut-admin", "One approver this month"), "lifted, with its event")
+    Do $$$AssertTrue($ISOBJECT($CLASSMETHOD(site, "OnePerson")), "lifted")
+    Set sc = $CLASSMETHOD(site, "SetOnePerson", 0, "ut-admin", "", "a-source-longer-than-an-event-takes")
+    Do $$$AssertNotTrue($SYSTEM.Status.IsOK(sc), "a restore whose event fails is refused")
+    Do $$$AssertTrue($ISOBJECT($CLASSMETHOD(site, "OnePerson")), "and the lift is as it was")
+    Do $$$AssertStatusOK($CLASSMETHOD(site, "SetOnePerson", 0, "ut-admin", ""), "restored")
+    Do $$$AssertNotTrue($ISOBJECT($CLASSMETHOD(site, "OnePerson")), "the rule holds again")
+}
+
+/// A retirement stands on its impact alone, so one for which no stored case could be read does not pass.
+Method TestARetirementNeedsAReadableImpact()
+{
+    Set kit = "Shutter.Test.SiteKit", site = "Shutter.Catalogue.SiteEntry"
+    Set id = $CLASSMETHOD(kit, "ActiveEntry", .match, .near, .problem)
+    Do $$$AssertEquals(problem, "", "an active entry")
+    // Every stored case this proof would scan becomes unreadable, and is put back after.
+    Set saved = 0
+    Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT TOP 200 c.ID AS cid, c.CurrentSnapshot AS sid FROM Shutter_Store.""Case"" c WHERE c.CurrentSnapshot IS NOT NULL ORDER BY c.ID DESC")
+    While rs.%Next() {
+        Set snap = ##class(Shutter.Store.Snapshot).%OpenId(rs.%Get("sid"))
+        Continue:'$ISOBJECT(snap)
+        Set saved = saved + 1, saved(saved) = $LISTBUILD(snap.%Id(), snap.Summary)
+        Set snap.Summary = "{unreadable"
+        Do snap.%Save()
+    }
+    Try {
+        Set content = ##class(Shutter.Catalogue.SiteEntryVersion).Find(id, 1).Content()
+        Set result = ##class(Shutter.Catalogue.SiteEntryProof).Run(id, 1, content, "retire", "ut-author", "api", 1, .proof)
+        Do $$$AssertEquals(result.impact.unread, result.impact.scanned, "no case could be read: " _ result.impact.%ToJSON())
+        Do $$$AssertNotTrue(result.passed, "the retirement's proof does not pass")
+        Do $$$AssertTrue(result.problems.%ToJSON() [ "could be read", "saying why: " _ result.problems.%ToJSON())
+    } Catch ex {
+        Do $$$AssertTrue(0, "failed: " _ ex.DisplayString())
+    }
+    For i = 1:1:saved {
+        Set snap = ##class(Shutter.Store.Snapshot).%OpenId($LIST(saved(i), 1))
+        Set snap.Summary = $LIST(saved(i), 2)
+        Do snap.%Save()
+    }
+    Set result = ##class(Shutter.Catalogue.SiteEntryProof).Run(id, 1, ##class(Shutter.Catalogue.SiteEntryVersion).Find(id, 1).Content(), "retire", "ut-author", "api", 1, .proof)
+    Do $$$AssertTrue(result.passed, "with the cases readable again it passes")
+}
+
 }

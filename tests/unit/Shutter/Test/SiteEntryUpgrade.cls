@@ -404,4 +404,23 @@ Method TestARowTheQueryCannotReadIsNeverSkipped()
     Do $$$AssertEquals($CLASSMETHOD(kit, "Snapshot", match).SummaryObject().catalogue.entry, id, "mended, the entry answers")
 }
 
+/// A fixture whose case is stored but whose evidence this release cannot read is a failure to report, not a case that
+/// is gone: the recheck flags the entry, and a proof does not pass on the frozen copy. Before, both took it for a purge.
+Method TestAFixtureThatCannotBeReadIsAFailure()
+{
+    Set kit = "Shutter.Test.SiteKit", site = "Shutter.Catalogue.SiteEntry"
+    Set match = $CLASSMETHOD(kit, "Case", {"ward": "WARD-ISO"}, .snap), near = $CLASSMETHOD(kit, "Case", {"ward": "WARD-B"})
+    Do $$$AssertEquals($CLASSMETHOD(kit, "Activate", $CLASSMETHOD(kit, "Body", match.CaseId, near.CaseId), .id), "", "an active entry")
+    Set snap.Summary = "{this release cannot read it"
+    Do $$$AssertStatusOK(snap.%Save(), "the fixture's stored evidence no longer reads")
+    Do $$$AssertEquals($CLASSMETHOD(site, "Recheck", "upgrade", 0), 1, "the recheck flags the entry")
+    Set words = $CLASSMETHOD(site, "ById", id).ReviewWords()
+    Do $$$AssertTrue(words [ ("Case " _ match.CaseId _ " is stored, but"), "saying the case could not be read: " _ words)
+    Do $$$AssertNotTrue(words [ "no longer stored", "and not that it is gone")
+    Set content = ##class(Shutter.Catalogue.SiteEntryVersion).Find(id, 1).Content()
+    Set result = ##class(Shutter.Catalogue.SiteEntryProof).Run(id, 1, content, "activate", "ut-author", "api", 0, .proof)
+    Do $$$AssertNotTrue(result.passed, "a proof does not pass")
+    Do $$$AssertEquals(result.fixtures.%Get(0).source, "error", "its row says the case could not be read")
+}
+
 }
