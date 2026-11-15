@@ -298,7 +298,17 @@ Get AI Hub Community build `2027.1.0AI.109.0` from the [Early Access portal](htt
 ./install.sh --image-file irishealth-community-2027.1.0AI.109.0-docker.tar.gz
 ```
 
-Build `2026.3.0AI.154.0` is also supported. With both images loaded, `./install.sh` chooses 109. Without a configured provider, the board replays recordings; it does not run a local model.
+Build `2026.3.0AI.154.0` is also supported. With both images loaded, `./install.sh` chooses 109.
+
+**The contest's own route, `docker compose up`:** with build 154 loaded and tagged as the contest's instructions say, nothing else is needed (about 2.5 minutes to healthy, no key):
+
+```sh
+docker load -i irishealth-community-2026.3.0AI.154.0-docker.tar.gz
+docker tag <the loaded image's name> irishealth-community:2026.3.0AI.154.0
+docker compose up -d
+```
+
+On build 109, start it with `SHUTTER_IMAGE=irishealth-community:2027.1.0AI.109.0 docker compose up -d` instead. Without a configured provider, the board replays recordings; it does not run a local model.
 
 A replay makes no model call and executes no tool. It restores a recorded answer and tool calls, marked **replay**, then runs the gate against the plan.
 
