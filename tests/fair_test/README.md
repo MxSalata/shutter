@@ -17,6 +17,8 @@ image, and CI doesn't run it.
 | `play.py` | One run per case, mode and repetition, in a shuffled order; keeps each run's raw record. |
 | `grade.py` | The export with the mode's name removed, the category of each run from that export alone, then the counts, the strict and lenient means and the always-escalate baseline. |
 | `test_grade.py` | The grader's rules and the date shift, with no instance. |
+| `regrade.py` | A published set re-graded offline from its blind exports: each run's proposal history, its grade under two declared and versioned policies, three answers kept apart, and the published table again. Reads only. |
+| `test_regrade.py` | The history, both policies and the three answers on made-up rows, and the published 1.4.3 set against its results file and the page's table, with no instance. |
 
 ## How to run
 
@@ -30,6 +32,37 @@ python3 tests/fair_test/grade.py --raw runs --sealed docs/readme/fair-test --out
 
 A finished run's file is skipped on a second start, so a broken session carries on where it stopped. The play folder is
 replaced on each start, so `play.py` refuses one holding anything it didn't write.
+
+## Re-grading the published records
+
+```
+python3 tests/fair_test/regrade.py --check docs/readme/fair-test/results-r143-all.json
+```
+
+reconstructs release 1.4.3's table from the blind exports in `docs/readme/fair-test/exports/r143-all`, with no instance,
+no model and no key. It checks the seal and the exports' `manifest.sha256`, reads each run's proposal history from its
+recorded event texts, grades every run by two declared policies, prints the table and every run they grade differently,
+and exits 1 unless every figure, every per-run category and note and every unscorable run equals the published results
+file. `--out DIR` writes each run's history (`history.jsonl`) and its grades and answers (`regrade.json`).
+
+- **`current-plan` 1** is `grade.categorise` on the row as exported, unchanged: the plan the case ended with. These are
+  `grade.py`'s figures.
+- **`first-proposal` 1** is the same `categorise` on the plan that first reached the dispatch gate, which is the
+  proposal as `scoring.md` defines it ("the disposition the mode settled on before the dispatch gate"). The row's
+  proposal, gate and stop are that plan's; its effect, the writes and the receiver's final history, is the run's own.
+  When no earlier plan reached the dispatch gate the row is graded as it is. A row with no recorded events has no
+  history, and its category under this policy is null: nothing is taken from the current plan to stand for an earlier one.
+
+Each run also gets three answers, kept apart: **the proposal** (the current plan and the first to reach dispatch, each
+with the snapshot and digest it rests on, against the sealed reference), **the release decision** (each plan's release,
+by approval or automatic, and its stop, by stage and codes; whether the case permits a write; whether a forbidden write
+was released) and **what reached the receiver** (the dispatches, how often the failed key is in the final history, and
+whether the final state is the right answer's).
+
+The table's rows, the policy and version of each, and where each published figure sits are declared in the exports'
+`table.json`; `regrade.py` refuses a policy or version it doesn't have. The history is read from the event texts, so its
+digests are the 12 characters the events print, and a plan's digest is known only once it was approved or released.
+`grade.py` and the published results files are unchanged.
 
 ## What the rig changes, and why
 

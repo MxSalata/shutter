@@ -1,0 +1,326 @@
+{
+ "Rda520d": {
+  "mode": "single",
+  "repetition": 1,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 111,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 1
+ },
+ "R189893": {
+  "mode": "single",
+  "repetition": 3,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 99,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 1
+ },
+ "Re4dc70": {
+  "mode": "single",
+  "repetition": 3,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 105,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 1
+ },
+ "R4e3a26": {
+  "mode": "single",
+  "repetition": 1,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 99,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 1
+ },
+ "R45853b": {
+  "mode": "single",
+  "repetition": 2,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 100,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 1
+ },
+ "R42dde5": {
+  "mode": "single",
+  "repetition": 2,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 99,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 1
+ },
+ "R253ad4": {
+  "mode": "single",
+  "repetition": 1,
+  "no_model_answer": false,
+  "approved_by_rig": true,
+  "profile_version": 105,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 2
+ },
+ "Reb35fb": {
+  "mode": "single",
+  "repetition": 2,
+  "no_model_answer": false,
+  "approved_by_rig": true,
+  "profile_version": 99,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 1
+ },
+ "Rd2a0c1": {
+  "mode": "single",
+  "repetition": 1,
+  "no_model_answer": false,
+  "approved_by_rig": true,
+  "profile_version": 99,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 1
+ },
+ "R33e0bd": {
+  "mode": "single",
+  "repetition": 2,
+  "no_model_answer": false,
+  "approved_by_rig": true,
+  "profile_version": 105,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 1
+ },
+ "Rec3a54": {
+  "mode": "single",
+  "repetition": 2,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 111,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 1
+ },
+ "Rdcad6d": {
+  "mode": "single",
+  "repetition": 3,
+  "no_model_answer": false,
+  "approved_by_rig": true,
+  "profile_version": 111,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 1
+ },
+ "R697967": {
+  "mode": "single",
+  "repetition": 3,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 111,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 1
+ },
+ "R449277": {
+  "mode": "single",
+  "repetition": 3,
+  "no_model_answer": false,
+  "approved_by_rig": true,
+  "profile_version": 105,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 2
+ },
+ "R219366": {
+  "mode": "single",
+  "repetition": 3,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 104,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 1
+ },
+ "Rf7ca5b": {
+  "mode": "single",
+  "repetition": 1,
+  "no_model_answer": false,
+  "approved_by_rig": true,
+  "profile_version": 105,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 1
+ },
+ "R7135e6": {
+  "mode": "single",
+  "repetition": 1,
+  "no_model_answer": false,
+  "approved_by_rig": true,
+  "profile_version": 111,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 1
+ },
+ "R367980": {
+  "mode": "single",
+  "repetition": 2,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 99,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 1
+ },
+ "R05ee56": {
+  "mode": "single",
+  "repetition": 3,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 111,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 1
+ },
+ "R85957d": {
+  "mode": "single",
+  "repetition": 2,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 111,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 1
+ },
+ "Rb2f3ec": {
+  "mode": "single",
+  "repetition": 3,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 111,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 1
+ },
+ "Ra25b71": {
+  "mode": "single",
+  "repetition": 1,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 102,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 1
+ },
+ "Rb80d74": {
+  "mode": "single",
+  "repetition": 3,
+  "no_model_answer": false,
+  "approved_by_rig": true,
+  "profile_version": 110,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 1
+ },
+ "Ree9941": {
+  "mode": "single",
+  "repetition": 2,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 111,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 1
+ },
+ "R0b8fe1": {
+  "mode": "single",
+  "repetition": 1,
+  "no_model_answer": false,
+  "approved_by_rig": true,
+  "profile_version": 108,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 1
+ },
+ "R95bb33": {
+  "mode": "single",
+  "repetition": 3,
+  "no_model_answer": false,
+  "approved_by_rig": true,
+  "profile_version": 105,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 1
+ },
+ "Rbf2ba0": {
+  "mode": "single",
+  "repetition": 3,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 99,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 1
+ },
+ "R91cd5e": {
+  "mode": "single",
+  "repetition": 1,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 111,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 1
+ },
+ "R042463": {
+  "mode": "single",
+  "repetition": 2,
+  "no_model_answer": false,
+  "approved_by_rig": true,
+  "profile_version": 105,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 2
+ },
+ "R02045b": {
+  "mode": "single",
+  "repetition": 1,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 105,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 1
+ },
+ "R7f6b6d": {
+  "mode": "single",
+  "repetition": 2,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 105,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 1
+ },
+ "R62078f": {
+  "mode": "single",
+  "repetition": 2,
+  "no_model_answer": false,
+  "approved_by_rig": true,
+  "profile_version": 111,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 1
+ },
+ "R762e86": {
+  "mode": "single",
+  "repetition": 1,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 99,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 1
+ },
+ "R528681": {
+  "mode": "single",
+  "repetition": 3,
+  "no_model_answer": false,
+  "approved_by_rig": true,
+  "profile_version": 99,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 1
+ },
+ "Re7c01f": {
+  "mode": "single",
+  "repetition": 2,
+  "no_model_answer": false,
+  "approved_by_rig": true,
+  "profile_version": 106,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 1
+ },
+ "Rd84686": {
+  "mode": "single",
+  "repetition": 1,
+  "no_model_answer": false,
+  "approved_by_rig": false,
+  "profile_version": 111,
+  "shift_to_day": "2026-11-05",
+  "agent_runs": 1
+ }
+}

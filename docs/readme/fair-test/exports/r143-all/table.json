@@ -1,0 +1,15 @@
+{
+ "title": "Release 1.4.3, all 12 cases",
+ "about": "The recipe for the grade columns of the first table under Release 1.4.3 in docs/readme/fair-test.md: each row's export, its grading policy and version, and where results-r143-all.json holds its published figures. The cost columns come from the Costs page, not from the exports, and are not reproduced here.",
+ "results": "results-r143-all.json",
+ "rows": [
+  {"label": "The board", "export": "board", "policy": "current-plan", "version": 1, "results": "modes/board/as_run"},
+  {"label": "Single investigator, as settled here", "export": "single", "policy": "first-proposal", "version": 1, "results": "modes/single/as_settled"},
+  {"label": "Single investigator, as graded by `grade.py`", "export": "single", "policy": "current-plan", "version": 1, "results": "modes/single/as_run"},
+  {"label": "Site policy, board live, the 10 cases played", "export": "policy-live", "policy": "current-plan", "version": 1, "results": "modes/policy-live/as_run"},
+  {"label": "Site policy, board live, composed with the board's F03 and F12", "export": "policy-live", "policy": "current-plan", "version": 1, "compose": {"export": "board", "cases": ["F03", "F12"]}, "means_only": true, "results": "modes/policy-live/composed_not_played"},
+  {"label": "Site policy, board not live", "export": "policy-noboard", "policy": "current-plan", "version": 1, "results": "modes/policy-noboard/as_run"},
+  {"label": "Rules only", "export": "rules", "policy": "current-plan", "version": 1, "results": "modes/rules/as_run"},
+  {"label": "Always escalate, computed", "baseline": "always-escalate"}
+ ]
+}

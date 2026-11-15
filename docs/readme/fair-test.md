@@ -145,7 +145,9 @@ The receiver's final history holds the failed key once, from the fixture's own c
 
 Read literally against the final plan, the two runs are F (loss 6 each); that is the as-graded row in the table. This
 page leads with the settled figure. `grade.py` was not changed. The fix it needs is to judge F08 on the first plan made
-on the 404 snapshot, and to record every plan and gate stage in the row.
+on the 404 snapshot, and to record every plan and gate stage in the row. The exports of these 1.0.0 runs are not
+published, so this settlement rests on the account above; the 1.4.3 rerun's are, and its settled row is re-graded from
+them by command ([below](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#release-143-all-12-cases-rerun)).
 
 **Why only the single investigator met this.** In all six live F08 runs the first read came before the slow commit. In
 runs 1 and 2 the single investigator planned in about 13 s, before the commit, so its rehearsal said `would_apply`. In
@@ -722,7 +724,8 @@ from this same code (R R R each) to the 10 cases played, and was not played as o
   given in [the one
   disagreement](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#the-one-disagreement-and-how-it-was-settled).
   The board's three runs planned after the commit, their rehearsal said `already_committed`, and they stopped
-  `blocked`, R, as on 1.0.0. No blind re-grade was done this time.
+  `blocked`, R, as on 1.0.0. No blind re-grade by hand was done this time; the records are re-graded by command
+  (below).
 - **No mode executed a wrong write.** On 1.0.0, Site policy and Rules only each wrote F09's cancelled transfer in all
   three runs. On 1.4.3 the gate stops that resend at proposal (`FURTHER_MOVEMENT`: a cancel of the transfer, ADT^A12,
   that the receiver has not applied), so F09 is a wrong write proposed and stopped (Wp, loss 8) instead of executed
@@ -761,6 +764,23 @@ Per case, USD for the three runs: board F01 1.218, F02 1.175, F03 1.356, F04 2.4
 F03 run with the board live that was under way when the instance's container restarted at 03:29 UTC: the case resolved
 on a verified reconcile after the restart, but the player lost its record, so it is not graded. F03 and F12 were then
 left unplayed in that mode, because their estimates would have taken the spend past the cap.
+
+**Re-grading from the records.** The five blind exports these figures were graded from are published, byte for byte,
+with their keys and a manifest of their hashes, in
+[fair-test/exports/r143-all](https://github.com/MxSalata/shutter/tree/main/docs/readme/fair-test/exports/r143-all).
+`python3 tests/fair_test/regrade.py --check docs/readme/fair-test/results-r143-all.json` re-grades all 174 runs offline,
+with no instance and no model, prints the grade columns of the first table above from a declared recipe (the cost
+columns come from the Costs page), and exits 1 unless every figure and every run's category and note equal the results
+file. It names two grading policies and versions them: `current-plan` 1 is `grade.py`'s rule, unchanged, and
+`first-proposal` 1 judges the plan that first reached the dispatch gate, which is what `scoring.md` calls the proposal,
+by the same rule. Each run's history (every snapshot with its digest, every plan version, gate decision, approval or
+automatic release, voided approval, dispatch and verification) is read from the event texts the exports already carry.
+The two policies differ on the single investigator's three F08 runs and nowhere else (plan v1 resend, stopped at
+dispatch: R; plan v2 reconcile: F), so the "as settled" row is `first-proposal` 1 and the "as graded" row
+`current-plan` 1. Rules only's F08 runs also have two plans (a resend stopped at dispatch, then a resend stopped at
+proposal by `ALREADY_COMMITTED`) and grade R by either. No run released a forbidden write. The reason flags are still
+not graded; [tests/fair_test](https://github.com/MxSalata/shutter/tree/main/tests/fair_test)'s README says what each
+policy reads.
 
 **What it does not show.** This is not a new held-out test (above). Three runs a case, twelve cases and one fictional
 hospital, as for 1.0.0. Site policy with the board live is missing F03 and F12. The modes ran one after another on one
@@ -802,9 +822,14 @@ In [docs/readme/fair-test](https://github.com/MxSalata/shutter/tree/main/docs/re
   release 1.4.3's whole code on all twelve cases: per mode (Rules only, Site policy with the board not live and live, the
   single investigator, the board), each run's graded row with its Costs page figure, each case's cost and seconds, the
   totals, the settled single investigator and what was not played.
+- [exports/r143-all](https://github.com/MxSalata/shutter/tree/main/docs/readme/fair-test/exports/r143-all): the blind
+  exports and keys `grade.py` wrote for the 1.4.3 rerun, one folder per mode, byte for byte, with `manifest.sha256`
+  (their hashes) and `table.json` (the 1.4.3 table's rows: each one's export, grading policy and version, and where its
+  published figures are). Outside the seal's manifest.
 
 **To repeat it:** [tests/fair_test](https://github.com/MxSalata/shutter/tree/main/tests/fair_test) holds the fixtures
 built from `cases.md`, the player and the grader; its README says how to run them.
 `python3 tests/fair_test/build_fixtures.py --sealed docs/readme/fair-test --check` checks the seal and that the fixtures
-match the cases. The board and the single investigator need a live key; Site policy and Rules only do not. CI does not
-run it.
+match the cases. The board and the single investigator need a live key; Site policy and Rules only do not.
+`python3 tests/fair_test/regrade.py --check docs/readme/fair-test/results-r143-all.json` re-grades the published 1.4.3
+records with neither. CI does not run them.
