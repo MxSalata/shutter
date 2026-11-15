@@ -711,6 +711,8 @@ export function DecisionCard({
                       <>
                         <StatusBadge
                           {...gateStatus}
+                          // Neutral on a plan that writes nothing: a green tile on an escalated case reads as an all-clear
+                          tone={writesNothing && gate.outcome === 'pass' ? 'neutral' : gateStatus.tone}
                           // Its scope beside a plan that writes nothing, so a green check is not read as leave to write
                           label={
                             gateFactLabel(gate.outcome, checks, c.state, writesNothing) ?? gateStatus.label

@@ -10,7 +10,7 @@ import type {
   Snapshot,
 } from '@/api/types';
 import { TRIAL } from '@/env/mode';
-import { displayZone, humanize } from '@/lib/format';
+import { displayZone, formatZoned, humanize } from '@/lib/format';
 import type { EvidenceRef } from '@/lib/evidenceRefs';
 import { asArray, asObject } from '@/lib/json';
 import { APPROVALS, caseState, gateOutcome, PROVENANCE, ranOnIris, type OutcomeCase } from '@/lib/status';
@@ -246,18 +246,15 @@ export function actionHeadline(f: CaseFacts, technical = true): string {
 }
 
 /**
- * When the recorded case was approved: the time its events record the move out of awaiting approval, "20 Oct, 17:24
- * UTC", for the note the trial shows once it has replayed what the case did after a reader's approval. Empty when the
- * events record no approval.
+ * When the recorded case was approved: the time its events record the move out of awaiting approval, in the feed's zone
+ * as the rest of the case page gives it ("2 Nov, 14:16:41 GMT"), for the note the trial shows once it has replayed what
+ * the case did after a reader's approval. Empty when the events record no approval.
  */
 export function recordedApprovalTime(events: CaseEvent[] | null | undefined): string {
   const e = (events ?? []).find(
     (x) => x.kind === 'state' && x.fromState === 'awaiting_approval' && x.toState === 'approved',
   );
-  const d = e?.at ? new Date(e.at) : null;
-  if (!d || Number.isNaN(d.getTime())) return '';
-  const day = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(d);
-  return `${day}, ${d.toISOString().slice(11, 16)} UTC`;
+  return formatZoned(e?.at);
 }
 
 /**

@@ -94,6 +94,13 @@ export { REPLAY_DONE };
  * A tab panel clears the header and the sticky tab bar when it is scrolled to, as `.case-tab-panel` makes the
  * sections and steps inside it do.
  */
+/**
+ * Above the trial's Audit trail: its times are the replay's of 2 Nov 2026 (fixtures.json `recordedAt`), while the agents'
+ * own recordings carry when they first answered live (S2's, S3's and S8's tool calls on 25 Oct).
+ */
+const TRIAL_AUDIT_TIMES =
+  'These times are the recording’s, made on 2 Nov 2026 by replaying the agents’ answers; the agents first answered live before that (S2, S3 and S8 on 25 Oct), and each agent’s recording gives its own time.';
+
 const PANEL = {
   className: 'case-tab-panel',
   style: { scrollMarginTop: 'calc(var(--shutter-header-h) + 3.5rem)' },
@@ -456,6 +463,12 @@ function CaseBody({ c }: { c: CaseDetail }) {
           </Tabs.Panel>
           <Tabs.Panel value="audit" pt="md" {...PANEL}>
             <Stack gap="md">
+              {/* The trial's times are one replay's, seconds apart, beside earlier times the agents' own answers carry */}
+              {TRIAL ? (
+                <Text size="sm" c="dimmed" maw="68ch">
+                  {TRIAL_AUDIT_TIMES}
+                </Text>
+              ) : null}
               <CaseTimeline events={events.data ?? []} />
               {/* What approvers decided before on these conditions here; "What needs you now" names them first when
                   the case waits for an approval */}

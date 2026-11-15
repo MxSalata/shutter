@@ -175,7 +175,7 @@ test.describe('the S2 approval in the trial', () => {
     expect(await replayed).toBe(true);
     await expect(outcome).toHaveAttribute('data-tone', 'positive');
     await expect(page.getByTestId('replay-note')).toHaveText(
-      'Replayed from the recording: approved 2 Nov, 14:16 UTC. Your approval is noted at the end of the audit trail.',
+      'Replayed from the recording: approved 2 Nov, 14:16:41 GMT. Your approval is noted at the end of the audit trail.',
     );
     const stages = page.locator('.lifecycle-step');
     await expect(stages).toHaveCount(7);
@@ -270,7 +270,7 @@ test.describe('the case page made easier to read', () => {
     await page.mouse.wheel(0, 1200);
     const compact = page.getByTestId('case-action-compact');
     await expect(compact).toBeInViewport();
-    await expect(compact).toHaveAccessibleName('Needs you: escalate to a team');
+    await expect(compact).toHaveAccessibleName('Needs you: notify a team');
     await compact.click();
     // It reaches the control it names: the panel's button, not a card that describes it
     const heading = page.getByRole('heading', { name: 'Escalations' });

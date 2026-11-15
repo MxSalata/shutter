@@ -10,7 +10,7 @@ import { decisionLabels } from './planAction';
  */
 export interface CaseAction {
   needsYou: boolean;
-  /** The words on the button: "Decide on the resend", "Escalate to a team", "No action needed". */
+  /** The words on the button: "Decide on the resend", "Notify a team", "No action needed". */
   label: string;
   /** The compact copy's word: "Needs you" or "No action". */
   short: string;
@@ -132,7 +132,7 @@ export function caseActionOf(f: CaseFacts, ctx: ActionContext): CaseAction {
       ? yours('Mark as handled', 'escalations')
       : notYours('Waiting for an approver', 'waiting for an approver to mark it handled');
   }
-  if (next.escalate) return yours('Escalate to a team', 'escalations');
+  if (next.escalate) return yours('Notify a team', 'escalations');
   if (c.state === 'failed')
     return ctx.trial
       ? notYours('Reinvestigate', 'reinvestigate needs a real model, not in the trial')

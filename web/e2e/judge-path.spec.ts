@@ -69,7 +69,7 @@ for (const width of [1280, 390])
       await expect(page.getByRole('heading', { name: /^Case C-\d{6}/, level: 1 })).toBeVisible();
       const note = page.getByTestId('s8-rules-note');
       await expect(note).toHaveText(
-        'Rules only, exempted here on purpose to show a plain resend: every check passed and WARD-B was written over WARD-C. On a real case the gate holds it.',
+        'Rules only, exempted here on purpose to show a plain resend: every other check passed and WARD-B was written over WARD-C. On a real case the gate holds it.',
         { timeout: 15_000 },
       );
       await note.scrollIntoViewIfNeeded();
