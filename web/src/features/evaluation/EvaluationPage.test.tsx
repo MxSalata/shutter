@@ -165,8 +165,11 @@ describe('EvaluationPage', () => {
     const own = within(headline()).getByText('recorded failures, the expected action chosen');
     expect(card.compareDocumentPosition(resumes) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(resumes.compareDocumentPosition(own) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    // Straight after the hero statement, before the catalogue demonstration's lines
+    // After the hero statement and its S8 line ("The seventh" stays next to the 7 misses), before the catalogue
+    // demonstration's lines
+    const seventh = within(headline()).getByText(/^The seventh, S8, wrote over/);
     const given = within(headline()).getByText(/^The agents are given the catalogue's matching entry/);
+    expect(seventh.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(card.compareDocumentPosition(given) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 

@@ -524,9 +524,6 @@ function Headline({
       statement={heroStatement(proof)}
       tour="evaluation-headline"
     >
-      {/* The rerun of the held-out cases follows the hero statement; the catalogue demonstration comes after it */}
-      <HeldOutCard />
-
       {second ? (
         <Text size="md">
           {second}{' '}
@@ -541,6 +538,10 @@ function Headline({
           ) : null}
         </Text>
       ) : null}
+
+      {/* The rerun of the held-out cases follows the hero statement and its S8 line, before the catalogue demonstration */}
+      <HeldOutCard />
+
       {t.plans_with_a_catalogue_outcome ? (
         <Text size="sm">
           {`The agents are given the catalogue's matching entry and preferred outcome. The coordinator took that outcome in ${t.plans_taking_the_preferred_outcome ?? 0} of ${t.plans_with_a_catalogue_outcome} plans, S8 included: policy applied to evidence, not answers reached unaided.`}
