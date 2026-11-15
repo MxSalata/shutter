@@ -116,9 +116,9 @@ nothing sent.
   `Shutter.Setup.InstallAIHubStatus(root)` (the provider configuration, the knowledge bases, the agent mode, the publisher's
   web application). A failed install stops the load.
 - **The parameters.** `demo` is empty by default: a first install, or a load after `zpm "uninstall iris-shutter"`, is then
-  the demo, and an upgrade keeps the flag the instance holds (section 8). `zpm "load /path/to/module -Ddemo=0"` installs without the demo; `production`
-  (empty by default) names a production of the site's own to install Shutter's items into instead (section 4), as in
-  `zpm "load /path/to/module -Ddemo=0 -Dproduction=Your.Production"`.
+  the demo, and an upgrade keeps the flag the instance holds (section 8). `zpm "load /path/to/module -Ddemo=0"` installs
+  without the demo; `production` (empty by default) names a production of the site's own to install Shutter's items into
+  instead (section 4), as in `zpm "load /path/to/module -Ddemo=0 -Dproduction=Your.Production"`.
 - **A packaged install** (an archive made by `zpm "package"`, the form the registry serves) carries the `knowledge/`,
   `fixtures/` and `www/` folders the install reads; IPM keeps the extracted module in its module root (its ModuleRoot setting,
   by default `<data directory>/ipm/iris-shutter/<version>/`), and `/shutter` serves `www/` from there. It needs IPM 0.10.4 or
