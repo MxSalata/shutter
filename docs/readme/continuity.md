@@ -28,8 +28,9 @@ decision on a case already decided is refused with who decided first.
 - **A decision on a case whose answer never came** (the connection dropped, or a gateway's page came back in the API's
   place): the review says it can't tell whether the decision was recorded and keeps the comment as sent, and pressing the
   same button again sends the same decision under the same key. If the first was recorded, the server answers with that
-  record, so nothing is decided twice. If the page reads the case moved meanwhile, the review stops and says the change may
-  be that decision: the Audit trail says who decided. It never says nothing was decided.
+  record or refuses this press naming who decided; nothing is decided twice. If the page reads the case moved meanwhile,
+  the review stops and says the change may be that decision: the Audit trail says who decided. It never says nothing was
+  decided.
 - **The approval of an outage's resend** whose answer never came says it can't tell whether it was recorded, and points to
   the card, which is read again. Only an offered set can be approved, so a second approval of a set already approved is
   refused ([CONTRACTS 17.8](https://github.com/MxSalata/shutter/blob/main/docs/CONTRACTS.md#178-the-send-v151-to-v154)).

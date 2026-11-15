@@ -1657,7 +1657,7 @@ describe('CasePage', () => {
     release();
     const said = await within(dialog).findByTestId('review-error');
     expect(said).toHaveTextContent(
-      /^No answer came back \(.+\), so this page can't tell whether your decision was recorded\. Pressing "Approve the resend" again sends the same decision under the same key: if the first was recorded, the server answers with that record and nothing is decided twice\.$/,
+      /^No answer came back \(.+\), so this page can't tell whether your decision was recorded\. Pressing "Approve the resend" again sends the same decision under the same key: if the first was recorded, the server answers with that record or refuses this press naming who decided; nothing is decided twice\.$/,
     );
     expect(said).not.toHaveTextContent(/Nothing was/);
     // The comment is held as sent, so the next press is the same body under the same key

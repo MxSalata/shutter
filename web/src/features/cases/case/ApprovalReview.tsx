@@ -58,11 +58,13 @@ const LOST_MOVED_WORDS =
 
 /**
  * A decision whose answer never came, on a case the page has not seen move: the page can't tell whether it was
- * recorded. The same press sends the same body under the same key, which the server answers from the first reply when
- * the first was recorded (CONTRACTS 5, the Idempotency-Key), so it is never decided twice.
+ * recorded. The same press sends the same body under the same key (CONTRACTS 5, the Idempotency-Key). The server keeps
+ * the first reply only once the first decision has finished, so a retry is answered with that reply, or refused while
+ * the first is still being made or when it was cut off before its reply was kept (the case then reads decided, with who
+ * decided). Either way it is never decided twice.
  */
 function lostWords(press: string, cause: string): string {
-  return `No answer came back${cause ? ` (${cause})` : ''}, so this page can't tell whether your decision was recorded. Pressing "${press}" again sends the same decision under the same key: if the first was recorded, the server answers with that record and nothing is decided twice.`;
+  return `No answer came back${cause ? ` (${cause})` : ''}, so this page can't tell whether your decision was recorded. Pressing "${press}" again sends the same decision under the same key: if the first was recorded, the server answers with that record or refuses this press naming who decided; nothing is decided twice.`;
 }
 
 /** What a decision is bound to, said beside its controls: the plan, its encounter, its digest and the case version. */
