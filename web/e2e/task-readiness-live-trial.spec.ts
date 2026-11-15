@@ -46,7 +46,10 @@ const control = (over: Record<string, unknown>) => ({
   ...over,
 });
 
-/** The stand-in: the signed-in user, the settings, the recovery control and the site profile a test gives. */
+/**
+ * The stand-in: the signed-in user, the settings, the recovery control and the site profile a test gives, and the health
+ * report's last live run when it gives one.
+ */
 async function stubServer(
   page: Page,
   state: {
@@ -54,6 +57,7 @@ async function stubServer(
     settings: Record<string, unknown>;
     recovery: Record<string, unknown>;
     profile: Record<string, unknown>;
+    lastLiveRun?: Record<string, unknown> | null;
   },
 ) {
   const json = (route: Route, body: unknown, status = 200) => route.fulfill({ status, json: body });
@@ -66,7 +70,13 @@ async function stubServer(
       case '/me':
         return json(route, state.me);
       case '/health':
-        return json(route, { ok: true, demo: true, version: 'stub', checks: [] });
+        return json(route, {
+          ok: true,
+          demo: true,
+          version: 'stub',
+          checks: [],
+          ...(state.lastLiveRun === undefined ? {} : { last_live_run: state.lastLiveRun }),
+        });
       case '/settings':
         return json(route, { ...fixtures.settings, ...state.settings });
       case '/costs':
@@ -162,6 +172,13 @@ test.describe('Your tasks on a live server @settings', () => {
       },
       recovery: { stopped: true, stoppedBy: 'operator', stopReason: 'receiver upgrade' },
       profile: { recovery: { mode: 'enabled' } },
+      lastLiveRun: {
+        at: '2026-11-15T09:12:00Z',
+        status: 'budget_exceeded',
+        member: 'coordinator',
+        model: 'stub-model',
+        mode: 'live',
+      },
     });
     const section = await openTasks(page);
     await expect(section.getByTestId('tasks-summary')).toHaveText(
@@ -177,6 +194,12 @@ test.describe('Your tasks on a live server @settings', () => {
     );
     await expect(ask.getByTestId('task-next')).toContainText('SHUTTER_DAILY_BUDGET_USD');
     await expect(ask.locator('[data-kind="now"]')).toContainText('Now: The model cannot be asked. Read ');
+    // The last observed live call, apart from what holds now, with when it started
+    const seen = ask.locator('[data-kind="seen"]');
+    await expect(seen).toContainText(
+      'Seen: The newest run that reached a real model ended without a usable answer (budget_exceeded). Started ',
+    );
+    await expect(seen.locator('time')).toHaveAttribute('datetime', '2026-11-15T09:12:00Z');
     const approve = section.getByTestId('task-approve');
     await expect(approve.getByTestId('task-condition')).toHaveText(
       'Recovery is stopped by operator: receiver upgrade. No new recovery call is admitted.',
