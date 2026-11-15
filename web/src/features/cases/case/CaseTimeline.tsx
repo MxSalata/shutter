@@ -10,8 +10,12 @@ import { Timestamp } from '@/components/Timestamp';
 import { humanize, plural } from '@/lib/format';
 import { eventRounds } from './derive';
 import { auditText, planRationales } from './timeline';
+import { isStartNote } from './restart';
 
-/** Events other than a state change: neutral records and notes, information for a release or a write, red for an error. */
+/**
+ * Events other than a state change: neutral records and notes, information for a release or a write, red for an error.
+ * The production's start note is an error-kind event that records a restart, not a failure: neutral, and named so.
+ */
 const KIND_COLOURS: Record<string, string> = {
   artifact: 'gray',
   note: 'gray',
@@ -42,13 +46,21 @@ function RoundTimeline({ events, rationales }: { events: CaseEvent[]; rationales
       {events.map((e) => (
         <Timeline.Item
           key={e.seq}
-          color={e.kind === 'state' ? stateColour(e.toState) : (KIND_COLOURS[e.kind] ?? 'gray')}
+          color={
+            e.kind === 'state'
+              ? stateColour(e.toState)
+              : isStartNote(e)
+                ? 'gray'
+                : (KIND_COLOURS[e.kind] ?? 'gray')
+          }
           title={
             <Group gap="xs" wrap="wrap">
               <Text size="sm" fw={600}>
                 {e.kind === 'state'
                   ? humanize(e.toState)
-                  : humanize(e.kind === 'artifact' ? 'record' : e.kind)}
+                  : isStartNote(e)
+                    ? 'Production started'
+                    : humanize(e.kind === 'artifact' ? 'record' : e.kind)}
               </Text>
               {/* An event the trial's mock plays from the recording after an approval made in the trial */}
               {e.replayed ? (
