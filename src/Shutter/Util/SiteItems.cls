@@ -13,6 +13,10 @@
 /// - puts the site's values back on the definition the install made (Apply), after the install's own changes (the demo's
 ///   items off on a site's install, the Second Parser following its jar, the receivers' and the FHIR items put back), so
 ///   new items, new settings and changed defaults arrive and the site's values stand.
+/// What the install sets itself is never taken for the site's (InstallOwns): the demo items' enabled flags when the demo
+/// flag changes, or, with no record, when the capture holds what the earlier install set; the Second Parser's flag with no
+/// record; and the four server settings of the FHIR items and of the receivers' connector items, which their own records
+/// set at every install.
 /// With no record of the last install (one over 1.4.8 or earlier), the capture is compared with the definition this
 /// install made: every value that differs is the site's, but the descriptions (DESCRIPTIVE), nothing counts as taken out,
 /// and an added item of a Shutter class is left out, since it may be one Shutter no longer ships. (The class as last
@@ -50,7 +54,7 @@ ClassMethod CaptureStatus() As %Status
 {
     Try {
         Quit:..ShapeB()
-        Set r = ..Capture(..#PRODUCTION, ..#NODE, $GET(^Shutter.Config("version")) '= "")
+        Set r = ..Capture(..#PRODUCTION, ..#NODE, $GET(^Shutter.Config("version")) '= "", $GET(^Shutter.Config("demo")))
         If r = "captured" Write !, "Shutter: the settings of Shutter.Production's items are noted, to be kept over the install", !
     } Catch ex {
         Write !, "Shutter: the settings of Shutter.Production's items could not be noted (", ex.DisplayString(), "); check them after the install", !
@@ -64,7 +68,9 @@ ClassMethod KeepStatus() As %Status
 {
     Quit:..ShapeB() $$$OK
     Set node = ..#NODE
-    Set sc = ..Keep(..#PRODUCTION, node, .out)
+    Merge receivers = ^Shutter.Config("receiverItems")
+    Do ..InstallOwns(.owned, $LISTGET($GET(@node@("before")), 5), $GET(^Shutter.Config("demo"), 1), $DATA(^Shutter.Config("fhirItems")) > 0, .receivers)
+    Set sc = ..Keep(..#PRODUCTION, node, .out, .owned)
     Quit:$$$ISERR(sc) sc
     Set @node@("last") = out.%ToJSON()
     Set said = ..Account(out)
@@ -78,11 +84,57 @@ ClassMethod ShapeB() As %Boolean [ CodeMode = expression ]
 $GET(^Shutter.Config("production")) '= ""
 }
 
+/// What the install itself sets on Shutter.Production, and so not the site's to keep (owned, for Keep): owned("i", item)
+/// is the item's class the rules hold for ("" for any), owned("i", item, "p", property) and owned("i", item, "s", target,
+/// setting) a rule: $LISTBUILD("always"), never learnt and dropped from the record; $LISTBUILD("no record"), not learnt
+/// with no record; $LISTBUILD("was", value), with no record, a capture holding value is the earlier install's.
+/// - The demo items' Enabled (Shutter.Setup DEMOITEMS: off on a site's install, as shipped on a demo's). When the demo
+///   flag changes in this install (demoBefore, the stored flag the capture found, against demoNow) the install's value
+///   stands, "always"; otherwise "was" the earlier install's, on for a demo and off for a site.
+/// - The Second Parser's Enabled, which follows its jar (Shutter.Setup SyncSecondParser): with no record the earlier
+///   install's jar is unknown, so "no record".
+/// - The four server settings of the FHIR items that call the server, while the FHIR record is there (fhir), and of each
+///   receiver's connector item (receivers, ^Shutter.Config("receiverItems")): the install writes them from those records
+///   (Shutter.FHIR.Install RestoreItems, Shutter.Util.Onboard RestoreReceiverItems), which stay the one place they are
+///   set, so "always".
+ClassMethod InstallOwns(Output owned, demoBefore As %String, demoNow As %Boolean, fhir As %Boolean, ByRef receivers)
+{
+    Kill owned
+    If demoBefore = "" Set demoBefore = 1
+    Set rule = $SELECT((''demoBefore) '= (''demoNow): $LISTBUILD("always"), 1: $LISTBUILD("was", ''demoBefore))
+    Set names = $PARAMETER("Shutter.Setup", "DEMOITEMS")
+    For k = 1:1:$LENGTH(names, ",") {
+        Set name = $PIECE(names, ",", k)
+        Continue:name=""
+        Set owned("i", name) = "", owned("i", name, "p", "Enabled") = rule
+    }
+    Set name = $PARAMETER("Shutter.Util.SecondParser", "ITEM")
+    Set:name'="" owned("i", name) = "", owned("i", name, "p", "Enabled") = $LISTBUILD("no record")
+    Set endpoint = "HTTPServer,HTTPPort,Credentials,SSLConfig"
+    If fhir {
+        Set names = $PARAMETER("Shutter.FHIR.Profile", "ITEMS"), endpoint = $PARAMETER("Shutter.FHIR.Install", "ENDPOINT")
+        For k = 1:1:$LENGTH(names, ",") {
+            Set name = $PIECE(names, ",", k)
+            Continue:(name = "")||'$CLASSMETHOD("Shutter.FHIR.Install", "CallsTheServer", name)
+            Set owned("i", name) = $CLASSMETHOD("Shutter.FHIR.Install", "ItemClass", name)
+            For j = 1:1:$LENGTH(endpoint, ",") Set owned("i", name, "s", "Adapter", $PIECE(endpoint, ",", j)) = $LISTBUILD("always")
+        }
+    }
+    Set endpoint = "HTTPServer,HTTPPort,Credentials,SSLConfig", name = ""
+    For {
+        Set name = $ORDER(receivers(name))
+        Quit:name=""
+        Set owned("i", name) = "Shutter.Operation.Ward"
+        For j = 1:1:$LENGTH(endpoint, ",") Set owned("i", name, "s", "Adapter", $PIECE(endpoint, ",", j)) = $LISTBUILD("always")
+    }
+}
+
 /// Takes the capture into @node@("before"): the production's definition (Read), and as the node's value
-/// $LISTBUILD(seconds, UTC time, job, found). A capture no install has used, younger than PENDINGSECONDS, is kept as it
-/// is. On an instance no install has run on (installed 0) nothing is read: what is there is the shipped class freshly
-/// compiled, not a site's. Returns "captured", "pending" (one kept), "no definition" or "first install".
-ClassMethod Capture(production As %String, node As %String, installed As %Boolean) As %String
+/// $LISTBUILD(seconds, UTC time, job, found, demo), demo being the stored demo flag of the earlier install. A capture no
+/// install has used, younger than PENDINGSECONDS, is kept as it is. On an instance no install has run on (installed 0)
+/// nothing is read: what is there is the shipped class freshly compiled, not a site's. Returns "captured", "pending" (one
+/// kept), "no definition" or "first install".
+ClassMethod Capture(production As %String, node As %String, installed As %Boolean, demo As %String = "") As %String
 {
     Set meta = $GET(@node@("before"))
     If (meta '= "") && ((..Seconds() - $LISTGET(meta, 1)) < ..#PENDINGSECONDS) Quit "pending"
@@ -92,17 +144,18 @@ ClassMethod Capture(production As %String, node As %String, installed As %Boolea
         Set found = ..Read(production, .def)
         Merge:found @node@("before") = def
     }
-    Set @node@("before") = $LISTBUILD(..Seconds(), ..Stamp(), $JOB, found)
+    Set @node@("before") = $LISTBUILD(..Seconds(), ..Stamp(), $JOB, found, demo)
     Quit $SELECT(found: "captured", installed: "no definition", 1: "first install")
 }
 
-/// After the install: what the site changed since the last install learnt from the capture (Learn), the site's values
-/// put back on the definition (Apply), the definition saved and written to the class (so a later compile, a restart
-/// through Shutter.Setup.RestartProduction included, rebuilds the same definition), the running production updated when
-/// anything changed, the record and the definition left kept, and the capture removed. out holds mode ("record", "no
-/// record", "nothing captured" or "no production"), changes, and the lists kept, restored, removed and skipped, which name
-/// the items, properties and settings but never a setting's value.
-ClassMethod Keep(production As %String, node As %String, Output out As %DynamicObject) As %Status
+/// After the install: what the site changed since the last install learnt from the capture (Learn), what the install
+/// itself owns dropped from the record (owned, from InstallOwns; Forget), the site's values put back on the definition
+/// (Apply), the definition saved and written to the class (so a later compile, a restart through
+/// Shutter.Setup.RestartProduction included, rebuilds the same definition), the running production updated when anything
+/// changed, the record and the definition left kept, and the capture removed. out holds mode ("record", "no record",
+/// "nothing captured" or "no production"), changes, and the lists kept, restored, removed and skipped, which name the
+/// items, properties and settings but never a setting's value.
+ClassMethod Keep(production As %String, node As %String, Output out As %DynamicObject, ByRef owned) As %Status
 {
     Set sc = $$$OK, out = {"mode": "", "changes": 0, "kept": [], "restored": [], "removed": [], "skipped": []}
     Try {
@@ -118,10 +171,11 @@ ClassMethod Keep(production As %String, node As %String, Output out As %DynamicO
                 Do ..Read(prod, .left)
             }
             Set out.mode = $SELECT(record: "record", 1: "no record")
-            Do ..Learn(.before, .left, record, .site, out)
+            Do ..Learn(.before, .left, record, .site, out, .owned)
         } Else {
             Set out.mode = "nothing captured"
         }
+        Do ..Forget(.site, .owned, out)
         Set changes = ..Apply(prod, .site, out)
         If changes Set sc = prod.%Save() Quit:$$$ISERR(sc)
         Set sc = prod.SaveToClass() Quit:$$$ISERR(sc)
@@ -146,11 +200,12 @@ ClassMethod Keep(production As %String, node As %String, Output out As %DynamicO
 /// install left (record 1) or this install made (record 0), has not: a property or setting changed or added, a setting
 /// taken out (record 1 only), an item added (whole, with "added" 1). An item the site added and then deleted leaves the
 /// record. With no record, the descriptions are not learnt, and an added item of a Shutter class is left out (skipped).
-ClassMethod Learn(ByRef before, ByRef left, record As %Boolean, ByRef site, out As %DynamicObject)
+/// What the install owns (owned, InstallOwns) is not learnt.
+ClassMethod Learn(ByRef before, ByRef left, record As %Boolean, ByRef site, out As %DynamicObject, ByRef owned)
 {
-    Kill s, b, d
+    Kill s, b, d, o
     Merge s = before("p"), b = left("p"), d = site("p")
-    Do ..LearnNode(.s, .b, ..#PRODUCTIONPROPERTIES, record, .d)
+    Do ..LearnNode(.s, .b, ..#PRODUCTIONPROPERTIES, record, .d, .o)
     Kill site("p")
     Merge site("p") = d
     Set name = ""
@@ -169,9 +224,10 @@ ClassMethod Learn(ByRef before, ByRef left, record As %Boolean, ByRef site, out 
                 Set site("i", name, "added") = 1
                 Continue
             }
-            Kill s, b, d
+            Kill s, b, d, o
             Merge s = before("i", name), b = left("i", name), d = site("i", name)
-            Do ..LearnNode(.s, .b, ..#ITEMPROPERTIES, record, .d)
+            Do ..Rules(.owned, name, class, .o)
+            Do ..LearnNode(.s, .b, ..#ITEMPROPERTIES, record, .d, .o)
             Kill site("i", name)
             If $DATA(d) > 1 Merge site("i", name) = d Set site("i", name) = class
             Continue
@@ -192,14 +248,71 @@ ClassMethod Learn(ByRef before, ByRef left, record As %Boolean, ByRef site, out 
     }
 }
 
+/// The rules of owned that hold for one item of this class, in o.
+ClassMethod Rules(ByRef owned, name As %String, class As %String, Output o) [ Private ]
+{
+    Kill o
+    Quit:'$DATA(owned("i", name), cls)
+    Quit:(cls '= "")&&(cls '= class)
+    Merge o = owned("i", name)
+}
+
+/// Whether a value the capture holds is the install's under its rule (InstallOwns), and so not the site's.
+ClassMethod Installs(rule As %String, record As %Boolean, value As %String) As %Boolean [ Private ]
+{
+    Quit:rule="" 0
+    Set kind = $LISTGET(rule, 1)
+    Quit:kind="always" 1
+    Quit:record 0
+    Quit (kind = "no record") || ((kind = "was") && ($LISTGET(rule, 2) = value))
+}
+
+/// Drops from site what the install owns outright ("always" in owned): a recorded value of it, of an item the site
+/// changed or added, goes, and the account says so. An item record left with nothing goes too.
+ClassMethod Forget(ByRef site, ByRef owned, out As %DynamicObject)
+{
+    Set name = ""
+    For {
+        Set name = $ORDER(owned("i", name))
+        Quit:name=""
+        Continue:'$DATA(site("i", name), class)
+        Do ..Rules(.owned, name, class, .o)
+        Set p = ""
+        For {
+            Set p = $ORDER(o("p", p), 1, rule)
+            Quit:p=""
+            Continue:($LISTGET(rule, 1) '= "always")||'$DATA(site("i", name, "p", p))
+            Kill site("i", name, "p", p)
+            Do out.skipped.%Push(name _ ": " _ p _ " is the install's")
+        }
+        Set t = ""
+        For {
+            Set t = $ORDER(o("s", t))
+            Quit:t=""
+            Set n = ""
+            For {
+                Set n = $ORDER(o("s", t, n), 1, rule)
+                Quit:n=""
+                Continue:($LISTGET(rule, 1) '= "always")
+                Continue:'$DATA(site("i", name, "s", t, n))&&'$DATA(site("i", name, "x", t, n))
+                Kill site("i", name, "s", t, n), site("i", name, "x", t, n)
+                Do out.skipped.%Push(name _ ": " _ t _ " setting " _ n _ " is the install's")
+            }
+        }
+        If '$GET(site("i", name, "added")) && ($ORDER(site("i", name, "")) = "") Kill site("i", name)
+    }
+}
+
 /// One node (the production's, or an item's): s the capture's, b the definition left, d the record, each with ("p",
 /// property) and ("s", target, name); the record also has ("x", target, name) for a setting taken out.
-ClassMethod LearnNode(ByRef s, ByRef b, list As %String, record As %Boolean, ByRef d) [ Private ]
+/// o holds the rules of what the install owns on this node (Rules).
+ClassMethod LearnNode(ByRef s, ByRef b, list As %String, record As %Boolean, ByRef d, ByRef o) [ Private ]
 {
     For k = 1:1:$LENGTH(list, ",") {
         Set p = $PIECE(list, ",", k)
         Continue:'($DATA(s("p", p), v) # 2)
         Continue:('record && $LISTFIND($LISTFROMSTRING(..#DESCRIPTIVE), p))
+        Continue:..Installs($GET(o("p", p)), record, v)
         If ($DATA(b("p", p), was) # 2) && (was = v) Continue
         Set d("p", p) = v
     }
@@ -211,6 +324,7 @@ ClassMethod LearnNode(ByRef s, ByRef b, list As %String, record As %Boolean, ByR
         For {
             Set n = $ORDER(s("s", t, n), 1, v)
             Quit:n=""
+            Continue:..Installs($GET(o("s", t, n)), record, v)
             If ($DATA(b("s", t, n), was) # 2) && (was = v) Continue
             Set d("s", t, n) = v
             Kill d("x", t, n)
@@ -226,6 +340,7 @@ ClassMethod LearnNode(ByRef s, ByRef b, list As %String, record As %Boolean, ByR
             Set n = $ORDER(b("s", t, n))
             Quit:n=""
             Continue:$DATA(s("s", t, n))
+            Continue:..Installs($GET(o("s", t, n)), record, "")
             Set d("x", t, n) = ""
             Kill d("s", t, n)
         }

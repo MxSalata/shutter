@@ -16,8 +16,9 @@ ClassMethod ItemClass(name As %String) As %String
     Quit $CASE(name, "FHIR Receiver": "Shutter.Operation.FHIRReceiver", "FHIR Out": "Shutter.Operation.FHIRExecute", "FHIR Gate": "Shutter.Operation.FHIRGate", "FHIR Verifier": "Shutter.Operation.FHIRVerify", : "")
 }
 
-/// Whether the item calls the server: the reader and the writer do, the gate and the verifier ask the reader.
-ClassMethod CallsTheServer(name As %String) As %Boolean [ Private ]
+/// Whether the item calls the server: the reader and the writer do, the gate and the verifier ask the reader. Also read by
+/// Shutter.Util.SiteItems, which leaves these items' four server settings to the record.
+ClassMethod CallsTheServer(name As %String) As %Boolean
 {
     Quit (name = "FHIR Receiver") || (name = "FHIR Out")
 }

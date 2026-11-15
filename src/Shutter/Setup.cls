@@ -1609,11 +1609,14 @@ ClassMethod StartProduction() As %Status
     Quit sc
 }
 
+/// The demo's items of Shutter.Production, which a site's install switches off (DisableDemoItems).
+Parameter DEMOITEMS = "ADT In,ADT to Downstream,Downstream Out,ADT to Records,Records Out,Scenario Player";
+
 /// On a site install (demo = 0): the demo's items of Shutter.Production are switched off, so the production runs
 /// with no feed of its own: "ADT In", "ADT to Downstream", "Downstream Out", "ADT to Records", "Records Out" and
-/// "Scenario Player". A site adds its own feed items or uses the intake route. The definition is saved, and a running
-/// production takes the change at once. A demo install leaves the items as the class defines them; a reinstall compiles
-/// the class afresh (the items enabled again) and switches them off again.
+/// "Scenario Player" (DEMOITEMS). A site adds its own feed items or uses the intake route. The definition is saved, and a
+/// running production takes the change at once. A demo install leaves the items as the class defines them; a reinstall
+/// compiles the class afresh (the items enabled again) and switches them off again.
 ClassMethod DisableDemoItems() As %Status
 {
     Set sc = $$$OK
@@ -1621,7 +1624,7 @@ ClassMethod DisableDemoItems() As %Status
     Try {
         Set prod = ##class(Ens.Config.Production).%OpenId("Shutter.Production", , .sc)
         If '$ISOBJECT(prod) Quit
-        Set demoItems = $LISTBUILD("ADT In", "ADT to Downstream", "Downstream Out", "ADT to Records", "Records Out", "Scenario Player"), changed = 0
+        Set demoItems = $LISTFROMSTRING(..#DEMOITEMS), changed = 0
         For i = 1:1:prod.Items.Count() {
             Set item = prod.Items.GetAt(i)
             If $LISTFIND(demoItems, item.Name) && item.Enabled {
