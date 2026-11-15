@@ -10,6 +10,9 @@ Class Shutter.FHIR.Install [ Abstract ]
 /// The four adapter settings that name the server, in the order of the record.
 Parameter ENDPOINT = "HTTPServer,HTTPPort,Credentials,SSLConfig";
 
+/// How many of FHIR Receiver's newest answers the Doctor looks through for a receiver's newest read.
+Parameter READROWS = 20;
+
 /// The class of one of the four items, or "" for any other name.
 ClassMethod ItemClass(name As %String) As %String
 {
@@ -400,7 +403,9 @@ ClassMethod ProofWord(proof As Shutter.Store.FHIRProof, softwareName As %String,
 /// The FHIR part of the Doctor. {"receivers": []} when the stored profile has no FHIR receiver (an entry whose fhir
 /// block passes what a save asks of it); else
 /// {"policy_version", "items_problem", "endpoints_agree", "receivers": [{"receiver", "recovery_enabled", "proof",
-/// "proof_measured_at", "credential"}]}. It reads what is stored and calls no server.
+/// "proof_measured_at", "credential", "sign_in", "sign_in_at", "sign_in_detail"}]}. The sign_in fields are what the
+/// receiver's newest read on record says of the items' sign-in to it (<method>SignIn</method>), or "none" when there is
+/// no such read. It reads what is stored and calls no server.
 ClassMethod Doctor() As %DynamicObject
 {
     Set r = {"receivers": []}
@@ -425,12 +430,81 @@ ClassMethod Doctor() As %DynamicObject
             Set row.proof = ..ProofWord(proof, softwareName, softwareVersion)
             Set row."proof_measured_at" = $SELECT($ISOBJECT(proof): proof.MeasuredAt, 1: "")
             Do row.%Set("credential", (credential '= "") && ##class(Ens.Config.Credentials).%ExistsId(credential), "boolean")
+            Set read = ..NewestRead(##class(Shutter.FHIR.Wire).Base(##class(Shutter.FHIR.Profile).Block(name)))
+            Set row."sign_in" = $SELECT($ISOBJECT(read): ..SignIn(read, .detail), 1: "none")
+            Set row."sign_in_at" = $SELECT($ISOBJECT(read): ##class(Shutter.Util.Json).Str(read, "observed_at"), 1: "")
+            Set row."sign_in_detail" = $SELECT($ISOBJECT(read): detail, 1: "No read of this receiver among FHIR Receiver's newest " _ ..#READROWS _ " answers")
             Do r.receivers.%Push(row)
         }
     } Catch ex {
         Set r = {"receivers": [], "error": (ex.DisplayString())}
     }
     Quit r
+}
+
+/// What one read of FHIR Receiver says of the items' sign-in to the receiver, from its parts (the PartsJSON of a
+/// Shutter.Msg.FHIRReadResult), with <var>detail</var> in words:
+/// <ul>
+/// <li>"refused": a part came back HTTP 401 or 403; or a part came back HTTP 404 or 410 that is not the receiver's
+/// answer (<class>Shutter.FHIR.Trust</class>) and no part was the receiver's own. That is how a web server answers a
+/// sign-in it refuses, or a path it does not serve: on a demo whose FHIR user had been disabled, every read showed
+/// only an HTTP 404 and a status of 0.</li>
+/// <li>"accepted": a part was the receiver's own answer (a trusted 200, or a 404 or 410 that is its OperationOutcome).</li>
+/// <li>"unknown": anything else, such as no answer at all.</li>
+/// </ul>
+ClassMethod SignIn(parts As %DynamicObject, Output detail As %String) As %String
+{
+    Set detail = "", refused = "", missing = "", own = 0
+    If '$ISOBJECT(parts) || 'parts.%IsA("%Library.DynamicObject") Set detail = "The read holds no parts" Quit "unknown"
+    // The parts in the order FHIR Receiver reads them.
+    Set list = []
+    For key = "metadata", "search", "encounter", "patient", "locations", "history", "vread" {
+        Set value = parts.%Get(key)
+        Continue:'$ISOBJECT(value)
+        If value.%IsA("%Library.DynamicArray") {
+            Set it = value.%GetIterator()
+            While it.%GetNext(, .one) { Do list.%Push(["location", (one)]) }
+        } Else {
+            Do list.%Push([(key), (value)])
+        }
+    }
+    Set it = list.%GetIterator()
+    While it.%GetNext(, .pair) {
+        Set kind = pair.%Get(0), part = pair.%Get(1)
+        Continue:'$ISOBJECT(part)||'part.%IsA("%Library.DynamicObject")
+        Set raw = +##class(Shutter.Util.Json).Str(part, "raw_status"), trusted = +##class(Shutter.Util.Json).Str(part, "http_status")
+        If (raw = 401) || (raw = 403) {
+            Set:refused="" refused = "the " _ kind _ " read had HTTP " _ raw
+        } ElseIf ((raw = 404) || (raw = 410)) && (trusted = 0) && (##class(Shutter.Util.Json).Str(part, "error") [ "not the receiver's answer") {
+            Set:missing="" missing = "the " _ kind _ " read had HTTP " _ raw _ " that is not the receiver's answer"
+        } ElseIf (trusted = 200) || (trusted = 404) || (trusted = 410) {
+            Set own = 1
+        }
+    }
+    If refused '= "" Set detail = "The receiver refused the sign-in: " _ refused _ ". Check the credential FHIR Receiver and FHIR Out use, and that its user is enabled at the receiver" Quit "refused"
+    If (missing '= "") && 'own Set detail = "No read reached the receiver: " _ missing _ ", as a web server answers a sign-in it refuses or a path it does not serve. Check the credential FHIR Receiver and FHIR Out use, that its user and the receiver's web application are enabled, and that the entry's base is the receiver's path" Quit "refused"
+    If own Quit "accepted"
+    Set detail = "No read had an answer that says whether the sign-in was accepted"
+    Quit "unknown"
+}
+
+/// The parts of FHIR Receiver's newest read of the receiver at that base, among its newest READROWS answers; "" when
+/// there is none.
+ClassMethod NewestRead(base As %String) As %DynamicObject [ Private ]
+{
+    Set found = ""
+    Quit:base="" found
+    Try {
+        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT TOP " _ ..#READROWS _ " PartsJSON FROM Shutter_Msg.FHIRReadResult WHERE PartsJSON IS NOT NULL ORDER BY ID DESC")
+        While rs.%Next() {
+            Set parts = ##class(Shutter.Util.Json).Parse(rs.%Get("PartsJSON"), .sc)
+            Continue:$$$ISERR(sc)||'$ISOBJECT(parts)||'parts.%IsA("%Library.DynamicObject")
+            If ##class(Shutter.Util.Json).Str(parts, "base") = base Set found = parts Quit
+        }
+    } Catch ex {
+        Set found = ""
+    }
+    Quit found
 }
 
 }
