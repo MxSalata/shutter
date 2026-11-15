@@ -3,7 +3,7 @@
 is loaded over it from the same folder, as a site does after pulling the repository. Nothing of the site's is lost and the
 uninstall (the module's Clean phase) never runs.
 
-    python3 tests/e2e/upgrade_check.py --image IMAGE --ctr NAME --old DIR [--port N] [--shape site|demo|into] [--as-version V] [--keep]
+    python3 tests/e2e/upgrade_check.py --image IMAGE --ctr NAME --old DIR [--port N] [--shape site|demo|into] [--plain-upgrade] [--as-version V] [--keep]
 
 DIR is the earlier release's tree (git archive v1.0.0, say). The shapes:
 
@@ -13,6 +13,9 @@ DIR is the earlier release's tree (git archive v1.0.0, say). The shapes:
     into  Shutter's items inside a hospital's own running production (-Ddemo=0 -Dproduction=), in the hospital's namespace;
           a case is opened in the store and a person saves the site profile. The site's own items must come through the
           install's second run over its production unchanged.
+
+--plain-upgrade (site shape) loads this tree with no -Ddemo, as a plain zpm "load" after a pull does: from 1.4.8 the install
+keeps the instance's own demo setting, so the site must still read "demo":false and have none of the demo's users.
 
 After the upgrade it checks the case (the count, and that the first one still opens with its state), the profile, the running productions (a site's production keeps its job numbers),
 the module's version, and then that a real uninstall still takes Shutter off the upgraded instance. It needs Docker and
@@ -25,6 +28,8 @@ import re
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SITE = os.path.join(HERE, "onboard_site")
@@ -41,9 +46,12 @@ ap.add_argument("--ctr", required=True)
 ap.add_argument("--old", required=True)
 ap.add_argument("--port", type=int, default=0)
 ap.add_argument("--shape", choices=["site", "demo", "into"], default="site")
+ap.add_argument("--plain-upgrade", action="store_true", help="site shape: the upgrade loads with no -Ddemo; the site must stay a site")
 ap.add_argument("--as-version", default="", help="the version this tree's module.xml is given in the container, as a release would bump it")
 ap.add_argument("--keep", action="store_true")
 args = ap.parse_args()
+if args.plain_upgrade and args.shape != "site":
+    sys.exit("--plain-upgrade goes with the site shape")
 CTR = args.ctr
 failed = []
 passed = 0
@@ -193,6 +201,34 @@ def the_upgrade(ns, extra, old_version):
     return out
 
 
+def health():
+    """GET /api/shutter/health with no sign-in: anyone may ask whether the instance is the demo."""
+    p = subprocess.run(["docker", "port", CTR, "52773/tcp"], capture_output=True, text=True).stdout.splitlines()[0].rsplit(":", 1)[1]
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{p}/api/shutter/health", timeout=30) as r:
+            return json.loads(r.read().decode())
+    except urllib.error.HTTPError as e:
+        return {"http": e.code, "body": e.read().decode(errors="replace")[:500]}
+    except (OSError, ValueError) as e:
+        return {"error": str(e)}
+
+
+def demo_users():
+    """Which of the demo's users exist, as 1 or 0 each: operator, approver, forwarder."""
+    return value("%SYS", '##class(Security.Users).Exists("operator")_##class(Security.Users).Exists("approver")_##class(Security.Users).Exists("forwarder")')
+
+
+def site_not_demo(ns, when, ask_health=True):
+    """A site's install is not the demo: the stored flag is 0, none of the demo's users exists and, when asked, health says so."""
+    flag = value(ns, '$GET(^Shutter.Config("demo"))')
+    check(f"the stored demo flag is 0 {when}", flag == "0", flag)
+    users = demo_users()
+    check(f"no operator, approver or forwarder user {when}", users == "000", users)
+    if ask_health:
+        h = health()
+        check(f'GET /api/shutter/health reads "demo":false {when}', h.get("demo") is False, h)
+
+
 def uninstall_after(ns):
     step("A real uninstall of the upgraded instance")
     start = time.time()
@@ -241,8 +277,10 @@ Set sc=$SYSTEM.OBJ.Delete("Shutter.Setup","-d")''')
     gate_before = jobs("SHUTTER").get("Gate")
     before_onboard = value("SHUTTER", '$GET(^Shutter.Config("onboard","PATHOLOGY"))')
     print("before:", before_cases, before_profile, before_status, before_onboard, site_jobs, flush=True)
+    site_not_demo("SHUTTER", "before the upgrade", ask_health=False)
 
-    the_upgrade("SHUTTER", " -Ddemo=0", old_version)
+    the_upgrade("SHUTTER", "" if args.plain_upgrade else " -Ddemo=0", old_version)
+    site_not_demo("SHUTTER", "after the upgrade" + (", which gave no -Ddemo" if args.plain_upgrade else ""))
     check("the case is still there", case_line("SHUTTER") == before_cases, (before_cases, case_line("SHUTTER")))
     same_case("SHUTTER", before_first)
     receiver_watch("SHUTTER", "Shutter.Production")
