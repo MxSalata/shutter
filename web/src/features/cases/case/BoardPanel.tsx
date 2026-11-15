@@ -260,7 +260,7 @@ function Citations({ run, name, receiver }: { run: AgentRun; name: string; recei
       label={
         <>
           {`${sections}${named}`}
-          <VisuallyHidden component="span">{`, ${name}`}</VisuallyHidden>
+          <VisuallyHidden component="span">{` (${name})`}</VisuallyHidden>
         </>
       }
     >
@@ -375,7 +375,7 @@ function SpecialistCard({
   const confidence = Number(result.confidence ?? run.finding?.confidence);
   // A run with no answer can still hold a result (over its budget, kept for inspection only): no confidence to report
   const shown = answered(run) && Number.isFinite(confidence) && confidence > 0;
-  const own = 'own confidence';
+  const own = 'self-reported confidence';
   return (
     <MemberCard
       member={run.memberCode}
@@ -726,7 +726,7 @@ export function BoardPanel({
           ? "The scenario catalogue matched the case and the site's profile says who decides it. A case it leaves to the board shows the board's findings here."
           : count === 1
             ? 'One specialist agent reads the evidence; a coordinator agent proposes the plan.'
-            : `${count ? `${NUMBERS[count] ?? count} specialist` : 'Specialist'} agents read the same evidence in parallel; a coordinator agent proposes one plan.`;
+            : `${count ? `${NUMBERS[count] ?? count} specialist` : 'Specialist'} agents read the same evidence in parallel${TRIAL ? ' on IRIS (a recording answers in turn)' : ''}; a coordinator agent proposes one plan.`;
   const coordinatorResult = asObject(coordinator?.result) ?? {};
   const disagreements = asArray(coordinatorResult.disagreements);
   const dissent = disagreements.length;

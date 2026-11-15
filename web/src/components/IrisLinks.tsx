@@ -71,7 +71,8 @@ export function IrisLinks({ links }: { links: IrisLink[] }) {
       ))}
       {onlineDemo ? (
         <Text size="xs" c="dimmed" span data-testid="iris-sign-in">
-          Opens IRIS&apos;s Management Portal in a new tab; it first asks for {PORTAL_SIGN_IN}.
+          Opens IRIS&apos;s Management Portal in a new tab; it first asks for {PORTAL_SIGN_IN}, then
+          IRIS&apos;s read-only sign-in demo-trace (password in the README&apos;s sign-in table).
         </Text>
       ) : null}
     </Group>

@@ -57,7 +57,7 @@ describe('the sign-in the Management Portal asks for first', () => {
     env.live = true;
     renderUi(<IrisLinks links={caseIrisLinks(CASE, '/')} />);
     expect(screen.getByTestId('iris-sign-in')).toHaveTextContent(
-      "Opens IRIS's Management Portal in a new tab; it first asks for GitHub or an emailed code.",
+      "Opens IRIS's Management Portal in a new tab; it first asks for GitHub or an emailed code, then IRIS's read-only sign-in demo-trace (password in the README's sign-in table).",
     );
   });
 

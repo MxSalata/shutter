@@ -379,7 +379,7 @@ describe('the board, trimmed to pay for the receipt', () => {
     ).toHaveAttribute('data-tech-detail', 'open');
     await userEvent.click(
       within(coordinator).getByRole('button', {
-        name: /^Cited 8 evidence sections and catalogue entry E7\s?, Coordinator$/,
+        name: /^Cited 8 evidence sections and catalogue entry E7 \(Coordinator\)$/,
       }),
     );
     await userEvent.click(await within(coordinator).findByRole('button', { name: 'Catalogue entry E7' }));

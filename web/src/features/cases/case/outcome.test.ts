@@ -257,6 +257,19 @@ describe('the outcome sentence', () => {
     });
     expect(releaseStatus(f)?.label).toBe('Waiting for approval');
   });
+
+  it("says what Shutter is doing while a case runs, never a state's bare label", () => {
+    const f = factsOf('C-000002');
+    const doing = (state: string) => nextAction({ ...f, c: { ...f.c, state } as CaseFacts['c'] }).action;
+    expect(doing('detected')).toBe('No action needed now: Shutter is collecting evidence');
+    expect(doing('collecting')).toBe('No action needed now: Shutter is collecting evidence');
+    expect(doing('investigating')).toBe('No action needed now: Shutter is investigating');
+    expect(doing('proposed')).toBe('No action needed now: Shutter is checking the plan');
+    expect(doing('gated')).toBe('No action needed now: Shutter is checking the plan');
+    expect(doing('rehearsing')).toBe('No action needed now: Shutter is rehearsing');
+    expect(doing('grouped')).toBe('No action needed now: Shutter is holding it with its incident');
+    expect(doing('verifying')).toBe('No action needed now: Shutter is verifying');
+  });
 });
 
 describe('what Shutter did, by outcome', () => {

@@ -89,7 +89,7 @@ async function openBlock(page: Page) {
 const noSidewaysScroll = (page: Page) =>
   page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth);
 
-// A live page's first visit offers the trial ("New here?"), which would cover the case: it was seen before
+// A live Home's first visit offers the trial ("New here?"): it was seen before, so a pass through Home finds nothing over it
 test.beforeEach(({ page }) =>
   page.addInitScript(() => localStorage.setItem('shutter:live-welcome:v1', '2026-11-02T09:00:00Z')),
 );

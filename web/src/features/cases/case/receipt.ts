@@ -132,6 +132,13 @@ function decider(
   // A plan the policy wrote that writes nothing is settled by that; one that writes still waits for its release
   if (by.startsWith('policy:') && !writes)
     return `The site's written policy, entry ${by.slice('policy:'.length)}`;
+  // With no plan there is nothing to approve yet, which is not the same as a plan that writes nothing
+  if (!plan?.plan)
+    return plan === undefined
+      ? 'Unknown'
+      : c.state === 'resolved' || STOPPED_STATES.includes(c.state)
+        ? 'No plan'
+        : 'Not yet: no plan';
   if (!writes) return 'No approval needed: the plan writes nothing';
   // Approvals not read (still loading, or the read failed): who released the write is not known
   if (approvals === undefined) return 'Unknown';

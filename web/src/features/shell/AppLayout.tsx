@@ -310,7 +310,7 @@ const isActive = (pathname: string, to: string) => pathname === to || pathname.s
 /**
  * The frame of every signed-in page: the header (in a trial page, the trial's banner above its row), the navigation
  * and the page. A trial page adds its chrome from the chunk only trial pages load (src/trial/chrome.tsx), and the
- * guide, which runs only there; a live page offers the trial instead, once, in LiveWelcome.
+ * guide, which runs only there; a live Home offers the trial instead, once, in LiveWelcome.
  */
 export function AppLayout() {
   const [opened, { toggle, close }] = useDisclosure();
@@ -443,9 +443,10 @@ export function AppLayout() {
           <chrome.Guide />
           <chrome.LeaveTrialConfirm />
         </>
-      ) : (
+      ) : pathname === '/home' ? (
+        // Home only: in a corner of any other page it covered what the reader came to see
         <LiveWelcome />
-      )}
+      ) : null}
     </AppShell>
   );
 }

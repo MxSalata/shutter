@@ -63,10 +63,14 @@ export function httpStatusText(status: number): string {
       return 'Not found';
     case 409:
       return 'Conflict: something changed meanwhile';
+    case 429:
+      return 'Too many requests at once: wait a few seconds, then try again';
     case 500:
       return 'Internal server error';
     case 502:
       return 'The answer did not come from the API';
+    case 503:
+      return 'Shutter is unavailable for a moment, perhaps updating: try again shortly';
     default:
       return `HTTP ${status}`;
   }
@@ -94,9 +98,17 @@ export function isApiError(e: unknown): e is ApiError {
   return e instanceof ApiError;
 }
 
+/** The scenario player's refusal while a run is queued or playing (Shutter.API.Dispatch): "a run of S3 is still playing". */
+const RUN_IN_THE_WAY = /^a run of \S+ is (still playing|queued)$/i;
+
 /** A one-line description of anything thrown. */
 export function describeError(e: unknown): string {
   if (e instanceof ApiError) {
+    // A rate limit's page (a proxy's, worded for its owner) and a 503 with no word of its own: said for the reader
+    if (e.status === 429 || (e.status === 503 && !e.detail)) return httpStatusText(e.status);
+    // The run in the way may be anyone's: who to wait for, without the code
+    if (e.code === 'wrong_state' && RUN_IN_THE_WAY.test(e.detail))
+      return `${e.detail.charAt(0).toUpperCase()}${e.detail.slice(1)}; perhaps another user's, or the hospital's. Try again when it ends.`;
     const what = e.detail || httpStatusText(e.status);
     return e.code && !what.includes(e.code) ? `${what} (${e.code})` : what;
   }

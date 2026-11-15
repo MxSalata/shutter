@@ -95,6 +95,25 @@ describe('safetyReceipt', () => {
     expect(r.decidedBy).toBe("The site's written policy, entry E2");
     expect(r.status).toBe('0 writes so far; executing');
   });
+  it('says there is no plan yet on a fresh case, and no plan on a closed one, never that a plan writes nothing', () => {
+    const base = fixtures.cases['C-000002'];
+    const of = (state: string, plan: PlanView | null | undefined) =>
+      safetyReceipt({
+        c: { ...base.detail, state, disposition: '' } as unknown as CaseDetail,
+        plan,
+        approvals: { approvals: [] } as unknown as ApprovalsView,
+        attempts: [],
+        closure: null,
+        snapshot: null,
+      }).decidedBy;
+    expect(of('detected', null)).toBe('Not yet: no plan');
+    expect(of('investigating', null)).toBe('Not yet: no plan');
+    expect(of('failed', null)).toBe('No plan');
+    expect(of('escalated', null)).toBe('No plan');
+    // The plan not read yet: who decides is not known
+    expect(of('investigating', undefined)).toBe('Unknown');
+  });
+
   it('names a revoked approval, and counts only attempts that reached the receiver as writes', () => {
     const base = fixtures.cases['C-000021'];
     const c = { ...base.detail, state: 'escalated' } as unknown as CaseDetail;

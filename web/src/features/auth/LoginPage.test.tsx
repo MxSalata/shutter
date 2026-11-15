@@ -321,10 +321,11 @@ describe('LoginPage, the proof on a demo install', () => {
     for (const link of links) expect(link.getAttribute('href')).toMatch(/\?trial#\/evaluation$/);
   });
 
-  it('says every write is gated, rehearsed, released and verified', async () => {
+  it('says every write is gated, then explicitly released, never that it is rehearsed or verified', async () => {
     await renderDemoLogin();
     const tile = screen.getByText('Every write').closest('.stat-tile');
-    expect(tile).toHaveTextContent('gated, rehearsed, released and verified');
+    expect(tile).toHaveTextContent('gated, then explicitly released');
+    expect(tile).not.toHaveTextContent(/rehearsed|verified/);
   });
 
   it('gives a phone one line with both bases in place of the tiles', async () => {
@@ -570,7 +571,7 @@ describe('LoginPage, how much it says', () => {
     for (const link of within(card).getAllByRole('link'))
       expect(layer1Words(link).length).toBeLessThanOrEqual(4);
     // A tile's caption: at most 8 words
-    for (const caption of [/^the board chose/, /^gated, rehearsed/])
+    for (const caption of [/^the board chose/, /^gated, then/])
       expect(wordCount(screen.getByText(caption).textContent)).toBeLessThanOrEqual(8);
     // The proof line: at most 30 words
     const proof = screen.getByTestId('proof-cohort');

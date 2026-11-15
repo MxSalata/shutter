@@ -14,7 +14,7 @@ const dismissed = () => {
 };
 
 /**
- * The live app's first-run prompt, once per device after sign-in: it points to the trial, where the guide runs, so
+ * The live app's first-run prompt, on Home, once per device after sign-in: it points to the trial, where the guide runs, so
  * a first look never happens on a hospital's live data. A card at the corner of the page, never over it: on the online
  * demo the page itself holds a case to approve, and the first thing a visitor sees must not hide it.
  */

@@ -149,7 +149,7 @@ describe('a board with a member missing', () => {
       runs.map((r) => (r.memberCode === 'conformance' ? { ...r, status: 'budget_exceeded' } : r)),
     );
     const card = await screen.findByRole('region', { name: 'Encounter Integrity' });
-    expect(within(card).getByText('own confidence')).toHaveAccessibleDescription(
+    expect(within(card).getByText('self-reported confidence')).toHaveAccessibleDescription(
       "The agent's own report, not calibrated. The gate does not use it.",
     );
   });

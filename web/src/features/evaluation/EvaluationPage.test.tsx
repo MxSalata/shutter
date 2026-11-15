@@ -143,7 +143,7 @@ describe('EvaluationPage', () => {
   it("puts the held-out cases above the board's own score, each line with its release, the latest first", () => {
     renderPage();
     const card = within(headline()).getByRole('region', {
-      name: 'Held-out cases F01 to F12: 12 cases, 36 runs in each mode (strict mean loss, lower is better)',
+      name: 'Cases F01 to F12 (held out at 1.0.0; 1.4.3 is a regression rerun): 12 cases, 36 runs in each mode (strict mean loss, lower is better)',
     });
     const lines = [...card.querySelectorAll(':scope > div > p')].map(visible);
     expect(lines).toEqual([
@@ -165,11 +165,19 @@ describe('EvaluationPage', () => {
     const own = within(headline()).getByText('recorded failures, the expected action chosen');
     expect(card.compareDocumentPosition(resumes) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(resumes.compareDocumentPosition(own) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // After the hero statement and its S8 line ("The seventh" stays next to the 7 misses), before the catalogue
+    // demonstration's lines
+    const seventh = within(headline()).getByText(/^The seventh, S8, wrote over/);
+    const given = within(headline()).getByText(/^The agents are given the catalogue's matching entry/);
+    expect(seventh.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(card.compareDocumentPosition(given) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('shows F03 as evaluation evidence under the same gate: its release, both outcomes and no write, never as S3', () => {
     renderPage();
-    const card = within(headline()).getByRole('region', { name: /^Held-out cases F01 to F12/ });
+    const card = within(headline()).getByRole('region', {
+      name: /^Cases F01 to F12 \(held out at 1\.0\.0; 1\.4\.3 is a regression rerun\)/,
+    });
     const example = within(card).getByTestId('same-gate-example');
     expect(example).toHaveTextContent(/^Evaluation evidence, same gate, release 1\.4\.3:/);
     // One press away in Plain (the opened content is found as hidden while its transition runs): the case, the release, what each mode proposed and what the gate did, and the writes
@@ -212,7 +220,9 @@ describe('EvaluationPage', () => {
 
   it('keeps the baselines and release 1.1.1 one press away, labelled with their releases', () => {
     renderPage(undefined, { detail: 'technical' });
-    const card = within(headline()).getByRole('region', { name: /^Held-out cases F01 to F12/ });
+    const card = within(headline()).getByRole('region', {
+      name: /^Cases F01 to F12 \(held out at 1\.0\.0; 1\.4\.3 is a regression rerun\)/,
+    });
     // An explanation, so Technical leaves it closed; the same-gate detail is data, which Technical opens
     expect(within(card).getByRole('button', { name: 'F03 in detail' })).toHaveAttribute(
       'aria-expanded',
@@ -407,7 +417,9 @@ describe('EvaluationPage', () => {
     expect(visible(single)).toBe(
       'Each specialist answers from its own view. The single investigator has no recording; its figures are above.',
     );
-    const card = screen.getByRole('region', { name: /^Held-out cases F01 to F12/ });
+    const card = screen.getByRole('region', {
+      name: /^Cases F01 to F12 \(held out at 1\.0\.0; 1\.4\.3 is a regression rerun\)/,
+    });
     expect(card).toHaveTextContent('the single investigator 0.167 as settled');
     expect(card.compareDocumentPosition(single) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(why).not.toHaveTextContent('No single-agent run was recorded');

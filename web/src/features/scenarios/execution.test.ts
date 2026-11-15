@@ -113,7 +113,7 @@ describe('the short route', () => {
     expect(routeNext('S8', 'board')?.next).toMatch(/^That is the short route\./);
     // What to look at names the agents' findings on the case, where the board's panel is
     for (const id of ROUTE)
-      expect(routeNext(id, 'board')?.look).toMatch(/The board has each agent's finding/);
+      expect(routeNext(id, 'board')?.look).toMatch(/\. The board section has each agent's finding/);
     // S20 is the optional approval-boundary card, never one of the three
     expect(ROUTE).not.toContain('S20');
     expect(routeNext('S20', 'rules')).toBeNull();

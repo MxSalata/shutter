@@ -197,6 +197,31 @@ describe('the shell', () => {
     silenced.mockRestore();
   });
 
+  it("says Shutter was updated when a page's code is gone after a release, with Reload to open it", async () => {
+    const silenced = vi.spyOn(console, 'error').mockImplementation(() => {});
+    function StalePage(): never {
+      throw new TypeError(
+        'Failed to fetch dynamically imported module: https://shutter.example/assets/SettingsPage-CdSemi1_.js',
+      );
+    }
+    renderFrame('/settings', <StalePage />);
+    const main = await screen.findByRole('main');
+    expect(within(main).getByRole('heading', { name: 'Shutter was just updated' })).toBeInTheDocument();
+    expect(within(main).getByText('Reload to open the new release.')).toBeInTheDocument();
+    expect(within(main).queryByText(/SettingsPage/)).not.toBeInTheDocument();
+    expect(within(main).getByRole('button', { name: 'Reload' })).toBeInTheDocument();
+    silenced.mockRestore();
+  });
+
+  it('offers the trial on Home only, where it covers nothing the reader came to see', async () => {
+    localStorage.removeItem(LIVE_WELCOME_KEY);
+    const router = renderFrame('/cases/C-000002');
+    await screen.findByRole('main');
+    expect(screen.queryByRole('dialog', { name: 'New here?' })).not.toBeInTheDocument();
+    await act(() => router.navigate('/home'));
+    expect(await screen.findByRole('dialog', { name: 'New here?' })).toBeInTheDocument();
+  });
+
   it('counts the cases that need a person beside Cases, in words for a screen reader', async () => {
     renderFrame();
     // The recording holds one case waiting for an approval, and its escalated and blocked cases

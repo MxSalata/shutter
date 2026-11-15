@@ -220,7 +220,7 @@ async function shot(page: Page, name: string) {
 
 test.use({ viewport: { width: 1280, height: 900 } });
 
-// A live page's first visit offers the trial ("New here?"), which would cover the case: it was seen before
+// A live Home's first visit offers the trial ("New here?"): it was seen before, so a pass through Home finds nothing over it
 test.beforeEach(({ context }) =>
   context.addInitScript(() => localStorage.setItem('shutter:live-welcome:v1', '2026-11-02T09:00:00Z')),
 );
