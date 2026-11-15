@@ -59,7 +59,7 @@ Recovery has different contracts, with different guarantees:
 
 ![S8 in the Visual Trace: case workflow, evidence, board members and gate](https://raw.githubusercontent.com/MxSalata/shutter/main/web/public/s8-visual-trace.png)
 
-*S8's case in IRIS's Visual Trace, from a replay: each board member has its own lane, and the recorded specialists answer in turn within milliseconds. Live, they start together and take 12 to 16 seconds each. Each tool call as its own step: [Trace an agent](https://github.com/MxSalata/shutter/blob/main/docs/readme/tracing.md).*
+*S8's case in IRIS's Visual Trace, from a replay: each board member has its own lane, and the recorded specialists answer in turn within milliseconds. Live, they start together and take 12 to 16 seconds each. [Trace an agent](https://github.com/MxSalata/shutter/blob/main/docs/readme/tracing.md) shows each tool call as its own step.*
 
 ## For judges
 
@@ -67,7 +67,7 @@ Recovery has different contracts, with different guarantees:
 
 **Know the mode:** the trial plays recordings in your browser; the online demo runs on real IRIS, where the `demo` account replays the recorded agents and the judges' account calls them live; your machine runs either ([Try it](https://github.com/MxSalata/shutter#try-it)).
 
-Open the [trial](https://mxsalata.github.io/shutter/), choose **Start with S2** in the welcome dialog. It opens **Scenarios** in Board mode, where **Try these three first** has a card for each, with its own **Run** button (the case numbers below are the trial's; on the demo, open the case the banner names):
+Open the [trial](https://mxsalata.github.io/shutter/) and choose **Start with S2** in the welcome dialog. It opens **Scenarios** in Board mode, where **Try these three first** has a card for each, with its own **Run** button (the case numbers below are the trial's; on the demo, open the case the banner names):
 
 1. **S2: recover a transfer that never arrived.** Press **Run S2**, then open the case named by the banner, C-000002 in the trial. Choose **Decide on the resend**, then **Approve the resend** in the review that opens. One conditional write, then **Delivered: verified at the receiver**.
 2. **S3: recognise a delivery that already arrived.** Press **Run S3**. Its case, C-000003 in the trial, reads the receiver's receipt. Only the acknowledgement was lost. Nothing is written.
@@ -75,14 +75,14 @@ Open the [trial](https://mxsalata.github.io/shutter/), choose **Start with S2** 
 
 **The browser trial replays recorded workflow and gate outcomes; on IRIS the gate runs on the server.** There, the same gate checks all three. The [trial](https://mxsalata.github.io/shutter/) makes no model call and sends nothing to IRIS, so it leaves out what needs a live instance: the Single investigator, receiver outages, convening the board or reinvestigating a case, free-text questions (the suggested ones are answered from recordings), and the Management Portal, where only S8's **Message trace** has a screenshot. A reload starts the recording afresh.
 
-Then visit the [online demo](https://shutter.mxsalata.com), a fictional hospital running on real IRIS for Health with AI Hub build `2026.3.0AI.154.0`. Its bed manager is a simulated receiver with a versioned API (`Shutter.Operation.Ward`, an HTTP operation), so case recovery runs end to end. Against a plain MLLP receiver Shutter investigates and drafts an email, and in an outage resends through the engine. Its sign-ins:
+Then visit the [online demo](https://shutter.mxsalata.com), a fictional hospital running on real IRIS for Health with AI Hub build `2026.3.0AI.154.0`. Its bed manager is a simulated receiver with a versioned HTTP API (`Downstream.API`), reached through Shutter's `Downstream Out` operation (`Shutter.Operation.Ward`), so case recovery runs end to end. Against a plain MLLP receiver Shutter investigates and drafts an email, and in an outage resends through the engine. Its sign-ins:
 
 | Sign-in | What you can do |
 | --- | --- |
 | `demo` / `shutter` | Read, open the written explanations (live answers need the judges' account), approve waiting cases, and run scenarios from their recordings (no model call, no spend); no reset |
 | Judges' account, supplied by the organisers | Run scenarios with live agents or **Convene the board**, one run at a time |
 
-The online demo is one hospital shared by every visitor. A scenario run by someone else resets the receiver, and a case of yours still waiting from an earlier run then closes as abandoned; **Run** waits while another visitor's run plays. Run it again if that happens.
+The online demo is one hospital shared by every visitor. If someone else runs the same scenario, its reset of the receiver closes a case of yours still waiting from an earlier run of it; **Run** waits while another visitor's run plays. Run it again if that happens.
 
 The demo resets hourly. Live spending is capped at 5 USD an hour and 15 USD a day. All judges sign in to the one judges' account, so they share its 2 USD an hour. When that is spent, live runs are refused until the next hour, and the `demo` account still plays the scenarios from their recordings. Shutter admits a live run only when the recorded spend, the estimates reserved for the runs in flight and the new run's own estimate fit within its caps, checking and reserving in one locked step. That bounds estimates, not the bill: a run can cost more than its estimate, and a reservation older than 20 minutes is released, so these caps are no ceiling on the provider's invoice.
 
