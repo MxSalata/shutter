@@ -577,8 +577,10 @@ ClassMethod Decide(id As %String, body As %DynamicObject, actor As %String, sour
         }
         If (action '= "retire") && (..ActiveCount(id) >= $PARAMETER("Shutter.Catalogue.SiteEntryVersion", "MAXACTIVE")) Set code = "too_many", detail = "The site has its " _ $PARAMETER("Shutter.Catalogue.SiteEntryVersion", "MAXACTIVE") _ " active site entries already" Quit
         // The proof again (R8, P5): nobody activates on a stale proof, or on one the evidence no longer bears out.
+        // A proposal whose own proof went stale stands on the newest one a person ran of the same digest since, if any.
         Set proposed = ##class(Shutter.Catalogue.SiteEntryProof).%OpenId(entry.ProposalProofId)
-        If '$ISOBJECT(proposed) || 'proposed.Passed || 'proposed.Current() Set code = "proof_failed", detail = "The proposal's proof is stale: the catalogue, the site profile, the gate's policy or the release changed since it ran. Run the proof again" Quit
+        If '$ISOBJECT(proposed) || 'proposed.Passed || 'proposed.Current() Set proposed = ##class(Shutter.Catalogue.SiteEntryProof).Latest(id, v.Digest, action)
+        If '$ISOBJECT(proposed) || 'proposed.Passed || 'proposed.Current() Set code = "proof_failed", detail = "The proof of this digest is stale: the catalogue, the site profile, the gate's policy or the release changed since it ran. Run the proof again" Quit
         Set again = ##class(Shutter.Catalogue.SiteEntryProof).Run(id, v.Version, content, action, actor, "approval", 0, .proofNow)
         If 'again.passed || '$ISOBJECT(proofNow) || (##class(Shutter.Util.Digest).Canonical(again.fixtures) '= ##class(Shutter.Util.Digest).Canonical(proposed.ToObject().result.%Get("fixtures"))) {
             Set code = "proof_failed", detail = "The proof run again at approval did not answer as the proposal's did"

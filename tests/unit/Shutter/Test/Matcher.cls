@@ -295,26 +295,19 @@ Method TestEveryValueIsReached()
 /// the tests run from it).
 Method TestVocabularyIsTheBuilders()
 {
-    Set path = $PIECE($GET(^UnitTestRoot), "tests/unit/", 1) _ "scripts/build-catalogue.py"
+    Set path = $PIECE($GET(^UnitTestRoot), "tests/unit/", 1) _ "knowledge/catalogue/vocabulary.json"
     If ($GET(^UnitTestRoot) = "") || '##class(%File).Exists(path) {
-        Do $$$LogMessage("scripts/build-catalogue.py is not on the mounted path; the vocabulary was not compared")
+        Do $$$LogMessage("knowledge/catalogue/vocabulary.json is not on the mounted path; the vocabulary was not compared")
         Quit
     }
-    Set file = ##class(%Stream.FileCharacter).%New()
-    Set file.Filename = path
-    Set builder = {}, inside = 0
-    While 'file.AtEnd {
-        Set line = file.ReadLine()
-        If $EXTRACT(line, 1, 14) = "CONDITIONS = {" Set inside = 1 Continue
-        Continue:'inside
-        Quit:($EXTRACT(line, 1) = "}")
-        Set m = ##class(%Regex.Matcher).%New("^\s*""(\w+)"": \{(.*)\},?\s*$", line)
-        Continue:'m.Match()
-        Set name = m.Group(1), values = [], v = ##class(%Regex.Matcher).%New("""(\w+)""", m.Group(2))
-        While v.Locate() { Do values.%Push(v.Group(1)) }
-        Do builder.%Set(name, values)
-    }
-    Do $$$AssertEquals(..Canonical(builder), ..Canonical(..Vocabulary()), "the builder's CONDITIONS and the test's vocabulary agree")
+    Set file = ##class(Shutter.Util.Json).Parse(##class(Shutter.Knowledge.Text).ReadFile(path), .sc)
+    Do $$$AssertTrue($ISOBJECT(file) && $ISOBJECT(file.conditions), "the builder's vocabulary file is read")
+    Quit:'$ISOBJECT(file)
+    Do $$$AssertEquals(..Canonical(file.conditions), ..Canonical(..Vocabulary()), "the builder's vocabulary file and the test's vocabulary agree")
+    // And the file is the one a site's own entries are checked against (CONTRACTS 6.8): the core holds what the seed took.
+    Set held = ##class(Shutter.Catalogue.Vocabulary).Current()
+    Do $$$AssertTrue($ISOBJECT(held), "the core holds a vocabulary")
+    If $ISOBJECT(held) Do $$$AssertEquals(..Canonical(held.conditions), ..Canonical(file.conditions), "the vocabulary the core holds is the file's")
 }
 
 /// Holds: every listed condition must have one of its allowed values; a pattern that is not an object never holds.

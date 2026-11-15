@@ -33,9 +33,10 @@ ClassMethod Record(entryId As %String, version As %String, kind As %String, acto
     Quit e.%Save()
 }
 
-/// An entry's events, newest first.
+/// An entry's events, newest first; with no id, the events of the site as a whole.
 ClassMethod For(entryId As %String, limit As %Integer = 200) As %DynamicArray
 {
+    If entryId = "" Quit ##class(Shutter.Util.Json).Rows($CLASSNAME(), "SELECT TOP " _ (+limit) _ " ID FROM Shutter_Catalogue.SiteEntryEvent WHERE EntryId IS NULL ORDER BY ID DESC")
     Quit ##class(Shutter.Util.Json).Rows($CLASSNAME(), "SELECT TOP " _ (+limit) _ " ID FROM Shutter_Catalogue.SiteEntryEvent WHERE EntryId = ? ORDER BY ID DESC", entryId)
 }
 

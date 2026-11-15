@@ -31,7 +31,7 @@ Property At As %String(%JSONFIELDNAME = "at", MAXLEN = 30);
 Property By As %String(%JSONFIELDNAME = "by", MAXLEN = 160);
 
 /// api (a person ran it) or approval (run again as the approval commits).
-Property Trigger As %String(%JSONFIELDNAME = "trigger", MAXLEN = 16);
+Property Origin As %String(%JSONFIELDNAME = "origin", MAXLEN = 16);
 
 /// How many stored cases the impact reads at most, and for how long.
 Parameter IMPACTCASES = 200;
@@ -58,11 +58,11 @@ ClassMethod For(entryId As %String, limit As %Integer = 20) As %DynamicArray
     Quit out
 }
 
-/// The newest proof of a digest and an action a person ran, or "".
+/// The newest proof of a digest and an action that a person ran, or "".
 ClassMethod Latest(entryId As %String, digest As %String, action As %String) As Shutter.Catalogue.SiteEntryProof
 {
     Set id = ""
-    &sql(SELECT TOP 1 ID INTO :id FROM Shutter_Catalogue.SiteEntryProof WHERE EntryId = :entryId AND Digest = :digest AND Action = :action ORDER BY ID DESC)
+    &sql(SELECT TOP 1 ID INTO :id FROM Shutter_Catalogue.SiteEntryProof WHERE EntryId = :entryId AND Digest = :digest AND Action = :action AND Origin = 'api' ORDER BY ID DESC)
     If (SQLCODE '= 0) || (id = "") Quit ""
     Quit ..%OpenId(id)
 }
@@ -153,7 +153,7 @@ Method Current() As %Boolean
 /// fixture to answer as expected, with at least one match and at least one near miss (no_match); a retirement's proof is
 /// its impact read the other way (the cases the entry catches, and what each would do without it) and passes when it
 /// could be computed. <var>impact</var> 0 leaves P4 out (the run at an approval, which compares P1 and P2 alone).
-ClassMethod Run(entryId As %String, version As %Integer, content As %DynamicObject, action As %String, by As %String, trigger As %String = "api", impact As %Boolean = 1, Output proof As Shutter.Catalogue.SiteEntryProof) As %DynamicObject
+ClassMethod Run(entryId As %String, version As %Integer, content As %DynamicObject, action As %String, by As %String, origin As %String = "api", impact As %Boolean = 1, Output proof As Shutter.Catalogue.SiteEntryProof) As %DynamicObject
 {
     Set json = "Shutter.Util.Json", matcher = "Shutter.Catalogue.Matcher"
     Set proof = "", result = {}, problems = []
@@ -213,7 +213,7 @@ ClassMethod Run(entryId As %String, version As %Integer, content As %DynamicObje
     Set proof = ..%New()
     Set proof.EntryId = entryId, proof.Version = +version, proof.Digest = digest, proof.Action = action, proof.Passed = passed
     Set proof.ResultJSON = result.%ToJSON(), proof.ContextJSON = context.%ToJSON()
-    Set proof.At = ##class(Shutter.Util.Time).NowUTC(), proof.By = $EXTRACT(by, 1, 160), proof.Trigger = trigger
+    Set proof.At = ##class(Shutter.Util.Time).NowUTC(), proof.By = $EXTRACT(by, 1, 160), proof.Origin = origin
     Set sc = proof.%Save()
     If $$$ISERR(sc) {
         Do problems.%Push("The proof could not be stored: " _ $SYSTEM.Status.GetErrorText(sc))
@@ -316,7 +316,7 @@ Storage Default
 <Value>By</Value>
 </Value>
 <Value name="11">
-<Value>Trigger</Value>
+<Value>Origin</Value>
 </Value>
 </Data>
 <DataLocation>^Shutter.Cat5ADA.SiteEntryProofD</DataLocation>
