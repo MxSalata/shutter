@@ -381,7 +381,7 @@ export const CHAPTERS: GuideChapter[] = [
       {
         id: 'compare',
         title: 'Rules only got it wrong',
-        say: "With no agents, Rules only sent the transfer again and overwrote the bed manager's ward. Every safety check passed. Compare the two side by side.",
+        say: "With no agents, Rules only, exempted here on purpose, overwrote the bed manager's ward with every other check passed. Compare the two side by side.",
         place: { scenario: 'S8', mode: 'board' },
         target: 'case-compare',
         open: 'compare',
