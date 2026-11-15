@@ -65,6 +65,14 @@ const ANSWERS: Answers = {
     'What is a tier?':
       'A tier is how sensitive a receiver is: 1 information, 2 operations, 3 clinical safety. It sets who releases a write there, the written policy or a person.',
   },
+  'site-setup': {
+    'What does this page save?':
+      "Nothing by itself. The page keeps a draft in this browser tab, and Review and save hands it to the Site profile page's review, where an approver's Save stores the next version. A reload or a sign-out loses the draft.",
+    'Why are kind and tier needed before review?':
+      'Neither has a value that is safe at every site. The kind decides what an overtaken failure gets, and the tier picks the row of the approval table, so a receiver being added cannot go to review until a person has answered both.',
+    'What will Shutter do at a receiver I add here?':
+      'It investigates failures there and writes nothing: a receiver added on this page declares no API and no features, so the gate blocks every write. The draft pane says so under What Shutter will do here; its API, features and outage answers are set on the Site profile page.',
+  },
   library: {
     'What does each agent do?':
       'Three specialist agents each read the same evidence from one angle: conformance of the message, the integrity of the patient encounter, and the impact on the receiving system. Each card says what it asks and what it knows.',

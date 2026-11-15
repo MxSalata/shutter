@@ -5,7 +5,8 @@ export const SUGGESTION = '/site-profile?suggest=C-000008&fact=W1';
 
 /**
  * The Site profile, in Plain and in Technical. The suggested change leaves the draft different from the saved version,
- * so it is also the screen with the save bar showing: the layout run checks it at 360 px with the bar up.
+ * so it is also the screen with the save bar showing: the layout run checks it at 360 px with the bar up. Set up the
+ * site, which the Site profile links to, is checked on its start list and on one receiver's checklist.
  */
 export const area: Area = {
   tag: '@site-profile',
@@ -18,6 +19,12 @@ export const area: Area = {
       heading: 'Site profile',
       name: 'Site profile (a suggested change)',
       detail: 'technical',
+    },
+    { path: '/site-setup', heading: 'Set up the site' },
+    {
+      path: '/site-setup?receiver=Downstream%20Out',
+      heading: 'Set up the site',
+      name: 'Set up the site (a receiver in force)',
     },
   ],
   liveScreens: [{ path: SUGGESTION, heading: 'Site profile', name: 'Site profile (a suggested change)' }],

@@ -14,6 +14,7 @@ export function SaveBar({
   onReview,
   onDiscard,
   reviewLabel,
+  discardLabel = 'Discard changes',
   primary,
   alert,
   note,
@@ -23,6 +24,8 @@ export function SaveBar({
   /** Absent when the draft cannot be discarded by this reader. */
   onDiscard?: () => void;
   reviewLabel?: string;
+  /** The discard button's words, where a page calls its changes something else ("Discard the draft"). */
+  discardLabel?: string;
   /** In place of the review button: a page's own Save, such as a locked one. */
   primary?: ReactNode;
   /** What the last review refused, above the buttons. */
@@ -67,7 +70,7 @@ export function SaveBar({
         <Group gap="sm" wrap="wrap">
           {onDiscard ? (
             <Button variant="default" onClick={onDiscard}>
-              Discard changes
+              {discardLabel}
             </Button>
           ) : null}
           {primary ?? <Button onClick={onReview}>{reviewLabel}</Button>}

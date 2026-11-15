@@ -163,11 +163,13 @@ function ReceiverCard({
   profile,
   i,
   withTerms,
+  action,
 }: {
   r: SiteReceiver;
   profile: SiteProfile;
   i: number;
   withTerms: boolean;
+  action?: (r: SiteReceiver) => ReactNode;
 }) {
   const category = categoryOf(r);
   const text = CATEGORY_TEXT[category];
@@ -208,7 +210,7 @@ function ReceiverCard({
       <Stack gap="xs">
         <Group gap="sm" wrap="nowrap" align="center">
           <CategoryAvatar category={category} />
-          <Stack gap={0} style={{ minWidth: 0 }}>
+          <Stack gap={0} style={{ flex: 1, minWidth: 0 }}>
             <Title order={4} id={titleId}>
               {r.name || 'A new receiver'}
             </Title>
@@ -216,6 +218,7 @@ function ReceiverCard({
               {r.system || 'What it does is not answered yet'}
             </Text>
           </Stack>
+          {action?.(r)}
         </Group>
         <Group gap="xs" align="center">
           <Text size="sm" fw={600}>
@@ -318,7 +321,14 @@ function AbsentCategory({ category }: { category: ReceiverCategory }) {
  * what it can take. A category no receiver has follows, dashed, so the three kinds read as a whole. Who releases a
  * write is the matrix's, below.
  */
-export function ReceiverCards({ profile }: { profile: SiteProfile }) {
+export function ReceiverCards({
+  profile,
+  action,
+}: {
+  profile: SiteProfile;
+  /** What stands at the right of a receiver's name: the Site profile page's way to its checklist. */
+  action?: (r: SiteReceiver) => ReactNode;
+}) {
   const present = new Set(profile.receivers.map(categoryOf));
   const absent = CATEGORIES.filter((c) => !present.has(c));
   return (
@@ -340,7 +350,7 @@ export function ReceiverCards({ profile }: { profile: SiteProfile }) {
         style={{ alignItems: 'start' }}
       >
         {profile.receivers.map((r, i) => (
-          <ReceiverCard key={i} r={r} profile={profile} i={i} withTerms={i === 0} />
+          <ReceiverCard key={i} r={r} profile={profile} i={i} withTerms={i === 0} action={action} />
         ))}
         {absent.map((c) => (
           <AbsentCategory key={c} category={c} />

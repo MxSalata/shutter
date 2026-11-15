@@ -14,7 +14,7 @@ import {
 import { notifications } from '@mantine/notifications';
 import { IconChevronDown, IconPlus, IconTrash, IconVersions } from '@tabler/icons-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { useSearchParams } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { RunbookField } from './RunbookField';
 import { api } from '@/api/client';
@@ -74,6 +74,10 @@ import { ReviewModal, type SaveProblem } from './ReviewModal';
 import { SaveBar } from './SaveBar';
 import { VersionsPanel } from './VersionsPanel';
 import { SuggestionCard } from './SuggestionCard';
+import { SetupDraftCard } from './SetupDraftCard';
+import { SETUP_DRAFT_TITLE_ID, draftRows } from './setup/draftRows';
+import { SetupLink } from './setup/SetupLink';
+import { useSetup } from './setup/setupStore';
 import {
   FACT_PARAM,
   SUGGEST_PARAM,
@@ -775,12 +779,25 @@ function Profile({
   const [search, setSearch] = useSearchParams();
   const [suggested] = useState(suggestion);
   const [showSuggestion, setShowSuggestion] = useState(!!suggested);
+  // A draft handed over by Set up the site (in memory, this tab): the form holds it and the review opens on it at once.
+  // A draft made against a version that is no longer in force pre-fills nothing, as a stale suggestion does
+  const navigate = useNavigate();
+  const [handed] = useState(() => useSetup.getState().handover);
+  const handedHere = !!handed && handed.baseVersion === view.version;
+  const [showHanded, setShowHanded] = useState(!!handed);
+  useEffect(() => {
+    if (useSetup.getState().handover) useSetup.setState({ handover: null });
+  }, []);
   const [draft, setDraftState] = useState<SiteProfile>(() =>
-    suggested?.result.ok ? suggested.result.profile : clone(view.profile),
+    handed && handedHere
+      ? clone(handed.draft)
+      : suggested?.result.ok
+        ? suggested.result.profile
+        : clone(view.profile),
   );
   const [base, setBase] = useState<SiteProfileView>(view);
   const [problem, setProblem] = useState<Problem>(null);
-  const [reviewing, setReviewing] = useState(0);
+  const [reviewing, setReviewing] = useState(handedHere ? 1 : 0);
   const [saveProblem, setSaveProblem] = useState<SaveProblem>(null);
   // The button that opened the review, and whether a cancel should give focus back to it: the dialog is unmounted on
   // close, so the modal cannot return focus itself
@@ -790,6 +807,8 @@ function Profile({
     if (!refocus.current || reviewing) return;
     refocus.current = false;
     if (opener.current?.isConnected) opener.current.focus();
+    // The review opened by a hand-over had no button on this page: focus goes to the draft's band
+    else document.getElementById(SETUP_DRAFT_TITLE_ID)?.focus();
   }, [reviewing]);
 
   const [checking, setChecking] = useState(false);
@@ -875,6 +894,9 @@ function Profile({
 
   const done = (v: SiteProfileView) => {
     dropSuggestion();
+    // The draft is the version in force now: Set up the site starts from it
+    setShowHanded(false);
+    useSetup.getState().saved(v);
     reseed(v);
     setReviewing(0);
     notifications.show({
@@ -975,8 +997,31 @@ function Profile({
             </Text>
           ) : null
         }
+        actions={<SetupLink />}
       />
       <Stack gap="lg">
+        {handed && showHanded ? (
+          <SetupDraftCard
+            rows={handedHere ? draftRows(base.profile, draft) : []}
+            version={base.version}
+            stale={handedHere ? null : handed.baseVersion}
+            locked={locked}
+            onReview={review}
+            onDiscard={() => {
+              setShowHanded(false);
+              if (handedHere) {
+                useSetup.getState().discard();
+                reseed(base);
+              }
+            }}
+            onBack={() => {
+              // The answers as the form holds them now go back with the reader
+              if (handedHere && useSetup.getState().base?.version === base.version)
+                useSetup.getState().adopt(draft);
+              void navigate('/site-setup');
+            }}
+          />
+        ) : null}
         {suggested && showSuggestion ? (
           <SuggestionCard
             caseId={suggested.ref.caseId}
@@ -1031,7 +1076,7 @@ function Profile({
           <Text component="h2" id="site-policy-title" className="overline" m={0}>
             What this site&apos;s policy does
           </Text>
-          <ReceiverCards profile={draft} />
+          <ReceiverCards profile={draft} action={(r) => (r.name ? <SetupLink r={r} /> : null)} />
           <Card withBorder padding="md">
             <ReleaseMatrix profile={draft} />
           </Card>
