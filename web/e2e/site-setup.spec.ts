@@ -15,6 +15,9 @@ const AS_DEMO = { as: 'demo' } as const;
 const NAME = 'Which receiver? Name it by its production item.';
 const KIND = 'What kind of system is it?';
 const TIER = 'Its tier';
+const APPLIES = 'Does it apply messages in arrival order or by event time?';
+const RESEND = 'Does it take a resend with its original MSH-7, or need a fresh one?';
+const TAKES = 'Does it accept cancels (A11, A12, A13) and merges (A40)?';
 
 const sideways = (page: Page) =>
   page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
@@ -41,10 +44,15 @@ async function describeReceiver(page: Page) {
   await expect(page.getByRole('heading', { name: KIND })).toBeFocused();
   await press(page, card(page, KIND).getByRole('radio', { name: /Current state/ }), 'Space');
   await press(page, card(page, KIND).getByRole('button', { name: 'Next question' }));
+  // The page moves focus to the next question's heading: each step waits for it, as a person reads it before going on
+  await expect(page.getByRole('heading', { name: TIER })).toBeFocused();
   await press(page, card(page, TIER).getByRole('radio', { name: /2, operations/ }), 'Space');
   await press(page, card(page, TIER).getByRole('button', { name: 'Next question' }));
-  await press(page, page.getByRole('button', { name: 'Leave for now' }));
-  await press(page, page.getByRole('button', { name: 'Leave for now' }));
+  await expect(page.getByRole('heading', { name: APPLIES })).toBeFocused();
+  await press(page, card(page, APPLIES).getByRole('button', { name: 'Leave for now' }));
+  await expect(page.getByRole('heading', { name: RESEND })).toBeFocused();
+  await press(page, card(page, RESEND).getByRole('button', { name: 'Leave for now' }));
+  await expect(page.getByRole('heading', { name: TAKES })).toBeFocused();
   await press(page, page.getByRole('button', { name: 'It accepts neither' }));
   await press(page, page.getByRole('button', { name: 'Done' }));
   await expect(page.getByRole('heading', { name: 'Summary: Bed Board' })).toBeFocused();

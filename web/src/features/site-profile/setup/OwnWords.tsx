@@ -1,6 +1,7 @@
 import { Alert, Button, Group, Loader, Stack, Text, Textarea } from '@mantine/core';
 import { useState } from 'react';
-import { useSendSetupTurn, useSettings } from '@/api/hooks';
+import { useSettings } from '@/api/hooks';
+import { useSendSetupTurn } from '@/api/setupHooks';
 import type { SiteReceiver } from '@/api/types';
 import { ErrorAlert } from '@/components/ErrorAlert';
 import { LiveUnavailableNotice } from '@/components/LiveUnavailableNotice';
