@@ -70,6 +70,7 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
   <Route Url="/site-entries" Method="GET" Call="SiteEntries"/>
   <Route Url="/site-entries" Method="POST" Call="SiteEntryCreate"/>
   <Route Url="/site-entries/validate" Method="POST" Call="SiteEntryValidate"/>
+  <Route Url="/site-entries/preview" Method="POST" Call="SiteEntryPreview"/>
   <Route Url="/site-entries/:id" Method="GET" Call="SiteEntryGet"/>
   <Route Url="/site-entries/:id" Method="PUT" Call="SiteEntryChange"/>
   <Route Url="/site-entries/:id/proof" Method="POST" Call="SiteEntryProof"/>
@@ -1704,6 +1705,13 @@ ClassMethod SiteEntryValidate() As %Status
 {
     If '..Allow("Shutter_Operate", 1) Quit $$$OK
     Quit ##class(Shutter.API.SiteEntries).Validate()
+}
+
+/// The preview stores nothing, so it needs only what reading needs (R16: the public demo's roles run it).
+ClassMethod SiteEntryPreview() As %Status
+{
+    If '..Allow("Shutter_Operate", 1) Quit $$$OK
+    Quit ##class(Shutter.API.SiteEntries).Preview()
 }
 
 ClassMethod SiteEntryCreate() As %Status

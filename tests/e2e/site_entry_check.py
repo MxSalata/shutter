@@ -171,6 +171,15 @@ def main():
         check("POST /site-entries/validate answers the sentence and what the pattern can displace", status == 200 and valid.get("valid") and "a person decides" in valid.get("sentence", "") and any(o.get("id") == "E2" for o in valid.get("overlap", [])), f"{status} {str(valid)[:300]}")
         status, refused = operator.call("POST", "/site-entries/validate", dict({k: v for k, v in body.items() if k != "fromCase"}, pattern={"event": "transfer"}, decides="policy"))
         check("and refuses a body that says who decides", status == 200 and not refused.get("valid") and any(pr.get("field") == "decides" for pr in refused.get("problems", [])), f"{status} {str(refused)[:300]}")
+        _, listed = operator.call("GET", "/site-entries")
+        status, preview = operator.call("POST", "/site-entries/preview", body)
+        rows = ((preview or {}).get("proof") or {}).get("fixtures") or []
+        check("POST /site-entries/preview from S2's case: the proof passes, the entry leads there and leaves S1's alone", status == 200 and ((preview or {}).get("proof") or {}).get("passed") and len(rows) == 2 and rows[0].get("lead") == preview.get("id") and rows[1].get("holds") is False, f"{status} {str(preview)[:400]}")
+        check("its content is the case's conditions and facts, as a draft's would be", ((preview or {}).get("content") or {}).get("pattern", {}).get("event") == ["transfer"] and ((preview or {}).get("content") or {}).get("scope", {}).get("ward") == ["WARD-B"], str((preview or {}).get("content"))[:300])
+        check("its impact counts S2's case", match_id in str((((preview or {}).get("proof") or {}).get("impact") or {}).get("cases")), str(((preview or {}).get("proof") or {}).get("impact"))[:300])
+        _, after_preview = operator.call("GET", "/site-entries")
+        check("and the preview stored nothing", len((after_preview or {}).get("items") or []) == len((listed or {}).get("items") or []) and "proofId" not in ((preview or {}).get("proof") or {}), f"{len((after_preview or {}).get('items') or [])} {len((listed or {}).get('items') or [])}")
+        check("GET /site-entries says how many open plans an approval would stop", isinstance((after_preview or {}).get("waitingPlans"), int), str((after_preview or {}).get("waitingPlans")))
         status, entry = author.call("POST", "/site-entries", body)
         check("POST /site-entries makes a draft from S2's case", status == 201 and str((entry or {}).get("id", "")).startswith("L") and entry.get("state") == "draft", f"{status} {str(entry)[:300]}")
         if status != 201:

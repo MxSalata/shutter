@@ -332,6 +332,59 @@ Method TestOnlyAnAdministratorLiftsTheTwoPersonRule()
 
 /// The entries are the site's configuration, as the site profile is: the store's purge leaves them, and the uninstall's
 /// step names and removes them. A fixture whose case went with a purge answers from its frozen copy.
+/// The preview (POST /site-entries/preview) checks a body and runs P1, P2 and P4 on the cases it names, as a proof does,
+/// and stores nothing: no entry, version, proof or event, and the catalogue's version and the next id are as they were.
+Method TestThePreviewStoresNothing()
+{
+    Set proof = "Shutter.Catalogue.SiteEntryProof", kit = "Shutter.Test.SiteKit"
+    Set match = $CLASSMETHOD(kit, "Case", {"ward": "WARD-ISO"}), near = $CLASSMETHOD(kit, "Case", {"ward": "WARD-B"})
+    Set version = ##class(Shutter.Catalogue.Entry).CatalogueVersion(), next = $GET(^Shutter.Catalogue.Site("next"))
+    Set counts = ..Rows()
+    Do $$$AssertEquals($CLASSMETHOD(proof, "Preview", $CLASSMETHOD(kit, "Body", match.CaseId, near.CaseId), .result), "", "the preview runs")
+    Do $$$AssertTrue(result.valid, "the body is valid: " _ result.problems.%ToJSON())
+    Do $$$AssertEquals(result.id, "L" _ (next + 1), "under the id the next draft would take")
+    Do $$$AssertTrue(result.proof.passed, "its proof passes: " _ result.proof.%ToJSON())
+    Do $$$AssertEquals(result.proof.fixtures.%Get(0).lead, result.id, "the entry leads on the matching case")
+    Do $$$AssertTrue(result.proof.fixtures.%Get(1).ok && 'result.proof.fixtures.%Get(1).holds, "and leaves the near miss alone")
+    Do $$$AssertTrue(result.proof.impact.cases.%ToJSON() [ match.CaseId, "the impact lists the matching case")
+    Do $$$AssertNotTrue(result.proof.%IsDefined("proofId"), "and no proof is kept")
+    Do $$$AssertTrue(result.content.fixtures.%Get(0).conditions.%IsDefined("event"), "the fixtures come back frozen, with the conditions the case showed")
+    Do $$$AssertNotTrue(result.content.%IsDefined("decides") || result.proof.%IsDefined("decides"), "and nothing in the answer says who decides")
+    Do $$$AssertEquals(..Rows(), counts, "nothing is stored: " _ counts)
+    // From a case, with no pattern given: the case's conditions, its facts and the case as the first fixture.
+    Do $$$AssertEquals($CLASSMETHOD(proof, "Preview", {"fromCase": (match.CaseId), "title": "From a case", "why": "A test"}, .result), "", "a preview from a case runs")
+    Do $$$AssertEquals(result.content.pattern.event.%Get(0), "transfer", "the pattern is the case's conditions")
+    Do $$$AssertNotTrue(result.content.pattern.%IsDefined("death_recorded"), "without the reserved one")
+    Do $$$AssertEquals(result.content.scope.ward.%Get(0), "WARD-ISO", "the scope is the case's facts")
+    Do $$$AssertEquals(result.content.fixtures.%Get(0).case, match.CaseId, "the case is the first fixture")
+    Do $$$AssertNotTrue(result.proof.passed, "and with no near miss the proof does not pass")
+    Do $$$AssertTrue(result.proof.problems.%ToJSON() [ "near miss", "it says a near miss is needed: " _ result.proof.problems.%ToJSON())
+    // Missing words are problems, and the proof still runs; a body that says who decides is refused as a draft's is.
+    Do $$$AssertEquals($CLASSMETHOD(proof, "Preview", {"pattern": {"event": "transfer"}, "decides": "policy"}, .result), "", "a body with a problem is answered")
+    Do $$$AssertNotTrue(result.valid, "and is not valid")
+    Do $$$AssertTrue(result.problems.%ToJSON() [ """decides""", "naming decides: " _ result.problems.%ToJSON())
+    Do $$$AssertTrue($ISOBJECT(result.proof), "the proof runs on the pattern it has")
+    Do $$$AssertEquals($CLASSMETHOD(proof, "Preview", {"title": "No pattern", "why": "A test"}, .result), "", "a body with no pattern is answered")
+    Do $$$AssertEquals(result.%GetTypeOf("proof"), "null", "with no proof")
+    Do $$$AssertEquals($CLASSMETHOD(proof, "Preview", {"id": "L999999", "pattern": {"event": "transfer"}}, .result), "not_found", "an id no entry has")
+    Do $$$AssertEquals($CLASSMETHOD(proof, "Preview", {"action": "release", "pattern": {"event": "transfer"}}, .result), "bad_request", "an action that is not one")
+    Do $$$AssertEquals(..Rows(), counts, "still nothing stored")
+    Do $$$AssertEquals(##class(Shutter.Catalogue.Entry).CatalogueVersion(), version, "the catalogue's version is as it was")
+    Do $$$AssertEquals($GET(^Shutter.Catalogue.Site("next")), next, "and so is the next id")
+}
+
+/// The rows of the site's four tables, as one string.
+Method Rows() As %String [ Private ]
+{
+    Set out = ""
+    For table = "SiteEntry", "SiteEntryVersion", "SiteEntryProof", "SiteEntryEvent" {
+        Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT COUNT(*) AS n FROM Shutter_Catalogue." _ table)
+        Do rs.%Next()
+        Set out = out _ table _ "=" _ rs.%Get("n") _ " "
+    }
+    Quit out
+}
+
 Method TestThePurgeLeavesThemAndTheUninstallTakesThem()
 {
     Set site = "Shutter.Catalogue.SiteEntry", kit = "Shutter.Test.SiteKit"

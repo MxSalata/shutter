@@ -157,7 +157,8 @@ Method Current() As %Boolean
 /// fixture to answer as expected, with at least one match and at least one near miss (no_match); a retirement's proof is
 /// its impact read the other way (the cases the entry catches, and what each would do without it) and passes when it
 /// could be computed. <var>impact</var> 0 leaves P4 out (the run at an approval, which compares P1 and P2 alone).
-ClassMethod Run(entryId As %String, version As %Integer, content As %DynamicObject, action As %String, by As %String, origin As %String = "api", impact As %Boolean = 1, Output proof As Shutter.Catalogue.SiteEntryProof) As %DynamicObject
+/// <var>store</var> 0 keeps nothing (the preview): the result is the same, with no proofId.
+ClassMethod Run(entryId As %String, version As %Integer, content As %DynamicObject, action As %String, by As %String, origin As %String = "api", impact As %Boolean = 1, Output proof As Shutter.Catalogue.SiteEntryProof, store As %Boolean = 1) As %DynamicObject
 {
     Set json = "Shutter.Util.Json", matcher = "Shutter.Catalogue.Matcher"
     Set proof = "", result = {}, problems = []
@@ -235,6 +236,7 @@ ClassMethod Run(entryId As %String, version As %Integer, content As %DynamicObje
     Set passed = (problems.%Size() = 0)
     Do result.%Set("passed", passed, "boolean")
     Set result.context = context
+    If 'store Quit result
     Set proof = ..%New()
     Set proof.EntryId = entryId, proof.Version = +version, proof.Digest = digest, proof.Action = action, proof.Passed = passed
     Set proof.ResultJSON = result.%ToJSON(), proof.ContextJSON = context.%ToJSON()
@@ -291,6 +293,52 @@ ClassMethod Impact(entryId As %String, without As %DynamicArray, with As %Dynami
     Do out.%Set("capped", capped, "boolean")
     Set out.groups = groups, out.cases = cases
     Quit out
+}
+
+/// The preview (POST /site-entries/preview): a body checked as a draft's is (R1 to R5 and R15), its fixtures frozen from
+/// the stored cases they name, and P1, P2 and P4 run on them, with nothing stored anywhere: no entry, no version, no
+/// proof, no event, nothing on any case. A body may name {fromCase} to start from a closed case, as a new draft can, and
+/// {id} to preview a change of an existing entry (it is then left out of the others, as its own proof leaves it); a new
+/// entry is previewed under the id the next draft would take. {action} is activate (the default), retire or resume. The
+/// answer is {valid, problems, warnings, sentence, overlap, content, proof}; proof is "" when the body has no pattern to
+/// prove. It decides nothing: what would lead and what each case would do are the matcher's answers.
+ClassMethod Preview(body As %DynamicObject, Output result As %DynamicObject) As %String
+{
+    Set json = "Shutter.Util.Json", result = ""
+    If '$ISOBJECT(body) || 'body.%IsA("%Library.DynamicObject") Quit "bad_request"
+    Set given = ##class(%DynamicObject).%FromJSON(body.%ToJSON())
+    Set action = $CLASSMETHOD(json, "Str", given, "action", "activate")
+    If '$LISTFIND($LISTBUILD("activate", "retire", "resume"), action) Quit "bad_request"
+    For key = "action", "expectedVersion" { If given.%IsDefined(key) Do given.%Remove(key) }
+    Set problems = [], problem = ""
+    Set entryId = $CLASSMETHOD(json, "Str", given, "id")
+    If entryId '= "" {
+        If '$ISOBJECT(##class(Shutter.Catalogue.SiteEntry).ById(entryId)) Quit "not_found"
+    } Else {
+        Set entryId = "L" _ ($GET(^Shutter.Catalogue.Site("next")) + 1)
+    }
+    If given.%IsDefined("fromCase") {
+        Set given = ##class(Shutter.Catalogue.SiteEntry).FromCase($CLASSMETHOD(json, "Str", given, "fromCase"), given, .problem)
+        If given.%IsDefined("fromCase") Do given.%Remove("fromCase")
+    }
+    Do ##class(Shutter.Catalogue.SiteEntryVersion).Normalise(given, entryId, .content, .found, .warnings, 1)
+    If problem '= "" Do problems.%Push({"rule": "R1", "field": "fromCase", "text": (problem)})
+    Set it = found.%GetIterator()
+    While it.%GetNext(, .p) { Do problems.%Push(p) }
+    Set result = {}
+    Do result.%Set("valid", problems.%Size() = 0, "boolean")
+    Set result.problems = problems, result.warnings = warnings, result.id = entryId, result.action = action
+    Set result.sentence = ##class(Shutter.Catalogue.SiteEntryVersion).Sentence(content)
+    Set result.overlap = ##class(Shutter.Catalogue.SiteEntryVersion).Overlap(content.%Get("pattern"))
+    Set result.content = content
+    // A pattern the rules refused whole leaves nothing to prove; missing words (a title, a why) do not stop the proof.
+    Set pattern = content.%Get("pattern")
+    If '$ISOBJECT(pattern) || (pattern.%Size() = 0) {
+        Do result.%Set("proof", "", "null")
+        Quit ""
+    }
+    Set result.proof = ..Run(entryId, 0, content, action, "", "preview", 1, , 0)
+    Quit ""
 }
 
 /// What a case would do on a match that no site entry leads, in one word.
