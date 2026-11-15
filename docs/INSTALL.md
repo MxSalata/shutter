@@ -602,7 +602,8 @@ so a load of 1.4.7 or earlier without `-Ddemo=0` sets a site up as a demo: pass 
 applications or namespaces that load made. The demo users `operator`, `approver`, `forwarder`, `downstream-client` and
 `fhir-client`, where they exist, sign in with the demo's documented password, so take them off: delete them in the
 Management Portal (System Administration, Security, Users), or run `zpm "uninstall iris-shutter"` and install again with
-`-Ddemo=0`, which removes everything the demo load made but also loses the cases.
+`-Ddemo=0`, which also loses the cases; afterwards check in the Management Portal that the demo users, roles and web
+applications are gone.
 
 **Upgrading to 1.2.0.** Run the install once, or load the newer tree, and restart the production as above. Then:
 

@@ -76,7 +76,7 @@ Open the [trial](https://mxsalata.github.io/shutter/) and choose **Start with S2
 2. **S3: recognise a delivery that already arrived.** Press **Run S3**. Its case, C-000003 in the trial, reads the receiver's receipt. Only the acknowledgement was lost. Nothing is written.
 3. **S8: stop an ambiguous movement.** Press **Run S8 in Board**. Two systems moved the same patient at the same recorded time. Its case, C-000008 in the trial, escalates with **0 writes**. A person must decide. Its **In IRIS:** line opens **Message trace**, the agents' steps in IRIS's Visual Trace (a screenshot in the trial). On the online demo, **Message trace** first asks for a Cloudflare Access sign-in (GitHub or an emailed code), then IRIS's read-only sign-in, `demo-trace` / `Shutter-Demo-IRIS-Portal`; the trial's screenshot needs neither.
 
-**FHIR R4:** on the online demo (not the trial), choose **Site policy** under **Run mode**, then **Run** S35 ([what to look for](https://github.com/MxSalata/shutter/blob/main/docs/readme/fhir.md#try-it-s35)).
+**FHIR R4:** on the online demo (not the trial), choose **Site policy** under **Run mode**, then **Run** S35; there it updates the demo's own test FHIR server, held to the answers IRIS for Health's FHIR server gave ([what to look for](https://github.com/MxSalata/shutter/blob/main/docs/readme/fhir.md#try-it-s35)).
 
 **Where the agents beat the catalogue:** held-out case F09, a transfer its source cancelled six minutes later. The catalogue matched a resend; on release 1.0.0 Site policy wrote it in all three runs, and the board and the single investigator escalated in all six ([fair test](https://github.com/MxSalata/shutter/blob/main/docs/readme/fair-test.md#per-case)). Since then the gate also stops that write.
 
