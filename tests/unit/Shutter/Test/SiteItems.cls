@@ -91,46 +91,25 @@ Method TestUpgradeKeepsTheSitesValues()
     Do $$$AssertEquals(..Prop("UT Gate", "Enabled"), 0, "while its other values stand")
 }
 
-/// An upgrade over an install that left no record (1.4.7 and earlier). The module's capture, taken before the class is
-/// replaced, reads the earlier release's definition from the class as compiled: a value that differs from the new
-/// definition is the site's unless that release shipped it; the descriptions are the release's; nothing counts as taken
-/// out; an item the earlier release did not ship is the site's.
+/// An upgrade over an install that left no record (1.4.7 and earlier): every value that differs is the site's, but the
+/// descriptions; nothing counts as taken out; an added item of a Shutter class is left out.
 Method TestUpgradeWithNoRecord()
 {
     Set c = ..#CLASS, prod = ..#PRODUCTION, node = ..#NODE
     Do $$$AssertStatusOK(..WriteClass(..Earlier()), "the earlier release's production compiles")
     Do $$$AssertStatusOK(..SiteEdits(), "the site's own edits save")
     Do $$$AssertEquals($CLASSMETHOD(c, "Capture", prod, node, 1), "captured", "the upgrade captures")
-    Do $$$AssertEquals($GET(@node@("before", "shipped", "i", "UT Gate", "s", "Host", "FailureTimeout")), 0, "with the earlier release's definition, from its compiled class")
     Do $$$AssertStatusOK(..WriteClass(..Newer()), "the newer release's class compiles")
     Do $$$AssertStatusOK($CLASSMETHOD(c, "Keep", prod, node, .out), "the upgrade keeps")
     Do $$$AssertEquals(out.mode, "no record", "with no record of the earlier install")
     Do ..SiteKept("with no record", 0)
     Do ..NewArrived("with no record")
     Do $$$AssertEquals(..Prop("UT Gate", "Comment"), "The gate, newer text", "the release's own description stands")
-    Do $$$AssertEquals(..Value("UT Gate", "Host", "FailureTimeout"), 30, "the release's changed value arrives: the earlier one was shipped, not set")
-    Do $$$AssertEquals(..Value("UT Watch", "Host", "AlertOnError"), 1, "nothing counts as taken out")
-    Do $$$AssertEquals(..Count("UT Site Own"), 1, "an item the earlier release did not ship is the site's, of a Shutter class too")
-    Do $$$AssertEquals($DATA(@node@("left")) \ 10, 1, "the install leaves a record for the next one")
-}
-
-/// The same with no compiled class to read: the install run by hand after the class was replaced (a rebuilt container).
-/// Every value that differs is then the site's, but the descriptions, and an added item of a Shutter class is left out.
-Method TestUpgradeWithNoRecordByHand()
-{
-    Set c = ..#CLASS, prod = ..#PRODUCTION, node = ..#NODE
-    Do $$$AssertStatusOK(..WriteClass(..Earlier()), "the earlier release's production compiles")
-    Do $$$AssertStatusOK(..SiteEdits(), "the site's own edits save")
-    Do $$$AssertEquals($CLASSMETHOD(c, "Capture", prod, node, 1), "captured", "the install captures")
-    Kill @node@("before", "shipped")
-    Do $$$AssertStatusOK(..WriteClass(..Newer()), "the newer release's class compiles")
-    Do $$$AssertStatusOK($CLASSMETHOD(c, "Keep", prod, node, .out), "the install keeps")
-    Do ..SiteKept("by hand with no record", 0)
-    Do ..NewArrived("by hand with no record")
     Do $$$AssertEquals(..Value("UT Gate", "Host", "FailureTimeout"), 0, "a value that differs is taken to be the site's, a change of the release's included")
-    Do $$$AssertEquals(..Prop("UT Gate", "Comment"), "The gate, newer text", "the release's own description stands")
+    Do $$$AssertEquals(..Value("UT Watch", "Host", "AlertOnError"), 1, "nothing counts as taken out")
     Do $$$AssertEquals(..Count("UT Site Own"), 0, "the added item of a Shutter class is left out")
     Do $$$AssertTrue($CLASSMETHOD(c, "Account", out) [ "UT Site Own: not put back", "and the account says so")
+    Do $$$AssertEquals($DATA(@node@("left")) \ 10, 1, "the install leaves a record for the next one")
 }
 
 /// When a capture is taken, kept or skipped.
@@ -192,9 +171,10 @@ Method NewArrived(when As %String)
     Do $$$AssertEquals(..Value("UT Watch", "Host", "AlertGracePeriod"), 4, "the release's new setting on an item the site changed, " _ when)
 }
 
-/// On the definition, as a person in the Production Configuration page would (saved, not written to the class): the
-/// watch's pool size 3 and its call interval 9, its AlertOnError taken out; the gate switched off, a setting added, its
-/// comment changed; the production's actor pool 2; two items added, one of a system class and one of a Shutter class.
+/// A site's own edits: on the definition alone (saved, not written to the class), the watch's pool size 3 and its
+/// AlertOnError taken out, the gate switched off with a setting added and its comment changed, the production's actor
+/// pool 2, and two items added, one of a system class and one of a Shutter class; then, as the Production Configuration
+/// page saves (Ens.Production.ApplySettings: the definition and the class's XData), the watch's call interval 9.
 Method SiteEdits() As %Status
 {
     Set p = ##class(Ens.Config.Production).%OpenId(..#PRODUCTION)
@@ -202,9 +182,7 @@ Method SiteEdits() As %Status
     Set p.ActorPoolSize = 2
     Set w = ..Item(p, "UT Watch"), w.PoolSize = 3
     For j = w.Settings.Count():-1:1 {
-        Set s = w.Settings.GetAt(j)
-        If s.Name = "CallInterval" Set s.Value = 9
-        If s.Name = "AlertOnError" Do w.Settings.RemoveAt(j)
+        If w.Settings.GetAt(j).Name = "AlertOnError" Do w.Settings.RemoveAt(j)
     }
     Set g = ..Item(p, "UT Gate"), g.Enabled = 0, g.Comment = "Our gate"
     Do g.Settings.Insert(..Setting("Host", "ReplyCodeActions", "E=W"))
@@ -214,7 +192,11 @@ Method SiteEdits() As %Status
         Do:$LIST(row, 3) i.Settings.Insert(..Setting("Adapter", "FilePath", "/tmp/ut-site-out/"))
         Do p.Items.Insert(i)
     }
-    Quit p.%Save()
+    Set sc = p.%Save()
+    Kill p, w, g, i
+    Quit:$$$ISERR(sc) sc
+    Set set("UT Watch", "Adapter", "CallInterval") = 9
+    Quit ##class(Ens.Production).ApplySettings(..#PRODUCTION, .set)
 }
 
 Method Setting(target As %String, name As %String, value As %String) As Ens.Config.Setting
