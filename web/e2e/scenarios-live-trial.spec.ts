@@ -87,10 +87,10 @@ for (const width of [1280, 360])
     }) => {
       await standIn(page, OLD_DEMO);
       await page.goto('./#/scenarios');
-      // The live build's first visit offers the trial in a dialog over the page
-      await page.getByRole('button', { name: 'Not now' }).click();
       const first = page.getByRole('region', { name: 'Three to look at first' });
       await expect(first.getByText('No case yet: the hospital plays one every few minutes.')).toHaveCount(3);
+      // The live build offers the trial on Home only: nothing covers this page on a first visit
+      await expect(page.getByRole('dialog', { name: 'New here?' })).toHaveCount(0);
       for (const run of await first.getByRole('button', { name: /^Run / }).all())
         await expect(run).toBeDisabled();
       await expect(page.getByRole('button', { name: 'Reset' })).toBeDisabled();
@@ -112,7 +112,6 @@ for (const width of [1280, 360])
     }) => {
       await standIn(page, DEMO);
       await page.goto('./#/scenarios');
-      await page.getByRole('button', { name: 'Not now' }).click();
       const list = page.getByRole('region', { name: 'Every scenario' });
       const run = list.getByRole('button', { name: 'Run S8' });
       await expect(run).toBeEnabled();
@@ -155,7 +154,6 @@ for (const width of [1280, 360])
     }) => {
       await standIn(page, JUDGE, PATHOLOGY);
       await page.goto('./#/scenarios');
-      await page.getByRole('button', { name: 'Not now' }).click();
       await page.getByRole('button', { name: /^Optional, after these three: pathology on the demo/ }).click();
       const group = page.getByRole('region', { name: 'Pathology on the demo (optional)' });
       await expect(group).toBeInViewport();
@@ -179,7 +177,6 @@ for (const width of [1280, 360])
     }) => {
       await standIn(page, JUDGE);
       await page.goto('./#/scenarios');
-      await page.getByRole('button', { name: 'Not now' }).click();
       const list = page.getByRole('region', { name: 'Every scenario' });
       await expect(list.getByRole('button', { name: 'Run S8' })).toBeEnabled();
       await expect(page.getByRole('button', { name: 'Reset' })).toBeDisabled();
