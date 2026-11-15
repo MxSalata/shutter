@@ -123,6 +123,19 @@ Method Sent(control As %String, source As %String, target As %String, session As
     Quit ..HeaderFor(msg, source, target, session)
 }
 
+/// A session id no header holds yet: other test classes draw session ids from ranges that overlap this one
+/// (CaseTechnical 999990000 to 999998999), so a random id alone could land in a session that already has a header,
+/// and "the session's first" would then be someone else's.
+Method FreeSession() As %Integer
+{
+    For {
+        Set session = 999998000 + $RANDOM(900), used = 0
+        &sql(SELECT COUNT(*) INTO :used FROM Ens.MessageHeader WHERE SessionId = :session)
+        Quit:'used
+    }
+    Quit session
+}
+
 Method HeaderFor(msg As EnsLib.HL7.Message, source As %String, target As %String, session As %String) As Ens.MessageHeader
 {
     Set h = ##class(Ens.MessageHeader).%New()
@@ -136,7 +149,7 @@ Method HeaderFor(msg As EnsLib.HL7.Message, source As %String, target As %String
 /// The alerting item's own message beats the session's first (the transform's change stays); with none, the first stands.
 Method TestTheMessageTheItemWasSent()
 {
-    Set ap = "Shutter.Intake.AlertProcess", session = 999998000 + $RANDOM(900)
+    Set ap = "Shutter.Intake.AlertProcess", session = ..FreeSession()
     Set inbound = ..Sent("UTF1", "UT In", "UT Router", session, , "PAS-CODE")
     Set sent = ..Sent("UTF1", "UT Router", "UT Out", session, , "WARD-C")
     Set h = $CLASSMETHOD(ap, "HL7HeaderOfSession", session, .problem, "UT Out")
@@ -153,7 +166,7 @@ Method TestTheMessageTheItemWasSent()
 /// Two different messages to one item in a session: the alert names neither, so no case is built on a guess, and the words name both.
 Method TestSeveralMessagesToOneItemOpenNoCase()
 {
-    Set ap = "Shutter.Intake.AlertProcess", session = 999998000 + $RANDOM(900)
+    Set ap = "Shutter.Intake.AlertProcess", session = ..FreeSession()
     Set inbound = ..Sent("UTG0", "UT In", "UT Router", session, "MRN-UT-1")
     Set first = ..Sent("UTG1", "UT Router", "UT Out", session, "MRN-UT-1")
     Set second = ..Sent("UTG2", "UT Router", "UT Out", session, "MRN-UT-2")
@@ -178,7 +191,7 @@ Method TestSeveralMessagesToOneItemOpenNoCase()
 /// An item that took no HL7, in a session whose HL7 messages name two patients: the session's first could be the wrong patient.
 Method TestAnotherPatientStopsTheFallback()
 {
-    Set ap = "Shutter.Intake.AlertProcess", session = 999998000 + $RANDOM(900)
+    Set ap = "Shutter.Intake.AlertProcess", session = ..FreeSession()
     Do ..Sent("UTP1", "UT In", "UT Router", session, "MRN-UT-1"), ..Sent("UTP2", "UT In", "UT Router", session, "MRN-UT-2")
     Set words = $CLASSMETHOD(ap, "SeveralInSession", session, "UT Out")
     Do $$$AssertTrue((words [ "UTP1") && (words [ "UTP2"), "two patients in the session are said: " _ words)
