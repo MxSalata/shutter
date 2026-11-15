@@ -163,20 +163,32 @@ describe('what Ask Shutter may draft', () => {
   });
 });
 
-describe('a text refused before it is sent', () => {
-  it.each([
-    ['see https://intranet.example/boards', 'a link'],
-    ['ask www.example.nhs.uk', 'a link'],
-    ['mail ward.clerk@example.nhs.uk about it', 'an address'],
-    ['its number is 4857261930', 'a run of six or more digits'],
-    ['password: hunter2', 'what looks like a credential'],
-    ['api key = abc', 'what looks like a credential'],
-  ])('%s', (text, what) => {
-    expect(textProblem(text)).toBe(what);
-    expect(cleanText(text)).toEqual({
-      text: '',
-      problem: `The text holds ${what}. Take that out and send again: Ask Shutter does not need it.`,
-    });
+describe('a text refused before it is sent, the table Shutter.Test.ProfileSetup runs at the server', () => {
+  // A text given as parts is the parts joined, so no whole token shape stands in the table's file
+  const rows = coreTable<[string | string[], string]>('ProfileSetup', 'TextRows').map(
+    ([text, what]) => [Array.isArray(text) ? text.join('') : text, what] as const,
+  );
+
+  it('has the rows of the server class', () => {
+    expect(rows.length).toBeGreaterThan(30);
+    expect(rows.filter(([, what]) => what).length).toBeGreaterThan(20);
+  });
+
+  it.each(rows.map(([text, what]) => [JSON.stringify(text).slice(0, 50), text, what] as const))(
+    '%s',
+    (_label, text, what) => {
+      expect(textProblem(text)).toBe(what);
+      expect(cleanText(text).problem).toBe(
+        what ? `The text holds ${what}. Take that out and send again: Ask Shutter does not need it.` : '',
+      );
+    },
+  );
+
+  it("refuses a receiver's name that fails the same rule", () => {
+    expect(nameProblem('Bed Board')).toBe('');
+    expect(nameProblem('Ward 7, ask j.smith@trust.nhs.uk')).toBe(
+      "The receiver's name holds an address. Ask Shutter reads typed answers only about a receiver whose name has none: change the name, or answer with the page's controls.",
+    );
   });
 
   it('sends a plain answer as typed, line breaks as spaces and the ends trimmed', () => {

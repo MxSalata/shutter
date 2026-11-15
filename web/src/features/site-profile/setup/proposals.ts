@@ -23,20 +23,63 @@ const MAX_PROPOSALS = 3;
 const MAX_SYSTEM = 120;
 const KINDS_OF_SYSTEM = ['current_state', 'history_of_record', 'orders_results'];
 
+/** The top-level domains a bare domain is read by when it has no path: ProfileSetup's DOMAINS. */
+const DOMAINS =
+  'com|org|net|uk|io|gov|edu|info|biz|dev|app|cloud|online|site|xyz|eu|ie|local|internal|lan|ai|co';
+const BARE_DOMAIN = new RegExp(`\\b[a-z0-9-]+(\\.[a-z0-9-]+)*\\.(${DOMAINS})\\b`, 'i');
+
 /**
- * Why a text may not go to a model, or "": the port of ProfileSetup.TextProblem, the rule of a receiver's runbook line
- * with addresses added.
+ * Why a text may not go to a model, or "": the port of ProfileSetup.TextProblem. A control character (C0, DEL or C1); an
+ * invisible or direction-changing character; a link (a scheme, www., or a bare domain with a path or a known top-level
+ * domain); an address; the shape of a credential (a word such as password with ":" or "=", a provider's key prefix, a
+ * long hex or base64 run); a run of six or more digits; a number of ten or more digits with single spaces or hyphens
+ * between them. Both suites run the cases of the core's TextRows table.
  */
 export function textProblem(text: string): string {
   // eslint-disable-next-line no-control-regex
-  if (/[\x00-\x1f\x7f]/.test(text)) return 'a control character';
+  if (/[\x00-\x1f\x7f-\x9f]/.test(text)) return 'a control character';
+  if (/[\u00ad\u061c\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]/.test(text))
+    return 'an invisible or direction-changing character';
   if (/:\/\/|\bwww\.|\bmailto:|\bjavascript:/i.test(text)) return 'a link';
   if (/[^\s@]@[^\s@]/.test(text)) return 'an address';
+  if (/\b[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z][a-z0-9-]*\//i.test(text)) return 'a link';
+  if (BARE_DOMAIN.test(text)) return 'a link';
   if (/\b(password|passwd|pwd|secret|token|api[ _-]?key)\s*[:=]/i.test(text))
     return 'what looks like a credential';
+  if (
+    /\b(gh[pousr]_[A-Za-z0-9]{16,}|github_pat_[A-Za-z0-9_]{16,}|sk-[A-Za-z0-9_-]{16,}|xox[abposr]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{30,}|glpat-[A-Za-z0-9_-]{16,}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})/.test(
+      text,
+    )
+  )
+    return 'what looks like a credential';
+  if (/\b[0-9a-f]{32,}\b/i.test(text)) return 'what looks like a credential';
+  if (
+    /(?=[A-Za-z0-9+/_]*[A-Z])(?=[A-Za-z0-9+/_]*[a-z])(?=[A-Za-z0-9+/_]*[0-9])[A-Za-z0-9+/_]{24,}/.test(text)
+  )
+    return 'what looks like a credential';
   if (/\d{6}/.test(text)) return 'a run of six or more digits';
+  if (/\d([ -]?\d){9,}/.test(text)) return 'a long number';
   return '';
 }
+
+/**
+ * Why a receiver's name may not go to a model, or "": the port of ProfileSetup.NameProblem. The agent drafts for a
+ * receiver by its name, so a turn about a receiver whose name fails the text rule is not sent.
+ */
+export function nameProblem(name: string): string {
+  const what = textProblem(name);
+  return what
+    ? `The receiver's name holds ${what}. Ask Shutter reads typed answers only about a receiver whose name has none: change the name, or answer with the page's controls.`
+    : '';
+}
+
+/** A text with its case folded and each run of spaces as one: the port of ProfileSetup.Fold. */
+export const fold = (text: string) =>
+  text
+    .replace(/[\t\n\r\u00a0]/g, ' ')
+    .replace(/ {2,}/g, ' ')
+    .trim()
+    .toLowerCase();
 
 /** What the person is told when a text is refused before it is sent. */
 export const textRefusal = (what: string) =>
@@ -44,7 +87,7 @@ export const textRefusal = (what: string) =>
 
 /** The person's text as it is sent, or the problem: the port of ProfileSetup.CleanText. */
 export function cleanText(raw: string): { text: string; problem: string } {
-  const text = raw.replace(/[\t\n\r]/g, ' ').trim();
+  const text = raw.replace(/[\t\n\r]/g, ' ').replace(/^ +| +$/g, '');
   if (!text) return { text: '', problem: 'text is required' };
   if (text.length > MAX_TEXT) return { text: '', problem: `text is at most ${MAX_TEXT} characters` };
   const what = textProblem(text);

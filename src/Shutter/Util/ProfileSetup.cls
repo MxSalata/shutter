@@ -100,17 +100,44 @@ ClassMethod ClassOf(path As %String) As %String
     Quit "unknown"
 }
 
-/// Why a text may not go to a model, or "": a link, an address, a run of six or more digits or the shape of a credential,
-/// the rule of a receiver's runbook line (Shutter.Util.ReceiverCheck.ManualCheckProblem) with addresses added. Cutting a
-/// text short is not redaction, so a text that fails is refused whole, neither sent nor stored.
+/// Why a text may not go to a model, or "", the rule of a receiver's runbook line (Shutter.Util.ReceiverCheck
+/// .ManualCheckProblem) widened for what a person may type or paste: a control character (C0, DEL or C1); an invisible or
+/// direction-changing character (zero-width characters, the bidirectional marks, overrides and isolates); a link, which
+/// is a scheme, www., or a bare domain that has a path or ends in a known top-level domain; an address; the shape of a
+/// credential (a word such as password or token with ":" or "=", a provider's key prefix, a run of 32 or more hex
+/// digits, or a run of 24 or more base64 characters mixing capitals, small letters and digits); a run of six or more
+/// digits; and a number of ten or more digits written with single spaces or hyphens between them (an NHS number as
+/// printed, 943 476 5919, or a telephone number). The cases are one table, TextRows in Shutter.Test.ProfileSetup, that
+/// the web app's copy (setup/proposals.ts) runs too. Cutting a text short is not redaction, so a text that fails is
+/// refused whole, neither sent nor stored.
 ClassMethod TextProblem(text As %String) As %String
 {
-    If $LOCATE(text, "[\x00-\x1F\x7F]") Quit "a control character"
+    If $LOCATE(text, "[\x00-\x1F\x7F-\x9F]") Quit "a control character"
+    If $LOCATE(text, "[\x{00AD}\x{061C}\x{180E}\x{200B}-\x{200F}\x{202A}-\x{202E}\x{2060}-\x{2064}\x{2066}-\x{2069}\x{FEFF}]") Quit "an invisible or direction-changing character"
     If $LOCATE(text, "(?i)(://|\bwww\.|\bmailto:|\bjavascript:)") Quit "a link"
     If $LOCATE(text, "[^\s@]@[^\s@]") Quit "an address"
+    If $LOCATE(text, "(?i)\b[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z][a-z0-9-]*/") Quit "a link"
+    If $LOCATE(text, "(?i)\b[a-z0-9-]+(\.[a-z0-9-]+)*\.(" _ ..#DOMAINS _ ")\b") Quit "a link"
     If $LOCATE(text, "(?i)\b(password|passwd|pwd|secret|token|api[ _-]?key)\s*[:=]") Quit "what looks like a credential"
+    If $LOCATE(text, "\b(gh[pousr]_[A-Za-z0-9]{16,}|github_pat_[A-Za-z0-9_]{16,}|sk-[A-Za-z0-9_-]{16,}|xox[abposr]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{30,}|glpat-[A-Za-z0-9_-]{16,}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})") Quit "what looks like a credential"
+    If $LOCATE(text, "(?i)\b[0-9a-f]{32,}\b") Quit "what looks like a credential"
+    If $LOCATE(text, "(?=[A-Za-z0-9+/_]*[A-Z])(?=[A-Za-z0-9+/_]*[a-z])(?=[A-Za-z0-9+/_]*[0-9])[A-Za-z0-9+/_]{24,}") Quit "what looks like a credential"
     If $LOCATE(text, "\d{6}") Quit "a run of six or more digits"
+    If $LOCATE(text, "\d([ -]?\d){9,}") Quit "a long number"
     Quit ""
+}
+
+/// The top-level domains a bare domain is read by when it has no path: the common ones and the ones a hospital's
+/// intranet uses.
+Parameter DOMAINS = "com|org|net|uk|io|gov|edu|info|biz|dev|app|cloud|online|site|xyz|eu|ie|local|internal|lan|ai|co";
+
+/// Why a receiver's name may not go to a model, or "": the text rule (TextProblem). A turn about a receiver whose name
+/// fails it is refused before anything is sent, since the agent must name the receiver it drafts for.
+ClassMethod NameProblem(name As %String) As %String
+{
+    Set what = ..TextProblem(name)
+    If what = "" Quit ""
+    Quit "The receiver's name holds " _ what _ ". Ask Shutter reads typed answers only about a receiver whose name has none: change the name, or answer with the page's controls."
 }
 
 /// What the person is told when a text is refused.

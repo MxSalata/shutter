@@ -184,16 +184,43 @@ Method TestQuoteFromStoredTurns()
     Do $$$AssertEquals($CLASSMETHOD(st, "Earlier", conversation, "ut-setup", second.TurnId).%ToJSON(), [{"you": "It is the ward whiteboard"}].%ToJSON(), "the earlier turns the agent reads leave this one out")
 }
 
-/// A text is refused before anything is sent when it has the shape of a link, an address, a long number or a credential;
-/// a refused text is not cut short and sent on.
+/// The text rule's cases, from the one table both suites run: [text, what is refused, or ""]. A text given as a list of
+/// parts is those parts joined, so no whole token shape stands in this file.
+ClassMethod TextOf(row As %DynamicArray) As %String
+{
+    Set t = row.%Get(0)
+    If '$ISOBJECT(t) Quit t
+    Set joined = ""
+    Set iter = t.%GetIterator()
+    While iter.%GetNext(, .part) { Set joined = joined _ part }
+    Quit joined
+}
+
+/// A text is refused before anything is sent when it holds a control, invisible or direction-changing character, a link
+/// (a bare domain included), an address, a long number (an NHS or telephone number as printed included) or the shape of
+/// a credential (a provider's key prefix or a long hex or base64 run included); a refused text is not cut short and sent
+/// on. The cases are the table TextRows, which the web app's suite runs too.
 Method TestTextRefused()
 {
     Set ps = "Shutter.Util.ProfileSetup"
-    For pair = "see https://intranet.example/boards|a link", "ask www.example.nhs.uk|a link", "mail ward.clerk@example.nhs.uk about it|an address", "its number is 4857261930|a run of six or more digits", "password: hunter2|what looks like a credential", "api key = abc|what looks like a credential" {
-        Set clean = $CLASSMETHOD(ps, "CleanText", $PIECE(pair, "|", 1), .problem)
-        Do $$$AssertEquals(clean, "", $PIECE(pair, "|", 1) _ " is not sent")
-        Do $$$AssertEquals(problem, "The text holds " _ $PIECE(pair, "|", 2) _ ". Take that out and send again: Ask Shutter does not need it.", "and the person is told why")
+    Set n = 0, refused = 0
+    Set iter = ..Table("TextRows").%GetIterator()
+    While iter.%GetNext(, .row) {
+        Set n = n + 1, text = ..TextOf(row), what = row.%Get(1)
+        Set label = $ZCONVERT($EXTRACT(text, 1, 40), "O", "JSON")
+        Do $$$AssertEquals($CLASSMETHOD(ps, "TextProblem", text), what, label _ ": " _ $SELECT(what = "": "passes", 1: what))
+        Set clean = $CLASSMETHOD(ps, "CleanText", text, .problem)
+        If what = "" {
+            Do $$$AssertEquals(problem, "", label _ ": sent")
+        } Else {
+            Set refused = refused + 1
+            Do $$$AssertEquals(clean, "", label _ " is not sent")
+            Do $$$AssertEquals(problem, "The text holds " _ what _ ". Take that out and send again: Ask Shutter does not need it.", "and the person is told why")
+        }
     }
+    Do $$$AssertTrue((n > 30) && (refused > 20), "the table has its rows, " _ n)
+    Do $$$AssertEquals($CLASSMETHOD(ps, "NameProblem", "Bed Board"), "", "a plain name passes")
+    Do $$$AssertEquals($CLASSMETHOD(ps, "NameProblem", "Ward 7, ask j.smith@trust.nhs.uk"), "The receiver's name holds an address. Ask Shutter reads typed answers only about a receiver whose name has none: change the name, or answer with the page's controls.", "a name with an address does not")
     Do $$$AssertEquals($CLASSMETHOD(ps, "CleanText", "  it is the ward" _ $CHAR(10) _ "whiteboard, tier 2 ", .problem), "it is the ward whiteboard, tier 2", "line breaks are spaces, and the ends are trimmed")
     Do $$$AssertEquals(problem, "", "with no problem")
     Do $$$AssertEquals($CLASSMETHOD(ps, "CleanText", "   ", .problem), "", "an empty text is none")
