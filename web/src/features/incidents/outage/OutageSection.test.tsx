@@ -382,6 +382,113 @@ describe('OutageSection', () => {
     );
   });
 
+  it('heads an approval whose answer never came "No answer came back", never "Not approved", as a warning', async () => {
+    serve({ items: [offeredAtUnknown()], receivers: [] });
+    server.use(http.post('/api/shutter/outages/7/approvals', () => HttpResponse.error()));
+    renderSection();
+    const card = await screen.findByRole('region', { name: 'Outage 7, Results Out' });
+    await userEvent.click(await within(card).findByRole('button', { name: 'Approve the resend…' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Approve the resend' });
+    await userEvent.type(within(dialog).getByRole('textbox', { name: /What was checked/ }), 'Checked');
+    await userEvent.click(within(dialog).getByRole('checkbox'));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Approve and resend' }));
+    const notice = await within(dialog).findByRole('alert');
+    expect(notice).toHaveAttribute('data-tone', 'attention');
+    expect(notice).toHaveTextContent(
+      /^No answer came back.*No answer came back \(.+\), so this page can't tell whether it was recorded\. Close this and check the card once it is read again: it shows what was recorded\.$/,
+    );
+    expect(notice).not.toHaveTextContent(/Not approved|Nothing was sent/);
+  });
+
+  it('heads a hand closure whose answer never came "No answer came back", never "Not recorded", as a warning', async () => {
+    serve({ items: [offeredAtUnknown()], receivers: [] });
+    server.use(http.post('/api/shutter/outages/7/acts', () => HttpResponse.error()));
+    renderSection();
+    const card = await screen.findByRole('region', { name: 'Outage 7, Results Out' });
+    await userEvent.click(
+      await within(card).findByRole('button', { name: 'Already handled by hand: control id CF' }),
+    );
+    const dialog = await screen.findByRole('dialog', { name: 'Already handled by hand' });
+    await userEvent.type(
+      within(dialog).getByRole('textbox', { name: /What you checked at the receiver/ }),
+      'Entered by hand',
+    );
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Close it, send nothing' }));
+    const notice = await within(dialog).findByRole('alert');
+    expect(notice).toHaveAttribute('data-tone', 'attention');
+    expect(notice).toHaveTextContent(/^No answer came back.*can't tell whether it was recorded/);
+    expect(notice).not.toHaveTextContent(/Not recorded|Nothing was recorded/);
+  });
+
+  it('keeps the approval press off after an answer that never came, until the dialog is opened again', async () => {
+    serve({ items: [offeredAtUnknown()], receivers: [] });
+    let sent = 0;
+    server.use(
+      http.post('/api/shutter/outages/7/approvals', () => {
+        sent += 1;
+        return HttpResponse.error();
+      }),
+    );
+    renderSection();
+    const card = await screen.findByRole('region', { name: 'Outage 7, Results Out' });
+    await userEvent.click(await within(card).findByRole('button', { name: 'Approve the resend…' }));
+    let dialog = await screen.findByRole('dialog', { name: 'Approve the resend' });
+    await userEvent.type(within(dialog).getByRole('textbox', { name: /What was checked/ }), 'Checked');
+    await userEvent.click(within(dialog).getByRole('checkbox'));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Approve and resend' }));
+    await within(dialog).findByRole('alert');
+    // The first approval may stand, so a second press could only be refused as a set already approved
+    expect(within(dialog).getByRole('button', { name: 'Approve and resend' })).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeEnabled();
+    expect(sent).toBe(1);
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    // Opened again, it starts afresh: no notice, and the press is on once the note and the check are given
+    await userEvent.click(within(card).getByRole('button', { name: 'Approve the resend…' }));
+    dialog = await screen.findByRole('dialog', { name: 'Approve the resend' });
+    expect(within(dialog).queryByRole('alert')).not.toBeInTheDocument();
+    await userEvent.type(within(dialog).getByRole('textbox', { name: /What was checked/ }), 'Checked');
+    await userEvent.click(within(dialog).getByRole('checkbox'));
+    expect(within(dialog).getByRole('button', { name: 'Approve and resend' })).toBeEnabled();
+  });
+
+  it('keeps the hand closure press off after an answer that never came, but not after a refusal', async () => {
+    serve({ items: [offeredAtUnknown()], receivers: [] });
+    let sent = 0;
+    server.use(
+      http.post('/api/shutter/outages/7/acts', () => {
+        sent += 1;
+        return sent === 1
+          ? HttpResponse.json(
+              { error: 'version_changed', detail: 'The outage has changed since it was read: read it again' },
+              { status: 409 },
+            )
+          : HttpResponse.error();
+      }),
+    );
+    renderSection();
+    const card = await screen.findByRole('region', { name: 'Outage 7, Results Out' });
+    await userEvent.click(
+      await within(card).findByRole('button', { name: 'Already handled by hand: control id CF' }),
+    );
+    const dialog = await screen.findByRole('dialog', { name: 'Already handled by hand' });
+    await userEvent.type(
+      within(dialog).getByRole('textbox', { name: /What you checked at the receiver/ }),
+      'Entered by hand',
+    );
+    const confirm = within(dialog).getByRole('button', { name: 'Close it, send nothing' });
+    // A refusal recorded nothing, so the press stays on for another try
+    await userEvent.click(confirm);
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Not recorded');
+    expect(confirm).toBeEnabled();
+    // An answer that never came may be a recorded closure, so the press goes off
+    await userEvent.click(confirm);
+    await waitFor(() => expect(within(dialog).getByRole('alert')).toHaveTextContent('No answer came back'));
+    expect(confirm).toBeDisabled();
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeEnabled();
+    expect(sent).toBe(2);
+  });
+
   it.each([
     [
       'stopped',

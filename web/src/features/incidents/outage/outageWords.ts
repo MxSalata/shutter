@@ -10,7 +10,7 @@ import {
   IconTool,
   type Icon,
 } from '@tabler/icons-react';
-import { isApiError } from '@/lib/errors';
+import { answerLost, describeError, isApiError } from '@/lib/errors';
 import type { Tone } from '@/lib/tone';
 import type { RecoveryControl } from '@/api/types';
 import type { Outage, OutageRow, Resend } from './types';
@@ -223,8 +223,14 @@ export function approveConsequence(o: Pick<Outage, 'receiver' | 'lists'>): strin
 /** The server's detail after a colon: its first letter lowered, unless it starts an acronym ("HL7", "MSA"). */
 const afterColon = (t: string) => (/^[A-Z][a-z]/.test(t) ? `${t[0].toLowerCase()}${t.slice(1)}` : t);
 
-/** A refused approval or act in plain words: what happened, and that nothing was sent. */
+/**
+ * A refused approval or act in plain words: what happened, and that nothing was sent. An answer that never came is no
+ * refusal: the page can't tell whether the server recorded it, so it says so and points to the card, read again, and
+ * never says nothing was sent.
+ */
 export function refusalWords(e: unknown): string {
+  if (answerLost(e))
+    return `No answer came back (${describeError(e)}), so this page can't tell whether it was recorded. Close this and check the card once it is read again: it shows what was recorded.`;
   if (!isApiError(e)) return 'Nothing was sent: the server could not be reached.';
   const detail = afterColon(e.detail);
   switch (e.code) {

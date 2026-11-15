@@ -14,15 +14,11 @@ import { formatZoned, humanize } from '@/lib/format';
 import { useNow } from '@/lib/useNow';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { Section } from './Section';
+import { WAITING_FOR_A_PERSON } from './restart';
 
 /** How long nothing of a case may move before an approver can abandon it: the server's abandonAfterMinutes default. */
 export const ABANDON_AFTER_MINUTES = 15;
 const QUIET_MS = ABANDON_AFTER_MINUTES * 60_000;
-/**
- * States that wait for a person rather than for work in flight: the open approval task is a deferred message, which
- * the server counts as in flight whatever its age (409 busy), so abandoning is never offered there.
- */
-const WAITING_FOR_A_PERSON = ['awaiting_approval', 'grouped'];
 
 /** The newest event's time, any kind: the production's start note counts, so resumed work gets its quiet time. */
 function newestAt(events: CaseEvent[]): string {

@@ -115,9 +115,20 @@ export function whatChanged(
 /**
  * Why a decision on the review that was stopped was not recorded, in one sentence for the review that replaces it:
  * the plan moved, else the case did, else nothing the page reads changed and the server's refusal is all there is.
+ * When that decision's answer never came (`lost`), it may have been recorded, so the sentence says so instead.
  */
-export function replacedWords(before: ReviewedState, now: ReviewedState): string {
+export function replacedWords(before: ReviewedState, now: ReviewedState, lost = false): string {
   const was = `plan v${before.view.plan.version}`;
+  // A decision whose answer never came may have been recorded before the case moved: the audit trail says, not this page
+  if (lost) {
+    const since =
+      now.view.plan.digest !== before.view.plan.digest
+        ? `the plan has changed since: this is plan v${now.view.plan.version}`
+        : now.c.version !== before.c.version
+          ? 'the case has changed since, though the plan is the same'
+          : 'the page has read it again';
+    return `No answer came for your decision on ${was}, and ${since}. The Audit trail says whether that decision was recorded.`;
+  }
   if (now.view.plan.digest !== before.view.plan.digest)
     return `Your decision on ${was} was not recorded: the plan changed, and this is plan v${now.view.plan.version}.`;
   if (now.c.version !== before.c.version)

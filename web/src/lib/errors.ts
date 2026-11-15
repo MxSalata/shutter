@@ -101,6 +101,18 @@ export function isApiError(e: unknown): e is ApiError {
 /** The scenario player's refusal while a run is queued or playing (Shutter.API.Dispatch): "a run of S3 is still playing". */
 const RUN_IN_THE_WAY = /^a run of \S+ is (still playing|queued)$/i;
 
+/**
+ * A change whose answer never reached the page: no HTTP answer at all (the connection dropped, the server went away
+ * mid-request), or a gateway's or proxy's page where the API's answer should be (a 502, 503 or 504 with no API error
+ * code). The server may have recorded the change or not, and the page cannot tell which. A read is never one: nothing
+ * was asked to change.
+ */
+export function answerLost(e: unknown): boolean {
+  if (!(e instanceof ApiError) || e.method === 'GET') return false;
+  if (e.status === 0) return true;
+  return [502, 503, 504].includes(e.status) && !e.code;
+}
+
 /** A one-line description of anything thrown. */
 export function describeError(e: unknown): string {
   if (e instanceof ApiError) {

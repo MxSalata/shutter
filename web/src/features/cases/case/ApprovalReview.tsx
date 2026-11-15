@@ -11,7 +11,7 @@ import { ConfirmModal } from '@/components/ConfirmModal';
 import { Digest } from '@/components/Digest';
 import { KeyValueList } from '@/components/KeyValueList';
 import { Timestamp } from '@/components/Timestamp';
-import { describeError, isApiError } from '@/lib/errors';
+import { answerLost, describeError, isApiError } from '@/lib/errors';
 import { formatZoned, humanize, shortDigest } from '@/lib/format';
 import { ApprovalChangeRows } from './ApprovalChangeRows';
 import { fhirSummary, kindOfPlan, receiverKind } from './derive';
@@ -40,15 +40,32 @@ export interface OpenedReview {
   /**
    * What the review this one replaces had read, when it was opened from a stopped review's "Review current plan": it
    * says what changed and why that decision was not recorded. Nothing else of that review carries over: no comment, no
-   * key, no press.
+   * key, no press. `lost` when that review's decision got no answer before the case moved: it may have been recorded.
    */
-  replaces?: ReviewedState;
+  replaces?: ReviewedState & { lost?: boolean };
 }
 
 /** A review whose decision is no longer recorded: why, as the page saw it, and as the server refused it. */
 const MOVED_WORDS = "The plan or the case changed since you opened this, so this decision can't be recorded.";
 const STALE_WORDS =
   'Approval no longer valid: the plan or the case changed since you opened this, so this decision was not recorded.';
+/**
+ * A decision whose answer never came (the connection dropped, a gateway answered in the API's place) and a case that
+ * moved after it: the move may be that very decision, recorded, so the review never says nothing was decided.
+ */
+const LOST_MOVED_WORDS =
+  'No answer came back for your decision, and the case has changed since: the change may be your decision, recorded. The Audit trail says who decided.';
+
+/**
+ * A decision whose answer never came, on a case the page has not seen move: the page can't tell whether it was
+ * recorded. The same press sends the same body under the same key (CONTRACTS 5, the Idempotency-Key). The server keeps
+ * the first reply only once the first decision has finished, so a retry is answered with that reply, or refused while
+ * the first is still being made or when it was cut off before its reply was kept (the case then reads decided, with who
+ * decided). Either way it is never decided twice.
+ */
+function lostWords(press: string, cause: string): string {
+  return `No answer came back${cause ? ` (${cause})` : ''}, so this page can't tell whether your decision was recorded. Pressing "${press}" again sends the same decision under the same key: if the first was recorded, the server answers with that record or refuses this press naming who decided; nothing is decided twice.`;
+}
 
 /** What a decision is bound to, said beside its controls: the plan, its encounter, its digest and the case version. */
 function bindingLine(opened: OpenedReview, encounter: string): string {
@@ -181,6 +198,15 @@ function ReviewBody({
   const said =
     !stale && isApiError(decide.error) && decide.error.isConflict ? describeError(decide.error) : '';
   const refused = said && !/[.!?]$/.test(said) ? `${said}.` : said;
+  // No answer came: the page can't tell whether the decision was recorded, so it never says it was not, and the next
+  // press resends exactly this decision (its comment held as sent) under the same key
+  const lost = answerLost(decide.error);
+  // Once an answer is lost it stays lost for this review: a later press refused (the first still running at the server,
+  // or cut off before its reply was kept) never makes the first one not recorded. The key it was lost under holds the
+  // comment as sent; "Reject instead" takes a new key, and its comment is free again.
+  const [lostKey, setLostKey] = useState<string | null>(null);
+  const lostOnce = lost || lostKey !== null;
+  const held = lost || lostKey === key;
   // Once stopped, the review stays stopped, closing included: its decision can't be sent again, and the reason it
   // became invalid stays to be read until the person moves on
   const [stopped, setStopped] = useState(false);
@@ -240,7 +266,8 @@ function ReviewBody({
         view={view}
         snapshot={snapshot}
         opened={opened}
-        why={stale ? STALE_WORDS : refused || MOVED_WORDS}
+        why={lostOnce ? LOST_MOVED_WORDS : stale ? STALE_WORDS : refused || MOVED_WORDS}
+        lost={lostOnce}
         binding={bindingLine(opened, encounter)}
         live={live}
         onClose={onClose}
@@ -249,6 +276,7 @@ function ReviewBody({
     );
   const submit = () => {
     if (moved) return;
+    const sentKey = key;
     onSending(true);
     decide.mutate(
       {
@@ -258,9 +286,12 @@ function ReviewBody({
           expectedVersion: opened.c.version,
           comment,
         },
-        idempotencyKey: key,
+        idempotencyKey: sentKey,
       },
       {
+        onError: (e) => {
+          if (answerLost(e)) setLostKey(sentKey);
+        },
         onSuccess: (reply) => {
           onClose();
           // In the trial the page itself plays out what came next, and announces it once
@@ -285,7 +316,8 @@ function ReviewBody({
   };
   return (
     <Stack gap="sm" ref={body}>
-      {/* A review that replaces a stopped one says so first: why that decision was not recorded and what changed */}
+      {/* A review that replaces a stopped one says so first: why that decision was not recorded (or may not have been, when
+          its answer never came) and what changed */}
       {opened.replaces ? (
         <Paper
           withBorder
@@ -302,7 +334,7 @@ function ReviewBody({
               {`Now reviewing the current plan, v${opened.view.plan.version}`}
             </Text>
             <Text size="sm">
-              {`${replacedWords(opened.replaces, opened)} Nothing is decided until you confirm it.`}
+              {`${replacedWords(opened.replaces, opened, opened.replaces.lost)} Nothing is decided until you confirm it.`}
             </Text>
             <WhatChanged rows={whatChanged(opened.replaces, opened)} />
           </Stack>
@@ -354,10 +386,14 @@ function ReviewBody({
         />
         <Textarea
           label="Comment"
-          description="Recorded with your decision"
+          description={
+            held ? 'Kept as sent, so pressing again sends the same decision' : 'Recorded with your decision'
+          }
           autosize
           minRows={2}
           value={comment}
+          // Held while the decision is on its way too: what is typed then would ride the same key with another body
+          readOnly={held || decide.isPending}
           onChange={(e) => setComment(e.currentTarget.value)}
         />
         {/* The decision's controls stay in view while the review scrolls, with whatever stops them said beside them */}
@@ -367,8 +403,10 @@ function ReviewBody({
             {bindingLine(opened, encounter)}
           </Text>
           {decide.error ? (
-            <Alert color="red" variant="light" role="alert">
-              {describeError(decide.error)}
+            <Alert color="red" variant="light" role="alert" data-testid="review-error">
+              {lost
+                ? lostWords(approving ? labels.approve : labels.reject, describeError(decide.error))
+                : describeError(decide.error)}
             </Alert>
           ) : null}
           <Group justify="space-between" gap="sm" wrap="wrap">
@@ -424,7 +462,8 @@ function ReviewBody({
  * fresh read can say whether it was reopened since. No decision can be pressed here.
  * "Review current plan" reads the case again and opens a new review on what it reads, which needs its own confirming
  * press; a read that fails says so and offers to try again, and a case with nothing left to decide says that, with
- * neither a review nor a decision to press.
+ * neither a review nor a decision to press. A review whose own decision got no answer before the case moved says the
+ * move may be that decision, and never that nothing was decided.
  */
 function StoppedReview({
   c,
@@ -432,6 +471,7 @@ function StoppedReview({
   snapshot,
   opened,
   why,
+  lost,
   binding,
   live,
   onClose,
@@ -442,6 +482,8 @@ function StoppedReview({
   snapshot: Snapshot | null | undefined;
   opened: OpenedReview;
   why: string;
+  /** No answer came for this review's decision: it may be recorded, so nothing here says it was not. */
+  lost: boolean;
   binding: string;
   live: boolean;
   onClose: () => void;
@@ -479,7 +521,7 @@ function StoppedReview({
           c: fresh.c,
           view: fresh.view,
           snapshot: fresh.snapshot,
-          replaces: { c: opened.c, view: opened.view, snapshot: opened.snapshot },
+          replaces: { c: opened.c, view: opened.view, snapshot: opened.snapshot, lost },
         });
       },
     });
@@ -500,14 +542,18 @@ function StoppedReview({
       </Text>
       {read.isError ? (
         <Alert color="red" variant="light" role="alert" data-testid="review-current-failed">
-          {`The current plan could not be read: ${describeError(read.error)}. Nothing was decided; try again, or cancel.`}
+          {`The current plan could not be read: ${describeError(read.error)}. ${lost ? 'Try again, or cancel.' : 'Nothing was decided; try again, or cancel.'}`}
         </Alert>
       ) : null}
       {gone ? (
         <Alert color="gray" variant="light" role="alert" data-testid="review-current-gone">
           {gone.state === 'awaiting_approval'
-            ? 'The case has no plan to decide on now. Nothing was decided in this review.'
-            : `The case is no longer waiting for a decision: it is ${humanize(gone.state).toLowerCase()} now. Nothing was decided in this review.`}
+            ? `The case has no plan to decide on now.${lost ? '' : ' Nothing was decided in this review.'}`
+            : `The case is no longer waiting for a decision: it is ${humanize(gone.state).toLowerCase()} now. ${
+                lost
+                  ? 'Your decision may be what moved it: the Audit trail says who decided.'
+                  : 'Nothing was decided in this review.'
+              }`}
         </Alert>
       ) : null}
       <Group justify="flex-end" gap="sm" wrap="wrap">

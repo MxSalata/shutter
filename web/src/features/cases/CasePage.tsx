@@ -40,6 +40,7 @@ import { WarehouseHistoryPanel } from './case/WarehouseHistoryPanel';
 import { revealSection } from './case/revealSection';
 import { EscalationPanel } from './case/EscalationPanel';
 import { AbandonPanel } from './case/AbandonPanel';
+import { RestartNotice } from './case/RestartNotice';
 import { CaseTimeline } from './case/CaseTimeline';
 import { CaseStory, type StoryStep } from './case/CaseStory';
 import { BoardPanel } from './case/BoardPanel';
@@ -382,6 +383,8 @@ function CaseBody({ c }: { c: CaseDetail }) {
         onStage={showStage}
         investigation={boardOnTop ? 'the board' : undefined}
       />
+      {/* A restart the case has not moved on from: when, and what to do now (CONTRACTS 12, the start sweep) */}
+      <RestartNotice c={c} events={events.data} />
       <S8RulesNote c={c} />
       <CounterpartStrip
         c={c}
