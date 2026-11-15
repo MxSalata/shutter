@@ -1995,7 +1995,8 @@ demo items, switched off on a site install with the others.
 - **The demo flag.** The module manifest declares the IPM parameters `demo` and `production` (both empty by default)
   and invokes `Shutter.Setup.InstallStatus(${root}, ${demo}, ${production})`, whose `%Status` IPM checks: a failed install
   stops the load and the Docker build. `zpm "load <dir> -Ddemo=0"` installs for a site. An empty `demo` keeps the flag
-  `^Shutter.Config("demo")` already holds and is 1 only when none is stored, a first install; an explicit 1 or 0 always
+  `^Shutter.Config("demo")` already holds and is 1 only when none is stored (a first install, or a load after the uninstall,
+  which kills `^Shutter.Config`); an explicit 1 or 0 always
   wins (`Shutter.Setup.DemoSetting`, 1.4.8), so an upgrade with no `-Ddemo` keeps a site's install a site's. Every install creates
   `^Shutter.Config` (root, demo, version, mode), the folders under `<mgr>/shutter/`, the resources `Shutter_Operate`,
   `Shutter_Approve` and `Shutter_Intake`, the roles `Shutter_Operator`, `Shutter_Approver`, `Shutter_DownstreamClient`,
