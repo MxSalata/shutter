@@ -18893,7 +18893,11 @@
           },
           "effectivePattern": {
             "type": "object",
-            "description": "The pattern the matcher uses when the recheck dropped a predicate (R14)."
+            "description": "The pattern the matcher uses when a recheck dropped a predicate (R14). It stays until a new version is approved."
+          },
+          "effectiveScope": {
+            "type": "object",
+            "description": "The scope the matcher uses when a recheck dropped a scope fact that the entry's own matching fixture reads differently under this release (R14). It stays until a new version is approved."
           },
           "suspended": {
             "type": "object",

@@ -52,8 +52,14 @@ Property NeedsReview As %Boolean [ InitialExpression = 0 ];
 Property ReviewJSON As %String(MAXLEN = "");
 
 /// The pattern the matcher uses when the recheck dropped a predicate: the active version's without it, so the entry
-/// matches more and never less. Empty when the version's own pattern stands.
+/// matches more and never less. Empty when the version's own pattern stands. What a recheck dropped stays dropped until
+/// a new version of the entry is approved.
 Property EffectiveJSON As %String(MAXLEN = "");
+
+/// The scope the matcher uses when the recheck dropped a scope fact (a fact the entry's own matching fixture reads
+/// differently under this release): the active version's without it, so the entry matches more and never less. Empty
+/// when the version's own scope stands; kept, as EffectiveJSON is, until a new version is approved.
+Property EffectiveScopeJSON As %String(MAXLEN = "");
 
 Property SuspendedBy As %String(MAXLEN = 160);
 
@@ -94,23 +100,33 @@ ClassMethod Generation() As %Integer
 }
 
 /// What the catalogue's version carries after the shipped list: "" on a site that never activated an entry (its
-/// version string stays the shipped one), else ";g<generation>:" and the active entries' ids and versions.
+/// version string stays the shipped one), else ";g<generation>:" and the active entries' ids and versions. When the
+/// entries can't be read the part after the generation is "unreadable", which no plan's version ever equals.
 ClassMethod VersionSuffix() As %String
 {
     Set generation = ..Generation()
     If generation = 0 Quit ""
-    Quit ";g" _ generation _ ":" _ ..ActiveIds()
+    Set ids = ..ActiveIds(, .problem)
+    Quit ";g" _ generation _ ":" _ $SELECT(problem '= "": "unreadable", 1: ids)
 }
 
-/// The active entries as "L1@2,L4@1", in the order they were made, leaving one out when asked.
-ClassMethod ActiveIds(exceptId As %String = "") As %String
+/// The active entries as "L1@2,L4@1", in the order they were made, leaving one out when asked. A query that fails sets
+/// <var>problem</var>: the matcher then answers error (R13), never "no entries".
+ClassMethod ActiveIds(exceptId As %String = "", Output problem As %String) As %String
 {
-    Set out = ""
+    Set out = "", problem = ""
     Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT EntryId, ActiveVersion FROM Shutter_Catalogue.SiteEntry WHERE State = 'active' ORDER BY ID")
-    While rs.%Next() {
-        Continue:(rs.%Get("EntryId") = exceptId)
-        Set out = out _ $SELECT(out = "": "", 1: ",") _ rs.%Get("EntryId") _ "@" _ rs.%Get("ActiveVersion")
+    If rs.%SQLCODE < 0 Set problem = "the active site entries cannot be listed (SQLCODE " _ rs.%SQLCODE _ ")" Quit ""
+    Set sc = $$$OK
+    Try {
+        While rs.%Next(.sc) {
+            Continue:(rs.%Get("EntryId") = exceptId)
+            Set out = out _ $SELECT(out = "": "", 1: ",") _ rs.%Get("EntryId") _ "@" _ rs.%Get("ActiveVersion")
+        }
+    } Catch ex {
+        Set sc = ex.AsStatus()
     }
+    If $$$ISERR(sc) || (rs.%SQLCODE < 0) Set problem = "the active site entries cannot be listed: " _ $SELECT($$$ISERR(sc): $SYSTEM.Status.GetErrorText(sc), 1: "SQLCODE " _ rs.%SQLCODE) Quit ""
     Quit out
 }
 
@@ -123,13 +139,13 @@ ClassMethod ActiveCount(exceptId As %String = "") As %Integer
 }
 
 /// One entry as the matcher reads it: what a stored row gives it and nothing else.
-ClassMethod MatchItem(id As %String, version As %Integer, content As %DynamicObject, pattern As %DynamicObject) As %DynamicObject
+ClassMethod MatchItem(id As %String, version As %Integer, content As %DynamicObject, pattern As %DynamicObject, scope As %DynamicObject = "") As %DynamicObject
 {
     Set json = "Shutter.Util.Json"
     Set m = {}
     Set m.id = id, m.version = +version, m.title = $CLASSMETHOD(json, "Str", content, "title")
     Do m.%Set("priority", +$CLASSMETHOD(json, "Str", content, "priority", 100), "number")
-    Set m.scope = $SELECT($ISOBJECT(content.%Get("scope")): content.%Get("scope"), 1: {})
+    Set m.scope = $SELECT($ISOBJECT(scope): scope, $ISOBJECT(content.%Get("scope")): content.%Get("scope"), 1: {})
     Set m.pattern = $SELECT($ISOBJECT(pattern): pattern, 1: {})
     Set m.why = $CLASSMETHOD(json, "Str", content, "why"), m.team = $CLASSMETHOD(json, "Str", content, "team")
     Set m.instructions = $CLASSMETHOD(json, "Str", content, "instructions"), m.prose = $CLASSMETHOD(json, "Str", content, "prose")
@@ -157,31 +173,48 @@ ClassMethod Ordered(list As %DynamicArray, extra As %DynamicObject = "") As %Dyn
 
 /// The active entries as the matcher reads them, in its order. After an upgrade they are rechecked first (R14), before
 /// any case is matched. An active row that can't be read sets <var>problem</var>: the matcher then answers error, which
-/// stops every write, and the entry is never skipped (R13).
+/// stops every write, and the entry is never skipped (R13). So does a site with active entries that no recheck has
+/// completed under this release yet (one could not take the lock, or could not save what it found): the recheck is tried
+/// again at every match until one completes, and until then no case is matched on entries that were not checked.
 ClassMethod ActiveList(Output problem As %String, exceptId As %String = "") As %DynamicArray
 {
     Set problem = "", list = []
-    // A caller that only reads (a role with no write access to the database) cannot run the recheck; the next process
-    // that can, does.
-    If $GET(^Shutter.Catalogue.Site("checked")) '= $PARAMETER("Shutter.Setup", "VERSION") {
-        Try { Do ..Recheck("upgrade") } Catch ex { }
+    Set release = $PARAMETER("Shutter.Setup", "VERSION")
+    If $GET(^Shutter.Catalogue.Site("checked")) '= release {
+        // A caller that only reads (a role with no write access to the database) cannot complete the recheck: it gets
+        // error too, until a process that can has run it.
+        Set ok = 0
+        Try { Do ..Recheck("upgrade", 1, .ok) } Catch ex { Set ok = 0 }
+        If 'ok && (..ActiveCount() > 0) Set problem = "the site entries have not been rechecked under release " _ release _ " yet (the recheck is tried again at the next match)" Quit []
     }
     Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID, EntryId FROM Shutter_Catalogue.SiteEntry WHERE State = 'active' ORDER BY ID")
-    While rs.%Next() {
-        Set id = rs.%Get("EntryId")
-        Continue:(id = exceptId)
-        Set e = ..%OpenId(rs.%Get("ID"))
-        If '$ISOBJECT(e) Set problem = "the row of site entry " _ id _ " cannot be opened" Quit
-        Set v = ##class(Shutter.Catalogue.SiteEntryVersion).Find(e.EntryId, e.ActiveVersion)
-        Set content = $SELECT($ISOBJECT(v): v.Content(), 1: "")
-        If '$ISOBJECT(content) Set problem = "version " _ e.ActiveVersion _ " of site entry " _ id _ " cannot be read" Quit
-        Set pattern = content.%Get("pattern")
-        If e.EffectiveJSON '= "" Set pattern = ##class(Shutter.Util.Json).Parse(e.EffectiveJSON, .sc)
-        If '$ISOBJECT(pattern) || 'pattern.%IsA("%Library.DynamicObject") Set problem = "the pattern of site entry " _ id _ " cannot be read" Quit
-        Set scope = content.%Get("scope")
-        If $ISOBJECT(scope) && 'scope.%IsA("%Library.DynamicObject") Set problem = "the scope of site entry " _ id _ " cannot be read" Quit
-        Do list.%Push(..MatchItem(e.EntryId, e.ActiveVersion, content, pattern))
+    If rs.%SQLCODE < 0 Set problem = "the active site entries cannot be read (SQLCODE " _ rs.%SQLCODE _ ")" Quit []
+    Set rsc = $$$OK
+    Try {
+        While rs.%Next(.rsc) {
+            Set id = rs.%Get("EntryId")
+            Continue:(id = exceptId)
+            Set e = ..%OpenId(rs.%Get("ID"))
+            If '$ISOBJECT(e) Set problem = "the row of site entry " _ id _ " cannot be opened" Quit
+            Set v = ##class(Shutter.Catalogue.SiteEntryVersion).Find(e.EntryId, e.ActiveVersion)
+            Set content = $SELECT($ISOBJECT(v): v.Content(), 1: "")
+            If '$ISOBJECT(content) Set problem = "version " _ e.ActiveVersion _ " of site entry " _ id _ " cannot be read" Quit
+            Set pattern = content.%Get("pattern")
+            If e.EffectiveJSON '= "" Set pattern = ##class(Shutter.Util.Json).Parse(e.EffectiveJSON, .sc)
+            If '$ISOBJECT(pattern) || 'pattern.%IsA("%Library.DynamicObject") Set problem = "the pattern of site entry " _ id _ " cannot be read" Quit
+            Set scope = content.%Get("scope")
+            If e.EffectiveScopeJSON '= "" {
+                Set scope = ##class(Shutter.Util.Json).Parse(e.EffectiveScopeJSON, .sc)
+                If '$ISOBJECT(scope) || 'scope.%IsA("%Library.DynamicObject") Set problem = "the widened scope of site entry " _ id _ " cannot be read" Quit
+            }
+            If $ISOBJECT(scope) && 'scope.%IsA("%Library.DynamicObject") Set problem = "the scope of site entry " _ id _ " cannot be read" Quit
+            Do list.%Push(..MatchItem(e.EntryId, e.ActiveVersion, content, pattern, scope))
+        }
+    } Catch ex {
+        Set rsc = ex.AsStatus()
     }
+    // A row the query itself cannot read ends the listing early: it is a problem, never the end of the entries (R13).
+    If (problem = "") && ($$$ISERR(rsc) || (rs.%SQLCODE < 0)) Set problem = "the active site entries cannot be read: " _ $SELECT($$$ISERR(rsc): $SYSTEM.Status.GetErrorText(rsc), 1: "SQLCODE " _ rs.%SQLCODE)
     If problem '= "" Quit []
     Quit ..Ordered(list)
 }
@@ -241,6 +274,7 @@ Method Describe(full As %Boolean = 0) As %DynamicObject
     Do o.%Set("needsReview", ''..NeedsReview, "boolean")
     If ..ReviewJSON '= "" Set o.review = $CLASSMETHOD(json, "Parse", ..ReviewJSON, .sc)
     If ..EffectiveJSON '= "" Set o.effectivePattern = $CLASSMETHOD(json, "Parse", ..EffectiveJSON, .sc)
+    If ..EffectiveScopeJSON '= "" Set o.effectiveScope = $CLASSMETHOD(json, "Parse", ..EffectiveScopeJSON, .sc)
     If ..State = "suspended" Set o.suspended = {"by": (..SuspendedBy), "at": (..SuspendedAt), "reason": (..SuspendedReason)}
     Do o.%Set("casesSent", ..CasesSent(..EntryId), "number"), o.%Set("casesSent30", ..CasesSent(..EntryId, 30), "number")
     Set o.createdBy = ..CreatedBy, o.createdAt = ..CreatedAt, o.updatedAt = ..UpdatedAt
@@ -604,7 +638,10 @@ ClassMethod Decide(id As %String, body As %DynamicObject, actor As %String, sour
         }
         Set entry.SuspendedBy = "", entry.SuspendedAt = "", entry.SuspendedReason = ""
         Set entry.ProposalAction = "", entry.ProposalVersion = "", entry.ProposalDigest = "", entry.ProposalBy = "", entry.ProposalAt = "", entry.ProposalProofId = ""
-        If entry.State = "active" { Do entry.Review(##class(Shutter.Catalogue.Vocabulary).Current(), "approval") } Else { Set entry.NeedsReview = 0, entry.ReviewJSON = "", entry.EffectiveJSON = "" }
+        // A newly approved version is a person's review: what earlier rechecks dropped, and their flag, clear only here.
+        // A resumption keeps them, since its version is the one they were found on.
+        If (action = "activate") || (entry.State '= "active") Set entry.NeedsReview = 0, entry.ReviewJSON = "", entry.EffectiveJSON = "", entry.EffectiveScopeJSON = ""
+        If entry.State = "active" Do entry.Review(##class(Shutter.Catalogue.Vocabulary).Current(), "approval")
         $$$ThrowOnError(entry.Touch())
         Set generation = $INCREMENT(^Shutter.Catalogue.Site("generation"))
         Set words = $SELECT(alone: " The same person proposed and approved it: the two-person rule is lifted.", 1: "")
@@ -662,32 +699,60 @@ ClassMethod Suspend(id As %String, reason As %String, actor As %String, source A
 
 /// Check every active or suspended entry against the vocabulary and the site profile in force, and replay its fixtures:
 /// after an upgrade (the catalogue's seed, or the first match under a new release) and after every save of the site
-/// profile. Nothing is retired or narrowed: an entry can only come out matching more, flagged for a person. Returns how
-/// many entries are flagged. <var>reload</var> 0 keeps the vocabulary in force instead of reading the installed file.
-ClassMethod Recheck(trigger As %String = "upgrade", reload As %Boolean = 1) As %Integer
+/// profile. Nothing is retired or narrowed: an entry can only come out matching more, flagged for a person, and what one
+/// recheck dropped no later one restores. An entry that comes out widened raises the generation, so a plan made before
+/// it is not completed, as after an activation. Returns how many entries are flagged; <var>ok</var> is 1 only when every
+/// entry was checked and what changed was saved with its event, and only then is the release recorded as checked. A
+/// recheck that could not take the lock or save is tried again at the next match, which answers error until one
+/// completes (ActiveList). <var>reload</var> 0 keeps the vocabulary in force instead of reading the installed file.
+ClassMethod Recheck(trigger As %String = "upgrade", reload As %Boolean = 1, Output ok As %Boolean) As %Integer
 {
-    Set flagged = 0
-    If '..Lock() Quit 0
+    Set flagged = 0, ok = 0
+    If '..Lock() {
+        Kill ^Shutter.Catalogue.Site("checked")
+        Quit 0
+    }
+    Set complete = 1
     Try {
         Set root = $GET(^Shutter.Config("root"))
         If reload && (root '= "") Do ##class(Shutter.Catalogue.Vocabulary).Load(##class(%File).NormalizeDirectory(root) _ "knowledge/catalogue/vocabulary.json")
         Set vocabulary = ##class(Shutter.Catalogue.Vocabulary).Current()
         Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Shutter_Catalogue.SiteEntry WHERE State IN ('active', 'suspended') ORDER BY ID")
+        If rs.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$GeneralError, "the site entries cannot be listed (SQLCODE " _ rs.%SQLCODE _ ")"))
         While rs.%Next() {
             Set e = ..%OpenId(rs.%Get("ID"))
-            Continue:'$ISOBJECT(e)
-            Set before = e.NeedsReview _ "|" _ e.EffectiveJSON _ "|" _ e.ReviewWords()
-            Do e.Review(vocabulary, trigger)
-            Set after = e.NeedsReview _ "|" _ e.EffectiveJSON _ "|" _ e.ReviewWords()
+            If '$ISOBJECT(e) Set complete = 0 Continue
+            Set before = e.NeedsReview _ "|" _ e.EffectiveJSON _ "|" _ e.EffectiveScopeJSON _ "|" _ e.ReviewWords()
+            Do e.Review(vocabulary, trigger, .widened)
+            Set after = e.NeedsReview _ "|" _ e.EffectiveJSON _ "|" _ e.EffectiveScopeJSON _ "|" _ e.ReviewWords()
             If e.NeedsReview Set flagged = flagged + 1
-            If before '= after {
-                Do e.%Save()
-                Do ##class(Shutter.Catalogue.SiteEntryEvent).Record(e.EntryId, e.ActiveVersion, "rechecked", "system", trigger, $SELECT(e.NeedsReview: "Needs review: " _ e.ReviewWords(), 1: "Rechecked: nothing to review"))
+            Continue:(before = after)
+            Set level = $TLEVEL
+            Try {
+                TSTART
+                $$$ThrowOnError(e.%Save())
+                Set words = $SELECT(e.NeedsReview: "Needs review: " _ e.ReviewWords(), 1: "Rechecked: nothing to review")
+                // The generation is raised last, once the row and its event are written: a rolled back transaction does not
+                // undo an increment. Every change of the generation holds this lock, so the next value is known here.
+                Set raise = widened && (e.State = "active")
+                If raise Set words = words _ "; the entry matches more now, so the catalogue generation is " _ (..Generation() + 1)
+                $$$ThrowOnError(##class(Shutter.Catalogue.SiteEntryEvent).Record(e.EntryId, e.ActiveVersion, "rechecked", "system", trigger, words))
+                If raise Set generation = $INCREMENT(^Shutter.Catalogue.Site("generation"))
+                TCOMMIT
+            } Catch one {
+                While $TLEVEL > level { TROLLBACK 1 }
+                Set complete = 0
+                Try { Do ##class(%SYS.System).WriteToConsoleLog("Shutter: the recheck of site entry " _ e.EntryId _ " could not be saved: " _ one.DisplayString(), 0, 1) } Catch ex2 { }
             }
         }
-        Set ^Shutter.Catalogue.Site("checked") = $PARAMETER("Shutter.Setup", "VERSION")
     } Catch ex {
+        Set complete = 0
         Try { Do ##class(%SYS.System).WriteToConsoleLog("Shutter: the recheck of the site entries failed: " _ ex.DisplayString(), 0, 1) } Catch ex2 { }
+    }
+    If complete {
+        Set ^Shutter.Catalogue.Site("checked") = $PARAMETER("Shutter.Setup", "VERSION"), ok = 1
+    } Else {
+        Kill ^Shutter.Catalogue.Site("checked")
     }
     Do ..Unlock()
     Quit flagged
@@ -703,78 +768,147 @@ Method ReviewWords() As %String
         Set list = r.%Get(key)
         Continue:'$ISOBJECT(list)
         Set it = list.%GetIterator()
-        While it.%GetNext(, .item) { Set out = out _ $SELECT(out = "": "", 1: "; ") _ $SELECT($ISOBJECT(item): item.condition _ " dropped (" _ item.why _ ")", 1: item) }
+        While it.%GetNext(, .item) {
+            If $ISOBJECT(item) {
+                Set name = $SELECT(item.%Get("part") = "scope": "the scope's " _ item.condition, 1: item.condition)
+                Set out = out _ $SELECT(out = "": "", 1: "; ") _ name _ " dropped (" _ item.why _ ")"
+            } Else {
+                Set out = out _ $SELECT(out = "": "", 1: "; ") _ item
+            }
+        }
     }
     Quit out
 }
 
 /// This entry checked (R14). A predicate that names a condition or a value the vocabulary no longer knows is dropped
 /// whole, and so is a predicate whose value on one of the entry's own matching fixtures reads differently now than when
-/// the version was written: the entry then matches more, never less, and is flagged. A receiver or a team the site
-/// profile no longer names, a near miss the entry now matches, and a shipped entry that asks for a person on every case
-/// this one matches, are flagged and change nothing. Sets NeedsReview, ReviewJSON and EffectiveJSON; the caller saves.
-Method Review(vocabulary As %DynamicObject, trigger As %String) As %Boolean
+/// the version was written, and a scope fact (receiver, sending system, ward, reason word) that such a fixture reads
+/// differently: the entry then matches more, never less, and is flagged. A matching fixture the entry no longer matches
+/// as a whole, a receiver or a team the site profile no longer names, a near miss the entry now matches, and a shipped
+/// entry that asks for a person on every case this one matches, are flagged and change nothing.
+///
+/// What an earlier recheck dropped stays dropped, and the flag stays set, until a new version is approved (Decide clears
+/// them): a release that reads a fixture as it did before, or a fixture whose case is no longer stored, never narrows
+/// the entry back. Sets NeedsReview, ReviewJSON, EffectiveJSON and EffectiveScopeJSON; <var>widened</var> says whether
+/// this check dropped anything more. The caller saves.
+Method Review(vocabulary As %DynamicObject, trigger As %String, Output widened As %Boolean) As %Boolean
 {
     Set json = "Shutter.Util.Json", vocabularyClass = "Shutter.Catalogue.Vocabulary", matcher = "Shutter.Catalogue.Matcher"
+    Set widened = 0
     Set v = ##class(Shutter.Catalogue.SiteEntryVersion).Find(..EntryId, ..ActiveVersion)
     Set content = $SELECT($ISOBJECT(v): v.Content(), 1: "")
     // A row that can't be read is not this method's to mend: the matcher answers error for it (R13).
     If '$ISOBJECT(content) || '$ISOBJECT(content.%Get("pattern")) Quit ..NeedsReview
     Set pattern = ##class(%DynamicObject).%FromJSON(content.%Get("pattern").%ToJSON())
+    Set scope = $SELECT($ISOBJECT(content.%Get("scope")): ##class(%DynamicObject).%FromJSON(content.%Get("scope").%ToJSON()), 1: {})
     Set dropped = [], notes = []
+    // What earlier rechecks found, carried over: their drops still apply, their notes still stand.
+    Set old = $SELECT(..ReviewJSON '= "": $CLASSMETHOD(json, "Parse", ..ReviewJSON, .sc), 1: "")
+    If $ISOBJECT(old) && $ISOBJECT(old.%Get("dropped")) {
+        Set it = old.%Get("dropped").%GetIterator()
+        While it.%GetNext(, .item) {
+            Continue:'$ISOBJECT(item)
+            Set part = $SELECT(item.%Get("part") = "scope": "scope", 1: "pattern"), name = $CLASSMETHOD(json, "Str", item, "condition")
+            Continue:(name = "")||$DATA(seen(part, name))
+            Set seen(part, name) = ""
+            If part = "scope" { Do scope.%Remove(name) } Else { Do pattern.%Remove(name) }
+            Do dropped.%Push(item)
+        }
+    }
+    If $ISOBJECT(old) && $ISOBJECT(old.%Get("notes")) {
+        Set it = old.%Get("notes").%GetIterator()
+        While it.%GetNext(, .note) { Do ..AddNote(notes, .said, note) }
+    }
+    // The widened pattern and scope in force, read too, so a drop is kept even if the review's words were lost.
+    For part = "pattern", "scope" {
+        Set text = $SELECT(part = "pattern": ..EffectiveJSON, 1: ..EffectiveScopeJSON)
+        Continue:text=""
+        Set effective = $CLASSMETHOD(json, "Parse", text, .sc)
+        Continue:'$ISOBJECT(effective)
+        Set mine = $SELECT(part = "pattern": pattern, 1: scope), names = "", it = mine.%GetIterator()
+        While it.%GetNext(.name) { Set names = names _ $LISTBUILD(name) }
+        For i = 1:1:$LISTLENGTH(names) {
+            Set name = $LIST(names, i)
+            Continue:effective.%IsDefined(name)
+            Do mine.%Remove(name)
+            Set seen(part, name) = ""
+            Do dropped.%Push({"condition": (name), "part": (part), "why": "an earlier recheck dropped it"})
+        }
+    }
+    Set carried = dropped.%Size()
     If '$ISOBJECT(vocabulary) {
-        Do notes.%Push("No condition vocabulary is installed, so the pattern's words were not checked")
+        Do ..AddNote(notes, .said, "No condition vocabulary is installed, so the pattern's words were not checked")
     } Else {
         Set it = content.%Get("pattern").%GetIterator()
         While it.%GetNext(.condition, .values) {
+            Continue:'pattern.%IsDefined(condition)
             Set allowed = $CLASSMETHOD(vocabularyClass, "ValuesOf", vocabulary, condition)
-            If '$ISOBJECT(allowed) Do pattern.%Remove(condition), dropped.%Push({"condition": (condition), "why": "this release's vocabulary has no such condition"}) Continue
+            If '$ISOBJECT(allowed) Do pattern.%Remove(condition), dropped.%Push({"condition": (condition), "part": "pattern", "why": "this release's vocabulary has no such condition"}) Continue
             Set vi = values.%GetIterator()
             While vi.%GetNext(, .word) {
-                If '$CLASSMETHOD(vocabularyClass, "In", allowed, word) Do pattern.%Remove(condition), dropped.%Push({"condition": (condition), "why": ("this release's vocabulary has no value " _ word _ " for it")}) Quit
+                If '$CLASSMETHOD(vocabularyClass, "In", allowed, word) Do pattern.%Remove(condition), dropped.%Push({"condition": (condition), "part": "pattern", "why": ("this release's vocabulary has no value " _ word _ " for it")}) Quit
             }
         }
     }
-    Set scope = content.%Get("scope")
     Set fixtures = content.%Get("fixtures")
     If $ISOBJECT(fixtures) {
         Set fi = fixtures.%GetIterator()
         While fi.%GetNext(, .f) {
             Set caseId = $CLASSMETHOD(json, "Str", f, "case"), expect = $CLASSMETHOD(json, "Str", f, "expect")
             Set now = ##class(Shutter.Catalogue.SiteEntryProof).Replay(f, .source)
-            If source = "frozen" Do notes.%Push("Case " _ caseId _ " is no longer stored, so its evidence was not read again: only the vocabulary was checked for it") Continue
+            If source = "frozen" Do ..AddNote(notes, .said, "Case " _ caseId _ " is no longer stored, so its evidence was not read again: only the vocabulary was checked for it") Continue
             If expect = "match" {
                 Set frozen = f.%Get("conditions")
-                Continue:'$ISOBJECT(frozen)
-                Set names = "", pi = pattern.%GetIterator()
-                While pi.%GetNext(.condition) { Set names = names _ $LISTBUILD(condition) }
-                For i = 1:1:$LISTLENGTH(names) {
-                    Set condition = $LIST(names, i)
-                    Set was = $CLASSMETHOD(json, "Str", frozen, condition), is = $CLASSMETHOD(json, "Str", now.conditions, condition)
-                    If was '= is Do pattern.%Remove(condition), dropped.%Push({"condition": (condition), "why": ("case " _ caseId _ " read " _ was _ " when the version was written and reads " _ $SELECT(is = "": "nothing", 1: is) _ " under this release")})
+                If $ISOBJECT(frozen) {
+                    Set names = "", pi = pattern.%GetIterator()
+                    While pi.%GetNext(.condition) { Set names = names _ $LISTBUILD(condition) }
+                    For i = 1:1:$LISTLENGTH(names) {
+                        Set condition = $LIST(names, i)
+                        Set was = $CLASSMETHOD(json, "Str", frozen, condition), is = $CLASSMETHOD(json, "Str", now.conditions, condition)
+                        If was '= is Do pattern.%Remove(condition), dropped.%Push({"condition": (condition), "part": "pattern", "why": ("case " _ caseId _ " read " _ was _ " when the version was written and reads " _ $SELECT(is = "": "nothing", 1: is) _ " under this release")})
+                    }
                 }
+                // The scope facts the entry names, as the fixture read them when it was frozen and as they read now.
+                Set frozenScope = f.%Get("scope")
+                If $ISOBJECT(frozenScope) {
+                    Set names = "", si = scope.%GetIterator()
+                    While si.%GetNext(.name) { Set names = names _ $LISTBUILD(name) }
+                    For i = 1:1:$LISTLENGTH(names) {
+                        Set name = $LIST(names, i)
+                        Set was = $CLASSMETHOD(json, "Str", frozenScope, name), is = $CLASSMETHOD(json, "Str", now.scope, name)
+                        If name = "reason_code" Set was = $ZCONVERT(was, "L"), is = $ZCONVERT(is, "L")
+                        If was '= is Do scope.%Remove(name), dropped.%Push({"condition": (name), "part": "scope", "why": ("case " _ caseId _ " read " _ $SELECT(was = "": "nothing", 1: was) _ " when the version was written and reads " _ $SELECT(is = "": "nothing", 1: is) _ " under this release")})
+                    }
+                }
+                // And the fixture as a whole: the entry, as it now stands, must still match the case it was approved on.
+                If '($CLASSMETHOD(matcher, "ScopeHolds", scope, now.scope) && $CLASSMETHOD(matcher, "SiteHolds", pattern, now.conditions)) Do ..AddNote(notes, .said, "The entry no longer matches case " _ caseId _ ", which it was approved to match")
             } ElseIf $CLASSMETHOD(matcher, "ScopeHolds", scope, now.scope) && $CLASSMETHOD(matcher, "SiteHolds", pattern, now.conditions) {
-                Do notes.%Push("The entry now matches case " _ caseId _ ", which it was approved to leave alone")
+                Do ..AddNote(notes, .said, "The entry now matches case " _ caseId _ ", which it was approved to leave alone")
             }
         }
     }
     // The site profile: a receiver or a team it no longer names silently disables that part of the entry.
-    Set receivers = $SELECT($ISOBJECT(scope): scope.%Get("receiver"), 1: "")
+    Set receivers = scope.%Get("receiver")
     If $ISOBJECT(receivers) {
         Set ri = receivers.%GetIterator()
-        While ri.%GetNext(, .name) { If '$ISOBJECT(##class(Shutter.Store.SiteProfile).Receiver(name)) Do notes.%Push("The site profile no longer names the receiver " _ name _ ", so the entry matches no case of it") }
+        While ri.%GetNext(, .name) { If '$ISOBJECT(##class(Shutter.Store.SiteProfile).Receiver(name)) Do ..AddNote(notes, .said, "The site profile no longer names the receiver " _ name _ ", so the entry matches no case of it") }
     }
     Set team = $CLASSMETHOD(json, "Str", content, "team")
-    If (team '= "") && '##class(Shutter.Catalogue.SiteEntryVersion).TeamKnown(team) Do notes.%Push("The site profile no longer names the team " _ team)
+    If (team '= "") && '##class(Shutter.Catalogue.SiteEntryVersion).TeamKnown(team) Do ..AddNote(notes, .said, "The site profile no longer names the team " _ team)
     Set oi = ##class(Shutter.Catalogue.SiteEntryVersion).Overlap(content.%Get("pattern")).%GetIterator()
     While oi.%GetNext(, .row) {
-        If row.covers && (row.decides = "person") && 'row.leads Do notes.%Push("The shipped entry " _ row.id _ " asks for a person on every case this pattern matches")
+        If row.covers && (row.decides = "person") && 'row.leads Do ..AddNote(notes, .said, "The shipped entry " _ row.id _ " asks for a person on every case this pattern matches")
     }
-    // The first note, of a vocabulary that is not installed, and a fixture no longer stored, flag nothing by themselves.
-    Set flag = (dropped.%Size() > 0), ni = notes.%GetIterator()
+    // The first note, of a vocabulary that is not installed, and a fixture no longer stored, flag nothing by themselves;
+    // a flag once set stays until a new version is approved.
+    Set flag = (dropped.%Size() > 0) || ..NeedsReview, ni = notes.%GetIterator()
     While ni.%GetNext(, .note) { If (note '[ "is no longer stored") && (note '[ "No condition vocabulary") Set flag = 1 }
+    Set widened = (dropped.%Size() > carried)
     Set ..NeedsReview = flag
-    Set ..EffectiveJSON = $SELECT(dropped.%Size() > 0: pattern.%ToJSON(), 1: "")
+    Set anyPattern = 0, anyScope = 0, di = dropped.%GetIterator()
+    While di.%GetNext(, .item) { If item.%Get("part") = "scope" { Set anyScope = 1 } Else { Set anyPattern = 1 } }
+    Set ..EffectiveJSON = $SELECT(anyPattern: pattern.%ToJSON(), 1: "")
+    Set ..EffectiveScopeJSON = $SELECT(anyScope: scope.%ToJSON(), 1: "")
     If (dropped.%Size() = 0) && (notes.%Size() = 0) {
         Set ..ReviewJSON = ""
     } Else {
@@ -783,6 +917,15 @@ Method Review(vocabulary As %DynamicObject, trigger As %String) As %Boolean
         Set ..ReviewJSON = review.%ToJSON()
     }
     Quit flag
+}
+
+/// A note added once.
+ClassMethod AddNote(notes As %DynamicArray, ByRef said, note As %String) [ Private ]
+{
+    Set key = $EXTRACT(note, 1, 200) _ "|" _ $ZCRC(note, 7)
+    If $DATA(said(key)) Quit
+    Set said(key) = ""
+    Do notes.%Push(note)
 }
 
 // ---- removal ----
@@ -880,6 +1023,9 @@ Storage Default
 </Value>
 <Value name="22">
 <Value>UpdatedAt</Value>
+</Value>
+<Value name="23">
+<Value>EffectiveScopeJSON</Value>
 </Value>
 </Data>
 <DataLocation>^Shutter.Catalogue.SiteEntryD</DataLocation>

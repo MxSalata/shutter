@@ -138,6 +138,18 @@ ClassMethod Approve(id As %String, action As %String, author As %String = "ut-au
     Quit ""
 }
 
+/// The site entries' lock held in a process of its own until ^Shutter.Test.SiteLock says release (a minute at most), as
+/// a long approval would hold it: run with JOB by the test of a recheck that cannot take the lock.
+ClassMethod HoldTheLock()
+{
+    LOCK +^Shutter.Catalogue.Site("lock"):5
+    If '$TEST Set ^Shutter.Test.SiteLock = "not held" Quit
+    Set ^Shutter.Test.SiteLock = "held"
+    For i = 1:1:600 { Quit:($GET(^Shutter.Test.SiteLock) = "release")  Hang 0.1 }
+    LOCK -^Shutter.Catalogue.Site("lock")
+    Set ^Shutter.Test.SiteLock = "done"
+}
+
 /// A matching case and a near miss, stored and closed, and an entry active for them. Returns the entry's id.
 ClassMethod ActiveEntry(Output match As Shutter.Store.Case, Output near As Shutter.Store.Case, Output problem As %String) As %String
 {
