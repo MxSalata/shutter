@@ -442,7 +442,12 @@ sees them and the scenarios are the same without them (36 at v1.62, 37 since S35
   down window it leaves the stand-in down, and P2's own `up` step brings it back. Nothing else.
 - `ListPathology()` lists the paths; `GET /scenarios` carries them as `pathology` (an empty list where the route is not
   installed), each with `kind` `pathology`, `latestCase` as a scenario has it and `latestOutage` (`{ "id", "state",
-  "openedAt" }` of the receiver's newest outage, for P2; otherwise null).
+  "openedAt" }` of the receiver's newest outage, for P2; otherwise null). The page polls it every two seconds while a run
+  plays, so (the 1.4.6 ultrareview's #8) the paths are read from the file once and kept in
+  `^Shutter.Scenarios("cache", "pathology")` with the file's path, size and time, read again when any of them changes
+  (`PathologyText`, which `FindPathology` reads too), and the route's check is kept for 60 seconds per hospital namespace
+  (`LabReady(1)`, `LABREADYSECONDS`; a run's own checks ask afresh). Every install clears what was kept
+  (`Setup.CreateFolders`), and the demo hospital's install clears the route's check.
 - **A path's waits** read only the cases its own run opens (`WaitForState` with the newest case row before the run), since
   a path's cases keep its tag from one run to the next.
 
