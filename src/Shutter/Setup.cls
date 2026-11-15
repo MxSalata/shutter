@@ -105,6 +105,10 @@ ClassMethod InstallStatus(root As %String = "", demo As %Boolean = 1, production
     Set sc = $$$OK
     Try {
         Set ns = $NAMESPACE
+        // What the site set on Shutter.Production's items, before anything here changes the definition, and while the
+        // version is still the earlier install's (Shutter.Util.SiteItems). A load took it before IPM reloaded the classes;
+        // run by hand (a rebuilt container), the install takes it now. KeepStatus puts it back at the end.
+        Do ##class(Shutter.Util.SiteItems).CaptureStatus()
         // SQL hands an empty argument to a procedure as $CHAR(0); an empty demo keeps the default.
         If root = $CHAR(0) Set root = ""
         If (demo = "") || (demo = $CHAR(0)) Set demo = 1
@@ -179,6 +183,9 @@ ClassMethod InstallStatus(root As %String = "", demo As %Boolean = 1, production
         Set sc = ##class(Shutter.FHIR.Install).RestoreItems() Quit:$$$ISERR(sc)
         // Scenario S35: the demo's FHIR receiver entry, its four items and the proof of an in-process conformance run.
         If demo && ##class(%Dictionary.CompiledClass).%ExistsId("FHIRFacade.Kit") Set sc = ##class(Shutter.FHIR.Install).Demo(root _ "knowledge/site/profile.json") Quit:$$$ISERR(sc)
+        // The compile rewrote the definition from the package: the pool sizes, enabled flags, settings and items the site
+        // set go back on it, after the install's own changes above; new items and settings keep the package's values (1.4.8).
+        Set sc = ##class(Shutter.Util.SiteItems).KeepStatus() Quit:$$$ISERR(sc)
         If demo Set sc = ..InstallDemoHospital(ns) Quit:$$$ISERR(sc)
     } Catch ex {
         Set sc = ex.AsStatus()
