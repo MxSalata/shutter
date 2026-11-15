@@ -7,7 +7,7 @@ import { answeringOf } from './settingsText';
 /**
  * Whether each task a person may come to do is ready for them here, now, and if not what stands in the way and what to do
  * next: read only, from what the app already reads (GET /me's `can`, GET /settings, GET /recovery-control, the site
- * profile, GET /costs). The pages keep their own checks and decide as before when a button is pressed; this says the same
+ * profile, GET /health's `last_live_run`, GET /costs). The pages keep their own checks and decide as before when a button is pressed; this says the same
  * facts together, before the press. Pure, so a table test holds every state.
  */
 
@@ -24,6 +24,7 @@ export type ConditionCode =
   | 'replays_only'
   | 'replay_edition'
   | 'no_key'
+  | 'mimic'
   | 'budget'
   | 'share'
   | 'provider'
@@ -44,12 +45,14 @@ export interface Condition {
 
 /**
  * A fact the readiness rests on, kept apart by kind (the review's U145-04): `set up`, what the installation is configured
- * to do; `now`, what holds at the moment the page read it (`at`, an ISO UTC time); `seen`, what the store shows happened.
+ * to do; `now`, what holds at the moment the page read it (`at`, an ISO UTC time); `seen`, what the store shows happened,
+ * with `started`, the ISO UTC time the run it names started, where it names one.
  */
 export interface Evidence {
   kind: 'set up' | 'now' | 'seen';
   words: string;
   at?: string;
+  started?: string;
 }
 
 export interface TaskReadiness {
@@ -75,8 +78,13 @@ export interface ReadinessInput {
   recoveryAt?: string;
   profile?: SiteProfile;
   profileAt?: string;
-  /** GET /costs `totals.liveRuns`: runs that reached a real model, all time. */
+  /** GET /costs `totals.liveRuns`: the board's runs that reached a real model, all time. */
   liveRuns?: number;
+  /**
+   * GET /health `last_live_run`: the newest run that reached a model (live or record, never the API mimic), null when none
+   * has; undefined when it was not read. When read it is said instead of the count, which leaves out reviews' runs.
+   */
+  lastLive?: { at: string; status: string } | null;
   now?: number;
 }
 
@@ -242,13 +250,22 @@ function ask(i: ReadinessInput): TaskReadiness {
     {
       kind: 'set up',
       words: s.mock
-        ? 'The API mimic answers, a test fixture: no model is called.'
+        ? 'The API mimic is on, a test fixture: no model is called.'
         : s.providerConfigured
           ? 'A model key is configured.'
           : 'No model key is configured.',
     },
   ];
-  if (!s.providerConfigured && !s.mock)
+  if (s.mock)
+    // As the Ask panel does: the mimic answers the agents' runs, but a question of your own needs a model
+    conditions.push({
+      code: 'mimic',
+      effect: 'blocks',
+      words:
+        'The API mimic answers here, a test fixture: the Ask panel takes no question of your own while it is on.',
+      next: 'Pick a suggested question on a case: its answers were recorded with the real agents. To ask your own, an administrator switches the mimic off (Shutter.Mock.Setup_Disable) and sets a model key.',
+    });
+  else if (!s.providerConfigured)
     conditions.push(
       s.aiHubPresent === false
         ? {
@@ -277,18 +294,28 @@ function ask(i: ReadinessInput): TaskReadiness {
       evidence.push({ kind: 'now', words: 'The model cannot be asked.', at: i.settingsAt });
     } else evidence.push({ kind: 'now', words: 'The model can be asked.', at: i.settingsAt });
   }
-  if (typeof i.liveRuns === 'number')
+  if (i.lastLive)
     evidence.push({
       kind: 'seen',
-      words: i.liveRuns
-        ? `${plural(i.liveRuns, 'agent run')} reached a real model on this instance.`
-        : 'No agent run has reached a real model on this instance yet.',
+      words: `The newest run that reached a real model ${
+        i.lastLive.status === 'ok' ? 'answered' : `ended without a usable answer (${i.lastLive.status})`
+      }.`,
+      started: i.lastLive.at,
+    });
+  // Health not read: the board's count, which the costs give
+  else if (i.lastLive === null || typeof i.liveRuns === 'number')
+    evidence.push({
+      kind: 'seen',
+      words:
+        i.lastLive !== null && i.liveRuns
+          ? `${plural(i.liveRuns, 'agent run')} reached a real model on this instance.`
+          : 'No agent run has reached a real model on this instance yet.',
     });
   return task('ask', title, does, conditions, evidence);
 }
 
 function approve(i: ReadinessInput): TaskReadiness {
-  const title = 'Approve or release a recovery';
+  const title = "Approve a recovery or an incident's release";
   const does = i.trial
     ? 'Tried in this browser: approving replays the recorded outcome, and nothing is sent.'
     : "Lets a reviewed plan, or an incident's release, write to the receiver after the gate.";
@@ -328,8 +355,8 @@ function approve(i: ReadinessInput): TaskReadiness {
         words:
           'Shutter is in shadow mode: it investigates and records what it would propose, refuses an approval, and rehearses and sends nothing.',
         next: i.can.configure
-          ? "Enabling recovery is the site's decision. Once it is made, set recovery.mode to enabled in the site profile."
-          : "Enabling recovery is the site's decision: a person who may change the site's settings sets recovery.mode to enabled in the site profile.",
+          ? "Enabling recovery is the site's decision. Once it is made, set recovery.mode to enabled in the site profile. A plan made before it needs fresh evidence."
+          : "Enabling recovery is the site's decision: a person who may change the site's settings sets recovery.mode to enabled in the site profile. A plan made before it needs fresh evidence.",
       });
     if (c.stopped)
       conditions.push({
@@ -396,8 +423,7 @@ function close(i: ReadinessInput): TaskReadiness {
     ? 'Tried in this browser, with your reason.'
     : 'Closes an escalated, blocked or failed case the team corrected by hand, with your reason.';
   if (!i.signedIn) return task('close', title, does, [SIGNED_OUT]);
-  // An approver closes whatever the site's rule says
-  if (i.can.approve) return task('close', title, does, []);
+  // The server's close needs Shutter_Operate whoever asks, as the case's own action checks it first
   if (!i.can.operate)
     return task('close', title, does, [
       role(
@@ -405,6 +431,8 @@ function close(i: ReadinessInput): TaskReadiness {
         'Ask an operator or an approver to close it.',
       ),
     ]);
+  // An approver closes whatever the site's rule says
+  if (i.can.approve) return task('close', title, does, []);
   if (!i.profile)
     return task('close', title, does, [
       notRead(

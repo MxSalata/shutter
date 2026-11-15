@@ -1805,6 +1805,11 @@ export type Health = Record<string, unknown> & {
    * anonymous answer does not yet (CONTRACTS 12 lists its keys), so the sign-in page reads them only when it does.
    */
   live?: Pick<LiveStatus, 'enabled' | 'every_minutes'>;
+  /**
+   * What was last observed (v1.35, CONTRACTS 12): the newest run that reached a model (`live` or `record`, never the API
+   * mimic), with `at` its start as an ISO UTC time, or null when none has. The anonymous answer carries it too.
+   */
+  last_live_run?: { at: string; status: string; member: string; model: string; mode: string } | null;
 };
 
 // ---- asking about a case (CONTRACTS 14: the deterministic card, the questions and their routes) ----

@@ -95,6 +95,7 @@ describe('TasksSection', () => {
           '/api/shutter/settings',
           '/api/shutter/recovery-control',
           '/api/shutter/site-profile',
+          '/api/shutter/health',
           '/api/shutter/costs',
         ]),
       );
@@ -113,7 +114,7 @@ describe('TasksSection', () => {
       'Read cases and recorded runs',
       'Run a scenario',
       'Ask the agents a question of your own',
-      'Approve or release a recovery',
+      "Approve a recovery or an incident's release",
       'Escalate a case by email',
       'Close a case handled by hand',
     ]);
@@ -140,7 +141,12 @@ describe('TasksSection', () => {
     expect(now).toHaveTextContent(/^Now: The model can be asked\. Read .+\.$/);
     const time = now.querySelector('time')!;
     expect(time.getAttribute('dateTime')).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
-    expect(ask.querySelector('[data-kind="seen"]')).toHaveTextContent(/^Seen: .*real model on this instance/);
+    // What was seen: the health report's newest run that reached a model, with when it started
+    const seen = ask.querySelector('[data-kind="seen"]')!;
+    expect(seen).toHaveTextContent(
+      /^Seen: The newest run that reached a real model answered\. Started .+\.$/,
+    );
+    expect(seen.querySelector('time')).toHaveAttribute('dateTime', fixtures.health.last_live_run.at);
   });
 
   it('in shadow mode: the approval is not now and says how recovery is enabled; an escalation reads Not sent', async () => {
@@ -176,6 +182,23 @@ describe('TasksSection', () => {
     );
     expect(within(ask).getByTestId('task-next')).toHaveTextContent(/ANTHROPIC_API_KEY/);
     expect(await row('scenario')).toHaveAttribute('data-state', 'limited');
+  });
+
+  it('with the API mimic on: asking is not now, as the Ask panel says, and no line says a model can be asked', async () => {
+    answer({ settings: { mock: true, mockConfig: 'AI.LLM.ShutterMock', mockModel: 'mock' } });
+    renderTasks();
+    await open();
+    const ask = await row('ask');
+    expect(ask).toHaveAttribute('data-state', 'blocked');
+    expect(within(ask).getByTestId('task-condition')).toHaveAttribute('data-code', 'mimic');
+    expect(within(ask).getByTestId('task-next')).toHaveTextContent(
+      /^Next: Pick a suggested question on a case/,
+    );
+    expect(ask.querySelector('[data-kind="set up"]')).toHaveTextContent(
+      'Set up: The API mimic is on, a test fixture: no model is called.',
+    );
+    expect(ask.querySelector('[data-kind="now"]')).toBeNull();
+    expect(screen.getByTestId('tasks-summary')).toHaveTextContent('Not now: your own questions');
   });
 
   it("for the public demo's own user: the role's reason, with the conditions that also apply under Also", async () => {

@@ -124,6 +124,34 @@ describe('taskReadiness', () => {
     );
   });
 
+  it("says the last observed live call from the health report, with when it started, in place of the costs' count", () => {
+    const STARTED = '2026-11-15T09:12:00Z';
+    const ok = tasks(live({ lastLive: { at: STARTED, status: 'ok' } })).ask;
+    expect(ok.evidence[2]).toEqual({
+      kind: 'seen',
+      words: 'The newest run that reached a real model answered.',
+      started: STARTED,
+    });
+    expect(ok.evidence).toHaveLength(3);
+    // A failing afternoon shows as such beside the configured mode and what holds now
+    const failed = tasks(live({ lastLive: { at: STARTED, status: 'model_error' } })).ask;
+    expect(failed.evidence.map((e) => e.kind)).toEqual(['set up', 'now', 'seen']);
+    expect(failed.evidence[2].words).toBe(
+      'The newest run that reached a real model ended without a usable answer (model_error).',
+    );
+    expect(failed.state).toBe('ready');
+    // None yet, whatever the board's count says
+    expect(tasks(live({ lastLive: null })).ask.evidence[2]).toEqual({
+      kind: 'seen',
+      words: 'No agent run has reached a real model on this instance yet.',
+    });
+    // It is said with no key too: what was seen stays apart from what is set up
+    const noKey = tasks(
+      live({ settings: settings({ providerConfigured: false }), lastLive: { at: STARTED, status: 'ok' } }),
+    ).ask;
+    expect(noKey.evidence.map((e) => e.kind)).toEqual(['set up', 'seen']);
+  });
+
   describe("the review's acceptance states, each with a truthful next step", () => {
     it('no key: asking is not possible, and the next step names the key and the restart', () => {
       const t = tasks(live({ settings: settings({ providerConfigured: false }) }));
@@ -144,10 +172,23 @@ describe('taskReadiness', () => {
       expect(t.ask.conditions[0].next).toMatch(/AI Hub edition/);
     });
 
-    it('the API mimic counts as a model to ask, and says no model is called', () => {
-      const t = tasks(live({ settings: settings({ providerConfigured: false, mock: true }) }));
-      expect(t.ask.state).toBe('ready');
-      expect(t.ask.evidence[0].words).toMatch(/API mimic/);
+    it('the API mimic: a question of your own is not now, as the Ask panel says, and nothing claims a model', () => {
+      for (const providerConfigured of [false, true]) {
+        const t = tasks(live({ settings: settings({ providerConfigured, mock: true }) }));
+        expect(t.ask.state, String(providerConfigured)).toBe('blocked');
+        expect(codes(t.ask)).toEqual(['mimic']);
+        expect(t.ask.conditions[0].next).toMatch(/^Pick a suggested question on a case/);
+        expect(t.ask.conditions[0].next).toMatch(/switches the mimic off/);
+        expect(t.ask.evidence[0]).toEqual({
+          kind: 'set up',
+          words: 'The API mimic is on, a test fixture: no model is called.',
+        });
+        expect(t.ask.evidence.some((e) => e.kind === 'now')).toBe(false);
+      }
+      // Its scenarios still run, against the mimic
+      const scenario = tasks(live({ settings: settings({ mock: true }) })).scenario;
+      expect(scenario.state).toBe('ready');
+      expect(scenario.evidence[0].words).toMatch(/API mimic/);
     });
 
     it('provider failure: the existing notice words, until when, and a next step by the instance', () => {
@@ -214,6 +255,8 @@ describe('taskReadiness', () => {
       expect(t.approve.state).toBe('blocked');
       expect(codes(t.approve)).toEqual(['shadow']);
       expect(t.approve.conditions[0].next).toMatch(/set recovery\.mode to enabled in the site profile/);
+      // A plan already waiting stays void once recovery is enabled, as after the stop
+      expect(t.approve.conditions[0].next).toMatch(/A plan made before it needs fresh evidence\.$/);
       expect(t.approve.evidence[0].words).toBe('Recovery is in shadow mode, not stopped.');
       expect(t.escalate.state).toBe('limited');
       expect(codes(t.escalate)).toEqual(['mail_suppressed']);
@@ -257,6 +300,10 @@ describe('taskReadiness', () => {
       expect(
         tasks(live({ profile: profile({ approvers: { close_needs_approver: true } }) })).close.state,
       ).toBe('ready');
+      // but, as the server's close, only with Shutter_Operate: a custom role that approves without it may not
+      const approverOnly = tasks(live({ can: { ...NOTHING, approve: true } })).close;
+      expect(codes(approverOnly)).toEqual(['role']);
+      expect(approverOnly.conditions[0].words).toMatch(/Shutter_Operate/);
     });
 
     it("the public demo's own user: scenarios replay, and a question of their own is a judge's", () => {
@@ -363,6 +410,7 @@ describe('taskReadiness', () => {
       live({ can: OPERATOR, profile: profile({ approvers: { close_needs_approver: true } }) }),
       live({ settings: settings({ providerConfigured: false, demo: false }) }),
       live({ settings: settings({ providerConfigured: false, aiHubPresent: false }) }),
+      live({ settings: settings({ mock: true }) }),
       live({ recovery: { ...RECOVERY, mode: 'shadow', stopped: true } }),
       live({ recovery: { ...RECOVERY, readable: false } }),
       live({ settings: undefined, recovery: undefined, profile: undefined }),

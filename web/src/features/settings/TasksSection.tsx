@@ -1,6 +1,14 @@
 import { Group, Stack, Text } from '@mantine/core';
 import type { UseQueryResult } from '@tanstack/react-query';
-import { useCan, useCosts, useMe, useRecoveryControl, useSettings, useSiteProfile } from '@/api/hooks';
+import {
+  useCan,
+  useCosts,
+  useHealth,
+  useMe,
+  useRecoveryControl,
+  useSettings,
+  useSiteProfile,
+} from '@/api/hooks';
 import { Section } from '@/components/Section';
 import { StatusBadge } from '@/components/StatusBadge';
 import { TechDetail } from '@/components/TechDetail';
@@ -14,11 +22,20 @@ const readAt = (q: Pick<UseQueryResult, 'dataUpdatedAt' | 'data'>) =>
 
 const KIND_WORDS: Record<Evidence['kind'], string> = { 'set up': 'Set up', now: 'Now', seen: 'Seen' };
 
-/** One fact behind a task, by its kind, with the time the page read it where an old reading could pass for current. */
+/**
+ * One fact behind a task, by its kind, with when the run it names started, and the time the page read it where an old
+ * reading could pass for current.
+ */
 function EvidenceLine({ e }: { e: Evidence }) {
   return (
     <Text size="xs" c="dimmed" data-kind={e.kind}>
       {KIND_WORDS[e.kind]}: {e.words}
+      {e.started ? (
+        <>
+          {' '}
+          Started <Timestamp iso={e.started} short size="xs" c="dimmed" focusable={false} />.
+        </>
+      ) : null}
       {e.at ? (
         <>
           {' '}
@@ -73,15 +90,19 @@ function TaskRow({ t }: { t: TaskReadiness }) {
   );
 }
 
-/** The tasks, read once the section is opened: who the reader is, the settings, the recovery control, the profile, the costs. */
+/**
+ * The tasks, read once the section is opened: who the reader is, the settings, the recovery control, the profile, the
+ * health report's last live run and the costs.
+ */
 function TaskList() {
   const me = useMe();
   const can = useCan();
   const settings = useSettings();
   const recovery = useRecoveryControl();
   const profile = useSiteProfile();
+  const health = useHealth();
   const costs = useCosts();
-  if ([me, settings, recovery, profile, costs].some((q) => q.isPending))
+  if ([me, settings, recovery, profile, health, costs].some((q) => q.isPending))
     return (
       <Text size="sm" c="dimmed">
         Reading what you can do…
@@ -98,6 +119,8 @@ function TaskList() {
     profile: profile.data?.profile,
     profileAt: readAt(profile),
     liveRuns: TRIAL ? undefined : costs.data?.totals?.liveRuns,
+    // Undefined on an answer without the key, so the count stands in
+    lastLive: TRIAL ? undefined : health.data?.last_live_run,
   });
   return (
     <Stack gap="sm">
