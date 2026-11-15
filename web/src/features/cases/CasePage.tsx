@@ -94,12 +94,26 @@ export { REPLAY_DONE };
  * A tab panel clears the header and the sticky tab bar when it is scrolled to, as `.case-tab-panel` makes the
  * sections and steps inside it do.
  */
+const RECORDING_DAY = new Intl.DateTimeFormat('en-GB', {
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+  timeZone: 'UTC',
+});
+
 /**
- * Above the trial's Audit trail: its times are the replay's of 2 Nov 2026 (fixtures.json `recordedAt`), while the agents'
- * own recordings carry when they first answered live (S2's, S3's and S8's tool calls on 25 Oct).
+ * Above the trial's Audit trail: its times are the replay's, on the day its first line carries (the day of
+ * fixtures.json's `recordedAt`, 2 Nov 2026), while a case the agents worked has their own recordings, made earlier
+ * (S2's, S3's and S8's tool calls on 25 Oct). Nothing until the trail is read.
  */
-const TRIAL_AUDIT_TIMES =
-  'These times are the recording’s, made on 2 Nov 2026 by replaying the agents’ answers; the agents first answered earlier (S2, S3 and S8 on 25 Oct), and each agent’s recording gives its own time.';
+export function trialAuditTimes(firstAt: string | undefined, agents: boolean): string {
+  const at = firstAt ? new Date(firstAt) : undefined;
+  if (!at || Number.isNaN(at.getTime())) return '';
+  const day = RECORDING_DAY.format(at);
+  return agents
+    ? `These times are the recording's, made on ${day} by replaying the agents' answers; the agents first answered earlier, and each agent's recording gives its own time.`
+    : `These times are the recording's, made on ${day}.`;
+}
 
 const PANEL = {
   className: 'case-tab-panel',
@@ -115,6 +129,13 @@ function CaseBody({ c }: { c: CaseDetail }) {
   const open = isOpen(c.state);
   const events = useCaseEvents(c.caseId, open);
   const facts = useCaseFacts(c, open);
+  // The trail's oldest line is the recording's own: lines a visitor adds come later
+  const auditTimes = TRIAL
+    ? trialAuditTimes(
+        events.data?.reduce<string | undefined>((min, e) => (!min || e.at < min ? e.at : min), undefined),
+        c.counts.runs > 0,
+      )
+    : '';
   const client = useQueryClient();
   // The case's scenario, for its expectation: rules alone's S8 write is "Not as expected", however verified
   const scenario = useScenarios().data?.scenarios.find((s) => s.id === c.scenario);
@@ -464,9 +485,9 @@ function CaseBody({ c }: { c: CaseDetail }) {
           <Tabs.Panel value="audit" pt="md" {...PANEL}>
             <Stack gap="md">
               {/* The trial's times are one replay's, seconds apart, beside earlier times the agents' own answers carry */}
-              {TRIAL ? (
+              {TRIAL && auditTimes ? (
                 <Text size="sm" c="dimmed" maw="68ch">
-                  {TRIAL_AUDIT_TIMES}
+                  {auditTimes}
                 </Text>
               ) : null}
               <CaseTimeline events={events.data ?? []} />

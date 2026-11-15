@@ -778,9 +778,19 @@ describe('CasePage', () => {
     renderCase('C-000002', '?tab=audit');
     expect(
       await screen.findByText(
-        /^These times are the recording’s, made on 2 Nov 2026 by replaying the agents’ answers;/,
+        /^These times are the recording's, made on 2 Nov 2026 by replaying the agents' answers;/,
       ),
     ).toBeInTheDocument();
+    env.trial = false;
+  });
+
+  it('says only the recording day on a trial case no agent worked', async () => {
+    env.trial = true;
+    renderCase('C-000012', '?tab=audit');
+    expect(
+      await screen.findByText("These times are the recording's, made on 2 Nov 2026."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/replaying the agents' answers/)).not.toBeInTheDocument();
     env.trial = false;
   });
 
