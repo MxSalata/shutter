@@ -4,7 +4,8 @@
 /// needs a production. Message headers cannot be made safely in a unit test, so InFlight is tested on a case with no
 /// workflow session, where the last state event's age decides; the header rule runs on a production only.
 /// MarkOpenAtStart notes every case in a working state on the instance, this one included: on a shared instance the
-/// other working cases get the start note too.
+/// other working cases get the start note too. Open's close of an earlier run's case after a scenario reset takes the
+/// abandoned label too, with the reset's own words.
 Class Shutter.Test.Abandon Extends %UnitTest.TestCase
 {
 
@@ -111,6 +112,39 @@ Method TestRefusesAStaleVersion()
     Do $$$AssertEquals(..Stored("Version"), 1, "its version too")
     Do $$$AssertEquals(..Stored("Disposition"), "", "no disposition was written")
     Do $$$AssertEquals(..Column(1, "State"), "draft", "and the draft email is not cancelled")
+}
+
+// ---- closed by another run's reset ----
+
+/// A further failure for the same operation after a scenario run's reset closes the earlier run's case still open for it
+/// (Open): labelled as Abandon labels a case, disposition abandoned, but with the reset's own headline and outcome, which
+/// the web reads to say another run closed it and no person gave it up (web outcome.ts closedByReset), and a state event
+/// by the system. The failure opens a case of its own, removed here with its events; resetAt is put back as it was.
+Method TestAScenarioResetClosesAnEarlierRunsCase()
+{
+    Set saved = $GET(^Shutter.Config("resetAt"), $CHAR(0))
+    Set ^Shutter.Config("resetAt") = "2026-10-20T11:00:00Z"
+    Set op = {"operation_key": "PAS^HOSP^MRN9004^ENC-9004^transfer^2026-10-15T08:20:00Z", "encounter_id": "ENC-9004", "patient_id": "MRN9004", "patient_id_authority": "HOSP", "event": "transfer", "ward": "WARD-B", "bed": null, "event_time": "2026-10-15T08:20:00Z", "source_system": "PAS", "source_message_id": "UTABANDON", "payload_digest": "sha256:utabandon"}
+    Set newCase = "", opened = 0
+    Try {
+        Set sc = ##class(Shutter.Store.Case).Open(op, "delivery_failed", "Delivery unavailable (test)", "", "", "board", .newCase, .opened)
+    } Catch ex {
+        Set sc = ex.AsStatus()
+    }
+    If $ISOBJECT(newCase) && (newCase.%Id() '= "") && (newCase.%Id() '= ..CaseRowId) Do ..Purge(newCase.%Id())
+    If saved = $CHAR(0) { Kill ^Shutter.Config("resetAt") } Else { Set ^Shutter.Config("resetAt") = saved }
+    Do $$$AssertStatusOK(sc, "the further failure is taken")
+    Do $$$AssertTrue(opened, "and opens a case of its own")
+    Do $$$AssertEquals(..Stored("State"), "failed", "the earlier run's case is failed")
+    Do $$$AssertEquals(..Stored("Disposition"), "abandoned", "with disposition abandoned")
+    Do $$$AssertNotEquals(..Stored("ClosedAt"), "", "and closed")
+    Do $$$AssertEquals(..Stored("Headline"), "Abandoned: another scenario run reset the receiver", "the reset's headline, which the web reads")
+    Do $$$AssertEquals(..Stored("Outcome"), "Abandoned: a new scenario run reset the downstream system after this case was opened; nothing more is sent", "and its outcome")
+    Set ev = ..LastEvent("state")
+    Do $$$AssertEquals(ev.fromState, "collecting", "the state event leaves collecting")
+    Do $$$AssertEquals(ev.toState, "failed", "for failed")
+    Do $$$AssertEquals(ev.actor, "system", "by the system: no person acted")
+    Do $$$AssertTrue(ev.text [ "a new scenario run reset the downstream system", "its text names the reset: " _ ev.text)
 }
 
 // ---- busy or left behind ----
