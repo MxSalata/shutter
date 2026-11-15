@@ -97,6 +97,8 @@ Method OnAgentRequest(request As Shutter.Bridge.Msg.AgentRequest, Output respons
     // share), checked and reserved in one locked step; a replay calls no model, asks the budget nothing and reserves nothing.
     Set response.RequestedBy = request.RequestedBy
     Set reserveKey = $SELECT(spec.Mode '= "replay": spec.CorrelationKey _ "|" _ spec.MemberCode _ "|" _ $JOB _ "|" _ $ZHOROLOG, 1: "")
+    // Keyed by the request's message (Budget.RunKey), which the process that records the run's row passes on to settle it.
+    If (reserveKey '= "") && (spec.EnsMessageId '= "") Set reserveKey = ##class(Shutter.Util.Budget).RunKey(spec.EnsMessageId)
     // The provider refusing the key (Shutter.Util.LiveAgents, v1.37): while a live run failed with an authentication error
     // in the last fifteen minutes, a run that would call a model is refused here with no call, as the budget refuses one.
     // A run that would call a model with such a setting is refused before anything is looked up with it.
@@ -132,8 +134,6 @@ Method OnAgentRequest(request As Shutter.Bridge.Msg.AgentRequest, Output respons
             Set response.Error = ex.DisplayString()
         }
     }
-    // Whatever happened after an admission (the run ended, or no runner was there to start it), its reservation goes.
-    If reserveKey '= "" Do ##class(Shutter.Util.Budget).Settle(reserveKey)
     Do ##class(Shutter.Util.Secret).MaskResponse(response, $LISTBUILD(..ProviderConfig), ..Model)
     Do ##class(Shutter.Util.LiveAgents).NoteRun(spec.Mode, response.Status, response.Error)
     Do ##class(Shutter.Bridge.Runner).Stamp(spec, response)
@@ -142,6 +142,17 @@ Method OnAgentRequest(request As Shutter.Bridge.Msg.AgentRequest, Output respons
     If response.StartedAtMs = "" Set response.StartedAtMs = ##class(Shutter.Util.Time).NowUTCms()
     If response.DurationMs = "" Set response.DurationMs = (($ZHOROLOG - start) * 1000) \ 1
     If response.Status = "" Set response.Status = "ok"
+    // Whatever happened after an admission (the run ended, or no runner was there to start it), the reservation now holds
+    // what the run cost, priced as its row will be, until the process that writes the row settles it by the request's
+    // message (Budget.Hold and Recorded; ultrareview 1.4.6, #6): settled here, the run would count as neither reserved
+    // nor spent until that row landed. A request with no message settles here, as before.
+    If reserveKey '= "" {
+        If spec.EnsMessageId '= "" {
+            Do ##class(Shutter.Util.Budget).Hold(reserveKey, ##class(Shutter.Store.AgentRun).CostOf(response))
+        } Else {
+            Do ##class(Shutter.Util.Budget).Settle(reserveKey)
+        }
+    }
     $$$TRACE("Agent run done: " _ response.Status _ ", model " _ response.Model _ ", tokens " _ (+response.PromptTokens) _ " in / " _ (+response.CompletionTokens) _ " out (cache read " _ (+response.CacheReadTokens) _ "), " _ (+response.Iterations) _ " turns, " _ (+response.ToolCalls) _ " tool calls, " _ (+response.DurationMs) _ " ms")
     If response.Error '= "" $$$LOGWARNING("Agent run " _ response.Status _ ": " _ response.Error)
     Quit $$$OK

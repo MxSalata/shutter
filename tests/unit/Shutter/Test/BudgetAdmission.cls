@@ -374,6 +374,107 @@ Method TestARefusalNamesItsOwnStatus()
 }
 
 /// Rows of AgentRun with a case, case events, and AgentRun rows with no case and no question.
+/// A run's cost counts as reserved or as spent from its admission until its row is saved, never as neither (the 1.4.6
+/// ultrareview's #6). The Agent item's reservation is keyed by the request's message (RunKey); when the run ends it holds
+/// what the run cost (Hold) instead of being settled, and the row's writer settles it by that message once the row is
+/// saved (AgentRun.FromResponse, Budget.Recorded), which is safe to repeat. A run that cost nothing settles at once, a
+/// model with no price keeps the estimate, and a key with nothing reserved stays empty. No cap or share is in play, and the
+/// row is the test's own and is taken away again.
+Method TestTheCostIsHeldUntilItsRowIsSaved()
+{
+    Set b = "Shutter.Util.Budget"
+    Kill ^Shutter.Budget("reserve")
+    Set ^Shutter.Config("budgetReserveUsd") = "0.50"
+    Do $CLASSMETHOD(b, "Configure", "0"), $CLASSMETHOD(b, "ConfigureShare", "0")
+    Set user = "ut-hold-" _ $JOB, since = $CLASSMETHOD(b, "Status").since
+    // A message header id of the test's own: digits, as a header's id is, within AgentRun's EnsMessageId
+    Set header = "99" _ $JOB _ "1", key = $CLASSMETHOD(b, "RunKey", header)
+    Do $$$AssertEquals(key, "message:" _ header, "the run's key is its request's message")
+    Do $$$AssertTrue($CLASSMETHOD(b, "Admit", key, user, .st, .est), "the run is admitted")
+    Do $$$AssertEquals($CLASSMETHOD(b, "Reserved", user, .n) _ "|" _ n, ".5|1", "with the estimate reserved")
+    // The run ended, at what the test runner's figures cost
+    Set resp = ..Response(user)
+    Set cost = ##class(Shutter.Store.AgentRun).CostOf(resp)
+    Do $$$AssertTrue(+cost > 0, "the run cost something: " _ cost)
+    Set spentBefore = $CLASSMETHOD(b, "SpentBy", user, since)
+    Do $CLASSMETHOD(b, "Hold", key, cost)
+    Do $$$AssertEquals($CLASSMETHOD(b, "Reserved", user, .n) _ "|" _ n, (+cost) _ "|1", "the reservation now holds what the run cost, for its asker")
+    Do $$$AssertEquals($CLASSMETHOD(b, "SpentBy", user, since) - spentBefore, 0, "while its row is not saved yet")
+    // The process saves the row with the request's message: the spend has the run, and the reservation is gone
+    Set sc = ##class(Shutter.Store.AgentRun).FromResponse("", "", "explain", "explain", resp, header, .run)
+    Do $$$AssertStatusOK(sc, "the row is saved")
+    If $$$ISERR(sc) Quit
+    Do $$$AssertEquals($CLASSMETHOD(b, "SpentBy", user, since) - spentBefore, +cost, "the spend counts the run")
+    Do $$$AssertEquals($CLASSMETHOD(b, "Reserved", user, .n) _ "|" _ n, "0|0", "and its reservation was settled with the row")
+    Do $CLASSMETHOD(b, "Recorded", header)
+    Do $$$AssertEquals(($CLASSMETHOD(b, "SpentBy", user, since) - spentBefore) _ "|" _ $CLASSMETHOD(b, "Reserved", user), (+cost) _ "|0", "settling again changes nothing")
+    Do ##class(Shutter.Store.AgentRun).%DeleteId(run.%Id())
+    // A run that cost nothing has nothing to hold; one whose model has no price keeps the estimate until its row is saved
+    Do $$$AssertTrue($CLASSMETHOD(b, "Admit", key _ "-free", user), "a second run is admitted")
+    Do $CLASSMETHOD(b, "Hold", key _ "-free", 0)
+    Do $$$AssertEquals($DATA(^Shutter.Budget("reserve", key _ "-free")), 0, "one that cost nothing settles at once")
+    Do $$$AssertTrue($CLASSMETHOD(b, "Admit", key _ "-unpriced", user), "a third run is admitted")
+    Do $CLASSMETHOD(b, "Hold", key _ "-unpriced", "")
+    Set held = $GET(^Shutter.Budget("reserve", key _ "-unpriced"))
+    Do $$$AssertEquals($LISTGET(held, 1) _ "|" _ $LISTGET(held, 3), ".5|" _ user, "one whose model has no price keeps the estimate, for its asker")
+    Do $CLASSMETHOD(b, "Settle", key _ "-unpriced")
+    Do $CLASSMETHOD(b, "Hold", "message:ut-hold-none", 1)
+    Do $$$AssertEquals($DATA(^Shutter.Budget("reserve", "message:ut-hold-none")), 0, "a key with nothing reserved stays empty")
+    Do $$$AssertEquals($CLASSMETHOD(b, "Reserved", "", .n) _ "|" _ n, "0|0", "all settled")
+}
+
+/// One formula prices a run (AgentRun.CostOf): a replay and a run the API mimic answered cost 0, a model with no price is
+/// "", and every writer of a run's cost uses it, as does the Agent item's hold, which comes once the response is complete
+/// and is keyed by the request's message; the rows' writers settle by that message once saved; and the day's state reads
+/// the reservations before the spend, so a settle between the two reads counts a run twice, never not at all. Read from
+/// the code where the production is needed to drive it.
+Method TestOneFormulaPricesTheRunAndTheHold()
+{
+    Set resp = ..Response("ut-price")
+    Set model = ##class(Shutter.Test.FakeRunner).#MODEL
+    Do $$$AssertEquals(+##class(Shutter.Store.AgentRun).CostOf(resp), +##class(Shutter.Store.ModelPrice).Cost(model, resp.PromptTokens, resp.CompletionTokens, 0, 0), "a live run is priced by ModelPrice")
+    Set resp.Mode = "replay"
+    Do $$$AssertEquals(##class(Shutter.Store.AgentRun).CostOf(resp), 0, "a replay costs 0")
+    Set resp.Mode = "live", resp.Model = "mock"
+    Do $$$AssertEquals(##class(Shutter.Store.AgentRun).CostOf(resp), 0, "so does a run the API mimic answered")
+    Set resp.Model = "ut-no-such-model"
+    Do $$$AssertEquals(##class(Shutter.Store.AgentRun).CostOf(resp), "", "a model with no price is unpriced")
+    For pair = $LISTBUILD("Shutter.Store.AgentRun", "FromResponse"), $LISTBUILD("Shutter.Store.AgentRun", "FromDiagnostic"), $LISTBUILD("Shutter.Store.Review", "StoreAgent") {
+        Do $$$AssertTrue(..Source($LIST(pair, 1), $LIST(pair, 2)) [ "CostOf(response)", $LIST(pair, 1) _ "." _ $LIST(pair, 2) _ " prices with it")
+    }
+    Do $$$AssertTrue(..Source("Shutter.Store.AgentRun", "FromResponse") [ "If $$$ISOK(sc) Do ##class(Shutter.Util.Budget).Recorded(ensMessageId)", "the row's writer settles once the row is saved")
+    Do $$$AssertTrue(..Source("Shutter.Store.Review", "StoreAgent") [ "If $$$ISOK(sc) Do ##class(Shutter.Util.Budget).Recorded(ensMessageId)", "as the review does once it keeps the cost")
+    Set item = ..Source("Shutter.Bridge.Operation.Agent", "OnAgentRequest")
+    Do $$$AssertTrue(item [ "Set reserveKey = ##class(Shutter.Util.Budget).RunKey(spec.EnsMessageId)", "the Agent item keys the reservation by the request's message")
+    Set hold = $FIND(item, "Do ##class(Shutter.Util.Budget).Hold(reserveKey, ##class(Shutter.Store.AgentRun).CostOf(response))")
+    Do $$$AssertTrue(hold > 0, "and holds the run's cost in it")
+    Do $$$AssertTrue(hold > $FIND(item, "Do ##class(Shutter.Bridge.Runner).Stamp(spec, response)"), "once the response is complete")
+    Do $$$AssertEquals($LENGTH(item, "Budget).Settle(reserveKey)"), 2, "and settles only a request with no message")
+    Set status = ..Source("Shutter.Util.Budget", "Status"), mine = ..Source("Shutter.Util.Budget", "StatusFor")
+    Do $$$AssertTrue($FIND(status, "..Reserved(") < $FIND(status, "..Spent("), "the day's state reads the reservations before the spend")
+    Do $$$AssertTrue($FIND(mine, "..Reserved(user") < $FIND(mine, "..SpentBy(user"), "and the user's, theirs before their spend")
+}
+
+/// A live response at the test runner's figures (Shutter.Test.FakeRunner), as the Agent item hands it to the process.
+ClassMethod Response(user As %String) As Shutter.Bridge.Msg.AgentResponse
+{
+    Set resp = ##class(Shutter.Bridge.Msg.AgentResponse).%New()
+    Set resp.Mode = "live", resp.Model = ##class(Shutter.Test.FakeRunner).#MODEL, resp.Status = "ok"
+    Set resp.PromptTokens = ##class(Shutter.Test.FakeRunner).#PROMPTTOKENS, resp.CompletionTokens = ##class(Shutter.Test.FakeRunner).#COMPLETIONTOKENS
+    Set resp.CacheReadTokens = 0, resp.CacheCreationTokens = 0, resp.Iterations = 1, resp.ToolCalls = 0
+    Set resp.StartedAt = ##class(Shutter.Util.Time).NowUTC(), resp.DurationMs = 5, resp.RequestedBy = user
+    Quit resp
+}
+
+/// A method's code as written.
+ClassMethod Source(class As %String, method As %String) As %String
+{
+    Set def = ##class(%Dictionary.MethodDefinition).%OpenId(class _ "||" _ method)
+    If '$ISOBJECT(def) Quit ""
+    Do def.Implementation.Rewind()
+    Quit def.Implementation.Read(1000000)
+}
+
 ClassMethod Counts() As %String
 {
     Set withCase = 0, events = 0, caseless = 0

@@ -200,7 +200,8 @@ Method TestAReplayedRequestCallsNoProviderAndSpendsNothing()
     Do $$$AssertStatusOK(sc, "the replay runner answers from " _ key)
     Do $$$AssertEquals(response.Mode, "replay", "and says it replayed")
     Do $$$AssertTrue(response.RecordId '= "", "from the recording")
-    Do $$$AssertTrue(..Source("Shutter.Store.AgentRun", "FromResponse") [ "$SELECT(response.Mode = ""replay"": 0", "the row's cost is 0 for a replay")
+    Do $$$AssertTrue(..Source("Shutter.Store.AgentRun", "CostOf") [ "$SELECT(response.Mode = ""replay"": 0", "a run's cost is 0 for a replay")
+    Do $$$AssertTrue(..Source("Shutter.Store.AgentRun", "FromResponse") [ "Set run.CostUSD = ..CostOf(response)", "and the row is priced so")
 }
 
 }
