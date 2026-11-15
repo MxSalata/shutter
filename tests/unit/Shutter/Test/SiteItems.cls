@@ -92,7 +92,8 @@ Method TestUpgradeKeepsTheSitesValues()
 }
 
 /// An upgrade over an install that left no record (1.4.8 and earlier): every value that differs is the site's, but the
-/// descriptions; nothing counts as taken out; an added item of a Shutter class is left out.
+/// descriptions; nothing counts as taken out; an added item of a Shutter class is left out. A rule of what the install
+/// owns holds only for the item's class it names.
 Method TestUpgradeWithNoRecord()
 {
     Set c = ..#CLASS, prod = ..#PRODUCTION, node = ..#NODE
@@ -100,7 +101,8 @@ Method TestUpgradeWithNoRecord()
     Do $$$AssertStatusOK(..SiteEdits(), "the site's own edits save")
     Do $$$AssertEquals($CLASSMETHOD(c, "Capture", prod, node, 1), "captured", "the upgrade captures")
     Do $$$AssertStatusOK(..WriteClass(..Newer()), "the newer release's class compiles")
-    Do $$$AssertStatusOK($CLASSMETHOD(c, "Keep", prod, node, .out), "the upgrade keeps")
+    Set owned("i", "UT Watch") = "Shutter.Operation.SomethingElse", owned("i", "UT Watch", "s", "Adapter", "CallInterval") = $LISTBUILD("always")
+    Do $$$AssertStatusOK($CLASSMETHOD(c, "Keep", prod, node, .out, .owned), "the upgrade keeps")
     Do $$$AssertEquals(out.mode, "no record", "with no record of the earlier install")
     Do ..SiteKept("with no record", 0)
     Do ..NewArrived("with no record")
@@ -122,8 +124,8 @@ Method TestCapture()
     Do $$$AssertEquals($CLASSMETHOD(c, "Capture", prod, node, 1), "pending", "a capture younger than a day, which no install used, is kept")
     Do $$$AssertEquals($LIST(@node@("before"), 2), "earlier", "as it was")
     Set @node@("before") = $LISTBUILD(now - 90000, "earlier", 1, 0)
-    Do $$$AssertEquals($CLASSMETHOD(c, "Capture", prod, node, 1), "captured", "one older than a day is taken again")
-    Do $$$AssertEquals($LIST(@node@("before"), 3) _ "/" _ $LIST(@node@("before"), 4), $JOB _ "/1", "by this job, with the definition")
+    Do $$$AssertEquals($CLASSMETHOD(c, "Capture", prod, node, 1, 0), "captured", "one older than a day is taken again")
+    Do $$$AssertEquals($LIST(@node@("before"), 3) _ "/" _ $LIST(@node@("before"), 4) _ "/" _ $LIST(@node@("before"), 5), $JOB _ "/1/0", "by this job, with the definition and the earlier install's demo flag")
     Do $$$AssertEquals(@node@("before", "i", "UT Watch", "p", "PoolSize"), 1, "which it holds")
     Kill @node
     Do $$$AssertEquals($CLASSMETHOD(c, "Capture", prod, node, 0), "first install", "no install has run: nothing is read")
@@ -133,6 +135,117 @@ Method TestCapture()
     Do $$$AssertStatusOK($CLASSMETHOD(c, "Keep", "ShutterTest.NoSuchProduction", node, .out), "Keep with no production")
     Do $$$AssertEquals(out.mode, "no production", "does nothing")
     Do $$$AssertEquals($DATA(@node@("before")), 0, "but use up the capture")
+}
+
+/// An item whose class changed in the newer release is the package's, and what the site set on it leaves the record.
+Method TestClassChanged()
+{
+    Set c = ..#CLASS, prod = ..#PRODUCTION, node = ..#NODE
+    Do $$$AssertStatusOK(..WriteClass(..Earlier()), "the earlier release's production compiles")
+    Do $CLASSMETHOD(c, "Capture", prod, node, 0)
+    Do $$$AssertStatusOK($CLASSMETHOD(c, "Keep", prod, node, .out), "the first install keeps a record")
+    Do $$$AssertStatusOK(..SiteEdits(), "the site's own edits save")
+    Do $$$AssertEquals($CLASSMETHOD(c, "Capture", prod, node, 1), "captured", "the upgrade captures")
+    Do $$$AssertStatusOK(..WriteClass($REPLACE(..Newer(), "Shutter.Operation.ReceiverWatch", "Shutter.Operation.Verify")), "the newer class, the watch on another class, compiles")
+    Do $$$AssertStatusOK($CLASSMETHOD(c, "Keep", prod, node, .out), "the upgrade keeps")
+    Do $$$AssertEquals(..Prop("UT Watch", "PoolSize") _ "|" _ ..Value("UT Watch", "Adapter", "CallInterval") _ "|" _ ..Value("UT Watch", "Host", "AlertOnError"), "1|5|1", "the item on its new class is the package's")
+    Do $$$AssertTrue($CLASSMETHOD(c, "Account", out) [ "UT Watch: its class is now Shutter.Operation.Verify", "the account says why")
+    Do $$$AssertEquals($DATA(@node@("site", "i", "UT Watch")), 0, "and the record forgets it")
+    Do $$$AssertEquals(..Prop("UT Gate", "Enabled") _ "|" _ ..Count("UT Site Out") _ "|" _ ..ProductionProp("ActorPoolSize"), "0|1|2", "the site's other values stand")
+}
+
+/// What the install sets itself (InstallOwns) is not the site's. With no record, a demo turned site keeps its demo item
+/// off although the capture had it on (on was the earlier install's); a site's own switch against the earlier install's
+/// value stands; when the demo flag changes, a recorded flag is dropped; a value owned with no record only is learnt
+/// once there is a record; and a setting a Shutter record writes is left to the install.
+Method TestInstallsOwnValues()
+{
+    Set c = ..#CLASS, prod = ..#PRODUCTION, node = ..#NODE
+    Do $$$AssertStatusOK(..WriteClass(..Earlier()), "the earlier release's production compiles, the gate on: a demo's install")
+    Set set("UT Watch", "Adapter", "CallInterval") = 9
+    Do $$$AssertStatusOK(##class(Ens.Production).ApplySettings(prod, .set), "the watch's server setting moved as the portal saves")
+    Do $$$AssertEquals($CLASSMETHOD(c, "Capture", prod, node, 1, 1), "captured", "the load captures, the earlier install a demo")
+    Do $$$AssertStatusOK(..WriteClass(..Newer()), "the newer class compiles")
+    Do $$$AssertStatusOK(..Switch("UT Gate", 0), "this install, a site's, switches the gate off")
+    Set owned("i", "UT Gate") = "", owned("i", "UT Gate", "p", "Enabled") = $LISTBUILD("always")
+    Set owned("i", "UT Watch") = "Shutter.Operation.ReceiverWatch", owned("i", "UT Watch", "s", "Adapter", "CallInterval") = $LISTBUILD("always")
+    Do $$$AssertStatusOK($CLASSMETHOD(c, "Keep", prod, node, .out, .owned), "the upgrade keeps")
+    Do $$$AssertEquals(out.mode, "no record", "with no record")
+    Do $$$AssertEquals(..Prop("UT Gate", "Enabled"), 0, "the gate stays off: on was the earlier install's (the demo's), not the site's")
+    Do $$$AssertEquals(..Value("UT Watch", "Adapter", "CallInterval"), 5, "the setting a record writes is the install's")
+    Do $$$AssertEquals($DATA(@node@("site", "i", "UT Gate", "p", "Enabled")) + $DATA(@node@("site", "i", "UT Watch", "s", "Adapter", "CallInterval")), 0, "and neither is in the record")
+
+    Kill owned
+    Set owned("i", "UT Gate") = "", owned("i", "UT Gate", "p", "Enabled") = $LISTBUILD("was", 0)
+    Do $$$AssertEquals($CLASSMETHOD(c, "Capture", prod, node, 1, 0), "captured", "a second load, a site's")
+    Do $$$AssertStatusOK(..WriteClass(..Newer()), "compiles")
+    Do $$$AssertStatusOK(..Switch("UT Gate", 0), "and switches the gate off")
+    Do $$$AssertStatusOK($CLASSMETHOD(c, "Keep", prod, node, .out, .owned), "keeps")
+    Do $$$AssertEquals(out.mode _ "/" _ ..Prop("UT Gate", "Enabled"), "record/0", "with a record, and the gate stays off")
+
+    Do $$$AssertStatusOK(..Switch("UT Gate", 1), "the site switches the gate on itself")
+    Do $$$AssertEquals($CLASSMETHOD(c, "Capture", prod, node, 1, 0), "captured", "the next load captures")
+    Do $$$AssertStatusOK(..WriteClass(..Newer()), "compiles")
+    Do $$$AssertStatusOK(..Switch("UT Gate", 0), "and switches it off")
+    Do $$$AssertStatusOK($CLASSMETHOD(c, "Keep", prod, node, .out, .owned), "keeps")
+    Do $$$AssertEquals(..Prop("UT Gate", "Enabled"), 1, "the site's own switch stands")
+    Do $$$AssertEquals($GET(@node@("site", "i", "UT Gate", "p", "Enabled")), 1, "as the site's")
+
+    Set owned("i", "UT Gate", "p", "Enabled") = $LISTBUILD("always")
+    Do $$$AssertEquals($CLASSMETHOD(c, "Capture", prod, node, 1, 1), "captured", "a load where the demo flag changes")
+    Do $$$AssertStatusOK(..WriteClass(..Newer()), "compiles")
+    Do $$$AssertStatusOK(..Switch("UT Gate", 0), "and switches it off")
+    Do $$$AssertStatusOK($CLASSMETHOD(c, "Keep", prod, node, .out, .owned), "keeps")
+    Do $$$AssertEquals(..Prop("UT Gate", "Enabled"), 0, "the install's value stands")
+    Do $$$AssertEquals($DATA(@node@("site", "i", "UT Gate", "p", "Enabled")), 0, "the recorded flag is dropped")
+    Do $$$AssertTrue($CLASSMETHOD(c, "Account", out) [ "UT Gate: Enabled is the install's", "and the account says so")
+}
+
+/// A value owned with no record only (the Second Parser's flag): not learnt over an install that left no record, learnt
+/// once there is one.
+Method TestOwnedWithNoRecord()
+{
+    Set c = ..#CLASS, prod = ..#PRODUCTION, node = ..#NODE
+    Set owned("i", "UT Gate") = "", owned("i", "UT Gate", "p", "Enabled") = $LISTBUILD("no record")
+    Do $$$AssertStatusOK(..WriteClass(..Earlier()), "the earlier release's production compiles")
+    Do $$$AssertStatusOK(..Switch("UT Gate", 0), "the gate is off, by the site or the earlier install")
+    Do $$$AssertEquals($CLASSMETHOD(c, "Capture", prod, node, 1), "captured", "the load captures")
+    Do $$$AssertStatusOK(..WriteClass(..Newer()), "compiles: the gate on")
+    Do $$$AssertStatusOK($CLASSMETHOD(c, "Keep", prod, node, .out, .owned), "keeps")
+    Do $$$AssertEquals(out.mode _ "/" _ ..Prop("UT Gate", "Enabled"), "no record/1", "with no record the install's value stands")
+    Do $$$AssertStatusOK(..Switch("UT Gate", 0), "the site switches it off")
+    Do $$$AssertEquals($CLASSMETHOD(c, "Capture", prod, node, 1), "captured", "the next load captures")
+    Do $$$AssertStatusOK(..WriteClass(..Newer()), "compiles")
+    Do $$$AssertStatusOK($CLASSMETHOD(c, "Keep", prod, node, .out, .owned), "keeps")
+    Do $$$AssertEquals(out.mode _ "/" _ ..Prop("UT Gate", "Enabled"), "record/0", "with a record the site's switch stands")
+}
+
+/// The rules InstallOwns gives for Shutter.Production.
+Method TestInstallOwns()
+{
+    Set c = ..#CLASS
+    Set r("Lab Rx") = $LISTBUILD("10.1.1.1", 443, "LabCred", "")
+    Do $CLASSMETHOD(c, "InstallOwns", .o, 1, 0, 1, .r)
+    Do $$$AssertEquals($GET(o("i", "ADT In", "p", "Enabled")), $LISTBUILD("always"), "a demo turned site: the demo items' flag is the install's")
+    Do $$$AssertEquals($GET(o("i", "Scenario Player", "p", "Enabled")), $LISTBUILD("always"), "all six of them")
+    Do $$$AssertEquals($GET(o("i", "Second Parser", "p", "Enabled")), $LISTBUILD("no record"), "the Second Parser's flag, with no record")
+    Do $$$AssertEquals($GET(o("i", "FHIR Out")), "Shutter.Operation.FHIRExecute", "the FHIR writer, on its own class")
+    Do $$$AssertEquals($GET(o("i", "FHIR Out", "s", "Adapter", "HTTPServer")), $LISTBUILD("always"), "its server is the record's")
+    Do $$$AssertEquals($GET(o("i", "FHIR Receiver", "s", "Adapter", "SSLConfig")), $LISTBUILD("always"), "and the reader's")
+    Do $$$AssertEquals($DATA(o("i", "FHIR Gate")), 0, "the gate calls no server")
+    Do $$$AssertEquals($GET(o("i", "Lab Rx")), "Shutter.Operation.Ward", "a receiver's connector item")
+    Do $$$AssertEquals($GET(o("i", "Lab Rx", "s", "Adapter", "Credentials")), $LISTBUILD("always"), "its credential is the record's")
+    Do $$$AssertEquals($DATA(o("i", "Lab Rx", "s", "Adapter", "ResponseTimeout")), 0, "its timeouts are the site's")
+    Kill r
+    Do $CLASSMETHOD(c, "InstallOwns", .o, 0, 0, 0, .r)
+    Do $$$AssertEquals($GET(o("i", "ADT In", "p", "Enabled")), $LISTBUILD("was", 0), "a site again: off was the earlier install's")
+    Do $$$AssertEquals($DATA(o("i", "FHIR Out")) + $DATA(o("i", "Lab Rx")), 0, "no FHIR record and no receiver: nothing of theirs")
+    Do $CLASSMETHOD(c, "InstallOwns", .o, 1, 1, 0, .r)
+    Do $$$AssertEquals($GET(o("i", "Records Out", "p", "Enabled")), $LISTBUILD("was", 1), "a demo again: on was the earlier install's")
+    Do $CLASSMETHOD(c, "InstallOwns", .o, "", 1, 0, .r)
+    Do $$$AssertEquals($GET(o("i", "Records Out", "p", "Enabled")), $LISTBUILD("was", 1), "no stored flag reads as a demo, as elsewhere")
+    Do $CLASSMETHOD(c, "InstallOwns", .o, 0, 1, 0, .r)
+    Do $$$AssertEquals($GET(o("i", "ADT to Records", "p", "Enabled")), $LISTBUILD("always"), "a site turned demo: the install's")
 }
 
 /// Read's shape.
@@ -158,6 +271,7 @@ Method SiteKept(when As %String, withDescriptions As %Boolean = 1)
     Do $$$AssertEquals(..Prop("UT Gate", "Enabled"), 0, "the item it switched off, " _ when)
     Do $$$AssertEquals(..Value("UT Gate", "Host", "ReplyCodeActions"), "E=W", "the setting it added, " _ when)
     Do $$$AssertEquals(..ProductionProp("ActorPoolSize"), 2, "the production's actor pool, " _ when)
+    Do $$$AssertEquals(..ProductionSetting("UpdateTimeout"), 25, "the production's own setting, " _ when)
     Do $$$AssertEquals(..Count("UT Site Out"), 1, "the item it added, once, " _ when)
     Do $$$AssertEquals(..Prop("UT Site Out", "ClassName") _ "|" _ ..Value("UT Site Out", "Adapter", "FilePath"), "EnsLib.File.PassthroughOperation|/tmp/ut-site-out/", "with its class and settings, " _ when)
     Do:withDescriptions $$$AssertEquals(..Prop("UT Gate", "Comment"), "Our gate", "its comment, " _ when)
@@ -173,13 +287,15 @@ Method NewArrived(when As %String)
 
 /// A site's own edits: on the definition alone (saved, not written to the class), the watch's pool size 3 and its
 /// AlertOnError taken out, the gate switched off with a setting added and its comment changed, the production's actor
-/// pool 2, and two items added, one of a system class and one of a Shutter class; then, as the Production Configuration
-/// page saves (Ens.Production.ApplySettings: the definition and the class's XData), the watch's call interval 9.
+/// pool 2 and its own setting UpdateTimeout 25, and two items added, one of a system class and one of a Shutter class;
+/// then, as the Production Configuration page saves (Ens.Production.ApplySettings: the definition and the class's
+/// XData), the watch's call interval 9.
 Method SiteEdits() As %Status
 {
     Set p = ##class(Ens.Config.Production).%OpenId(..#PRODUCTION)
     Quit:'$ISOBJECT(p) $$$ERROR($$$GeneralError, "no scratch production")
     Set p.ActorPoolSize = 2
+    Do p.Settings.Insert(..Setting("Adapter", "UpdateTimeout", 25))
     Set w = ..Item(p, "UT Watch"), w.PoolSize = 3
     For j = w.Settings.Count():-1:1 {
         If w.Settings.GetAt(j).Name = "AlertOnError" Do w.Settings.RemoveAt(j)
@@ -197,6 +313,17 @@ Method SiteEdits() As %Status
     Quit:$$$ISERR(sc) sc
     Set set("UT Watch", "Adapter", "CallInterval") = 9
     Quit ##class(Ens.Production).ApplySettings(..#PRODUCTION, .set)
+}
+
+/// An item switched on or off on the definition alone, as the install's own steps do.
+Method Switch(name As %String, enabled As %Boolean) As %Status
+{
+    Set p = ##class(Ens.Config.Production).%OpenId(..#PRODUCTION)
+    Quit:'$ISOBJECT(p) $$$ERROR($$$GeneralError, "no scratch production")
+    Set item = ..Item(p, name)
+    Quit:'$ISOBJECT(item) $$$ERROR($$$GeneralError, "no item " _ name)
+    Set item.Enabled = enabled
+    Quit p.%Save()
 }
 
 Method Setting(target As %String, name As %String, value As %String) As Ens.Config.Setting
@@ -285,6 +412,17 @@ Method ProductionProp(property As %String) As %String
     Set p = ##class(Ens.Config.Production).%OpenId(..#PRODUCTION, 0)
     Quit:'$ISOBJECT(p) "(no production)"
     Quit $PROPERTY(p, property)
+}
+
+/// One of the production's own settings, or "(none)".
+Method ProductionSetting(setting As %String) As %String
+{
+    Set p = ##class(Ens.Config.Production).%OpenId(..#PRODUCTION, 0)
+    Quit:'$ISOBJECT(p) "(no production)"
+    For j = 1:1:p.Settings.Count() {
+        Return:(p.Settings.GetAt(j).Name = setting) p.Settings.GetAt(j).Value
+    }
+    Quit "(none)"
 }
 
 /// An item's setting, or "(none)".
