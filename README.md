@@ -60,6 +60,8 @@ On an ordinary day a hospital's integration engine can see hundreds of failed me
 
 **Two things to know about the demo.** It is one hospital shared by every visitor: if someone else runs the same scenario, its reset of the receiver closes a case of yours still waiting, so run it again. And it resets on the hour: for up to a minute it answers with errors, then everyone is signed out, so start a scenario well before the hour.
 
+**Or on your own instance:** with IPM on a stock AI Hub image, `zpm "repo -reset-defaults"` then `zpm "install iris-shutter"` installs the demo in about two minutes, with no API key ([Try it](https://github.com/MxSalata/shutter#try-it)).
+
 **Read the code:** [CaseWorkflow](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Process/CaseWorkflow.cls) runs the case; the [AI Hub agents](https://github.com/MxSalata/shutter/tree/main/src/Shutter/Agent), three specialists and a [coordinator](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Agent/Coordinator.cls), read the sealed evidence; the coordinator calls [SubmitPlan](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Tools/SubmitPlan.cls); the [gate](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Operation/Gate.cls) checks the plan; an IRIS Workflow task takes the approval; one conditional write follows, and the [verifier](https://github.com/MxSalata/shutter/blob/main/src/Shutter/Operation/Verify.cls) reads the receiver's receipts and history.
 
 <details>
@@ -248,6 +250,31 @@ Loss runs from **0 for a right outcome to 20 for a wrong write executed**. It is
 
 ## Try it
 
+### IPM on a stock AI Hub image
+
+**The quickest install: two commands, about two minutes, no API key.** In the USER namespace of a stock AI Hub build `2026.3.0AI.154.0` image, with IPM 0.10.4 or later loaded there (the stock image has none in USER; this repository carries `vendor/ipm/zpm-0.10.10.xml`):
+
+```objectscript
+zpm "repo -reset-defaults"
+zpm "install iris-shutter"
+```
+
+That installs the registry's latest version as the demo (130 seconds when measured on 15 November 2026). With no provider configured, the agents replay their recordings. Then open `/shutter/index.html` on the instance's web port, sign in as `approver` / `shutter`, and run S2, S3 and S8.
+
+**In its own namespace,** as a hospital would install it (with `-Ddemo=0` as well), with a clone at `<module>` inside the container:
+
+```objectscript
+Do $SYSTEM.OBJ.Load("<module>/src/Shutter/Setup.cls", "ck")
+Write ##class(Shutter.Setup).CreateNamespace("SHUTTER")
+Do $SYSTEM.OBJ.Delete("Shutter.Setup")
+zn "SHUTTER"
+Do $SYSTEM.OBJ.Load("<module>/vendor/ipm/zpm-0.10.10.xml", "ck")
+zpm "repo -reset-defaults"
+zpm "install iris-shutter"
+```
+
+Start from a namespace that has no Shutter in it (USER on a stock instance). The registry's version can lag this repository; for the exact clone, replace the last two lines with `zpm "load <module>"`. On plain IRIS for Health Community 2026.2, with no AI Hub, load the core instead, `zpm "load <module>/core"`, which replays recorded agent runs. [INSTALL.md](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md) explains each command, upgrades, uninstalling and how to play scenarios from a terminal.
+
 ### Docker: replay first, no key
 
 You need Docker, at least **5 GB of memory** and about **25 GB of disk**. The replay edition pulls a roughly **6 GB image**, then is healthy in about **8 minutes on 8 cores**.
@@ -285,24 +312,6 @@ A replay makes no model call and executes no tool. It restores a recorded answer
 Run S2, S3 and S8 as above. Then try S2's approval as an operator, submit it from two tabs, or approve its Workflow task with an empty plan digest. The expected results are refusal, one write only, and no dispatch respectively.
 
 [Exact steps and expected answers](https://github.com/MxSalata/shutter/blob/main/docs/readme/first-steps.md) · [Windows, Apple silicon, ports and edition switching](https://github.com/MxSalata/shutter/blob/main/docs/readme/running.md) · [Troubleshooting](https://github.com/MxSalata/shutter/blob/main/docs/readme/troubleshooting.md)
-
-### IPM on a stock AI Hub image
-
-With a clone at `<module>` inside the container:
-
-```objectscript
-Do $SYSTEM.OBJ.Load("<module>/src/Shutter/Setup.cls", "ck")
-Write ##class(Shutter.Setup).CreateNamespace("SHUTTER")
-Do $SYSTEM.OBJ.Delete("Shutter.Setup")
-zn "SHUTTER"
-Do $SYSTEM.OBJ.Load("<module>/vendor/ipm/zpm-0.10.10.xml", "ck")
-zpm "repo -reset-defaults"
-zpm "install iris-shutter"
-```
-
-Start from a namespace that has no Shutter in it (USER on a stock instance). The last command installs the registry's latest version, which can lag this repository; for the exact clone, replace the last two lines with `zpm "load <module>"`. On plain IRIS for Health Community 2026.2, with no AI Hub, load the core instead, `zpm "load <module>/core"`, which replays recorded agent runs. This installs the demo, which the web app plays as above. [INSTALL.md](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md) explains each command and how to play scenarios from a terminal.
-
-[Installation, upgrades and uninstall](https://github.com/MxSalata/shutter/blob/main/docs/INSTALL.md)
 
 ## At your site: investigate first, enable recovery deliberately
 
