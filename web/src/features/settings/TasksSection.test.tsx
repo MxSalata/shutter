@@ -149,6 +149,34 @@ describe('TasksSection', () => {
     expect(seen.querySelector('time')).toHaveAttribute('dateTime', fixtures.health.last_live_run.at);
   });
 
+  it("shows the rows before the health report answers, with the costs' count, then the newest run once it does", async () => {
+    answer({});
+    let release = () => {};
+    const held = new Promise<void>((r) => (release = r));
+    server.use(
+      http.get('/api/shutter/health', async () => {
+        await held;
+        return HttpResponse.json({ recorded: fixtures.source, ...fixtures.health });
+      }),
+    );
+    try {
+      renderTasks();
+      await open();
+      expect(await screen.findByTestId('tasks-summary')).toHaveTextContent('All 6 ready for you.');
+      const ask = await row('ask');
+      const seen = () => ask.querySelector('[data-kind="seen"]');
+      expect(seen()).toHaveTextContent('Seen: No agent run has reached a real model on this instance yet.');
+      release();
+      await vi.waitFor(() =>
+        expect(seen()).toHaveTextContent(
+          /^Seen: The newest run that reached a real model answered\. Started .+\.$/,
+        ),
+      );
+    } finally {
+      release();
+    }
+  });
+
   it('says a run refused before any call in plain words, and its status only on Technical', async () => {
     answer({});
     server.use(

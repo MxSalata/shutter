@@ -101,7 +101,8 @@ function TaskRow({ t }: { t: TaskReadiness }) {
 
 /**
  * The tasks, read once the section is opened: who the reader is, the settings, the recovery control, the profile, the
- * health report's last live run and the costs.
+ * health report's last live run and the costs. The rows wait for all but the health report, which runs the Doctor and
+ * feeds only the ask row's Seen line: until it answers that line says the costs' count, then the newest run.
  */
 function TaskList() {
   const me = useMe();
@@ -111,7 +112,7 @@ function TaskList() {
   const profile = useSiteProfile();
   const health = useHealth();
   const costs = useCosts();
-  if ([me, settings, recovery, profile, health, costs].some((q) => q.isPending))
+  if ([me, settings, recovery, profile, costs].some((q) => q.isPending))
     return (
       <Text size="sm" c="dimmed">
         Reading what you can do…
@@ -128,7 +129,7 @@ function TaskList() {
     profile: profile.data?.profile,
     profileAt: readAt(profile),
     liveRuns: TRIAL ? undefined : costs.data?.totals?.liveRuns,
-    // Undefined on an answer without the key, so the count stands in
+    // Undefined until the health report answers, and on an answer without the key: the count stands in
     lastLive: TRIAL ? undefined : health.data?.last_live_run,
   });
   return (
