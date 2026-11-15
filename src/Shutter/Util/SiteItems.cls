@@ -167,7 +167,7 @@ ClassMethod Learn(ByRef before, ByRef left, record As %Boolean, ByRef site, out 
         Set name = $ORDER(before("i", name), 1, class)
         Quit:name=""
         If $DATA(left("i", name), was) {
-            Continue:was '= class
+            Continue:(was '= class)
             If $GET(site("i", name, "added")) {
                 // The site's own item: its record is the item as it is now.
                 Kill site("i", name)
@@ -211,7 +211,7 @@ ClassMethod LearnNode(ByRef s, ByRef b, list As %String, record As %Boolean, ByR
     For k = 1:1:$LENGTH(list, ",") {
         Set p = $PIECE(list, ",", k)
         Continue:'($DATA(s("p", p), v) # 2)
-        Continue:'record && $LISTFIND($LISTFROMSTRING(..#DESCRIPTIVE), p)
+        Continue:('record && $LISTFIND($LISTFROMSTRING(..#DESCRIPTIVE), p))
         If ($DATA(b("p", p), was) # 2) && (was = v) Continue
         If 'record && ($DATA(o("p", p), was) # 2) && (was = v) Continue
         Set d("p", p) = v
@@ -301,7 +301,7 @@ ClassMethod ApplyNode(obj As %RegisteredObject, ByRef d, list As %String, label 
     For k = 1:1:$LENGTH(list, ",") {
         Set p = $PIECE(list, ",", k)
         Continue:'($DATA(d("p", p), v) # 2)
-        Continue:$PROPERTY(obj, p) = v
+        Continue:($PROPERTY(obj, p) = v)
         Set $PROPERTY(obj, p) = v, changes = changes + 1
         Do:$ISOBJECT(out) out.kept.%Push(label _ ": " _ p _ " " _ $SELECT($LISTFIND($LISTFROMSTRING(..#DESCRIPTIVE), p): "(its text)", 1: v))
     }
@@ -320,7 +320,7 @@ ClassMethod ApplyNode(obj As %RegisteredObject, ByRef d, list As %String, label 
             Quit:n=""
             If $DATA(at(t, n)) {
                 Set one = settings.GetAt(at(t, n))
-                Continue:one.Value = v
+                Continue:(one.Value = v)
                 Set one.Value = v
             } Else {
                 Set one = ##class(Ens.Config.Setting).%New()
@@ -382,7 +382,7 @@ ClassMethod Read(production, Output def) As %Boolean
         Set item = prod.Items.GetAt(i)
         Continue:'$ISOBJECT(item)
         Set name = item.Name
-        Continue:(name = "") || $DATA(def("i", name))
+        Continue:((name = "") || $DATA(def("i", name)))
         Set def("i", name) = item.ClassName
         For k = 1:1:$LENGTH(list, ",") Set p = $PIECE(list, ",", k), def("i", name, "p", p) = $PROPERTY(item, p)
         Do ..ReadSettings(item.Settings, .s)

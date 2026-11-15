@@ -314,7 +314,7 @@ Method Value(name As %String, target As %String, setting As %String) As %String
     Quit:'$ISOBJECT(item) "(no item)"
     For j = 1:1:item.Settings.Count() {
         Set s = item.Settings.GetAt(j)
-        Return:(s.Target = target) && (s.Name = setting) s.Value
+        Return:((s.Target = target) && (s.Name = setting)) s.Value
     }
     Quit "(none)"
 }
