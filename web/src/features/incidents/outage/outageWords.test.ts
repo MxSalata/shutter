@@ -220,6 +220,16 @@ describe("the send's words", () => {
     ).toBe('Nothing was sent: at this receiver a duplicate is unknown: check the receiver first.');
     expect(refused('version_changed')).toMatch(/^Nothing was sent: the outage moved on/);
     expect(refusalWords(new Error('offline'))).toBe('Nothing was sent: the server could not be reached.');
+    // No answer at all, or a gateway's page in the API's place: it may have been recorded, so never "Nothing was sent"
+    for (const lost of [
+      new ApiError({ status: 0, method: 'POST', path: '/outages/7/approvals', body: 'Failed to fetch' }),
+      new ApiError({ status: 504, method: 'POST', path: '/outages/7/approvals', body: 'Gateway Timeout' }),
+    ]) {
+      expect(refusalWords(lost)).toMatch(
+        /^No answer came back \((Failed to fetch|Gateway Timeout)\), so this page can't tell whether it was recorded\./,
+      );
+      expect(refusalWords(lost)).not.toMatch(/Nothing was/);
+    }
     // The recovery control's words keep their capital: "Shutter" and "Shadow" start a sentence of their own
     expect(
       refused('recovery_stopped', "Shutter recovery is stopped, so this resend can't be approved."),

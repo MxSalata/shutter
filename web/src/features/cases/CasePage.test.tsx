@@ -1620,6 +1620,119 @@ describe('CasePage', () => {
     expect(refusal).toHaveTextContent(/^The case is blocked, not awaiting approval \(wrong_state\)\.$/);
   });
 
+  it('says a decision whose answer never came may be recorded, and sends the same one again under the same key', async () => {
+    const sent: { key: string | null; body: unknown }[] = [];
+    server.use(
+      http.post('/api/shutter/cases/C-000002/approvals', async ({ request }) => {
+        sent.push({ key: request.headers.get('Idempotency-Key'), body: await request.clone().json() });
+        // The first answer is lost on the way back; the second press is answered
+        if (sent.length === 1) return HttpResponse.error();
+        return HttpResponse.json(
+          { taskId: '77', decision: 'approve', caseId: 'C-000002', approver: 'approver' },
+          { status: 202 },
+        );
+      }),
+    );
+    const announced = vi.spyOn(notifications, 'show');
+    renderCase('C-000002');
+    await screen.findByTestId('case-proposal');
+    await userEvent.click(screen.getByTestId('case-action'));
+    const dialog = await screen.findByRole('dialog', { name: 'Approve the resend: plan v1' });
+    await userEvent.type(within(dialog).getByRole('textbox', { name: /Comment/ }), 'Checked at the ward');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Approve the resend' }));
+    const said = await within(dialog).findByTestId('review-error');
+    expect(said).toHaveTextContent(
+      /^No answer came back \(.+\), so this page can't tell whether your decision was recorded\. Pressing "Approve the resend" again sends the same decision under the same key: if the first was recorded, the server answers with that record and nothing is decided twice\.$/,
+    );
+    expect(said).not.toHaveTextContent(/Nothing was/);
+    // The comment is held as sent, so the next press is the same body under the same key
+    const comment = within(dialog).getByRole('textbox', { name: /Comment/ });
+    expect(comment).toHaveAttribute('readonly');
+    expect(comment).toHaveValue('Checked at the ward');
+    // The review stays: the case has not moved, so nothing says the decision can't be recorded
+    expect(within(dialog).queryByTestId('review-stopped')).not.toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Approve the resend' }));
+    await waitFor(() =>
+      expect(announced).toHaveBeenCalledWith(expect.objectContaining({ title: 'Approved by approver' })),
+    );
+    expect(sent).toHaveLength(2);
+    expect(sent[1].key).toBeTruthy();
+    expect(sent[1].key).toBe(sent[0].key);
+    expect(sent[1].body).toEqual(sent[0].body);
+    announced.mockRestore();
+  });
+
+  it('never says nothing was decided when the case moved after a decision whose answer was lost', async () => {
+    const detail = (await (await fetch('/api/shutter/cases/C-000002')).json()) as { version: number };
+    let decided = false;
+    server.use(
+      http.get('/api/shutter/cases/C-000002', () =>
+        HttpResponse.json(decided ? { ...detail, state: 'blocked', version: detail.version + 1 } : detail),
+      ),
+      // The rejection is recorded, then the connection drops before its answer reaches the page
+      http.post('/api/shutter/cases/C-000002/approvals', () => {
+        decided = true;
+        return HttpResponse.error();
+      }),
+    );
+    renderCase('C-000002');
+    await screen.findByTestId('case-proposal');
+    await userEvent.click(screen.getByTestId('case-action'));
+    let dialog = await screen.findByRole('dialog', { name: 'Approve the resend: plan v1' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Reject instead' }));
+    dialog = await screen.findByRole('dialog', { name: 'Reject the resend: plan v1' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Reject the resend' }));
+    const refusal = await within(dialog).findByTestId('review-refusal');
+    expect(refusal).toHaveTextContent(
+      /^No answer came back for your decision, and the case has changed since: the change may be your decision, recorded\. The Audit trail says who decided\./,
+    );
+    expect(refusal).not.toHaveTextContent(/can't be recorded|was not recorded/);
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Review current plan' }));
+    const gone = await within(dialog).findByTestId('review-current-gone');
+    expect(gone).toHaveTextContent(
+      'The case is no longer waiting for a decision: it is blocked now. Your decision may be what moved it: the Audit trail says who decided.',
+    );
+    expect(dialog).not.toHaveTextContent(/Nothing was decided/);
+  });
+
+  it('opens the current plan after a lost answer without saying the earlier decision was not recorded', async () => {
+    const view = (await (await fetch('/api/shutter/cases/C-000002/plan')).json()) as {
+      plan: Record<string, unknown>;
+    };
+    const detail = (await (await fetch('/api/shutter/cases/C-000002')).json()) as { version: number };
+    // The case is re-planned while the decision's answer is lost on the way back
+    let replanned = false;
+    const current = () =>
+      replanned
+        ? { ...view, plan: { ...view.plan, version: 2, digest: 'sha256:another', expectedVersion: 2 } }
+        : view;
+    server.use(
+      http.get('/api/shutter/cases/C-000002/plan', () => HttpResponse.json(current())),
+      http.get('/api/shutter/cases/C-000002', () =>
+        HttpResponse.json(replanned ? { ...detail, version: detail.version + 3 } : detail),
+      ),
+      http.post('/api/shutter/cases/C-000002/approvals', () => {
+        replanned = true;
+        return HttpResponse.error();
+      }),
+    );
+    renderCase('C-000002');
+    await screen.findByTestId('case-proposal');
+    await userEvent.click(screen.getByTestId('case-action'));
+    const stopped = await screen.findByRole('dialog', { name: 'Approve the resend: plan v1' });
+    await userEvent.click(within(stopped).getByRole('button', { name: 'Approve the resend' }));
+    expect(await within(stopped).findByTestId('review-refusal')).toHaveTextContent(
+      /^No answer came back for your decision, and the case has changed since: .* Review the current plan to decide again\.$/,
+    );
+    await userEvent.click(within(stopped).getByRole('button', { name: 'Review current plan' }));
+    const fresh = await screen.findByRole('dialog', { name: 'Approve the resend: plan v2' });
+    const note = within(fresh).getByTestId('review-replaces');
+    expect(note).toHaveTextContent(
+      'No answer came for your decision on plan v1, and the plan has changed since: this is plan v2. The Audit trail says whether that decision was recorded. Nothing is decided until you confirm it.',
+    );
+    expect(note).not.toHaveTextContent(/was not recorded/);
+  });
+
   it('holds the review open while a decision is being sent, so its answer is always announced', async () => {
     const sent: unknown[] = [];
     let answer!: () => void;

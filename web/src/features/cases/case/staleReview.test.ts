@@ -137,6 +137,18 @@ describe('why the stopped decision was not recorded', () => {
       'Your decision on plan v1 was not recorded: it was refused as stale, though nothing this page reads has changed.',
     );
   });
+
+  it('never says a decision whose answer never came was not recorded', () => {
+    expect(replacedWords(opened(), replanned(), true)).toBe(
+      'No answer came for your decision on plan v1, and the plan has changed since: this is plan v2. The Audit trail says whether that decision was recorded.',
+    );
+    const moved = opened();
+    moved.c = { ...moved.c, version: 7 };
+    expect(replacedWords(opened(), moved, true)).toBe(
+      'No answer came for your decision on plan v1, and the case has changed since, though the plan is the same. The Audit trail says whether that decision was recorded.',
+    );
+    expect(replacedWords(opened(), opened(), true)).not.toMatch(/not recorded/);
+  });
 });
 
 describe('a read older than the review', () => {
