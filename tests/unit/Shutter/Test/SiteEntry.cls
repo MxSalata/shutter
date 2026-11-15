@@ -154,7 +154,7 @@ Method TestTheSentence()
     Do $$$AssertEquals(sentence, "When a transfer from PAS fails, is rejected or gets no answer, and the ward is WARD-ISO: a person decides", "the entry in one sentence")
 }
 
-/// Which shipped entries a pattern can displace, condition by condition, against the shipped catalogue: 
+/// Which shipped entries a pattern can displace, condition by condition, against the shipped catalogue: a failed
 /// transfer can displace E2 (they share failed and uncertain), never an entry for a delivery it does not name, and E19
 /// is listed as the one that leads.
 Method TestTheOverlapReport()
