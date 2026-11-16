@@ -1,6 +1,6 @@
 {
   "note": "GET /api/shutter/catalogue and GET /api/shutter/site-profile as a demo install of this tree answered them, signed in as the demo's operator, with no site entry. Recorded on a stock IRIS for Health Community 2026.2 container: the iris job's setup steps (namespace, load, install, hospital, records), then one sign-in and the two reads (scripts/record-catalogue.py). Record again whenever the shipped catalogue or Matcher.AtReceiver changes: atReceivers.test.ts says when.",
-  "release": "1.4.8",
+  "release": "1.4.9",
   "gatePolicyVersion": "2026-11-07.1",
   "siteProfile": {
     "profile": {
@@ -177,7 +177,7 @@
     },
     "version": 4,
     "source": "/home/irisowner/dev/knowledge/site/profile.json (demo)",
-    "updatedAt": "2026-11-16T01:21:48Z",
+    "updatedAt": "2026-11-16T02:24:19Z",
     "updatedBy": "install",
     "catalogueEntries": 19
   },
