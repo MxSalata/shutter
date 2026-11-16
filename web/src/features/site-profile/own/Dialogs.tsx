@@ -118,7 +118,10 @@ export function SendDialog({
   const locked = saveLocked(can);
   const lockedId = useId();
   const v = versionOf(entry, action);
-  const stored = entry.proofs.find((p) => p.action === action && p.digest === v?.digest);
+  // The proof a proposal will stand on: the newest a person ran (the core's Latest), never an approval's own run
+  const stored = entry.proofs.find(
+    (p) => p.action === action && p.digest === v?.digest && p.origin === 'api',
+  );
   const [proof, setProof] = useState<SiteEntryProofResult | null>(stored?.result ?? null);
   const [problem, setProblem] = useState('');
   const prove = useProve(entry.id);

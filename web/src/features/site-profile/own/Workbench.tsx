@@ -482,7 +482,10 @@ function Editor({
   const problems = live?.problems ?? [];
   const warnings = live?.warnings ?? [];
   const draftDigest = entry?.draft?.digest ?? (entry && !entry.activeVersion ? entry.digest : undefined);
-  const lastProof = entry?.proofs.find((p) => p.action === 'activate' && p.digest === draftDigest);
+  // The proof a proposal would stand on: the newest a person ran, never an approval's own run
+  const lastProof = entry?.proofs.find(
+    (p) => p.action === 'activate' && p.digest === draftDigest && p.origin === 'api',
+  );
   const provedNow =
     proof?.passed && proof.digest === draftDigest ? proof : lastProof?.passed ? lastProof.result : null;
 

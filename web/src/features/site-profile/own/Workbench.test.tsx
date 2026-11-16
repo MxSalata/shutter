@@ -425,6 +425,21 @@ describe("the workbench of the site's own scenarios", () => {
       expect(exact).not.toHaveTextContent(/WARD-ISO/);
     }, 60_000);
 
+    it("shows the proof a proposal will stand on, a person's, not an approval's own run", async () => {
+      serve({
+        state: 'suspended',
+        suspended: { by: 'colleague', at, reason: 'Too broad' },
+        proofs: [proofRow('21', 'approval', 'resume'), proofRow('20', 'api', 'resume', 7)],
+      });
+      const user = userEvent.setup();
+      page('/site-profile?own=L1');
+      await user.click(
+        await screen.findByRole('button', { name: 'Propose resuming it…' }, { timeout: 5000 }),
+      );
+      const dialog = await screen.findByRole('dialog', { name: 'Propose resuming L1' });
+      expect(within(dialog).getByTestId('own-proof-impact')).toHaveTextContent(/it would catch 7/);
+    }, 60_000);
+
     it('shows the approver the proof the approval stands on when the one proposed on went stale', async () => {
       serve(retiring('12'));
       const user = userEvent.setup();
