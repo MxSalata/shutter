@@ -2545,7 +2545,8 @@ while the day's budget or the caller's share is spent or the provider refuses th
 resolves to `replay`.
 
 **The run.** The route sends `Shutter.Msg.SetupTurnRequest` to the Case Question item, which opens the row, answers at once
-with `Shutter.Msg.QuestionStarted` and asks the Agent Board item with one `Shutter.Bridge.Msg.AgentRequest`: `Role` and
+with `Shutter.Msg.QuestionStarted`, reads the site's switch again (`ProfileSetup.Proceed`: switched off since the route
+admitted the turn, the turn ends `failed` and nothing goes to a model) and asks the Agent Board item with one `Shutter.Bridge.Msg.AgentRequest`: `Role` and
 `MemberCode` `setup`, `AgentClass` `Shutter.Agent.SetupGuide` (the Explain agent in the question tier `setup`, with its own
 preamble, `Shutter.Agent.Base.SetupPreamble`: it drafts for a person to review, saves nothing, switches nothing on, states
 nothing about what a receiver can do and names only the fields marked as its own; no toolset, the explain collection's
@@ -2611,7 +2612,12 @@ each field still holds its `from`, and its own copy of checks 1, 2, 4 and 5 pass
 ("Not used: the draft changed meanwhile"). Drafted answers enter the draft at once, marked "Drafted by Ask Shutter", with
 Undo; a hand edit makes an answer the person's. The review dialog lists them under "Drafted by Ask Shutter", each with its
 value, the quoted words and what it does, and its Save stays disabled until "I have read the answers Ask Shutter drafted"
-is ticked. Opening the review drops a turn that is still being read. `say` and quotes are shown as plain text. The public
+is ticked. Drafted answers follow their receiver by the page's own receiver id, which the hand-over carries to the Site
+profile page: a receiver renamed there keeps them in the review's list, with the tick, and they stay marked when the draft
+goes back to Set up the site; only an answer changed since leaves the list. The Site profile's "Discard changes" discards
+a handed-over draft in Set up the site too. An answer to a send made before a discard, a save or a sign-out is not taken
+into the next draft, and none is used while the stored version has moved under the draft. Opening the review drops a
+turn that is still being read. `say` and quotes are shown as plain text. The public
 demo's and the judges' roles hold no `Shutter_Configure`: their Save is locked and `PUT /site-profile` answers 403.
 "Why does this matter?" on a card goes through `POST /page-questions` (14.6) whatever the switch says, with the question,
 the answer on the page and its consequence line: the receiver's name and the answer are held to the text rule above
