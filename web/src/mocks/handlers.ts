@@ -42,6 +42,7 @@ import { digest, draftEscalation, teamFor } from './escalation';
 import { receiverCheckFor, type RecordedCase } from './receiverCheck';
 import { freshHolds, heldView, type CaseFixture, type Hold } from './hold';
 import { onboardingHandlers, resetOnboarding } from './onboarding';
+import { siteEntryHandlers } from './siteEntries';
 import { recordedSiteProfile, recordedSiteProfileHistory } from './profile';
 import { pageAnswerFor, resetPageQuestionIds, samplePageQuestion } from './pageQuestions';
 import {
@@ -255,6 +256,7 @@ export function resetMock(signedInAs: keyof typeof USERS | null = 'approver') {
   played = {};
   holds = freshHolds(cases);
   resetSiteProfile();
+  siteEntries.reset();
   escalations = {};
   closed = {};
   abandoned = {};
@@ -822,6 +824,24 @@ export const SITE_ENTRIES_EXAMPLE: SiteEntriesView = {
   },
   catalogueVersion: '',
 };
+
+/**
+ * The site's own scenarios in the trial: two sample entries (the recorded cases were made with none, so neither changed
+ * how a recorded case ended), and the page's routes answered on the recorded cases.
+ */
+const siteEntries = siteEntryHandlers({
+  csrf: (request) => csrf(request),
+  guard: (need) => guard(need),
+  who: () => session?.username ?? '',
+  cases: () => allCases(),
+  caseOf: (id) => caseOf(id),
+  receivers: () => (siteProfile?.profile.receivers ?? []).map((r) => r.name),
+  teams: () => (siteProfile?.profile.teams ?? []).map((t) => t.id),
+});
+siteEntries.reset();
+
+/** For a test: the site as one with none of its own entries, as the recorded build is. */
+export const clearSiteEntries = () => siteEntries.clear();
 
 export const handlers = [
   ...onboardingHandlers(csrf, guard),
@@ -1511,9 +1531,8 @@ export const handlers = [
         ? HttpResponse.json(siteProfile)
         : error(404, 'not_found', 'No site profile was recorded'),
   ),
-  // The site's own scenarios (CONTRACTS 6.8), read only: the recorded cases were made with none, so the list is empty
-  // unless a test answers with the example (SITE_ENTRIES_EXAMPLE).
-  http.get(`${BASE}/site-entries`, () => (!session ? signedOut() : HttpResponse.json(NO_SITE_ENTRIES))),
+  // The site's own scenarios (CONTRACTS 6.8): the trial's sample entries and every route of the page (siteEntries.ts)
+  ...siteEntries.handlers,
   http.get(`${BASE}/site-profile/history`, ({ request }) => {
     if (!session) return signedOut();
     const limit = Number(new URL(request.url).searchParams.get('limit') ?? 50);

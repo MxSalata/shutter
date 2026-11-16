@@ -1,10 +1,11 @@
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
 import { http, HttpResponse } from 'msw';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { SiteEntriesView } from '@/api/types';
-import { resetMock, SITE_ENTRIES_EXAMPLE } from '@/mocks/handlers';
+import { clearSiteEntries, resetMock, SITE_ENTRIES_EXAMPLE } from '@/mocks/handlers';
 import { server } from '@/mocks/node';
 import { useAppearance } from '@/stores/appearance';
 import { theme } from '@/theme';
@@ -17,7 +18,9 @@ function page() {
   return render(
     <QueryClientProvider client={client}>
       <MantineProvider theme={theme}>
-        <OwnScenarios />
+        <MemoryRouter>
+          <OwnScenarios />
+        </MemoryRouter>
       </MantineProvider>
     </QueryClientProvider>,
   );
@@ -36,10 +39,14 @@ beforeEach(() => {
 
 describe("the site's own scenarios on the Site profile page", () => {
   it('says there is none on a site that has none, and how one is made', async () => {
+    clearSiteEntries();
     page();
     expect(await screen.findByText(/None yet: the shipped catalogue alone decides/)).toBeInTheDocument();
     expect(screen.getByText(/can never allow a resend/)).toBeInTheDocument();
+    expect(screen.getByText(/Start one from a closed case/)).toBeInTheDocument();
     expect(screen.queryByTestId('own-scenarios-list')).not.toBeInTheDocument();
+    // An operator may not change the site: nothing offers to write one
+    expect(screen.queryByTestId('own-new')).not.toBeInTheDocument();
   });
 
   it("says when a fixture's case is no longer stored, though nothing is flagged", async () => {
@@ -76,9 +83,9 @@ describe("the site's own scenarios on the Site profile page", () => {
     ).toBeInTheDocument();
     expect(within(row).getByText(/Version 1 approved by approver/)).toBeInTheDocument();
     expect(within(row).getByText(/0 cases sent to a person in the last 30 days/)).toBeInTheDocument();
-    // Plain shows no condition names; nothing on the page changes an entry.
+    // Plain shows no condition names; an operator opens an entry and is offered nothing that changes it.
     expect(screen.queryByTestId('own-scenario-L1-pattern')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual(['Open']);
     expect(screen.queryByTestId('own-scenarios-warnings')).not.toBeInTheDocument();
   });
 

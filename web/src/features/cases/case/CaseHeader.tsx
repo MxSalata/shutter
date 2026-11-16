@@ -33,6 +33,7 @@ import { followedBoard } from './follows';
 import { evidenceOf, messageTypeLabel, messageTypeOf } from './message';
 import { actionHead, headerSentence } from './outcome';
 import { keepTogether } from './keepTogether';
+import { OwnScenarioLink } from './OwnScenarioLink';
 import { FailedAt } from './TechFacts';
 import { catalogueEntryOf, digestPrefix, failureCode, messageContentsLink } from './technical';
 
@@ -251,6 +252,7 @@ export function CaseHeader({
               icon={IconSparkles}
             />
           ) : null}
+          {c.candidateEntry ? <OwnScenarioLink c={c} size="xs" /> : null}
         </>
       }
       lead={<Lead c={c} />}

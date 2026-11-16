@@ -64,6 +64,10 @@ const ANSWERS: Answers = {
       'A receiver either needs only where the patient is now (current state, such as a bed system) or every movement in order (history of record, such as the patient record). The category decides whether a late message is still worth sending.',
     'What is a tier?':
       'A tier is how sensitive a receiver is: 1 information, 2 operations, 3 clinical safety. It sets who releases a write there, the written policy or a person.',
+    'What is one of our own scenarios?':
+      "A brake of this site's own: a pattern of conditions, and the words for the person a case goes to. A case it matches goes to a person, and Shutter sends and closes nothing by itself; it can never allow a resend. One person writes it, often from a closed case, and proves it; a second person approves it.",
+    'Why does a scenario need a near miss?':
+      'The proof checks a closed case the scenario must catch and a near miss it must leave alone. The near miss shows the pattern is no wider than meant, so it does not send cases to a person that need no one.',
   },
   library: {
     'What does each agent do?':
