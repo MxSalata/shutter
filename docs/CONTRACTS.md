@@ -2815,7 +2815,8 @@ resolves to `replay`.
 
 **The run.** The route sends `Shutter.Msg.SetupTurnRequest` to the Case Question item, which opens the row, answers at once
 with `Shutter.Msg.QuestionStarted`, reads the site's switch again (`ProfileSetup.Proceed`: switched off since the route
-admitted the turn, the turn ends `failed` and nothing goes to a model) and asks the Agent Board item with one `Shutter.Bridge.Msg.AgentRequest`: `Role` and
+admitted the turn, the turn ends `failed` and nothing goes to a model; the Agent Board item reads it once more before
+any runner, `PageQuestion.Refuses`, for a turn that waited in its queue, v1.69) and asks the Agent Board item with one `Shutter.Bridge.Msg.AgentRequest`: `Role` and
 `MemberCode` `setup`, `AgentClass` `Shutter.Agent.SetupGuide` (the Explain agent in the question tier `setup`, with its own
 preamble, `Shutter.Agent.Base.SetupPreamble`: it drafts for a person to review, saves nothing, switches nothing on, states
 nothing about what a receiver can do and names only the fields marked as its own; no toolset, the explain collection's

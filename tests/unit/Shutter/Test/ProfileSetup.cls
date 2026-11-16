@@ -401,7 +401,8 @@ Method TestToolSetAndLiveOnly()
     Set spec.Mode = "record"
     Do $$$AssertTrue(##class(Shutter.Util.PageQuestion).Refuses(spec, .why), "never recorded")
     Set spec.Mode = "live"
-    Do $$$AssertNotTrue(##class(Shutter.Util.PageQuestion).Refuses(spec, .why), "live runs")
+    // Live, it runs while the site's switch is on; with it off it is refused here too (Shutter.Test.SetupSwitch)
+    Do $$$AssertEquals(##class(Shutter.Util.PageQuestion).Refuses(spec, .why), '##class(Shutter.Store.SiteProfile).SetupAnswers(), "live runs, while the switch is on")
     If ##class(%Dictionary.CompiledClass).%ExistsId("Shutter.Agent.SetupGuide") {
         Do $$$AssertEquals($PARAMETER("Shutter.Agent.SetupGuide", "TOOLSETS"), "", "the agent class declares no toolset")
         Do $$$AssertEquals($PARAMETER("Shutter.Agent.SetupGuide", "TERMINAL"), "SubmitSetupTurn", "and its terminal tool")

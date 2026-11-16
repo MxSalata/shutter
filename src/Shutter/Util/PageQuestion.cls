@@ -187,6 +187,8 @@ ClassMethod Refuses(spec As Shutter.Bridge.RunSpec, Output detail As %String) As
 {
     Set detail = ""
     If '$ISOBJECT(spec) || '..IsPageRun(spec.AgentClass) Quit 0
+    // A set-up turn that waited in this item's queue while the site switched typed answers off goes no further
+    If ##class(Shutter.Util.ProfileSetup).IsSetupRun(spec.AgentClass) && '##class(Shutter.Store.SiteProfile).SetupAnswers() Set detail = "Reading typed answers was switched off in the site profile after this turn was sent: nothing went to a model" Quit 1
     If spec.Mode = "live" Quit 0
     Do ..RunMode(spec.Mode, .detail)
     Quit 1
