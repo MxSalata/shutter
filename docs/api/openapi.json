@@ -9853,7 +9853,7 @@
             }
           },
           "404": {
-            "description": "Not found. not_found: No such site entry.",
+            "description": "Not found. not_found: No such site entry (an id is read letter for letter: l1 is not L1).",
             "x-error-codes": [
               "not_found"
             ],
@@ -9995,7 +9995,7 @@
             }
           },
           "404": {
-            "description": "Not found. not_found: No such site entry.",
+            "description": "Not found. not_found: No such site entry (an id is read letter for letter: l1 is not L1).",
             "x-error-codes": [
               "not_found"
             ],
@@ -10167,7 +10167,7 @@
             }
           },
           "404": {
-            "description": "Not found. not_found: No such site entry.",
+            "description": "Not found. not_found: No such site entry (an id is read letter for letter: l1 is not L1).",
             "x-error-codes": [
               "not_found"
             ],
@@ -10202,6 +10202,27 @@
                     "value": {
                       "error": "wrong_state",
                       "detail": "The entry has no draft to activate, or is not in the state the action needs"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error. store_failed: The proof could not be kept with its event; no proof is kept.",
+            "x-error-codes": [
+              "store_failed"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "store_failed": {
+                    "value": {
+                      "error": "store_failed",
+                      "detail": "The proof could not be kept with its event"
                     }
                   }
                 }
@@ -10332,7 +10353,7 @@
             }
           },
           "404": {
-            "description": "Not found. not_found: No such site entry.",
+            "description": "Not found. not_found: No such site entry (an id is read letter for letter: l1 is not L1).",
             "x-error-codes": [
               "not_found"
             ],
@@ -10511,7 +10532,7 @@
             }
           },
           "404": {
-            "description": "Not found. not_found: No such site entry.",
+            "description": "Not found. not_found: No such site entry (an id is read letter for letter: l1 is not L1).",
             "x-error-codes": [
               "not_found"
             ],
@@ -10704,7 +10725,7 @@
             }
           },
           "404": {
-            "description": "Not found. not_found: No such site entry.",
+            "description": "Not found. not_found: No such site entry (an id is read letter for letter: l1 is not L1).",
             "x-error-codes": [
               "not_found"
             ],
@@ -19022,7 +19043,8 @@
                 "type": "array",
                 "items": {
                   "type": "string"
-                }
+                },
+                "description": "What the page and the Doctor show for as long as it holds: a suspension (an administrator's set-aside included), an entry that needs review, an entry whose fixtures' cases are no longer stored, an entry the last recheck could not check (an active one keeps every case at error until it is mended or set aside from the terminal), and the two-person rule lifted."
               },
               "downgrade": {
                 "type": "string"
@@ -19066,6 +19088,10 @@
           },
           "vocabulary": {
             "type": "object"
+          },
+          "siteError": {
+            "type": "string",
+            "description": "Set when the site's own active entries cannot be read, have not been rechecked under this release and the site profile in force yet, or changed while they were read (read again up to three times); site is then empty and every case is matched as error (R13). The version and the generation are read with the entries, as one."
           }
         },
         "required": [

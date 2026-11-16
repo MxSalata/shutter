@@ -9,12 +9,20 @@ Class Shutter.API.SiteEntries Extends %RegisteredObject
 ClassMethod Catalogue() As %Status
 {
     Set o = {}
-    Set o.version = ##class(Shutter.Catalogue.Entry).CatalogueVersion()
+    // The version, the generation and the entries read as one: read again while a change landed between them, so the
+    // answer never pairs a version with entries of another generation.
+    For try = 1:1:3 {
+        Set version = ##class(Shutter.Catalogue.Entry).CatalogueVersion(), generation = ##class(Shutter.Catalogue.SiteEntry).Generation()
+        Set list = ##class(Shutter.Catalogue.SiteEntry).ActiveList(.problem)
+        Quit:((##class(Shutter.Catalogue.Entry).CatalogueVersion() = version) && (##class(Shutter.Catalogue.SiteEntry).Generation() = generation))
+        If try = 3 Set problem = $SELECT($GET(problem) '= "": problem, 1: "the site's entries changed while they were read: read them again")
+    }
+    Set o.version = version
     Set o.shippedVersion = ##class(Shutter.Catalogue.Entry).ShippedVersion()
-    Do o.%Set("generation", ##class(Shutter.Catalogue.SiteEntry).Generation(), "number")
+    Do o.%Set("generation", generation, "number")
     Set o.shipped = ##class(Shutter.Catalogue.Entry).All()
     Set site = []
-    Set it = ##class(Shutter.Catalogue.SiteEntry).ActiveList(.problem).%GetIterator()
+    Set it = list.%GetIterator()
     While it.%GetNext(, .m) {
         // As the matcher reads them: the three fields that decide are its own words, never a stored row's.
         Set e = {}
