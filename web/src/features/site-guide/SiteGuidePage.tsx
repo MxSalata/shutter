@@ -4,7 +4,7 @@ import { IconArrowLeft, IconPrinter } from '@tabler/icons-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { api } from '@/api/client';
-import { useHealth, useScenarios, useSiteProfile } from '@/api/hooks';
+import { useHealth, useScenarios, useSettings, useSiteProfile } from '@/api/hooks';
 import type { SiteEntriesView, SiteEntryItem, SiteProfile, SiteProfileView, SiteReceiver } from '@/api/types';
 import { CodeChip } from '@/components/CodeChip';
 import { DetailSwitch } from '@/components/DetailSwitch';
@@ -237,7 +237,17 @@ function Lines({ label, items }: { label: string; items: ReactNode[] }) {
 }
 
 /** One receiver: what it is, what Shutter may and will never do there, who approves, and what an outage does. */
-function Receiver({ r, profile, holds }: { r: SiteReceiver; profile: SiteProfile; holds?: AutomaticHold[] }) {
+function Receiver({
+  r,
+  profile,
+  holds,
+  mode,
+}: {
+  r: SiteReceiver;
+  profile: SiteProfile;
+  holds?: AutomaticHold[];
+  mode: string;
+}) {
   const category = categoryOf(r);
   const text = CATEGORY_TEXT[category];
   const fhir = fhirOf(r);
@@ -273,7 +283,11 @@ function Receiver({ r, profile, holds }: { r: SiteReceiver; profile: SiteProfile
         . <Code>{`policy.${r.tier}`}</Code>
       </>,
     );
-    if (KINDS.some((k) => releaseAt(profile, r, k) === 'automatic'))
+    if (mode !== 'policy')
+      may.push(
+        `The watched production's failures run in ${mode} mode here, so the site's written policy releases no write: this table is not read.`,
+      );
+    else if (KINDS.some((k) => releaseAt(profile, r, k) === 'automatic'))
       may.push(`Released automatically means ${automaticWords(holds)}.`);
     never.push(
       "It never sends anything but the case's own operation, unchanged, after the gate and a dry run.",
@@ -506,21 +520,35 @@ function Gate({ policy, profile }: { policy: string; profile: SiteProfile }) {
   );
 }
 
+/** Who settles a watched production's case in each mode other than policy (CONTRACTS 6.3). */
+const MODE_SETTLES: Record<string, string> = {
+  board: 'the board of agents settles every case',
+  single: 'the single investigator settles every case',
+  rules: 'no agent and no catalogue path: each case is a plain resend for the gate to judge',
+};
+const MODE_WHO: Record<string, string> = {
+  board: 'the board of agents, as the watched mode asks',
+  single: 'the single investigator, as the watched mode asks',
+  rules: 'no agent, as the watched mode asks: a plain resend for the gate to judge',
+};
+
 function Scenario({
   e,
   profile,
   titles,
   own,
   holds,
+  mode,
 }: {
   e: CatalogueEntry;
   profile: SiteProfile;
   titles: Map<string, string>;
   own?: SiteEntryItem;
   holds?: AutomaticHold[];
+  mode: string;
 }) {
   const site = e.origin === 'site';
-  const at = site ? [] : entryAtReceivers(e, profile, holds);
+  const at = site ? [] : entryAtReceivers(e, profile, holds, mode);
   const alternatives = site ? [] : alternativesOf(e);
   const shown = (e.scenarios ?? []).map((s) => (titles.get(s) ? `${s} (${titles.get(s)})` : s));
   return (
@@ -534,7 +562,8 @@ function Scenario({
           {site ? `${printable(e.sentence) || patternWords(e.pattern)}.` : `${patternWords(e.pattern)}.`}
         </Text>
         <Text size="sm">
-          Who decides here: {decidesWords(e.decides)}. <Code>{`decides: ${e.decides}`}</Code>
+          Who decides here: {site || mode === 'policy' ? decidesWords(e.decides) : (MODE_WHO[mode] ?? mode)}.{' '}
+          <Code>{`decides: ${e.decides}`}</Code>
         </Text>
         {site ? (
           <>
@@ -592,11 +621,16 @@ function Scenarios({
   profile,
   titles,
   entries,
+  warnings,
+  mode,
 }: {
   catalogue: CatalogueView;
   profile: SiteProfile;
   titles: Map<string, string>;
   entries: SiteEntryItem[];
+  /** GET /site-entries' status warnings: a suspended entry, one that needs review, a purged fixture, a lifted rule. */
+  warnings: string[];
+  mode: string;
 }) {
   const others = profile.receivers.filter((r) => !modelledReceiver(r));
   // A receiver with no recovery API takes no write from the case either: its cases go to a person, as at orders
@@ -607,6 +641,13 @@ function Scenarios({
   const fhir = others.filter((r) => fhirOf(r)).map((r) => r.name);
   return (
     <Stack gap="sm">
+      {mode !== 'policy' ? (
+        <StatusNotice tone="info" title={`The watched production runs in ${mode} mode`}>
+          <Text size="md" data-testid="site-guide-mode">
+            {`Failures from the watched production run in ${mode} mode here: ${MODE_SETTLES[mode] ?? 'not the site policy'}. The site's written policy releases no write in this mode, so each entry below says what the catalogue holds, not who is asked.`}
+          </Text>
+        </StatusNotice>
+      ) : null}
       <Text size="md" className="site-guide-prose">
         Each entry is a failure Shutter knows. When one alone matches a case, it settles as below at this
         site; when several match, the board decides; a pattern no entry knows goes to the board: a plan that
@@ -648,13 +689,21 @@ function Scenarios({
           profile={profile}
           titles={titles}
           own={entries.find((x) => x.id === e.id && x.activeVersion === e.version)}
+          mode={mode}
         />
       ))}
       <Title order={3} fz="lg">
         The shipped entries
       </Title>
       {[...catalogue.shipped].sort(byNumber).map((e) => (
-        <Scenario key={e.id} e={e} profile={profile} titles={titles} holds={catalogue.automaticHolds} />
+        <Scenario
+          key={e.id}
+          e={e}
+          profile={profile}
+          titles={titles}
+          holds={catalogue.automaticHolds}
+          mode={mode}
+        />
       ))}
     </Stack>
   );
@@ -713,6 +762,8 @@ export default function SiteGuidePage() {
   const health = useHealth();
   const entries = useGuideEntries();
   const scenarios = useScenarios();
+  // The mode a watched production's failures run in: outside policy the site's written policy releases nothing
+  const settings = useSettings();
   // The moment of export: fixed when the page opens, so every page of the PDF carries the same stamp
   const [now] = useState(() => new Date());
   useEffect(() => {
@@ -722,7 +773,7 @@ export default function SiteGuidePage() {
       document.title = before;
     };
   }, []);
-  const failed = [profile, catalogue, health].find((q) => q.isError);
+  const failed = [profile, catalogue, health, settings].find((q) => q.isError);
   // GET /catalogue names the profile version its rows were made under: a guide is printed only when that is the profile
   // the page read, so no part comes from another version (a save landed between the reads, or a cached profile)
   const mixed =
@@ -746,7 +797,8 @@ export default function SiteGuidePage() {
     !profile.isFetching &&
     !catalogue.isFetching &&
     !entries.isPending &&
-    !scenarios.isPending;
+    !scenarios.isPending &&
+    !!settings.data;
   const titles = new Map((scenarios.data?.scenarios ?? []).map((s) => [s.id, s.title]));
   return (
     <div className="site-guide">
@@ -789,6 +841,8 @@ export default function SiteGuidePage() {
             health={health.data! as Record<string, unknown>}
             titles={titles}
             entries={entries.data?.items ?? []}
+            warnings={entries.data?.status?.warnings ?? []}
+            mode={settings.data?.watchedMode ?? 'policy'}
             now={now}
           />
         )}
@@ -803,6 +857,8 @@ function Guide({
   health,
   titles,
   entries,
+  warnings,
+  mode,
   now,
 }: {
   view: SiteProfileView;
@@ -810,6 +866,8 @@ function Guide({
   health: Record<string, unknown>;
   titles: Map<string, string>;
   entries: SiteEntryItem[];
+  warnings: string[];
+  mode: string;
   now: Date;
 }) {
   const profile = view.profile;
@@ -824,6 +882,7 @@ function Guide({
         ? "the demo's answers"
         : 'the shipped answers'
       : '',
+    watchedMode: mode,
   });
   return (
     <>
@@ -832,7 +891,13 @@ function Guide({
       </Sheet>
       <Sheet id={PARTS[0][0]} title={PARTS[0][1]} stamp={stamp}>
         {profile.receivers.map((r, i) => (
-          <Receiver key={`${r.name}-${i}`} r={r} profile={profile} holds={catalogue.automaticHolds} />
+          <Receiver
+            key={`${r.name}-${i}`}
+            r={r}
+            profile={profile}
+            holds={catalogue.automaticHolds}
+            mode={mode}
+          />
         ))}
       </Sheet>
       <Sheet id={PARTS[1][0]} title={PARTS[1][1]} stamp={stamp}>
@@ -842,7 +907,14 @@ function Guide({
         <Gate policy={stamp.gatePolicy} profile={profile} />
       </Sheet>
       <Sheet id={PARTS[3][0]} title={PARTS[3][1]} stamp={stamp}>
-        <Scenarios catalogue={catalogue} profile={profile} titles={titles} entries={entries} />
+        <Scenarios
+          catalogue={catalogue}
+          profile={profile}
+          titles={titles}
+          entries={entries}
+          warnings={warnings}
+          mode={mode}
+        />
       </Sheet>
       <Sheet id={PARTS[4][0]} title={PARTS[4][1]} stamp={stamp}>
         <Limits profile={profile} />

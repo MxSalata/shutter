@@ -134,6 +134,16 @@ describe("an entry at each receiver, in words, from the route's rows", () => {
     expect(at.map((g) => g.receivers)).toEqual([['Beds Out']]);
   });
 
+  it('gives only the outcome outside policy mode, where the site policy releases nothing', () => {
+    const at = entryAtReceivers(
+      { ...entry('E2'), atReceivers: [row('Beds Out', 'resend')] },
+      profile(),
+      [],
+      'board',
+    );
+    expect(at[0].lines).toEqual(['Outcome: a resend.']);
+  });
+
   it('lists the alternatives as the catalogue writes them', () => {
     expect(alternativesOf(entry('E1'))[0]).toBe(
       'Alternative 1, a correction of the history by a person: where history policy: correct.',
@@ -206,5 +216,9 @@ describe('the words', () => {
       'Trial (sample data) · Site profile version 3 · catalogue E1@5 · gate policy 2026-11-07.1 · release 1.4.8 · exported 15 Nov 2026, 23:50 GMT',
     );
     expect(stampLine({ ...s, trial: false })).not.toContain('Trial');
+    expect(stampLine({ ...s, watchedMode: 'policy' })).not.toContain('watched mode');
+    expect(stampLine({ ...s, watchedMode: 'board' })).toContain(
+      ' · release 1.4.8 · watched mode board · exported ',
+    );
   });
 });

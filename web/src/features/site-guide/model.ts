@@ -235,14 +235,16 @@ const outcomeOf = (outcome: string, ref: string) =>
 
 /**
  * What the entry comes to at each receiver Shutter can write to, in words, from the rows the route answered (never
- * worked out here): receivers with the same words grouped together. An orders and results receiver and a FHIR receiver
- * are left out: the guide says once what happens there. A row whose receiver the profile no longer has is shown with no
- * release table, as the route gave it.
+ * worked out here): receivers with the same words grouped together. An orders and results receiver, a FHIR receiver
+ * and a receiver with no recovery API are left out: the guide says once what happens there. A row whose receiver the
+ * profile no longer has is shown with no release table, as the route gave it. Outside policy mode (<var>mode</var>, the
+ * watched production's) the site's written policy releases nothing, so only the catalogue's outcome is given.
  */
 export function entryAtReceivers(
   entry: CatalogueEntry,
   profile: SiteProfile,
   holds?: AutomaticHold[],
+  mode = 'policy',
 ): EntryAt[] {
   const groups: EntryAt[] = [];
   for (const row of entry.atReceivers ?? []) {
@@ -250,12 +252,14 @@ export function entryAtReceivers(
     const r = profile.receivers.find((x) => x.name === row.receiver);
     if (r && hasNoRecoveryApi(r)) continue;
     const release = r ? releaseAt(profile, r, chainOf(entry)) : 'approval';
+    const asked = (outcome: string, decides: string) =>
+      mode === 'policy' ? ` ${askedWords(outcome, release, decides, holds)}` : '';
     const lines = [
       ...row.whenOtherSource.map(
         (o) =>
-          `When the other system sending at the same time is ${printable(o.otherSource)}: ${outcomeOf(o.outcome, o.outcomeRef)}. ${askedWords(o.outcome, release, o.decides, holds)}`,
+          `When the other system sending at the same time is ${printable(o.otherSource)}: ${outcomeOf(o.outcome, o.outcomeRef)}.${asked(o.outcome, o.decides)}`,
       ),
-      `${row.whenOtherSource.length ? 'Otherwise' : 'Outcome'}: ${outcomeOf(row.outcome, row.outcomeRef)}. ${askedWords(row.outcome, release, row.decides, holds)}`,
+      `${row.whenOtherSource.length ? 'Otherwise' : 'Outcome'}: ${outcomeOf(row.outcome, row.outcomeRef)}.${asked(row.outcome, row.decides)}`,
     ];
     const same = groups.find((g) => g.lines.join('\n') === lines.join('\n'));
     if (same) same.receivers.push(row.receiver);
@@ -339,6 +343,8 @@ export interface Stamp {
   gatePolicy: string;
   release: string;
   exportedAt: string;
+  /** The mode the watched production's failures run in (GET /settings watchedMode), printed when it is not policy. */
+  watchedMode?: string;
 }
 
 /** The versions this guide describes, and when it was made. */
@@ -349,6 +355,7 @@ export function stampOf(input: {
   now: Date;
   trial: boolean;
   shippedWords: string;
+  watchedMode?: string;
 }): Stamp {
   const { view, catalogue, health, now, trial } = input;
   const by = printable(view.updatedBy) || 'Setup';
@@ -365,6 +372,7 @@ export function stampOf(input: {
     gatePolicy: text('gate_policy_version'),
     release: text('version'),
     exportedAt: stampTime(now.toISOString()),
+    watchedMode: input.watchedMode || 'policy',
   };
 }
 
@@ -376,6 +384,7 @@ export function stampLine(s: Stamp): string {
     `catalogue ${s.catalogueVersion || 'not read'}`,
     `gate policy ${s.gatePolicy || 'not read'}`,
     `release ${s.release || 'not read'}`,
+    s.watchedMode && s.watchedMode !== 'policy' ? `watched mode ${s.watchedMode}` : null,
     `exported ${s.exportedAt}`,
   ]
     .filter(Boolean)

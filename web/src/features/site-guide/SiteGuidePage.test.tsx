@@ -325,6 +325,33 @@ describe("This site's guide", () => {
     );
   });
 
+  it("says outside policy mode that the watched production's cases are settled by that mode, and asks nobody by policy", async () => {
+    server.use(
+      http.get('/api/shutter/settings', () =>
+        HttpResponse.json({ ...fixtures.settings, watchedMode: 'board' }),
+      ),
+    );
+    renderGuide();
+    expect(await screen.findByTestId('site-guide-mode')).toHaveTextContent(
+      "Failures from the watched production run in board mode here: the board of agents settles every case. The site's written policy releases no write in this mode",
+    );
+    for (const f of screen.getAllByTestId('site-guide-foot'))
+      expect(f).toHaveTextContent('watched mode board');
+    const scenarios = document.getElementById('site-guide-scenarios')!;
+    expect(scenarios).not.toHaveTextContent('Nobody is asked');
+    expect(scenarios).not.toHaveTextContent('An approver releases the write');
+    expect(screen.getByTestId('site-guide-entry-E2')).toHaveTextContent(
+      'Who decides here: the board of agents, as the watched mode asks.',
+    );
+  });
+
+  it('prints in policy mode as before, with no mode line and no mode in the stamp', async () => {
+    renderGuide();
+    await screen.findByTestId('site-guide-stamp');
+    expect(screen.queryByTestId('site-guide-mode')).toBeNull();
+    for (const f of screen.getAllByTestId('site-guide-foot')) expect(f).not.toHaveTextContent('watched mode');
+  });
+
   it('sends every case of a receiver with no recovery API to a person, and promises it no write', async () => {
     withProfile((p) =>
       p.receivers.push({
