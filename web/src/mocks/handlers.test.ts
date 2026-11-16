@@ -725,3 +725,18 @@ describe('the precedents', () => {
     expect(forged.status).toBe(400);
   });
 });
+
+describe("the trial's site entries routes", () => {
+  beforeEach(() => resetMock('approver'));
+
+  it('answers fixtures that are not a list with the core’s problem, never a crash', async () => {
+    const answer = await api.post<{ valid: boolean; problems: { rule: string; text: string }[] }>(
+      '/site-entries/preview',
+      { title: 'A preview', pattern: { event: ['transfer'] }, why: 'A test.', fixtures: {} },
+    );
+    expect(answer.valid).toBe(false);
+    expect(answer.problems).toContainEqual(
+      expect.objectContaining({ rule: 'R1', text: 'The fixtures are a list of {case, expect}' }),
+    );
+  });
+});

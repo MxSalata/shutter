@@ -366,7 +366,11 @@ export function siteEntryHandlers(deps: SiteEntryDeps) {
       content.pattern[condition] = list;
     }
     const seen = new Set<string>();
-    ((body.fixtures ?? []) as { case?: string; expect?: string }[]).forEach((f, n) => {
+    // As the core (SiteEntryVersion R1): fixtures that are not a list are a problem, never a crash
+    const fixtures = body.fixtures ?? [];
+    if (!Array.isArray(fixtures))
+      add(problems, 'R1', 'fixtures', 'The fixtures are a list of {case, expect}');
+    (Array.isArray(fixtures) ? (fixtures as { case?: string; expect?: string }[]) : []).forEach((f, n) => {
       const caseId = String(f?.case ?? '').trim();
       const expect = f?.expect;
       if (!caseId || (expect !== 'match' && expect !== 'no_match'))
