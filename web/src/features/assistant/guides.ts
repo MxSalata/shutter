@@ -89,12 +89,18 @@ export const GUIDES: Record<string, PageGuide> = {
   },
   'site-profile': {
     title: 'Site profile',
-    what: 'The site\'s own answers: each receiver, what kind of record it keeps and how sensitive it is, and who releases a write at each tier, the site\'s written policy or a person. A suggested change from a case opens here as a draft for an approver to save. "Ask Shutter about this" beside kind, tier and recovery explains each answer.',
+    what: "The site's own answers: each receiver, the kind of record it keeps and how sensitive it is, and who releases a write at each tier, the written policy or a person. A change a case suggests opens here as a draft. Our own scenarios are this site's brakes: each sends the cases it matches to a person.",
     next: [
       { label: 'Read the receivers and the policy', to: '/site-profile' },
       { label: 'The agents the board is made of', to: '/library' },
     ],
-    questions: ['Who releases a write?', 'What is a receiver category?', 'What is a tier?'],
+    questions: [
+      'Who releases a write?',
+      'What is a receiver category?',
+      'What is a tier?',
+      'What is one of our own scenarios?',
+      'Why does a scenario need a near miss?',
+    ],
   },
   library: {
     title: 'Agent library',

@@ -63,6 +63,9 @@ ClassMethod List() As %Status
     Set o.items = ##class(Shutter.Catalogue.SiteEntry).List()
     Set o.status = ##class(Shutter.Catalogue.SiteEntry).Status()
     Set o.catalogueVersion = ##class(Shutter.Catalogue.Entry).CatalogueVersion()
+    // The open cases whose plan was made under the version in force: an approval's dialog says how many will not
+    // complete under it (R17) before anyone approves.
+    Do o.%Set("waitingPlans", ##class(Shutter.Catalogue.SiteEntry).WaitingPlans(o.catalogueVersion), "number")
     Quit ##class(Shutter.API.Dispatch).Json(o)
 }
 
@@ -87,6 +90,19 @@ ClassMethod Validate() As %Status
     Set o.sentence = ##class(Shutter.Catalogue.SiteEntryVersion).Sentence(content)
     Set o.overlap = ##class(Shutter.Catalogue.SiteEntryVersion).Overlap(content.%Get("pattern"))
     Quit ##class(Shutter.API.Dispatch).Json(o)
+}
+
+/// POST /site-entries/preview: the body checked as a draft's is, and P1, P2 and P4 run on the stored cases it names, with
+/// nothing stored (Shutter.Catalogue.SiteEntryProof.Preview). The public demo's roles may run it (R16).
+ClassMethod Preview() As %Status
+{
+    Set body = ..BodyOr400()
+    If '$ISOBJECT(body) Quit $$$OK
+    Set:$ISOBJECT($GET(%response)) %response.Timeout = 120
+    Set code = ##class(Shutter.Catalogue.SiteEntryProof).Preview(body, .result)
+    If code = "not_found" Quit ..Refuse(code, "No site entry " _ ##class(Shutter.Util.Json).Str(body, "id"))
+    If code '= "" Quit ..Refuse(code, "The action is activate, retire or resume")
+    Quit ##class(Shutter.API.Dispatch).Json(result)
 }
 
 /// POST /site-entries: a draft from a body, or from a stored case ({fromCase}). 201 with the entry.

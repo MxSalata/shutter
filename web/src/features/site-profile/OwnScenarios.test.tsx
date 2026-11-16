@@ -1,10 +1,11 @@
 import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
 import { http, HttpResponse } from 'msw';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { SiteEntriesView } from '@/api/types';
-import { resetMock, SITE_ENTRIES_EXAMPLE } from '@/mocks/handlers';
+import { clearSiteEntries, resetMock, SITE_ENTRIES_EXAMPLE } from '@/mocks/handlers';
 import { server } from '@/mocks/node';
 import { useAppearance } from '@/stores/appearance';
 import { theme } from '@/theme';
@@ -17,7 +18,9 @@ function page() {
   return render(
     <QueryClientProvider client={client}>
       <MantineProvider theme={theme}>
-        <OwnScenarios />
+        <MemoryRouter>
+          <OwnScenarios />
+        </MemoryRouter>
       </MantineProvider>
     </QueryClientProvider>,
   );
@@ -36,10 +39,14 @@ beforeEach(() => {
 
 describe("the site's own scenarios on the Site profile page", () => {
   it('says there is none on a site that has none, and how one is made', async () => {
+    clearSiteEntries();
     page();
     expect(await screen.findByText(/None yet: the shipped catalogue alone decides/)).toBeInTheDocument();
     expect(screen.getByText(/can never allow a resend/)).toBeInTheDocument();
+    expect(screen.getByText(/Start one from a closed case/)).toBeInTheDocument();
     expect(screen.queryByTestId('own-scenarios-list')).not.toBeInTheDocument();
+    // An operator may not change the site: nothing offers to write one
+    expect(screen.queryByTestId('own-new')).not.toBeInTheDocument();
   });
 
   it("says when a fixture's case is no longer stored, though nothing is flagged", async () => {
@@ -76,9 +83,9 @@ describe("the site's own scenarios on the Site profile page", () => {
     ).toBeInTheDocument();
     expect(within(row).getByText(/Version 1 approved by approver/)).toBeInTheDocument();
     expect(within(row).getByText(/0 cases sent to a person in the last 30 days/)).toBeInTheDocument();
-    // Plain shows no condition names; nothing on the page changes an entry.
+    // Plain shows no condition names; an operator opens an entry and is offered nothing that changes it.
     expect(screen.queryByTestId('own-scenario-L1-pattern')).not.toBeInTheDocument();
-    expect(screen.queryByRole('button')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual(['Open']);
     expect(screen.queryByTestId('own-scenarios-warnings')).not.toBeInTheDocument();
   });
 
@@ -185,5 +192,60 @@ describe("the site's own scenarios on the Site profile page", () => {
     );
     page();
     expect(await screen.findByText('Our own scenarios could not be read')).toBeInTheDocument();
+  });
+
+  it('shows an entry set aside from the terminal as the core reports it: suspended, its reason and its note, with the banner', async () => {
+    const example = SITE_ENTRIES_EXAMPLE.items[0]!;
+    answering({
+      ...SITE_ENTRIES_EXAMPLE,
+      items: [
+        {
+          ...example,
+          state: 'suspended',
+          needsReview: true,
+          suspended: {
+            by: 'admin',
+            at: '2026-11-16T01:00:00Z',
+            reason: 'Set aside by an IRIS administrator: its row was damaged',
+          },
+          review: {
+            dropped: [],
+            notes: [
+              "The entry's row could not be read and was written again from its versions and events: a person reviews it before it applies again",
+            ],
+          },
+        },
+        {
+          ...example,
+          id: 'L2',
+          title: '',
+          sentence: '',
+          content: undefined,
+          unreadable: "This entry's content cannot be read",
+        },
+      ],
+      status: {
+        ...SITE_ENTRIES_EXAMPLE.status,
+        suspended: ['L1'],
+        warnings: [
+          'Site entry L1 is suspended (by admin, 2026-11-16T01:00:00Z): its protection is off until a second person approves resuming it',
+          'Site entry L3 could not be rechecked under release 1.4.9 (its row cannot be read): until it is, every case on the site is matched as error and goes to a person.',
+        ],
+      },
+    });
+    page();
+    const warnings = await screen.findByTestId('own-scenarios-warnings');
+    expect(within(warnings).getByText(/L3 could not be rechecked/)).toBeInTheDocument();
+    const row = screen.getByTestId('own-scenario-L1');
+    expect(within(row).getByText('Suspended')).toBeInTheDocument();
+    expect(
+      within(row).getByText(/Set aside by an IRIS administrator: its row was damaged/),
+    ).toBeInTheDocument();
+    expect(within(row).getByTestId('own-scenario-L1-notes')).toHaveTextContent(
+      /written again from its versions/,
+    );
+    expect(
+      within(screen.getByTestId('own-scenario-L2')).getByText("This entry's content cannot be read."),
+    ).toBeInTheDocument();
   });
 });

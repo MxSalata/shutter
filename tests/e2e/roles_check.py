@@ -100,11 +100,11 @@ def wait(check, timeout, every=1):
 def site_entry_checks(args, operator, approver, check, error_of):
     """The site's own catalogue entries (CONTRACTS 6.8): reading is Shutter_Operate, a draft, a proof and a proposal are
     Shutter_Configure, an approval is Shutter_Approve and, on a demo, Shutter_Configure too, a suspension is both. The
-    public demo's roles read and validate; they save, propose, approve and suspend nothing (R16). It leaves one draft,
+    public demo's roles read, validate and preview; they save, propose, approve and suspend nothing (R16). It leaves one draft,
     which changes nothing."""
     quote = urllib.parse.quote
     signed_out = Session(args.url)
-    for method, path in (("GET", "/catalogue"), ("GET", "/site-entries"), ("POST", "/site-entries"), ("POST", "/site-entries/validate")):
+    for method, path in (("GET", "/catalogue"), ("GET", "/site-entries"), ("POST", "/site-entries"), ("POST", "/site-entries/validate"), ("POST", "/site-entries/preview")):
         status, body = signed_out.call(method, path, {} if method == "POST" else None)
         check(f"{method} {path} signed out: 401 unauthenticated", status == 401 and error_of(body) == "unauthenticated", f"{status} {body}")
     entry = {"title": "Roles check: a failed transfer", "pattern": {"event": "transfer"}, "why": "The roles check made this draft; it changes nothing."}
@@ -122,6 +122,11 @@ def site_entry_checks(args, operator, approver, check, error_of):
     check("operator: POST /site-entries/validate: 200, and nothing is stored", status == 200 and (body or {}).get("valid") is True and stored() == before, f"{status} {str(body)[:200]}")
     status, body = operator.call("POST", "/site-entries/validate", entry, csrf=False)
     check("operator: POST /site-entries/validate without X-Requested-With is 403 csrf", status == 403 and error_of(body) == "csrf", f"{status} {body}")
+    status, body = operator.call("POST", "/site-entries/preview", entry)
+    check("operator: POST /site-entries/preview: 200, with a proof", status == 200 and (body or {}).get("valid") is True and isinstance((body or {}).get("proof"), dict), f"{status} {str(body)[:200]}")
+    check("operator: and the preview stored nothing", stored() == before, str(stored())[:200])
+    status, body = operator.call("POST", "/site-entries/preview", entry, csrf=False)
+    check("operator: POST /site-entries/preview without X-Requested-With is 403 csrf", status == 403 and error_of(body) == "csrf", f"{status} {body}")
     status, body = operator.call("POST", "/site-entries", entry)
     check("operator: POST /site-entries is 403 forbidden, naming Shutter_Configure", status == 403 and error_of(body) == "forbidden" and "Shutter_Configure" in (body or {}).get("detail", ""), f"{status} {body}")
     status, made = approver.call("POST", "/site-entries", entry)
@@ -157,6 +162,8 @@ def site_entry_checks(args, operator, approver, check, error_of):
             check(f"{name}: GET {path.replace(entry_id, '{id}')}: 200", status == 200, f"{status} {str(body)[:200]}")
         status, body = public.call("POST", "/site-entries/validate", entry)
         check(f"{name}: POST /site-entries/validate: 200", status == 200 and (body or {}).get("valid") is True, f"{status} {str(body)[:200]}")
+        status, body = public.call("POST", "/site-entries/preview", entry)
+        check(f"{name}: POST /site-entries/preview: 200 (Try it on the demo)", status == 200 and (body or {}).get("valid") is True and isinstance((body or {}).get("proof"), dict), f"{status} {str(body)[:200]}")
         for method, path, body_sent, resource in changes + (("POST", f"/site-entries/{quote(entry_id)}/approvals", approval, "Shutter_Configure"), ("POST", f"/site-entries/{quote(entry_id)}/suspend", {"reason": "roles check"}, "Shutter_Configure")):
             status, body = public.call(method, path, body_sent)
             check(f"{name}: {method} {path.replace(entry_id, '{id}')} is 403 forbidden, naming {resource}", status == 403 and error_of(body) == "forbidden" and resource in (body or {}).get("detail", ""), f"{status} {body}")

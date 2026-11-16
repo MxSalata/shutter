@@ -9773,6 +9773,139 @@
         }
       }
     },
+    "/api/shutter/site-entries/preview": {
+      "post": {
+        "operationId": "siteEntryPreview",
+        "tags": [
+          "site entries"
+        ],
+        "summary": "Try a site entry on stored cases, storing nothing",
+        "description": "The body checked as a draft's is (R1 to R5 and R15), its fixtures frozen from the stored, closed cases they name, and the proof's P1, P2 and P4 run on them: whether the entry matches each case as expected and which entry leads there, and what the last stored cases would have done without it. Nothing is stored: no entry, version, proof or event, and nothing on any case. {fromCase} starts from a closed case as a new draft does; {id} previews a change of an existing entry; {action} is activate (the default), retire or resume. The public demo's roles may run it (R16).\n\nNeeds Shutter_Operate. A change: send X-Requested-With: Shutter.\n\nCONTRACTS 6.8.",
+        "x-contract": "docs/CONTRACTS.md section 6.8",
+        "x-required-resource": "Shutter_Operate",
+        "x-writes": true,
+        "x-idempotent": false,
+        "x-dispatch": "Shutter.API.Dispatch.SiteEntryPreview",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XRequestedWith"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SiteEntryPreviewBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The validation, the content as a draft would store it, and the proof, or null when the body has no pattern to prove.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteEntryPreview"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request. bad_request: The body must be a JSON object, or the action is not activate, retire or resume.",
+            "x-error-codes": [
+              "bad_request"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "bad_request": {
+                    "value": {
+                      "error": "bad_request",
+                      "detail": "The body must be a JSON object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in. unauthenticated: Sign in first.",
+            "x-error-codes": [
+              "unauthenticated"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "unauthenticated": {
+                    "value": {
+                      "error": "unauthenticated",
+                      "detail": "Sign in first"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden. forbidden: This needs Shutter_Operate. csrf: Changes need the header X-Requested-With: Shutter.",
+            "x-error-codes": [
+              "forbidden",
+              "csrf"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "forbidden": {
+                    "value": {
+                      "error": "forbidden",
+                      "detail": "This needs Shutter_Operate"
+                    }
+                  },
+                  "csrf": {
+                    "value": {
+                      "error": "csrf",
+                      "detail": "Changes need the header X-Requested-With: Shutter"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found. not_found: the body names an id no site entry has.",
+            "x-error-codes": [
+              "not_found"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "not_found": {
+                    "value": {
+                      "error": "not_found",
+                      "detail": "No site entry L9"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/shutter/site-entries/{id}": {
       "get": {
         "operationId": "siteEntryGet",
@@ -19053,6 +19186,10 @@
           },
           "catalogueVersion": {
             "type": "string"
+          },
+          "waitingPlans": {
+            "type": "integer",
+            "description": "The open cases whose plan was made under the catalogue version in force: none of them completes once an approval changes it (R17)."
           }
         },
         "required": [
@@ -19153,6 +19290,142 @@
         "required": [
           "valid",
           "problems"
+        ]
+      },
+      "SiteEntryPreviewBody": {
+        "description": "POST /site-entries/preview: a site entry as a person writes it, as SiteEntryBody, with the id of an existing entry to preview a change of it and the action to prove.",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "An existing entry whose change is previewed; none for a new one, previewed under the id the next draft would take."
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "activate",
+              "retire",
+              "resume"
+            ],
+            "description": "The action the proof is for; activate when none."
+          },
+          "fromCase": {
+            "type": "string",
+            "description": "A stored, closed case to start from: its conditions fill the pattern, its facts the scope and the case is the first fixture, unless the body gives them."
+          },
+          "title": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "integer"
+          },
+          "scope": {
+            "type": "object"
+          },
+          "pattern": {
+            "type": "object"
+          },
+          "why": {
+            "type": "string"
+          },
+          "team": {
+            "type": "string"
+          },
+          "instructions": {
+            "type": "string"
+          },
+          "prose": {
+            "type": "string"
+          },
+          "fixtures": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "case": {
+                  "type": "string"
+                },
+                "expect": {
+                  "type": "string",
+                  "enum": [
+                    "match",
+                    "no_match"
+                  ]
+                }
+              },
+              "required": [
+                "case",
+                "expect"
+              ]
+            }
+          }
+        }
+      },
+      "SiteEntryPreview": {
+        "description": "POST /site-entries/preview.",
+        "type": "object",
+        "properties": {
+          "valid": {
+            "type": "boolean"
+          },
+          "problems": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "rule": {
+                  "type": "string"
+                },
+                "field": {
+                  "type": "string"
+                },
+                "text": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "id": {
+            "type": "string",
+            "description": "The id the entry was previewed under."
+          },
+          "action": {
+            "type": "string"
+          },
+          "sentence": {
+            "type": "string"
+          },
+          "overlap": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "content": {
+            "$ref": "#/components/schemas/SiteEntryContent"
+          },
+          "proof": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SiteEntryProofResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "valid",
+          "problems",
+          "content",
+          "proof"
         ]
       },
       "SiteEntryAction": {

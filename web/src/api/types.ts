@@ -1387,7 +1387,134 @@ export interface SiteEntryContent {
   team: string;
   instructions: string;
   prose: string;
-  fixtures: { case: string; expect: 'match' | 'no_match' }[];
+  fixtures: SiteEntryFixture[];
+}
+
+/**
+ * A fixture: a stored, closed case the entry must catch (`match`) or leave alone (`no_match`). A stored draft's, or a
+ * preview's, is frozen: beside the case it keeps the conditions and the scope facts the case showed (words, no patient
+ * data), read when the draft was written.
+ */
+export interface SiteEntryFixture {
+  case: string;
+  expect: 'match' | 'no_match';
+  conditions?: Record<string, string>;
+  scope?: Record<string, string>;
+  chain?: string;
+  snapshot_digest?: string;
+}
+
+/** A problem or a warning the core found in a body (R1 to R5, R15): the rule, the field it is about, and the words. */
+export interface SiteEntryProblem {
+  rule: string;
+  field: string;
+  text: string;
+}
+
+/** A shipped entry a pattern can displace (POST /site-entries/validate and /preview). */
+export interface SiteEntryOverlap {
+  id: string;
+  title: string;
+  decides: string;
+  outcome: string;
+  /** Every case the site entry matches, this shipped entry matches too (the scope aside). */
+  covers: boolean;
+  /** It answers before any site entry (a death on the message). */
+  leads: boolean;
+}
+
+/** What a proof's last stored cases would have done without the entry, by group (P4). */
+export type SiteEntryImpactGroup =
+  | 'automatic_resend'
+  | 'approved_resend'
+  | 'closure'
+  | 'board'
+  | 'person'
+  | 'new_pattern'
+  | 'other_site_entry'
+  | 'other';
+
+/** A proof's answer (POST /site-entries/{id}/proof), or the proof of a preview, which keeps nothing (no proofId). */
+export interface SiteEntryProofResult {
+  passed: boolean;
+  action: 'activate' | 'retire' | 'resume';
+  version: number;
+  digest: string;
+  fixtures: {
+    case: string;
+    expect: 'match' | 'no_match';
+    /** evidence: read again from the stored snapshot; frozen: the case is gone, its frozen conditions answered. */
+    source: 'evidence' | 'frozen';
+    /** Whether the entry's own scope and pattern hold on the case. */
+    holds: boolean;
+    /** On a match fixture, the entry that leads on the case with this one laid over the active ones. */
+    lead?: string;
+    ok: boolean;
+    text: string;
+  }[];
+  counts: { match: number; no_match: number };
+  impact?: {
+    scanned: number;
+    caught: number;
+    unread: number;
+    capped: boolean;
+    groups: Partial<Record<SiteEntryImpactGroup, number>>;
+    cases: Partial<Record<SiteEntryImpactGroup, string[]>>;
+  };
+  problems: string[];
+  proofId?: string;
+}
+
+/** POST /site-entries/preview: the body checked, the content as a draft would store it, and its proof. Stores nothing. */
+export interface SiteEntryPreview {
+  valid: boolean;
+  problems: SiteEntryProblem[];
+  warnings: SiteEntryProblem[];
+  /** The id the entry was previewed under: its own, or the one the next draft would take. */
+  id: string;
+  action: string;
+  sentence: string;
+  overlap: SiteEntryOverlap[];
+  content: SiteEntryContent;
+  /** null when no pattern is left to prove. */
+  proof: SiteEntryProofResult | null;
+}
+
+/** POST /site-entries/validate. */
+export interface SiteEntryValidation {
+  valid: boolean;
+  problems: SiteEntryProblem[];
+  warnings: SiteEntryProblem[];
+  sentence: string;
+  overlap: SiteEntryOverlap[];
+}
+
+/** GET /site-entries/{id}: the entry with every version, its proofs and its events. */
+export interface SiteEntryDetail extends SiteEntryItem {
+  versions: {
+    version: number;
+    status: 'draft' | 'approved';
+    digest: string;
+    writtenBy?: string;
+    writtenAt?: string;
+    approvedBy?: string;
+    approvedAt?: string;
+    reason?: string;
+    safetyReference?: string;
+  }[];
+  proofs: {
+    /** The proof's row, which a proposal names as its proofId. */
+    id?: string;
+    version: number;
+    digest: string;
+    action: string;
+    passed: boolean;
+    at: string;
+    by: string;
+    origin: string;
+    result: SiteEntryProofResult;
+  }[];
+  events: { at: string; actor: string; kind: string; text: string; source?: string; version?: number }[];
 }
 
 export type SiteEntryState = 'draft' | 'proposed' | 'active' | 'suspended' | 'retired';
@@ -1410,18 +1537,34 @@ export interface SiteEntryItem {
   revision: number;
   approvedBy?: string;
   approvedAt?: string;
-  /** The open proposal, waiting for a second person. */
+  /** The open proposal, waiting for a second person, with the proof it was made on. */
   proposal?: {
     action: 'activate' | 'retire' | 'resume';
     version: number;
     digest: string;
     by: string;
     at: string;
+    proofId?: string;
+  };
+  /** A draft begun beside the active version: it changes nothing until it is approved. */
+  draft?: {
+    version: number;
+    digest: string;
+    writtenBy?: string;
+    writtenAt?: string;
+    content?: SiteEntryContent;
+    sentence?: string;
   };
   /** Set by the recheck after an upgrade or a profile save: the entry still applies, and a person should look. */
   needsReview: boolean;
   review?: { dropped?: { condition: string; why: string }[]; notes?: string[] };
+  /**
+   * Who suspended it, when and why. An entry an IRIS administrator set aside from the terminal (a row that could not be
+   * read or rechecked) is reported as suspended too, its reason saying so.
+   */
   suspended?: { by: string; at: string; reason: string };
+  /** Said when the entry's content cannot be read. */
+  unreadable?: string;
   /** The cases the entry sent to a person, in all and in the last 30 days. */
   casesSent: number;
   casesSent30: number;
@@ -1445,6 +1588,8 @@ export interface SiteEntriesView {
     warnings: string[];
   };
   catalogueVersion: string;
+  /** The open cases whose plan was made under the catalogue version in force: an approval stops them completing (R17). */
+  waitingPlans?: number;
 }
 
 export interface SiteProfileVersionEntry {

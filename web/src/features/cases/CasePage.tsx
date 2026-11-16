@@ -26,6 +26,7 @@ import { usePrefersReducedMotion, useStagedReveal } from '@/lib/motion';
 import { caseOutcome } from '@/lib/status';
 import type { Tone } from '@/lib/tone';
 import { CaseBundleDownload } from './case/CaseBundleDownload';
+import { OwnScenarioLink } from './case/OwnScenarioLink';
 import { CaseHeader } from './case/CaseHeader';
 import { Lifecycle, REPLAYED_STAGES, type StageKey } from './case/Lifecycle';
 import { FailureMap } from './case/FailureMap';
@@ -364,6 +365,7 @@ function CaseBody({ c }: { c: CaseDetail }) {
         portalBase={base}
         snapshot={facts.snapshot}
         next={headerNext}
+        newPattern={<OwnScenarioLink c={c} size="xs" />}
         actions={
           <>
             {c.document ? null : <ConveneBoard c={c} />}
@@ -506,6 +508,7 @@ function CaseBody({ c }: { c: CaseDetail }) {
               {!stopped ? <EscalationPanel c={c} /> : null}
               <PortalLinks c={c} runs={facts.runs} portalBase={base} />
               <CaseBundleDownload caseId={c.caseId} />
+              <OwnScenarioLink c={c} />
             </Stack>
           </Tabs.Panel>
         </Tabs>
