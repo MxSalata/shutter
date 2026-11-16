@@ -362,4 +362,14 @@ describe("This site's guide", () => {
     expect(screen.getByText('model_content.free_text, model_content.setup_answers')).toBeInTheDocument();
   });
 
+  it("says an outage resend leaves to a person a message whose case one of the site's own entries stopped", async () => {
+    withProfile((p) =>
+      Object.assign(p.receivers[0], { watch: { item: 'Downstream Out' }, engine_resend: true }),
+    );
+    renderGuide();
+    expect(await screen.findByTestId('site-guide-receiver-Downstream Out')).toHaveTextContent(
+      "After one approval the engine sends again the outage's messages that never arrived, settled by the receiver's declared duplicate handling, except a message whose case one of this site's own entries stopped: that goes to a person with the entry's instructions.",
+    );
+  });
+
 });
