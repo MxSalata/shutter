@@ -30,7 +30,11 @@ export type AnswerStatus = 'in_force' | 'you' | 'ask' | 'onboarding' | 'unanswer
 
 /** One answer Ask Shutter drafted, as the review lists it: the page's words for it, never the model's. */
 export interface DraftedAnswer {
-  /** The receiver, by its name in the draft, and the key the value is stored under. */
+  /**
+   * The receiver: its id on the page (the store's, carried over to the Site profile page with the hand-over, so a rename
+   * there keeps the answer), its name in the draft when it was handed over, and the key the value is stored under.
+   */
+  rid: string;
   receiver: string;
   key: string;
   /** What the answer is: "Kind of system". */
@@ -47,6 +51,8 @@ export interface DraftedAnswer {
 export interface Handover {
   draft: SiteProfile;
   baseVersion: number;
+  /** The page's id of each receiver of `draft`, in its order. */
+  rids: string[];
   /** The answers in it that Ask Shutter drafted and the person has not changed since. */
   drafted: DraftedAnswer[];
 }
@@ -145,8 +151,11 @@ interface SetupActions {
   saved: (view: SiteProfileView) => void;
   handOver: () => void;
   takeHandover: () => Handover | null;
-  /** The Site profile page hands a draft back: receivers keep their ids by name, and a changed answer is the person's. */
-  adopt: (draft: SiteProfile) => void;
+  /**
+   * The Site profile page hands a draft back: receivers keep their ids by the page's ids where it gives one for each
+   * (so a rename there keeps a receiver and its drafted answers), else by name; a changed answer is the person's.
+   */
+  adopt: (draft: SiteProfile, rids?: string[]) => void;
   /** A typed answer was sent: the server opened its turn. */
   sent: (rid: string, question: QuestionId, text: string, asked: SetupTurnAsked) => void;
   /** The turn being read is dropped: whatever comes back for it is not used. */
@@ -170,7 +179,8 @@ const clone = <T>(x: T): T => JSON.parse(JSON.stringify(x)) as T;
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 let nextRid = 1;
-const newRid = () => `r${nextRid++}`;
+let epochs = 0;
+export const newRid = () => `r${nextRid++}`;
 
 const EMPTY: SetupData = {
   base: null,
@@ -284,7 +294,12 @@ export const useSetup = create<SetupState>((set, get) => ({
         ? {
             // A turn still being read is dropped: the draft under review cannot change
             ...dropPending(s),
-            handover: { draft: clone(s.draft), baseVersion: s.base.version, drafted: draftedAnswers(s) },
+            handover: {
+              draft: clone(s.draft),
+              baseVersion: s.base.version,
+              rids: [...s.rids],
+              drafted: draftedAnswers(s),
+            },
           }
         : s,
     ),
@@ -293,13 +308,26 @@ export const useSetup = create<SetupState>((set, get) => ({
     if (h) set({ handover: null });
     return h;
   },
-  adopt: (next) =>
+  adopt: (next, pageRids) =>
     set((s) => {
       if (!s.draft || !s.base) return s;
       const byName = new Map(s.draft.receivers.map((r, i) => [r.name, s.rids[i]]));
       const taken = new Set<string>();
       const added: Record<string, true> = {};
-      const rids = next.receivers.map((r) => {
+      // The page's own ids, where it gives one for each receiver: a receiver renamed there is the same receiver
+      const byId = pageRids && pageRids.length === next.receivers.length ? pageRids : null;
+      const rids = next.receivers.map((r, i) => {
+        const id = byId?.[i];
+        if (id && s.rids.includes(id) && !taken.has(id)) {
+          taken.add(id);
+          if (s.added[id]) added[id] = true;
+          return id;
+        }
+        if (byId) {
+          const rid = newRid();
+          added[rid] = true;
+          return rid;
+        }
         const known = byName.get(r.name);
         if (known && !taken.has(known)) {
           taken.add(known);
@@ -466,6 +494,7 @@ export function draftedAnswers(s: SetupData): DraftedAnswer[] {
     const q = questionOfKey(key);
     if (!r || !q) continue;
     out.push({
+      rid,
       receiver: r.name,
       key,
       label: q.short,

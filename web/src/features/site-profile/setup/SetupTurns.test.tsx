@@ -895,3 +895,71 @@ describe('a late answer', () => {
     expect(state().suggested).toBeNull();
   });
 });
+
+describe('drafted answers after the hand-over', () => {
+  /** A receiver added and named, its three answers drafted, handed over, and the review cancelled. */
+  async function handedOver(user: ReturnType<typeof userEvent.setup>) {
+    renderApp();
+    await nameBedBoard(user);
+    await sendTyped(user);
+    await waitFor(() => expect(added().tier).toBe(3));
+    await user.click(
+      within(screen.getByRole('region', { name: 'Unsaved changes' })).getByRole('button', {
+        name: 'Review and save…',
+      }),
+    );
+    const dialog = within(await screen.findByRole('dialog', { name: /^Save version/ }));
+    await user.click(dialog.getByRole('button', { name: 'Cancel' }));
+    return within(await screen.findByRole('region', { name: 'A draft from Set up the site' }));
+  }
+
+  it("keeps a renamed receiver's drafted answers in the review, the tick required, and marked when it goes back", async () => {
+    const user = userEvent.setup();
+    const band = await handedOver(user);
+    const id = rid();
+    // The setup page tells the person to name it by its production item: they correct the name here
+    const name = screen.getAllByRole('textbox', { name: /^Production item/ }).at(-1)!;
+    await user.clear(name);
+    await user.type(name, 'Bed Board East');
+    await user.click(band.getByRole('button', { name: 'Review and save…' }));
+    const dialog = within(await screen.findByRole('dialog', { name: /^Save version/ }));
+    const block = within(dialog.getByRole('list', { name: 'Drafted by Ask Shutter (3)' }));
+    expect(block.getByText(/Bed Board East, tier:/)).toBeInTheDocument();
+    expect(dialog.getByRole('button', { name: /^Save version/ })).toBeDisabled();
+    expect(
+      dialog.getByRole('checkbox', { name: 'I have read the answers Ask Shutter drafted.' }),
+    ).not.toBeChecked();
+    await user.click(dialog.getByRole('button', { name: 'Cancel' }));
+    await user.click(
+      within(await screen.findByRole('region', { name: 'A draft from Set up the site' })).getByRole(
+        'button',
+        {
+          name: 'Back to Set up the site',
+        },
+      ),
+    );
+    await waitFor(() => expect(added().name).toBe('Bed Board East'));
+    const s = useSetup.getState();
+    expect(s.rids.at(-1)).toBe(id);
+    for (const q of ['system', 'category', 'tier'] as const)
+      expect([q, statusOf(s, id, questionById(q))]).toEqual([q, 'ask']);
+  }, 90_000);
+
+  it('discards the handed-over draft in Set up the site too when the save bar discards it', async () => {
+    const user = userEvent.setup();
+    await handedOver(user);
+    await user.click(
+      within(screen.getByRole('region', { name: 'Unsaved changes' })).getByRole('button', {
+        name: 'Discard changes',
+      }),
+    );
+    expect(screen.queryByRole('region', { name: 'A draft from Set up the site' })).not.toBeInTheDocument();
+    const s = useSetup.getState();
+    // The draft is the stored profile again, with no receiver added and nothing drafted
+    expect(s.draft).toEqual(s.base!.profile);
+    expect(s.draft!.receivers.some((r) => r.name === 'Bed Board')).toBe(false);
+    expect(Object.values(s.prov).some((p) => p.by === 'ask')).toBe(false);
+    expect(s.turns).toEqual([]);
+    expect(s.conversation).toBeNull();
+  }, 90_000);
+});

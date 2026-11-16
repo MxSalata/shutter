@@ -78,7 +78,7 @@ import { SetupDraftCard } from './SetupDraftCard';
 import { SETUP_DRAFT_TITLE_ID, draftRows } from './setup/draftRows';
 import { answerText, questionOfKey } from './setup/fields';
 import { SetupLink } from './setup/SetupLink';
-import { useSetup } from './setup/setupStore';
+import { newRid, useSetup } from './setup/setupStore';
 import {
   FACT_PARAM,
   SUGGEST_PARAM,
@@ -399,10 +399,13 @@ function ReceiverFields({
 function ProfileForm({
   draft,
   setDraft,
+  setRids,
   problem,
 }: {
   draft: SiteProfile;
   setDraft: (fn: (d: SiteProfile) => void) => void;
+  /** The page's receiver ids, kept in step with a receiver added or removed here. */
+  setRids: (fn: (ids: string[]) => string[]) => void;
   problem: Problem;
 }) {
   const err = (path: string) => (problem?.path === path ? problem.message : undefined);
@@ -449,7 +452,10 @@ function ProfileForm({
                 profile={draft}
                 problem={problem}
                 update={(fn) => setDraft((d) => fn(d.receivers[i]))}
-                remove={() => setDraft((d) => void d.receivers.splice(i, 1))}
+                remove={() => {
+                  setDraft((d) => void d.receivers.splice(i, 1));
+                  setRids((ids) => ids.filter((_, j) => j !== i));
+                }}
               />
             ))}
             <Group>
@@ -457,7 +463,10 @@ function ProfileForm({
                 variant="light"
                 size="xs"
                 leftSection={<IconPlus size={14} />}
-                onClick={() => setDraft((d) => void d.receivers.push(newReceiver()))}
+                onClick={() => {
+                  setDraft((d) => void d.receivers.push(newReceiver()));
+                  setRids((ids) => [...ids, newRid()]);
+                }}
               >
                 Add a receiver
               </Button>
@@ -796,6 +805,13 @@ function Profile({
         ? suggested.result.profile
         : clone(view.profile),
   );
+  // The page's own id of each receiver of the draft, in its order: a hand-over's ids, so an answer Ask Shutter drafted
+  // follows its receiver through a rename here, and fresh ones otherwise
+  const [rids, setRids] = useState<string[]>(() =>
+    handed && handedHere && handed.rids.length === handed.draft.receivers.length
+      ? [...handed.rids]
+      : (suggested?.result.ok ? suggested.result.profile : view.profile).receivers.map(() => newRid()),
+  );
   const [base, setBase] = useState<SiteProfileView>(view);
   const [problem, setProblem] = useState<Problem>(null);
   const [reviewing, setReviewing] = useState(handedHere ? 1 : 0);
@@ -826,6 +842,7 @@ function Profile({
   const reseed = (v: SiteProfileView) => {
     setBase(v);
     setDraftState(clone(v.profile));
+    setRids(v.profile.receivers.map(() => newRid()));
     setProblem(null);
   };
   const changes = diffProfiles(base.profile, draft);
@@ -958,13 +975,21 @@ function Profile({
   };
 
   // The answers Ask Shutter drafted in Set up the site that the form still holds as drafted: one changed here since is
-  // the person's own, and leaves the list
+  // the person's own, and leaves the list. A receiver is found by the page's id, so one renamed here keeps its drafted
+  // answers and the review still asks for them to be read; by its name only if the ids no longer line up
+  const byId = rids.length === draft.receivers.length;
   const drafted =
     handed && handedHere && showHanded
-      ? handed.drafted.filter((d) => {
-          const r = draft.receivers.find((x) => x.name === d.receiver);
+      ? handed.drafted.flatMap((d) => {
+          const at = byId ? rids.indexOf(d.rid) : -1;
+          const r =
+            at >= 0
+              ? draft.receivers[at]
+              : byId
+                ? undefined
+                : draft.receivers.find((x) => x.name === d.receiver);
           const q = questionOfKey(d.key);
-          return !!r && !!q && answerText(q, r) === d.value;
+          return r && q && answerText(q, r) === d.value ? [{ ...d, receiver: r.name }] : [];
         })
       : [];
   const dirty = changes.length > 0;
@@ -1028,7 +1053,7 @@ function Profile({
             onBack={() => {
               // The answers as the form holds them now go back with the reader
               if (handedHere && useSetup.getState().base?.version === base.version)
-                useSetup.getState().adopt(draft);
+                useSetup.getState().adopt(draft, byId ? rids : undefined);
               void navigate('/site-setup');
             }}
           />
@@ -1119,7 +1144,7 @@ function Profile({
                   </li>
                 ))}
               </ul>
-              <ProfileForm draft={draft} setDraft={setDraft} problem={problem} />
+              <ProfileForm draft={draft} setDraft={setDraft} setRids={setRids} problem={problem} />
               <VersionsPanel current={base.version} />
               <OtherSettings profile={draft} base={base} />
             </Stack>
@@ -1133,7 +1158,14 @@ function Profile({
           <SaveBar
             count={changes.length}
             onReview={review}
-            onDiscard={() => reseed(base)}
+            onDiscard={() => {
+              // A draft handed over by Set up the site is discarded there too, as the band's own Discard does
+              if (handed && handedHere && showHanded) {
+                useSetup.getState().discard();
+                setShowHanded(false);
+              }
+              reseed(base);
+            }}
             reviewLabel="Review and save…"
             alert={problemAlert}
             note={
