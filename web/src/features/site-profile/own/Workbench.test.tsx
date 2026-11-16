@@ -35,6 +35,8 @@ function page(at = '/site-profile') {
 
 /** Every body the page sent to a site entry route, by its path. */
 let sent: { path: string; body: Record<string, unknown> }[] = [];
+/** Every request the page sent that is not a read, as its method and path, recorded as it starts. */
+let writes: string[] = [];
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 afterEach(() => server.resetHandlers());
@@ -43,9 +45,11 @@ beforeEach(() => {
   resetMock('approver');
   useAppearance.setState({ detail: 'plain' });
   sent = [];
+  writes = [];
   server.events.removeAllListeners();
   server.events.on('request:start', ({ request }) => {
     const url = new URL(request.url);
+    if (request.method !== 'GET') writes.push(`${request.method} ${url.pathname.slice(BASE.length)}`);
     if (request.method !== 'GET' && url.pathname.startsWith(`${BASE}/site-entries`))
       void request
         .clone()
@@ -215,9 +219,22 @@ describe("the workbench of the site's own scenarios", () => {
       "The online demo's settings are locked",
     );
     expect(within(review).getByRole('button', { name: 'Approve' })).toHaveAttribute('aria-disabled', 'true');
-    expect(sent.every((s) => s.path === '/site-entries/preview' || s.path === '/site-entries/validate')).toBe(
-      true,
-    );
+    // Each locked control is pressed, and none of them sends anything
+    await user.type(within(review).getByLabelText(/^Reason/), 'Looks right');
+    await user.click(within(review).getByRole('button', { name: 'Approve' }));
+    await user.click(within(review).getByRole('button', { name: 'Cancel' }));
+    await user.click(await screen.findByRole('button', { name: 'Open L1' }));
+    await user.click(await screen.findByRole('button', { name: 'Change it' }, { timeout: 5000 }));
+    await user.click(await screen.findByRole('button', { name: 'Save the draft' }));
+    await user.click(screen.getByRole('button', { name: 'Propose retiring it…' }));
+    const send = await screen.findByRole('dialog', { name: 'Propose retiring L1' });
+    await user.click(within(send).getByRole('button', { name: 'Send for approval' }));
+    expect(screen.queryByRole('button', { name: 'Suspend it…' })).not.toBeInTheDocument();
+    await new Promise((r) => setTimeout(r, 300));
+    expect(writes).toContain('POST /site-entries/preview');
+    expect(
+      writes.filter((w) => w !== 'POST /site-entries/preview' && w !== 'POST /site-entries/validate'),
+    ).toEqual([]);
   }, 60_000);
 
   it('shows the demo its example where it has no entry of its own, tried on S2 and S1', async () => {
