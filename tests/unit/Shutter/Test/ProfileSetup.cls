@@ -12,6 +12,9 @@ Class Shutter.Test.ProfileSetup Extends %UnitTest.TestCase
 /// made meanwhile by anyone else (an end-to-end run on the same namespace) still holds, and a gap in the ids is harmless.
 Method OnAfterOneTest(testname As %String) As %Status
 {
+    // Each turn with its runs and their tool calls, then any row left
+    Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT ID FROM Shutter_Store.SetupTurn WHERE AskedBy IN ('ut-setup', 'ut-setup-other')")
+    While rs.%Next() { Do ##class(Shutter.Store.SetupTurn).PurgeTurn(rs.%Get("ID")) }
     &sql(DELETE FROM Shutter_Store.SetupTurn WHERE AskedBy IN ('ut-setup', 'ut-setup-other'))
     Quit $$$OK
 }
@@ -548,6 +551,100 @@ Method TestAConversationLeavesTheProfileAlone()
     Do $$$AssertEquals($CLASSMETHOD(st, "PurgeBefore", "1900-01-02T00:00:00Z", .failed), 0, "a cutoff before them takes none")
     For i = 1:1:rows Do $$$AssertStatusOK($CLASSMETHOD(st, "PurgeTurn", rows(i)), "a turn is purged, with its runs")
     Do $$$AssertEquals($CLASSMETHOD(st, "Count", conversation), 0, "none is left")
+    Set row = ##class(Shutter.Store.SiteProfile).Row()
+    Do $$$AssertEquals($SELECT($ISOBJECT(row): row.Version, 1: 0), version, "the profile's version did not move")
+    Do $$$AssertEquals(##class(Shutter.Store.SiteProfileVersion).History(500).%ToJSON(), history, "nor its history")
+    Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).Current().%ToJSON(), current, "nor the profile in force")
+}
+
+/// A turn of the conversation as the Case Question item holds it while the agent reads it: the row opened and being
+/// answered, about the added receiver Bed Board, and the item's process with the turn's id and its answer awaited.
+Method Asked(text As %String, Output q As Shutter.Process.Question, conversation As %String = "") As Shutter.Store.SetupTurn
+{
+    Set st = "Shutter.Store.SetupTurn"
+    Set draft = ##class(Shutter.Store.SiteProfile).Current()
+    Do draft.receivers.%Push(..Added())
+    Set frame = ##class(Shutter.Util.ProfileSetup).Frame(draft, "Bed Board", .problem)
+    If conversation = "" Set conversation = $CLASSMETHOD(st, "NewConversation")
+    Set view = ##class(Shutter.Util.ProfileSetup).View(##class(Shutter.Store.SiteProfile).Current(), draft, "Bed Board")
+    Do $$$AssertStatusOK($CLASSMETHOD(st, "Create", conversation, "Bed Board", text, view, frame, 1, 1, "ut-setup", .t), "a turn: " _ text)
+    Do t.Answering()
+    Set q = ##class(Shutter.Process.Question).%New("Case Question")
+    Set q.QuestionId = t.TurnId, q.ExplainPending = 1
+    Quit t
+}
+
+/// The agent item's answer with a result.
+ClassMethod Answer(result As %DynamicObject, status As %String = "ok") As Shutter.Bridge.Msg.AgentResponse
+{
+    Set r = ##class(Shutter.Bridge.Msg.AgentResponse).%New()
+    Set r.Status = status, r.Model = "ut-model", r.Mode = "live", r.ResultJSON = $SELECT($ISOBJECT(result): result.%ToJSON(), 1: "")
+    Quit r
+}
+
+/// How many runs are recorded for a turn.
+ClassMethod Runs(turnId As %String) As %Integer
+{
+    Set n = 0
+    &sql(SELECT COUNT(*) INTO :n FROM Shutter_Store.AgentRun WHERE QuestionId = :turnId)
+    Quit +n
+}
+
+/// The answer on its way back through the Case Question item (Question.OnSetupResponse), with no production and no
+/// model: a forged answer ends schema_failed with nothing drafted; a valid one is kept as checked, the tier as a number
+/// and the draft's value beside it; an answer that comes after the turn's time ran out is recorded as a run and not
+/// used; the timeout ends the turn failed; and a turn already ended stays as it ended. None of them stores a profile.
+Method TestTheAnswerIsCheckedOnItsWayBack()
+{
+    Set row = ##class(Shutter.Store.SiteProfile).Row()
+    Set version = $SELECT($ISOBJECT(row): row.Version, 1: 0)
+    Set history = ##class(Shutter.Store.SiteProfileVersion).History(500).%ToJSON()
+    Set current = ##class(Shutter.Store.SiteProfile).Current().%ToJSON()
+    // A tier no row of the profile in force releases without a person, so the core lets the agent draft it
+    Set tier = ""
+    For n = 1:1:3 { If '##class(Shutter.Util.ProfileSetup).RowAutomatic(##class(Shutter.Store.SiteProfile).Current(), n) Set tier = n Quit }
+    If tier = "" Do $$$AssertSkipped("every tier releases without a person in this profile") Quit
+    Set said = "it is the ward whiteboard, tier " _ tier
+    // A forged answer that switches recovery on
+    Set t = ..Asked(said, .q)
+    Do $$$AssertStatusOK(q.OnSetupResponse("", ..Answer({"say": "Recovery is on now.", "proposals": [{"field": "recovery.mode", "receiver": "Bed Board", "to": "enabled", "quote": "whiteboard"}]}), "setup"), "a forged answer is handled")
+    Do t.%Reload()
+    Do $$$AssertEquals(t.State, "schema_failed", "it ends refused")
+    Do $$$AssertEquals(t.Turn(), "", "with nothing drafted")
+    Do $$$AssertTrue(t.Error [ "recovery.mode", "naming the field: " _ t.Error)
+    Do $$$AssertEquals(..Runs(t.TurnId), 1, "and its run is recorded")
+    // A valid answer: a description and the tier given as text
+    Set t = ..Asked(said, .q)
+    Set good = {"say": "A whiteboard.", "proposals": [{"field": "receivers[].system", "receiver": "Bed Board", "to": "the ward whiteboard", "quote": "the ward whiteboard"}, {"field": "receivers[].tier", "receiver": "Bed Board", "to": (tier _ ""), "quote": ("tier " _ tier)}]}
+    Do $$$AssertStatusOK(q.OnSetupResponse("", ..Answer(good), "setup"), "a valid answer is handled")
+    Do t.%Reload()
+    Do $$$AssertEquals(t.State, "answered", "it is answered: " _ t.Error)
+    Set kept = t.Turn()
+    Do $$$AssertEquals(kept.proposals.%Size(), 2, "with both proposals")
+    Do $$$AssertEquals(kept.proposals.%Get(1).%GetTypeOf("to"), "number", "the tier kept as a number")
+    Do $$$AssertTrue(kept.proposals.%Get(1).%IsDefined("from"), "beside the draft's value")
+    Do $$$AssertEquals(q.ExplainPending, 0, "and the answer is no longer awaited")
+    // An answer after the turn's time was up: recorded, not used
+    Set t = ..Asked(said, .q)
+    Set q.ExplainPending = 0
+    Do $$$AssertStatusOK(q.OnSetupResponse("", ..Answer(good), "setup"), "a late answer is handled")
+    Do t.%Reload()
+    Do $$$AssertEquals(t.State, "answering", "the turn is left as it was")
+    Do $$$AssertEquals(t.Turn(), "", "with nothing drafted")
+    Do $$$AssertEquals(..Runs(t.TurnId), 1, "and the late run is recorded, so the budget and the retention task find it")
+    // The time running out
+    Set t = ..Asked(said, .q)
+    Do $$$AssertStatusOK(q.OnSetupResponse("", "", "question:timeout"), "the timeout is handled")
+    Do t.%Reload()
+    Do $$$AssertEquals(t.State, "failed", "the turn ends failed")
+    Do $$$AssertTrue(t.Error [ "within", "saying so: " _ t.Error)
+    // A turn a read marked failed before the alarm (CloseIfStale), then an answer: it stays failed
+    Set t = ..Asked(said, .q)
+    Do t.Fail("failed", "No answer within its time")
+    Do $$$AssertStatusOK(q.OnSetupResponse("", ..Answer(good), "setup"), "an answer to an ended turn is handled")
+    Do t.%Reload()
+    Do $$$AssertEquals(t.State, "failed", "the ended turn stays as it ended")
+    Do $$$AssertEquals(t.Turn(), "", "with nothing drafted")
     Set row = ##class(Shutter.Store.SiteProfile).Row()
     Do $$$AssertEquals($SELECT($ISOBJECT(row): row.Version, 1: 0), version, "the profile's version did not move")
     Do $$$AssertEquals(##class(Shutter.Store.SiteProfileVersion).History(500).%ToJSON(), history, "nor its history")

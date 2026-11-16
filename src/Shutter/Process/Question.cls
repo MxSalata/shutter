@@ -177,7 +177,13 @@ Method OnPageResponse(callrequest As %Library.Persistent, callresponse As %Libra
         Quit q.Fail("failed", "No answer from the Explain agent within " _ ..AgentTimeoutSeconds _ " s")
     }
     If completionkey '= "page" { $$$LOGWARNING("Unexpected completion key " _ completionkey) Quit $$$OK }
-    If '..ExplainPending { $$$TRACE("The Explain agent answered " _ q.QuestionId _ " after its time was up; the answer is not used") Quit $$$OK }
+    If '..ExplainPending {
+        // A late answer is still a run that was paid for: it is recorded, so the day's budget and the costs count it and
+        // the retention task finds its tool calls, and its answer is not used.
+        If $ISOBJECT(callresponse) && callresponse.%IsA("Shutter.Bridge.Msg.AgentResponse") Do ##class(Shutter.Store.AgentRun).FromResponse("", "", "explain", "explain", callresponse, ..HeaderIdOf(callrequest), .late, q.QuestionId)
+        $$$TRACE("The Explain agent answered " _ q.QuestionId _ " after its time was up; the run is recorded and the answer is not used")
+        Quit $$$OK
+    }
     Set ..ExplainPending = 0
     If '$ISOBJECT(callresponse) || 'callresponse.%IsA("Shutter.Bridge.Msg.AgentResponse") Quit q.Fail("failed", "The agent item answered with " _ $SELECT($ISOBJECT(callresponse): $CLASSNAME(callresponse), 1: "nothing"))
     Set sc = ##class(Shutter.Store.AgentRun).FromResponse("", "", "explain", "explain", callresponse, ..HeaderIdOf(callrequest), .run, q.QuestionId)
@@ -243,7 +249,13 @@ Method OnSetupResponse(callrequest As %Library.Persistent, callresponse As %Libr
         Quit t.Fail("failed", "No answer from the Set-up guide agent within " _ ..AgentTimeoutSeconds _ " s")
     }
     If completionkey '= "setup" { $$$LOGWARNING("Unexpected completion key " _ completionkey) Quit $$$OK }
-    If '..ExplainPending { $$$TRACE("The Set-up guide agent answered " _ t.TurnId _ " after its time was up; the answer is not used") Quit $$$OK }
+    If '..ExplainPending {
+        // A late answer is still a run that was paid for: it is recorded, so the day's budget and the costs count it and
+        // the retention task takes its tool calls with the turn, and its answer is not used.
+        If $ISOBJECT(callresponse) && callresponse.%IsA("Shutter.Bridge.Msg.AgentResponse") Do ##class(Shutter.Store.AgentRun).FromResponse("", "", "setup", "setup", callresponse, ..HeaderIdOf(callrequest), .late, t.TurnId)
+        $$$TRACE("The Set-up guide agent answered " _ t.TurnId _ " after its time was up; the run is recorded and the answer is not used")
+        Quit $$$OK
+    }
     Set ..ExplainPending = 0
     If '$ISOBJECT(callresponse) || 'callresponse.%IsA("Shutter.Bridge.Msg.AgentResponse") Quit t.Fail("failed", "The agent item answered with " _ $SELECT($ISOBJECT(callresponse): $CLASSNAME(callresponse), 1: "nothing"))
     Set sc = ##class(Shutter.Store.AgentRun).FromResponse("", "", "setup", "setup", callresponse, ..HeaderIdOf(callrequest), .run, t.TurnId)

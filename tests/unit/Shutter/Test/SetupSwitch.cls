@@ -54,4 +54,24 @@ Method TestTheAgentItemRefusesATurnOnceTheSwitchIsOff()
     Do $$$AssertNotTrue(##class(Shutter.Util.PageQuestion).Refuses(page, .detail), "a live page question is not refused by it")
 }
 
+/// A turn that ended while its run waited in the Agent Board item's queue (its time ran out) is refused there with the
+/// switch on: nothing of it goes to a model.
+Method TestAnEndedTurnIsNotSent()
+{
+    Do ..Switch(1)
+    Set st = "Shutter.Store.SetupTurn"
+    Set draft = ##class(Shutter.Store.SiteProfile).Current()
+    Do draft.receivers.%Push({"name": "Bed Board", "features": {"conditional_writes": false, "receipts": false, "history": false, "dry_run": false}})
+    Set frame = ##class(Shutter.Util.ProfileSetup).Frame(draft, "Bed Board", .problem)
+    Do $$$AssertStatusOK($CLASSMETHOD(st, "Create", $CLASSMETHOD(st, "NewConversation"), "Bed Board", "it is the ward whiteboard", {}, frame, 1, 1, "ut-setup", .t), "a turn")
+    Do t.Answering()
+    Set spec = ##class(Shutter.Bridge.RunSpec).%New()
+    Set spec.AgentClass = "Shutter.Agent.SetupGuide", spec.Mode = "live", spec.CorrelationKey = t.TurnId
+    Do $$$AssertNotTrue(##class(Shutter.Util.PageQuestion).Refuses(spec, .why), "a turn being answered runs: " _ why)
+    Do t.Fail("failed", "No answer within its time")
+    Do $$$AssertTrue(##class(Shutter.Util.PageQuestion).Refuses(spec, .why), "an ended turn's run is refused")
+    Do $$$AssertTrue(why [ "The turn ended (failed)", "saying so: " _ why)
+    Do $CLASSMETHOD(st, "PurgeTurn", t.%Id())
+}
+
 }

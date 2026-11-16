@@ -214,8 +214,11 @@ Method Answering() As %Status
     Quit ..%Save()
 }
 
+/// The turn's checked answer kept. A turn that has already ended (failed when its time ran out, which a read can find
+/// before the alarm does) stays as it ended: an answer that comes after is not kept.
 Method Answered(turn As %DynamicObject, run As Shutter.Store.AgentRun) As %Status
 {
+    If (..State '= "pending") && (..State '= "answering") Quit $$$OK
     Set ..State = "answered", ..Error = ""
     Set ..TurnJSON = turn.%ToJSON()
     Set ..AnsweredAt = ##class(Shutter.Util.Time).NowUTC()
