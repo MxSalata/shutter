@@ -593,11 +593,14 @@ Method MarkSiteEntry(entryId As %String) As %Status
 }
 
 /// The site entry MarkSiteEntry recorded, as stored now (another process may have recorded it since this copy was read).
-Method StoredSiteEntry() As %String
+/// <var>unreadable</var> is 1 when the stored row could not be read: the copy's value is then returned, and a caller that
+/// holds a case for it holds this one too, since an older copy may predate the record.
+Method StoredSiteEntry(Output unreadable As %Boolean) As %String
 {
-    Set id = ..%Id(), stored = ""
+    Set id = ..%Id(), stored = "", unreadable = 0
     If id = "" Quit i%SiteEntry
     &sql(SELECT SiteEntry INTO :stored FROM Shutter_Store."Case" WHERE ID = :id)
+    If SQLCODE < 0 Set unreadable = 1
     Quit $SELECT(SQLCODE = 0: stored, 1: i%SiteEntry)
 }
 
@@ -608,6 +611,8 @@ Method %OnBeforeSave(insert As %Boolean) As %Status [ Private, ServerOnly = 1 ]
     If insert Quit $$$OK
     Set id = ..%Id(), inc = "", snap = "", site = ""
     &sql(SELECT Incident, CurrentSnapshot, SiteEntry INTO :inc, :snap, :site FROM Shutter_Store."Case" WHERE ID = :id)
+    // A stored row that cannot be read is not overwritten by a copy that may be older: the save fails.
+    If SQLCODE < 0 Quit $$$ERROR($$$SQLError, SQLCODE, $GET(%msg))
     If SQLCODE '= 0 Quit $$$OK
     If inc '= ..IncidentGetObjectId() Do ..IncidentSetObjectId(inc)
     If snap '= ..CurrentSnapshotGetObjectId() Do ..CurrentSnapshotSetObjectId(snap)

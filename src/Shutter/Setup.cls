@@ -2072,6 +2072,24 @@ ClassMethod SiteEntriesOnePerson(on As %Boolean, reason As %String = "") As %Str
     Quit $SELECT(on: "ok: one person may propose and approve a site entry until this is restored", 1: "ok: a second person approves every site entry again")
 }
 
+/// Set aside one of the site's own catalogue entries that cannot be read or rechecked (CONTRACTS 6.8, R13): while such
+/// an active entry stands, every case on the site is matched as error and goes to a person, and the Doctor names it. The
+/// entry is suspended, with who, when and the reason, recorded as an event and warned about for as long as it lasts; a
+/// row whose own data cannot be read is written again from its versions and events first, and the damaged data kept.
+/// Nothing is deleted, and resuming or retiring the entry afterwards is a proposal and a second person's approval. From
+/// the terminal only, by an IRIS administrator (%Admin_Manage): it is neither a route nor an SQL procedure.
+///
+///     Write ##class(Shutter.Setup).SiteEntriesSetAside("L3", "Its row cannot be read after the disk fault of 14 May, incident INC-9")
+ClassMethod SiteEntriesSetAside(id As %String, reason As %String = "") As %String
+{
+    If $ISOBJECT($GET(%request)) || $ISOBJECT($GET(%sqlcontext)) Quit "ERROR: from the terminal only"
+    If '$SYSTEM.Security.Check("%Admin_Manage", "USE") Quit "ERROR: %Admin_Manage is required"
+    If $ZSTRIP(reason, "<>W") = "" Quit "ERROR: a reason is required"
+    Set code = ##class(Shutter.Catalogue.SiteEntry).SetAside(id, $USERNAME, $ZSTRIP(reason, "<>W"), "terminal", .detail)
+    If code '= "" Quit "ERROR: " _ code _ ": " _ detail
+    Quit "ok: " _ detail
+}
+
 /// A readiness report as JSON: what is installed, what runs, what is missing.
 ClassMethod Doctor(refresh As %Boolean = 0) As %String [ SqlProc ]
 {

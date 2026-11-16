@@ -76,14 +76,51 @@ Property CreatedAt As %String(MAXLEN = 30);
 
 Property UpdatedAt As %String(MAXLEN = 30);
 
+/// How long a match waits for a recheck another process is running, in seconds: longer than an approval holds the lock.
+Parameter RECHECKWAIT = 15;
+
 // ---- reading ----
 
+/// The entry with this id, letter for letter: the column compares without regard to case, so "l1" would find L1, while
+/// every other comparison of ids (the proof's other entries, the impact's leader) is exact. "" for no such entry.
 ClassMethod ById(id As %String) As Shutter.Catalogue.SiteEntry
 {
+    Set rid = ..RowId(id)
+    If rid = "" Quit ""
+    Set e = ..%OpenId(rid)
+    If '$ISOBJECT(e) || (e.EntryId '= id) Quit ""
+    Quit e
+}
+
+/// The stored row of an entry, read again from the disk: under the lock, a copy the process already has open (a
+/// caller's, or this method's own from before the lock) is never taken for the stored row, since %OpenId would hand it
+/// back as it was read.
+ClassMethod Fresh(id As %String) As Shutter.Catalogue.SiteEntry [ Private ]
+{
+    Set e = ..ById(id)
+    If $ISOBJECT(e) $$$ThrowOnError(e.%Reload())
+    Quit e
+}
+
+/// The row id of an entry, read from the index alone (so a row whose data cannot be read is still found), or "".
+ClassMethod RowId(id As %String) As %String
+{
+    If '..IsSiteId(id) Quit ""
     Set rid = ""
     &sql(SELECT ID INTO :rid FROM Shutter_Catalogue.SiteEntry WHERE EntryId = :id)
     If (SQLCODE '= 0) || (rid = "") Quit ""
-    Quit ..%OpenId(rid)
+    Quit rid
+}
+
+/// The entry id a row is indexed under, read from the index alone, or "".
+ClassMethod IdOfRow(rid As %String) As %String [ Private ]
+{
+    Set key = ""
+    For {
+        Set key = $ORDER(^Shutter.Catalogue.SiteEntryI("EntryIdx", key)) Quit:key=""
+        If $DATA(^Shutter.Catalogue.SiteEntryI("EntryIdx", key, rid)) Return $ZSTRIP(key, "<>W")
+    }
+    Quit ""
 }
 
 /// Whether an id has the form of a site entry's.
@@ -130,12 +167,36 @@ ClassMethod ActiveIds(exceptId As %String = "", Output problem As %String) As %S
     Quit out
 }
 
-/// How many entries are active, one left out when asked.
-ClassMethod ActiveCount(exceptId As %String = "") As %Integer
+/// How many entries are active, one left out when asked. <var>failed</var> is 1 when the count could not be read: a
+/// caller then never takes it for none.
+ClassMethod ActiveCount(exceptId As %String = "", Output failed As %Boolean) As %Integer
 {
-    Set n = 0
+    Set n = 0, failed = 0
     &sql(SELECT COUNT(*) INTO :n FROM Shutter_Catalogue.SiteEntry WHERE State = 'active' AND (:exceptId IS NULL OR EntryId <> :exceptId))
+    If SQLCODE < 0 Set failed = 1
     Quit +n
+}
+
+/// What a completed recheck is bound to: this release and the inputs it read, which every save of the site profile and
+/// every change of the vocabulary in force counts (InputsChanged). A recheck stores it in ^Shutter.Catalogue.Site("checked")
+/// as it read it when it began, so a profile saved during or after a recheck always leaves the stored mark another, and
+/// the entries are checked again before any case is matched on them.
+ClassMethod CheckedMark() As %String
+{
+    Quit $PARAMETER("Shutter.Setup", "VERSION") _ "|" _ (+$GET(^Shutter.Catalogue.Site("inputs")))
+}
+
+/// Whether a recheck completed under this release and the inputs in force.
+ClassMethod IsChecked() As %Boolean
+{
+    Quit $GET(^Shutter.Catalogue.Site("checked")) = ..CheckedMark()
+}
+
+/// Something the recheck reads has changed (the site profile was saved, another vocabulary was put in force): the entries
+/// are checked again before the next case is matched on them.
+ClassMethod InputsChanged()
+{
+    Set n = $INCREMENT(^Shutter.Catalogue.Site("inputs"))
 }
 
 /// One entry as the matcher reads it: what a stored row gives it and nothing else.
@@ -180,12 +241,14 @@ ClassMethod ActiveList(Output problem As %String, exceptId As %String = "") As %
 {
     Set problem = "", list = []
     Set release = $PARAMETER("Shutter.Setup", "VERSION")
-    If $GET(^Shutter.Catalogue.Site("checked")) '= release {
-        // A caller that only reads (a role with no write access to the database) cannot complete the recheck: it gets
-        // error too, until a process that can has run it.
+    If '..IsChecked() {
+        // A recheck another process is running is waited for, not taken for one that failed: the wait is longer than an
+        // approval's, and one completed meanwhile is not run again. A caller that cannot write gets error until a process
+        // that can has run it.
         Set ok = 0
-        Try { Do ..Recheck("upgrade", 1, .ok) } Catch ex { Set ok = 0 }
-        If 'ok && (..ActiveCount() > 0) Set problem = "the site entries have not been rechecked under release " _ release _ " yet (the recheck is tried again at the next match)" Quit []
+        Try { Do ..Recheck("upgrade", 1, .ok, ..#RECHECKWAIT, 1) } Catch ex { Set ok = 0 }
+        Set count = ..ActiveCount(, .failed)
+        If 'ok && ((count > 0) || failed) Set problem = ..UncheckedWords(release) Quit []
     }
     Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID, EntryId FROM Shutter_Catalogue.SiteEntry WHERE State = 'active' ORDER BY ID")
     If rs.%SQLCODE < 0 Set problem = "the active site entries cannot be read (SQLCODE " _ rs.%SQLCODE _ ")" Quit []
@@ -219,13 +282,18 @@ ClassMethod ActiveList(Output problem As %String, exceptId As %String = "") As %
     Quit ..Ordered(list)
 }
 
-/// Which of the site's own entries stopped a case: the match its current evidence carries, when that match is a site
-/// entry's (origin site; it is then the case's only match). {entry, title, instructions}, or "" for a case no site entry
-/// matched. Read by the closures that run outside the case workflow (the outage close, the engine's delivery read and
-/// the resend set), so that none of them settles such a case, or offers its message, without a person seeing the brake.
-ClassMethod StoppedCase(case As Shutter.Store.Case) As %DynamicObject
+/// Which of the site's own entries stopped a case, for the closures that run outside the case workflow (the outage close,
+/// the engine's delivery read, the resend set and the outage run's settle), so that none of them settles such a case, or
+/// offers its message, without a person seeing the brake. In order: the match its current evidence carries, when that
+/// match is a site entry's; the entry the case recorded from earlier evidence (Shutter.Store.Case.SiteEntry); and, on a
+/// site that has activated an entry, its stored evidence matched now against the active entries, so a case whose evidence
+/// was collected before an entry was activated is held by it too. {entry, title, instructions}, or "" for a case no site
+/// entry stops. When that cannot be told (the case's record or the active entries cannot be read, the evidence was matched
+/// as error, or matching it now fails) the case is held all the same: entry is "" and unread says why.
+/// <var>cache</var> keeps the active entries between calls of one pass (the resend set's).
+ClassMethod StoppedCase(case As Shutter.Store.Case, ByRef cache) As %DynamicObject
 {
-    Set json = "Shutter.Util.Json"
+    Set json = "Shutter.Util.Json", matcher = "Shutter.Catalogue.Matcher"
     If '$ISOBJECT(case) Quit ""
     Set snap = case.CurrentSnapshot
     Set summary = $SELECT($ISOBJECT(snap): snap.SummaryObject(), 1: "")
@@ -236,8 +304,30 @@ ClassMethod StoppedCase(case As Shutter.Store.Case) As %DynamicObject
     }
     // Earlier evidence of the case matched one (the case keeps it, Shutter.Store.Case.SiteEntry): its words as the
     // entry's version in force (or last in force) gives them.
-    Set marked = case.StoredSiteEntry()
-    If marked = "" Quit ""
+    Set marked = case.StoredSiteEntry(.unreadable)
+    If unreadable Quit ..Unread("the case's record of its site entry cannot be read")
+    If marked = "" {
+        // The evidence was matched when the site's entries could not be read: that answered nothing either way.
+        If $ISOBJECT(cat) && ($CLASSMETHOD(json, "Str", cat, "decision") = "error") Quit ..Unread("its evidence was matched while the site's own entries could not be read")
+        If ..Generation() = 0 Quit ""
+        If '$DATA(cache("list")) Set cache("list") = ..ActiveList(.problem), cache("problem") = problem
+        If cache("problem") '= "" Quit ..Unread(cache("problem"))
+        Set list = cache("list")
+        If (list.%Size() = 0) || '$ISOBJECT(summary) Quit ""
+        // The stored evidence matched now: an entry activated since it was collected holds the case as well.
+        Set hit = "", failed = ""
+        Try {
+            Set conditions = $CLASSMETHOD(matcher, "Conditions", case, summary, ##class(Shutter.Store.ChainItem).KindFor(case))
+            Set scope = $CLASSMETHOD(matcher, "Scope", case, summary)
+            Set it = list.%GetIterator()
+            While it.%GetNext(, .s) { If $CLASSMETHOD(matcher, "ScopeHolds", s.%Get("scope"), scope) && $CLASSMETHOD(matcher, "SiteHolds", s.%Get("pattern"), conditions) Set hit = s Quit }
+        } Catch ex {
+            Set failed = "its evidence could not be matched against the site's own entries: " _ $EXTRACT(ex.DisplayString(), 1, 200)
+        }
+        If failed '= "" Quit ..Unread(failed)
+        If '$ISOBJECT(hit) Quit ""
+        Quit {"entry": (hit.id), "title": (hit.title), "instructions": (hit.instructions)}
+    }
     Set out = {"entry": (marked), "title": "", "instructions": ""}
     Set e = ..ById(marked)
     Set v = $SELECT($ISOBJECT(e) && (e.ActiveVersion > 0): ##class(Shutter.Catalogue.SiteEntryVersion).Find(marked, e.ActiveVersion), 1: "")
@@ -249,9 +339,22 @@ ClassMethod StoppedCase(case As Shutter.Store.Case) As %DynamicObject
 /// The words for a case one of the site's own entries stopped: the entry, and its instructions when it has them.
 ClassMethod StoppedWords(stopped As %DynamicObject) As %String
 {
+    If stopped.entry = "" Quit "the site's own entries cannot be told for this case (" _ stopped.unread _ "), so a person decides"
     Set words = "the site's own scenario " _ stopped.entry _ " asks a person"
     If stopped.instructions '= "" Set words = words _ ": " _ stopped.instructions
     Quit words
+}
+
+/// What holds a case, as a headline names it: "the site's own scenario L1", or the entries that could not be told.
+ClassMethod StoppedLabel(stopped As %DynamicObject) As %String
+{
+    Quit $SELECT(stopped.entry '= "": "the site's own scenario " _ stopped.entry, 1: "a site entry that could not be told")
+}
+
+/// A hold whose entry cannot be told, with the reason.
+ClassMethod Unread(why As %String) As %DynamicObject [ Private ]
+{
+    Quit {"entry": "", "title": "", "instructions": "", "unread": (why)}
 }
 
 /// How many cases an entry sent to a person: the cases with a plan that names it, in all or since a number of days.
@@ -344,18 +447,37 @@ ClassMethod List() As %DynamicArray
 ClassMethod Status() As %DynamicObject
 {
     Set o = {}, warnings = [], suspended = [], review = [], active = 0, proposed = 0
-    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT EntryId, State, NeedsReview, ProposalAction, SuspendedBy, SuspendedAt FROM Shutter_Catalogue.SiteEntry ORDER BY ID")
-    While rs.%Next() {
-        Set id = rs.%Get("EntryId"), state = rs.%Get("State")
-        If state = "active" Set active = active + 1
-        If rs.%Get("ProposalAction") '= "" Set proposed = proposed + 1
-        If state = "suspended" {
-            Do suspended.%Push(id)
-            Do warnings.%Push("Site entry " _ id _ " is suspended (by " _ rs.%Get("SuspendedBy") _ ", " _ rs.%Get("SuspendedAt") _ "): its protection is off until a second person approves resuming it")
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT EntryId, State, NeedsReview, ProposalAction, SuspendedBy, SuspendedAt, ReviewJSON FROM Shutter_Catalogue.SiteEntry ORDER BY ID")
+    Set rsc = $$$OK
+    Try {
+        If rs.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$GeneralError, "SQLCODE " _ rs.%SQLCODE))
+        While rs.%Next(.rsc) {
+            Set id = rs.%Get("EntryId"), state = rs.%Get("State")
+            If state = "active" Set active = active + 1
+            If rs.%Get("ProposalAction") '= "" Set proposed = proposed + 1
+            If state = "suspended" {
+                Do suspended.%Push(id)
+                Do warnings.%Push("Site entry " _ id _ " is suspended (by " _ rs.%Get("SuspendedBy") _ ", " _ rs.%Get("SuspendedAt") _ "): its protection is off until a second person approves resuming it")
+            }
+            If rs.%Get("NeedsReview") && ((state = "active") || (state = "suspended")) {
+                Do review.%Push(id)
+                Do warnings.%Push("Site entry " _ id _ " needs review: an upgrade or a change of the site profile touched it. It still applies")
+            }
+            // A fixture whose case is gone leaves only the vocabulary check for it (design 7): said where people read.
+            If (state = "active") && (rs.%Get("ReviewJSON") [ "is no longer stored") Do warnings.%Push("Site entry " _ id _ ": the case of one or more of its fixtures is no longer stored, so an upgrade checks only its words and the frozen copy for them. Prove it on a stored case")
         }
-        If rs.%Get("NeedsReview") && ((state = "active") || (state = "suspended")) {
-            Do review.%Push(id)
-            Do warnings.%Push("Site entry " _ id _ " needs review: an upgrade or a change of the site profile touched it. It still applies")
+        If $$$ISERR(rsc) || (rs.%SQLCODE < 0) $$$ThrowStatus($SELECT($$$ISERR(rsc): rsc, 1: $$$ERROR($$$GeneralError, "SQLCODE " _ rs.%SQLCODE)))
+    } Catch ex {
+        Do warnings.%Push("The site's own entries cannot all be read (" _ $EXTRACT(ex.DisplayString(), 1, 200) _ "): the matcher answers error until they can, or until an IRIS administrator sets the damaged one aside from the terminal (Shutter.Setup.SiteEntriesSetAside)")
+    }
+    // What the last recheck could not check, entry by entry (R13, R14).
+    Set id = ""
+    For {
+        Set id = $ORDER(^Shutter.Catalogue.Site("unchecked", id), 1, row) Quit:id=""
+        If $LISTGET(row, 1) = "active" {
+            Do warnings.%Push("Site entry " _ id _ " could not be rechecked under release " _ $LISTGET(row, 4) _ " (" _ $LISTGET(row, 2) _ "): until it is, every case on the site is matched as error and goes to a person. Mend it, or an IRIS administrator sets it aside from the terminal: Write ##class(Shutter.Setup).SiteEntriesSetAside(""" _ id _ """, ""reason"")")
+        } Else {
+            Do warnings.%Push("Site entry " _ id _ " (" _ $LISTGET(row, 1) _ ") could not be rechecked under release " _ $LISTGET(row, 4) _ " (" _ $LISTGET(row, 2) _ "): it is not in force, and it needs review before anyone resumes it")
         }
     }
     Set one = ..OnePerson()
@@ -366,7 +488,7 @@ ClassMethod Status() As %DynamicObject
     If $ISOBJECT(one) { Set o.onePerson = one } Else { Do o.%Set("onePerson", "", "null") }
     Set o.warnings = warnings
     // What a downgrade costs, said where the person who plans one reads (docs/INSTALL.md).
-    If active > 0 Set o.downgrade = active _ " site " _ $SELECT(active = 1: "entry", 1: "entries") _ " active: they stop applying below this release"
+    If active > 0 Set o.downgrade = active _ " site " _ $SELECT(active = 1: "entry", 1: "entries") _ " active: they stop applying below this release, and a case saved there loses its record of the entry that stopped it"
     Quit o
 }
 
@@ -382,8 +504,22 @@ ClassMethod OnePerson() As %DynamicObject
 
 /// Lift or restore the two-person rule, recorded as an event. Called by Shutter.Setup.SiteEntriesOnePerson, which an
 /// IRIS administrator runs from the terminal; no route and no SQL procedure reaches it.
-/// The lift and its event are written together, or neither.
+/// The lift and its event are written together, or neither, under the entries' lock: an approval in flight reads the
+/// rule once and holds the lock until it commits, so a restore waits for it and every later approval reads the rule restored.
 ClassMethod SetOnePerson(on As %Boolean, who As %String, reason As %String, source As %String = "terminal") As %Status [ Internal ]
+{
+    If '..Lock() Quit $$$ERROR($$$GeneralError, "busy: the site entries are being changed; try again")
+    Set sc = $$$OK
+    Try {
+        Set sc = ..WriteOnePerson(on, who, reason, source)
+    } Catch ex {
+        Set sc = ex.AsStatus()
+    }
+    Do ..Unlock()
+    Quit sc
+}
+
+ClassMethod WriteOnePerson(on As %Boolean, who As %String, reason As %String, source As %String) As %Status [ Private ]
 {
     Set level = $TLEVEL
     TSTART
@@ -506,7 +642,8 @@ ClassMethod Change(id As %String, body As %DynamicObject, expectedVersion As %St
     Set code = ""
     Try {
         TSTART
-        Set entry = ..ById(id)
+        // The stored row, read again from the disk: the copy read before the lock is never the one checked or saved.
+        Set entry = ..Fresh(id)
         Set code = $SELECT('$ISOBJECT(entry): "not_found", 1: ..Changeable(entry, expectedVersion, .detail))
         If code = "" {
             If entry.DraftVersion = 0 Set entry.DraftVersion = ..NextVersion(id)
@@ -579,9 +716,19 @@ ClassMethod Prove(id As %String, action As %String, actor As %String, source As 
     If '$ISOBJECT(v) Quit $SELECT(detail [ "The action is": "bad_request", 1: "wrong_state")
     Set content = v.Content()
     If '$ISOBJECT(content) Set detail = "Version " _ v.Version _ " of " _ id _ " cannot be read" Quit "wrong_state"
-    Set result = ##class(Shutter.Catalogue.SiteEntryProof).Run(id, v.Version, content, action, actor, "api", 1, .proof)
-    Do ##class(Shutter.Catalogue.SiteEntryEvent).Record(id, v.Version, "proved", actor, source, "Proof for " _ action _ ": " _ $SELECT(result.passed: "passed", 1: "did not pass"), $SELECT($ISOBJECT(proof): "proof:" _ proof.%Id(), 1: ""))
-    Quit ""
+    // The proof and its event together, or neither: no proof a proposal could stand on is kept without its line in the
+    // entry's history.
+    Set level = $TLEVEL, code = ""
+    Try {
+        TSTART
+        Set result = ##class(Shutter.Catalogue.SiteEntryProof).Run(id, v.Version, content, action, actor, "api", 1, .proof)
+        $$$ThrowOnError(##class(Shutter.Catalogue.SiteEntryEvent).Record(id, v.Version, "proved", actor, source, "Proof for " _ action _ ": " _ $SELECT(result.passed: "passed", 1: "did not pass"), $SELECT($ISOBJECT(proof): "proof:" _ proof.%Id(), 1: "")))
+        TCOMMIT
+    } Catch ex {
+        While $TLEVEL > level { TROLLBACK 1 }
+        Set code = "failed", detail = "The proof could not be kept with its event: " _ ex.DisplayString(), result = ""
+    }
+    Quit code
 }
 
 /// Propose an action: the version and its digest are frozen for a second person, with a passing proof of that digest
@@ -592,7 +739,7 @@ ClassMethod Propose(id As %String, action As %String, actor As %String, source A
     If '..Lock() Quit "busy"
     Set code = ""
     Try {
-        Set entry = ..ById(id)
+        Set entry = ..Fresh(id)
         If '$ISOBJECT(entry) Set code = "not_found" Quit
         If entry.ProposalAction '= "" Set code = "wrong_state", detail = "A proposal to " _ entry.ProposalAction _ " " _ id _ " already waits for approval" Quit
         Set v = entry.VersionFor(action, .detail)
@@ -603,7 +750,7 @@ ClassMethod Propose(id As %String, action As %String, actor As %String, source A
             Set detail = ..StillValid(content, id)
             If detail '= "" Set code = "bad_request" Quit
         }
-        If (action = "activate") && (entry.State '= "active") && (..ActiveCount(id) >= $PARAMETER("Shutter.Catalogue.SiteEntryVersion", "MAXACTIVE")) Set code = "too_many", detail = "The site has its " _ $PARAMETER("Shutter.Catalogue.SiteEntryVersion", "MAXACTIVE") _ " active site entries already" Quit
+        If (action = "activate") && (entry.State '= "active") && ((..ActiveCount(id, .failed) >= $PARAMETER("Shutter.Catalogue.SiteEntryVersion", "MAXACTIVE")) || failed) Set code = "too_many", detail = $SELECT(failed: "The active site entries cannot be counted", 1: "The site has its " _ $PARAMETER("Shutter.Catalogue.SiteEntryVersion", "MAXACTIVE") _ " active site entries already") Quit
         Set proof = ##class(Shutter.Catalogue.SiteEntryProof).Latest(id, v.Digest, action)
         If '$ISOBJECT(proof) Set code = "no_proof", detail = "No proof of this version's digest for " _ action _ ": run the proof first" Quit
         If 'proof.Passed Set code = "no_proof", detail = "The latest proof of this digest did not pass" Quit
@@ -653,7 +800,7 @@ ClassMethod Decide(id As %String, body As %DynamicObject, actor As %String, sour
     If '..Lock() Quit "busy"
     Set code = ""
     Try {
-        Set entry = ..ById(id)
+        Set entry = ..Fresh(id)
         If '$ISOBJECT(entry) Set code = "not_found" Quit
         If entry.ProposalAction = "" Set code = "wrong_state", detail = "No proposal waits for approval on " _ id Quit
         Set action = entry.ProposalAction
@@ -675,18 +822,18 @@ ClassMethod Decide(id As %String, body As %DynamicObject, actor As %String, sour
         Set v = ##class(Shutter.Catalogue.SiteEntryVersion).Find(id, entry.ProposalVersion)
         Set content = $SELECT($ISOBJECT(v): v.Content(), 1: "")
         If '$ISOBJECT(content) || (v.Digest '= entry.ProposalDigest) Set code = "digest_mismatch", detail = "The proposed version is no longer the one proposed: reject the proposal, and the draft can be changed and proposed again" Quit
-        // Two people (R6): the approver neither proposed this nor last changed the version, unless an IRIS administrator
-        // lifted the rule from the terminal, which every such approval then says. A user name is the same person whatever
-        // its letters' case, as IRIS reads it at sign-in.
+        // Two people (R6): the approver neither proposed this nor last changed the version, for every action (a retirement
+        // and a resumption as an activation), unless an IRIS administrator lifted the rule from the terminal, which every
+        // such approval then says. A user name is the same person whatever its letters' case, as IRIS reads it at sign-in.
         Set who = $ZCONVERT(actor, "U")
-        Set alone = (who = $ZCONVERT(entry.ProposalBy, "U")) || ((action = "activate") && (who = $ZCONVERT(v.WrittenBy, "U")))
+        Set alone = (who = $ZCONVERT(entry.ProposalBy, "U")) || (who = $ZCONVERT(v.WrittenBy, "U"))
         If alone && '$ISOBJECT(..OnePerson()) Set code = "same_person", detail = "A second person approves a site entry: " _ actor _ " proposed this or wrote the version" Quit
         If action '= "retire" {
             Set detail = ..StillValid(content, id)
             If detail '= "" Set code = "bad_request" Quit
             Set detail = ""
         }
-        If (action '= "retire") && (..ActiveCount(id) >= $PARAMETER("Shutter.Catalogue.SiteEntryVersion", "MAXACTIVE")) Set code = "too_many", detail = "The site has its " _ $PARAMETER("Shutter.Catalogue.SiteEntryVersion", "MAXACTIVE") _ " active site entries already" Quit
+        If (action '= "retire") && ((..ActiveCount(id, .failed) >= $PARAMETER("Shutter.Catalogue.SiteEntryVersion", "MAXACTIVE")) || failed) Set code = "too_many", detail = $SELECT(failed: "The active site entries cannot be counted", 1: "The site has its " _ $PARAMETER("Shutter.Catalogue.SiteEntryVersion", "MAXACTIVE") _ " active site entries already") Quit
         // The proof again (R8, P5): nobody activates on a stale proof, or on one the evidence no longer bears out.
         // A proposal whose own proof went stale stands on the newest one a person ran of the same digest since, if any.
         Set proposed = ##class(Shutter.Catalogue.SiteEntryProof).%OpenId(entry.ProposalProofId)
@@ -721,7 +868,7 @@ ClassMethod Decide(id As %String, body As %DynamicObject, actor As %String, sour
         If entry.State = "active" Do entry.Review(##class(Shutter.Catalogue.Vocabulary).Current(), "approval")
         $$$ThrowOnError(entry.Touch())
         Set generation = $INCREMENT(^Shutter.Catalogue.Site("generation"))
-        Set words = $SELECT(alone: " The same person proposed and approved it: the two-person rule is lifted.", 1: "")
+        Set words = $SELECT(alone: " The same person proposed it or wrote the version, and approved it: the two-person rule is lifted.", 1: "")
         $$$ThrowOnError(##class(Shutter.Catalogue.SiteEntryEvent).Record(id, v.Version, "approved", actor, source, "Approved (" _ action _ "): " _ reason _ words, v.Digest))
         $$$ThrowOnError(##class(Shutter.Catalogue.SiteEntryEvent).Record(id, v.Version, $CASE(action, "activate": "activated", "retire": "retired", : "resumed"), actor, source, "Version " _ v.Version _ " " _ $CASE(action, "activate": "is active", "retire": "is retired", : "applies again") _ "; catalogue generation " _ generation, "proof:" _ proofNow.%Id()))
         TCOMMIT
@@ -759,7 +906,7 @@ ClassMethod Suspend(id As %String, reason As %String, actor As %String, source A
     If '..Lock() Quit "busy"
     Set code = ""
     Try {
-        Set entry = ..ById(id)
+        Set entry = ..Fresh(id)
         If '$ISOBJECT(entry) Set code = "not_found" Quit
         If entry.State '= "active" Set code = "wrong_state", detail = id _ " is " _ entry.State _ ": only an active entry is suspended" Quit
         TSTART
@@ -786,61 +933,221 @@ ClassMethod Suspend(id As %String, reason As %String, actor As %String, source A
 /// after an upgrade (the catalogue's seed, or the first match under a new release) and after every save of the site
 /// profile. Nothing is retired or narrowed: an entry can only come out matching more, flagged for a person, and what one
 /// recheck dropped no later one restores. An entry that comes out widened raises the generation, so a plan made before
-/// it is not completed, as after an activation. Returns how many entries are flagged; <var>ok</var> is 1 only when every
-/// entry was checked and what changed was saved with its event, and only then is the release recorded as checked. A
-/// recheck that could not take the lock or save is tried again at the next match, which answers error until one
-/// completes (ActiveList). <var>reload</var> 0 keeps the vocabulary in force instead of reading the installed file.
-ClassMethod Recheck(trigger As %String = "upgrade", reload As %Boolean = 1, Output ok As %Boolean) As %Integer
+/// it is not completed, as after an activation. Returns how many entries are flagged.
+///
+/// <var>ok</var> is 1 only when every active entry was checked and what changed was saved with its event; only then is
+/// the mark of what was checked (CheckedMark, as read when the recheck began) recorded. A recheck that could not take the
+/// lock, load the vocabulary, list the entries or check an active one is tried again at the next match, which answers error
+/// until one completes (ActiveList). Each entry is checked on its own: an active one that cannot be is named, with the
+/// reason, in ^Shutter.Catalogue.Site("unchecked") and on the Doctor (Status), and an IRIS administrator can set it aside
+/// from the terminal (SetAside); a suspended one is not in force, so it is flagged and named there, and stops nothing.
+/// The lock is released on every path. <var>reload</var> 0 keeps the vocabulary in force instead of reading the
+/// installed file; <var>wait</var> is how long the lock is waited for; <var>ifNeeded</var> 1 does nothing once the lock
+/// is taken if another process completed a recheck of the same inputs meanwhile.
+ClassMethod Recheck(trigger As %String = "upgrade", reload As %Boolean = 1, Output ok As %Boolean, wait As %Integer = 5, ifNeeded As %Boolean = 0) As %Integer
 {
     Set flagged = 0, ok = 0
-    If '..Lock() {
-        Kill ^Shutter.Catalogue.Site("checked")
+    LOCK +^Shutter.Catalogue.Site("lock"):wait
+    If '$TEST {
+        Try { Kill ^Shutter.Catalogue.Site("checked") } Catch ex { }
         Quit 0
     }
-    Set complete = 1
+    Set complete = 1, mark = ""
+    Kill unchecked
     Try {
+        If ifNeeded && ..IsChecked() Set ok = 1 Quit
         Set root = $GET(^Shutter.Config("root"))
-        If reload && (root '= "") Do ##class(Shutter.Catalogue.Vocabulary).Load(##class(%File).NormalizeDirectory(root) _ "knowledge/catalogue/vocabulary.json")
+        If reload && (root '= "") $$$ThrowOnError(##class(Shutter.Catalogue.Vocabulary).Load(##class(%File).NormalizeDirectory(root) _ "knowledge/catalogue/vocabulary.json"))
+        // What this recheck reads, as it begins: a profile saved or a vocabulary put in force from here on leaves the
+        // stored mark another, so it is checked again.
+        Set mark = ..CheckedMark()
         Set vocabulary = ##class(Shutter.Catalogue.Vocabulary).Current()
-        Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Shutter_Catalogue.SiteEntry WHERE State IN ('active', 'suspended') ORDER BY ID")
-        If rs.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$GeneralError, "the site entries cannot be listed (SQLCODE " _ rs.%SQLCODE _ ")"))
-        While rs.%Next() {
-            Set e = ..%OpenId(rs.%Get("ID"))
-            If '$ISOBJECT(e) Set complete = 0 Continue
-            Set before = e.NeedsReview _ "|" _ e.EffectiveJSON _ "|" _ e.EffectiveScopeJSON _ "|" _ e.ReviewWords()
-            Do e.Review(vocabulary, trigger, .widened)
-            Set after = e.NeedsReview _ "|" _ e.EffectiveJSON _ "|" _ e.EffectiveScopeJSON _ "|" _ e.ReviewWords()
-            If e.NeedsReview Set flagged = flagged + 1
-            Continue:(before = after)
-            Set level = $TLEVEL
-            Try {
-                TSTART
-                $$$ThrowOnError(e.%Save())
-                Set words = $SELECT(e.NeedsReview: "Needs review: " _ e.ReviewWords(), 1: "Rechecked: nothing to review")
-                // The generation is raised last, once the row and its event are written: a rolled back transaction does not
-                // undo an increment. Every change of the generation holds this lock, so the next value is known here.
-                Set raise = widened && (e.State = "active")
-                If raise Set words = words _ "; the entry matches more now, so the catalogue generation is " _ (..Generation() + 1)
-                $$$ThrowOnError(##class(Shutter.Catalogue.SiteEntryEvent).Record(e.EntryId, e.ActiveVersion, "rechecked", "system", trigger, words))
-                If raise Set generation = $INCREMENT(^Shutter.Catalogue.Site("generation"))
-                TCOMMIT
-            } Catch one {
-                While $TLEVEL > level { TROLLBACK 1 }
-                Set complete = 0
-                Try { Do ##class(%SYS.System).WriteToConsoleLog("Shutter: the recheck of site entry " _ e.EntryId _ " could not be saved: " _ one.DisplayString(), 0, 1) } Catch ex2 { }
+        // Each state listed apart, from the state's index alone: a row whose data cannot be read is still listed.
+        For state = "active", "suspended" {
+            Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Shutter_Catalogue.SiteEntry WHERE State = ? ORDER BY ID", state)
+            If rs.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$GeneralError, "the site entries cannot be listed (SQLCODE " _ rs.%SQLCODE _ ")"))
+            Set rsc = $$$OK
+            While rs.%Next(.rsc) {
+                Set rid = rs.%Get("ID")
+                Set flagged = flagged + ..RecheckOne(rid, state, vocabulary, trigger, .why)
+                Continue:why=""
+                Set id = ..IdOfRow(rid)
+                Set unchecked($SELECT(id '= "": id, 1: "row " _ rid)) = $LISTBUILD(state, $EXTRACT(why, 1, 300), ##class(Shutter.Util.Time).NowUTC(), $PARAMETER("Shutter.Setup", "VERSION"))
+                If state = "active" Set complete = 0
+                Try { Do ##class(%SYS.System).WriteToConsoleLog("Shutter: site entry " _ $SELECT(id '= "": id, 1: "row " _ rid) _ " (" _ state _ ") could not be rechecked: " _ why, 0, 1) } Catch ex2 { }
             }
+            // A row the query itself cannot read ends the listing early: the recheck is then not complete.
+            If $$$ISERR(rsc) || (rs.%SQLCODE < 0) $$$ThrowStatus($SELECT($$$ISERR(rsc): rsc, 1: $$$ERROR($$$GeneralError, "the site entries cannot be listed (SQLCODE " _ rs.%SQLCODE _ ")")))
         }
     } Catch ex {
         Set complete = 0
         Try { Do ##class(%SYS.System).WriteToConsoleLog("Shutter: the recheck of the site entries failed: " _ ex.DisplayString(), 0, 1) } Catch ex2 { }
     }
-    If complete {
-        Set ^Shutter.Catalogue.Site("checked") = $PARAMETER("Shutter.Setup", "VERSION"), ok = 1
-    } Else {
-        Kill ^Shutter.Catalogue.Site("checked")
+    Try {
+        If 'ok {
+            // What could not be checked, said on the Doctor until a recheck checks it (Status).
+            If mark '= "" {
+                Kill ^Shutter.Catalogue.Site("unchecked")
+                Merge ^Shutter.Catalogue.Site("unchecked") = unchecked
+            }
+            If complete && (mark '= "") {
+                Set ^Shutter.Catalogue.Site("checked") = mark, ok = 1
+            } Else {
+                Kill ^Shutter.Catalogue.Site("checked")
+            }
+        }
+    } Catch ex {
+        Set ok = 0
+    }
+    LOCK -^Shutter.Catalogue.Site("lock")
+    Quit flagged
+}
+
+/// One entry of the recheck, under the lock: its row read again from the disk, checked, and what changed saved with its
+/// event and, for an active entry that comes out matching more, the generation raised last. Returns 1 when the entry is
+/// flagged. <var>why</var> is "" when the entry was checked, else why it could not be; a suspended one that could not be is
+/// flagged on its row where the row allows it.
+ClassMethod RecheckOne(rid As %String, state As %String, vocabulary As %DynamicObject, trigger As %String, Output why As %String) As %Boolean [ Private ]
+{
+    Set why = "", flagged = 0, level = $TLEVEL, e = ""
+    Try {
+        Set e = ..%OpenId(rid)
+        If '$ISOBJECT(e) $$$ThrowStatus($$$ERROR($$$GeneralError, "its row cannot be opened"))
+        $$$ThrowOnError(e.%Reload())
+        Set before = e.NeedsReview _ "|" _ e.EffectiveJSON _ "|" _ e.EffectiveScopeJSON _ "|" _ e.ReviewWords()
+        Do e.Review(vocabulary, trigger, .widened)
+        Set after = e.NeedsReview _ "|" _ e.EffectiveJSON _ "|" _ e.EffectiveScopeJSON _ "|" _ e.ReviewWords()
+        Set flagged = ''e.NeedsReview
+        If before '= after {
+            TSTART
+            $$$ThrowOnError(e.%Save())
+            Set words = $SELECT(e.NeedsReview: "Needs review: " _ e.ReviewWords(), 1: "Rechecked: nothing to review")
+            // The generation is raised last, once the row and its event are written: a rolled back transaction does not
+            // undo an increment. Every change of the generation holds this lock, so the next value is known here.
+            Set raise = widened && (e.State = "active")
+            If raise Set words = words _ "; the entry matches more now, so the catalogue generation is " _ (..Generation() + 1)
+            $$$ThrowOnError(##class(Shutter.Catalogue.SiteEntryEvent).Record(e.EntryId, e.ActiveVersion, "rechecked", "system", trigger, words))
+            If raise Set generation = $INCREMENT(^Shutter.Catalogue.Site("generation"))
+            TCOMMIT
+        }
+    } Catch one {
+        While $TLEVEL > level { TROLLBACK 1 }
+        Set why = $EXTRACT(one.DisplayString(), 1, 300)
+        // The copy in memory is the stored row again, so a later recheck in this process compares against what is stored.
+        If $ISOBJECT(e) {
+            Try { Do e.%Reload() } Catch reload { }
+        }
+        If state '= "active" {
+            Set flagged = 1
+            Try { &sql(UPDATE Shutter_Catalogue.SiteEntry SET NeedsReview = 1 WHERE ID = :rid) } Catch flag { }
+        }
+    }
+    Quit flagged
+}
+
+/// What the matcher says while the entries are not rechecked: the release, and each active entry the last recheck could
+/// not check, with its reason and the way out.
+ClassMethod UncheckedWords(release As %String) As %String [ Private ]
+{
+    Set words = "the site entries have not been rechecked under release " _ release _ " and the site profile in force yet (the recheck is tried again at the next match)"
+    Set id = ""
+    For {
+        Set id = $ORDER(^Shutter.Catalogue.Site("unchecked", id), 1, row) Quit:id=""
+        Continue:($LISTGET(row, 1) '= "active")
+        Set words = words _ "; site entry " _ id _ " could not be rechecked (" _ $LISTGET(row, 2) _ "): an IRIS administrator can set it aside from the terminal (Shutter.Setup.SiteEntriesSetAside)"
+    }
+    Quit words
+}
+
+/// An IRIS administrator's way out for an active or suspended entry that cannot be read or rechecked, when it stops the
+/// site's matching (R13) and nobody can mend it: Shutter.Setup.SiteEntriesSetAside, from the terminal. The entry is
+/// suspended, so it stops applying, with the administrator, the time and the reason, flagged for review, recorded as an
+/// event (set_aside) and warned about for as long as it lasts, as any suspension is; the generation rises. A row whose own
+/// data cannot be read is first written again from what its versions and events still say, and the damaged node kept
+/// beside it (^Shutter.Catalogue.Site("damaged", row)). Nothing is deleted. Resuming or retiring it afterwards is a
+/// proposal and a second person's approval. Returns "" and the words, or not_found, wrong_state, busy or failed.
+ClassMethod SetAside(id As %String, who As %String, reason As %String, source As %String = "terminal", Output detail As %String) As %String [ Internal ]
+{
+    Set detail = "", code = ""
+    Set reason = $ZSTRIP(##class(Shutter.Util.ModelView).Clean(reason), "<>W")
+    If reason = "" Set detail = "A reason is required" Quit "bad_request"
+    Set rid = ..RowId(id)
+    If rid = "" Set detail = "No site entry " _ id Quit "not_found"
+    If '..Lock() Set detail = "The site entries are being changed; try again" Quit "busy"
+    Set level = $TLEVEL
+    Try {
+        Set now = ##class(Shutter.Util.Time).NowUTC(), rebuilt = 0, e = ""
+        Try {
+            Set e = ..%OpenId(rid)
+            If $ISOBJECT(e) Do e.%Reload()
+        } Catch unreadable {
+            Set e = ""
+        }
+        TSTART
+        If '$ISOBJECT(e) {
+            If '$DATA(^Shutter.Catalogue.SiteEntryI("StateIdx", " ACTIVE", rid)) && '$DATA(^Shutter.Catalogue.SiteEntryI("StateIdx", " SUSPENDED", rid)) {
+                Set code = "wrong_state", detail = "The row of " _ id _ " cannot be read, and it is not indexed as active or suspended: it is not in force, so there is nothing to set aside"
+                While $TLEVEL > level { TROLLBACK 1 }
+                Quit
+            }
+            // The row's own data cannot be read: written again as a suspended entry from its versions and events.
+            Set ^Shutter.Catalogue.Site("damaged", rid) = $GET(^Shutter.Catalogue.SiteEntryD(rid))
+            $$$ThrowOnError(..Rebuild(rid, id, now))
+            Set e = ..%OpenId(rid)
+            If '$ISOBJECT(e) $$$ThrowStatus($$$ERROR($$$GeneralError, "the row could not be written again"))
+            Set rebuilt = 1
+        }
+        If (e.State '= "active") && (e.State '= "suspended") && 'rebuilt {
+            Set code = "wrong_state", detail = id _ " is " _ e.State _ ": only an active or suspended entry is set aside"
+            While $TLEVEL > level { TROLLBACK 1 }
+            Quit
+        }
+        Set was = e.State
+        Set e.State = "suspended", e.SuspendedBy = $EXTRACT(who, 1, 160), e.SuspendedAt = now, e.SuspendedReason = $EXTRACT("Set aside by an IRIS administrator: " _ reason, 1, 1000)
+        Set e.NeedsReview = 1
+        $$$ThrowOnError(e.Touch())
+        Set generation = ..Generation() + 1
+        Set words = "Set aside from the terminal (" _ $SELECT(rebuilt: "its row could not be read and was written again from its versions and events", 1: "it was " _ was) _ "): " _ reason _ "; it stops applying until a second person approves resuming it; catalogue generation " _ generation
+        $$$ThrowOnError(##class(Shutter.Catalogue.SiteEntryEvent).Record(id, e.ActiveVersion, "set_aside", who, source, words))
+        Set generation = $INCREMENT(^Shutter.Catalogue.Site("generation"))
+        Kill ^Shutter.Catalogue.Site("unchecked", id), ^Shutter.Catalogue.Site("checked")
+        TCOMMIT
+        Set detail = id _ " is set aside (suspended); the next match rechecks the site's entries"
+    } Catch ex {
+        While $TLEVEL > level { TROLLBACK 1 }
+        Set code = "failed", detail = ex.DisplayString()
     }
     Do ..Unlock()
-    Quit flagged
+    Quit code
+}
+
+/// A row written again, under the lock, from what the entry's versions and events still say: the latest approved version
+/// as the version in force, a later draft as the draft, the priority of the version in force, who made it and when. Its
+/// state index is put right for the new row; the caller sets the state.
+ClassMethod Rebuild(rid As %String, id As %String, now As %String) As %Status [ Private ]
+{
+    Set active = 0, draft = 0, createdBy = "", createdAt = "", priority = 100
+    &sql(SELECT MAX(Version) INTO :active FROM Shutter_Catalogue.SiteEntryVersion WHERE EntryId = :id AND Status = 'approved')
+    Set active = +active
+    &sql(SELECT MAX(Version) INTO :draft FROM Shutter_Catalogue.SiteEntryVersion WHERE EntryId = :id AND Status = 'draft' AND Version > :active)
+    Set draft = +draft
+    &sql(SELECT TOP 1 Actor, At INTO :createdBy, :createdAt FROM Shutter_Catalogue.SiteEntryEvent WHERE EntryId = :id AND Kind = 'created' ORDER BY ID)
+    Set v = $SELECT(active > 0: ##class(Shutter.Catalogue.SiteEntryVersion).Find(id, active), 1: "")
+    Set content = $SELECT($ISOBJECT(v): v.Content(), 1: "")
+    If $ISOBJECT(content) Set priority = +##class(Shutter.Util.Json).Str(content, "priority", 100)
+    Set review = {"dropped": [], "notes": ["The entry's row could not be read and was written again from its versions and events: a person reviews it before it applies again"], "trigger": "set_aside", "release": ($PARAMETER("Shutter.Setup", "VERSION"))}
+    // The storage's values in order (Storage Default below): the class name, then each property.
+    Set node = $LISTBUILD("", id, "suspended", active, draft, priority, "", "", "", "", "", "", 1, review.%ToJSON(), "", "", "", "", 1, createdBy, createdAt, now, "")
+    // Every state the damaged row may have been indexed under is cleared, then the new one indexed.
+    Set state = ""
+    For {
+        Set state = $ORDER(^Shutter.Catalogue.SiteEntryI("StateIdx", state)) Quit:state=""
+        Kill ^Shutter.Catalogue.SiteEntryI("StateIdx", state, rid)
+    }
+    Set ^Shutter.Catalogue.SiteEntryD(rid) = node
+    // The index holds the state as the column's collation gives it (SQLUPPER: a space, then the word in capitals).
+    Set ^Shutter.Catalogue.SiteEntryI("StateIdx", " " _ $ZCONVERT("suspended", "U"), rid) = ""
+    Quit $$$OK
 }
 
 /// What the last recheck found, in words.
@@ -909,7 +1216,9 @@ Method Review(vocabulary As %DynamicObject, trigger As %String, Output widened A
         Set text = $SELECT(part = "pattern": ..EffectiveJSON, 1: ..EffectiveScopeJSON)
         Continue:text=""
         Set effective = $CLASSMETHOD(json, "Parse", text, .sc)
-        Continue:'$ISOBJECT(effective)
+        // A widening that cannot be read is never taken for none (that would narrow the entry back): the recheck of the
+        // entry fails, and the matcher answers error for it as it does already (R13).
+        If '$ISOBJECT(effective) || 'effective.%IsA("%Library.DynamicObject") $$$ThrowStatus($$$ERROR($$$GeneralError, "the widened " _ part _ " of " _ ..EntryId _ " cannot be read"))
         Set mine = $SELECT(part = "pattern": pattern, 1: scope), names = "", it = mine.%GetIterator()
         While it.%GetNext(.name) { Set names = names _ $LISTBUILD(name) }
         For i = 1:1:$LISTLENGTH(names) {
@@ -934,14 +1243,24 @@ Method Review(vocabulary As %DynamicObject, trigger As %String, Output widened A
                 If '$CLASSMETHOD(vocabularyClass, "In", allowed, word) Do pattern.%Remove(condition), dropped.%Push({"condition": (condition), "part": "pattern", "why": ("this release's vocabulary has no value " _ word _ " for it")}) Quit
             }
         }
+        // The scope, as the pattern: a fact this release's vocabulary no longer lists is one the matcher no longer reads,
+        // and a fact the case does not carry never holds (Matcher.ScopeHolds), so it is dropped whole.
+        Set known = $CLASSMETHOD(vocabularyClass, "SiteList", vocabulary, "scope"), names = "", si = scope.%GetIterator()
+        While si.%GetNext(.name) { Set names = names _ $LISTBUILD(name) }
+        For i = 1:1:$LISTLENGTH(names) {
+            Set name = $LIST(names, i)
+            If '$CLASSMETHOD(vocabularyClass, "In", known, name) Do scope.%Remove(name), dropped.%Push({"condition": (name), "part": "scope", "why": "this release's vocabulary has no such scope fact"})
+        }
     }
+    Set nearer = 0
     Set fixtures = content.%Get("fixtures")
     If $ISOBJECT(fixtures) {
         Set fi = fixtures.%GetIterator()
         While fi.%GetNext(, .f) {
             Set caseId = $CLASSMETHOD(json, "Str", f, "case"), expect = $CLASSMETHOD(json, "Str", f, "expect")
             Set now = ##class(Shutter.Catalogue.SiteEntryProof).Replay(f, .source, .why)
-            If source = "frozen" Do ..AddNote(notes, .said, "Case " _ caseId _ " is no longer stored, so its evidence was not read again: only the vocabulary was checked for it") Continue
+            // A fixture whose case is gone is noted, and its frozen copy still proves the pattern's logic below.
+            If source = "frozen" Do ..AddNote(notes, .said, "Case " _ caseId _ " is no longer stored, so its evidence was not read again: only the vocabulary and its frozen copy were checked for it")
             // A stored case this release cannot read is a failure, never a case that is gone: it flags the entry.
             If source = "error" Do ..AddNote(notes, .said, "Case " _ caseId _ " is stored, but " _ why _ ": the entry is not checked against it until a person looks") Continue
             If expect = "match" {
@@ -970,7 +1289,9 @@ Method Review(vocabulary As %DynamicObject, trigger As %String, Output widened A
                 // And the fixture as a whole: the entry, as it now stands, must still match the case it was approved on.
                 If '($CLASSMETHOD(matcher, "ScopeHolds", scope, now.scope) && $CLASSMETHOD(matcher, "SiteHolds", pattern, now.conditions)) Do ..AddNote(notes, .said, "The entry no longer matches case " _ caseId _ ", which it was approved to match")
             } ElseIf $CLASSMETHOD(matcher, "ScopeHolds", scope, now.scope) && $CLASSMETHOD(matcher, "SiteHolds", pattern, now.conditions) {
-                Do ..AddNote(notes, .said, "The entry now matches case " _ caseId _ ", which it was approved to leave alone")
+                // A near miss the entry now matches is a widening this release made: new to this check, it raises the
+                // generation as a drop does, so a plan made before it is not completed.
+                If ..AddNote(notes, .said, "The entry now matches case " _ caseId _ ", which it was approved to leave alone") Set nearer = 1
             }
         }
     }
@@ -990,7 +1311,7 @@ Method Review(vocabulary As %DynamicObject, trigger As %String, Output widened A
     // a flag once set stays until a new version is approved.
     Set flag = (dropped.%Size() > 0) || ..NeedsReview, ni = notes.%GetIterator()
     While ni.%GetNext(, .note) { If (note '[ "is no longer stored") && (note '[ "No condition vocabulary") Set flag = 1 }
-    Set widened = (dropped.%Size() > carried)
+    Set widened = (dropped.%Size() > carried) || nearer
     Set ..NeedsReview = flag
     Set anyPattern = 0, anyScope = 0, di = dropped.%GetIterator()
     While di.%GetNext(, .item) { If item.%Get("part") = "scope" { Set anyScope = 1 } Else { Set anyPattern = 1 } }
@@ -1006,13 +1327,14 @@ Method Review(vocabulary As %DynamicObject, trigger As %String, Output widened A
     Quit flag
 }
 
-/// A note added once.
-ClassMethod AddNote(notes As %DynamicArray, ByRef said, note As %String) [ Private ]
+/// A note added once. Returns 1 when it was not there yet.
+ClassMethod AddNote(notes As %DynamicArray, ByRef said, note As %String) As %Boolean [ Private ]
 {
     Set key = $EXTRACT(note, 1, 200) _ "|" _ $ZCRC(note, 7)
-    If $DATA(said(key)) Quit
+    If $DATA(said(key)) Quit 0
     Set said(key) = ""
     Do notes.%Push(note)
+    Quit 1
 }
 
 // ---- removal ----
@@ -1029,7 +1351,9 @@ ClassMethod RemoveAll() As %Status
         Set one = $CLASSMETHOD(class, "%KillExtent")
         If $$$ISERR(one) Set sc = one
     }
-    Kill ^Shutter.Catalogue.Site
+    // The generation, the counter and the marks go only with every entry: a removal that failed leaves the entries it
+    // could not remove with their generation, so the catalogue's version still carries them.
+    If $$$ISOK(sc) Kill ^Shutter.Catalogue.Site
     Quit sc
 }
 

@@ -149,7 +149,14 @@ ClassMethod SeedFromFile(path As %String, Output count As %Integer) As %Status
     // The vocabulary that came with the file, and the site's own entries checked against it and against this release's
     // matcher before any case is matched (CONTRACTS 6.8, R14). The seed never touches their tables. A recheck that fails
     // is tried again at the first match, so it never stops an install.
-    Do ##class(Shutter.Catalogue.Vocabulary).Load(##class(%File).GetDirectory(path) _ "vocabulary.json")
+    // A vocabulary file that is there and is not the vocabulary leaves the old one in force: the entries are then not
+    // checked against it, the release is not recorded as checked, and the first match tries again (reading the file).
+    Set lsc = ##class(Shutter.Catalogue.Vocabulary).Load(##class(%File).GetDirectory(path) _ "vocabulary.json")
+    If $$$ISERR(lsc) {
+        Try { Do ##class(%SYS.System).WriteToConsoleLog("Shutter: the catalogue's vocabulary could not be loaded: " _ $SYSTEM.Status.GetErrorText(lsc), 0, 1) } Catch ex { }
+        Try { Kill ^Shutter.Catalogue.Site("checked") } Catch ex { }
+        Quit sc
+    }
     Try { Do ##class(Shutter.Catalogue.SiteEntry).Recheck("upgrade", 0) } Catch ex { Kill ^Shutter.Catalogue.Site("checked") }
     Quit sc
 }

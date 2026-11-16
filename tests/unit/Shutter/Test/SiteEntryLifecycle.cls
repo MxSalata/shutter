@@ -180,7 +180,8 @@ Method TestSuspendResumeRetire()
     Do $$$AssertEquals($CLASSMETHOD(site, "Propose", id, "resume", "ut-approver", "api", .entry, .detail), "", "and proposed")
     Set body = {"action": "resume", "version": 1, "digest": (entry.ProposalDigest), "decision": "approve", "reason": "narrowed elsewhere"}
     Do $$$AssertEquals($CLASSMETHOD(site, "Decide", id, body, "ut-approver", "api", .e2, .detail, .extra), "same_person", "the proposer cannot approve it")
-    Do $$$AssertEquals($CLASSMETHOD(site, "Decide", id, body, "ut-author", "api", .e2, .detail, .extra), "", "another person does: " _ detail)
+    Do $$$AssertEquals($CLASSMETHOD(site, "Decide", id, body, "ut-author", "api", .e2, .detail, .extra), "same_person", "nor who wrote the version (R6, for every action)")
+    Do $$$AssertEquals($CLASSMETHOD(site, "Decide", id, body, "ut-third", "api", .e2, .detail, .extra), "", "another person does: " _ detail)
     Do $$$AssertEquals(##class(Shutter.Catalogue.Entry).CatalogueVersion(), shipped _ ";g3:" _ id _ "@1", "generation 3: never the string of generation 1 again")
     Do $$$AssertEquals($CLASSMETHOD(site, "Status").warnings.%Size(), 0, "the warning is gone with the suspension")
     // A retirement's proof is its impact read the other way.
@@ -311,6 +312,8 @@ Method TestOnlyAnAdministratorLiftsTheTwoPersonRule()
     If $ISOBJECT($GET(%sqlcontext)) || $ISOBJECT($GET(%request)) {
         Do $$$AssertTrue(##class(Shutter.Setup).SiteEntriesOnePerson(1, "unit test") [ "terminal only", "refused away from the terminal")
         Do $$$AssertNotTrue($ISOBJECT($CLASSMETHOD(site, "OnePerson")), "and nothing is lifted")
+    } Else {
+        Do $$$AssertSkipped("run from the terminal: the refusal away from it is not exercised")
     }
     Do $$$AssertNotTrue(##class(%Dictionary.CompiledMethod).%OpenId("Shutter.Setup||SiteEntriesOnePerson").SqlProc, "it is no SQL procedure")
     Set id = ..Draft(.match, .near)
@@ -416,6 +419,91 @@ Method TestARetirementNeedsAReadableImpact()
     }
     Set result = ##class(Shutter.Catalogue.SiteEntryProof).Run(id, 1, ##class(Shutter.Catalogue.SiteEntryVersion).Find(id, 1).Content(), "retire", "ut-author", "api", 1, .proof)
     Do $$$AssertTrue(result.passed, "with the cases readable again it passes")
+}
+
+/// A restore of the two-person rule waits for an approval in flight: it takes the entries' lock, which an approval holds
+/// from reading the rule to its commit, so it is refused while another process holds it and nothing is written.
+Method TestTheRuleIsChangedUnderTheLock()
+{
+    Set site = "Shutter.Catalogue.SiteEntry"
+    Do $$$AssertStatusOK($CLASSMETHOD(site, "SetOnePerson", 1, "ut-admin", "unit test"), "lifted")
+    Kill ^Shutter.Test.SiteLock
+    Job ##class(Shutter.Test.SiteKit).HoldTheLock()
+    For i = 1:1:50 { Quit:$GET(^Shutter.Test.SiteLock)="held"  Hang 0.1 }
+    Do $$$AssertEquals($GET(^Shutter.Test.SiteLock), "held", "an approval holds the lock")
+    Set events = ##class(Shutter.Catalogue.SiteEntryEvent).For("").%Size()
+    Try {
+        Set sc = $CLASSMETHOD(site, "SetOnePerson", 0, "ut-admin", "")
+        Do $$$AssertStatusNotOK(sc, "the restore is refused while it holds")
+        Do $$$AssertTrue($SYSTEM.Status.GetErrorText(sc) [ "busy", "as busy: " _ $SYSTEM.Status.GetErrorText(sc))
+        Do $$$AssertTrue($ISOBJECT($CLASSMETHOD(site, "OnePerson")), "the rule stays as it was")
+        Do $$$AssertEquals(##class(Shutter.Catalogue.SiteEntryEvent).For("").%Size(), events, "and no event is written")
+    } Catch ex {
+        Do $$$AssertTrue(0, "failed: " _ ex.DisplayString())
+    }
+    Set ^Shutter.Test.SiteLock = "release"
+    For i = 1:1:50 { Quit:$GET(^Shutter.Test.SiteLock)="done"  Hang 0.1 }
+    Kill ^Shutter.Test.SiteLock
+    Do $$$AssertStatusOK($CLASSMETHOD(site, "SetOnePerson", 0, "ut-admin", ""), "then it is restored")
+    Do $$$AssertNotTrue($ISOBJECT($CLASSMETHOD(site, "OnePerson")), "and holds again")
+}
+
+/// An entry's id is read letter for letter: "l1" is no entry, so no proof or proposal is ever made under it.
+Method TestAnIdIsReadLetterForLetter()
+{
+    Set site = "Shutter.Catalogue.SiteEntry"
+    Set id = ..Draft(.match, .near)
+    Set lower = $ZCONVERT(id, "L")
+    Do $$$AssertNotTrue($ISOBJECT($CLASSMETHOD(site, "ById", lower)), lower _ " is no entry")
+    Do $$$AssertEquals($CLASSMETHOD(site, "Prove", lower, "activate", "ut-author", "api", .result, .detail), "not_found", "no proof under it")
+    Do $$$AssertEquals($CLASSMETHOD(site, "Propose", lower, "activate", "ut-author", "api", .entry, .detail), "not_found", "nor a proposal")
+    Do $$$AssertTrue($ISOBJECT($CLASSMETHOD(site, "ById", id)), id _ " is")
+}
+
+/// A proof is kept with its event, or not at all: one whose event cannot be written leaves no proof to propose on.
+Method TestAProofIsKeptWithItsEvent()
+{
+    Set site = "Shutter.Catalogue.SiteEntry"
+    Set id = ..Draft(.match, .near)
+    Set digest = ##class(Shutter.Catalogue.SiteEntryVersion).Find(id, 1).Digest
+    Set long = "a-source-longer-than-the-event-allows"
+    Do $$$AssertEquals($CLASSMETHOD(site, "Prove", id, "activate", "ut-author", long, .result, .detail), "failed", "a proof whose event fails: " _ detail)
+    Do $$$AssertNotTrue($ISOBJECT(##class(Shutter.Catalogue.SiteEntryProof).Latest(id, digest, "activate")), "leaves no proof")
+    Do $$$AssertEquals($CLASSMETHOD(site, "Propose", id, "activate", "ut-author", "api", .entry, .detail), "no_proof", "so nothing is proposed on it")
+    Do $$$AssertEquals($CLASSMETHOD(site, "Prove", id, "activate", "ut-author", "api", .result, .detail), "", "the next proof is kept")
+    Do $$$AssertEquals(##class(Shutter.Catalogue.SiteEntryEvent).For(id).%Get(0).kind, "proved", "with its event")
+}
+
+/// R6 for a retirement: the person who wrote the version in force approves neither its activation nor its retirement.
+Method TestTheVersionsAuthorDoesNotApproveItsRetirement()
+{
+    Set site = "Shutter.Catalogue.SiteEntry", kit = "Shutter.Test.SiteKit"
+    Set id = $CLASSMETHOD(kit, "ActiveEntry", .match, .near, .problem)
+    Do $$$AssertEquals(problem, "", "an active entry, written by ut-author and approved by ut-approver")
+    Do $$$AssertEquals($CLASSMETHOD(site, "Prove", id, "retire", "ut-approver", "api", .result, .detail), "", "the retirement is proved")
+    Do $$$AssertEquals($CLASSMETHOD(site, "Propose", id, "retire", "ut-approver", "api", .entry, .detail), "", "and proposed by the approver")
+    Set body = {"action": "retire", "version": 1, "digest": (entry.ProposalDigest), "decision": "approve", "reason": "no longer needed"}
+    Do $$$AssertEquals($CLASSMETHOD(site, "Decide", id, body, "ut-author", "api", .e2, .detail, .extra), "same_person", "the version's author does not approve it")
+    Do $$$AssertEquals($CLASSMETHOD(site, "ById", id).State, "active", "it still applies")
+    Do $$$AssertEquals($CLASSMETHOD(site, "Decide", id, body, "ut-third", "api", .e2, .detail, .extra), "", "a third person does: " _ detail)
+    Do $$$AssertEquals($CLASSMETHOD(site, "ById", id).State, "retired", "retired")
+}
+
+/// P1: a proof does not pass when another site entry leads on its match fixture, and the row names the leader.
+Method TestAProofFailsWhenAnotherEntryLeads()
+{
+    Set site = "Shutter.Catalogue.SiteEntry", kit = "Shutter.Test.SiteKit"
+    Set match = $CLASSMETHOD(kit, "Case", {"ward": "WARD-ISO"}), near = $CLASSMETHOD(kit, "Case", {"ward": "WARD-B"})
+    Set broad = $CLASSMETHOD(kit, "Body", match.CaseId, near.CaseId)
+    Set broad.title = "Every transfer into the ward", broad.priority = 5, broad.pattern = {"event": "transfer"}, broad.scope = {"ward": ["WARD-ISO"]}
+    Do $$$AssertEquals($CLASSMETHOD(kit, "Activate", broad, .broadId), "", "a broader entry at priority 5 is active")
+    Do $$$AssertEquals($CLASSMETHOD(site, "Create", $CLASSMETHOD(kit, "Body", match.CaseId, near.CaseId), "ut-author", "api", .entry, .problems, .warnings), "", "a draft at priority 10")
+    Set id = entry.EntryId
+    Do $$$AssertEquals($CLASSMETHOD(site, "Prove", id, "activate", "ut-author", "api", .result, .detail), "", "proved")
+    Do $$$AssertNotTrue(result.passed, "it does not pass")
+    Set row = result.fixtures.%Get(0)
+    Do $$$AssertEquals(row.lead, broadId, "the match fixture's row names the leader")
+    Do $$$AssertTrue(row.text [ broadId, "in its words: " _ row.text)
 }
 
 }

@@ -163,7 +163,10 @@ ClassMethod Store(json As %String, source As %String = "", user As %String = "",
     // A receiver or a team the profile no longer names would silently disable a site entry that names it (CONTRACTS 6.8):
     // the site's own entries are checked after every save, and one the change touched is flagged for a person. It still
     // applies. Never a reason for the save to fail.
+    // The save is counted first, so a recheck already running (which read the profile before) or one that fails here
+    // leaves the entries' mark of what was checked another, and the next match checks them again (R14).
     If $$$ISOK(sc) {
+        Try { Do ##class(Shutter.Catalogue.SiteEntry).InputsChanged() } Catch ex { }
         Try { Do ##class(Shutter.Catalogue.SiteEntry).Recheck("profile") } Catch ex { }
     }
     Quit sc

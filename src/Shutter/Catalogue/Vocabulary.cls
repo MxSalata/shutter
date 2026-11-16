@@ -34,11 +34,15 @@ ClassMethod Problem(v As %DynamicObject) As %String
 }
 
 /// Put a vocabulary in force (the seed, and the tests of an upgrade that knows fewer conditions).
+/// Another vocabulary than the one in force is something the site's entries are checked against again before the next
+/// case is matched on them (Shutter.Catalogue.SiteEntry.InputsChanged).
 ClassMethod Use(v As %DynamicObject)
 {
+    Set json = v.%ToJSON(), changed = ($GET(^Shutter.Catalogue.Vocabulary("json")) '= json)
     Kill ^Shutter.Catalogue.Vocabulary
-    Set ^Shutter.Catalogue.Vocabulary("json") = v.%ToJSON()
+    Set ^Shutter.Catalogue.Vocabulary("json") = json
     Set ^Shutter.Catalogue.Vocabulary("at") = ##class(Shutter.Util.Time).NowUTC()
+    If changed Do ##class(Shutter.Catalogue.SiteEntry).InputsChanged()
 }
 
 /// The vocabulary in force, or "" when none was ever taken and the installed root holds no file.

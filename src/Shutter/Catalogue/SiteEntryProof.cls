@@ -111,6 +111,8 @@ ClassMethod Replay(fixture As %DynamicObject, Output source As %String, Output w
     If '$ISOBJECT(case) || (digest = "") Quit out
     Set cid = case.%Id(), sid = ""
     &sql(SELECT TOP 1 ID INTO :sid FROM Shutter_Store.Snapshot WHERE "Case" = :cid AND Digest = :digest ORDER BY ID DESC)
+    // Only a snapshot that is not there is a purge: a lookup that failed is a failure to report.
+    If SQLCODE < 0 Set source = "error", why = "its stored evidence could not be looked up (SQLCODE " _ SQLCODE _ ")" Quit out
     If (SQLCODE '= 0) || (sid = "") Quit out
     Try {
         Set snap = ##class(Shutter.Store.Snapshot).%OpenId(sid)
@@ -161,6 +163,9 @@ ClassMethod Run(entryId As %String, version As %Integer, content As %DynamicObje
     Set proof = "", result = {}, problems = []
     Set digest = ##class(Shutter.Catalogue.SiteEntryVersion).DigestOf(content)
     Set result.action = action, result.version = +version, result.digest = digest
+    // What the proof is bound to, read before anything it evaluates and again at the end (P5): a catalogue or a profile
+    // that changed while it ran is a problem, so the context kept is always the one it was evaluated under.
+    Set started = ##class(Shutter.Util.Digest).Canonical(..Context(entryId, action, digest))
     Set others = ##class(Shutter.Catalogue.SiteEntry).ActiveList(.problem, entryId)
     If problem '= "" Do problems.%Push("The active site entries cannot be read: " _ problem) Set others = []
     Set mine = ##class(Shutter.Catalogue.SiteEntry).MatchItem(entryId, version, content, content.%Get("pattern"))
@@ -224,10 +229,11 @@ ClassMethod Run(entryId As %String, version As %Integer, content As %DynamicObje
             Do problems.%Push("The impact could not be computed: " _ ex.DisplayString())
         }
     }
+    Set context = ..Context(entryId, action, digest)
+    If ##class(Shutter.Util.Digest).Canonical(context) '= started Do problems.%Push("The catalogue, the site profile, the gate's policy or the release changed while the proof ran: run it again")
     Set result.problems = problems
     Set passed = (problems.%Size() = 0)
     Do result.%Set("passed", passed, "boolean")
-    Set context = ..Context(entryId, action, digest)
     Set result.context = context
     Set proof = ..%New()
     Set proof.EntryId = entryId, proof.Version = +version, proof.Digest = digest, proof.Action = action, proof.Passed = passed
@@ -252,13 +258,16 @@ ClassMethod Impact(entryId As %String, without As %DynamicArray, with As %Dynami
     Set json = "Shutter.Util.Json", matcher = "Shutter.Catalogue.Matcher"
     Set out = {}, groups = {}, cases = {}, scanned = 0, caught = 0, unread = 0, capped = 0
     Set deadline = $ZHOROLOG + ..#IMPACTSECONDS
+    // A query that fails, or stops at a row it cannot read, is no impact: it throws, and the proof says so (Run).
     Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT TOP " _ ..#IMPACTCASES _ " ID FROM Shutter_Store.""Case"" WHERE CurrentSnapshot IS NOT NULL ORDER BY ID DESC")
-    While rs.%Next() {
+    If rs.%SQLCODE < 0 $$$ThrowStatus($$$ERROR($$$GeneralError, "the stored cases cannot be listed (SQLCODE " _ rs.%SQLCODE _ ")"))
+    Set rsc = $$$OK
+    While rs.%Next(.rsc) {
         If $ZHOROLOG > deadline Set capped = 1 Quit
-        Set case = ##class(Shutter.Store.Case).%OpenId(rs.%Get("ID"))
-        Continue:'$ISOBJECT(case)
-        Continue:'$ISOBJECT(case.CurrentSnapshot)
         Set scanned = scanned + 1
+        // A case that cannot be opened, or whose evidence cannot, is counted as unread, never left out.
+        Set case = ##class(Shutter.Store.Case).%OpenId(rs.%Get("ID"))
+        If '$ISOBJECT(case) || '$ISOBJECT(case.CurrentSnapshot) Set unread = unread + 1 Continue
         Try {
             Set summary = case.CurrentSnapshot.SummaryObject()
             Set chain = ##class(Shutter.Store.ChainItem).KindFor(case)
@@ -277,6 +286,7 @@ ClassMethod Impact(entryId As %String, without As %DynamicArray, with As %Dynami
             Set unread = unread + 1
         }
     }
+    If $$$ISERR(rsc) || (rs.%SQLCODE < 0) $$$ThrowStatus($SELECT($$$ISERR(rsc): rsc, 1: $$$ERROR($$$GeneralError, "the stored cases cannot be read (SQLCODE " _ rs.%SQLCODE _ ")")))
     Do out.%Set("scanned", scanned, "number"), out.%Set("caught", caught, "number"), out.%Set("unread", unread, "number")
     Do out.%Set("capped", capped, "boolean")
     Set out.groups = groups, out.cases = cases
