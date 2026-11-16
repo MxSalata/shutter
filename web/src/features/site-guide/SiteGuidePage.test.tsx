@@ -14,13 +14,24 @@ import SiteGuidePage from './SiteGuidePage';
 
 /** This site's guide on a live page: every part from the install's answers, the stamp, the site's own entries, rights. */
 
+/** Every request the guide sent that is not a read: the guide stores nothing, whatever it renders or prints. */
+let writes: string[] = [];
+
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 afterEach(() => {
+  expect(writes).toEqual([]);
+  server.events.removeAllListeners();
   server.resetHandlers();
   useAppearance.setState({ detail: 'plain' });
 });
 afterAll(() => server.close());
-beforeEach(() => resetMock('operator'));
+beforeEach(() => {
+  resetMock('operator');
+  writes = [];
+  server.events.on('request:start', ({ request }) => {
+    if (request.method !== 'GET') writes.push(`${request.method} ${new URL(request.url).pathname}`);
+  });
+});
 
 type Profile = { receivers: Record<string, unknown>[] } & Record<string, unknown>;
 
@@ -301,10 +312,6 @@ describe("This site's guide", () => {
   });
 
   it('says what is missing when a reader may not read the profile, and writes nothing', async () => {
-    const writes: string[] = [];
-    server.events.on('request:start', ({ request }) => {
-      if (request.method !== 'GET') writes.push(`${request.method} ${request.url}`);
-    });
     server.use(
       http.get('/api/shutter/site-profile', () =>
         HttpResponse.json({ error: 'forbidden', detail: 'This needs Shutter_Operate' }, { status: 403 }),
@@ -312,8 +319,31 @@ describe("This site's guide", () => {
     );
     renderGuide();
     expect(await screen.findByText('This guide needs the operator or approver role')).toBeInTheDocument();
+  });
+
+  it('writes nothing when it renders whole, reads again after a profile version moved, and prints, for an operator and an approver', async () => {
+    const print = vi.spyOn(window, 'print').mockImplementation(() => {});
+    let calls = 0;
+    server.use(
+      http.get('/api/shutter/catalogue', () => {
+        calls += 1;
+        return HttpResponse.json({ ...catalogueView(), profileVersion: calls === 1 ? 8 : 7 });
+      }),
+    );
+    const first = renderGuide();
+    expect(await screen.findByTestId('site-guide-stamp', {}, { timeout: 5000 })).toHaveTextContent(
+      'Version 7',
+    );
+    expect(calls).toBe(2);
+    await userEvent.click(screen.getByRole('button', { name: 'Print or save as PDF' }));
+    expect(print).toHaveBeenCalledOnce();
+    first.unmount();
+    resetMock('approver');
+    renderGuide();
+    await screen.findByTestId('site-guide-stamp', {}, { timeout: 5000 });
+    await userEvent.click(screen.getByRole('button', { name: 'Print or save as PDF' }));
+    print.mockRestore();
     expect(writes).toEqual([]);
-    server.events.removeAllListeners();
   });
 
   it('says what happens to a pattern no entry knows as the core does: the board, then a person only for a write', async () => {

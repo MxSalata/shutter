@@ -35,7 +35,17 @@ function pdfPages(pdf: Buffer): number {
 test('opens from the Site profile page with every part, the stamp and its sample data label', async ({
   page,
 }) => {
-  await openGuide(page);
+  // The guide stores nothing: from its opening on, every request to the API is a read
+  const writes: string[] = [];
+  page.on('request', (r) => {
+    if (new URL(r.url()).pathname.includes('/api/shutter/') && r.method() !== 'GET')
+      writes.push(`${r.method()} ${r.url()}`);
+  });
+  await go(page, '/site-profile');
+  writes.length = 0;
+  await page.getByRole('link', { name: "Export this site's guide (PDF)" }).click();
+  await expect(page.getByRole('heading', { level: 1, name: "This site's guide" })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Print or save as PDF' })).toBeEnabled();
   await expect(page).toHaveURL(/#\/site-guide$/);
   for (const part of PARTS) await expect(page.getByRole('heading', { level: 2, name: part })).toBeVisible();
   const stamp = page.getByTestId('site-guide-stamp');
@@ -53,6 +63,7 @@ test('opens from the Site profile page with every part, the stamp and its sample
   // No navigation chrome: the guide is a document of its own
   await expect(page.getByRole('navigation')).toHaveCount(0);
   await expect(page.getByRole('banner')).toHaveCount(0);
+  expect(writes).toEqual([]);
   expect(await audit(page)).toEqual([]);
 });
 
