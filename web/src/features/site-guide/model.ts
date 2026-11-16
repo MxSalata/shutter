@@ -186,6 +186,9 @@ export function askedWords(
   decides: string,
   holds?: AutomaticHold[],
 ): string {
+  // The site's policy for this tier convenes the board before the entry's outcome is read (CaseWorkflow.PolicyPath)
+  if (release === 'board')
+    return "The board of agents settles the case, as the site's policy for this tier asks; any write it proposes waits for a person.";
   if (decides === 'board' && outcome !== 'escalate')
     return 'The board of agents proposes a plan; any write it proposes waits for a person to approve it.';
   if (outcome === 'escalate')

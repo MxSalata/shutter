@@ -3,6 +3,7 @@ import type { SiteProfile, SiteReceiver } from '@/api/types';
 import catalogue from '../../../../knowledge/catalogue/catalogue.json';
 import {
   alternativesOf,
+  askedWords,
   entryAtReceivers,
   hasNoRecoveryApi,
   limitsFor,
@@ -125,6 +126,15 @@ describe("an entry at each receiver, in words, from the route's rows", () => {
 });
 
 describe('the words', () => {
+  it("says a policy of board convenes the board before the entry's outcome is read", () => {
+    const board =
+      "The board of agents settles the case, as the site's policy for this tier asks; any write it proposes waits for a person.";
+    for (const outcome of ['none', 'resend', 'correct_history']) {
+      expect(askedWords(outcome, 'board', 'policy')).toBe(board);
+      expect(askedWords(outcome, 'board', 'policy')).not.toContain('Nobody is asked');
+    }
+  });
+
   it('writes a pattern in the words the core gives a site entry', () => {
     expect(patternWords(entry('E6').pattern)).toBe(
       'When a message fails, is rejected or gets no answer, and encounter state is discharged',
