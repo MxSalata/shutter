@@ -571,7 +571,8 @@ ClassMethod Frame(draft As %DynamicObject, receiver As %String, Output problem A
 /// answers. Not shown: mail addresses and domains, API paths, approvers' names, runbook and call lines, any other
 /// receiver's answers, any case, any message. A receiver's name and description are shown only when they pass the text
 /// rule a typed answer is held to (TextProblem, and a description of at most MAXSYSTEM characters), since a person may
-/// have typed anything into either with the page's controls; a value that fails is left out, and "left_out" names it.
+/// have typed anything into either with the page's controls; a value that fails is left out, and "left_out" names it. The
+/// kind, the tier and the yes or no answers are shown only as one of the kinds, a tier 1 to 3 and true or false.
 ClassMethod View(base As %DynamicObject, draft As %DynamicObject, receiver As %String) As %DynamicObject
 {
     Set entry = ..Find(draft, receiver)
@@ -598,6 +599,11 @@ ClassMethod View(base As %DynamicObject, draft As %DynamicObject, receiver As %S
         }
         Set shown = answered && $LISTFIND($LISTBUILD("system", "category", "tier", "cancels", "merges"), key) && (type '= "object") && (type '= "array")
         If shown && (key = "system") && ((type '= "string") || ($LENGTH(entry.%Get(key)) > ..#MAXSYSTEM) || (..TextProblem(entry.%Get(key)) '= "")) Set shown = 0 Do leftOut.%Push(field)
+        // The kind, the tier and the yes or no answers are shown only as the values the page's controls give: any other
+        // text a hand-made draft puts there is never shown to the model.
+        If shown && (key = "category") && ((type '= "string") || '$LISTFIND($LISTBUILD("current_state", "history_of_record", "orders_results"), entry.%Get(key))) Set shown = 0 Do leftOut.%Push(field)
+        If shown && (key = "tier") && ((type '= "number") || '$LISTFIND($LISTBUILD(1, 2, 3), entry.%Get(key))) Set shown = 0 Do leftOut.%Push(field)
+        If shown && ((key = "cancels") || (key = "merges")) && (type '= "boolean") Set shown = 0 Do leftOut.%Push(field)
         If shown Do f.%Set("value", entry.%Get(key), type)
         Do view.fields.%Push(f)
     }
