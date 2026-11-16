@@ -192,6 +192,73 @@ Method TestASiteEntrysCaseIsHeld()
     Kill ^Shutter.Counter("snapshot", c)
 }
 
+/// A case that recorded one of the site's own entries is held by it whatever its current evidence matches (here a
+/// shipped entry's), and a case already closed is said as closed, never as one a person still decides on.
+Method TestARecordedEntryHoldsTheMessage()
+{
+    Set held = ..Failed("9990000361^^^NHS^NH", 8, ..#NEVER, "SC")
+    Set c = ..Case("RS-SITE-2", $NAMESPACE, held, "")
+    Set case = ##class(Shutter.Store.Case).%OpenId(c)
+    Set summary = {"catalogue": {"decision": "policy", "entry": "E2", "outcome": "resend", "matches": [{"id": "E2", "version": 1, "decides": "policy", "title": "A transfer the receiver was unavailable for"}]}}
+    Set snap = ##class(Shutter.Store.Snapshot).Begin(case, 300)
+    Do $$$AssertStatusOK(snap.Seal(summary), "the case's current evidence is a shipped entry's")
+    Do $$$AssertStatusOK(case.SetSnapshot(snap), "as its current evidence")
+    Do $$$AssertStatusOK(case.MarkSiteEntry("L7"), "an earlier investigation matched the site's L7")
+    Try {
+        Set why = ##class(Shutter.Util.ResendSet).SiteHold($NAMESPACE, held)
+        Do $$$AssertTrue(why [ "held by the site's own scenario L7 on case RS-SITE-2: a person decides on its case", "held by the record: " _ why)
+        Set check = ##class(Shutter.Operation.EngineResend).Recheck($NAMESPACE, ..Item, held, "Results Out", "")
+        Do $$$AssertEquals(check.verdict, "skip", "a send run skips it")
+        Set case.State = "resolved", case.Disposition = "handled_by_hand", case.ClosedAt = "2026-11-16T09:00:00Z"
+        Do $$$AssertStatusOK(case.%Save(), "a person closed the case by hand")
+        Set why = ##class(Shutter.Util.ResendSet).SiteHold($NAMESPACE, held)
+        Do $$$AssertTrue(why [ "its case was closed (handled_by_hand) at 2026-11-16T09:00:00Z, and the hold stays", "still held, said as closed: " _ why)
+        Do $$$AssertNotTrue(why [ "a person decides on its case", "never as one still waiting")
+    } Catch ex {
+        Do $$$AssertTrue(0, "failed: " _ ex.DisplayString())
+    }
+    Do ##class(Shutter.Store.Case).%OpenId(c).SetSnapshot("")
+    Do ##class(Shutter.Store.Snapshot).%DeleteId(snap.%Id())
+    Kill ^Shutter.Counter("snapshot", c)
+}
+
+/// After a send, a message's case that one of the site's own entries now holds is not resolved by the run: what was sent
+/// goes on it as a note, and it is left for the person (EngineResend.Resolve, as the run's settle and a late settle call it).
+Method TestASentMessagesHeldCaseIsLeftForAPerson()
+{
+    Set c = ..Case("RS-SITE-3", $NAMESPACE, "UT-RS-H3-" _ $JOB, "")
+    Set case = ##class(Shutter.Store.Case).%OpenId(c)
+    Do $$$AssertStatusOK(case.MarkSiteEntry("L7"), "the case recorded the site's L7 after the send")
+    Do $$$AssertStatusOK(##class(Shutter.Store.Outage).Open({"name": ("ResendSet Test Out " _ $JOB), "watch": {"namespace": ($NAMESPACE), "item": (..Item)}, "runbook": "", "call": "", "approvers": []}, "cant_tell", "a test", "unit", .o), "an outage")
+    Set ..Made("Shutter.Store.Outage", o.%Id()) = ""
+    Do ##class(Shutter.Operation.EngineResend).Resolve($NAMESPACE, "UT-RS-H3-" _ $JOB, "Resent by Shutter; new header 9 Completed.", o)
+    Set case = ##class(Shutter.Store.Case).%OpenId(c)
+    Do $$$AssertEquals(case.State, "escalated", "the case is left as it was")
+    Set text = ""
+    &sql(SELECT TOP 1 Text INTO :text FROM Shutter_Store.CaseEvent WHERE "Case" = :c AND Kind = 'note' ORDER BY ID DESC)
+    Do $$$AssertTrue(text [ "Resent by Shutter", "what was sent is noted: " _ text)
+    Do $$$AssertTrue(text [ "L7 asks a person", "with the entry")
+    Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM Shutter_Store.CaseEvent WHERE ""Case"" = ?", c)
+}
+
+/// A run's message held for one of the site's own entries is not the run's any more: its case is left out of the cases
+/// the later messages' patient check ignores, so a later message of the same patient is held behind it.
+Method TestAHeldMessagesCaseIsNotTheRunsAnyMore()
+{
+    Set run = "UT-RUN-" _ $JOB
+    For n = 1, 2 {
+        Set r = ##class(Shutter.Store.ResendRecord).%New()
+        Set r.RunId = run, r.Position = n, r.Namespace = $NAMESPACE, r.Item = ..Item, r.OriginHeaderId = "UT-RUN-H" _ n, r.CaseId = "RS-RUN-" _ n
+        If n = 1 Set r.State = "stopped", r.Words = "not sent: held by the site's own scenario L7 on case RS-RUN-1: a person decides on its case"
+        If n = 2 Set r.State = "approved"
+        Do $$$AssertStatusOK(r.%Save(), "row " _ n)
+        Set ..Made("Shutter.Store.ResendRecord", r.%Id()) = ""
+    }
+    Set cases = ##class(Shutter.Operation.EngineResend).RunCases(run)
+    Do $$$AssertNotTrue($LISTFIND(cases, "RS-RUN-1"), "the held message's case is not the run's: " _ $LISTTOSTRING(cases))
+    Do $$$AssertTrue($LISTFIND(cases, "RS-RUN-2"), "the other message's is")
+}
+
 /// The digest moves with the set and stands still without a change.
 Method TestDigest()
 {

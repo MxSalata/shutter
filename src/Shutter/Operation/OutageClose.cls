@@ -542,7 +542,7 @@ ClassMethod Judge(case As Shutter.Store.Case, outage As Shutter.Store.Outage) As
     Set c = {"state": (case.State), "failureKind": (case.FailureKind), "failureReasonCode": (case.FailureReasonCode), "deliveryHeader": "", "deliveryCustody": "", "deliveryStatus": "", "effectiveAck": "", "words": ""}
     Do c.%Set("identity", ..IdentityException(case), "boolean")
     Set stopped = ##class(Shutter.Catalogue.SiteEntry).StoppedCase(case)
-    Set c.site = $SELECT($ISOBJECT(stopped): stopped.entry, 1: "")
+    Set c.site = ..SiteOf(stopped)
     Set first = ..LinkVerdict(c)
     If first.decided Quit ..Verdict(first, "")
     Set facts = ##class(Shutter.Util.EngineCheck).Read(case)
@@ -557,6 +557,8 @@ ClassMethod Judge(case As Shutter.Store.Case, outage As Shutter.Store.Outage) As
             Set c.words = ##class(Shutter.Util.EngineWords).DeliveredWords(h.headerId, ..LocalTime(h.completedAt), facts.effectiveAck, facts.ackReason)
         }
     }
+    // Read again after the engine's: evidence matched while the engine was read may have recorded a site entry.
+    If c.site = "" Set stopped = ##class(Shutter.Catalogue.SiteEntry).StoppedCase(case), c.site = ..SiteOf(stopped)
     Set verdict = ..LinkVerdict(c)
     If verdict.resolve {
         Set case.Outcome = c.words, case.Headline = $EXTRACT(c.words, 1, 500)
@@ -575,6 +577,14 @@ ClassMethod Judge(case As Shutter.Store.Case, outage As Shutter.Store.Outage) As
         Do case.%Save()
     }
     Quit ..Verdict(verdict, c.deliveryHeader)
+}
+
+/// What LinkVerdict reads of a site entry's hold: its id, "unreadable" when the entries could not be told for the case,
+/// or "" for none.
+ClassMethod SiteOf(stopped As %DynamicObject) As %String [ Private ]
+{
+    If '$ISOBJECT(stopped) Quit ""
+    Quit $SELECT(stopped.entry '= "": stopped.entry, 1: "unreadable")
 }
 
 ClassMethod Verdict(v As %DynamicObject, headerId As %String) As %DynamicObject [ Private ]
@@ -614,7 +624,7 @@ ClassMethod LinkVerdict(c As %DynamicObject) As %DynamicObject
     If c.deliveryCustody '= "delivered" Quit ..Open("its own delivery header" _ $SELECT(c.deliveryHeader '= "": " (" _ c.deliveryHeader _ ")", 1: "") _ " reads " _ $SELECT(c.deliveryStatus '= "": c.deliveryStatus, 1: c.deliveryCustody) _ ", not Completed", 0)
     If (c.effectiveAck = "not_established") || (c.effectiveAck = "") Quit ..Open(c.words, 0)
     If c.%Get("site") '= "" {
-        Set v = ..Open("the engine delivered it, but the site's own scenario " _ c.site _ " stopped its case: a person decides on its case", 0)
+        Set v = ..Open("the engine delivered it, but " _ $SELECT(c.site = "unreadable": "the site's own entries could not be told for its case", 1: "the site's own scenario " _ c.site _ " stopped its case") _ ": a person decides on its case", 0)
         Do v.%Set("site", 1, "boolean")
         Quit v
     }

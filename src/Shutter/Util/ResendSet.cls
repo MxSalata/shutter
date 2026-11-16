@@ -76,8 +76,8 @@ ClassMethod Lists(ns As %String, item As %String, from As %String, to As %String
         // A message whose case one of the site's own entries stopped is held, with the entry and its instructions, for
         // the person who decides on its case (CONTRACTS 6.8): it never joins a set in silence.
         If list = "candidate" {
-            Set why = ..SiteHold(ns, h.id)
-            If (why = "") && (row.headerId '= h.id) Set why = ..SiteHold(ns, row.headerId)
+            Set why = ..SiteHold(ns, h.id, .siteCache)
+            If (why = "") && (row.headerId '= h.id) Set why = ..SiteHold(ns, row.headerId, .siteCache)
             If why '= "" Set row.reason = why, list = "refused"
         }
         If list = "candidate" { Do candidates.%Push(row) Set members = members _ $LISTBUILD(row.headerId) } Else { Do out.lists.%Get(list).%Push(row) }
@@ -239,13 +239,22 @@ ClassMethod AttemptsOf(ns As %String, headerId As %String) As %String
 /// Why a message is held for its case: "held by the site's own scenario L1 on case C-000123: " and the entry's
 /// instructions, when one of the site's own entries stopped a case on the header, else "". Read when the set is listed and
 /// again before each send.
-ClassMethod SiteHold(ns As %String, headerId As %String) As %String
+/// A case whose evidence was collected before an entry was activated is held by that entry too, and a message whose cases
+/// cannot be read, or whose entries cannot be told, is held all the same (Shutter.Catalogue.SiteEntry.StoppedCase).
+/// <var>cache</var> keeps the active entries for one pass.
+ClassMethod SiteHold(ns As %String, headerId As %String, ByRef cache) As %String
 {
-    Set cases = ..CaseRows(ns, headerId), iter = cases.%GetIterator()
+    Set cases = ..CaseRows(ns, headerId, .failed), iter = cases.%GetIterator()
+    If failed Quit "held by the site's own entries' rule: Shutter's cases on this message could not be read, so whether one of the site's own entries stopped one cannot be told"
     While iter.%GetNext(, .one) {
-        Set stopped = ##class(Shutter.Catalogue.SiteEntry).StoppedCase(##class(Shutter.Store.Case).%OpenId(one.id))
+        Set case = ##class(Shutter.Store.Case).%OpenId(one.id)
+        If '$ISOBJECT(case) Return "held by the site's own entries' rule: case " _ one.caseId _ " on this message could not be read"
+        Set stopped = ##class(Shutter.Catalogue.SiteEntry).StoppedCase(case, .cache)
         Continue:'$ISOBJECT(stopped)
-        Set why = "held by the site's own scenario " _ stopped.entry _ " on case " _ one.caseId _ ": a person decides on its case"
+        Set who = $SELECT(stopped.entry '= "": "the site's own scenario " _ stopped.entry, 1: "the site's own entries' rule")
+        // A case already closed is said as it is, so the refusal is never read as one still waiting.
+        Set state = $SELECT(case.State = "resolved": "its case was closed" _ $SELECT(case.Disposition '= "": " (" _ case.Disposition _ ")", 1: "") _ $SELECT(case.ClosedAt '= "": " at " _ case.ClosedAt, 1: "") _ ", and the hold stays", 1: "a person decides on its case")
+        Set why = "held by " _ who _ " on case " _ one.caseId _ ": " _ $SELECT(stopped.entry = "": "the site's own entries cannot be told for it (" _ stopped.unread _ "); ", 1: "") _ state
         If stopped.instructions '= "" Set why = why _ ". The site's instructions: " _ stopped.instructions
         Return why
     }
@@ -270,14 +279,21 @@ ClassMethod CasesOf(ns As %String, rows As %DynamicArray) As %List
 /// Shutter's namespace, whose id can equal any header id of another namespace, so it is never matched against ns. A case
 /// of Shutter's own feed (no SourceNamespace) names a header of Shutter's namespace, so it counts only when ns is the one
 /// this runs in. Called in Shutter's namespace.
-ClassMethod CaseRows(ns As %String, headerId As %String) As %DynamicArray
+/// <var>failed</var> is 1 when the query failed or stopped at a row it could not read: the rows are then not all of them.
+ClassMethod CaseRows(ns As %String, headerId As %String, Output failed As %Boolean) As %DynamicArray
 {
-    Set out = []
+    Set out = [], failed = 0
     Quit:(ns="")||(headerId="") out
     Set local = ($ZCONVERT(ns, "U") = $ZCONVERT($NAMESPACE, "U"))
     Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT ID, CaseId, State FROM Shutter_Store.""Case"" WHERE (SourceNamespace = ? AND OriginHeaderId = ?) OR (? = 1 AND (SourceNamespace IS NULL OR SourceNamespace = '') AND (OriginHeaderId = ? OR SourceHeaderId = ?)) ORDER BY ID", ns, headerId, local, headerId, headerId)
-    Quit:rs.%SQLCODE<0 out
-    While rs.%Next() { Do out.%Push({"id": (rs.%Get("ID")), "caseId": (rs.%Get("CaseId")), "state": (rs.%Get("State"))}) }
+    If rs.%SQLCODE < 0 Set failed = 1 Quit out
+    Set rsc = $$$OK
+    Try {
+        While rs.%Next(.rsc) { Do out.%Push({"id": (rs.%Get("ID")), "caseId": (rs.%Get("CaseId")), "state": (rs.%Get("State"))}) }
+    } Catch ex {
+        Set rsc = ex.AsStatus()
+    }
+    If $$$ISERR(rsc) || (rs.%SQLCODE < 0) Set failed = 1
     Quit out
 }
 

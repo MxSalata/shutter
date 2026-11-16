@@ -165,8 +165,9 @@ ClassMethod Settle(case As Shutter.Store.Case, row As %DynamicObject, checks As 
             Set note = "The engine delivered this message (" _ words _ "); " _ ##class(Shutter.Catalogue.SiteEntry).StoppedWords(stopped) _ ". The case is left for them"
             Set sc = case.Note("note", note, "gate", ref)
             Quit:$$$ISERR(sc) sc
-            Set case.Headline = "Stopped for a person: the engine delivered this message, and the site's own scenario " _ stopped.entry _ " asks a person"
-            Quit case.Transition("blocked", "The site's own scenario " _ stopped.entry _ " matched this case, so the engine's delivery does not close it: a person decides", "gate", ref)
+            Set label = ##class(Shutter.Catalogue.SiteEntry).StoppedLabel(stopped)
+            Set case.Headline = "Stopped for a person: the engine delivered this message, and " _ label _ " asks a person"
+            Quit case.Transition("blocked", $ZCONVERT($EXTRACT(label), "U") _ $EXTRACT(label, 2, *) _ " holds this case, so the engine's delivery does not close it: a person decides", "gate", ref)
         }
         Set case.Headline = words
         Quit case.Transition("resolved", words, "gate", ref)

@@ -33,6 +33,10 @@ Parameter LATEDAYS = 7;
 /// The actor the outage's events and the cases' notes name.
 Parameter ACTOR = "Engine Resend";
 
+/// How a row held for one of the site's own entries begins its words (ResendSet.SiteHold's "held by the site's own ..."),
+/// which RunCases reads back.
+Parameter SITEHELD = "not sent: held by the site's own ";
+
 /// The settings an approval binds.
 Parameter BOUND = "DefCharEncoding,IPAddress,Port";
 
@@ -273,12 +277,15 @@ ClassMethod Recheck(ns As %String, item As %String, headerId As %String, receive
 }
 
 /// The run's own cases, which the patient check leaves out: the case each row of the run names, and every case on each
-/// row's origin header in its namespace (a message can have more than one).
+/// row's origin header in its namespace (a message can have more than one). A row this run held for one of the site's own
+/// entries is not the run's any more: its case is open for a person, so a later message of the same patient is held by
+/// the patient check behind it, as it would be had the set been listed after the hold (ResendSet.Lists).
 ClassMethod RunCases(runId As %String) As %List
 {
     Set ids = ""
-    Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT CaseId, Namespace, OriginHeaderId FROM Shutter_Store.ResendRecord WHERE RunId = ?", runId)
+    Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT CaseId, Namespace, OriginHeaderId, State, Words FROM Shutter_Store.ResendRecord WHERE RunId = ?", runId)
     While rs.%Next() {
+        Continue:((rs.%Get("State") = "stopped") && ($EXTRACT(rs.%Get("Words"), 1, $LENGTH(..#SITEHELD)) = ..#SITEHELD))
         Set id = rs.%Get("CaseId")
         Set:(id'="")&&'$LISTFIND(ids, id) ids = ids _ $LISTBUILD(id)
         Set cases = ##class(Shutter.Util.ResendSet).CaseRows(rs.%Get("Namespace"), rs.%Get("OriginHeaderId"))
@@ -439,6 +446,7 @@ ClassMethod AlreadyDelivered(ns As %String, row As Shutter.Store.ResendRecord, o
         Continue:one.state="resolved"
         Set case = ##class(Shutter.Store.Case).%OpenId(one.id)
         Continue:'$ISOBJECT(case)
+        Continue:..LeftForPerson(case, row.Words, outage)
         Set case.Disposition = "already_delivered", case.Outcome = row.Words, case.Headline = $EXTRACT(row.Words, 1, 500)
         Do case.Transition("resolved", row.Words, ..#ACTOR, "outage:" _ outage.%Id())
     }
@@ -486,9 +494,21 @@ ClassMethod Resolve(ns As %String, headerId As %String, words As %String, outage
         Continue:one.state="resolved"
         Set case = ##class(Shutter.Store.Case).%OpenId(one.id)
         Continue:'$ISOBJECT(case)
+        Continue:..LeftForPerson(case, words, outage)
         Set case.Outcome = words, case.Headline = $EXTRACT(words, 1, 500)
         Do case.Transition("resolved", words, ..#ACTOR, "outage:" _ outage.%Id())
     }
+}
+
+/// A case one of the site's own entries stopped (CONTRACTS 6.8, R18), here one marked after the set was approved or the
+/// message sent: what was sent goes on it as a note, and it is left for the person with the site's instructions, as the
+/// outage close and the engine's delivery read leave such a case. Returns 1 when the case was left.
+ClassMethod LeftForPerson(case As Shutter.Store.Case, words As %String, outage As Shutter.Store.Outage) As %Boolean
+{
+    Set stopped = ##class(Shutter.Catalogue.SiteEntry).StoppedCase(case)
+    If '$ISOBJECT(stopped) Quit 0
+    Do case.Note("note", words _ " " _ $ZCONVERT($EXTRACT(##class(Shutter.Catalogue.SiteEntry).StoppedWords(stopped)), "U") _ $EXTRACT(##class(Shutter.Catalogue.SiteEntry).StoppedWords(stopped), 2, *) _ ". The case is left for them", ..#ACTOR, "outage:" _ outage.%Id())
+    Quit 1
 }
 
 /// The run's end with nothing stopped: closed when every message went or was already held, else to a person with those

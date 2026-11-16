@@ -255,7 +255,10 @@ ClassMethod Rematch(case As Shutter.Store.Case, chainKind As %String, projectedS
     Try {
         Set cat = ##class(Shutter.Catalogue.Matcher).Match(##class(Shutter.Catalogue.Matcher).Conditions(case, summary, chainKind), ##class(Shutter.Catalogue.Matcher).Facts(summary, case), ##class(Shutter.Catalogue.Matcher).Scope(case, summary))
     } Catch ex {
-        Set cat = summary.%Get("catalogue")
+        // A match that cannot be made now is no answer: never the evidence's older one, which may predate an entry of the
+        // site's own (CONTRACTS 6.8). The chain then goes to the board or a person, never to policy.
+        Set cat = {"matches": [], "decision": "error", "error": ("The chain's item could not be matched again: " _ $EXTRACT(ex.DisplayString(), 1, 200))}
+        Do cat.%Set("entry", "", "null"), cat.%Set("outcome", "", "null")
     }
     Quit cat
 }
