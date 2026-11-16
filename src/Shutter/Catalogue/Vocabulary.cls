@@ -42,7 +42,7 @@ ClassMethod Use(v As %DynamicObject)
     Kill ^Shutter.Catalogue.Vocabulary
     Set ^Shutter.Catalogue.Vocabulary("json") = json
     Set ^Shutter.Catalogue.Vocabulary("at") = ##class(Shutter.Util.Time).NowUTC()
-    If changed Do ##class(Shutter.Catalogue.SiteEntry).InputsChanged()
+    If changed Do ##class(Shutter.Catalogue.SiteEntry).InputsChanged("vocabulary")
 }
 
 /// The vocabulary in force, or "" when none was ever taken and the installed root holds no file.

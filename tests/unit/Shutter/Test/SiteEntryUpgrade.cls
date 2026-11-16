@@ -246,6 +246,44 @@ Method TestAProfileChangeFlagsTheEntry()
     Do $$$AssertTrue($CLASSMETHOD(site, "ById", id).ReviewWords() [ ("no longer names the team " _ team), "and so does what it was for")
 }
 
+/// A profile save whose own recheck cannot take the lock leaves the cause waiting: the catch-up recheck that the next
+/// read runs (here GET /catalogue's) records its event under the profile save, not as an upgrade, and then nothing waits.
+Method TestACatchUpRecheckNamesItsCause()
+{
+    Set kit = "Shutter.Test.SiteKit", site = "Shutter.Catalogue.SiteEntry"
+    Set row = ##class(Shutter.Store.SiteProfile).Row()
+    If '$ISOBJECT(row) Do $$$AssertSkipped("no stored site profile on this instance") Quit
+    Set saved = row.Json, version = row.Version
+    Set profile = ##class(%DynamicObject).%FromJSON(saved)
+    If '$ISOBJECT(profile.teams) || (profile.teams.%Size() = 0) Do $$$AssertSkipped("the stored site profile names no team") Quit
+    Set team = profile.teams.%Get(0).id
+    Set match = $CLASSMETHOD(kit, "Case", {"ward": "WARD-ISO"}), near = $CLASSMETHOD(kit, "Case", {"ward": "WARD-B"})
+    Set body = $CLASSMETHOD(kit, "Body", match.CaseId, near.CaseId)
+    Set body.team = team
+    Do $$$AssertEquals($CLASSMETHOD(kit, "Activate", body, .id), "", "an entry that names a team of the profile")
+    Kill ^Shutter.Test.SiteLock
+    Job ##class(Shutter.Test.SiteKit).HoldTheLock()
+    For i = 1:1:50 { Quit:$GET(^Shutter.Test.SiteLock)="held"  Hang 0.1 }
+    Do $$$AssertEquals($GET(^Shutter.Test.SiteLock), "held", "another process holds the site entries' lock")
+    Do profile.%Remove("teams"), profile.%Remove("version")
+    Do $$$AssertStatusOK(##class(Shutter.Store.SiteProfile).Store(profile.%ToJSON(), "unit test", "ut", "", .now), "the profile is saved without its teams while the lock is held")
+    Do $$$AssertEquals($GET(^Shutter.Catalogue.Site("cause")), "profile", "the recheck it could not run waits, for the profile save")
+    Set ^Shutter.Test.SiteLock = "release"
+    For i = 1:1:50 { Quit:$GET(^Shutter.Test.SiteLock)="done"  Hang 0.1 }
+    Kill ^Shutter.Test.SiteLock
+    Set view = ##class(Shutter.API.SiteEntries).CatalogueView()
+    Set event = ##class(Shutter.Catalogue.SiteEntryEvent).For(id).%Get(0)
+    Do $$$AssertEquals(event.kind, "rechecked", "the read ran the recheck")
+    Do $$$AssertEquals(event.source, "profile", "under the cause that left it waiting")
+    Do $$$AssertEquals($GET(^Shutter.Catalogue.Site("cause")), "", "and nothing waits any more")
+    // The profile as it was
+    Set row = ##class(Shutter.Store.SiteProfile).Row()
+    Set row.Json = saved, row.Version = version
+    Do row.%Save()
+    Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM Shutter_Store.SiteProfileVersion WHERE Version > ?", version)
+    Kill ^Shutter.Config("feedZone"), ^Shutter.Config("preventFailures")
+}
+
 /// Finding the widening once is enough: a fixture whose case is no longer stored narrows nothing, so a later recheck (here
 /// after a save of the site profile) leaves the entry as widened and flagged.
 Method TestAWideningIsKept()

@@ -200,9 +200,18 @@ ClassMethod IsChecked() As %Boolean
 
 /// Something the recheck reads has changed (the site profile was saved, another vocabulary was put in force): the entries
 /// are checked again before the next case is matched on them.
-ClassMethod InputsChanged()
+ClassMethod InputsChanged(cause As %String = "profile")
 {
     Set n = $INCREMENT(^Shutter.Catalogue.Site("inputs"))
+    // Why the entries are to be checked again, until a recheck completes: a catch-up recheck at the next read names it
+    Set ^Shutter.Catalogue.Site("cause") = cause
+}
+
+/// What a pending recheck is for: the change that left the entries unchecked (a profile save, a vocabulary put in force,
+/// or a recheck that could not complete), else the upgrade.
+ClassMethod PendingCause() As %String
+{
+    Quit $GET(^Shutter.Catalogue.Site("cause"), "upgrade")
 }
 
 /// One entry as the matcher reads it: what a stored row gives it and nothing else.
@@ -252,7 +261,7 @@ ClassMethod ActiveList(Output problem As %String, exceptId As %String = "") As %
         // approval's, and one completed meanwhile is not run again. A caller that cannot write gets error until a process
         // that can has run it.
         Set ok = 0
-        Try { Do ..Recheck("upgrade", 1, .ok, ..#RECHECKWAIT, 1) } Catch ex { Set ok = 0 }
+        Try { Do ..Recheck(..PendingCause(), 1, .ok, ..#RECHECKWAIT, 1) } Catch ex { Set ok = 0 }
         Set count = ..ActiveCount(, .failed)
         If 'ok && ((count > 0) || failed) Set problem = ..UncheckedWords(release) Quit []
     }
@@ -1079,6 +1088,8 @@ ClassMethod Recheck(trigger As %String = "upgrade", reload As %Boolean = 1, Outp
     LOCK +^Shutter.Catalogue.Site("lock"):wait
     If '$TEST {
         Try { Kill ^Shutter.Catalogue.Site("checked") } Catch ex { }
+        // The catch-up recheck names what this one was for, unless an earlier cause still waits
+        Try { If $GET(^Shutter.Catalogue.Site("cause")) = "" Set ^Shutter.Catalogue.Site("cause") = trigger } Catch ex { }
         Quit 0
     }
     Set complete = 1, mark = ""
@@ -1121,8 +1132,11 @@ ClassMethod Recheck(trigger As %String = "upgrade", reload As %Boolean = 1, Outp
             }
             If complete && (mark '= "") {
                 Set ^Shutter.Catalogue.Site("checked") = mark, ok = 1
+                // Checked as the mark says: nothing waits any more, unless the inputs moved while this one ran
+                If mark = ..CheckedMark() Kill ^Shutter.Catalogue.Site("cause")
             } Else {
                 Kill ^Shutter.Catalogue.Site("checked")
+                If $GET(^Shutter.Catalogue.Site("cause")) = "" Set ^Shutter.Catalogue.Site("cause") = trigger
             }
         }
     } Catch ex {
