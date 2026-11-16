@@ -550,10 +550,11 @@ function Editor({
           ))}
         </Group>
         <Text size="sm" aria-live="polite" data-testid="own-live-impact">
-          {live?.proof?.impact
-            ? impactLine(live.proof.impact)
-            : counting
-              ? 'Counting what it would catch…'
+          {/* An answer for an earlier pattern is never shown as this one's */}
+          {counting
+            ? 'Counting what it would catch…'
+            : live?.proof?.impact
+              ? impactLine(live.proof.impact)
               : Object.keys(form.pattern).length
                 ? 'What it would catch could not be counted.'
                 : 'Tick at least one condition.'}

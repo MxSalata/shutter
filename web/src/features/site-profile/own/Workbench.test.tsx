@@ -148,6 +148,19 @@ describe("the workbench of the site's own scenarios", () => {
     expect(sent.some((s) => s.path === '/site-entries' && Array.isArray(s.body.fixtures))).toBe(true);
   }, 60_000);
 
+  it("shows no earlier pattern's count while the new one is counted", async () => {
+    const user = userEvent.setup();
+    page('/site-profile?own=new&case=C-000028');
+    const chips = await screen.findByTestId('own-chips', {}, { timeout: 5000 });
+    const line = screen.getByTestId('own-live-impact');
+    await waitFor(() => expect(line).toHaveTextContent(/it would catch \d+/), { timeout: 5000 });
+    // The next preview never answers: the line says it is counting, not the last pattern's figure
+    server.use(http.post(`${BASE}/site-entries/preview`, () => new Promise<never>(() => undefined)));
+    await user.click(within(chips).getByText('nothing later was applied'));
+    expect(line).toHaveTextContent('Counting what it would catch…');
+    expect(line).not.toHaveTextContent(/it would catch \d+/);
+  }, 60_000);
+
   it('lets a second person approve the waiting sample with a reason, showing the proof, what it displaces and the plans it stops', async () => {
     const user = userEvent.setup();
     page();
