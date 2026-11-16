@@ -190,7 +190,7 @@ def main():
         check("its impact counts S2's case", match_id in str((((preview or {}).get("proof") or {}).get("impact") or {}).get("cases")), str(((preview or {}).get("proof") or {}).get("impact"))[:300])
         _, after_preview = operator.call("GET", "/site-entries")
         check("and the preview stored nothing", len((after_preview or {}).get("items") or []) == len((before_preview or {}).get("items") or []) and "proofId" not in ((preview or {}).get("proof") or {}), f"{len((after_preview or {}).get('items') or [])} {len((before_preview or {}).get('items') or [])}")
-        check("GET /site-entries says how many open plans an approval would stop", isinstance((after_preview or {}).get("waitingPlans"), int), str((after_preview or {}).get("waitingPlans")))
+        check("GET /site-entries says how many open plans an approval would stop", type((after_preview or {}).get("waitingPlans")) is int, str((after_preview or {}).get("waitingPlans")))
         status, entry = author.call("POST", "/site-entries", body)
         check("POST /site-entries makes a draft from S2's case", status == 201 and str((entry or {}).get("id", "")).startswith("L") and entry.get("state") == "draft", f"{status} {str(entry)[:300]}")
         if status != 201:
@@ -228,7 +228,7 @@ def main():
         version = (active or {}).get("catalogueVersion", "")
         check("the catalogue's version carries the generation and the entry", version.startswith(shipped + ";g") and version.endswith(f":{first}@1"), version[-40:])
         activated_at = generation_of(version)
-        check("the answer says how many waiting plans were made under the old version", isinstance((active or {}).get("waitingPlans"), int), str((active or {}).get("waitingPlans")))
+        check("the answer says how many waiting plans were made under the old version", type((active or {}).get("waitingPlans")) is int, str((active or {}).get("waitingPlans")))
         _, listing = operator.call("GET", "/catalogue")
         site = (listing or {}).get("site") or []
         check("GET /catalogue lists the entry as the matcher reads it: a person, escalate, no alternatives", len(site) == 1 and site[0].get("id") == first and site[0].get("decides") == "person" and site[0].get("preferred", {}).get("outcome") == "escalate" and site[0].get("alternatives") == [], str(site)[:300])
