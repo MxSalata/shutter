@@ -358,8 +358,12 @@ function Settings({ profile }: { profile: SiteProfile }) {
         profile.model_content?.free_text === true
           ? 'Note text (OBX and NTE) goes too, with those replaced by tokens, up to 500 characters.'
           : 'Note text never goes: the model learns only that a note is present.'
+      } ${
+        profile.model_content?.setup_answers === true
+          ? "What a person types about a receiver in Set up the site goes to the model with that receiver's name and description, after the text rule refuses links, addresses, long numbers and secrets."
+          : 'Nothing typed in Set up the site is read by a model.'
       }`,
-      'model_content.free_text',
+      'model_content.free_text, model_content.setup_answers',
     ],
     [
       'Notifications',

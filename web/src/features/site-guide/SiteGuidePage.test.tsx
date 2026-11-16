@@ -345,4 +345,21 @@ describe("This site's guide", () => {
         expect(e.textContent).not.toContain('Lab Old');
   });
 
+  it('names typed set-up answers in what reaches a model, by the site switch', async () => {
+    withProfile((p) => (p.model_content = { free_text: false, setup_answers: true }));
+    const on = renderGuide();
+    const settings = await part('site-guide-settings');
+    expect(settings).toHaveTextContent(
+      "What a person types about a receiver in Set up the site goes to the model with that receiver's name and description, after the text rule refuses links, addresses, long numbers and secrets.",
+    );
+    on.unmount();
+    server.resetHandlers();
+    renderGuide();
+    expect(await part('site-guide-settings')).toHaveTextContent(
+      'Nothing typed in Set up the site is read by a model.',
+    );
+    await userEvent.click(screen.getByRole('radio', { name: 'Technical' }));
+    expect(screen.getByText('model_content.free_text, model_content.setup_answers')).toBeInTheDocument();
+  });
+
 });
