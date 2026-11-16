@@ -407,6 +407,29 @@ describe("the workbench of the site's own scenarios", () => {
       proofs: [proofRow('12', 'api', 'retire', 12), proofRow('11', 'api', 'retire', 3)],
     });
 
+    it('offers the suspension while a proposal waits on the active entry, and sends the revision read', async () => {
+      serve({
+        draftVersion: 2,
+        draft: { version: 2, digest: 'sha256:draft', writtenBy: 'author', content: example.content },
+        proposal: { action: 'activate', version: 2, digest: 'sha256:draft', by: 'author', at, proofId: '9' },
+      });
+      const user = userEvent.setup();
+      page('/site-profile?own=L1');
+      expect(
+        await screen.findByRole('button', { name: 'Review the proposal…' }, { timeout: 5000 }),
+      ).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'Suspend it…' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Suspend L1' });
+      await user.type(within(dialog).getByLabelText(/^Reason/), 'It floods the on-call');
+      await user.click(within(dialog).getByRole('button', { name: 'Suspend now' }));
+      await waitFor(() =>
+        expect(sent.find((x) => x.path === '/site-entries/L1/suspend')?.body).toEqual({
+          reason: 'It floods the on-call',
+          expectedVersion: 4,
+        }),
+      );
+    }, 60_000);
+
     it('shows a retirement the pattern in force when a recheck widened the entry, naming what it dropped', async () => {
       serve({
         needsReview: true,

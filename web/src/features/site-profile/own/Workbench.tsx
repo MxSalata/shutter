@@ -309,23 +309,25 @@ function Stored({ entry, review, onSaved, onClose }: WorkbenchProps & { entry: S
           {`version ${entry.version ?? ''} digest ${entry.digest} revision ${entry.revision}`}
         </Text>
       ) : null}
-      {!entry.proposal && entry.state !== 'retired' ? (
+      {entry.state !== 'retired' &&
+      (!entry.proposal || (entry.state === 'active' && can.approve && can.configure)) ? (
         <Group gap="xs" wrap="wrap" data-testid="own-entry-actions">
-          {live && !editing ? (
+          {live && !editing && !entry.proposal ? (
             <Button size="xs" variant="default" onClick={() => setEditing(true)}>
               {entry.draft ? 'Edit the draft' : 'Change it'}
             </Button>
           ) : null}
-          {live ? (
+          {live && !entry.proposal ? (
             <Button size="xs" variant="default" onClick={() => setSend('retire')}>
               Propose retiring it…
             </Button>
           ) : null}
-          {entry.state === 'suspended' ? (
+          {entry.state === 'suspended' && !entry.proposal ? (
             <Button size="xs" variant="default" onClick={() => setSend('resume')}>
               Propose resuming it…
             </Button>
           ) : null}
+          {/* R12: one approver switches an active entry off at once, whatever proposal waits on it */}
           {entry.state === 'active' && can.approve && can.configure ? (
             <Button size="xs" variant="light" color="red" onClick={() => setSuspending(true)}>
               Suspend it…
