@@ -146,6 +146,31 @@ Method TestAClosurePlannedBeforeAnActivationIsPlannedAgain()
     Do $$$AssertEquals(atGate.State, "blocked", "at the limit a person looks")
 }
 
+/// A verification that answers for a case whose plan can no longer be read, with no write on record: whether the plan
+/// wrote nothing, and so whether the closure rules hold, cannot be told, so the case goes to a person and is not closed.
+/// Before, the closure rules were passed over and the case resolved.
+Method TestAVerificationWithNoPlanToReadDoesNotClose()
+{
+    Set kit = "Shutter.Test.SiteKit"
+    Set closure = {"disposition": "superseded", "action": {"type": "none"}, "summary": "A later transfer moved the encounter on"}
+    Set pass = ##class(Shutter.Msg.GateResult).%New()
+    Set pass.Outcome = "pass", pass.Summary = "Every check passed", pass.ChecksJSON = "[]"
+    Set case = $CLASSMETHOD(kit, "Case", {"ward": "WARD-B", "state": "investigating"})
+    Set wf = ##class(Shutter.Test.SiteWorkflow).%New("Case Workflow")
+    Set wf.CaseId = case.CaseId, wf.Mode = "policy"
+    Do $$$AssertStatusOK(wf.AdoptPlan(case, closure, "policy:E1"), "a closure is planned")
+    Do $$$AssertStatusOK(wf.OnGateProposal(case, pass), "and passes the gate")
+    Do $$$AssertEquals(case.State, "verifying", "it is being verified")
+    // The plan the workflow names is no longer there to read.
+    Set wf.PlanId = "999999999"
+    Set verified = ##class(Shutter.Msg.VerifyResult).%New()
+    Set verified.Outcome = "verified", verified.Summary = "Superseded by a later transfer", verified.DetailJSON = "{}"
+    Do $$$AssertStatusOK(wf.OnVerify(case, verified), "the verification answers")
+    Do $$$AssertEquals(case.State, "escalated", "a person decides, the case is not closed")
+    Do $$$AssertEquals(case.Outcome, "", "and it carries no outcome")
+    Do $$$AssertTrue(case.Headline [ "cannot be read", "the headline says why: " _ case.Headline)
+}
+
 /// On fresh evidence a site entry answers alone, wherever the workflow would otherwise have gone: in Site policy and
 /// Board mode, in an incident's release on a policy chain, and before the case can follow another's board. A person's
 /// convened board still convenes. Rules only stays the baseline. And a closure on such a case never happens without a

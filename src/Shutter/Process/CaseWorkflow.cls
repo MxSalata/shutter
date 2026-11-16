@@ -2309,6 +2309,12 @@ Method OnVerify(case As Shutter.Store.Case, result As Shutter.Msg.VerifyResult) 
         // changed, or a site entry been activated, while the verifier read the receiver (ClosureHeld).
         // The current plan decides, never whether an attempt is on record: a plan that writes nothing is held to them.
         Set closing = ##class(Shutter.Store.Plan).%OpenId(..PlanId)
+        // With no write on record and no plan that can be read, whether the case may close cannot be told: a person decides.
+        If '$ISOBJECT(closing) && '$ISOBJECT(attempt) {
+            Set case.Outcome = ""
+            Set case.Headline = "A person checks this: the plan the verification answered cannot be read"
+            Quit case.Transition("escalated", "The verification answered (" _ result.Summary _ "), but the case's plan" _ $SELECT(..PlanId '= "": " (" _ ..PlanId _ ")", 1: "") _ " cannot be read and no write is on record, so whether the case may close cannot be told. Nothing was sent; a person decides", "system", "verification:" _ result.VerificationId)
+        }
         If $ISOBJECT(closing) && 'closing.IsWrite() {
             // The verification's words are the outcome of a case that closes; one that is held has none yet.
             Set case.Outcome = ""
