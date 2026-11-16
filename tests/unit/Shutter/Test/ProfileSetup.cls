@@ -509,6 +509,11 @@ Method TestTheFrameIsNotTheDraft()
     Do $$$AssertTrue(frame.%ToJSON() '[ "Downstream Out", "no other receiver")
     Do $$$AssertEquals(##class(Shutter.Util.ProfileSetup).Frame(draft, "Nobody", .problem), "", "a receiver the draft does not name gives none")
     Do $$$AssertEquals(problem, "draft has no receiver named Nobody", "said so")
+    // A name the draft holds twice: a turn would be read, checked and applied to the first of them, so none is framed
+    Set twice = {}.%FromJSON(draft.%ToJSON())
+    Do twice.receivers.%Push({"name": "Bed Board"})
+    Do $$$AssertEquals(##class(Shutter.Util.ProfileSetup).Frame(twice, "Bed Board", .problem), "", "a name held twice gives no frame")
+    Do $$$AssertEquals(problem, $PARAMETER("Shutter.Util.ProfileSetup", "TWICE"), "and says another receiver has this name")
     // The checks read the frame as they read the draft: a kind is not drafted while a site-wide policy is present.
     Set turn = {"say": "A whiteboard.", "proposals": [{"field": "receivers[].category", "receiver": "Bed Board", "to": "current_state", "quote": "whiteboard"}]}
     Do $$$AssertNotTrue(##class(Shutter.Util.ProfileSetup).CheckTurn(turn, ..Base(), frame, "Bed Board", ["the whiteboard"], .problem, .accepted), "refused on the frame as on the draft")

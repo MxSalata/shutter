@@ -760,6 +760,46 @@ describe('an answer that must not be used', () => {
   });
 });
 
+describe('two receivers of one name', () => {
+  it('refuses a typed answer about either before anything is sent, and drafts nothing on either', async () => {
+    const user = userEvent.setup();
+    renderApp();
+    await nameBedBoard(user);
+    // A second receiver of that name in the draft, while the first's card is open
+    const first = rid();
+    act(() => useSetup.getState().setKey(useSetup.getState().addReceiver(), 'name', 'Bed Board'));
+    act(() => useSetup.getState().focusOn(first));
+    await sendTyped(user);
+    expect(
+      await screen.findByText(
+        'Another receiver in the draft has this name: give each receiver its own name before Ask Shutter reads an answer about it.',
+      ),
+    ).toBeInTheDocument();
+    expect(posts()).toHaveLength(0);
+    const both = useSetup.getState().draft!.receivers.filter((r) => r.name === 'Bed Board');
+    expect(both.map((r) => (r as Record<string, unknown>).system ?? null)).toEqual([null, null]);
+  });
+
+  it('is refused by the route too', async () => {
+    const draft = structuredClone(recorded.profile);
+    draft.receivers.push({ name: 'Bed Board' } as never, { name: 'Bed Board' } as never);
+    const res = await fetch(TURNS, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'Shutter' },
+      body: JSON.stringify({
+        receiver: 'Bed Board',
+        text: 'a whiteboard',
+        draft,
+        baseVersion: recorded.version,
+      }),
+    });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { detail: string }).detail).toMatch(
+      /^another receiver in the draft has this name/,
+    );
+  });
+});
+
 describe('a late answer', () => {
   const turn: SetupTurnBody = {
     say: 'A whiteboard.',
@@ -827,6 +867,10 @@ describe('a late answer', () => {
       },
     ],
     ['the receiver was renamed', (id: string) => state().setKey(id, 'name', 'Bed Board 2')],
+    [
+      'another receiver was given the same name',
+      () => state().setKey(state().addReceiver(), 'name', 'Bed Board'),
+    ],
   ])('is dropped whole when %s', (_name, change) => {
     const id = pending();
     change(id);

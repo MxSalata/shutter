@@ -42,7 +42,12 @@ import {
   controlProblem,
   validateProfile,
 } from '@/features/site-profile/profile';
-import { cleanText, nameProblem } from '@/features/site-profile/setup/proposals';
+import {
+  TWICE,
+  cleanText,
+  nameProblem,
+  named as receiversNamed,
+} from '@/features/site-profile/setup/proposals';
 import { digest, draftEscalation, teamFor } from './escalation';
 import { receiverCheckFor, type RecordedCase } from './receiverCheck';
 import { freshHolds, heldView, type CaseFixture, type Hold } from './hold';
@@ -1620,6 +1625,7 @@ export const handlers = [
       return error(400, 'bad_request', 'draft must be the profile as a JSON object');
     if (!draft.receivers.some((r) => r.name === body.receiver))
       return error(400, 'bad_request', `draft has no receiver named ${body.receiver}`);
+    if (receiversNamed(draft, body.receiver) > 1) return error(400, 'bad_request', TWICE);
     if (typeof body.baseVersion !== 'number')
       return error(
         400,

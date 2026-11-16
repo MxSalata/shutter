@@ -12,7 +12,7 @@ import { liveRefusal } from '@/lib/liveAgents';
 import { withHeaderClass } from '@/lib/messageLink';
 import { DRAFTING_OFF, TYPED_NOTE, type Drafting } from './drafting';
 import { QUESTIONS, type SetupQuestion } from './fields';
-import { MAX_TEXT, cleanText, nameProblem } from './proposals';
+import { MAX_TEXT, TWICE, cleanText, nameProblem, named as receiversNamed } from './proposals';
 import { useSetup, type TurnEntry } from './setupStore';
 
 /** How many typed answers may draft nothing for one question before the card asks for its control instead. */
@@ -199,6 +199,9 @@ export function OwnWords({
     const named = nameProblem(r.name);
     if (named) return setProblem(named);
     if (!state.draft || !state.base) return;
+    // Read, checked and applied by the name: with two receivers of that name it would land on the first
+    if (receiversNamed(state.draft, r.name) > 1)
+      return setProblem(`${TWICE[0].toUpperCase()}${TWICE.slice(1)}.`);
     setProblem('');
     // The draft this is sent from: an answer that comes back after a discard or a sign-out is not taken into another
     const epoch = state.epoch;

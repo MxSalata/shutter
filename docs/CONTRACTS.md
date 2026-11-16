@@ -2862,7 +2862,7 @@ The accepted turn adds `from` to each proposal, the draft's value when the turn 
 
 - `POST /site-profile/setup-turns` (`Shutter_Operate`; `X-Requested-With`; `Idempotency-Key`) `{conversation, receiver,
   text, draft, baseVersion, draftRevision}` -> 202 `{turnId, conversation, state}`; `400 bad_request` for a body out of
-  shape or over 400000 characters, a receiver the draft does not name or whose name fails the text rule, or a text
+  shape or over 400000 characters, a receiver the draft does not name, names twice (v1.69) or whose name fails the text rule, or a text
   missing, too long or refused as above;
   then `409 setup_drafting_off`, 403 and 409 as above; `409 stale_version` with `currentVersion` when `baseVersion` is not
   the stored version; `404 not_found` for a conversation that is not the caller's; `409 turn_pending` with `turnId`

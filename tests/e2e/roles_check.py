@@ -576,6 +576,11 @@ def setup_turn_checks(args, operator, approver, demo_password, judge_password, c
           status == 400 and error_of(body) == "bad_request" and "a link" in (body or {}).get("detail", ""), f"{status} {body}")
     status, body = approver.call("POST", "/site-profile/setup-turns", {**turn("it is a whiteboard"), "receiver": "Nobody"}, idempotent=True)
     check("a receiver the draft does not name is 400 bad_request", status == 400 and error_of(body) == "bad_request", f"{status} {body}")
+    twice = json.loads(json.dumps(draft))
+    twice["receivers"] = list(twice.get("receivers") or []) + [dict(next(r for r in twice["receivers"] if r.get("name") == receiver))]
+    status, body = approver.call("POST", "/site-profile/setup-turns", turn("it is a whiteboard", body_draft=twice), idempotent=True)
+    check("a receiver whose name the draft holds twice is 400 bad_request, saying so",
+          status == 400 and error_of(body) == "bad_request" and "another receiver in the draft has this name" in (body or {}).get("detail", ""), f"{status} {body}")
     status, body = approver.call("POST", "/site-profile/setup-turns", {**turn("it is a whiteboard"), "receiver": "Ward 7, ask j.smith@trust.nhs.uk"}, idempotent=True)
     check("a receiver whose name holds an address is 400 bad_request, saying so",
           status == 400 and error_of(body) == "bad_request" and "name holds an address" in (body or {}).get("detail", ""), f"{status} {body}")

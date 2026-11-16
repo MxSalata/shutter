@@ -11,7 +11,7 @@ import {
   type QuestionId,
   type SetupQuestion,
 } from './fields';
-import { applyBatch, checkTurn } from './proposals';
+import { applyBatch, checkTurn, named } from './proposals';
 
 /**
  * Set up the site's draft: a copy of the stored profile that lives in this tab's memory and nowhere else. Nothing here
@@ -414,6 +414,7 @@ export const useSetup = create<SetupState>((set, get) => ({
         s.moved ||
         !r ||
         r.name !== view.receiver ||
+        named(s.draft, r.name) > 1 ||
         view.conversation !== s.conversation ||
         view.baseVersion !== s.base.version
       )

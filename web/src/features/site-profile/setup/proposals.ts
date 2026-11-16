@@ -81,6 +81,14 @@ export function nameProblem(name: string): string {
     : '';
 }
 
+/** What a turn about a name the draft holds twice is told: ProfileSetup's TWICE. */
+export const TWICE =
+  'another receiver in the draft has this name: give each receiver its own name before Ask Shutter reads an answer about it';
+
+/** How many of a draft's receivers have this name: ProfileSetup.Named. A turn about a name held twice is not sent. */
+export const named = (draft: SiteProfile | undefined, name: string) =>
+  (draft?.receivers ?? []).filter((x) => x.name === name).length;
+
 /** A text with its case folded and each run of spaces as one: the port of ProfileSetup.Fold. */
 export const fold = (text: string) =>
   text

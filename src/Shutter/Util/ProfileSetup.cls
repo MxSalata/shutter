@@ -231,6 +231,23 @@ ClassMethod Find(profile As %DynamicObject, name As %String, Output index As %In
     Quit ""
 }
 
+/// How many of a profile's receivers have this name.
+ClassMethod Named(profile As %DynamicObject, name As %String) As %Integer
+{
+    Set n = 0
+    If '$ISOBJECT(profile) || (name = "") Quit 0
+    Set list = profile.%Get("receivers")
+    If '$ISOBJECT(list) || 'list.%IsA("%Library.DynamicArray") Quit 0
+    Set iter = list.%GetIterator()
+    While iter.%GetNext(, .r) {
+        If $ISOBJECT(r) && r.%IsA("%Library.DynamicObject") && (r.%GetTypeOf("name") = "string") && (r.%Get("name") = name) Set n = n + 1
+    }
+    Quit n
+}
+
+/// What a turn about a name the draft holds twice is told.
+Parameter TWICE = "another receiver in the draft has this name: give each receiver its own name before Ask Shutter reads an answer about it";
+
 /// The entry's kind as the server reads it (Shutter.Store.SiteProfile.ReceiverCategory): its own, else current_state.
 ClassMethod Category(r As %DynamicObject) As %String
 {
@@ -531,6 +548,8 @@ ClassMethod Frame(draft As %DynamicObject, receiver As %String, Output problem A
     If '$ISOBJECT(draft) || 'draft.%IsA("%Library.DynamicObject") Set problem = "draft must be the profile as a JSON object" Quit ""
     Set entry = ..Find(draft, receiver)
     If '$ISOBJECT(entry) Set problem = "draft has no receiver named " _ receiver Quit ""
+    // A turn is read, checked and applied by the receiver's name: with two of that name it would land on the first
+    If ..Named(draft, receiver) > 1 Set problem = ..#TWICE Quit ""
     Set frame = {"receivers": [({}.%FromJSON(entry.%ToJSON()))]}
     Set policy = draft.%Get("policy")
     Set frame.policy = $SELECT($ISOBJECT(policy) && policy.%IsA("%Library.DynamicObject"): {}.%FromJSON(policy.%ToJSON()), 1: {})
