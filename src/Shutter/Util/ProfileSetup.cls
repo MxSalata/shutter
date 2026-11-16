@@ -114,11 +114,13 @@ ClassMethod ClassOf(path As %String) As %String
 /// counts as a space and a run of them as one, and every Unicode dash or minus sign as a hyphen (Spaces), so a number
 /// pasted with non-breaking spaces or typographic dashes is read as typed. The invisible characters are every format
 /// character (Unicode's Cf, the tag characters among them) and the fillers, joiners and variation selectors that show
-/// nothing. An IPv4 address is a link too. The cases are one table, TextRows in Shutter.Test.ProfileSetup, that
+/// nothing. An IPv4 address is a link too. A text longer than TEXTBOUND is refused before any pattern is read, so no
+/// caller makes the rule read a long one. The cases are one table, TextRows in Shutter.Test.ProfileSetup, that
 /// the web app's copy (setup/proposals.ts) runs too. Cutting a text short is not redaction, so a text that fails is
 /// refused whole, neither sent nor stored.
 ClassMethod TextProblem(text As %String) As %String
 {
+    If $LENGTH($GET(text)) > ..#TEXTBOUND Quit "more than " _ ..#TEXTBOUND _ " characters"
     Set text = ..Spaces($GET(text))
     If $LOCATE(text, "[\x00-\x1F\x7F-\x9F]") Quit "a control character"
     If $LOCATE(text, "[\p{Cf}\x{034F}\x{115F}\x{1160}\x{17B4}\x{17B5}\x{180B}-\x{180E}\x{3164}\x{FE00}-\x{FE0F}\x{FFA0}]") Quit "an invisible or direction-changing character"
@@ -139,6 +141,14 @@ ClassMethod TextProblem(text As %String) As %String
 /// The top-level domains a bare domain is read by when it has no path: the common ones and the ones a hospital's
 /// intranet uses.
 Parameter DOMAINS = "com|org|net|uk|io|gov|edu|info|biz|dev|app|cloud|online|site|xyz|eu|ie|local|internal|lan|ai|co|scot|wales|cymru|nhs|int|health|care";
+
+/// The longest receiver name a turn is about: Shutter.Store.SetupTurn's Receiver keeps at most this many characters, and
+/// the route refuses a longer one before the text rule reads it.
+Parameter MAXNAME = 200;
+
+/// The longest text the text rule reads: anything longer is refused at once, so a long name or text cannot make its
+/// patterns read for long. It is well above MAXTEXT and SetupTurn's longest receiver name.
+Parameter TEXTBOUND = 2000;
 
 /// A text with every Unicode space (no-break, the typographic spaces, the narrow and the ideographic ones) and the line
 /// and paragraph separators as a plain space, each run of spaces as one, and every Unicode dash and minus sign (the

@@ -232,7 +232,14 @@ Method TestTextRefused()
     Do $$$AssertEquals(problem, "text is at most 500 characters", "said so")
     Do $$$AssertEquals($CLASSMETHOD(ps, "CleanText", "bay 12345, ward 7", .problem), "bay 12345, ward 7", "five digits pass")
     Do $$$AssertEquals($CLASSMETHOD(ps, "CleanText", "the ward " _ $CHAR(8211) _ " bay 4", .problem), "the ward - bay 4", "a dash is kept as a hyphen")
-
+    // A long text is refused before any pattern reads it: a run of letters that are not hex digits reaches the base64
+    // rule, whose lookaheads would read it again from every place.
+    Set long = $TRANSLATE($JUSTIFY("", 400000), " ", "z")
+    Set t0 = $ZHOROLOG, what = $CLASSMETHOD(ps, "TextProblem", long), took = $ZHOROLOG - t0
+    Do $$$AssertEquals(what, "more than 2000 characters", "400000 characters are refused")
+    Do $$$AssertTrue(took < 1, "at once: " _ took _ " s")
+    Do $$$AssertEquals($CLASSMETHOD(ps, "TextProblem", $EXTRACT(long, 1, 2000)), "", "2000 letters are read")
+    Do $$$AssertTrue($CLASSMETHOD(ps, "NameProblem", $EXTRACT(long, 1, 2001)) [ "more than 2000 characters", "a name that long is refused")
 }
 
 /// Who may send a turn: the site's own switch first, off unless a person saved it on, then a page question's rule.

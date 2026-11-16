@@ -588,6 +588,9 @@ def setup_turn_checks(args, operator, approver, demo_password, judge_password, c
     check("a text with an NHS number as printed is 400 bad_request", status == 400 and error_of(body) == "bad_request" and "a long number" in (body or {}).get("detail", ""), f"{status} {body}")
     status, body = Session(args.url).call("POST", "/site-profile/setup-turns", turn("it is a whiteboard"))
     check("signed out: 401", status == 401, f"{status} {body}")
+    status, body = approver.call("POST", "/site-profile/setup-turns", {**turn("it is a whiteboard"), "receiver": "z" * 300}, idempotent=True)
+    check("a receiver name longer than 200 characters is 400 bad_request, before the text rule reads it",
+          status == 400 and error_of(body) == "bad_request" and "at most 200 characters" in (body or {}).get("detail", ""), f"{status} {body}")
 
     # Off: refused with its own code, whoever asks and whatever they hold, and no agent run is made for any of them.
     runs = lambda c: {k: ((c or {}).get("totals") or {}).get(k) for k in ("liveRuns", "replayedRuns", "mockRuns")}  # noqa: E731

@@ -184,6 +184,16 @@ describe('a text refused before it is sent, the table Shutter.Test.ProfileSetup 
     },
   );
 
+  it('reads a dash as a hyphen, and refuses a text longer than the bound before any pattern reads it', () => {
+    expect(cleanText('the ward \u2013 bay 4')).toEqual({ text: 'the ward - bay 4', problem: '' });
+    const long = 'z'.repeat(400_000);
+    const t0 = performance.now();
+    expect(textProblem(long)).toBe('more than 2000 characters');
+    expect(performance.now() - t0).toBeLessThan(1000);
+    expect(textProblem(long.slice(0, 2000))).toBe('');
+    expect(nameProblem(long.slice(0, 2001))).toContain('more than 2000 characters');
+  });
+
   it("refuses a receiver's name that fails the same rule", () => {
     expect(nameProblem('Bed Board')).toBe('');
     expect(nameProblem('Ward 7, ask j.smith@trust.nhs.uk')).toBe(

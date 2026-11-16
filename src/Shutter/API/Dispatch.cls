@@ -2382,6 +2382,9 @@ ClassMethod SetupTurnAsk() As %Status
     Set ps = "Shutter.Util.ProfileSetup"
     Set receiver = $SELECT(body.%GetTypeOf("receiver") = "string": body.%Get("receiver"), 1: "")
     If receiver = "" Quit ..Fail("400 Bad Request", "bad_request", "receiver must name the receiver the answer is about")
+    // A name longer than a turn keeps is refused before the text rule reads it.
+    Set maxName = $PARAMETER(ps, "MAXNAME")
+    If $LENGTH(receiver) > maxName Quit ..Fail("400 Bad Request", "bad_request", "receiver is at most " _ maxName _ " characters")
     // The agent is shown the receiver's name and drafts for it by that name: a name that fails the text rule is never sent.
     Set problem = $CLASSMETHOD(ps, "NameProblem", receiver)
     If problem '= "" Quit ..Fail("400 Bad Request", "bad_request", problem)

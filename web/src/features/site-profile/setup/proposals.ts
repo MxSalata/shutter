@@ -28,6 +28,9 @@ const KINDS_OF_SYSTEM = ['current_state', 'history_of_record', 'orders_results']
 const DOMAINS =
   'com|org|net|uk|io|gov|edu|info|biz|dev|app|cloud|online|site|xyz|eu|ie|local|internal|lan|ai|co|scot|wales|cymru|nhs|int|health|care';
 
+/** The longest text the text rule reads: ProfileSetup's TEXTBOUND. */
+const TEXT_BOUND = 2000;
+
 /**
  * A text with every Unicode space and the line and paragraph separators as a plain space, each run of spaces as one,
  * and every Unicode dash and minus sign as a hyphen: the port of ProfileSetup.Spaces.
@@ -46,9 +49,11 @@ const BARE_DOMAIN = new RegExp(`\\b[a-z0-9-]+(\\.[a-z0-9-]+)*\\.(${DOMAINS})\\b`
  * top-level domain); an address; the shape of a credential (a word such as password with ":" or "=", a provider's key
  * prefix, a long hex or base64 run); a run of six or more digits; a number of ten or more digits with spaces, hyphens,
  * dots or brackets between them, every Unicode space or separator read as a space, a run of them as one, and every
- * Unicode dash as a hyphen; an IPv4 address, as a link. Both suites run the cases of the core's TextRows table.
+ * Unicode dash as a hyphen; an IPv4 address, as a link. A text longer than the bound is refused before any pattern is
+ * read. Both suites run the cases of the core's TextRows table.
  */
 export function textProblem(raw: string): string {
+  if (raw.length > TEXT_BOUND) return `more than ${TEXT_BOUND} characters`;
   const text = spaces(raw);
   // eslint-disable-next-line no-control-regex
   if (/[\x00-\x1f\x7f-\x9f]/.test(text)) return 'a control character';
