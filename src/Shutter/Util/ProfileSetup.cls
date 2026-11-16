@@ -109,12 +109,14 @@ ClassMethod ClassOf(path As %String) As %String
 /// is a scheme, www., or a bare domain that has a path or ends in a known top-level domain; an address; the shape of a
 /// credential (a word such as password or token with ":" or "=", a provider's key prefix, a run of 32 or more hex
 /// digits, or a run of 24 or more base64 characters mixing capitals, small letters and digits); a run of six or more
-/// digits; and a number of ten or more digits written with single spaces or hyphens between them (an NHS number as
-/// printed, 943 476 5919, or a telephone number). The cases are one table, TextRows in Shutter.Test.ProfileSetup, that
+/// digits; and a number of ten or more digits with spaces, hyphens, dots or brackets between them (an NHS number as
+/// printed, 943 476 5919, or a telephone number, (020) 7946 0958). Every Unicode space counts as a space and a run of
+/// them as one (Spaces), so a number pasted with non-breaking spaces is read as typed. The cases are one table, TextRows in Shutter.Test.ProfileSetup, that
 /// the web app's copy (setup/proposals.ts) runs too. Cutting a text short is not redaction, so a text that fails is
 /// refused whole, neither sent nor stored.
 ClassMethod TextProblem(text As %String) As %String
 {
+    Set text = ..Spaces($GET(text))
     If $LOCATE(text, "[\x00-\x1F\x7F-\x9F]") Quit "a control character"
     If $LOCATE(text, "[\x{00AD}\x{061C}\x{180E}\x{200B}-\x{200F}\x{202A}-\x{202E}\x{2060}-\x{2064}\x{2066}-\x{2069}\x{FEFF}]") Quit "an invisible or direction-changing character"
     If $LOCATE(text, "(?i)(://|\bwww\.|\bmailto:|\bjavascript:)") Quit "a link"
@@ -126,13 +128,21 @@ ClassMethod TextProblem(text As %String) As %String
     If $LOCATE(text, "(?i)\b[0-9a-f]{32,}\b") Quit "what looks like a credential"
     If $LOCATE(text, "(?=[A-Za-z0-9+/_]*[A-Z])(?=[A-Za-z0-9+/_]*[a-z])(?=[A-Za-z0-9+/_]*[0-9])[A-Za-z0-9+/_]{24,}") Quit "what looks like a credential"
     If $LOCATE(text, "\d{6}") Quit "a run of six or more digits"
-    If $LOCATE(text, "\d([ -]?\d){9,}") Quit "a long number"
+    If $LOCATE(text, "\d([ ().-]{0,3}\d){9,}") Quit "a long number"
     Quit ""
 }
 
 /// The top-level domains a bare domain is read by when it has no path: the common ones and the ones a hospital's
 /// intranet uses.
 Parameter DOMAINS = "com|org|net|uk|io|gov|edu|info|biz|dev|app|cloud|online|site|xyz|eu|ie|local|internal|lan|ai|co";
+
+/// A text with every Unicode space (no-break, the typographic spaces, the narrow and the ideographic ones) as a plain
+/// space and each run of spaces as one.
+ClassMethod Spaces(text As %String) As %String
+{
+    Set text = $ZSTRIP($TRANSLATE(text, $CHAR(160, 5760, 8192, 8193, 8194, 8195, 8196, 8197, 8198, 8199, 8200, 8201, 8202, 8239, 8287, 12288), $JUSTIFY("", 16)), "=W")
+    Quit text
+}
 
 /// Why a receiver's name may not go to a model, or "": the text rule (TextProblem). A turn about a receiver whose name
 /// fails it is refused before anything is sent, since the agent must name the receiver it drafts for.
@@ -149,12 +159,13 @@ ClassMethod TextRefusal(what As %String) As %String
     Quit "The text holds " _ what _ ". Take that out and send again: Ask Shutter does not need it."
 }
 
-/// The person's text as it is kept and sent: line breaks and tabs as spaces, trimmed; "" with a problem when it is
+/// The person's text as it is kept and sent: line breaks, tabs and every Unicode space as spaces, each run as one, trimmed;
+/// "" with a problem when it is
 /// empty, longer than MAXTEXT or holds what a model should not get (TextProblem).
 ClassMethod CleanText(text As %String, Output problem As %String) As %String
 {
     Set problem = ""
-    Set text = $ZSTRIP($TRANSLATE($GET(text), $CHAR(9, 10, 13), "   "), "<>W")
+    Set text = $ZSTRIP(..Spaces($TRANSLATE($GET(text), $CHAR(9, 10, 13), "   ")), "<>W")
     If text = "" Set problem = "text is required" Quit ""
     If $LENGTH(text) > ..#MAXTEXT Set problem = "text is at most " _ ..#MAXTEXT _ " characters" Quit ""
     Set what = ..TextProblem(text)

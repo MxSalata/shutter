@@ -27,16 +27,22 @@ const KINDS_OF_SYSTEM = ['current_state', 'history_of_record', 'orders_results']
 /** The top-level domains a bare domain is read by when it has no path: ProfileSetup's DOMAINS. */
 const DOMAINS =
   'com|org|net|uk|io|gov|edu|info|biz|dev|app|cloud|online|site|xyz|eu|ie|local|internal|lan|ai|co';
+
+/** A text with every Unicode space as a plain space and each run of spaces as one: the port of ProfileSetup.Spaces. */
+export const spaces = (text: string) =>
+  text.replace(/[\u00a0\u1680\u2000-\u200a\u202f\u205f\u3000]/g, ' ').replace(/[ \t]{2,}/g, (run) => run[0]);
 const BARE_DOMAIN = new RegExp(`\\b[a-z0-9-]+(\\.[a-z0-9-]+)*\\.(${DOMAINS})\\b`, 'i');
 
 /**
  * Why a text may not go to a model, or "": the port of ProfileSetup.TextProblem. A control character (C0, DEL or C1); an
  * invisible or direction-changing character; a link (a scheme, www., or a bare domain with a path or a known top-level
  * domain); an address; the shape of a credential (a word such as password with ":" or "=", a provider's key prefix, a
- * long hex or base64 run); a run of six or more digits; a number of ten or more digits with single spaces or hyphens
- * between them. Both suites run the cases of the core's TextRows table.
+ * long hex or base64 run); a run of six or more digits; a number of ten or more digits with spaces, hyphens, dots or
+ * brackets between them, every Unicode space read as a space and a run of them as one. Both suites run the cases of the
+ * core's TextRows table.
  */
-export function textProblem(text: string): string {
+export function textProblem(raw: string): string {
+  const text = spaces(raw);
   // eslint-disable-next-line no-control-regex
   if (/[\x00-\x1f\x7f-\x9f]/.test(text)) return 'a control character';
   if (/[\u00ad\u061c\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]/.test(text))
@@ -59,7 +65,7 @@ export function textProblem(text: string): string {
   )
     return 'what looks like a credential';
   if (/\d{6}/.test(text)) return 'a run of six or more digits';
-  if (/\d([ -]?\d){9,}/.test(text)) return 'a long number';
+  if (/\d([ ().-]{0,3}\d){9,}/.test(text)) return 'a long number';
   return '';
 }
 
@@ -88,7 +94,7 @@ export const textRefusal = (what: string) =>
 
 /** The person's text as it is sent, or the problem: the port of ProfileSetup.CleanText. */
 export function cleanText(raw: string): { text: string; problem: string } {
-  const text = raw.replace(/[\t\n\r]/g, ' ').replace(/^ +| +$/g, '');
+  const text = spaces(raw.replace(/[\t\n\r]/g, ' ')).replace(/^ +| +$/g, '');
   if (!text) return { text: '', problem: 'text is required' };
   if (text.length > MAX_TEXT) return { text: '', problem: `text is at most ${MAX_TEXT} characters` };
   const what = textProblem(text);

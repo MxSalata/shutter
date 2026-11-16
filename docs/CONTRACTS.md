@@ -2787,8 +2787,10 @@ and isolates); a link, which is a scheme, `www.`, or a bare domain with a path o
 (`intranet.trust.nhs.uk/board`, `example.com`); an address; the shape of a credential (a word such as `password` or
 `token` with `:` or `=`, a provider's key prefix such as `ghp_`, `github_pat_`, `sk-`, `xox?-`, `AKIA`, `AIza` or
 `glpat-`, a JSON web token, a run of 32 or more hex digits, or a run of 24 or more base64 characters mixing capitals,
-small letters and digits); a run of six or more digits; or a number of ten or more digits written with single spaces or
-hyphens between them (an NHS number as printed, `943 476 5919`, or a telephone number). The person is told what was
+small letters and digits); a run of six or more digits; or a number of ten or more digits with spaces, hyphens, dots or
+brackets between them (an NHS number as printed, `943 476 5919`, or a telephone number, `(020) 7946 0958`). Every
+Unicode space (a no-break space among them) is read and kept as a plain space and a run of spaces as one, so a number
+pasted with them is read as typed (v1.69). The person is told what was
 found: "Take that out and send again: Ask Shutter does not need it." A refused text is neither sent nor stored; a text is
 never cut short and sent on. The cases are one table, `TextRows` in `tests/unit/Shutter/Test/ProfileSetup.cls`, which
 both suites run. A turn about a receiver whose name fails the same rule is refused too (`ProfileSetup.NameProblem`),
