@@ -415,6 +415,11 @@ Method TestTheConversationsLimits()
     Do $$$AssertStatusOK(t.Answered({"say": "Read.", "proposals": [], "ask": null}, ""), "then answered")
     Do $$$AssertEquals($CLASSMETHOD(st, "Pending", conversation), "", "and the conversation is free")
     Do $$$AssertEquals($CLASSMETHOD(st, "ByTurnId", t.TurnId).ToObject().turn.say, "Read.", "the accepted turn is read back")
+    // The run's message is linked under this namespace's own portal path, as a page question's, never a fixed one
+    Do $$$AssertEquals(t.ToObject().%GetTypeOf("messageLink"), "null", "no run, no link")
+    Set t.EnsMessageId = "4321"
+    Do $$$AssertEquals(t.ToObject().messageLink, ##class(Shutter.API.Dispatch).PortalPath() _ "EnsPortal.MessageContents.zen?HeaderClass=Ens.MessageHeader&HeaderId=4321", "linked under the namespace's own portal path")
+    Set t.EnsMessageId = ""
     // A turn left behind past its time is closed when the conversation is next looked at.
     Do $$$AssertStatusOK($CLASSMETHOD(st, "Create", conversation, "Bed Board", "tier 2", {}, frame, 7, 2, "ut-setup", .left), "a second turn")
     Set left.AskedAt = ##class(Shutter.Util.Time).FromNow(-700)

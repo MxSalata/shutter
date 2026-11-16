@@ -89,6 +89,8 @@ export interface TurnEntry {
   /** Who read it: the run's model (`mock` under the API mimic) and its message in the production, for the trace. */
   model?: string | null;
   run?: string | null;
+  /** The run's message in the Management Portal, as the server gives it (under its namespace's own portal path). */
+  link?: string | null;
 }
 
 /** The turn being read: one at a time. */
@@ -392,7 +394,9 @@ export const useSetup = create<SetupState>((set, get) => ({
       if (!p || p.turnId !== view.turnId || !s.draft || !s.base) return s;
       const end = (entry: Partial<TurnEntry>, more: Partial<SetupData> = {}): Partial<SetupData> => ({
         turns: s.turns.map((t) =>
-          t.id === view.turnId ? { ...t, model: view.model, run: view.ensMessageId, ...entry } : t,
+          t.id === view.turnId
+            ? { ...t, model: view.model, run: view.ensMessageId, link: view.messageLink ?? null, ...entry }
+            : t,
         ),
         pending: null,
         ...more,

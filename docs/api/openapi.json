@@ -17958,6 +17958,13 @@
             ],
             "description": "The Visual Trace link's message id."
           },
+          "messageLink": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The run's message in the Management Portal, under the portal path of the namespace the agent ran in (Dispatch.MessageLink); null with ensMessageId."
+          },
           "turn": {
             "oneOf": [
               {
@@ -17986,6 +17993,7 @@
           "model",
           "costUsd",
           "ensMessageId",
+          "messageLink",
           "turn"
         ]
       }

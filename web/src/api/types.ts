@@ -2160,6 +2160,8 @@ export interface SetupTurnView {
   model: string | null;
   costUsd: number | null;
   ensMessageId: string | null;
+  /** The run's message in the Management Portal, as the server builds it (Dispatch.MessageLink); null with `ensMessageId`. */
+  messageLink: string | null;
   turn: SetupTurnBody | null;
 }
 

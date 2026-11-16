@@ -2601,7 +2601,9 @@ The accepted turn adds `from` to each proposal, the draft's value when the turn 
   24 turns; 503 `no_service` and `not_queued`,
   502 `no_answer`, 500 `turn_failed`. A repeated request with its idempotency key is answered from the first.
 - `GET /site-profile/setup-turns/{id}` -> `{turnId, conversation, receiver, text, state, baseVersion, draftRevision,
-  askedBy, askedAt, answeredAt, error, mode, model, costUsd, ensMessageId, turn}` for the one who asked it; `404
+  askedBy, askedAt, answeredAt, error, mode, model, costUsd, ensMessageId, messageLink, turn}` for the one who asked it
+  (`messageLink`: the run's message under the portal path of the namespace the agent ran in, `Dispatch.MessageLink`, as a
+  page question's; null with `ensMessageId`); `404
   not_found` for anyone else, as for an id that is not there.
 
 **The web app.** A card of a class A question has "Or answer in your own words" only where a turn can be sent: the switch

@@ -303,6 +303,8 @@ Method ToObject() As %DynamicObject
     If ..Model = "" { Do o.%Set("model", "", "null") } Else { Set o.model = ..Model }
     Do o.%Set("costUsd", +..CostUSD, "number")
     If ..EnsMessageId = "" { Do o.%Set("ensMessageId", "", "null") } Else { Set o.ensMessageId = ..EnsMessageId }
+    // The run's message under this namespace's own portal path, as a page question's (Shutter.API.Dispatch.MessageLink)
+    If ..EnsMessageId = "" { Do o.%Set("messageLink", "", "null") } Else { Set o.messageLink = ##class(Shutter.API.Dispatch).MessageLink(..EnsMessageId) }
     Set turn = ..Turn()
     If $ISOBJECT(turn) && (..State = "answered") { Set o.turn = turn } Else { Do o.%Set("turn", "", "null") }
     Quit o

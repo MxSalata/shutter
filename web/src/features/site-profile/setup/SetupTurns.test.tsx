@@ -112,6 +112,12 @@ async function sendTyped(user: ReturnType<typeof userEvent.setup>, text = ANSWER
   await user.click(screen.getByRole('button', { name: 'Send to Ask Shutter' }));
 }
 
+/**
+ * The run's message as the server links it: under the portal path of the namespace the agent ran in, a site's own
+ * namespace here (Setup.InstallInto), so a link built from a fixed path would show.
+ */
+const RUN_LINK = '/csp/trust/EnsPortal.MessageContents.zen?HeaderClass=Ens.MessageHeader&HeaderId=77';
+
 /** The route as a server that answers a turn with what the test gives it, checked by nobody: a forged answer. */
 function answersWith(turn: unknown, more: Partial<SetupTurnView> = {}) {
   server.use(
@@ -138,6 +144,7 @@ function answersWith(turn: unknown, more: Partial<SetupTurnView> = {}) {
         model: 'claude-opus-5-5',
         costUsd: 0.01,
         ensMessageId: '77',
+        messageLink: RUN_LINK,
         turn: turn as SetupTurnBody,
         ...more,
       } satisfies SetupTurnView),
@@ -394,6 +401,7 @@ describe('a typed answer read by Ask Shutter', () => {
           model: null,
           costUsd: 0,
           ensMessageId: null,
+          messageLink: null,
           turn:
             state === 'answered'
               ? {
@@ -613,6 +621,35 @@ describe('an answer that must not be used', () => {
     expect(puts()).toEqual([]);
   });
 
+  it("names the run's message without a link when the server gives none, and never builds one from a fixed path", async () => {
+    answersWith(
+      {
+        say: 'A whiteboard.',
+        proposals: [
+          {
+            field: 'receivers[].system',
+            receiver: 'Bed Board',
+            to: 'the ward whiteboard',
+            quote: 'the ward whiteboard',
+            from: null,
+          },
+        ],
+        ask: null,
+      },
+      { messageLink: null },
+    );
+    const user = userEvent.setup();
+    renderApp();
+    await nameBedBoard(user);
+    await sendTyped(user);
+    expect(
+      await screen.findByText(/^Read live by the Set-up guide agent on IRIS AI Hub, with claude-opus-5-5\./),
+    ).toHaveTextContent(
+      'Read live by the Set-up guide agent on IRIS AI Hub, with claude-opus-5-5. Its run is message 77 in the Management Portal.',
+    );
+    expect(screen.queryByRole('link', { name: 'message 77' })).not.toBeInTheDocument();
+  });
+
   it('shows markup and a link in what Ask Shutter says, and in a quote, as plain text', async () => {
     answersWith({
       say: '<img src=x onerror="alert(1)"> see [the docs](https://evil.example) <b>now</b>',
@@ -637,10 +674,8 @@ describe('an answer that must not be used', () => {
     expect(run.parentElement).toHaveTextContent(
       'Read live by the Set-up guide agent on IRIS AI Hub, with claude-opus-5-5. Its run is message 77 in the Management Portal.',
     );
-    expect(run).toHaveAttribute(
-      'href',
-      '/csp/healthshare/shutter/EnsPortal.MessageContents.zen?HeaderClass=Ens.MessageHeader&HeaderId=77',
-    );
+    // The server's link, under the namespace's own portal path, never one built from a fixed path
+    expect(run).toHaveAttribute('href', RUN_LINK);
     await waitFor(() => expect(added().system).toBe('whiteboard'));
     expect(container.querySelector('img')).toBeNull();
     expect(container.querySelector('a[href*="evil.example"]')).toBeNull();
@@ -755,6 +790,7 @@ describe('a late answer', () => {
     model: 'mock',
     costUsd: 0,
     ensMessageId: null,
+    messageLink: null,
     turn,
     ...more,
   });
@@ -987,6 +1023,7 @@ describe('the store, around a turn', () => {
     model: 'mock',
     costUsd: 0,
     ensMessageId: null,
+    messageLink: null,
     turn: {
       say: 'Read.',
       proposals: [{ field: 'receivers[].system', receiver: 'Bed Board', to, quote: to, from }],

@@ -171,6 +171,7 @@ export function answerTurn(
     model: 'mock',
     costUsd: 0,
     ensMessageId: null,
+    messageLink: null,
     turn: checked.ok && !problem ? checked.turn : null,
   };
   turns[view.turnId] = { view };
