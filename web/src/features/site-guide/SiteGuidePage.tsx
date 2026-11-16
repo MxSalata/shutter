@@ -31,6 +31,7 @@ import {
 } from '@/features/site-profile/profile';
 import { capabilities, fhirOf } from '@/features/site-profile/receiverCapabilities';
 import {
+  NOT_PRINTED,
   OUT_OF_DATE,
   alternativesOf,
   decidesWords,
@@ -41,6 +42,7 @@ import {
   andWords,
   byNumber,
   patternWords,
+  printable,
   releaseAt,
   stampLine,
   stampOf,
@@ -69,7 +71,8 @@ const PARTS = [
 const useCatalogue = () =>
   useQuery({ queryKey: ['catalogue'], queryFn: () => api.get<CatalogueView>('/catalogue') });
 
-const and = andWords;
+/** A list in words, every name in it printable (no address, host or API path). */
+const and = (items: string[]) => andWords(items.map(printable));
 
 /** A part of the guide: on paper a page of its own, with the stamp at the foot of each page it runs to. */
 function Sheet({
@@ -263,8 +266,8 @@ function Receiver({ r, profile }: { r: SiteReceiver; profile: SiteProfile }) {
     ? (r.approvers as unknown[]).filter((x) => typeof x === 'string')
     : [];
   const approves = [
-    `${profile.approvers?.role || 'A person with the approver role'} approve${profile.approvers?.role ? '' : 's'} its writes${own.length ? `, named for it: ${and(own as string[])}` : ''}.`,
-    `When nobody is available: ${profile.approvers?.escalation || 'not answered'}.`,
+    `${printable(profile.approvers?.role) || 'A person with the approver role'} approve${profile.approvers?.role ? '' : 's'} its writes${own.length ? `, named for it: ${and(own as string[])}` : ''}.`,
+    `When nobody is available: ${printable(profile.approvers?.escalation) || 'not answered'}.`,
     teams.length ? `A case Shutter can't recover goes to ${and(teams)}.` : null,
   ].filter(Boolean) as string[];
   const watch = r.watch as { item?: string } | undefined;
@@ -280,9 +283,9 @@ function Receiver({ r, profile }: { r: SiteReceiver; profile: SiteProfile }) {
     <div className="site-guide-block" data-testid={`site-guide-receiver-${r.name}`}>
       <Stack gap="sm">
         <Stack gap={0}>
-          <Title order={3}>{r.name || 'An unnamed receiver'}</Title>
+          <Title order={3}>{printable(r.name) || 'An unnamed receiver'}</Title>
           <Text size="sm" c="dimmed">
-            {r.system || 'What it does is not answered'}
+            {printable(r.system) || 'What it does is not answered'}
           </Text>
         </Stack>
         <Text size="sm">
@@ -364,13 +367,16 @@ function Settings({ profile }: { profile: SiteProfile }) {
     [
       'Authoritative source',
       profile.authoritative_source
-        ? `${profile.authoritative_source}: when two systems move a patient at the same time, its movement stands.`
+        ? `${printable(profile.authoritative_source)}: when two systems move a patient at the same time, its movement stands.`
         : 'None named: when two systems move a patient at the same time, the board or a person decides.',
       'authoritative_source',
     ],
   ];
   return (
     <Stack gap="sm">
+      <Text size="sm" c="dimmed" className="site-guide-prose">
+        {`Words the site wrote are printed as written, but for mail addresses, hosts, web addresses and API paths: each shows as "${NOT_PRINTED}".`}
+      </Text>
       {rows.map(([k, v, key]) => (
         <Stack key={k} gap={2} className="site-guide-prose">
           <Text fw={600}>
@@ -443,11 +449,11 @@ function Scenario({
     <div className="site-guide-block" data-testid={`site-guide-entry-${e.id}`}>
       <Stack gap="xs">
         <Group gap="xs" wrap="wrap">
-          <Title order={3}>{`${e.id}: ${e.title}`}</Title>
+          <Title order={3}>{`${e.id}: ${printable(e.title)}`}</Title>
           {site ? <StatusBadge tone="info" label="This site's own" /> : null}
         </Group>
         <Text size="sm">
-          {site ? `${e.sentence || patternWords(e.pattern)}.` : `${patternWords(e.pattern)}.`}
+          {site ? `${printable(e.sentence) || patternWords(e.pattern)}.` : `${patternWords(e.pattern)}.`}
         </Text>
         <Text size="sm">
           Who decides here: {decidesWords(e.decides)}. <Code>{`decides: ${e.decides}`}</Code>
@@ -458,14 +464,16 @@ function Scenario({
               Shutter sends and closes nothing: the case goes to a person with these instructions.
             </Text>
             <Text size="sm" fw={600}>
-              {e.instructions || 'No instructions written.'}
+              {printable(e.instructions) || 'No instructions written.'}
             </Text>
-            {e.preferred?.why ? <Text size="sm">Why: {e.preferred.why}</Text> : null}
+            {e.preferred?.why ? <Text size="sm">Why: {printable(e.preferred.why)}</Text> : null}
             <Text size="sm" c="dimmed">
               {own?.approvedBy
-                ? `Version ${e.version}, approved by ${own.approvedBy}${own.approvedAt ? `, ${stampTime(own.approvedAt)}` : ''}.`
+                ? `Version ${e.version}, approved by ${printable(own.approvedBy)}${own.approvedAt ? `, ${stampTime(own.approvedAt)}` : ''}.`
                 : `Version ${e.version}; who approved it was not read.`}
-              {e.team ? ` Team: ${(profile.teams ?? []).find((t) => t.id === e.team)?.name ?? e.team}.` : ''}
+              {e.team
+                ? ` Team: ${printable((profile.teams ?? []).find((t) => t.id === e.team)?.name ?? e.team)}.`
+                : ''}
             </Text>
           </>
         ) : (

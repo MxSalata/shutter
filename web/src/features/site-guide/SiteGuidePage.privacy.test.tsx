@@ -2,10 +2,11 @@ import { MantineProvider } from '@mantine/core';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import fixtures from '@/mocks/fixtures.json';
-import { resetMock } from '@/mocks/handlers';
+import { catalogueView, resetMock, SITE_ENTRIES_EXAMPLE } from '@/mocks/handlers';
 import { server } from '@/mocks/node';
 import { useAppearance } from '@/stores/appearance';
 import { theme } from '@/theme';
@@ -125,4 +126,62 @@ describe("This site's guide and the patient's data", () => {
       expect(text.match(/\/api\/|\/downstream\//g)).toBeNull();
       expect(nhsShaped(text)).toEqual([]);
     });
+
+  it('masks every mail address, host, web address and API path the site wrote into its free text', async () => {
+    const view = structuredClone(fixtures.siteProfile) as unknown as {
+      profile: Record<string, unknown> & {
+        approvers: Record<string, unknown>;
+        teams: { name: string }[];
+        receivers: Record<string, unknown>[];
+      };
+      updatedBy: string;
+      version: number;
+    };
+    const p = view.profile;
+    p.approvers.role = 'Bed managers (bm.team@trust.example.org)';
+    p.approvers.escalation = 'Ring 4455 or mail oncall@trust.example.nhs.uk';
+    p.teams[0].name = 'Integration, wiki https://wiki.trust.example.org/oncall';
+    p.receivers[0].system = 'The bed system at beds01.trust.example.nhs.uk, /api/beds/v2';
+    p.receivers[0].approvers = ['alice.smith@trust.example.org'];
+    p.authoritative_source = 'pas.trust.example.nhs.uk';
+    view.updatedBy = 'admin@trust.example.org';
+    const example = SITE_ENTRIES_EXAMPLE.items[0];
+    const instructions = 'Mail nurse.in.charge@ward.example.nhs.uk or see https://intranet.example.org/iso';
+    server.use(
+      http.get('/api/shutter/site-profile', () => HttpResponse.json(view)),
+      http.get('/api/shutter/catalogue', () =>
+        HttpResponse.json({
+          ...catalogueView(view.profile as never),
+          profileVersion: view.version,
+          site: [
+            {
+              ...example.content,
+              instructions,
+              version: 1,
+              origin: 'site',
+              decides: 'person',
+              preferred: { outcome: 'escalate', why: 'See beds.example.org for why.' },
+              alternatives: [],
+              sentence: example.sentence,
+            },
+          ],
+        }),
+      ),
+      http.get('/api/shutter/site-entries', () =>
+        HttpResponse.json({
+          ...SITE_ENTRIES_EXAMPLE,
+          items: [{ ...example, approvedBy: 'sister@ward.example.org' }],
+        }),
+      ),
+    );
+    const { container } = renderGuide();
+    await screen.findByTestId('site-guide-entry-L1');
+    const text = container.textContent ?? '';
+    expect(text).toContain('(an address, not printed here)');
+    expect(text.match(/[\w.+-]+@[\w-]+\.[\w.]+/g)).toBeNull();
+    expect(text.match(/example\.(org|nhs\.uk)|https?:|\/api\//g)).toBeNull();
+    // The words around them stay
+    expect(text).toContain('Ring 4455 or mail (an address, not printed here)');
+    expect(text).toContain('approved by (an address, not printed here)');
+  });
 });

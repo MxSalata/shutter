@@ -214,7 +214,7 @@ export function entryAtReceivers(entry: CatalogueEntry, profile: SiteProfile): E
     const lines = [
       ...row.whenOtherSource.map(
         (o) =>
-          `When the other system sending at the same time is ${o.otherSource}: ${outcomeOf(o.outcome, o.outcomeRef)}. ${askedWords(o.outcome, release, o.decides)}`,
+          `When the other system sending at the same time is ${printable(o.otherSource)}: ${outcomeOf(o.outcome, o.outcomeRef)}. ${askedWords(o.outcome, release, o.decides)}`,
       ),
       `${row.whenOtherSource.length ? 'Otherwise' : 'Outcome'}: ${outcomeOf(row.outcome, row.outcomeRef)}. ${askedWords(row.outcome, release, row.decides)}`,
     ];
@@ -234,6 +234,32 @@ export function alternativesOf(entry: CatalogueEntry): string[] {
       ? `${head}: the board's or a person's choice.`
       : `${head}: where ${when.replace(/_/g, ' ')}.`;
   });
+}
+
+// ---- what is printed ----
+
+/** The words that stand where an address was: the guide prints no mail address, host, URL or API path. */
+export const NOT_PRINTED = '(an address, not printed here)';
+
+const ADDRESS = [
+  // A mail address
+  /[\w.+-]+@[\w-]+(?:\.[\w-]+)+/g,
+  // A URL
+  /\bhttps?:\/\/\S+/gi,
+  // An API path
+  /\/api\/\S*/g,
+  // A host or domain: names joined by dots, ending in a top-level suffix
+  /\b[\w-]+(?:\.[\w-]+)*\.(?:uk|com|org|net|nhs|scot|wales|ie|eu|io|local|internal|lan|example|test|gov|ac|co)\b/gi,
+];
+
+/**
+ * Free text the site wrote (who to ring, approvers' and teams' names, receivers' names and descriptions, an entry's
+ * instructions, who saved the profile), with every mail address, host, URL and API path in it masked.
+ */
+export function printable(text: string | undefined | null): string {
+  let out = String(text ?? '');
+  for (const re of ADDRESS) out = out.replace(re, NOT_PRINTED);
+  return out;
 }
 
 // ---- the stamp ----
@@ -265,7 +291,7 @@ export function stampOf(input: {
   shippedWords: string;
 }): Stamp {
   const { view, catalogue, health, now, trial } = input;
-  const by = view.updatedBy || 'Setup';
+  const by = printable(view.updatedBy) || 'Setup';
   const saved = view.updatedAt
     ? `saved ${stampTime(view.updatedAt)} by ${by}${view.source === 'api' ? '' : ` (${input.shippedWords})`}`
     : input.shippedWords;
