@@ -248,16 +248,24 @@ ClassMethod TeamKnown(team As %String) As %Boolean
     Quit 0
 }
 
-/// The digit runs of a text (R5), spaces and hyphens between digits aside: a valid NHS number is a problem, since the
-/// words can reach a model; any other run of six or more digits is a warning.
+/// The digit runs of a text (R5), read as Set up the site's text rule reads a long number (ProfileSetup.TextProblem):
+/// every Unicode space as a space and every dash as a hyphen (ProfileSetup.Spaces), and up to three spaces, hyphens,
+/// dots or brackets between digits read as one number. A valid NHS number is a problem, since the words can reach a
+/// model; any other run of six or more digits is a warning.
 ClassMethod Digits(text As %String, field As %String, problems As %DynamicArray, warnings As %DynamicArray) [ Private ]
 {
-    Set run = "", warned = 0, refused = 0
-    For i = 1:1:($LENGTH(text) + 1) {
-        Set c = $EXTRACT(text, i)
+    Set text = ##class(Shutter.Util.ProfileSetup).Spaces(text)
+    Set run = "", warned = 0, refused = 0, i = 0
+    While i <= $LENGTH(text) {
+        Set i = i + 1, c = $EXTRACT(text, i)
         If c ? 1N Set run = run _ c Continue
-        // A space or a hyphen inside a number, as an NHS number is often written.
-        If (run '= "") && ((c = " ") || (c = "-")) && ($EXTRACT(text, i + 1) ? 1N) Continue
+        // Up to three separators inside a number, as an NHS or telephone number is often written: 943 476 5919,
+        // 943.476.5919, (020) 7946 0958, 943 - 476 - 5919.
+        If run '= "" {
+            Set j = i
+            While (j < (i + 3)) && (" ().-" [ $EXTRACT(text, j + 1)) && ($EXTRACT(text, j + 1) '= "") { Set j = j + 1 }
+            If (" ().-" [ c) && ($EXTRACT(text, j + 1) ? 1N) Set i = j Continue
+        }
         If $LENGTH(run) >= 10 {
             For at = 1:1:($LENGTH(run) - 9) {
                 If ##class(Shutter.Util.CaseReminder).LooksLikeNHSNumber($EXTRACT(run, at, at + 9)) Set refused = 1 Quit

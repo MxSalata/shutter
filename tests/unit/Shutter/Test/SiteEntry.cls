@@ -65,6 +65,12 @@ Method TestEveryRefusal()
         {"name": "words that are not text", "set": {"instructions": ["ring the ward"]}, "expect": "R5 instructions"},
         {"name": "a valid NHS number in the instructions", "set": {"instructions": "Ring about 999 100 1018 first"}, "expect": "R5 instructions"},
         {"name": "a valid NHS number in the why", "set": {"why": "As for 9991001018"}, "expect": "R5 why"},
+        {"name": "an NHS number with dots", "set": {"instructions": "See 999.100.1018 first"}, "expect": "R5 instructions"},
+        {"name": "an NHS number with two spaces", "set": {"instructions": "See 999  100  1018 first"}, "expect": "R5 instructions"},
+        {"name": "an NHS number with brackets", "set": {"instructions": "See (999) 100 1018 first"}, "expect": "R5 instructions"},
+        {"name": "an NHS number with spaced hyphens", "set": {"instructions": "See 999 - 100 - 1018 first"}, "expect": "R5 instructions"},
+        {"name": "an NHS number with en dashes", "set": {"instructions": ("See 999 " _ $CHAR(8211) _ " 100 " _ $CHAR(8211) _ " 1018 first")}, "expect": "R5 instructions"},
+        {"name": "an NHS number with non-breaking hyphens", "set": {"title": ("For 999" _ $CHAR(8209) _ "100" _ $CHAR(8209) _ "1018")}, "expect": "R5 title"},
         {"name": "a fixture that expects neither", "set": {"fixtures": [{"case": "C-000001", "expect": "maybe"}]}, "expect": "R1 fixtures"}
     ]
     Set it = rows.%GetIterator()
@@ -92,6 +98,10 @@ Method TestWarnings()
     Do body.%Remove("instructions")
     Do $$$AssertEquals(..Problems(body, .warnings), "", "no instructions is no problem")
     Do $$$AssertEquals(warnings.%Get(0).field, "instructions", "and warns")
+    Set body = ##class(Shutter.Test.SiteKit).Body()
+    Set body.instructions = "Bay 12, ward 7, since 15/11/2026; wards 1-2-3 and 4 5 6"
+    Do $$$AssertEquals(..Problems(body, .warnings), "", "a bay, a ward, a date and a list of wards are no problem")
+    Do $$$AssertEquals(warnings.%Size(), 0, "and warn of nothing")
 }
 
 /// The words are cleaned as stored model text is: nothing invisible is kept.
