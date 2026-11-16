@@ -669,6 +669,12 @@ stops applying, and the older code can say nothing about it. Before you downgrad
    entries again, but a closure the workflow plans on later evidence no longer reads that record, so look again at the
    open cases the entries had stopped.
 
+**Set up the site's switch, across a downgrade below 1.5.0.** Once the site profile holds `model_content.setup_answers`
+(`true`, or `false` after it was switched off), a release before 1.5.0 refuses every save of the profile, on the server
+and on the page, naming that key as an unknown setting. Before you downgrade, save the profile without the key: `PUT
+/api/shutter/site-profile` with `model_content.setup_answers` removed (an older release accepts that save too, so the
+way out is the same after the downgrade). The older release has no Set up the site, so nothing is lost.
+
 Who may do what with them: writing a draft, proving it on stored cases and proposing it need `Shutter_Configure`;
 approving the proposal needs `Shutter_Approve` and a second person, never the one who wrote or proposed it. The installer's
 approver role holds both rights, so two approvers are enough. A site with one approver can have an IRIS administrator lift

@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.69, 16 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.70, 16 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -466,11 +466,11 @@ caller's process passes; the operator and the approver read the watched hospital
 | --- | --- |
 | none | `POST` and `DELETE /session`; `GET /health` (its summary; the full report needs `Shutter_Operate`) |
 | signed in | `GET /me`, which answers `{username, operator, approver, can: {operate, approve, configure, scenarios, reset, liveAgents, stopRecovery}}` from the resources the user holds (`can` since v1.34: the app shows only what the user may do; `scenarios` is `Shutter_Scenarios` and, since v1.57, `reset` is `Shutter_ScenarioReset`, so the app shows a judge Run on and Reset off; `liveAgents` is `Shutter_LiveAgents`, below); `GET /access` (v1.2.0), what each role Shutter installs may do beside what the caller may, for the Settings page's Your access table: `{demo, portalHardened, read, recordedAt?, roles: [{role, installed}], rows: [{id, needs, available, roles, you}]}`, read only, naming roles and resources and never a user (`Shutter.API.Access`; the roles' columns from Security.Roles for a caller with `%Admin_Secure`, `read` `now`, otherwise from the record the install, the portal's hardening and each start write, `recorded` with `recordedAt`, or `none` before any) |
-| `Shutter_Operate` | every other `GET`; `POST /cases/{id}/bundle`; `POST /cases/{id}/preview-blind-resend`, `/reinvestigate` (v1.39: the reopened case's agent runs count against the requester's share, and without `Shutter_LiveAgents`, or while the provider refuses the key, they answer from recordings only, `ModeOverride` `replay` as a question's do in 14, and a board with no recording leaves the case escalated for a person, with the reason, and plans nothing; the 202 `{caseId, state: "reopening", requestedBy, liveAgents}` says which) and `/close` (unless the site keeps the two-person rule, below); `POST /cases/{id}/escalations`, `PATCH /cases/{id}/escalations/{seq}` and `POST /cases/{id}/escalations/{seq}/send`; `GET /production-reviews`, `GET /production-reviews/targets` and `GET /production-reviews/{id}`; `POST /production-reviews` (section 13: the review reads only; its agent part takes `Shutter_LiveAgents`, below, and is skipped without it); `GET /cases/{id}/whatif`, `GET /cases/{id}/questions`, `GET /cases/{id}/questions/suggested`, `GET /cases/{id}/questions/{qid}` and `POST /cases/{id}/questions` (section 14: a question reads only, and a live run spends model credit); `GET /settings/schemas` (section 12); `POST /site-entries/validate` and `/preview` (6.8: they store nothing) |
+| `Shutter_Operate` | every other `GET`; `POST /cases/{id}/bundle`; `POST /cases/{id}/preview-blind-resend`, `/reinvestigate` (v1.39: the reopened case's agent runs count against the requester's share, and without `Shutter_LiveAgents`, or while the provider refuses the key, they answer from recordings only, `ModeOverride` `replay` as a question's do in 14, and a board with no recording leaves the case escalated for a person, with the reason, and plans nothing; the 202 `{caseId, state: "reopening", requestedBy, liveAgents}` says which) and `/close` (unless the site keeps the two-person rule, below); `POST /cases/{id}/escalations`, `PATCH /cases/{id}/escalations/{seq}` and `POST /cases/{id}/escalations/{seq}/send`; `GET /production-reviews`, `GET /production-reviews/targets` and `GET /production-reviews/{id}`; `POST /production-reviews` (section 13: the review reads only; its agent part takes `Shutter_LiveAgents`, below, and is skipped without it); `GET /cases/{id}/whatif`, `GET /cases/{id}/questions`, `GET /cases/{id}/questions/suggested`, `GET /cases/{id}/questions/{qid}` and `POST /cases/{id}/questions` (section 14: a question reads only, and a live run spends model credit); `GET /settings/schemas` (section 12); `POST /site-entries/validate` and `/preview` (6.8: they store nothing); `POST /page-questions` (14.6) and `POST /site-profile/setup-turns` (14.7), each live only, so with `Shutter_LiveAgents` as well (v1.70: listed here) |
 | `Shutter_Approve` | `POST /site-entries/{id}/approvals` and `/suspend` (6.8); `POST /cases/{id}/approvals`; `POST /incidents/{id}/approvals` and `/incidents/{id}/chains/{seq}/approvals`; `POST /cases/{id}/close` where the site profile's `approvers.close_needs_approver` is true; `POST /cases/{id}/abandon` (always an approver's); `POST /cases/{id}/further-release` (6.5); `POST /cases/{id}/bundle-unredacted` |
 | `Shutter_Scenarios` | `POST /scenarios/{id}/run` (v1.34: the demo controls; the operator and approver roles hold it, since v1.57 the role `Shutter_Judge` too, and since v1.58 the public demo's role `Shutter_Demo`, whose runs replay, as it has no `Shutter_LiveAgents` (4.2); on an instance that is not a demo, `^Shutter.Config("demo")` 0, the route answers 403 `not_a_demo_instance` and changes nothing). A run is one at a time (409 `wrong_state` while one is queued or playing, 4.2), and the cases it opens carry who started it, so their live agent runs count against that user's share of the day's budget, as a convened board does (9, v1.57); a starter without `Shutter_LiveAgents` runs replay only, with no model call and nothing spent, and is refused the single investigator, 409 `not_recorded` (4.2, v1.58) |
 | `Shutter_ScenarioReset` | `POST /scenarios/reset` and `Shutter.Setup_PurgeStore` (v1.57: resetting the shared demo and emptying its store were `Shutter_Scenarios` before; the operator and approver roles hold it, the roles `Shutter_Judge` and `Shutter_Demo` do not, so one judge never clears the demo under another; on an instance that is not a demo the reset answers 403 `not_a_demo_instance` and the purge refuses, changing nothing). An install or an upgrade creates it and gives it to the operator and the approver, so an upgraded operator keeps resetting; the uninstall removes it with Shutter's other resources |
-| `Shutter_LiveAgents` | Spending the model budget (v1.34, the judges): `POST /cases/{id}/board` (the board convenes live on a blocked, escalated or failed case, 14.5), `POST /cases/{id}/questions` running live, the agent part of `POST /production-reviews` (13.5, v1.39: skipped without it, never refused) and a reinvestigation's live runs (v1.39: recordings only without it); without it a question is answered from recordings only, and one with no recording is refused `409 no_recorded_answer` at once. Operators, approvers and the role `Shutter_Judge` (the public demo's role plus this; both hold `Shutter_Scenarios`, the judge's since v1.57 and the demo's since v1.58) hold it; `Shutter_Demo` does not, so a scenario run it starts replays (4.2). Every live run counts against the day's budget and the caller's share (9) |
+| `Shutter_LiveAgents` | Spending the model budget (v1.34, the judges): `POST /cases/{id}/board` (the board convenes live on a blocked, escalated or failed case, 14.5), `POST /cases/{id}/questions` running live, the agent part of `POST /production-reviews` (13.5, v1.39: skipped without it, never refused), a reinvestigation's live runs (v1.39: recordings only without it), and `POST /page-questions` (14.6) and `POST /site-profile/setup-turns` (14.7), answered live only (`403 live_agents_only` without it; v1.70: listed here); without it a question is answered from recordings only, and one with no recording is refused `409 no_recorded_answer` at once. Operators, approvers and the role `Shutter_Judge` (the public demo's role plus this; both hold `Shutter_Scenarios`, the judge's since v1.57 and the demo's since v1.58) hold it; `Shutter_Demo` does not, so a scenario run it starts replays (4.2). Every live run counts against the day's budget and the caller's share (9) |
 | `Shutter_Configure` | `POST /site-entries`, `PUT /site-entries/{id}`, `POST /site-entries/{id}/proof` and `/propose` (6.8; `POST /site-entries/{id}/suspend` needs it beside `Shutter_Approve`, and on a demo instance so does `POST /site-entries/{id}/approvals`); `PUT /site-profile`; `PATCH /library/{code}`; `POST /settings/schemas` (section 12); `GET /settings/namespaces` and the routes under it (11.1; an apply and a removal need `%Admin_Manage` as well); `POST /production-reviews/{id}/annotations` and `DELETE /production-reviews/annotations/{annotationId}` (section 13) (v1.34: what changes the site; the approver role holds it, the public demo's role does not) |
 | `Shutter_StopRecovery` | `POST /recovery-control/stop` (18; operators and approvers hold it, the public demo's roles do not). `POST /recovery-control/clear` needs `Shutter_Configure` and `Shutter_Approve` |
 | `Shutter_Intake` | `POST /intake` (section 11) |
@@ -1274,6 +1274,9 @@ it got there, can authorise a write or a closure.
   (`Shutter.Catalogue.Matcher.Scope`). A receiver or a team named must be in the site profile.
 - **R5.** The words are plain text within limits (title 200, why 500, instructions 2,000, prose 4,000 characters), cleaned as
   stored model text is, and refused when they hold a valid NHS number; any other run of six or more digits is a warning.
+  A number is read as Set up the site's text rule reads a long number (14.7, v1.70): every Unicode space and dash as typed,
+  and up to three spaces, hyphens, dots or brackets between digits as one number, so `943.476.5919`, `(943) 476 5919`
+  and `943 - 476 - 5919` are read whole.
   The words can reach a model (a board a person convenes, Ask about this case), so they follow section 9.
 - **R6.** Writing, proving and proposing need `Shutter_Configure`; approving needs `Shutter_Approve`; the approver is
   neither the person who proposed the action nor the person who last changed the proposed version (409 `same_person`),
@@ -1284,13 +1287,16 @@ it got there, can authorise a write or a closure.
   waits for an approval in flight), and warned about for as long as it holds. It is not a site profile field.
 - **R7.** The approver sends the action, the version and the digest they read; another is 409 `digest_mismatch`.
 - **R8.** No activation or resumption without a passing proof of that digest with at least one `match` fixture and at
-  least one `no_match` fixture (a near miss), run again at the approval.
+  least one `no_match` fixture (a near miss), run again at the approval. A retirement's and a resumption's proof, and a
+  resumption's check of the rules, are of the entry as it is matched now (v1.70): the active version's pattern and scope
+  with what a recheck dropped left out (`effectivePattern`, `effectiveScope`, R14), the digest being the version's.
 - **R9.** Every approved change is a new version; an approved version is never written again; ids are never reused.
 - **R10.** Retiring an entry, or changing an active one, goes through the same proposal and approval.
 - **R11.** There is no switch that turns every site entry off together.
 - **R12.** One person holding `Shutter_Approve` and `Shutter_Configure` may suspend one entry at once, with a reason. Each
   suspension is recorded and raises a warning on `GET /site-entries`, the Site profile page and the Doctor
-  (`site_entries.warnings`) for as long as it lasts. Resuming is a proposal and an approval.
+  (`site_entries.warnings`) for as long as it lasts. Resuming is a proposal and an approval. An open proposal on the
+  entry does not stand in the way: the page offers the suspension beside it (v1.70).
 - **R13.** An active entry that can't be read makes the matcher answer `decision: error` (the gate's `MATCHER_ERROR`,
   unknown), for every case, since which cases it would catch cannot be told. It is never skipped. So does a query of the
   entries that fails or stops at a row it cannot read (never taken as "no entries"; the catalogue's version then ends
@@ -1418,8 +1424,13 @@ copy answers and the row says `source: "frozen"`. A stored case whose evidence t
   evaluated and again at the end (a context that changed while the proof ran is a problem, so the proof does not pass).
   The proof and its `proved` event are kept together, or neither (500 `store_failed`). A proof under another
   context is stale: 409 `no_proof` at the proposal, 409 `proof_failed` at the approval unless a person has run the proof
-  again since. The approval runs P1 and P2 again and refuses (409 `proof_failed`) unless the fixtures answer as the
-  proposal's proof recorded.
+  again since. The approval runs P1 and P2 again and refuses (409 `proof_failed`, with the rerun as `proof`) unless each
+  fixture asserts what the proof it stands on recorded: its case, what was expected, whether it answered so, whether the
+  entry's own scope and pattern held and which entry led (v1.70: where a row was read from, the stored evidence or its
+  frozen copy once the retention task took the case, and its words are not compared). The proof it stands on is the
+  proposal's own while it passed and is current, else the newest passing and current one a person ran of the same digest
+  and action; `GET /site-entries` names it as `proposal.standsOn` ("" when there is none, and the approval is refused
+  until the proof is run again) beside `proposal.proofCurrent`, whether the proof proposed on is still current (v1.70).
 
 The gate is not run per entry: every stop entry has the same gate behaviour, which the release's own tests prove
 (`Shutter.Test.SiteSafety`, `Shutter.Test.Gate`).
@@ -1440,11 +1451,11 @@ replaces the shipped catalogue from any JSON, answers on a demo instance only.
 
 | Route | Needs | What it does |
 | --- | --- | --- |
-| `GET /catalogue` | `Shutter_Operate` | `{version, shippedVersion, generation, profileVersion, shipped, automaticHolds, site, vocabulary, siteError?}`: the shipped entries, each with `atReceivers` (below, v1.67), the active site entries as the matcher reads them (read with the version, the generation and the site profile's version as one, the rows at each receiver made inside that read, again when a change lands between them), and the vocabulary; `profileVersion` (v1.68) is the profile version the rows were made under (0 for the shipped defaults, null when a save kept landing during the read); `automaticHolds` (v1.68) is what an automatic release by the site's policy still sends to a person under that profile, each `{hold, when, source}` (`Shutter.Process.CaseWorkflow.AutomaticHolds`, kept beside `PolicyPath`, whose holds it lists); `siteError` when the entries cannot be read (R13) |
-| `GET /site-entries` | `Shutter_Operate` | `{items, status, catalogueVersion}`: every entry (`id`, `state`, `title`, `sentence`, `version`, `digest`, `content`, `activeVersion`, `draftVersion`, `revision`, `approvedBy`, `approvedAt`, `proposal`, `needsReview`, `review`, `effectivePattern`, `effectiveScope`, `suspended`, `casesSent`, `casesSent30`, and `draft` for a draft beside an active version) and the site's status (`active`, `proposed`, `generation`, `limit`, `suspended`, `needsReview`, `onePerson`, `warnings`, `downgrade`), and `waitingPlans` (v1.68), the open cases whose plan was made under the catalogue version in force, which an approval would stop completing (R17) |
+| `GET /catalogue` | `Shutter_Operate` | `{version, shippedVersion, generation, profileVersion, shipped, automaticHolds, site, vocabulary, siteError?}`: the shipped entries, each with `atReceivers` (below, v1.67), the active site entries as the matcher reads them (read with the version, the generation and the site profile's version as one, the rows at each receiver made inside that read, again when a change lands between them), and the vocabulary; `profileVersion` (v1.68) is the profile version the rows were made under (0 for the shipped defaults, null when a save kept landing during the read); `automaticHolds` (v1.68) is what an automatic release by the site's policy still sends to a person under that profile, each `{hold, when, source}` (`Shutter.Process.CaseWorkflow.AutomaticHolds`, kept beside `PolicyPath`, whose holds it lists); `siteError` when the entries cannot be read (R13). Reading it may first run a pending recheck of the active entries (R14), under the system's name, its events naming the change that left them unchecked (v1.70) |
+| `GET /site-entries` | `Shutter_Operate` | `{items, status, catalogueVersion}`: every entry (`id`, `state`, `title`, `sentence`, `version`, `digest`, `content`, `activeVersion`, `draftVersion`, `revision`, `approvedBy`, `approvedAt`, `proposal`, `needsReview`, `review`, `effectivePattern`, `effectiveScope`, `suspended`, `casesSent`, `casesSent30`, and `draft` for a draft beside an active version; `proposal` carries `standsOn` and `proofCurrent`, v1.70, P5) and the site's status (`active`, `proposed`, `generation`, `limit`, `suspended`, `needsReview`, `onePerson`, `warnings`, `downgrade`), and `waitingPlans` (v1.68), the open cases whose plan was made under the catalogue version in force, which an approval would stop completing (R17) |
 | `GET /site-entries/{id}` | `Shutter_Operate` | The entry with `versions`, `proofs` and `events`; 404 `not_found` (an id is read letter for letter, on every route: `l1` is not `L1`) |
 | `POST /site-entries/validate` | `Shutter_Operate` | `{valid, problems, warnings, sentence, overlap}` for a body: each problem `{rule, field, text}`; `overlap` lists the shipped entries the pattern can displace, condition by condition, with `covers` and `leads`. Stores nothing and reads no case |
-| `POST /site-entries/preview` (v1.68) | `Shutter_Operate` | The body checked as a draft's is, its fixtures frozen from the closed cases they name, and P1, P2 and P4 run on them: `{valid, problems, warnings, id, action, sentence, overlap, content, proof}`, `proof` as the proof route answers it with no `proofId`, or null when no pattern is left to prove (missing words do not stop it). `{fromCase}` starts from a closed case as a new draft does, `{id}` previews a change of an existing entry (404 `not_found`), `{action}` is `activate` (the default), `retire` or `resume`; a new entry is previewed under the id the next draft would take. Stores nothing: no entry, version, proof or event, and nothing on any case. The public demo's roles run it (R16) |
+| `POST /site-entries/preview` (v1.68) | `Shutter_Operate` | The body checked as a draft's is, its fixtures frozen from the closed cases they name, and P1, P2 and P4 run on them: `{valid, problems, warnings, id, action, sentence, overlap, content, proof}`, `proof` as the proof route answers it with no `proofId`, or null when no pattern is left to prove (missing words do not stop it). `{fromCase}` starts from a closed case as a new draft does, `{id}` previews a change of an existing entry (404 `not_found`), `{action}` is `activate` (the default), `retire` or `resume`; a new entry is previewed under the id the next draft would take. Stores nothing: no entry, version, proof or event, and nothing on any case, except that a pending recheck of the active entries (R14) may run first, under the system's name, its events naming the change that left them unchecked, profile save, vocabulary or upgrade (v1.70). The public demo's roles run it (R16) |
 | `POST /site-entries` | `Shutter_Configure` | 201 with a draft. `{fromCase}` fills the pattern with that closed case's conditions (the reserved one aside), the scope with its facts and the first fixture with the case; what the body gives stands. 400 `bad_request` with `problems` |
 | `PUT /site-entries/{id}` | `Shutter_Configure` | Rewrites the draft, or begins one beside the active version. `expectedVersion` is the entry's `revision` and is required (409 `stale_version` with `currentVersion` when it is missing or another); 409 `wrong_state` for a proposed draft or a retired entry |
 | `POST /site-entries/{id}/proof` | `Shutter_Configure` | `{action?}` (`activate` when none). Runs P1, P2 and P4 and keeps the proof: `{passed, fixtures, counts, impact, problems, context, proofId}` |
@@ -2782,8 +2793,9 @@ turn_pending`), or is refused with the same code if the lock is still held.
 
 **What the person's text may hold.** Before anything is sent to a model the core refuses (and the web app refuses first)
 a text with any of these (`ProfileSetup.TextProblem`, the rule of a receiver's runbook line widened): a control character
-(C0, DEL or C1); an invisible or direction-changing character (zero-width characters, the bidirectional marks, overrides
-and isolates); a link, which is a scheme, `www.`, a bare domain with a path or a known top-level domain
+(C0, DEL or C1); an invisible or direction-changing character (every Unicode format character, the zero-width characters,
+the bidirectional marks, overrides and isolates and the tag characters among them, and the fillers, the grapheme joiner
+and the variation selectors that show nothing, v1.70); a link, which is a scheme, `www.`, a bare domain with a path or a known top-level domain
 (`intranet.trust.nhs.uk/board`, `example.com`, `intranet.nhs.scot`: the list includes `.scot`, `.wales`, `.cymru` and
 `.nhs`, v1.69), or an IPv4 address with or without a path (v1.69); an address; the shape of a credential (a word such as `password` or
 `token` with `:` or `=`, a provider's key prefix such as `ghp_`, `github_pat_`, `sk-`, `xox?-`, `AKIA`, `AIza` or
@@ -2791,7 +2803,10 @@ and isolates); a link, which is a scheme, `www.`, a bare domain with a path or a
 small letters and digits); a run of six or more digits; or a number of ten or more digits with spaces, hyphens, dots or
 brackets between them (an NHS number as printed, `943 476 5919`, or a telephone number, `(020) 7946 0958`). Every
 Unicode space (a no-break space among them) is read and kept as a plain space and a run of spaces as one, so a number
-pasted with them is read as typed (v1.69). The person is told what was
+pasted with them is read as typed (v1.69); so are the line and paragraph separators, and every Unicode dash and minus
+sign is read and kept as a hyphen, so an NHS number with en dashes or non-breaking hyphens between its groups is a long number too
+(v1.70; the rows write the characters as escapes). A text longer than 2000 characters is refused before any pattern
+reads it (v1.70). The person is told what was
 found: "Take that out and send again: Ask Shutter does not need it." A refused text is neither sent nor stored; a text is
 never cut short and sent on. The cases are one table, `TextRows` in `tests/unit/Shutter/Test/ProfileSetup.cls`, which
 both suites run. A turn about a receiver whose name fails the same rule is refused too (`ProfileSetup.NameProblem`),
@@ -2816,7 +2831,8 @@ resolves to `replay`.
 **The run.** The route sends `Shutter.Msg.SetupTurnRequest` to the Case Question item, which opens the row, answers at once
 with `Shutter.Msg.QuestionStarted`, reads the site's switch again (`ProfileSetup.Proceed`: switched off since the route
 admitted the turn, the turn ends `failed` and nothing goes to a model; the Agent Board item reads it once more before
-any runner, `PageQuestion.Refuses`, for a turn that waited in its queue, v1.69) and asks the Agent Board item with one `Shutter.Bridge.Msg.AgentRequest`: `Role` and
+any runner, `PageQuestion.Refuses`, for a turn that waited in its queue, v1.69, and refuses there too a run whose turn
+ended while it waited, v1.70) and asks the Agent Board item with one `Shutter.Bridge.Msg.AgentRequest`: `Role` and
 `MemberCode` `setup`, `AgentClass` `Shutter.Agent.SetupGuide` (the Explain agent in the question tier `setup`, with its own
 preamble, `Shutter.Agent.Base.SetupPreamble`: it drafts for a person to review, saves nothing, switches nothing on, states
 nothing about what a receiver can do and names only the fields marked as its own; no toolset, the explain collection's
@@ -2834,7 +2850,9 @@ the field while the agent can still correct it, and again by the Case Question i
 proposals of a turn pass or fail together; a turn that never passes ends `schema_failed` with nothing drafted.
 
 1. Each `field` is a class A field whose conditions hold, `receiver` is the receiver the turn is about, and no field is
-   named twice.
+   named twice. A kind is not drafted while the pattern in force of one of the site's own active entries names
+   `receiver_category` (v1.70: a drafted kind could take the receiver out of that entry's stop, and the effects check has
+   no line for the site's own stops); the agent is then told the kind is a person's.
 2. `to` has the field's type and is one of its values; a description keeps the text rules; a tier is kept as a number.
 3. `quote` is 3 to 200 characters and is part of what that person typed about this receiver in this conversation, as the
    stored turns hold it (`SetupTurn.Said`: each text with the receiver its turn was about; compared without case, runs of
@@ -2850,7 +2868,7 @@ proposals of a turn pass or fail together; a turn that never passes ends `schema
    name the kind; `person` at a FHIR receiver), since they are not points on one scale: any value in place of `automatic` is
    stricter, and any other change (to `automatic`, or between `per_chain`, `approval` and `board`) counts as less strict.
    Every other line is a rank. The batch is refused if any line is less strict than under the profile in force or than
-   under the draft as sent. With check 1's rule that a kind or a tier is drafted only while unanswered, a turn never
+   under the draft as sent (`ProfileSetup.EffectsRefusal`, tested on its own, v1.70). With check 1's rule that a kind or a tier is drafted only while unanswered, a turn never
    undoes, or moves, an answer the person gave.
 5. The validator on a copy: `SiteProfile.Validate` answers nothing for the batch applied, or exactly what it answers
    for the draft as sent (its own unfinished state). The validator returns its first problem only, so this is a
@@ -2863,13 +2881,20 @@ The accepted turn adds `from` to each proposal, the draft's value when the turn 
 
 - `POST /site-profile/setup-turns` (`Shutter_Operate`; `X-Requested-With`; `Idempotency-Key`) `{conversation, receiver,
   text, draft, baseVersion, draftRevision}` -> 202 `{turnId, conversation, state}`; `400 bad_request` for a body out of
-  shape or over 400000 characters, a receiver the draft does not name, names twice (v1.69) or whose name fails the text rule, or a text
+  shape or over 400000 characters, a receiver name over 200 characters (v1.70, before the text rule reads it), a receiver
+  the draft does not name, names twice (v1.69) or whose name fails the text rule, or a text
   missing, too long or refused as above;
   then `409 setup_drafting_off`, 403 and 409 as above; `409 stale_version` with `currentVersion` when `baseVersion` is not
   the stored version; `404 not_found` for a conversation that is not the caller's; `409 turn_pending` with `turnId`
   while the conversation has a turn being read or another request on it is being admitted; `409 conversation_full` after
   24 turns; 503 `no_service` and `not_queued`,
-  502 `no_answer`, 500 `turn_failed`. A repeated request with its idempotency key is answered from the first.
+  502 `no_answer`, 500 `turn_failed`. A repeated request with its idempotency key is answered from the first, a repeat sent
+  while the first is still being admitted included: it waits for the first, up to 30 seconds, then `409 turn_pending`
+  (v1.70). A turn's request that waited in the Case Question item's queue past the route's own wait is checked again
+  when the item opens it, and opens no row while another turn of the conversation is being read or the conversation
+  is full (v1.70). An answer that comes after the turn's time ran out is recorded as a run (the budget and the costs
+  count it, and the retention task takes its tool calls with the turn) and not used; a turn that ended stays as it
+  ended (v1.70).
 - `GET /site-profile/setup-turns/{id}` -> `{turnId, conversation, receiver, text, state, baseVersion, draftRevision,
   askedBy, askedAt, answeredAt, error, mode, model, costUsd, ensMessageId, messageLink, turn}` for the one who asked it
   (`messageLink`: the run's message under the portal path of the namespace the agent ran in, `Dispatch.MessageLink`, as a
@@ -3553,6 +3578,17 @@ That `If-Match` or an approval makes the write idempotent; that a verified versi
 
 ## Changes
 
+- v1.70, 16 Nov 2026 (the review of 1.5.0): 5: `POST /page-questions` and `POST /site-profile/setup-turns` in the
+  `Shutter_Operate` and `Shutter_LiveAgents` rows. 6.8: R5 reads a number as the text rule reads a long number; R8, a
+  retirement's and a resumption's proof and check are of the entry as matched now (`effectivePattern`,
+  `effectiveScope`); R12, the suspension beside an open proposal; P5, the approval compares what each fixture asserts,
+  and `GET /site-entries` gives `proposal.standsOn` and `proposal.proofCurrent`; the preview and `GET /catalogue` may
+  first run a pending recheck, its events naming its cause. 14.7: the text rule reads dashes and the line and paragraph
+  separators as typed, refuses every format character and the characters that show nothing, and refuses a text over 2000
+  characters before any pattern; a receiver name over 200 characters is 400; a kind is not drafted while an active site
+  entry reads `receiver_category`; the effects check is `EffectsRefusal`; a repeat with its idempotency key sent while
+  the first is admitted waits for it; a queued turn is checked again when it is opened; a late answer is recorded as a
+  run, and a run of an ended turn is refused at the agent item.
 - v1.69, 15 Nov 2026 (Set up the site): new 14.7: the page's turn route `POST /site-profile/setup-turns` and
   `GET /site-profile/setup-turns/{id}`, the field table (`Shutter.Util.ProfileSetup.Fields`: an agent may draft a
   receiver's description, and the kind and tier of a receiver being added, and nothing else), `CheckTurn` with the
