@@ -296,13 +296,16 @@ test.describe('the trial on the build IRIS serves', () => {
     // its editor is a lazy chunk of its own, and the entry's lists of lazy chunk dependencies gain the shared site entry
     // module that the case page and the editor both read. The three together stay within 7,700 bytes. Set up the site
     // (its route and lazy chunks' dependency lists, and the header's Ask Shutter button going to the page's own
-    // conversation there) adds 582 more: the four together measure 77,651 bytes, so the allowance is 8,300 bytes
+    // conversation there) adds 582 more: the four together measure 77,651 bytes, so the allowance was 8,300 bytes. The
+    // check after a session ends without a sign-out (who it was, so that someone else signing in next is given none of
+    // the earlier person's page state), in the query client and the sign-in hook, so in the shell, adds 236 more:
+    // 77,887 bytes, so the allowance is 8,550 bytes
     const src = await page.evaluate(
       () => new URL(document.querySelector<HTMLScriptElement>('script[type="module"][src]')!.src).pathname,
     );
     const entry = bodies.find((b) => b.path === src);
     expect(entry, 'the entry chunk').toBeTruthy();
-    expect(entry!.size).toBeLessThanOrEqual(69_373 + 8_300);
+    expect(entry!.size).toBeLessThanOrEqual(69_373 + 8_550);
   });
 });
 
