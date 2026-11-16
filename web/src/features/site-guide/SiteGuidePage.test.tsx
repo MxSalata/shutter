@@ -22,6 +22,25 @@ afterEach(() => {
 afterAll(() => server.close());
 beforeEach(() => resetMock('operator'));
 
+type Profile = { receivers: Record<string, unknown>[] } & Record<string, unknown>;
+
+/** A part of the guide, by its section's id, once the guide has rendered. */
+async function part(id: string): Promise<HTMLElement> {
+  await screen.findByTestId('site-guide-stamp');
+  return document.getElementById(id)!;
+}
+
+/** The recorded site profile, changed as a test needs it, at the version the catalogue was made under. */
+function withProfile(edit: (profile: Profile) => void) {
+  server.use(
+    http.get('/api/shutter/site-profile', () => {
+      const recorded = structuredClone(fixtures.siteProfile) as unknown as { profile: Profile };
+      edit(recorded.profile);
+      return HttpResponse.json(recorded);
+    }),
+  );
+}
+
 function renderGuide() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const router = createMemoryRouter(
@@ -296,4 +315,14 @@ describe("This site's guide", () => {
     expect(writes).toEqual([]);
     server.events.removeAllListeners();
   });
+
+  it('says what happens to a pattern no entry knows as the core does: the board, then a person only for a write', async () => {
+    renderGuide();
+    const scenarios = await part('site-guide-scenarios');
+    expect(scenarios).not.toHaveTextContent('a pattern no entry knows goes to a person');
+    expect(scenarios).toHaveTextContent(
+      'a pattern no entry knows goes to the board: a plan that writes waits for a person, and one that sends nothing closes, flagged for a reviewer as a candidate entry.',
+    );
+  });
+
 });

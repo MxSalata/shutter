@@ -601,7 +601,9 @@ function Scenarios({
     <Stack gap="sm">
       <Text size="md" className="site-guide-prose">
         Each entry is a failure Shutter knows. When one alone matches a case, it settles as below at this
-        site; when several match, the board decides, and a pattern no entry knows goes to a person.
+        site; when several match, the board decides; a pattern no entry knows goes to the board: a plan that
+        writes waits for a person, and one that sends nothing closes, flagged for a reviewer as a candidate
+        entry.
         {catalogue.site.length
           ? ` This site's own entries answer first, after a death on the message: a case one matches goes to a person.`
           : ''}

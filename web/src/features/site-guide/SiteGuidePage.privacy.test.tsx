@@ -184,4 +184,5 @@ describe("This site's guide and the patient's data", () => {
     expect(text).toContain('Ring 4455 or mail (an address, not printed here)');
     expect(text).toContain('approved by (an address, not printed here)');
   });
+
 });
