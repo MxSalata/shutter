@@ -3,39 +3,17 @@
 /// who may send one, what the agent is shown, the conversation's limits and the row's life. The four XData tables are
 /// the one copy the core and the web app are both held to: web/src/features/site-profile/setup/fields.test.ts,
 /// effects.test.ts and proposals.test.ts read them (Fields, EffectRows, TextRows, TurnRows) from this file, so the two agree row for row or one suite fails.
-/// Every row made here is deleted after each test, and the counters are put back when nothing else moved them
-/// meanwhile. No test here stores a profile, and one of them proves it.
+/// Every row made here is deleted after each test, and the counters are left as they stand. No test here stores a
+/// profile, and one of them proves it.
 Class Shutter.Test.ProfileSetup Extends %UnitTest.TestCase
 {
 
-Property TurnsBefore As %String;
-
-Property ConversationsBefore As %String;
-
-Method OnBeforeOneTest(testname As %String) As %Status
-{
-    Set ..TurnsBefore = $GET(^Shutter.Counter("setupturn")), ..ConversationsBefore = $GET(^Shutter.Counter("setupconversation"))
-    Quit $$$OK
-}
-
-/// The test's own rows are deleted, and each counter is put back only when its last id is one this test made, so a turn
-/// or conversation opened meanwhile by anyone else (an end-to-end run on the same namespace) keeps its id unique.
+/// The test's own rows are deleted. The counters are left where they are: putting one back could hand out an id a turn
+/// made meanwhile by anyone else (an end-to-end run on the same namespace) still holds, and a gap in the ids is harmless.
 Method OnAfterOneTest(testname As %String) As %Status
 {
-    Set lastTurn = "", lastConversation = ""
-    &sql(SELECT MAX(TurnId), MAX(Conversation) INTO :lastTurn, :lastConversation FROM Shutter_Store.SetupTurn WHERE AskedBy IN ('ut-setup', 'ut-setup-other'))
     &sql(DELETE FROM Shutter_Store.SetupTurn WHERE AskedBy IN ('ut-setup', 'ut-setup-other'))
-    Do ..Rewind("setupturn", ..TurnsBefore, lastTurn)
-    Do ..Rewind("setupconversation", ..ConversationsBefore, lastConversation)
     Quit $$$OK
-}
-
-/// A counter put back to <var>before</var> when it stands at the number of <var>last</var>, the highest id this test made.
-ClassMethod Rewind(counter As %String, before As %String, last As %String)
-{
-    Quit:$GET(last)=""
-    Quit:+$GET(^Shutter.Counter(counter))'=+$PIECE(last, "-", 2)
-    If before = "" { Kill ^Shutter.Counter(counter) } Else { Set ^Shutter.Counter(counter) = before }
 }
 
 /// A table of this class, as JSON.
