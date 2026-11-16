@@ -656,9 +656,11 @@ def setup_turn_checks(args, operator, approver, demo_password, judge_password, c
             t = wait(lambda: settled(first), max(args.timeout, 120), 2)
             check(f"{first} is read: answered, with what was drafted", (t or {}).get("state") == "answered" and isinstance(((t or {}).get("turn") or {}).get("proposals"), list), t)
             fields = sorted(p.get("field") for p in (((t or {}).get("turn") or {}).get("proposals") or []))
-            check("only a description and a kind were drafted, each quoted from what was typed",
+            typed = "it is the ward whiteboard, it only shows where patients are now"
+            check("only a description and a kind were drafted, each for this receiver and quoted from what was typed",
                   set(fields) <= {"receivers[].system", "receivers[].category", "receivers[].tier"}
-                  and all(p.get("quote", "").lower() in "it is the ward whiteboard, it only shows where patients are now" for p in t["turn"]["proposals"]), fields)
+                  and all(len((p.get("quote") or "").strip()) >= 3 and (p.get("quote") or "").lower() in typed
+                          and p.get("receiver") == receiver for p in t["turn"]["proposals"]), (t or {}).get("turn"))
             other = operator if asker != "operator" else approver
             status, body = other.call("GET", f"/site-profile/setup-turns/{first}")
             check("another user's GET of the turn is 404", status == 404 and error_of(body) == "not_found", f"{status} {body}")
