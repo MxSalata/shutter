@@ -41,7 +41,9 @@ ROOT = os.path.dirname(os.path.dirname(HERE))
 HOME = "/home/irisowner"
 PKG = f"{HOME}/pkg"
 # The names of the items an install into a site's production adds (Setup.cls, INSTALLITEMS, in 1.0.0 and since).
-INSTALL_ITEMS = ["HL7 Index", "Case Releaser", "Receiver Watch", "Engine Resend", "Escalation Mail", "Case Workflow", "Case Review", "Case Question", "Incident Workflow", "Evidence Collector", "Agent Conformance", "Agent Encounter", "Agent Impact", "Agent Coordinator", "Agent Board", "Gate", "Shutter Approvers", "Shutter API", "Verifier", "Case Intake", "Case Intake Store", "Second Parser"]
+# "Failure Census" (Shutter.Operation.FailureCensus) is the census route's item (CONTRACTS 19), added by an install into a
+# site's production since 1.2.0; the census it runs is off unless the site profile turns it on.
+INSTALL_ITEMS = ["HL7 Index", "Case Releaser", "Receiver Watch", "Engine Resend", "Escalation Mail", "Case Workflow", "Case Review", "Failure Census", "Case Question", "Incident Workflow", "Evidence Collector", "Agent Conformance", "Agent Encounter", "Agent Impact", "Agent Coordinator", "Agent Board", "Gate", "Shutter Approvers", "Shutter API", "Verifier", "Case Intake", "Case Intake Store", "Second Parser"]
 # The demo's items of Shutter.Production, which a site's install switches off (Setup.cls, DEMOITEMS).
 DEMO_ITEMS = ["ADT In", "ADT to Downstream", "Downstream Out", "ADT to Records", "Records Out", "Scenario Player"]
 PW = "Upgrade-2026x"
