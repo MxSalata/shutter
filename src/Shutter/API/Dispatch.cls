@@ -2412,6 +2412,26 @@ ClassMethod SetupTurnAsk() As %Status
         Set extra = {} Set extra.currentVersion = version
         Quit ..Fail("409 Conflict", "stale_version", "baseVersion is not the stored profile's version", extra)
     }
+    // A repeat of a request with its idempotency key is answered from the first, even one sent while the first is
+    // still being admitted: the key is held from the lookup until its answer is kept, so the repeat waits for it.
+    Set key = %request.GetCgiEnv("HTTP_IDEMPOTENCY_KEY"), held = ""
+    If (key '= "") && ($LENGTH(key) <= 128) {
+        Set held = ##class(Shutter.Util.Digest).SHA256Hex(..IdempotencyKey(key))
+        Lock +^Shutter.Lock("idem", held):30
+        If '$TEST Quit ..Fail("409 Conflict", "turn_pending", "A request with this idempotency key is still being answered: one turn at a time")
+    }
+    Try {
+        Set sc = ..SetupTurnKeyed(conversation, receiver, text, draft, frame, version, body, bodyText)
+    } Catch ex {
+        Set sc = ex.AsStatus()
+    }
+    If held '= "" Lock -^Shutter.Lock("idem", held)
+    Quit sc
+}
+
+/// POST /site-profile/setup-turns from the idempotency lookup on, the request's key held by the caller.
+ClassMethod SetupTurnKeyed(conversation As %String, receiver As %String, text As %String, draft As %DynamicObject, frame As %DynamicObject, version As %Integer, body As %DynamicObject, bodyText As %String) As %Status [ Private ]
+{
     Set r = ..Idempotent(bodyText, .replayed)
     If replayed Quit $$$OK
     // A later turn holds its conversation from the checks below until its row is opened, so two requests sent at once

@@ -46,6 +46,7 @@ import http.cookiejar
 import json
 import os
 import sys
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -69,7 +70,8 @@ class Session:
         if method != "GET" and csrf:
             request.add_header("X-Requested-With", "Shutter")
         if idempotent:
-            request.add_header("Idempotency-Key", str(uuid.uuid4()))
+            # A key of the caller's own when one is given (a repeat of the same request), else a new one
+            request.add_header("Idempotency-Key", idempotent if isinstance(idempotent, str) else str(uuid.uuid4()))
         try:
             with self.opener.open(request, timeout=60) as response:
                 text = response.read().decode()
@@ -586,11 +588,11 @@ def setup_turn_checks(args, operator, approver, demo_password, judge_password, c
           status == 400 and error_of(body) == "bad_request" and "name holds an address" in (body or {}).get("detail", ""), f"{status} {body}")
     status, body = approver.call("POST", "/site-profile/setup-turns", turn("NHS number 943 476 5919"), idempotent=True)
     check("a text with an NHS number as printed is 400 bad_request", status == 400 and error_of(body) == "bad_request" and "a long number" in (body or {}).get("detail", ""), f"{status} {body}")
-    status, body = Session(args.url).call("POST", "/site-profile/setup-turns", turn("it is a whiteboard"))
-    check("signed out: 401", status == 401, f"{status} {body}")
     status, body = approver.call("POST", "/site-profile/setup-turns", {**turn("it is a whiteboard"), "receiver": "z" * 300}, idempotent=True)
     check("a receiver name longer than 200 characters is 400 bad_request, before the text rule reads it",
           status == 400 and error_of(body) == "bad_request" and "at most 200 characters" in (body or {}).get("detail", ""), f"{status} {body}")
+    status, body = Session(args.url).call("POST", "/site-profile/setup-turns", turn("it is a whiteboard"))
+    check("signed out: 401", status == 401, f"{status} {body}")
 
     # Off: refused with its own code, whoever asks and whatever they hold, and no agent run is made for any of them.
     runs = lambda c: {k: ((c or {}).get("totals") or {}).get(k) for k in ("liveRuns", "replayedRuns", "mockRuns")}  # noqa: E731
@@ -686,6 +688,20 @@ def setup_turn_checks(args, operator, approver, demo_password, judge_password, c
                         if opened == 24:
                             status, body = session.call("POST", "/site-profile/setup-turns", turn("tier 3", conversation), idempotent=True)
                             check("a 25th turn is 409 conversation_full", status == 409 and error_of(body) == "conversation_full", f"{status} {body}")
+                        # The same first turn sent twice at once with one idempotency key: the repeat waits for the
+                        # first and is answered from it, so one conversation and one turn are opened.
+                        key, answers = str(uuid.uuid4()), []
+                        same = turn("it is the ward whiteboard")
+                        pair = [threading.Thread(target=lambda: answers.append(session.call("POST", "/site-profile/setup-turns", same, idempotent=key))) for _ in range(2)]
+                        for th in pair:
+                            th.start()
+                        for th in pair:
+                            th.join()
+                        ids = {(b or {}).get("turnId") for _, b in answers}
+                        check("the same request sent twice at once with one idempotency key opens one turn, both answered 202 with it",
+                              [a for a, _ in answers] == [202, 202] and len(ids) == 1, answers)
+                        if len(ids) == 1 and None not in ids:
+                            wait(lambda: settled(next(iter(ids))), max(args.timeout, 120), 1)
                     else:
                         check("a turn that asks for recovery to be switched on drafts no such thing",
                               t.get("state") in ("answered", "schema_failed", "failed")
