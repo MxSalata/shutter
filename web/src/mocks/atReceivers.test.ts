@@ -54,6 +54,7 @@ describe("the trial's catalogue and the recorded route", () => {
     resetMock('approver');
     const view = catalogueView({ ...profile, receivers: [profile.receivers[0]] });
     expect(view.shipped.every((e) => e.atReceivers?.length === 1)).toBe(true);
-    expect(view.version).toBe(catalogue.version);
+    // The recorded version, with the generation and the trial's active sample entry after it
+    expect(view.version).toBe(`${catalogue.version};g1:L1@1`);
   });
 });

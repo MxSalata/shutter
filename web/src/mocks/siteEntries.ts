@@ -779,6 +779,38 @@ export function siteEntryHandlers(deps: SiteEntryDeps) {
         },
       ];
     },
+    /**
+     * The active entries as GET /catalogue lists them (SiteEntries.Catalogue: in the order they were made, the three
+     * fields that decide in the matcher's own words), with the generation and the version's suffix (VersionSuffix).
+     */
+    active() {
+      const list = entries.filter((e) => e.state === 'active');
+      const site = list.map((e) => {
+        const v = e.versions.find((x) => x.version === e.activeVersion)!;
+        const c = v.content;
+        return {
+          id: e.id,
+          version: v.version,
+          title: c.title,
+          origin: 'site',
+          kind: 'stop',
+          priority: c.priority,
+          scope: c.scope,
+          pattern: c.pattern,
+          decides: 'person',
+          preferred: { outcome: 'escalate', why: c.why },
+          alternatives: [],
+          instructions: c.instructions,
+          team: c.team,
+          prose: c.prose,
+          sentence: sentence(c),
+        };
+      });
+      const suffix = generation
+        ? `;g${generation}:${list.map((e) => `${e.id}@${e.activeVersion}`).join(',')}`
+        : '';
+      return { generation, suffix, site };
+    },
     /** For a test: the site as one with no entry of its own. */
     clear() {
       entries = [];

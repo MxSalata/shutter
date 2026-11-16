@@ -784,16 +784,21 @@ export const NO_SITE_ENTRIES: SiteEntriesView = {
  * GET /catalogue (CONTRACTS 6.8) as the real route answered it on a demo install with no site entry
  * (catalogue-recorded.json, recorded from IRIS with scripts in the file's own note), with each shipped entry's
  * atReceivers worked out again for the trial's own site profile, which a visitor may change: the port of the core's
- * Matcher.AtReceiver in atReceivers.ts, held to the recording by its test.
+ * Matcher.AtReceiver in atReceivers.ts, held to the recording by its test. The trial's active site entries, its
+ * samples and any a visitor activates, are listed as the route lists them, with the generation and the version's suffix.
  */
 export function catalogueView(profile: SiteProfile | undefined = siteProfile?.profile): CatalogueView {
   const recorded = recordedCatalogue.catalogue as unknown as CatalogueView;
+  const own = siteEntries.active();
   return {
     ...recorded,
+    version: recorded.version + own.suffix,
+    generation: own.generation,
     shipped: recorded.shipped.map(({ atReceivers: _recorded, ...e }: CatalogueEntry) => ({
       ...e,
       atReceivers: profile ? atReceiversOf(e, profile) : [],
     })),
+    site: own.site,
   };
 }
 

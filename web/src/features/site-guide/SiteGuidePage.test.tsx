@@ -6,7 +6,7 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import fixtures from '@/mocks/fixtures.json';
-import { catalogueView, resetMock, SITE_ENTRIES_EXAMPLE } from '@/mocks/handlers';
+import { catalogueView, clearSiteEntries, resetMock, SITE_ENTRIES_EXAMPLE } from '@/mocks/handlers';
 import { server } from '@/mocks/node';
 import { useAppearance } from '@/stores/appearance';
 import { theme } from '@/theme';
@@ -96,7 +96,24 @@ describe("This site's guide", () => {
     expect(e1).toHaveTextContent('At Downstream Out');
     expect(e1).toHaveTextContent('a correction of the history by a person (its alternative 1)');
     expect(e1).toHaveTextContent('Shown in the scenarios S1 (');
+  });
+
+  it("lists the trial's active sample entry as the site's own, and not the one waiting for a second person", async () => {
+    renderGuide();
+    const own = await screen.findByTestId('site-guide-entry-L1');
+    expect(screen.getByText("This site's own entries")).toBeInTheDocument();
+    expect(within(own).getByText("This site's own")).toBeInTheDocument();
+    expect(own).toHaveTextContent('Version 1, approved by sample-approver, 15 Nov 2026');
+    expect(screen.queryByTestId('site-guide-entry-L2')).toBeNull();
+    expect(screen.getAllByTestId('site-guide-foot')[0]).toHaveTextContent(';g1:L1@1');
+  });
+
+  it("has no part for the site's own entries on a site with none", async () => {
+    clearSiteEntries();
+    renderGuide();
+    await screen.findByTestId('site-guide-entry-E1');
     expect(screen.queryByText("This site's own entries")).toBeNull();
+    expect(screen.getAllByTestId('site-guide-foot')[0]).not.toHaveTextContent(';g');
   });
 
   it("marks the site's own entries, with their instructions and who approved each and when", async () => {
