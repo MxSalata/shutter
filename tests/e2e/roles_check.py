@@ -136,9 +136,9 @@ def site_entry_checks(args, operator, approver, check, error_of):
     entry_id, revision = made["id"], made.get("revision")
     status, body = approver.call("PUT", f"/site-entries/{quote(entry_id)}", dict(entry, expectedVersion=revision + 7))
     check("approver: PUT /site-entries/{id} with another revision is 409 stale_version", status == 409 and error_of(body) == "stale_version" and (body or {}).get("currentVersion") == revision, f"{status} {body}")
-    status, body = approver.call("POST", f"/site-entries/{quote(entry_id)}/propose", {"action": "activate"})
+    status, body = approver.call("POST", f"/site-entries/{quote(entry_id)}/propose", {"action": "activate", "version": 1, "digest": made.get("digest")})
     check("approver: POST /site-entries/{id}/propose with no proof is 409 no_proof", status == 409 and error_of(body) == "no_proof", f"{status} {body}")
-    status, body = approver.call("POST", f"/site-entries/{quote(entry_id)}/suspend", {"reason": "roles check"})
+    status, body = approver.call("POST", f"/site-entries/{quote(entry_id)}/suspend", {"reason": "roles check", "expectedVersion": revision})
     check("approver: POST /site-entries/{id}/suspend on a draft is 409 wrong_state", status == 409 and error_of(body) == "wrong_state", f"{status} {body}")
     approval = {"action": "activate", "version": 1, "digest": made.get("digest"), "decision": "approve", "reason": "roles check"}
     status, body = approver.call("POST", f"/site-entries/{quote(entry_id)}/approvals", approval)

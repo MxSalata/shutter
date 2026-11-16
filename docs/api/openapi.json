@@ -10372,7 +10372,7 @@
           "site entries"
         ],
         "summary": "Propose an action on a site entry",
-        "description": "Fixes the action, the version and its digest for a second person. Needs a passing proof of that digest made under the catalogue, site profile, gate policy and release in force.\n\nNeeds Shutter_Configure. A change: send X-Requested-With: Shutter.\n\nCONTRACTS 6.8.",
+        "description": "Fixes the action, the version and its digest for a second person: the version and digest the proposer read, or nothing is proposed (409 digest_mismatch). Needs a passing proof of that digest made under the catalogue, site profile, gate policy and release in force.\n\nNeeds Shutter_Configure. A change: send X-Requested-With: Shutter.\n\nCONTRACTS 6.8.",
         "x-contract": "docs/CONTRACTS.md section 6.8",
         "x-required-resource": "Shutter_Configure",
         "x-writes": true,
@@ -10399,7 +10399,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SiteEntryAction"
+                "$ref": "#/components/schemas/SiteEntryProposal"
               }
             }
           }
@@ -10507,11 +10507,12 @@
             }
           },
           "409": {
-            "description": "Conflict. no_proof: No passing, current proof of this version's digest: run the proof first. wrong_state: A proposal already waits for approval, or the entry is not in the state the action needs. too_many: The site has its 50 active site entries already.",
+            "description": "Conflict. no_proof: No passing, current proof of this version's digest: run the proof first. wrong_state: A proposal already waits for approval, or the entry is not in the state the action needs. too_many: The site has its 50 active site entries already. digest_mismatch: The version and digest sent are not those of the version the action is about: someone changed the entry since it was read.",
             "x-error-codes": [
               "no_proof",
               "wrong_state",
-              "too_many"
+              "too_many",
+              "digest_mismatch"
             ],
             "content": {
               "application/json": {
@@ -10535,6 +10536,12 @@
                     "value": {
                       "error": "too_many",
                       "detail": "The site has its 50 active site entries already"
+                    }
+                  },
+                  "digest_mismatch": {
+                    "value": {
+                      "error": "digest_mismatch",
+                      "detail": "To activate L3 is about version 2 with digest sha256:...: the version and digest sent are not those. Someone changed the entry: read it again"
                     }
                   }
                 }
@@ -10744,7 +10751,7 @@
           "site entries"
         ],
         "summary": "Suspend an active site entry at once",
-        "description": "One person switches one entry off, with a reason: the cases it caught are the shipped catalogue's again. The suspension is recorded, raises the catalogue's generation and is warned about for as long as it lasts. Resuming is a proposal and a second person's approval.\n\nNeeds Shutter_Approve and Shutter_Configure. A change: send X-Requested-With: Shutter.\n\nCONTRACTS 6.8.",
+        "description": "One person switches one entry off, with a reason and the revision they read: the cases it caught are the shipped catalogue's again. The suspension is recorded, raises the catalogue's generation and is warned about for as long as it lasts. Resuming is a proposal and a second person's approval.\n\nNeeds Shutter_Approve and Shutter_Configure. A change: send X-Requested-With: Shutter.\n\nCONTRACTS 6.8.",
         "x-contract": "docs/CONTRACTS.md section 6.8",
         "x-required-resource": "Shutter_Approve",
         "x-writes": true,
@@ -10879,9 +10886,10 @@
             }
           },
           "409": {
-            "description": "Conflict. wrong_state: Only an active entry is suspended.",
+            "description": "Conflict. wrong_state: Only an active entry is suspended. stale_version: expectedVersion is missing or not the entry's revision; currentVersion says which it is.",
             "x-error-codes": [
-              "wrong_state"
+              "wrong_state",
+              "stale_version"
             ],
             "content": {
               "application/json": {
@@ -10893,6 +10901,13 @@
                     "value": {
                       "error": "wrong_state",
                       "detail": "Only an active entry is suspended"
+                    }
+                  },
+                  "stale_version": {
+                    "value": {
+                      "error": "stale_version",
+                      "detail": "expectedVersion is missing or not the entry's revision",
+                      "currentVersion": 5
                     }
                   }
                 }
@@ -19441,6 +19456,33 @@
           }
         }
       },
+      "SiteEntryProposal": {
+        "type": "object",
+        "description": "The action, and the version and digest the proposer read (v1.68): either one missing or not the version the action is about is 409 digest_mismatch, and nothing is proposed.",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "activate",
+              "retire",
+              "resume"
+            ]
+          },
+          "version": {
+            "type": "integer",
+            "description": "The version the action is about, as the proposer read it: the draft for activate, the active version for retire and resume."
+          },
+          "digest": {
+            "type": "string",
+            "description": "That version's digest, as the proposer read it."
+          }
+        },
+        "required": [
+          "action",
+          "version",
+          "digest"
+        ]
+      },
       "SiteEntryApproval": {
         "type": "object",
         "properties": {
@@ -19486,10 +19528,15 @@
         "properties": {
           "reason": {
             "type": "string"
+          },
+          "expectedVersion": {
+            "type": "integer",
+            "description": "The entry's revision as the person read it (v1.68): missing or another is 409 stale_version with currentVersion, and the entry stays as it is."
           }
         },
         "required": [
-          "reason"
+          "reason",
+          "expectedVersion"
         ]
       },
       "SiteEntryProofResult": {

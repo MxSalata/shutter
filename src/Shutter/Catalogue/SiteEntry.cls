@@ -749,8 +749,11 @@ ClassMethod Prove(id As %String, action As %String, actor As %String, source As 
 }
 
 /// Propose an action: the version and its digest are frozen for a second person, with a passing proof of that digest
-/// made under the catalogue, profile, gate policy and release in force (409 no_proof otherwise).
-ClassMethod Propose(id As %String, action As %String, actor As %String, source As %String, Output entry As Shutter.Catalogue.SiteEntry, Output detail As %String) As %String
+/// made under the catalogue, profile, gate policy and release in force (409 no_proof otherwise). <var>version</var> and
+/// <var>digest</var> are the ones the proposer read: when they are passed (the route always passes them), either one
+/// missing or not the version the action is about is digest_mismatch, so nobody proposes a draft rewritten since they
+/// read it. A terminal caller that names no version leaves them out.
+ClassMethod Propose(id As %String, action As %String, actor As %String, source As %String, Output entry As Shutter.Catalogue.SiteEntry, Output detail As %String, version As %String, digest As %String) As %String
 {
     Set detail = ""
     If '..Lock() Quit "busy"
@@ -761,6 +764,9 @@ ClassMethod Propose(id As %String, action As %String, actor As %String, source A
         If entry.ProposalAction '= "" Set code = "wrong_state", detail = "A proposal to " _ entry.ProposalAction _ " " _ id _ " already waits for approval" Quit
         Set v = entry.VersionFor(action, .detail)
         If '$ISOBJECT(v) Set code = $SELECT(detail [ "The action is": "bad_request", 1: "wrong_state") Quit
+        If $DATA(version) || $DATA(digest) {
+            If ($ZSTRIP($GET(version), "<>W") = "") || (+$GET(version) '= +v.Version) || ($GET(digest) '= v.Digest) Set code = "digest_mismatch", detail = "To " _ action _ " " _ id _ " is about version " _ v.Version _ " with digest " _ v.Digest _ ": the version and digest sent are not those. Someone changed the entry: read it again" Quit
+        }
         Set content = v.Content()
         If '$ISOBJECT(content) Set code = "wrong_state", detail = "Version " _ v.Version _ " of " _ id _ " cannot be read" Quit
         If action '= "retire" {
@@ -914,8 +920,11 @@ ClassMethod WaitingPlans(version As %String) As %Integer
 
 /// Suspend one active entry at once (R12): one person holding Shutter_Approve and Shutter_Configure, with a reason. The
 /// site returns to the shipped catalogue and gate for the cases it caught; the generation rises, so plans made while it
-/// applied do not complete; the suspension is recorded and warned about for as long as it lasts.
-ClassMethod Suspend(id As %String, reason As %String, actor As %String, source As %String, Output entry As Shutter.Catalogue.SiteEntry, Output detail As %String) As %String
+/// applied do not complete; the suspension is recorded and warned about for as long as it lasts. <var>expectedVersion</var> is
+/// the entry's revision as the person read it: when it is passed (the route always passes it), missing or another is
+/// stale_version, with the revision in <var>detail</var>, so a newer version is never switched off for a reason written
+/// about an older one. A terminal caller leaves it out.
+ClassMethod Suspend(id As %String, reason As %String, actor As %String, source As %String, Output entry As Shutter.Catalogue.SiteEntry, Output detail As %String, expectedVersion As %String) As %String
 {
     Set detail = ""
     Set reason = $ZSTRIP(##class(Shutter.Util.ModelView).Clean(reason), "<>W")
@@ -926,6 +935,7 @@ ClassMethod Suspend(id As %String, reason As %String, actor As %String, source A
         Set entry = ..Fresh(id)
         If '$ISOBJECT(entry) Set code = "not_found" Quit
         If entry.State '= "active" Set code = "wrong_state", detail = id _ " is " _ entry.State _ ": only an active entry is suspended" Quit
+        If $DATA(expectedVersion) && (($ZSTRIP(expectedVersion, "<>W") = "") || (+expectedVersion '= +entry.Revision)) Set code = "stale_version", detail = entry.Revision Quit
         TSTART
         Set entry.State = "suspended", entry.SuspendedBy = $EXTRACT(actor, 1, 160), entry.SuspendedAt = ##class(Shutter.Util.Time).NowUTC(), entry.SuspendedReason = $EXTRACT(reason, 1, 1000)
         $$$ThrowOnError(entry.Touch())

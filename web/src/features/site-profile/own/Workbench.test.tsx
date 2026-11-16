@@ -123,10 +123,19 @@ describe("the workbench of the site's own scenarios", () => {
     expect(within(dialog).getByTestId('own-digest')).toHaveTextContent(
       /action activate, version 1, digest sha256:/,
     );
+    const shown = /digest (sha256:[0-9a-f]+)/.exec(
+      within(dialog).getByTestId('own-digest').textContent ?? '',
+    )?.[1];
     await user.click(within(dialog).getByRole('button', { name: 'Send for approval' }));
     expect(await screen.findByTestId('own-proposal', {}, { timeout: 5000 })).toHaveTextContent(
       /approver proposed to make version 1 active/,
     );
+    // The proposal names the version and digest the dialog showed
+    expect(sent.find((s) => s.path === '/site-entries/L3/propose')?.body).toEqual({
+      action: 'activate',
+      version: 1,
+      digest: shown,
+    });
     // The author reviews their own: why they cannot approve it, and Approve is locked
     await user.click(screen.getByRole('button', { name: 'Review the proposal…' }));
     const review = await screen.findByRole('dialog', { name: 'Approve or reject: L3 version 1' });
@@ -255,6 +264,36 @@ describe("the workbench of the site's own scenarios", () => {
     const banner = await screen.findByTestId('own-scenarios-warnings', {}, { timeout: 5000 });
     expect(banner).toHaveTextContent(/L1 is suspended/);
     expect(await screen.findByRole('button', { name: 'Propose resuming it…' })).toBeInTheDocument();
+    // The suspension names the revision the page read
+    expect(sent.find((s) => s.path === '/site-entries/L1/suspend')?.body).toEqual({
+      reason: 'It floods the on-call',
+      expectedVersion: 4,
+    });
+  }, 60_000);
+
+  it("says someone changed the entry when a suspension names a revision that is no longer the entry's, and keeps the dialog open", async () => {
+    server.use(
+      http.post(`${BASE}/site-entries/:id/suspend`, () =>
+        HttpResponse.json(
+          {
+            error: 'stale_version',
+            detail: "expectedVersion is missing or not the entry's revision",
+            currentVersion: 5,
+          },
+          { status: 409 },
+        ),
+      ),
+    );
+    const user = userEvent.setup();
+    page('/site-profile?own=L1');
+    await user.click(await screen.findByRole('button', { name: 'Suspend it…' }, { timeout: 5000 }));
+    const dialog = await screen.findByRole('dialog', { name: 'Suspend L1' });
+    await user.type(within(dialog).getByLabelText(/^Reason/), 'It floods the on-call');
+    await user.click(within(dialog).getByRole('button', { name: 'Suspend now' }));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      'Someone changed this entry since you opened it: close and open it again.',
+    );
+    expect(screen.getByRole('dialog', { name: 'Suspend L1' })).toBeInTheDocument();
   }, 60_000);
 
   it("tells the version's author they cannot approve its retirement either, whatever the letter case of their name", async () => {

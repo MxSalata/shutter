@@ -270,6 +270,45 @@ Method TestARewrittenProposalCanBeRejected()
     Do $$$AssertEquals($CLASSMETHOD(site, "Change", id, ##class(Shutter.Test.SiteKit).Body(match.CaseId, near.CaseId), entry.Revision, "ut-author", "api", .e2, .problems, .warnings, .detail), "", "and the draft can be changed again: " _ detail)
 }
 
+/// A proposal is of the version and digest its proposer read: a draft rewritten and proved again since then is not
+/// proposed under their name, and the version and digest read now are. Missing ones are refused as a mismatch too.
+Method TestAProposalIsOfTheDigestRead()
+{
+    Set site = "Shutter.Catalogue.SiteEntry", kit = "Shutter.Test.SiteKit"
+    Set id = ..Draft(.match, .near)
+    Do $$$AssertEquals($CLASSMETHOD(site, "Prove", id, "activate", "ut-author", "api", .result, .detail), "", "the draft is proved")
+    Set read = ##class(Shutter.Catalogue.SiteEntryVersion).Find(id, 1).Digest
+    // Someone else rewrites the open draft (the same version number, another digest) and proves it again.
+    Set body = $CLASSMETHOD(kit, "Body", match.CaseId, near.CaseId)
+    Set body.title = "Rewritten by someone else"
+    Do $$$AssertEquals($CLASSMETHOD(site, "Change", id, body, $CLASSMETHOD(site, "ById", id).Revision, "ut-author-2", "api", .e2, .problems, .warnings, .detail), "", "the draft is rewritten: " _ detail)
+    Set now = ##class(Shutter.Catalogue.SiteEntryVersion).Find(id, 1).Digest
+    Do $$$AssertNotEquals(now, read, "under another digest")
+    Do $$$AssertEquals($CLASSMETHOD(site, "Prove", id, "activate", "ut-author-2", "api", .result, .detail), "", "and proved again")
+    Do $$$AssertEquals($CLASSMETHOD(site, "Propose", id, "activate", "ut-author", "api", .entry, .detail, 1, read), "digest_mismatch", "the digest read first is refused")
+    Do $$$AssertEquals($CLASSMETHOD(site, "Propose", id, "activate", "ut-author", "api", .entry, .detail, 2, now), "digest_mismatch", "and so is another version number")
+    Do $$$AssertEquals($CLASSMETHOD(site, "Propose", id, "activate", "ut-author", "api", .entry, .detail, "", ""), "digest_mismatch", "and none at all, when the caller passes them")
+    Do $$$AssertEquals($CLASSMETHOD(site, "ById", id).ProposalAction, "", "nothing is proposed")
+    Do $$$AssertEquals($CLASSMETHOD(site, "Propose", id, "activate", "ut-author", "api", .entry, .detail, 1, now), "", "the digest read now is proposed: " _ detail)
+    Do $$$AssertEquals(entry.ProposalDigest, now, "with that digest")
+}
+
+/// A suspension names the revision its person read: a stale one leaves the entry active, and the current one suspends it.
+Method TestASuspensionNamesTheRevisionRead()
+{
+    Set site = "Shutter.Catalogue.SiteEntry", kit = "Shutter.Test.SiteKit"
+    Set id = $CLASSMETHOD(kit, "ActiveEntry", .match, .near, .problem)
+    Do $$$AssertEquals(problem, "", "an active entry")
+    Set revision = $CLASSMETHOD(site, "ById", id).Revision
+    For stale = revision - 1, "", " " {
+        Do $$$AssertEquals($CLASSMETHOD(site, "Suspend", id, "It floods the on-call", "ut-approver", "api", .entry, .detail, stale), "stale_version", "a stale revision (""" _ stale _ """) is refused")
+        Do $$$AssertEquals(+detail, +revision, "with the current one")
+    }
+    Do $$$AssertEquals($CLASSMETHOD(site, "ById", id).State, "active", "and the entry stays active")
+    Do $$$AssertEquals($CLASSMETHOD(site, "Suspend", id, "It floods the on-call", "ut-approver", "api", .entry, .detail, revision), "", "the revision read suspends it: " _ detail)
+    Do $$$AssertEquals($CLASSMETHOD(site, "ById", id).State, "suspended", "suspended")
+}
+
 /// The two-person rule reads a user name whatever its letters' case: IRIS signs in ALICE and alice as one user.
 Method TestTheTwoPersonRuleIgnoresTheLettersCase()
 {

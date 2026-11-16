@@ -1443,9 +1443,9 @@ replaces the shipped catalogue from any JSON, answers on a demo instance only.
 | `POST /site-entries` | `Shutter_Configure` | 201 with a draft. `{fromCase}` fills the pattern with that closed case's conditions (the reserved one aside), the scope with its facts and the first fixture with the case; what the body gives stands. 400 `bad_request` with `problems` |
 | `PUT /site-entries/{id}` | `Shutter_Configure` | Rewrites the draft, or begins one beside the active version. `expectedVersion` is the entry's `revision` and is required (409 `stale_version` with `currentVersion` when it is missing or another); 409 `wrong_state` for a proposed draft or a retired entry |
 | `POST /site-entries/{id}/proof` | `Shutter_Configure` | `{action?}` (`activate` when none). Runs P1, P2 and P4 and keeps the proof: `{passed, fixtures, counts, impact, problems, context, proofId}` |
-| `POST /site-entries/{id}/propose` | `Shutter_Configure` | `{action}`. 409 `no_proof` without a passing, current proof of the version's digest; 409 `wrong_state` when a proposal already waits; 409 `too_many` (R15) |
+| `POST /site-entries/{id}/propose` | `Shutter_Configure` | `{action, version, digest}`: the version and digest the proposer read (v1.68), required; either one missing or not the version the action is about is 409 `digest_mismatch` and nothing is proposed. 409 `no_proof` without a passing, current proof of the version's digest; 409 `wrong_state` when a proposal already waits; 409 `too_many` (R15) |
 | `POST /site-entries/{id}/approvals` | `Shutter_Approve`; on a demo `Shutter_Configure` too | `{action, version, digest, decision: approve or reject, reason, safetyReference?}`. 409 `same_person`, `digest_mismatch`, `proof_failed`, `too_many`, `wrong_state`. On approve the change is made, the generation raised and the events written together; the answer is the entry with `catalogueVersion`, `approver` and `waitingPlans`, the open cases whose plan was made under the old version (R17) |
-| `POST /site-entries/{id}/suspend` | `Shutter_Approve` and `Shutter_Configure` | `{reason}` (R12); 409 `wrong_state` unless the entry is active |
+| `POST /site-entries/{id}/suspend` | `Shutter_Approve` and `Shutter_Configure` | `{reason, expectedVersion}` (R12): `expectedVersion` is the entry's `revision` as the person read it (v1.68), required (409 `stale_version` with `currentVersion` when it is missing or another, and the entry stays as it is); 409 `wrong_state` unless the entry is active |
 
 **What each shipped entry settles on at each receiver** (v1.67, for this site's guide). Each shipped entry in
 `GET /catalogue` carries `atReceivers`, one row per receiver of the profile in force, in its order: `{receiver, kind,
@@ -1465,7 +1465,7 @@ case's `catalogueEntry` and `planCreatedBy` (`policy:L1`) name the entry. The ap
 such a case, the entry's instructions and those of every other site entry that matched, and "Without it: E2, a resend by
 site policy". The Site profile page's **Our own scenarios** lists the entries and is where a person writes one (from a
 closed case: "Make this one of our scenarios" on the case), proves it, sends it for approval, and approves, rejects,
-suspends, retires or resumes it, each through the routes above; the page computes no decision and sends no field for one.
+suspends, retires or resumes it, each through the routes above, naming the version and digest or the revision it read; the page computes no case decision (who decides, the outcome) and sends no field for one, and an approval's `decision` is the person's approve or reject.
 On the public demo the page reads the entries and runs the preview ("Try it"); its saves are locked. Not in this release:
 export and import.
 
@@ -3394,7 +3394,9 @@ That `If-Match` or an approval makes the write idempotent; that a verified versi
   a body checked as a draft's is and P1, P2 and P4 run on the stored cases it names, with nothing stored, which the public
   demo's roles may run (R16); `GET /site-entries` gains `waitingPlans`; the Site profile page writes, proves, sends for
   approval, approves, rejects, suspends, retires and resumes an entry through the routes of 6.8, and on the public demo
-  reads them and runs the preview. 5: the `Shutter_Operate` row names validate and preview.
+  reads them and runs the preview. 5: the `Shutter_Operate` row names validate and preview. A proposal names the version
+  and digest its proposer read and a suspension the revision its person read, both required (409 `digest_mismatch`,
+  409 `stale_version`), so neither acts on a version changed since it was read.
 - v1.67, 16 Nov 2026 (this site's guide): 6.8: each shipped entry in `GET /catalogue` carries `atReceivers`, what a match
   of it alone settles on at each receiver of the profile in force, by the matcher's own `Settle` on that receiver's facts
   (`Shutter.Catalogue.Matcher.AtReceiver`), with a case-dependent `when` (`other_source`) returned as a condition, never

@@ -129,6 +129,17 @@ def main():
         _, body = operator.call("GET", f"/site-entries/{entry_id}")
         return body or {}
 
+    def read_for(entry_id, action):
+        """The version and digest an action is about, as a person reads them on the entry: the draft for an activation,
+        the active version otherwise."""
+        detail = site_entry(entry_id)
+        n = detail.get("draftVersion") if action == "activate" else detail.get("activeVersion")
+        digest = next((v.get("digest") for v in detail.get("versions") or [] if v.get("version") == n), None)
+        return {"action": action, "version": n, "digest": digest}
+
+    def revision_of(entry_id):
+        return {"expectedVersion": site_entry(entry_id).get("revision")}
+
     def decide(session, entry_id, action, decision="approve", digest=None, reason="site entry check"):
         proposal = site_entry(entry_id).get("proposal") or {}
         body = {"action": action, "version": proposal.get("version"), "digest": digest or proposal.get("digest"), "decision": decision, "reason": reason}
@@ -139,7 +150,7 @@ def main():
         status, proof = author.call("POST", f"/site-entries/{entry_id}/proof", {"action": action})
         if status != 200 or not (proof or {}).get("passed"):
             return status, proof
-        status, body = author.call("POST", f"/site-entries/{entry_id}/propose", {"action": action})
+        status, body = author.call("POST", f"/site-entries/{entry_id}/propose", read_for(entry_id, action))
         if status != 200:
             return status, body
         return decide(approver, entry_id, action)
@@ -190,13 +201,17 @@ def main():
         check("its pattern is the conditions the case showed, without the reserved one", content.get("pattern", {}).get("event") == ["transfer"] and "death_recorded" not in content.get("pattern", {}), str(content.get("pattern"))[:300])
         check("its scope is the case's facts", content.get("scope", {}).get("ward") == ["WARD-B"] and content.get("scope", {}).get("receiver") == [baseline.get("receiver")], str(content.get("scope")))
         check("and it has no field for who decides or the outcome", not any(k in content for k in ("decides", "preferred", "alternatives", "outcome")))
-        status, refused = author.call("POST", f"/site-entries/{first}/propose", {"action": "activate"})
+        status, refused = author.call("POST", f"/site-entries/{first}/propose", read_for(first, "activate"))
         check("a proposal with no proof is 409 no_proof", status == 409 and error_of(refused) == "no_proof", f"{status} {refused}")
         status, proof = author.call("POST", f"/site-entries/{first}/proof", {})
         rows = (proof or {}).get("fixtures") or []
         check("the proof passes: the entry leads on S2's case and leaves S1's alone", status == 200 and proof.get("passed") and len(rows) == 2 and rows[0].get("lead") == first and rows[1].get("holds") is False, f"{status} {str(proof)[:400]}")
         check("its impact counts S2's case among the last stored cases", match_id in str(((proof or {}).get("impact") or {}).get("cases")) and near_id not in str(((proof or {}).get("impact") or {}).get("cases")), str((proof or {}).get("impact"))[:300])
-        status, proposed = author.call("POST", f"/site-entries/{first}/propose", {"action": "activate"})
+        status, refused = author.call("POST", f"/site-entries/{first}/propose", {"action": "activate"})
+        check("a proposal that names no version and digest read is 409 digest_mismatch", status == 409 and error_of(refused) == "digest_mismatch", f"{status} {refused}")
+        status, refused = author.call("POST", f"/site-entries/{first}/propose", dict(read_for(first, "activate"), digest="sha256:" + "0" * 64))
+        check("and one of another digest is 409 digest_mismatch, proposing nothing", status == 409 and error_of(refused) == "digest_mismatch" and not site_entry(first).get("proposal"), f"{status} {refused}")
+        status, proposed = author.call("POST", f"/site-entries/{first}/propose", read_for(first, "activate"))
         check("proposed: the entry waits for approval", status == 200 and proposed.get("state") == "proposed" and (proposed.get("proposal") or {}).get("action") == "activate", f"{status} {str(proposed)[:300]}")
         _, unchanged = operator.call("GET", "/catalogue")
         check("a proposal changes nothing: the catalogue's version is what it was", unchanged.get("version") == version_before, unchanged.get("version"))
@@ -282,9 +297,14 @@ def main():
         # ---- 5. suspension by one approver, resumption by two ----
         status, refused = operator.call("POST", f"/site-entries/{first}/suspend", {"reason": "it floods the on-call"})
         check("an operator cannot suspend (403)", status == 403, f"{status}")
-        status, refused = approver.call("POST", f"/site-entries/{first}/suspend", {})
+        status, refused = approver.call("POST", f"/site-entries/{first}/suspend", revision_of(first))
         check("a suspension needs a reason (400)", status == 400, f"{status} {refused}")
-        status, suspended = approver.call("POST", f"/site-entries/{first}/suspend", {"reason": "It floods the on-call with escalations"})
+        revision = site_entry(first).get("revision")
+        status, refused = approver.call("POST", f"/site-entries/{first}/suspend", {"reason": "It floods the on-call with escalations"})
+        check("a suspension that names no revision read is 409 stale_version", status == 409 and error_of(refused) == "stale_version" and (refused or {}).get("currentVersion") == revision, f"{status} {refused}")
+        status, refused = approver.call("POST", f"/site-entries/{first}/suspend", {"reason": "It floods the on-call with escalations", "expectedVersion": revision - 1})
+        check("and one of an older revision is 409 stale_version, the entry still active", status == 409 and error_of(refused) == "stale_version" and site_entry(first).get("state") == "active", f"{status} {refused}")
+        status, suspended = approver.call("POST", f"/site-entries/{first}/suspend", {"reason": "It floods the on-call with escalations", "expectedVersion": revision})
         check("one approver suspends the entry at once", status == 200 and suspended.get("state") == "suspended" and (suspended.get("suspended") or {}).get("by") == "approver", f"{status} {str(suspended)[:300]}")
         _, listing = operator.call("GET", "/site-entries")
         warnings = ((listing or {}).get("status") or {}).get("warnings") or []
@@ -299,7 +319,7 @@ def main():
         check("resumed, the entry stops S2 again", case and case["state"] == "escalated" and case.get("catalogueEntry") == first, f"{why} {case and case['state']}")
 
         # ---- 6. retirement ----
-        status, refused = author.call("POST", f"/site-entries/{first}/propose", {"action": "retire"})
+        status, refused = author.call("POST", f"/site-entries/{first}/propose", read_for(first, "retire"))
         check("a retirement needs its own proof (409 no_proof)", status == 409 and error_of(refused) == "no_proof", f"{status} {refused}")
         status, retired = two_people(first, "retire")
         check("the entry is retired by two people", status == 200 and (retired or {}).get("state") == "retired", f"{status} {str(retired)[:300]}")
@@ -317,7 +337,7 @@ def main():
         for entry_id in made:
             state = site_entry(entry_id).get("state")
             if state == "active":
-                status, _ = approver.call("POST", f"/site-entries/{entry_id}/suspend", {"reason": "site entry check: left active by a failed run"})
+                status, _ = approver.call("POST", f"/site-entries/{entry_id}/suspend", dict(revision_of(entry_id), reason="site entry check: left active by a failed run"))
                 print(f"note: {entry_id} was left active and is suspended now (HTTP {status})")
 
     print(f"{len(failures)} failed" if failures else "every check passed")

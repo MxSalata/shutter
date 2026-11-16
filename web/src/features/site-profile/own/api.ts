@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, seg } from '@/api/client';
 import { keys } from '@/api/hooks';
+import { isApiError } from '@/lib/errors';
 import type {
   SiteEntryContent,
   SiteEntryDetail,
@@ -95,10 +96,18 @@ export function useProve(id: string) {
   });
 }
 
+/** What a proposal or a suspension names: the version and digest the person read, or the entry's revision. */
+export interface Read {
+  action: Action;
+  version: number;
+  digest: string;
+}
+
+/** Sends an action for approval, naming the version and digest the dialog showed (409 digest_mismatch otherwise). */
 export function usePropose(id: string) {
   const refresh = useRefresh();
   return useMutation({
-    mutationFn: (action: Action) => api.post<SiteEntryDetail>(`/site-entries/${seg(id)}/propose`, { action }),
+    mutationFn: (read: Read) => api.post<SiteEntryDetail>(`/site-entries/${seg(id)}/propose`, read),
     onSuccess: () => refresh(id),
   });
 }
@@ -128,10 +137,19 @@ export function useDecide(id: string) {
   });
 }
 
+/** Suspends the active entry, naming the revision the person read (409 stale_version otherwise). */
 export function useSuspend(id: string) {
   const refresh = useRefresh();
   return useMutation({
-    mutationFn: (reason: string) => api.post<SiteEntryDetail>(`/site-entries/${seg(id)}/suspend`, { reason }),
+    mutationFn: ({ reason, expectedVersion }: { reason: string; expectedVersion: number }) =>
+      api.post<SiteEntryDetail>(`/site-entries/${seg(id)}/suspend`, { reason, expectedVersion }),
     onSettled: () => refresh(id),
   });
+}
+
+/** The words for a refusal of a change made on what the person read: someone changed the entry since. */
+export function changedWords(e: unknown, fallback: string): string {
+  return isApiError(e) && (e.code === 'digest_mismatch' || e.code === 'stale_version')
+    ? 'Someone changed this entry since you opened it: close and open it again.'
+    : fallback;
 }

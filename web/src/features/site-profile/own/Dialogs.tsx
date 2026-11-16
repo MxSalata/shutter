@@ -10,7 +10,16 @@ import { LockedNote, LockedSaveButton } from '@/components/LockedSave';
 import { byEnv, toBecomeApprover } from '@/env/copy';
 import { describeError } from '@/lib/errors';
 import { useTechnical } from '@/stores/appearance';
-import { useDecide, usePropose, useProve, useSuspend, useValidation, versionOf, type Action } from './api';
+import {
+  changedWords,
+  useDecide,
+  usePropose,
+  useProve,
+  useSuspend,
+  useValidation,
+  versionOf,
+  type Action,
+} from './api';
 import { ProofTable } from './ProofTable';
 import { ACTION_WORDS, chipLabel, displacesWords, entryYaml } from './words';
 
@@ -179,18 +188,22 @@ export function SendDialog({
               </Button>
               <Button
                 loading={propose.isPending}
-                disabled={busy || !proof?.passed}
+                disabled={busy || !proof?.passed || !v}
                 onClick={() =>
-                  propose.mutate(action, {
-                    onSuccess: () => {
-                      notifications.show({
-                        color: 'teal',
-                        message: `${entry.id}: sent for approval. It changes nothing until a second person approves it.`,
-                      });
-                      onClose();
+                  v &&
+                  propose.mutate(
+                    { action, version: v.version, digest: v.digest },
+                    {
+                      onSuccess: () => {
+                        notifications.show({
+                          color: 'teal',
+                          message: `${entry.id}: sent for approval. It changes nothing until a second person approves it.`,
+                        });
+                        onClose();
+                      },
+                      onError: (e) => setProblem(changedWords(e, describeError(e))),
                     },
-                    onError: (e) => setProblem(describeError(e)),
-                  })
+                  )
                 }
               >
                 Send for approval
@@ -399,13 +412,16 @@ export function SuspendDialog({ entry, onClose }: { entry: SiteEntryDetail; onCl
             loading={suspend.isPending}
             onClick={() => {
               if (!reason.trim()) return setProblem('A reason is needed, for the record.');
-              suspend.mutate(reason.trim(), {
-                onSuccess: () => {
-                  notifications.show({ color: 'teal', message: `${entry.id} is suspended.` });
-                  onClose();
+              suspend.mutate(
+                { reason: reason.trim(), expectedVersion: entry.revision },
+                {
+                  onSuccess: () => {
+                    notifications.show({ color: 'teal', message: `${entry.id} is suspended.` });
+                    onClose();
+                  },
+                  onError: (e) => setProblem(changedWords(e, describeError(e))),
                 },
-                onError: (e) => setProblem(describeError(e)),
-              });
+              );
             }}
           >
             Suspend now

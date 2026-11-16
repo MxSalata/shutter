@@ -151,7 +151,8 @@ ClassMethod Proof(id As %String) As %Status
 ClassMethod Propose(id As %String) As %Status
 {
     Set body = ##class(Shutter.API.Dispatch).Body()
-    Set code = ##class(Shutter.Catalogue.SiteEntry).Propose(id, ##class(Shutter.Util.Json).Str(body, "action"), ##class(Shutter.API.Dispatch).User(), "api", .entry, .detail)
+    // The version and digest the proposer read, always passed: missing or another is digest_mismatch.
+    Set code = ##class(Shutter.Catalogue.SiteEntry).Propose(id, ##class(Shutter.Util.Json).Str(body, "action"), ##class(Shutter.API.Dispatch).User(), "api", .entry, .detail, ##class(Shutter.Util.Json).Str(body, "version"), ##class(Shutter.Util.Json).Str(body, "digest"))
     If code '= "" Quit ..Refuse(code, detail)
     Quit ##class(Shutter.API.Dispatch).Json(entry.Describe(1))
 }
@@ -177,7 +178,13 @@ ClassMethod Suspend(id As %String) As %Status
 {
     If '##class(Shutter.API.Dispatch).Allow("Shutter_Configure", 1) Quit $$$OK
     Set body = ##class(Shutter.API.Dispatch).Body()
-    Set code = ##class(Shutter.Catalogue.SiteEntry).Suspend(id, ##class(Shutter.Util.Json).Str(body, "reason"), ##class(Shutter.API.Dispatch).User(), "api", .entry, .detail)
+    // The revision the person read, always passed: missing or another is stale_version, as for a PUT.
+    Set code = ##class(Shutter.Catalogue.SiteEntry).Suspend(id, ##class(Shutter.Util.Json).Str(body, "reason"), ##class(Shutter.API.Dispatch).User(), "api", .entry, .detail, ##class(Shutter.Util.Json).Str(body, "expectedVersion"))
+    If code = "stale_version" {
+        Set extra = {}
+        Do extra.%Set("currentVersion", +detail, "number")
+        Quit ##class(Shutter.API.Dispatch).Fail("409 Conflict", "stale_version", "expectedVersion is missing or not the entry's revision", extra)
+    }
     If code '= "" Quit ..Refuse(code, detail)
     Quit ##class(Shutter.API.Dispatch).Json(##class(Shutter.Catalogue.SiteEntry).ById(id).Describe(1))
 }

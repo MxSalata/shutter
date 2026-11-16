@@ -977,7 +977,8 @@ export function siteEntryHandlers(deps: SiteEntryDeps) {
         if (denied) return denied;
         const e = find(String(params.id));
         if (!e) return fail(404, 'not_found', 'No such site entry');
-        const action = String((await bodyOf(request))?.action ?? '');
+        const body = await bodyOf(request);
+        const action = String(body?.action ?? '');
         if (e.proposal)
           return fail(
             409,
@@ -990,6 +991,13 @@ export function siteEntryHandlers(deps: SiteEntryDeps) {
             v.startsWith('The action') ? 400 : 409,
             v.startsWith('The action') ? 'bad_request' : 'wrong_state',
             v,
+          );
+        // As the core: the version and digest the proposer read, or nothing is proposed
+        if (Number(body?.version) !== v.version || body?.digest !== v.digest)
+          return fail(
+            409,
+            'digest_mismatch',
+            `To ${action} ${e.id} is about version ${v.version} with digest ${v.digest}: the version and digest sent are not those. Someone changed the entry: read it again`,
           );
         const proof = [...e.proofs]
           .reverse()
@@ -1083,10 +1091,16 @@ export function siteEntryHandlers(deps: SiteEntryDeps) {
         if (denied) return denied;
         const e = find(String(params.id));
         if (!e) return fail(404, 'not_found', 'No such site entry');
-        const reason = String((await bodyOf(request))?.reason ?? '').trim();
+        const body = await bodyOf(request);
+        const reason = String(body?.reason ?? '').trim();
         if (!reason) return fail(400, 'bad_request', 'A reason is required');
         if (e.state !== 'active')
           return fail(409, 'wrong_state', `${e.id} is ${e.state}: only an active entry is suspended`);
+        // As the core: the revision the person read, or the entry stays as it is
+        if (body?.expectedVersion === undefined || Number(body.expectedVersion) !== e.revision)
+          return fail(409, 'stale_version', "expectedVersion is missing or not the entry's revision", {
+            currentVersion: e.revision,
+          });
         e.state = 'suspended';
         e.suspended = { by: deps.who(), at: stamp(), reason };
         generation += 1;
