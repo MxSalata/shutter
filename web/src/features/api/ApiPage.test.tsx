@@ -59,13 +59,17 @@ describe('ApiPage', () => {
     renderUi(<ApiPage />, { detail: 'technical' });
     await user.type(screen.getByRole('textbox', { name: 'Find' }), 'site-profile');
     const found = routeButtons();
-    expect(found).toHaveLength(3);
+    expect(found).toHaveLength(5);
     expect(found[0]).toHaveAccessibleName(/^GET \/api\/shutter\/site-profile /);
     expect(found[1]).toHaveAccessibleName(/^PUT \/api\/shutter\/site-profile /);
     expect(found[2]).toHaveAccessibleName(/^GET \/api\/shutter\/site-profile\/history /);
+    // Set up the site's turn route: it sends a typed answer and stores no profile
+    expect(found[3]).toHaveAccessibleName(/^POST \/api\/shutter\/site-profile\/setup-turns /);
+    expect(found[4]).toHaveAccessibleName(/^GET \/api\/shutter\/site-profile\/setup-turns\/\{id\} /);
     await user.selectOptions(screen.getByRole('combobox', { name: 'Show' }), 'changes');
-    expect(routeButtons()).toHaveLength(1);
+    expect(routeButtons()).toHaveLength(2);
     expect(routeButtons()[0]).toHaveTextContent('Shutter_Configure');
+    expect(routeButtons()[1]).toHaveTextContent('Shutter_LiveAgents');
     await user.clear(screen.getByRole('textbox', { name: 'Find' }));
     await user.selectOptions(screen.getByRole('combobox', { name: 'Needs' }), 'Shutter_Intake');
     expect(routeButtons()).toHaveLength(1);

@@ -6,6 +6,7 @@ import { JsonBlock } from '@/components/JsonBlock';
 import { LockedNote, LockedSaveButton } from '@/components/LockedSave';
 import { byEnv } from '@/env/copy';
 import type { Change } from './profile';
+import type { DraftedAnswer } from './setup/setupStore';
 
 export type SaveProblem =
   { kind: 'stale'; currentVersion: number | null } | { kind: 'error'; message: string } | null;
@@ -21,6 +22,7 @@ export function ReviewModal({
   body,
   saving,
   locked = null,
+  drafted = [],
   problem,
   onCancel,
   onSave,
@@ -36,6 +38,11 @@ export function ReviewModal({
    * note beside it.
    */
   locked?: string | null;
+  /**
+   * The answers of this draft that Ask Shutter drafted from a person's words in Set up the site and nobody has changed
+   * since: each is listed with its value, the quoted words and what it does, and the Save waits for the tick below them.
+   */
+  drafted?: DraftedAnswer[];
   problem: SaveProblem;
   onCancel: () => void;
   onSave: () => void;
@@ -45,6 +52,8 @@ export function ReviewModal({
   const tier3 = changes.filter((c) => c.tier3Automatic);
   const lessOversight = changes.filter((c) => c.lessOversight);
   const [acknowledged, setAcknowledged] = useState(false);
+  // Clear on every opening: the dialog is unmounted when it closes
+  const [read, setRead] = useState(false);
   const confirmOnly = changes.length === 0;
   const lockedId = useId();
   return (
@@ -64,6 +73,34 @@ export function ReviewModal({
             trial: "In the trial, saving changes only this browser's copy, until you reload or leave.",
           })}
         </Text>
+        {drafted.length ? (
+          <Stack
+            gap="xs"
+            component="section"
+            aria-labelledby={`${lockedId}-drafted`}
+            className="review-drafted"
+          >
+            <Text size="sm" fw={600} id={`${lockedId}-drafted`}>
+              Drafted by Ask Shutter ({drafted.length})
+            </Text>
+            <List size="sm" spacing={6} aria-labelledby={`${lockedId}-drafted`}>
+              {drafted.map((d) => (
+                <List.Item key={`${d.receiver}/${d.key}`}>
+                  <Text size="sm" style={{ overflowWrap: 'anywhere' }}>
+                    {d.receiver}, {d.label.toLowerCase()}: <b>{d.value}</b>. Read from the words &ldquo;
+                    {d.quote}
+                    &rdquo;. {d.consequence}
+                  </Text>
+                </List.Item>
+              ))}
+            </List>
+            <Checkbox
+              checked={read}
+              onChange={(e) => setRead(e.currentTarget.checked)}
+              label="I have read the answers Ask Shutter drafted."
+            />
+          </Stack>
+        ) : null}
         {confirmOnly ? (
           <Text size="sm">
             The answers stay as they are, and are recorded as answered by you: the shipped answers stop being
@@ -153,7 +190,11 @@ export function ReviewModal({
           ) : (
             <Button
               loading={saving}
-              disabled={(tier3.length > 0 && !acknowledged) || problem?.kind === 'stale'}
+              disabled={
+                (tier3.length > 0 && !acknowledged) ||
+                (drafted.length > 0 && !read) ||
+                problem?.kind === 'stale'
+              }
               onClick={onSave}
             >
               {confirmOnly ? `Confirm as version ${next}` : `Save version ${next}`}

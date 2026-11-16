@@ -10,7 +10,7 @@ Class Shutter.Bridge.Catalogue
 Parameter EVIDENCETOOLS = "GetSnapshot,GetMessage,GetValidation,GetWardState,GetReceipt,GetTimeline,GetRoute,GetFailure";
 
 /// The terminal tools a run may carry, one each, named as their classes are.
-Parameter TERMINALS = "SubmitFindings,SubmitPlan,SubmitAnswer,SubmitBoardAnswer,SubmitReview";
+Parameter TERMINALS = "SubmitFindings,SubmitPlan,SubmitAnswer,SubmitBoardAnswer,SubmitReview,SubmitSetupTurn";
 
 /// The tool names a knowledge collection adds when attached (%AI.RAG.KnowledgeBase.AddToAgent): search_<collection>.
 Parameter KNOWLEDGEPREFIX = "search_";

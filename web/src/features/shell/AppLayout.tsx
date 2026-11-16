@@ -52,7 +52,7 @@ import { trialChrome } from '@/trial/slot';
 import { bannerForm } from '@/trial/visit';
 import { AssistantRouteSync } from '@/features/assistant/AssistantRouteSync';
 import { HeaderAssistantButton } from '@/features/assistant/HeaderAssistantButton';
-import { ASSISTANT_ASIDE_WIDTH, useAssistantWide } from '@/features/assistant/panel';
+import { ASSISTANT_ASIDE_WIDTH, useAskInPage, useAssistantWide } from '@/features/assistant/panel';
 import { useAssistant } from '@/features/assistant/store';
 
 /**
@@ -329,7 +329,9 @@ export function AppLayout() {
   const header = chrome ? { base: 92, sm: banner === 'compact' ? 88 : 96 } : 56;
   // Ask Shutter: beside the page from the wide breakpoint (the shell's aside, which the page keeps clear of), a drawer
   // below it; open or closed is remembered per tab (features/assistant)
-  const asking = useAssistant((s) => s.open);
+  // Set up the site holds Ask Shutter in its own conversation: no panel beside it
+  const askInPage = useAskInPage();
+  const asking = useAssistant((s) => s.open) && !askInPage;
   const wide = useAssistantWide();
   const beside = asking && wide;
   useFocusOnPageChange(pathname);

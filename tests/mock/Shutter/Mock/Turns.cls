@@ -47,6 +47,8 @@ ClassMethod Answer(ctx As %DynamicObject, request As %DynamicObject, size As %In
     Set first = conv.users.%Get(0)
     // A question about a page (CONTRACTS 14.6): the Explain agent in the tier page, with no case and no recording.
     If ##class(Shutter.Util.Json).Str(..Context(first), "tier") = "page" Quit ..PageTurn(ctx, conv, n, offered, ..Context(first), request, size, log)
+    // A turn of Set up the site (CONTRACTS 14.7): the Set-up guide agent in the tier setup, with no case and no recording.
+    If ##class(Shutter.Util.Json).Str(..Context(first), "tier") = "setup" Quit ..SetupTurn(ctx, conv, n, offered, ..Context(first), request, size, log)
     Set case = ..TagCase(first)
     If (case = "") || (case '= ctx.c) Quit ..Refuse("The evidence names case " _ case _ " and the run is for " _ ctx.c, "context_mismatch")
     Set heading = ..Heading(ctx.m)
@@ -149,6 +151,89 @@ ClassMethod PageTurn(ctx As %DynamicObject, conv As %DynamicObject, n As %Intege
     Set text = ..#PREFIX _ "The " _ $CLASSMETHOD(j, "Str", context, "page") _ " page" _ $SELECT(title '= "": ", " _ title, 1: "") _ ", as its summary shows it" _ $SELECT(named '= "": ": " _ named, 1: ", with no lists") _ ". Deterministic, from the API mimic; no model answered the question."
     Set answer = {"answer": ($EXTRACT(text, 1, 1100)), "cites": (cites), "confidence": "low"}
     Quit ..Reply(request, size, n, "", [{"name": (..Offer(offered, ctx.t)), "arguments": ({"caseId": (ctx.c), "answer": (answer)}.%ToJSON())}])
+}
+
+/// One turn of Set up the site: the run's id in the evidence tag, the Set-up guide agent's instructions and the terminal
+/// tool offered, and no evidence tool (the tier offers its knowledge search and SubmitSetupTurn only), or the call is
+/// refused. Then the knowledge search once with the person's text, then SubmitSetupTurn with a reading by keyword, then
+/// the closing sentence. The reading drafts only fields the request marks "you", each with the words it matched as its
+/// quote: the kind from a word such as whiteboard, record or laboratory; the tier from "tier N"; the description from
+/// "it is ...". A text that says "switch recovery on" makes it name recovery.mode instead, every time, which the core
+/// refuses, so a test sees a forged proposal end the run with nothing drafted. Never a recording: a turn has none.
+ClassMethod SetupTurn(ctx As %DynamicObject, conv As %DynamicObject, n As %Integer, offered As %DynamicObject, context As %DynamicObject, request As %DynamicObject, size As %Integer, log As %DynamicObject) As %DynamicObject
+{
+    Set j = "Shutter.Util.Json"
+    Set log.source = "setup"
+    Set id = ..TagCase(conv.users.%Get(0))
+    If (id = "") || (id '= ctx.c) Quit ..Refuse("The evidence names " _ id _ " and the run is for " _ ctx.c, "context_mismatch")
+    If conv.system '[ "# Read one answer about a receiver" Quit ..Refuse("The instructions are not the Set-up guide agent's", "context_mismatch")
+    If ..Offer(offered, ctx.t) = "" Quit ..Refuse("The terminal tool " _ ctx.t _ " is not offered", "context_mismatch")
+    Set iter = offered.%GetIterator()
+    While iter.%GetNext(.k) {
+        Set bare = ..Bare(k)
+        If (bare '= ctx.t) && ($EXTRACT(bare, 1, 7) '= "search_") Return ..Refuse("The tier setup offers a tool it must not: " _ bare, "context_mismatch")
+    }
+    Set term = ..Terminal(conv, ctx.t)
+    If term.accepted Quit ..Reply(request, size, n, ..#PREFIX _ "Read the answer about the receiver.")
+    If term.refusals > 1 Quit ..Reply(request, size, n, ..#PREFIX _ ctx.t _ " refused: " _ $EXTRACT(term.problems, 1, 1500))
+    Set text = $CLASSMETHOD(j, "Str", context.%Get("text"), "text")
+    If (n = 0) && (conv.users.%Size() = 1) {
+        Set name = ..Offer(offered, "search_explain")
+        If name '= "" {
+            Set args = {"query": ($EXTRACT(text, 1, 200))}
+            If ..Takes(offered.%Get(name), "top_k") Set args."top_k" = 3
+            Quit ..Reply(request, size, n, "", [{"name": (name), "arguments": (args.%ToJSON())}])
+        }
+    }
+    Set setup = context.%Get("setup")
+    If '$ISOBJECT(setup) Set setup = {}
+    Set receiver = $CLASSMETHOD(j, "Str", setup.%Get("receiver"), "name")
+    Set fields = setup.%Get("fields")
+    If '$ISOBJECT(fields) Set fields = []
+    Set proposals = [], drafted = "", read = ""
+    If $ZCONVERT(text, "L") [ "switch recovery on" {
+        // A forged proposal: a person-only field, which the core refuses whatever the words say.
+        Do proposals.%Push({"field": "recovery.mode", "receiver": (receiver), "to": "enabled", "quote": "switch recovery on"})
+    } Else {
+        Set fi = fields.%GetIterator()
+        While fi.%GetNext(, .f) {
+            Continue:'$ISOBJECT(f)
+            Continue:$CLASSMETHOD(j, "Str", f, "who")'="you"
+            Set field = $CLASSMETHOD(j, "Str", f, "id"), key = $PIECE(field, ".", 2), to = "", quote = ""
+            If key = "category" {
+                For pair = "whiteboard:current_state", "bed manager:current_state", "porter:current_state", "patients are now:current_state", "movement history:history_of_record", "patient record:history_of_record", "warehouse:history_of_record", "laborator:orders_results", "results:orders_results", "orders:orders_results" {
+                    Set at = $FIND($ZCONVERT(text, "L"), $PIECE(pair, ":", 1))
+                    Continue:'at
+                    Set to = $PIECE(pair, ":", 2), quote = $EXTRACT(text, at - $LENGTH($PIECE(pair, ":", 1)), at - 1)
+                    Quit
+                }
+            } ElseIf key = "tier" {
+                Set m = ##class(%Regex.Matcher).%New("(?i)tier ([123])", text)
+                If m.Locate() && $ISOBJECT(f.%Get("options")) {
+                    Set oi = f.%Get("options").%GetIterator()
+                    While oi.%GetNext(, .option) { If option = m.Group(1) Set to = m.Group(1), quote = $EXTRACT(text, m.Start, m.End - 1) }
+                }
+            } ElseIf key = "system" {
+                Set m = ##class(%Regex.Matcher).%New("(?i)\b(?:it is|it's|this is) ((?:the |a |an )?[a-z][a-z -]{2,60})", text)
+                If m.Locate() Set to = $ZSTRIP(m.Group(1), "<>W"), quote = to
+            }
+            Continue:to=""
+            Do proposals.%Push({"field": (field), "receiver": (receiver), "to": (to), "quote": (quote)})
+            Set drafted = drafted _ "," _ field, read = read _ $SELECT(read = "": "", 1: "; ") _ $CLASSMETHOD(j, "Str", f, "label") _ ": " _ to
+        }
+    }
+    // The next question: the first field of the checklist that is neither answered nor drafted in this turn.
+    Set ask = ""
+    Set fi = fields.%GetIterator()
+    While fi.%GetNext(, .f) {
+        Continue:'$ISOBJECT(f)
+        Set field = $CLASSMETHOD(j, "Str", f, "id")
+        If '$CLASSMETHOD(j, "Bool", f, "answered") && '$FIND(drafted _ ",", "," _ field _ ",") Set ask = {"field": (field), "receiver": (receiver)} Quit
+    }
+    Set say = ..#PREFIX _ $SELECT(read '= "": "Read from your words about " _ receiver _ ": " _ read _ ".", 1: "Nothing in your words about " _ receiver _ " could be read as an answer.") _ " Deterministic, from the API mimic; no model read the answer."
+    Set turn = {"say": ($EXTRACT(say, 1, 780)), "proposals": (proposals)}
+    If $ISOBJECT(ask) Set turn.ask = ask
+    Quit ..Reply(request, size, n, "", [{"name": (..Offer(offered, ctx.t)), "arguments": ({"caseId": (ctx.c), "turn": (turn)}.%ToJSON())}])
 }
 
 /// The member's recording as turns to replay, when replay is on and the material facts of the recorded case are

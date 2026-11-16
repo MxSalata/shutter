@@ -485,8 +485,9 @@ describe('the word budget', () => {
     // The page held 2,776 words before the restyle; it is a questionnaire, so it stays long (1,775 when measured). The
     // limit was 2,000, which the page had reached, until the Orders and results card's 35 words more (2,035), and then
     // the section Our own scenarios: its heading, its intro and what it says on a site with none, 41 words (2,076), and
-    // the header's button Export this site's guide (PDF), 5 words (2,081)
-    expect(inPlain).toBeLessThanOrEqual(2085);
+    // the header's button Export this site's guide (PDF), 5 words (2,081), and question 11's second switch, for typed
+    // answers in Set up the site, 17 words: the four together measure 2,098 words
+    expect(inPlain).toBeLessThanOrEqual(2100);
     expect(inTechnical).toBeGreaterThan(inPlain);
     expect(inTechnical).toBeLessThanOrEqual(Math.round(inPlain * 1.5));
   });

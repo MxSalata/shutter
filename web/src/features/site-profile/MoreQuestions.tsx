@@ -386,9 +386,24 @@ function Model({ draft, setDraft }: { draft: SiteProfile; setDraft: SetDraft }) 
           });
         }}
       />
+      <Switch
+        id="site-model_content-setup_answers"
+        label="Read typed answers in Set up the site"
+        description="Off: no box for your own words."
+        checked={draft.model_content?.setup_answers === true}
+        onChange={(e) => {
+          const v = e.currentTarget.checked;
+          setDraft((d) => {
+            d.model_content = { ...(d.model_content ?? {}), setup_answers: v };
+          });
+        }}
+      />
       <QuestionDetails
-        keys={[['model_content.free_text', draft.model_content?.free_text, 'false']]}
-        more="The tokens look like MRN-T1 and ENC-T1. On: the note text goes with the patient's identifiers, name and date of birth replaced by tokens, up to 500 characters (never a binary or reference value); it can still carry other people's names and clinical details."
+        keys={[
+          ['model_content.free_text', draft.model_content?.free_text, 'false'],
+          ['model_content.setup_answers', draft.model_content?.setup_answers, 'false'],
+        ]}
+        more="The tokens look like MRN-T1 and ENC-T1. On: the note text goes with the patient's identifiers, name and date of birth replaced by tokens, up to 500 characters (never a binary or reference value); it can still carry other people's names and clinical details. Typed answers: on, what a person types about a receiver in Set up the site goes to the model with that receiver's name and description, and the model drafts its description, kind and tier for review; it sets nothing else and saves nothing."
       />
     </Section>
   );

@@ -20,6 +20,7 @@ import {
   ASSISTANT_PANEL_ID,
   askAboutButtonId,
   assistantTitle,
+  useAskInPage,
   useAssistantContext,
   useAssistantWide,
   type AssistantContext,
@@ -182,7 +183,9 @@ export function AssistantAside() {
 export function AssistantOverlay() {
   const ctx = useAssistantContext();
   const title = assistantTitle(ctx);
-  const open = useAssistant((s) => s.open);
+  // A page that holds Ask Shutter itself has no drawer over it
+  const inPage = useAskInPage();
+  const open = useAssistant((s) => s.open) && !inPage;
   const onClose = useClosePanel();
   const wide = useAssistantWide();
   const phone = useMediaQuery('(max-width: 48em)', false, { getInitialValueInEffect: false });

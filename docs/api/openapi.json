@@ -10916,6 +10916,423 @@
           }
         }
       }
+    },
+    "/api/shutter/site-profile/setup-turns": {
+      "post": {
+        "operationId": "setupTurnAsk",
+        "tags": [
+          "site profile"
+        ],
+        "summary": "Send a typed answer about a receiver to Ask Shutter",
+        "description": "Set up the site: what a person typed about one receiver of their draft. The Set-up guide agent reads it live in the tier setup, with the explain collection's search and SubmitSetupTurn and nothing that reads a case or writes, and drafts answers for the person to review: only the receiver's description, and the kind and tier of a receiver that is not in the profile in force. Every policy, capability, site-wide switch and the recovery mode stay a person's own answer; the core refuses a turn that names one (Shutter.Util.ProfileSetup.CheckTurn), and a turn's proposals pass or fail together.\n\nThe route stores no profile and no draft: it reads the stored profile, keeps the turn's own row (the text, what the agent is shown, the part of the draft its checks read) and its run, and records nothing. A drafted answer is saved only by the Site profile page's review and PUT /site-profile.\n\nOff by default: while the site profile's model_content.setup_answers is not true the route answers 409 setup_drafting_off and no model is called. A text with a control, invisible or direction-changing character, a link (a bare domain included), an address, a run of six or more digits, a number of ten or more digits with spaces or hyphens, or the shape of a credential (a key prefix, a long hex or base64 run included) is refused 400 and is neither sent nor stored, and so is a turn about a receiver whose name fails the same rule. A drafted description is a part of its quote, which is part of what the person typed about that receiver; a kind or tier is drafted only while the draft leaves it unanswered.\n\nNeeds Shutter_Operate and Shutter_LiveAgents. A change: send X-Requested-With: Shutter. An Idempotency-Key replays the first reply.\n\nCONTRACTS 14.7.",
+        "x-contract": "docs/CONTRACTS.md section 14.7",
+        "x-required-resource": [
+          "Shutter_Operate",
+          "Shutter_LiveAgents"
+        ],
+        "x-writes": true,
+        "x-idempotent": true,
+        "x-dispatch": "Shutter.API.Dispatch.SetupTurnAsk",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/XRequestedWith"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendSetupTurn"
+              },
+              "example": {
+                "receiver": "Bed Board",
+                "text": "It is the ward whiteboard, it only shows where patients are now",
+                "draft": {
+                  "receivers": [
+                    {
+                      "name": "Bed Board",
+                      "features": {
+                        "conditional_writes": false,
+                        "receipts": false,
+                        "history": false,
+                        "dry_run": false
+                      }
+                    }
+                  ],
+                  "policy": {
+                    "1": {
+                      "single": "approval"
+                    },
+                    "2": {
+                      "single": "approval"
+                    },
+                    "3": {
+                      "single": "approval"
+                    }
+                  }
+                },
+                "baseVersion": 12,
+                "draftRevision": 3
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Where the turn sits; read what was drafted with GET /site-profile/setup-turns/{id}.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetupTurnAsked"
+                },
+                "example": {
+                  "turnId": "ST-000001",
+                  "conversation": "SC-000001",
+                  "state": "pending"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request. bad_request: A body over 400000 characters or out of shape, a receiver the draft does not name, a text missing or over 500 characters, a text that holds a link, an address, a run of six or more digits or the shape of a credential, a baseVersion that is not a number, or a conversation that is not an id. Or: Idempotency-Key is longer than 128 characters.",
+            "x-error-codes": [
+              "bad_request"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "bad_request": {
+                    "value": {
+                      "error": "bad_request",
+                      "detail": "A body over 400000 characters or out of shape, a receiver the draft does not name, a text missing or over 500 characters, a text that holds a link, an address, a run of six or more digits or the shape of a credential, a baseVersion that is not a number, or a conversation that is not an id. Or: Idempotency-Key is longer than 128 characters"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in. unauthenticated: Sign in first.",
+            "x-error-codes": [
+              "unauthenticated"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "unauthenticated": {
+                    "value": {
+                      "error": "unauthenticated",
+                      "detail": "Sign in first"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden. forbidden: This needs Shutter_Operate.; csrf: Changes need the header X-Requested-With: Shutter.; live_agents_only: Typed answers are read live only: that needs Shutter_LiveAgents, which the judges' account has.",
+            "x-error-codes": [
+              "forbidden",
+              "csrf",
+              "live_agents_only"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "forbidden": {
+                    "value": {
+                      "error": "forbidden",
+                      "detail": "This needs Shutter_Operate"
+                    }
+                  },
+                  "csrf": {
+                    "value": {
+                      "error": "csrf",
+                      "detail": "Changes need the header X-Requested-With: Shutter"
+                    }
+                  },
+                  "live_agents_only": {
+                    "value": {
+                      "error": "live_agents_only",
+                      "detail": "Typed answers are read live only: that needs Shutter_LiveAgents, which the judges' account has"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found. not_found: No conversation SC-000001 of yours.",
+            "x-error-codes": [
+              "not_found"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "not_found": {
+                    "value": {
+                      "error": "not_found",
+                      "detail": "No conversation SC-000001 of yours"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict. setup_drafting_off: Reading typed answers is switched off in the site profile (model_content.setup_answers): Set up the site works with its controls and written explanations, and no model is called.; live_unavailable: The day's budget or the caller's share is spent, or the model provider refuses the key (with live).; no_model: No model answers here (the agents replay recordings, and a typed answer has none): reading typed answers needs a model key.; stale_version: baseVersion is not the stored profile's version (with currentVersion).; turn_pending: A turn of this conversation is still being read, or another request on it is being admitted: one turn at a time (with turnId when one is being read).; conversation_full: This conversation has its 24 turns: discard the draft or go on with the page's controls.; idempotency_key_reused: The key was used with another body.",
+            "x-error-codes": [
+              "setup_drafting_off",
+              "live_unavailable",
+              "no_model",
+              "stale_version",
+              "turn_pending",
+              "conversation_full",
+              "idempotency_key_reused"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "setup_drafting_off": {
+                    "value": {
+                      "error": "setup_drafting_off",
+                      "detail": "Reading typed answers is switched off in the site profile (model_content.setup_answers): Set up the site works with its controls and written explanations, and no model is called"
+                    }
+                  },
+                  "live_unavailable": {
+                    "value": {
+                      "error": "live_unavailable",
+                      "detail": "The day's budget or the caller's share is spent, or the model provider refuses the key (with live)"
+                    }
+                  },
+                  "no_model": {
+                    "value": {
+                      "error": "no_model",
+                      "detail": "No model answers here (the agents replay recordings, and a typed answer has none): reading typed answers needs a model key"
+                    }
+                  },
+                  "stale_version": {
+                    "value": {
+                      "error": "stale_version",
+                      "detail": "baseVersion is not the stored profile's version (with currentVersion)"
+                    }
+                  },
+                  "turn_pending": {
+                    "value": {
+                      "error": "turn_pending",
+                      "detail": "A turn of this conversation is still being read: one turn at a time (with turnId)"
+                    }
+                  },
+                  "conversation_full": {
+                    "value": {
+                      "error": "conversation_full",
+                      "detail": "This conversation has its 24 turns: discard the draft or go on with the page's controls"
+                    }
+                  },
+                  "idempotency_key_reused": {
+                    "value": {
+                      "error": "idempotency_key_reused",
+                      "detail": "The key was used with another body"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error. turn_failed: The question could not be stored.",
+            "x-error-codes": [
+              "turn_failed"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "turn_failed": {
+                    "value": {
+                      "error": "turn_failed",
+                      "detail": "The question could not be stored"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "Bad gateway. no_answer: The item did not answer.",
+            "x-error-codes": [
+              "no_answer"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "no_answer": {
+                    "value": {
+                      "error": "no_answer",
+                      "detail": "The item did not answer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service unavailable. no_service: The production's API service is not running.; not_queued: The request could not be queued.",
+            "x-error-codes": [
+              "no_service",
+              "not_queued"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "no_service": {
+                    "value": {
+                      "error": "no_service",
+                      "detail": "The production's API service is not running"
+                    }
+                  },
+                  "not_queued": {
+                    "value": {
+                      "error": "not_queued",
+                      "detail": "The request could not be queued"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/shutter/site-profile/setup-turns/{id}": {
+      "get": {
+        "operationId": "setupTurnGet",
+        "tags": [
+          "site profile"
+        ],
+        "summary": "A turn of Set up the site and what was drafted",
+        "description": "For the one who asked it; anyone else gets 404, as for an id that is not there. A turn left pending or answering for 10 minutes is marked failed when it is read. What the agent was shown and the part of the draft kept with the turn are not sent back: the asker sent the draft.\n\nNeeds Shutter_Operate.\n\nCONTRACTS 14.7.",
+        "x-contract": "docs/CONTRACTS.md section 14.7",
+        "x-required-resource": "Shutter_Operate",
+        "x-writes": false,
+        "x-idempotent": false,
+        "x-dispatch": "Shutter.API.Dispatch.SetupTurnGet",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^ST-[0-9]+$"
+            },
+            "description": "The turn's id, such as ST-000001.",
+            "example": "ST-000001"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The turn, its state and, once accepted, what was said and drafted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetupTurn"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in. unauthenticated: Sign in first.",
+            "x-error-codes": [
+              "unauthenticated"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "unauthenticated": {
+                    "value": {
+                      "error": "unauthenticated",
+                      "detail": "Sign in first"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden. forbidden: This needs Shutter_Operate.",
+            "x-error-codes": [
+              "forbidden"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "forbidden": {
+                    "value": {
+                      "error": "forbidden",
+                      "detail": "This needs Shutter_Operate"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found. not_found: No turn ST-000001 of yours.",
+            "x-error-codes": [
+              "not_found"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "not_found": {
+                    "value": {
+                      "error": "not_found",
+                      "detail": "No turn ST-000001 of yours"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -17754,9 +18171,13 @@
             "properties": {
               "free_text": {
                 "type": "boolean"
+              },
+              "setup_answers": {
+                "type": "boolean",
+                "description": "Whether what a person types in Set up the site may be read by a model, which drafts answers for review (CONTRACTS 14.7). Off unless true: POST /site-profile/setup-turns then answers 409 setup_drafting_off and no model is called."
               }
             },
-            "description": "What may leave IRIS for a model beyond tokens and flags (CONTRACTS 9)."
+            "description": "What may leave IRIS for a model beyond tokens and flags (CONTRACTS 9 and 14.7)."
           },
           "feed": {
             "type": "object",
@@ -19736,6 +20157,279 @@
           "outcome",
           "outcomeRef",
           "whenOtherSource"
+        ]
+      },
+      "SendSetupTurn": {
+        "description": "POST /site-profile/setup-turns: what a person typed about one receiver of their draft (CONTRACTS 14.7).",
+        "type": "object",
+        "properties": {
+          "conversation": {
+            "type": "string",
+            "pattern": "^SC-[0-9]{6,}$",
+            "description": "The conversation's id, as the first turn's answer gave it; left out for a first turn. The conversation belongs to who started it."
+          },
+          "receiver": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The receiver the answer is about, by its name in the draft."
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "description": "What the person typed. Refused when it holds a link, an address, a run of six or more digits or the shape of a credential; a refused text is neither sent nor stored."
+          },
+          "draft": {
+            "$ref": "#/components/schemas/SiteProfile",
+            "description": "The draft as the page holds it. It is not stored: the turn keeps the receiver's own entry, the policy table, a site-wide history_policy, the recovery mode and the allowed mail domains, which its checks read."
+          },
+          "baseVersion": {
+            "type": "integer",
+            "description": "The stored profile's version the draft was made from; 409 stale_version when it is no longer the stored one."
+          },
+          "draftRevision": {
+            "type": "integer",
+            "description": "The page's count of the draft's changes, echoed back with the turn."
+          }
+        },
+        "required": [
+          "receiver",
+          "text",
+          "draft",
+          "baseVersion"
+        ]
+      },
+      "SetupTurnAsked": {
+        "description": "POST /site-profile/setup-turns answers 202 with the turn's id and the conversation's.",
+        "type": "object",
+        "properties": {
+          "turnId": {
+            "type": "string",
+            "examples": [
+              "ST-000001"
+            ]
+          },
+          "conversation": {
+            "type": "string",
+            "examples": [
+              "SC-000001"
+            ]
+          },
+          "state": {
+            "$ref": "#/components/schemas/QuestionState"
+          }
+        },
+        "required": [
+          "turnId",
+          "conversation",
+          "state"
+        ]
+      },
+      "SetupProposal": {
+        "description": "One answer Ask Shutter drafted from the person's words, as the core accepted it (Shutter.Util.ProfileSetup.CheckTurn).",
+        "type": "object",
+        "properties": {
+          "field": {
+            "type": "string",
+            "enum": [
+              "receivers[].system",
+              "receivers[].category",
+              "receivers[].tier"
+            ],
+            "description": "The only fields an agent may draft: a receiver's description, and the kind and tier of a receiver that is not in the profile in force."
+          },
+          "receiver": {
+            "type": "string",
+            "description": "The receiver the turn is about."
+          },
+          "to": {
+            "type": [
+              "string",
+              "integer"
+            ],
+            "description": "The drafted value: text for the description, a kind, or the tier as 1, 2 or 3."
+          },
+          "quote": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "The person's own words the value was read from, part of what they typed in this conversation as the stored turns hold it."
+          },
+          "from": {
+            "type": [
+              "string",
+              "number",
+              "boolean",
+              "null"
+            ],
+            "description": "The draft's value when the turn was sent, null when it held none."
+          }
+        },
+        "required": [
+          "field",
+          "receiver",
+          "to",
+          "quote",
+          "from"
+        ]
+      },
+      "SetupTurnBody": {
+        "description": "A turn as the core accepted it: what Ask Shutter says, what it drafted and the question it suggests next.",
+        "type": "object",
+        "properties": {
+          "say": {
+            "type": "string",
+            "maxLength": 800,
+            "description": "Ask Shutter's own sentences, to be shown as plain text."
+          },
+          "proposals": {
+            "type": "array",
+            "maxItems": 3,
+            "items": {
+              "$ref": "#/components/schemas/SetupProposal"
+            }
+          },
+          "ask": {
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "field": {
+                    "type": "string"
+                  },
+                  "receiver": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "field",
+                  "receiver"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A field of the site profile's table, of the same receiver, or null."
+          }
+        },
+        "required": [
+          "say",
+          "proposals",
+          "ask"
+        ]
+      },
+      "SetupTurn": {
+        "description": "GET /site-profile/setup-turns/{id}: the turn, its state and what was drafted (Shutter.Store.SetupTurn).",
+        "type": "object",
+        "properties": {
+          "turnId": {
+            "type": "string"
+          },
+          "conversation": {
+            "type": "string"
+          },
+          "receiver": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string",
+            "description": "What the person typed."
+          },
+          "state": {
+            "$ref": "#/components/schemas/QuestionState"
+          },
+          "baseVersion": {
+            "type": "integer"
+          },
+          "draftRevision": {
+            "type": "integer"
+          },
+          "askedBy": {
+            "type": "string"
+          },
+          "askedAt": {
+            "type": "string"
+          },
+          "answeredAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Null until set."
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why the turn was refused (schema_failed) or the run failed. Nothing of such a turn is drafted."
+          },
+          "mode": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "examples": [
+              "live"
+            ],
+            "description": "Always live: a turn is never a recording."
+          },
+          "model": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "costUsd": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "ensMessageId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The Visual Trace link's message id."
+          },
+          "messageLink": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The run's message in the Management Portal, under the portal path of the namespace the agent ran in (Dispatch.MessageLink); null with ensMessageId."
+          },
+          "turn": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SetupTurnBody"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The accepted turn, null until answered and for a refused or failed turn."
+          }
+        },
+        "required": [
+          "turnId",
+          "conversation",
+          "receiver",
+          "text",
+          "state",
+          "baseVersion",
+          "draftRevision",
+          "askedBy",
+          "askedAt",
+          "answeredAt",
+          "error",
+          "mode",
+          "model",
+          "costUsd",
+          "ensMessageId",
+          "messageLink",
+          "turn"
         ]
       }
     }

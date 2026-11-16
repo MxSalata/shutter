@@ -14,7 +14,7 @@ import {
 import { notifications } from '@mantine/notifications';
 import { IconChevronDown, IconPlus, IconPrinter, IconTrash, IconVersions } from '@tabler/icons-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Link, useSearchParams } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { RunbookField } from './RunbookField';
 import { api } from '@/api/client';
@@ -75,6 +75,11 @@ import { SaveBar } from './SaveBar';
 import { OwnScenarios } from './OwnScenarios';
 import { VersionsPanel } from './VersionsPanel';
 import { SuggestionCard } from './SuggestionCard';
+import { SetupDraftCard } from './SetupDraftCard';
+import { SETUP_DRAFT_TITLE_ID, draftRows } from './setup/draftRows';
+import { answerText, questionOfKey } from './setup/fields';
+import { SetupLink } from './setup/SetupLink';
+import { newRid, useSetup } from './setup/setupStore';
 import {
   FACT_PARAM,
   SUGGEST_PARAM,
@@ -395,10 +400,13 @@ function ReceiverFields({
 function ProfileForm({
   draft,
   setDraft,
+  setRids,
   problem,
 }: {
   draft: SiteProfile;
   setDraft: (fn: (d: SiteProfile) => void) => void;
+  /** The page's receiver ids, kept in step with a receiver added or removed here. */
+  setRids: (fn: (ids: string[]) => string[]) => void;
   problem: Problem;
 }) {
   const err = (path: string) => (problem?.path === path ? problem.message : undefined);
@@ -445,7 +453,10 @@ function ProfileForm({
                 profile={draft}
                 problem={problem}
                 update={(fn) => setDraft((d) => fn(d.receivers[i]))}
-                remove={() => setDraft((d) => void d.receivers.splice(i, 1))}
+                remove={() => {
+                  setDraft((d) => void d.receivers.splice(i, 1));
+                  setRids((ids) => ids.filter((_, j) => j !== i));
+                }}
               />
             ))}
             <Group>
@@ -453,7 +464,10 @@ function ProfileForm({
                 variant="light"
                 size="xs"
                 leftSection={<IconPlus size={14} />}
-                onClick={() => setDraft((d) => void d.receivers.push(newReceiver()))}
+                onClick={() => {
+                  setDraft((d) => void d.receivers.push(newReceiver()));
+                  setRids((ids) => [...ids, newRid()]);
+                }}
               >
                 Add a receiver
               </Button>
@@ -776,12 +790,32 @@ function Profile({
   const [search, setSearch] = useSearchParams();
   const [suggested] = useState(suggestion);
   const [showSuggestion, setShowSuggestion] = useState(!!suggested);
+  // A draft handed over by Set up the site (in memory, this tab): the form holds it and the review opens on it at once.
+  // A draft made against a version that is no longer in force pre-fills nothing, as a stale suggestion does
+  const navigate = useNavigate();
+  const [handed] = useState(() => useSetup.getState().handover);
+  const handedHere = !!handed && handed.baseVersion === view.version;
+  const [showHanded, setShowHanded] = useState(!!handed);
+  useEffect(() => {
+    if (useSetup.getState().handover) useSetup.setState({ handover: null });
+  }, []);
   const [draft, setDraftState] = useState<SiteProfile>(() =>
-    suggested?.result.ok ? suggested.result.profile : clone(view.profile),
+    handed && handedHere
+      ? clone(handed.draft)
+      : suggested?.result.ok
+        ? suggested.result.profile
+        : clone(view.profile),
+  );
+  // The page's own id of each receiver of the draft, in its order: a hand-over's ids, so an answer Ask Shutter drafted
+  // follows its receiver through a rename here, and fresh ones otherwise
+  const [rids, setRids] = useState<string[]>(() =>
+    handed && handedHere && handed.rids.length === handed.draft.receivers.length
+      ? [...handed.rids]
+      : (suggested?.result.ok ? suggested.result.profile : view.profile).receivers.map(() => newRid()),
   );
   const [base, setBase] = useState<SiteProfileView>(view);
   const [problem, setProblem] = useState<Problem>(null);
-  const [reviewing, setReviewing] = useState(0);
+  const [reviewing, setReviewing] = useState(handedHere ? 1 : 0);
   const [saveProblem, setSaveProblem] = useState<SaveProblem>(null);
   // The button that opened the review, and whether a cancel should give focus back to it: the dialog is unmounted on
   // close, so the modal cannot return focus itself
@@ -791,6 +825,8 @@ function Profile({
     if (!refocus.current || reviewing) return;
     refocus.current = false;
     if (opener.current?.isConnected) opener.current.focus();
+    // The review opened by a hand-over had no button on this page: focus goes to the draft's band
+    else document.getElementById(SETUP_DRAFT_TITLE_ID)?.focus();
   }, [reviewing]);
 
   const [checking, setChecking] = useState(false);
@@ -807,6 +843,7 @@ function Profile({
   const reseed = (v: SiteProfileView) => {
     setBase(v);
     setDraftState(clone(v.profile));
+    setRids(v.profile.receivers.map(() => newRid()));
     setProblem(null);
   };
   const changes = diffProfiles(base.profile, draft);
@@ -876,6 +913,9 @@ function Profile({
 
   const done = (v: SiteProfileView) => {
     dropSuggestion();
+    // The draft is the version in force now: Set up the site starts from it
+    setShowHanded(false);
+    useSetup.getState().saved(v);
     reseed(v);
     setReviewing(0);
     notifications.show({
@@ -935,6 +975,24 @@ function Profile({
     setReviewing(0);
   };
 
+  // The answers Ask Shutter drafted in Set up the site that the form still holds as drafted: one changed here since is
+  // the person's own, and leaves the list. A receiver is found by the page's id, so one renamed here keeps its drafted
+  // answers and the review still asks for them to be read; by its name only if the ids no longer line up
+  const byId = rids.length === draft.receivers.length;
+  const drafted =
+    handed && handedHere && showHanded
+      ? handed.drafted.flatMap((d) => {
+          const at = byId ? rids.indexOf(d.rid) : -1;
+          const r =
+            at >= 0
+              ? draft.receivers[at]
+              : byId
+                ? undefined
+                : draft.receivers.find((x) => x.name === d.receiver);
+          const q = questionOfKey(d.key);
+          return r && q && answerText(q, r) === d.value ? [{ ...d, receiver: r.name }] : [];
+        })
+      : [];
   const dirty = changes.length > 0;
   // Something to say about the answer a review refused: in the save bar while it shows, else on its own
   const problemAlert = problem ? (
@@ -970,14 +1028,17 @@ function Profile({
         }
         details={<HeaderDetails />}
         actions={
-          <Button
-            component={Link}
-            to="/site-guide"
-            variant="light"
-            leftSection={<IconPrinter size={16} aria-hidden />}
-          >
-            Export this site&apos;s guide (PDF)
-          </Button>
+          <>
+            <Button
+              component={Link}
+              to="/site-guide"
+              variant="light"
+              leftSection={<IconPrinter size={16} aria-hidden />}
+            >
+              Export this site&apos;s guide (PDF)
+            </Button>
+            <SetupLink />
+          </>
         }
         meta={
           !shipped && base.updatedAt ? (
@@ -988,6 +1049,28 @@ function Profile({
         }
       />
       <Stack gap="lg">
+        {handed && showHanded ? (
+          <SetupDraftCard
+            rows={handedHere ? draftRows(base.profile, draft) : []}
+            version={base.version}
+            stale={handedHere ? null : handed.baseVersion}
+            locked={locked}
+            onReview={review}
+            onDiscard={() => {
+              setShowHanded(false);
+              if (handedHere) {
+                useSetup.getState().discard();
+                reseed(base);
+              }
+            }}
+            onBack={() => {
+              // The answers as the form holds them now go back with the reader
+              if (handedHere && useSetup.getState().base?.version === base.version)
+                useSetup.getState().adopt(draft, byId ? rids : undefined);
+              void navigate('/site-setup');
+            }}
+          />
+        ) : null}
         {suggested && showSuggestion ? (
           <SuggestionCard
             caseId={suggested.ref.caseId}
@@ -1042,7 +1125,7 @@ function Profile({
           <Text component="h2" id="site-policy-title" className="overline" m={0}>
             What this site&apos;s policy does
           </Text>
-          <ReceiverCards profile={draft} />
+          <ReceiverCards profile={draft} action={(r) => (r.name ? <SetupLink r={r} /> : null)} />
           <Card withBorder padding="md">
             <ReleaseMatrix profile={draft} />
           </Card>
@@ -1074,7 +1157,7 @@ function Profile({
                   </li>
                 ))}
               </ul>
-              <ProfileForm draft={draft} setDraft={setDraft} problem={problem} />
+              <ProfileForm draft={draft} setDraft={setDraft} setRids={setRids} problem={problem} />
               <OwnScenarios />
               <VersionsPanel current={base.version} />
               <OtherSettings profile={draft} base={base} />
@@ -1089,7 +1172,14 @@ function Profile({
           <SaveBar
             count={changes.length}
             onReview={review}
-            onDiscard={() => reseed(base)}
+            onDiscard={() => {
+              // A draft handed over by Set up the site is discarded there too, as the band's own Discard does
+              if (handed && handedHere && showHanded) {
+                useSetup.getState().discard();
+                setShowHanded(false);
+              }
+              reseed(base);
+            }}
             reviewLabel="Review and save…"
             alert={problemAlert}
             note={
@@ -1112,6 +1202,7 @@ function Profile({
             body={body}
             saving={save.isPending || checking}
             locked={locked}
+            drafted={drafted}
             problem={saveProblem}
             onCancel={() => {
               refocus.current = true;

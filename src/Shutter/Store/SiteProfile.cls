@@ -376,13 +376,14 @@ ClassMethod Validate(p As %DynamicObject) As %String
             }
         }
     }
-    // What may leave IRIS for a model (T27): free text off unless the site says so.
+    // What may leave IRIS for a model (T27): free text off unless the site says so, and so is reading what a person types
+    // in Set up the site (setup_answers, CONTRACTS 14.7).
     If p.%IsDefined("model_content") {
         Set mc = p.%Get("model_content")
         If '$ISOBJECT(mc) Quit "model_content: must be an object"
         Set mi = mc.%GetIterator()
         While mi.%GetNext(.k, .flag) {
-            If '$LISTFIND($LISTBUILD("free_text"), k) Return "model_content." _ k _ ": unknown setting"
+            If '$LISTFIND($LISTBUILD("free_text", "setup_answers"), k) Return "model_content." _ k _ ": unknown setting"
             If mc.%GetTypeOf(k) '= "boolean" Return "model_content." _ k _ ": must be true or false"
         }
     }
@@ -789,6 +790,15 @@ ClassMethod ModelFreeText() As %Boolean
 {
     Set mc = ..Current().%Get("model_content")
     Quit $ISOBJECT(mc) && ##class(Shutter.Util.Json).Bool(mc, "free_text", 0)
+}
+
+/// Whether the site lets an agent read what a person types in Set up the site (CONTRACTS 14.7): off unless the profile's
+/// model_content.setup_answers is true, which only a person's saved answer makes it. While it is off the turn route
+/// refuses and no model is called for a typed answer.
+ClassMethod SetupAnswers() As %Boolean
+{
+    Set mc = ..Current().%Get("model_content")
+    Quit $ISOBJECT(mc) && mc.%IsA("%Library.DynamicObject") && (mc.%GetTypeOf("setup_answers") = "boolean") && mc.%Get("setup_answers")
 }
 
 /// Whether closing a case by hand (POST /cases/{id}/close) needs an approver, the two-person rule some trusts keep:

@@ -83,6 +83,8 @@ XData UrlMap [ XMLNamespace = "http://www.intersystems.com/urlmap" ]
   <Route Url="/shadow-observations" Method="GET" Call="Shutter.API.Recovery:ReportGet"/>
   <Route Url="/shadow-observations.csv" Method="GET" Call="Shutter.API.Recovery:ReportCsv"/>
   <Route Url="/site-profile/history" Method="GET" Call="SiteProfileHistory"/>
+  <Route Url="/site-profile/setup-turns" Method="POST" Call="SetupTurnAsk"/>
+  <Route Url="/site-profile/setup-turns/:id" Method="GET" Call="SetupTurnGet"/>
   <Route Url="/index" Method="GET" Call="IndexStatus"/>
   <Route Url="/index/messages" Method="GET" Call="IndexMessages"/>
   <Route Url="/incidents" Method="GET" Call="Incidents"/>
@@ -2353,6 +2355,126 @@ ClassMethod PageQuestionGet(qid As %String) As %Status
     If '$ISOBJECT(q) || (q.AskedBy '= ..User()) Quit ..Fail("404 Not Found", "not_found", "No question " _ qid _ " of yours about a page")
     Do q.CloseIfStale()
     Quit ..Json(q.ToObject())
+}
+
+// ---- Set up the site: a typed answer read by an agent (CONTRACTS 14.7) ----
+
+/// One turn of Set up the site: {conversation, receiver, text, draft, baseVersion, draftRevision}. receiver names a
+/// receiver of the draft; text is what the person typed about it, 1 to 500 characters, refused when it holds a link, an
+/// address, a run of six or more digits or the shape of a credential (it is then neither sent nor stored); draft is the
+/// profile as the page holds it; baseVersion the stored version it was made from. 409 setup_drafting_off while the site
+/// profile has not switched typed answers on (model_content.setup_answers, off by default), with no model called; then a
+/// page question's rule for a live answer (403 live_agents_only, 409 live_unavailable, 409 no_model); 409 stale_version
+/// when the stored version moved; 404 for a conversation that is not the caller's; 409 turn_pending while the
+/// conversation has a turn being read; 409 conversation_full after 24 turns. The request goes through the API service to
+/// the Case Question item, which opens the turn and answers at once while the Set-up guide agent runs in the tier setup:
+/// 202 {turnId, conversation, state}. The route reads the stored profile and stores none: nothing is written but the
+/// turn's own row (with what the agent is shown and the part of the draft its checks read, never the whole draft) and its
+/// run, and nothing is recorded.
+ClassMethod SetupTurnAsk() As %Status
+{
+    If '..Allow("Shutter_Operate", 1) Quit $$$OK
+    Set shape = "The body must be a JSON object: {conversation, receiver, text, draft, baseVersion, draftRevision}"
+    Set bodyText = $SELECT($ISOBJECT(%request.Content): %request.Content.Read($$$MaxStringLength), 1: $GET(%request.Content))
+    If $LENGTH(bodyText) > 400000 Quit ..Fail("400 Bad Request", "bad_request", "The body is longer than 400000 characters")
+    Set body = ##class(Shutter.Util.Json).Parse(bodyText, .psc)
+    If '$ISOBJECT(body) || $$$ISERR(psc) || ($CLASSNAME(body) '= "%Library.DynamicObject") Quit ..Fail("400 Bad Request", "bad_request", shape)
+    Set ps = "Shutter.Util.ProfileSetup"
+    Set receiver = $SELECT(body.%GetTypeOf("receiver") = "string": body.%Get("receiver"), 1: "")
+    If receiver = "" Quit ..Fail("400 Bad Request", "bad_request", "receiver must name the receiver the answer is about")
+    // The agent is shown the receiver's name and drafts for it by that name: a name that fails the text rule is never sent.
+    Set problem = $CLASSMETHOD(ps, "NameProblem", receiver)
+    If problem '= "" Quit ..Fail("400 Bad Request", "bad_request", problem)
+    If body.%GetTypeOf("text") '= "string" Quit ..Fail("400 Bad Request", "bad_request", "text must be text")
+    Set text = $CLASSMETHOD(ps, "CleanText", body.%Get("text"), .problem)
+    If problem '= "" Quit ..Fail("400 Bad Request", "bad_request", problem)
+    Set draft = body.%Get("draft")
+    Set frame = $CLASSMETHOD(ps, "Frame", draft, receiver, .problem)
+    If problem '= "" Quit ..Fail("400 Bad Request", "bad_request", problem)
+    If body.%GetTypeOf("baseVersion") '= "number" Quit ..Fail("400 Bad Request", "bad_request", "baseVersion must be the stored profile's version the draft was made from")
+    Set conversation = $SELECT(body.%GetTypeOf("conversation") = "string": body.%Get("conversation"), 1: "")
+    If (conversation '= "") && '##class(Shutter.Store.SetupTurn).IsConversation(conversation) Quit ..Fail("400 Bad Request", "bad_request", "conversation must be a conversation's id, or left out for a first turn")
+    // The site's own switch comes first: while it is off no typed answer goes to a model, whoever asks.
+    Set avail = ##class(Shutter.Util.LiveAgents).Availability(..User())
+    Set mode = ##class(Shutter.Util.PageQuestion).ItemMode()
+    If '$CLASSMETHOD(ps, "Admit", ##class(Shutter.Store.SiteProfile).SetupAnswers(), $SYSTEM.Security.Check("Shutter_LiveAgents", "USE"), avail, mode, .status, .code, .detail) {
+        Set extra = ""
+        If code = "live_unavailable" Set extra = {} Set extra.live = avail
+        Quit ..Fail(status, code, detail, extra)
+    }
+    // The draft must have been made from the version in force: a turn read against another would be dropped anyway.
+    Set row = ##class(Shutter.Store.SiteProfile).Row()
+    Set version = $SELECT($ISOBJECT(row): +row.Version, 1: 0)
+    If +body.%Get("baseVersion") '= version {
+        Set extra = {} Set extra.currentVersion = version
+        Quit ..Fail("409 Conflict", "stale_version", "baseVersion is not the stored profile's version", extra)
+    }
+    Set r = ..Idempotent(bodyText, .replayed)
+    If replayed Quit $$$OK
+    // A later turn holds its conversation from the checks below until its row is opened, so two requests sent at once
+    // cannot both pass them; a first turn's conversation is new, and no one else can name it yet.
+    If conversation = "" Quit ..SetupTurnSend(conversation, receiver, text, draft, frame, version, body, bodyText)
+    If '##class(Shutter.Store.SetupTurn).Claim(conversation) {
+        Quit ..Fail("409 Conflict", "turn_pending", "Another turn of this conversation is being sent: one turn at a time")
+    }
+    Try {
+        Set sc = ..SetupTurnSend(conversation, receiver, text, draft, frame, version, body, bodyText)
+    } Catch ex {
+        Set sc = ex.AsStatus()
+    }
+    Do ##class(Shutter.Store.SetupTurn).Release(conversation)
+    Quit sc
+}
+
+/// The rest of POST /site-profile/setup-turns, once the body, the switch, the reader and the version have passed: the
+/// conversation's own checks, then the turn sent to the Case Question item, which opens its row before it answers.
+ClassMethod SetupTurnSend(conversation As %String, receiver As %String, text As %String, draft As %DynamicObject, frame As %DynamicObject, version As %Integer, body As %DynamicObject, bodyText As %String) As %Status [ Private ]
+{
+    Set ps = "Shutter.Util.ProfileSetup"
+    // The conversation is the server's: a first turn gets its id here, a later one must be the caller's own, with no
+    // turn still being read and fewer than the limit behind it.
+    If conversation = "" {
+        Set conversation = ##class(Shutter.Store.SetupTurn).NewConversation()
+    } Else {
+        If ##class(Shutter.Store.SetupTurn).OwnerOf(conversation) '= ..User() Quit ..Fail("404 Not Found", "not_found", "No conversation " _ conversation _ " of yours")
+        Set pending = ##class(Shutter.Store.SetupTurn).Pending(conversation)
+        If pending '= "" {
+            Set extra = {} Set extra.turnId = pending
+            Quit ..Fail("409 Conflict", "turn_pending", "Turn " _ pending _ " of this conversation is still being read: one turn at a time", extra)
+        }
+        If ##class(Shutter.Store.SetupTurn).Count(conversation) >= $PARAMETER(ps, "MAXTURNS") Quit ..Fail("409 Conflict", "conversation_full", "This conversation has its " _ $PARAMETER(ps, "MAXTURNS") _ " turns: discard the draft or go on with the page's controls")
+    }
+    Set view = $CLASSMETHOD(ps, "View", ##class(Shutter.Store.SiteProfile).Current(), draft, receiver)
+    Set msg = ##class(Shutter.Msg.SetupTurnRequest).%New()
+    Set msg.Conversation = conversation, msg.Receiver = receiver, msg.Text = text
+    Set msg.ViewJSON = view.%ToJSON(), msg.FrameJSON = frame.%ToJSON()
+    Set msg.BaseVersion = version, msg.DraftRevision = +body.%Get("draftRevision"), msg.AskedBy = ..User()
+    Set sc = ##class(Ens.Director).CreateBusinessService("Shutter API", .service)
+    If $$$ISERR(sc) || '$ISOBJECT(service) Quit ..Fail("503 Service Unavailable", "no_service", "The API service is not running: " _ $SYSTEM.Status.GetErrorText(sc))
+    // Synchronous: the Case Question item answers with the turn's id at once and goes on with the agent.
+    Set service.Target = "Case Question"
+    Set sc = service.ProcessInput(msg, .started)
+    If $$$ISERR(sc) Quit ..Fail("503 Service Unavailable", "not_queued", "The turn could not be sent: " _ $SYSTEM.Status.GetErrorText(sc))
+    If '$ISOBJECT(started) || 'started.%IsA("Shutter.Msg.QuestionStarted") Quit ..Fail("502 Bad Gateway", "no_answer", "The Case Question item did not answer")
+    If started.QuestionId = "" Quit ..Fail("500 Internal Server Error", "turn_failed", $SELECT(started.Error '= "": started.Error, 1: "No turn was opened"))
+    Set reply = {}
+    Set reply.turnId = started.QuestionId, reply.conversation = conversation, reply.state = started.State
+    Set replyText = reply.%ToJSON()
+    Do ..Remember(bodyText, "202 Accepted", replyText)
+    Set %response.Status = "202 Accepted"
+    Write replyText
+    Quit $$$OK
+}
+
+/// One turn of Set up the site with what the agent said and drafted, for the one who asked it (404 for anyone else, as
+/// for an id that is not there). A turn left waiting past its time is marked failed on the way.
+ClassMethod SetupTurnGet(id As %String) As %Status
+{
+    If '..Allow() Quit $$$OK
+    Set t = ##class(Shutter.Store.SetupTurn).ByTurnId(id)
+    If '$ISOBJECT(t) || (t.AskedBy '= ..User()) Quit ..Fail("404 Not Found", "not_found", "No turn " _ id _ " of yours")
+    Do t.CloseIfStale()
+    Quit ..Json(t.ToObject())
 }
 
 // ---- HL7 schemas (CONTRACTS 12, v1.32) ----

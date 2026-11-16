@@ -663,11 +663,12 @@ export function validateProfile(p: unknown): string {
       } else return `further_messages.${k}: unknown setting`;
     }
   }
-  // What may leave IRIS for a model: free text off unless the site says so.
+  // What may leave IRIS for a model: free text off unless the site says so, and so is reading what a person types in
+  // Set up the site (setup_answers, CONTRACTS 14.7).
   if ('model_content' in p) {
     if (!isObject(p.model_content)) return 'model_content: must be an object';
     for (const [k, v] of members(p.model_content)) {
-      if (k !== 'free_text') return `model_content.${k}: unknown setting`;
+      if (k !== 'free_text' && k !== 'setup_answers') return `model_content.${k}: unknown setting`;
       if (typeof v !== 'boolean') return `model_content.${k}: must be true or false`;
     }
   }
@@ -808,6 +809,7 @@ export function fieldId(path: string): string {
   if (path === 'feed.prevent_failures') return 'site-feed-prevent_failures';
   if (path === 'recovery.mode') return 'site-recovery-mode';
   if (path === 'model_content.free_text') return 'site-model_content-free_text';
+  if (path === 'model_content.setup_answers') return 'site-model_content-setup_answers';
   return '';
 }
 
@@ -830,6 +832,7 @@ export function describePath(path: string): string {
   if (path === 'feed.prevent_failures') return 'Feed, prevent failures';
   if (path === 'recovery.mode') return 'Recovery, mode';
   if (path === 'model_content.free_text') return 'Model, note text';
+  if (path === 'model_content.setup_answers') return 'Model, typed answers in Set up the site';
   if (path === 'approvers.close_needs_approver') return 'Approvers, closing a case by hand';
   return path.replace(/_/g, ' ');
 }
@@ -1035,6 +1038,14 @@ export function diffProfiles(a: SiteProfile | undefined, b: SiteProfile): Change
         b.model_content?.free_text === true
           ? 'Note text: sent to the model from now on'
           : 'Note text: no longer sent to the model; it sees a flag instead',
+    });
+  if ((before.model_content?.setup_answers === true) !== (b.model_content?.setup_answers === true))
+    out.push({
+      path: 'model_content.setup_answers',
+      text:
+        b.model_content?.setup_answers === true
+          ? 'Set up the site: what a person types there may be read by a model from now on, which drafts answers for review'
+          : 'Set up the site: typed answers are no longer read by a model; its controls answer',
     });
   if ((before.merges ?? 'forbidden') !== (b.merges ?? 'forbidden'))
     out.push({

@@ -6,7 +6,8 @@
 /// synthesis (tier board). What comes back is checked against the facts and the view (Shutter.Store.CaseQuestion.CheckAnswer)
 /// before it is stored; a refused answer ends the question schema_failed, a missing one failed, and a timer ends the wait.
 /// Nothing here writes to the case or to a receiver, whatever the question says. A question about a page of the web app
-/// (Shutter.Msg.PageQuestionRequest, CONTRACTS 14.6) is answered here too, with no case: OnPageRequest.
+/// (Shutter.Msg.PageQuestionRequest, CONTRACTS 14.6) is answered here too, with no case: OnPageRequest. So is a turn of
+/// Set up the site (Shutter.Msg.SetupTurnRequest, CONTRACTS 14.7): OnSetupRequest.
 Class Shutter.Process.Question Extends Ens.BusinessProcess
 {
 
@@ -65,6 +66,8 @@ Method OnRequest(request As %Library.Persistent, Output response As %Library.Per
     // A question about a page of the web app (CONTRACTS 14.6) is answered by the same item: no case, the Explain agent in
     // the tier page.
     If request.%IsA("Shutter.Msg.PageQuestionRequest") Quit ..OnPageRequest(request, .response)
+    // A turn of Set up the site (CONTRACTS 14.7) too: no case, the Set-up guide agent in the tier setup.
+    If request.%IsA("Shutter.Msg.SetupTurnRequest") Quit ..OnSetupRequest(request, .response)
     If 'request.%IsA("Shutter.Msg.QuestionRequest") Quit $$$ERROR($$$GeneralError, "Case Question expects a question request, got " _ $CLASSNAME(request))
     Set started = ##class(Shutter.Msg.QuestionStarted).%New()
     Set response = started
@@ -188,6 +191,72 @@ Method OnPageResponse(callrequest As %Library.Persistent, callresponse As %Libra
     }
     $$$TRACE("Page question " _ q.QuestionId _ " answered" _ $SELECT(callresponse.Mode '= "": " (" _ callresponse.Mode _ ")", 1: ""))
     Quit q.Answered(answer, run)
+}
+
+/// A turn of Set up the site (CONTRACTS 14.7): the row is opened and the early answer goes back with its id, then the
+/// Set-up guide agent in the tier setup is asked through the Agent Board item with the person's text, their earlier texts
+/// in the conversation as the rows hold them, and what the page shows of the receiver, all as data
+/// (Shutter.Util.ProfileSetup.Request): its knowledge search and SubmitSetupTurn only, the tier's small budget, and never
+/// a recording. The route has already checked who may ask and that the site switched typed answers on; the switch is
+/// read again just before the request goes to the agent (ProfileSetup.Proceed).
+Method OnSetupRequest(request As Shutter.Msg.SetupTurnRequest, Output response As %Library.Persistent) As %Status
+{
+    Set started = ##class(Shutter.Msg.QuestionStarted).%New()
+    Set response = started
+    Set view = ##class(Shutter.Util.Json).Parse(request.ViewJSON, .vsc)
+    Set frame = ##class(Shutter.Util.Json).Parse(request.FrameJSON, .fsc)
+    Set sc = ##class(Shutter.Store.SetupTurn).Create(request.Conversation, request.Receiver, request.Text, view, frame, request.BaseVersion, request.DraftRevision, request.AskedBy, .t)
+    If $$$ISERR(sc) || '$ISOBJECT(t) Set started.State = "failed", started.Error = "The turn could not be opened: " _ $SYSTEM.Status.GetErrorText(sc) Quit $$$OK
+    Set ..QuestionId = t.TurnId, ..Tier = "setup"
+    Set started.QuestionId = t.TurnId, started.State = t.State
+    $$$TRACE("Turn " _ t.TurnId _ " of " _ t.Conversation _ " about " _ t.Receiver _ " asked by " _ request.AskedBy)
+    Set rsc = ..Reply(started)
+    If $$$ISERR(rsc) $$$TRACE("The early reply was not sent: " _ $SYSTEM.Status.GetErrorText(rsc))
+    Set mode = ##class(Shutter.Util.PageQuestion).ItemMode(..AgentTarget)
+    Set earlier = ##class(Shutter.Store.SetupTurn).Earlier(t.Conversation, t.AskedBy, t.TurnId)
+    Set context = ##class(Shutter.Util.ProfileSetup).Context(t.TurnId, t.Text, earlier, t.View())
+    Set req = ##class(Shutter.Util.ProfileSetup).Request(t.TurnId, t.Receiver, context, t.AskedBy, mode)
+    // The site's switch again, just before the text goes to the agent: switched off since the route admitted the turn,
+    // nothing is sent and the turn ends failed.
+    If '##class(Shutter.Util.ProfileSetup).Proceed(t) Quit $$$OK
+    Do t.Answering()
+    Set ..ExplainPending = 1
+    Set sc = ..SendRequestAsync(..AgentTarget, req, 1, "setup")
+    If $$$ISERR(sc) {
+        Set ..ExplainPending = 0
+        Do t.Fail("failed", "The request could not be sent to " _ ..AgentTarget _ ": " _ $SYSTEM.Status.GetErrorText(sc))
+        Quit $$$OK
+    }
+    Quit ..ArmTimeout()
+}
+
+/// The turn's answer, or its time running out: the run is recorded (with no case, so the budget counts it), and the turn
+/// kept only when the core's checks pass again here (Shutter.Util.ProfileSetup.CheckStored), refused as schema_failed
+/// otherwise, with nothing drafted.
+Method OnSetupResponse(callrequest As %Library.Persistent, callresponse As %Library.Persistent, completionkey As %String) As %Status
+{
+    Set t = ##class(Shutter.Store.SetupTurn).ByTurnId(..QuestionId)
+    If '$ISOBJECT(t) { $$$LOGWARNING("No setup turn " _ ..QuestionId _ " for the answer " _ completionkey) Quit $$$OK }
+    If completionkey = "question:timeout" {
+        If '..ExplainPending Quit $$$OK
+        Set ..ExplainPending = 0
+        Quit t.Fail("failed", "No answer from the Set-up guide agent within " _ ..AgentTimeoutSeconds _ " s")
+    }
+    If completionkey '= "setup" { $$$LOGWARNING("Unexpected completion key " _ completionkey) Quit $$$OK }
+    If '..ExplainPending { $$$TRACE("The Set-up guide agent answered " _ t.TurnId _ " after its time was up; the answer is not used") Quit $$$OK }
+    Set ..ExplainPending = 0
+    If '$ISOBJECT(callresponse) || 'callresponse.%IsA("Shutter.Bridge.Msg.AgentResponse") Quit t.Fail("failed", "The agent item answered with " _ $SELECT($ISOBJECT(callresponse): $CLASSNAME(callresponse), 1: "nothing"))
+    Set sc = ##class(Shutter.Store.AgentRun).FromResponse("", "", "setup", "setup", callresponse, ..HeaderIdOf(callrequest), .run, t.TurnId)
+    Quit:$$$ISERR(sc) sc
+    If (callresponse.Status '= "ok") || (callresponse.ResultJSON = "") Quit t.Fail($SELECT(callresponse.Status = "schema_failed": "schema_failed", 1: "failed"), "The agent answered " _ callresponse.Status _ $SELECT(callresponse.Error '= "": ": " _ $EXTRACT(callresponse.Error, 1, 1200), 1: ""), run)
+    Set turn = ##class(Shutter.Util.Json).Parse(callresponse.ResultJSON, .psc)
+    If '$ISOBJECT(turn) || $$$ISERR(psc) || 'turn.%IsA("%Library.DynamicObject") Quit t.Fail("failed", "The agent's result is not a JSON object", run)
+    If '##class(Shutter.Util.ProfileSetup).CheckStored(t.TurnId, turn, .problem, .accepted) {
+        $$$TRACE("Setup turn " _ t.TurnId _ ": the turn was refused: " _ problem)
+        Quit t.Fail("schema_failed", problem, run)
+    }
+    $$$TRACE("Setup turn " _ t.TurnId _ " answered" _ $SELECT(callresponse.Mode '= "": " (" _ callresponse.Mode _ ")", 1: ""))
+    Quit t.Answered(accepted, run)
 }
 
 /// question:<S>:<encounter>:<event>[:<receiver>], the base of a suggested question's record keys. The receiver is named when
@@ -321,6 +390,7 @@ Method OnResponse(request As %Library.Persistent, ByRef response As %Library.Per
     Set sc = $$$OK
     Try {
         If ..Tier = "page" { Set sc = ..OnPageResponse(callrequest, callresponse, completionkey) Quit }
+        If ..Tier = "setup" { Set sc = ..OnSetupResponse(callrequest, callresponse, completionkey) Quit }
         Set q = ##class(Shutter.Store.CaseQuestion).ByQuestionId(..QuestionId)
         If '$ISOBJECT(q) { $$$LOGWARNING("No question " _ ..QuestionId _ " for the answer " _ completionkey) Quit }
         If completionkey = "explain" { Set sc = ..OnExplain(q, callrequest, callresponse) Quit }
@@ -334,6 +404,9 @@ Method OnResponse(request As %Library.Persistent, ByRef response As %Library.Per
     If $$$ISERR(sc) && (..Tier = "page") {
         Set q = ##class(Shutter.Store.PageQuestion).ByQuestionId(..QuestionId)
         If $ISOBJECT(q) && ((q.State = "pending") || (q.State = "answering")) Do q.Fail("failed", "Error at " _ completionkey _ ": " _ $EXTRACT($SYSTEM.Status.GetErrorText(sc), 1, 1500))
+    } ElseIf $$$ISERR(sc) && (..Tier = "setup") {
+        Set t = ##class(Shutter.Store.SetupTurn).ByTurnId(..QuestionId)
+        If $ISOBJECT(t) && ((t.State = "pending") || (t.State = "answering")) Do t.Fail("failed", "Error at " _ completionkey _ ": " _ $EXTRACT($SYSTEM.Status.GetErrorText(sc), 1, 1500))
     } ElseIf $$$ISERR(sc) {
         Set q = ##class(Shutter.Store.CaseQuestion).ByQuestionId(..QuestionId)
         If $ISOBJECT(q) && ((q.State = "pending") || (q.State = "answering")) Do q.Fail("failed", "Error at " _ completionkey _ ": " _ $EXTRACT($SYSTEM.Status.GetErrorText(sc), 1, 1500))
@@ -349,6 +422,12 @@ Method OnError(request As %Library.Persistent, ByRef response As %Library.Persis
             Set ..ExplainPending = 0
             Set q = ##class(Shutter.Store.PageQuestion).ByQuestionId(..QuestionId)
             If $ISOBJECT(q) Do q.Fail("failed", "Error from the agent call: " _ $EXTRACT($SYSTEM.Status.GetErrorText(pErrorStatus), 1, 1500))
+            Quit
+        }
+        If (..Tier = "setup") && (pCompletionKey = "setup") && ..ExplainPending {
+            Set ..ExplainPending = 0
+            Set t = ##class(Shutter.Store.SetupTurn).ByTurnId(..QuestionId)
+            If $ISOBJECT(t) Do t.Fail("failed", "Error from the agent call: " _ $EXTRACT($SYSTEM.Status.GetErrorText(pErrorStatus), 1, 1500))
             Quit
         }
         Set q = ##class(Shutter.Store.CaseQuestion).ByQuestionId(..QuestionId)

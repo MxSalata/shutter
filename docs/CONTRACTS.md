@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.68, 16 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.69, 16 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -955,6 +955,11 @@ keeps `further_messages.in_patient_movement: stop`, which a demo install writes 
   a dry run to it (v1.21). Declare all four flags: for a receiver with no capabilities endpoint the route takes the
   declared features, and a flag left out reads as false there (the connector alone reads an absent flag as true, so the
   gate is the stricter of the two).
+- `model_content.setup_answers` (v1.69): `true` or `false`, `false` when absent and in the shipped profile: whether what a
+  person types in Set up the site may be read by a model, which drafts a receiver's description, kind and tier for review
+  (14.7). Only a person's saved answer turns it on (the Site profile's question 11, beside `model_content.free_text`);
+  while it is off the turn route answers `409 setup_drafting_off` and no model is called. The validator accepts only
+  `true` or `false`, and refuses any other key under `model_content`.
 - `further_messages` (6.5), how rigid a site wants the patient-level check. `in_patient_movement`: `stop`, or `show` to let a
   movement on another visit through with a line on the plan; a cancel, merge or discharge the receiver didn't apply on this visit
   stops either way. `admission_not_found`: `person`, or `policy` to let the tier's own policy release a lost admission on a 404.
@@ -2733,6 +2738,160 @@ questions from its mock (`mocks/pageQuestions.ts`) and labels them as sample ans
 (`PAGE_ANSWERS_RECORDED`). Open or closed is remembered per tab; the panel sits beside the page from 1200 px and is a
 drawer below, the whole screen on a phone.
 
+### 14.7 Set up the site: a typed answer read by an agent (v1.69)
+
+The web app's page Set up the site (`/site-setup`, linked from the Site profile) asks a checklist of questions about one
+receiver and builds a draft of the site profile in the browser. Every question has the page's own control, so the page
+works with no model. Where the site has switched it on, a person may answer some questions in their own words, and an
+agent reads the words and drafts answers for the person to review. The portal stores nothing: the draft lives in the
+browser, and the only way any answer is stored, drafted or not, is the Site profile page's review and `PUT /site-profile`
+(6.4: `Shutter_Configure`, `expectedVersion`, the validator, the version history). No route here stores a profile or a
+draft, and a whole conversation leaves the profile's version and history as they were.
+
+**The site's switch.** `model_content.setup_answers` in the site profile (6.4): `true` or `false`, false when absent and
+in the shipped profile. Only a person's saved answer turns it on (the Site profile's question 11). While it is not true,
+`POST /site-profile/setup-turns` answers `409 setup_drafting_off`, no model is called, and the page runs with its controls
+and its written explanations only.
+
+**What an agent may draft: the field table.** `Shutter.Util.ProfileSetup.Fields` puts every key the validator accepts in
+one class, and `web/src/features/site-profile/setup/fields.ts` holds the same table; `tests/unit/Shutter/Test/ProfileSetup.cls`
+holds the one copy both are compared with (its `Fields`, `EffectRows` and `TurnRows` tables run in both suites).
+
+| Class | Keys | Who supplies the value |
+| --- | --- | --- |
+| A | `receivers[].system`; `receivers[].category` and `receivers[].tier` | The agent or the person. The description of any receiver, lifted from the person's own words: the drafted text is a part of its quote, so of what the person typed about that receiver, and it keeps the text rule below and 120 characters at most. The kind and the tier only of a receiver that is not in the profile in force (it is being added in the draft) and only while the draft leaves them unanswered: a kind or tier the person chose, or one already drafted, is changed only with the page's control. No kind while the draft holds a site-wide `history_policy`; never a tier whose policy row, in force or in the draft, releases any chain kind with no person (`automatic`). |
+| P | `recovery.*`, `notifications.*`, `policy.*`, `merges`, `unconditional_resend`, `authoritative_source`, `feed.*`, `incident.*`, `teams.*`, `reminders.*`, `model_content.*`, `further_messages.*`, `approvers.*`, `mail.*`; of a receiver its `name`, `history_policy`, `applies`, `resend_timestamp`, `cancels`, `merges`, `api.*`, `features.*`, `strict_answers`, `manual_check.*`, `watch.*`, `ack_level`, `duplicates.*`, `engine_resend`, `hold.*`, `mail.*`, `approvers.*`, `runbook`, `call` and the outage minutes | A person only, with the page's control: every policy, every capability, every site-wide switch and the recovery mode. An agent may ask about one and never supplies its value. |
+| kept | `version`, the site-wide `history_policy`, `failure_census.*`; of a receiver `demo.*`, `fhir.*`, `documents.*`, `draft`, `namespace`, `item` | Stored as it is; never set from the page. A key the table does not name is preserved untouched and never set. |
+
+**The turn.** `Shutter.Store.SetupTurn` (`ST-nnnnnn`): the conversation (`SC-nnnnnn`), the receiver by its name in the draft,
+what the person typed (1 to 500 characters), what the agent was shown (the model's view), the part of the draft its checks
+read (the frame), the stored version the draft was made from and the page's draft revision (both echoed), `state` (as
+14.2's; a turn left `pending` or `answering` for 10 minutes is marked `failed` when it is read), who asked, the accepted
+turn, the run's mode and model, its cost and the Visual Trace link. Its run is a `Shutter.Store.AgentRun` row with no case
+naming the turn, so the day's budget and `GET /costs` count it as a page question's. The whole draft is never stored: the
+frame is the receiver's own entry, the policy table, a site-wide `history_policy`, `recovery` and `mail.allowed_domains`
+(`ProfileSetup.Frame`). The retention task takes the turns, their runs and tool calls after the cases' retention days, as
+it takes page questions, and the uninstall takes them all.
+
+**The conversation is the server's.** A first turn gets its conversation id from the core, and the conversation belongs
+to who started it. The earlier turns the agent reads, and the words a quote must come from, are the stored rows of that
+conversation, never a copy the browser sends. One turn at a time, and 24 turns in all: a later turn holds its
+conversation (`SetupTurn.Claim`, a lock) from these checks until the Case Question item has opened its row, so two
+requests sent at once cannot both pass them; the second waits up to 5 seconds and then meets the first's row (`409
+turn_pending`), or is refused with the same code if the lock is still held.
+
+**What the person's text may hold.** Before anything is sent to a model the core refuses (and the web app refuses first)
+a text with any of these (`ProfileSetup.TextProblem`, the rule of a receiver's runbook line widened): a control character
+(C0, DEL or C1); an invisible or direction-changing character (zero-width characters, the bidirectional marks, overrides
+and isolates); a link, which is a scheme, `www.`, or a bare domain with a path or a known top-level domain
+(`intranet.trust.nhs.uk/board`, `example.com`); an address; the shape of a credential (a word such as `password` or
+`token` with `:` or `=`, a provider's key prefix such as `ghp_`, `github_pat_`, `sk-`, `xox?-`, `AKIA`, `AIza` or
+`glpat-`, a JSON web token, a run of 32 or more hex digits, or a run of 24 or more base64 characters mixing capitals,
+small letters and digits); a run of six or more digits; or a number of ten or more digits written with single spaces or
+hyphens between them (an NHS number as printed, `943 476 5919`, or a telephone number). The person is told what was
+found: "Take that out and send again: Ask Shutter does not need it." A refused text is neither sent nor stored; a text is
+never cut short and sent on. The cases are one table, `TextRows` in `tests/unit/Shutter/Test/ProfileSetup.cls`, which
+both suites run. A turn about a receiver whose name fails the same rule is refused too (`ProfileSetup.NameProblem`),
+since the agent drafts for a receiver by its name.
+
+**What the agent is shown** (`ProfileSetup.View`, inside the evidence tag as escaped JSON, `PageQuestion.AsData`, 14.6): the
+page's name; the receiver in focus by its name, and whether it is being added; for each question of the checklist its field,
+its label, whether the agent may draft it here (`who`: `you` or `person`), its options and whether it is answered; the
+draft's value for the description, the kind, the tier and the yes or no answers; the person's text and their earlier texts
+in the conversation. Not shown: mail addresses and domains, API paths, approvers' names, runbook and call lines, any other
+receiver's answers, any case, any message, any patient data. A receiver's name and description are shown only when they
+pass the text rule above (a description of 120 characters at most), since a person may have typed anything into either
+with the page's controls and the validator holds `receivers[].system` to no such rule; a value that fails is left out and
+the view names it under `left_out`. Nothing here promises that no name reaches the model, and the person's text goes to
+the model provider as any live question does.
+
+**Who may send a turn** (`ProfileSetup.Admit`, in this order): `409 setup_drafting_off` while the switch is not on; then
+the page question's rule (14.6): `403 live_agents_only` without `Shutter_LiveAgents`, `409 live_unavailable` with `live`
+while the day's budget or the caller's share is spent or the provider refuses the key, `409 no_model` when the agents' mode
+resolves to `replay`.
+
+**The run.** The route sends `Shutter.Msg.SetupTurnRequest` to the Case Question item, which opens the row, answers at once
+with `Shutter.Msg.QuestionStarted`, reads the site's switch again (`ProfileSetup.Proceed`: switched off since the route
+admitted the turn, the turn ends `failed` and nothing goes to a model) and asks the Agent Board item with one `Shutter.Bridge.Msg.AgentRequest`: `Role` and
+`MemberCode` `setup`, `AgentClass` `Shutter.Agent.SetupGuide` (the Explain agent in the question tier `setup`, with its own
+preamble, `Shutter.Agent.Base.SetupPreamble`: it drafts for a person to review, saves nothing, switches nothing on, states
+nothing about what a receiver can do and names only the fields marked as its own; no toolset, the explain collection's
+search and the terminal tool; the catalogue pin holds a run to exactly `search_explain` and `SubmitSetupTurn`),
+`TerminalTool` `SubmitSetupTurn`, `Shutter.Schema.SetupTurn`, 12000 tokens, 3 iterations, no record key, live only
+(`PageQuestion.IsPageRun` holds the run to a page question's rule: never replayed, never recorded). Under the API mimic
+(tests/mock) the tier is read deterministically by keyword (`Shutter.Mock.Turns.SetupTurn`), every sentence marked
+`[mock]`, cost 0.
+
+**The terminal tool's argument** (`Shutter.Schema.SetupTurn`): `{say, proposals: [{field, receiver, to, quote}], ask:
+{field, receiver} or null}`; `say` at most 800 characters; at most three proposals.
+
+**What the core checks** (`ProfileSetup.CheckTurn`, run by the terminal tool against the stored turn, so a refusal names
+the field while the agent can still correct it, and again by the Case Question item before the turn is kept). The
+proposals of a turn pass or fail together; a turn that never passes ends `schema_failed` with nothing drafted.
+
+1. Each `field` is a class A field whose conditions hold, `receiver` is the receiver the turn is about, and no field is
+   named twice.
+2. `to` has the field's type and is one of its values; a description keeps the text rules; a tier is kept as a number.
+3. `quote` is 3 to 200 characters and is part of what that person typed about this receiver in this conversation, as the
+   stored turns hold it (`SetupTurn.Said`: each text with the receiver its turn was about; compared without case, runs of
+   spaces as one), so words typed about another receiver are never a quote for this one. A drafted description must be a
+   part of its quote, so it is lifted from the person's own text and never written by the agent. For a kind or a tier the
+   quote is traceability for the reviewer, not proof that the reading is right.
+4. **The effects check.** "What Shutter will do here" is computed for the receiver under the profile in force, under the
+   draft as sent and under the draft with the whole batch applied (`ProfileSetup.Effects`: what an overtaken failure does,
+   who approves a resend of each chain kind, whether a write from a case is possible, whether an engine resend is
+   possible, the recovery mode; each read as the server reads the profile: the kind's default, the entry's own history
+   policy, an older profile's site-wide one, the policy row of the tier, the declared features). An approval line holds the
+   policy's own value for its chain kind (`automatic`, `per_chain`, `approval` or `board`; `approval` where the row does not
+   name the kind; `person` at a FHIR receiver), since they are not points on one scale: any value in place of `automatic` is
+   stricter, and any other change (to `automatic`, or between `per_chain`, `approval` and `board`) counts as less strict.
+   Every other line is a rank. The batch is refused if any line is less strict than under the profile in force or than
+   under the draft as sent. With check 1's rule that a kind or a tier is drafted only while unanswered, a turn never
+   undoes, or moves, an answer the person gave.
+5. The validator on a copy: `SiteProfile.Validate` answers nothing for the batch applied, or exactly what it answers
+   for the draft as sent (its own unfinished state). The validator returns its first problem only, so this is a
+   convenience; the binding checks are the page's at the review and the server's at the save.
+6. `ask`, when given, names a field of the table, of the same receiver.
+
+The accepted turn adds `from` to each proposal, the draft's value when the turn was sent.
+
+**Routes.**
+
+- `POST /site-profile/setup-turns` (`Shutter_Operate`; `X-Requested-With`; `Idempotency-Key`) `{conversation, receiver,
+  text, draft, baseVersion, draftRevision}` -> 202 `{turnId, conversation, state}`; `400 bad_request` for a body out of
+  shape or over 400000 characters, a receiver the draft does not name or whose name fails the text rule, or a text
+  missing, too long or refused as above;
+  then `409 setup_drafting_off`, 403 and 409 as above; `409 stale_version` with `currentVersion` when `baseVersion` is not
+  the stored version; `404 not_found` for a conversation that is not the caller's; `409 turn_pending` with `turnId`
+  while the conversation has a turn being read or another request on it is being admitted; `409 conversation_full` after
+  24 turns; 503 `no_service` and `not_queued`,
+  502 `no_answer`, 500 `turn_failed`. A repeated request with its idempotency key is answered from the first.
+- `GET /site-profile/setup-turns/{id}` -> `{turnId, conversation, receiver, text, state, baseVersion, draftRevision,
+  askedBy, askedAt, answeredAt, error, mode, model, costUsd, ensMessageId, messageLink, turn}` for the one who asked it
+  (`messageLink`: the run's message under the portal path of the namespace the agent ran in, `Dispatch.MessageLink`, as a
+  page question's; null with `ensMessageId`); `404
+  not_found` for anyone else, as for an id that is not there.
+
+**The web app.** A card of a class A question has "Or answer in your own words" only where a turn can be sent: the switch
+on, `Shutter_LiveAgents`, a model to answer, the budget not spent, and never in the trial. Before a batch enters the draft
+the web app checks again, on the draft as it is then (`setup/proposals.ts`): the conversation is still the current one,
+the receiver is still the same entry (by an id the page gave it, not its name), the stored version is still `baseVersion`,
+each field still holds its `from`, and its own copy of checks 1, 2, 4 and 5 passes; any failure drops the whole batch
+("Not used: the draft changed meanwhile"). Drafted answers enter the draft at once, marked "Drafted by Ask Shutter", with
+Undo; a hand edit makes an answer the person's. The review dialog lists them under "Drafted by Ask Shutter", each with its
+value, the quoted words and what it does, and its Save stays disabled until "I have read the answers Ask Shutter drafted"
+is ticked. Drafted answers follow their receiver by the page's own receiver id, which the hand-over carries to the Site
+profile page: a receiver renamed there keeps them in the review's list, with the tick, and they stay marked when the draft
+goes back to Set up the site; only an answer changed since leaves the list. The Site profile's "Discard changes" discards
+a handed-over draft in Set up the site too. An answer to a send made before a discard, a save or a sign-out is not taken
+into the next draft, and none is used while the stored version has moved under the draft. Opening the review drops a
+turn that is still being read. `say` and quotes are shown as plain text. The public
+demo's and the judges' roles hold no `Shutter_Configure`: their Save is locked and `PUT /site-profile` answers 403.
+"Why does this matter?" on a card goes through `POST /page-questions` (14.6) whatever the switch says, with the question,
+the answer on the page and its consequence line: the receiver's name and the answer are held to the text rule above
+there too, and a value that fails is left out ("Not sent: the answer holds ..."). The switch's own line on the Site
+profile says only what is true while it is off: "no box for your own words".
+
 ## Repository layout
 
 The published IPM package is the repository root (`module.xml`, name `iris-shutter`, sources under `src/`): the whole of Shutter for an AI Hub build, 2026.3 or later with Interoperability (`SystemRequirements`, the organisers' line of 2 Nov 2026), the live runner, the agents, tools, the publisher, schemas, policies and knowledge bases included, since they need the `%AI` package. The core alone is `core/module.xml` (name `iris-shutter-core`, `SourcesRoot ../src`, the same resources without the agents' classes), loaded by path on a 2026.2 Community image and in CI, never published; it compiles there and replays recorded runs. Both modules contribute classes to the `Shutter` package; nothing under `src/` may reference `%AI`.
@@ -3390,6 +3549,18 @@ That `If-Match` or an approval makes the write idempotent; that a verified versi
 
 ## Changes
 
+- v1.69, 15 Nov 2026 (Set up the site): new 14.7: the page's turn route `POST /site-profile/setup-turns` and
+  `GET /site-profile/setup-turns/{id}`, the field table (`Shutter.Util.ProfileSetup.Fields`: an agent may draft a
+  receiver's description, and the kind and tier of a receiver being added, and nothing else), `CheckTurn` with the
+  effects check, the stored turn `Shutter.Store.SetupTurn`, the agent `Shutter.Agent.SetupGuide` in the tier `setup` with
+  the terminal tool `SubmitSetupTurn` (`Shutter.Schema.SetupTurn`), and the mimic's turn. 6.4: `model_content.setup_answers`,
+  off by default; while it is off the turn route answers `409 setup_drafting_off` and no model is called. The catalogue
+  pin's terminal tools (`Shutter.Bridge.Catalogue`) include `SubmitSetupTurn`, and the retention task and the uninstall
+  take the turns as they take page questions. Nothing here stores a profile: saving stays the review and
+  `PUT /site-profile`. The text rule refuses control, invisible and direction-changing characters, bare domains, spaced
+  long numbers and key shapes too, and holds the name and description the agent is shown; a drafted description is a
+  part of its quote about that receiver; a kind or tier is drafted only while unanswered, and the effects check compares
+  who approves by the policy's own values; a later turn holds its conversation while it is admitted.
 - v1.68, 16 Nov 2026 (the page for a site's own entries): 6.8 gains `POST /site-entries/preview` (`Shutter_Operate`):
   a body checked as a draft's is and P1, P2 and P4 run on the stored cases it names, with nothing stored, which the public
   demo's roles may run (R16); `GET /site-entries` gains `waitingPlans`; the Site profile page writes, proves, sends for

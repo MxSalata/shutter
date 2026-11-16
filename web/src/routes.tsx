@@ -19,6 +19,7 @@ const ReviewsPage = lazy(() => import('./features/reviews/ReviewsPage'));
 const ReviewPage = lazy(() => import('./features/reviews/ReviewPage'));
 const CoveragePage = lazy(() => import('./features/failure-census/CoveragePage'));
 const SiteProfilePage = lazy(() => import('./features/site-profile/SiteProfilePage'));
+const SetupPage = lazy(() => import('./features/site-profile/setup/SetupPage'));
 const LibraryPage = lazy(() => import('./features/library/LibraryPage'));
 const SettingsPage = lazy(() => import('./features/settings/SettingsPage'));
 const NamespacesPage = lazy(() => import('./features/namespaces/NamespacesPage'));
@@ -56,6 +57,7 @@ export const routes: RouteObject[] = [
               { path: 'reviews/:reviewId', element: <ReviewPage /> },
               { path: 'coverage', element: <CoveragePage /> },
               { path: 'site-profile', element: <SiteProfilePage /> },
+              { path: 'site-setup', element: <SetupPage /> },
               { path: 'library', element: <LibraryPage /> },
               { path: 'settings', element: <SettingsPage /> },
               { path: 'settings/namespaces', element: <NamespacesPage /> },

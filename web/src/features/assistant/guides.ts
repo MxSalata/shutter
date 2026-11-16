@@ -102,6 +102,19 @@ export const GUIDES: Record<string, PageGuide> = {
       'Why does a scenario need a near miss?',
     ],
   },
+  'site-setup': {
+    title: 'Set up the site',
+    what: "A checklist for one receiver at a time: its production item, what it is, its kind, its tier and what it takes, each answered with the page's own control. The draft builds up beside the questions. Nothing is saved here: Review and save hands the draft to the Site profile's review, where an approver saves it.",
+    next: [
+      { label: 'The Site profile, with every other answer', to: '/site-profile' },
+      { label: 'See a receiver at work on a case', to: '/cases' },
+    ],
+    questions: [
+      'What does this page save?',
+      'Why are kind and tier needed before review?',
+      'What will Shutter do at a receiver I add here?',
+    ],
+  },
   library: {
     title: 'Agent library',
     what: 'The board: three specialist agents and a coordinator agent, what each one asks of the evidence and what it knows. An approver may switch a specialist off the board.',

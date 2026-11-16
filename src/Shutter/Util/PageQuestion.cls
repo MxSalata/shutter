@@ -174,10 +174,11 @@ ClassMethod RunMode(itemMode As %String, Output detail As %String) As %String
     Quit ""
 }
 
-/// Whether a run is a page question's: its agent class is the tier's.
+/// Whether a run is a page question's, or a turn of Set up the site (CONTRACTS 14.7), which runs under the same rule:
+/// live or not at all, never from a recording and never into one. Its agent class is one of the two tiers'.
 ClassMethod IsPageRun(agentClass As %String) As %Boolean
 {
-    Quit $GET(agentClass) = ..#AGENTCLASS
+    Quit ($GET(agentClass) = ..#AGENTCLASS) || ##class(Shutter.Util.ProfileSetup).IsSetupRun($GET(agentClass))
 }
 
 /// Whether the agent item refuses a run before any runner sees it: a page question's run in any mode but live, with the

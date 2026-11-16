@@ -1311,8 +1311,11 @@ export interface SiteProfile {
   /** Who corrects the systems by hand when Shutter can't, and where their email goes (T29). */
   teams?: SiteTeam[];
   mail?: { from?: string; allowed_domains?: string[] };
-  /** What may leave IRIS for a model beyond tokens and flags (CONTRACTS 9). */
-  model_content?: { free_text?: boolean };
+  /**
+   * What may leave IRIS for a model beyond tokens and flags (CONTRACTS 9): the text of notes, and what a person types in
+   * Set up the site (CONTRACTS 14.7). Both off unless the profile says true.
+   */
+  model_content?: { free_text?: boolean; setup_answers?: boolean };
   /**
    * The zone of times the feed sends without an offset: an IANA name or a fixed offset (CONTRACTS 6.4); and whether the
    * feed is held while a message's HL7 schema category is not loaded here ("prevent failures", default false); how far
@@ -2323,6 +2326,67 @@ export interface PageQuestion {
   answer: Answer | null;
   /** When the trial's answer was made, when it carries it (the mock does; the server does not send it). */
   recordedAt?: string | null;
+}
+
+/** POST /site-profile/setup-turns (CONTRACTS 14.7): what a person typed about one receiver of the draft. */
+export interface SendSetupTurn {
+  /** The conversation's id, as the first turn's answer gave it; left out for a first turn. */
+  conversation?: string;
+  /** The receiver the answer is about, by its name in the draft. */
+  receiver: string;
+  /** What the person typed, 1 to 500 characters. */
+  text: string;
+  /** The draft as the page holds it. */
+  draft: SiteProfile;
+  /** The stored version the draft was made from. */
+  baseVersion: number;
+  /** The page's count of the draft's changes, echoed back. */
+  draftRevision: number;
+}
+
+/** POST /site-profile/setup-turns answers 202 with the turn's id and the conversation's. */
+export interface SetupTurnAsked {
+  turnId: string;
+  conversation: string;
+  state: QuestionState;
+}
+
+/** One answer Ask Shutter drafted: the field, the value, the person's quoted words and the draft's value it replaces. */
+export interface SetupProposal {
+  field: string;
+  receiver: string;
+  to: string | number;
+  quote: string;
+  from: string | number | boolean | null;
+}
+
+/** The turn as the core accepted it: what Ask Shutter says, what it drafted and the question it suggests next. */
+export interface SetupTurnBody {
+  say: string;
+  proposals: SetupProposal[];
+  ask: { field: string; receiver: string } | null;
+}
+
+/** GET /site-profile/setup-turns/{id}: the turn, its state and, once accepted, what was said and drafted. */
+export interface SetupTurnView {
+  turnId: string;
+  conversation: string;
+  receiver: string;
+  text: string;
+  state: QuestionState;
+  baseVersion: number;
+  draftRevision: number;
+  askedBy: string;
+  askedAt: string;
+  answeredAt: string | null;
+  error: string | null;
+  mode: string | null;
+  model: string | null;
+  costUsd: number | null;
+  ensMessageId: string | null;
+  /** The run's message in the Management Portal, as the server builds it (Dispatch.MessageLink); null with `ensMessageId`. */
+  messageLink: string | null;
+  turn: SetupTurnBody | null;
 }
 
 /** One row of a warehouse history read, reduced: exactly as the site's export gave it, and never the patient again. */
