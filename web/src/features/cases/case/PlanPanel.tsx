@@ -8,6 +8,7 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { TechDetail } from '@/components/TechDetail';
 import { Timestamp } from '@/components/Timestamp';
 import { checkCounts, CHECK_STATES, checkState, gateOutcome } from '@/lib/status';
+import { CHECK_QUESTIONS } from '@/lib/gateChecks';
 import { asArray, asObject } from '@/lib/json';
 import { checksOf, fhirSummary, kindOfPlan, quotedVersion, receiverKind, shownFailureText } from './derive';
 import { planLeader } from './follows';
@@ -32,22 +33,6 @@ const STAGES: Record<string, string> = {
 const FHIR_STAGES: Record<string, string> = {
   ...STAGES,
   proposal: 'At proposal',
-};
-
-/** What each of the gate's checks asks, in a line, under its name. */
-const CHECK_QUESTIONS: Record<string, string> = {
-  identity: 'Same patient and encounter at the receiver?',
-  conformance: 'Does the message parse against its schema?',
-  intent: "Does the plan send only the case's own operation, unchanged?",
-  ordering: 'Has no later event moved the encounter on?',
-  state_transition: "Can the encounter's state at the receiver take this event?",
-  effect: 'Is the operation not committed at the receiver already?',
-  authorization: "Has a person, or the site's written policy, released the write?",
-  concurrency: 'Is the receiver still at the version the plan is conditional on?',
-  evidence: 'Is the evidence recent enough to act on?',
-  capability: 'Does the receiver take conditional writes, keep receipts and history?',
-  catalogue: 'Does an entry of the scenario catalogue match the evidence?',
-  rehearsal: "Did the receiver's dry run say this would apply?",
 };
 
 /**

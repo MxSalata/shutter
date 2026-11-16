@@ -290,14 +290,15 @@ test.describe('the trial on the build IRIS serves', () => {
     // bounded failed count among them, and 1.4.6's merged items 34 more and the site profile's
     // Ask Shutter about this, in the shell's Ask panel, 558 more, and 1.4.8's plain words for a rate limit, a 503, a run in
     // the way and a page a release replaced (any page's error, so in the shell), 636 more, and the site's own scenarios'
-    // list query, its key and a profile save's rereading of the list (in the shared hooks, so in the shell), 190 more,
-    // so the allowance is 7,300 bytes
+    // list query, its key and a profile save's rereading of the list (in the shared hooks, so in the shell), 190 more
+    // (76,597 bytes), and this site's guide, a route outside the shell with its own chunk, 434 more (77,031), so the
+    // allowance is 7,700 bytes
     const src = await page.evaluate(
       () => new URL(document.querySelector<HTMLScriptElement>('script[type="module"][src]')!.src).pathname,
     );
     const entry = bodies.find((b) => b.path === src);
     expect(entry, 'the entry chunk').toBeTruthy();
-    expect(entry!.size).toBeLessThanOrEqual(69_373 + 7_300);
+    expect(entry!.size).toBeLessThanOrEqual(69_373 + 7_700);
   });
 });
 

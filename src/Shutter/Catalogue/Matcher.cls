@@ -703,6 +703,63 @@ ClassMethod WhenHolds(when As %String, facts As %DynamicObject) As %Boolean
     Quit ##class(Shutter.Store.SiteProfile).Flag(flag) = value
 }
 
+/// What a single match of a shipped entry settles on at a receiver of the profile in force, with no case: Settle on that
+/// receiver's own facts (ReceiverFacts), as a match of the entry alone at that receiver would give. A when whose value is
+/// other_source depends on the case (the other source system of a simultaneous movement), so it is never guessed: for
+/// each flag such a when names that the site has set, the same Settle on a case whose other source is that system is
+/// returned in whenOtherSource, when it settles otherwise. For this site's guide (GET /catalogue, CONTRACTS 6.8).
+ClassMethod AtReceiver(entry As %DynamicObject, receiver As %String) As %DynamicObject
+{
+    Set json = "Shutter.Util.Json"
+    Set m = {}
+    Set m.id = entry.id, m.version = entry.version, m.title = entry.title, m.decides = entry.decides
+    Set m.preferred = entry.%Get("preferred"), m.alternatives = entry.%Get("alternatives")
+    Set facts = ..ReceiverFacts(receiver)
+    Set out = {"facts": (facts)}
+    Do ..Settle(out, [(m)])
+    Set r = {}
+    Set r.receiver = receiver, r.kind = ##class(Shutter.Store.SiteProfile).ReceiverKind(receiver)
+    Set r.category = ##class(Shutter.Store.SiteProfile).ReceiverCategory(receiver)
+    Set r.decides = out.decision, r.outcome = $CLASSMETHOD(json, "Str", out, "outcome")
+    Set r.outcomeRef = $CLASSMETHOD(json, "Str", out, "outcome_ref")
+    Set onCase = [], seen = ""
+    Set alts = entry.%Get("alternatives")
+    If $ISOBJECT(alts) {
+        Set ai = alts.%GetIterator()
+        While ai.%GetNext(, .alt) {
+            Continue:'$ISOBJECT(alt)
+            Set when = $ZSTRIP($CLASSMETHOD(json, "Str", alt, "when"), "<>W")
+            Continue:(when '[ ":")
+            Set flag = $ZSTRIP($PIECE(when, ":", 1), "<>W")
+            Continue:($ZSTRIP($PIECE(when, ":", 2, *), "<>W") '= "other_source")
+            // The system the site names for the flag, read as WhenHolds reads it: a fact of the flag's name first
+            Set named = $SELECT(facts.%GetTypeOf(flag) = "string": facts.%Get(flag), 1: ##class(Shutter.Store.SiteProfile).Flag(flag))
+            Continue:((named = "") || $LISTFIND(seen, named))
+            Set seen = seen _ $LISTBUILD(named)
+            Set f = ..ReceiverFacts(receiver)
+            Set f."other_source" = named
+            Set o = {"facts": (f)}
+            Do ..Settle(o, [(m)])
+            Continue:(($CLASSMETHOD(json, "Str", o, "outcome") = r.outcome) && ($CLASSMETHOD(json, "Str", o, "outcome_ref") = r.outcomeRef))
+            Do onCase.%Push({"flag": (flag), "otherSource": (named), "decides": (o.decision), "outcome": ($CLASSMETHOD(json, "Str", o, "outcome")), "outcomeRef": ($CLASSMETHOD(json, "Str", o, "outcome_ref"))})
+        }
+    }
+    Set r.whenOtherSource = onCase
+    Quit r
+}
+
+/// A receiver's own facts for an entry's when, as Facts gives them for a case at that receiver: its history policy and its
+/// category; the other source system and the occupant's case come from a case, so they are empty here.
+ClassMethod ReceiverFacts(name As %String) As %DynamicObject
+{
+    Set f = {}
+    Set f."other_source" = ""
+    Set f."history_policy" = ##class(Shutter.Store.SiteProfile).ReceiverHistoryPolicy(name)
+    Set f."receiver_category" = ##class(Shutter.Store.SiteProfile).ReceiverCategory(name)
+    Set f."occupant_case" = ""
+    Quit f
+}
+
 /// yes when the receiver applied a movement for the encounter from another source system within the site's
 /// source_skew_seconds of the failed operation's own event time, either side of it.
 ClassMethod SimultaneousSource(summary As %DynamicObject, case As Shutter.Store.Case) As %String [ Private ]

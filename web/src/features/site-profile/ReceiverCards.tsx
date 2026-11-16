@@ -1,6 +1,5 @@
 import { Badge, Card, Group, List, SimpleGrid, Stack, Text, Title } from '@mantine/core';
 import { IconCircleDashed, IconX } from '@tabler/icons-react';
-import type { ReactNode } from 'react';
 import type { FhirReceiverSettings, ReceiverCategory, SiteProfile, SiteReceiver } from '@/api/types';
 import { CodeChip } from '@/components/CodeChip';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -17,6 +16,7 @@ import {
 } from '@/lib/categories';
 import { categoryMark, hueVar } from '@/lib/hues';
 import { FHIR_OVERTAKEN_LINE, TIER_LABELS, overtakenLine } from './profile';
+import { capabilities, fhirOf } from './receiverCapabilities';
 
 /** The category's mark: its icon in its identity hue on a round surface, dashed for a kind whose cases go to a person. */
 export function CategoryAvatar({ category }: { category: ReceiverCategory }) {
@@ -76,48 +76,6 @@ export function TierMark({ tier }: { tier: string | number }) {
       <TierMeter tier={Number(t)} />
     </Group>
   );
-}
-
-interface Capability {
-  yes: boolean;
-  /** For the "Takes:" line. */
-  short: string;
-  /** For "What it cannot take": the whole meaning. */
-  long: ReactNode;
-}
-
-/** What the receiver can take, as the site declared it. */
-function capabilities(r: SiteReceiver, withTerms: boolean): Capability[] {
-  const f = r.features;
-  // No features declared: the core assumes every one, as the downstream system's defaults
-  const has = (k: string) => (f ? f[k] === true : true);
-  const a = (code: string) => (withTerms ? <Term term="adt">{code}</Term> : code);
-  return [
-    {
-      yes: has('conditional_writes'),
-      short: 'conditional writes',
-      long: 'Conditional writes: a write names the version it expects',
-    },
-    { yes: has('receipts'), short: 'receipts', long: 'Receipts: it says whether an operation was committed' },
-    { yes: has('history'), short: 'history', long: 'A readable history of each encounter' },
-    { yes: has('dry_run'), short: 'dry runs', long: 'Dry runs: a write rehearsed and rolled back' },
-    {
-      yes: r.cancels === true,
-      short: 'cancels',
-      long: <>Cancels ({a('A11')}, A12, A13)</>,
-    },
-    {
-      yes: r.merges === true,
-      short: 'merges',
-      long: <>Merges ({a('A40')}), when the site allows them</>,
-    },
-  ];
-}
-
-/** The entry's fhir block when it is one the card can read, else null: a FHIR R4 receiver (DESIGN 2.1). */
-function fhirOf(r: SiteReceiver): FhirReceiverSettings | null {
-  const f = r.fhir as unknown;
-  return typeof f === 'object' && f !== null && !Array.isArray(f) ? (f as FhirReceiverSettings) : null;
 }
 
 /** What a FHIR R4 receiver takes, its switch and its ward map, in place of the declared features. */

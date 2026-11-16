@@ -96,6 +96,8 @@ For a hospital trying Shutter beside a real production, as [the install guide](h
 
 All 37 scenarios (S1 to S35, with S23 in three parts; CI plays 27 of them end to end), and the online demo's two optional pathology paths, P1 and P2, step by step, and where each part of the task shows: [docs/readme/scenarios.md](https://github.com/MxSalata/shutter/blob/main/docs/readme/scenarios.md).
 
+**This site's guide.** On the Site profile page, **Export this site's guide (PDF)** opens a page made from the install's own answers at that moment, which the browser prints to PDF: the receivers, the site-wide settings, the gate's checks, every scenario of the catalogue and what Shutter does with it at this site, and the limits that apply, stamped on every page with the profile's, the catalogue's, the gate policy's and the release's versions. It is for the people who sign off a site, and it holds no patient data. In the trial it is made from the demo hospital's sample data and says so.
+
 ## The approval boundary, attacked over HTTP
 
 On every push to `main` that changes code, CI tries an approval naming another plan or a stale version (409), an operator's approval (403), one approval sent twice (one write), a Workflow inbox approval with an empty or another digest (blocked, no write), the receiver changed after approval (S20, no write), and a resend of a delivery the receiver already holds (S3, no write). The script: [boundary_check.py](https://github.com/MxSalata/shutter/blob/main/tests/e2e/boundary_check.py).

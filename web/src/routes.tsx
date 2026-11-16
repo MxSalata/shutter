@@ -26,6 +26,7 @@ const EvaluationPage = lazy(() => import('./features/evaluation/EvaluationPage')
 const HealthPage = lazy(() => import('./features/health/HealthPage'));
 const ApiPage = lazy(() => import('./features/api/ApiPage'));
 const NotFoundPage = lazy(() => import('./features/shell/NotFoundPage'));
+const SiteGuidePage = lazy(() => import('./features/site-guide/SiteGuidePage'));
 
 // Hash routing: IRIS serves the files at /shutter/ without rewriting unknown paths to index.html, so a deep link
 // must not depend on the server.
@@ -66,6 +67,8 @@ export const routes: RouteObject[] = [
           },
         ],
       },
+      // This site's guide prints as a document of its own: signed in, but outside the shell, so no navigation prints
+      { path: 'site-guide', element: <SiteGuidePage />, errorElement: <RouteError /> },
     ],
   },
 ];

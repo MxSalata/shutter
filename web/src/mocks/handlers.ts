@@ -1,6 +1,9 @@
 import { delay, http, HttpResponse } from 'msw';
 import fixtures from './fixtures.json';
 import definitions from '../../../fixtures/scenarios.json';
+import recordedCatalogue from './catalogue-recorded.json';
+import { atReceiversOf } from './atReceivers';
+import type { CatalogueEntry, CatalogueView } from '@/features/site-guide/model';
 import type {
   SiteEntriesView,
   AccessReport,
@@ -775,6 +778,23 @@ export const NO_SITE_ENTRIES: SiteEntriesView = {
   catalogueVersion: '',
 };
 
+/**
+ * GET /catalogue (CONTRACTS 6.8) as the real route answered it on a demo install with no site entry
+ * (catalogue-recorded.json, recorded from IRIS with scripts in the file's own note), with each shipped entry's
+ * atReceivers worked out again for the trial's own site profile, which a visitor may change: the port of the core's
+ * Matcher.AtReceiver in atReceivers.ts, held to the recording by its test.
+ */
+export function catalogueView(profile: SiteProfile | undefined = siteProfile?.profile): CatalogueView {
+  const recorded = recordedCatalogue.catalogue as unknown as CatalogueView;
+  return {
+    ...recorded,
+    shipped: recorded.shipped.map(({ atReceivers: _recorded, ...e }: CatalogueEntry) => ({
+      ...e,
+      atReceivers: profile ? atReceiversOf(e, profile) : [],
+    })),
+  };
+}
+
 /** The worked example of docs/readme/local-rules.md as GET /site-entries would list it, active. Synthetic. */
 export const SITE_ENTRIES_EXAMPLE: SiteEntriesView = {
   items: [
@@ -1514,6 +1534,7 @@ export const handlers = [
   // The site's own scenarios (CONTRACTS 6.8), read only: the recorded cases were made with none, so the list is empty
   // unless a test answers with the example (SITE_ENTRIES_EXAMPLE).
   http.get(`${BASE}/site-entries`, () => (!session ? signedOut() : HttpResponse.json(NO_SITE_ENTRIES))),
+  http.get(`${BASE}/catalogue`, () => (!session ? signedOut() : HttpResponse.json(catalogueView()))),
   http.get(`${BASE}/site-profile/history`, ({ request }) => {
     if (!session) return signedOut();
     const limit = Number(new URL(request.url).searchParams.get('limit') ?? 50);

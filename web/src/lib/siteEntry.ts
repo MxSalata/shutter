@@ -96,7 +96,7 @@ export function siteMatchOf(summary: unknown): SiteMatch | undefined {
   };
 }
 
-const OUTCOMES: Record<string, string> = {
+export const OUTCOMES: Record<string, string> = {
   resend: 'a resend',
   resend_chain: 'a resend of the chain',
   resend_latest: 'a resend of the latest movement',
@@ -108,7 +108,7 @@ const OUTCOMES: Record<string, string> = {
   correct_history: 'a correction of the history by a person',
 };
 
-const DECIDES: Record<string, string> = {
+export const DECIDES: Record<string, string> = {
   policy: 'by site policy',
   board: 'decided by the board',
   person: 'decided by a person',
