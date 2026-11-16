@@ -1095,6 +1095,22 @@ describe('drafted answers after the hand-over', () => {
     ).not.toBeChecked();
   }, 90_000);
 
+  it('says what a drafted tier comes to under the form as it stands, the policy row changed since included', async () => {
+    const user = userEvent.setup();
+    const band = await handedOver(user);
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Tier 3, single failures' }), 'automatic');
+    await user.click(band.getByRole('button', { name: 'Review and save…' }));
+    const dialog = within(await screen.findByRole('dialog', { name: /^Save version/ }));
+    const block = dialog.getByRole('list', { name: 'Drafted by Ask Shutter (3)' });
+    const tier = within(block)
+      .getByText(/Bed Board, tier:/)
+      .closest('li')!;
+    expect(tier).toHaveTextContent(
+      "Tier 3's row now releases a write with no person: only a person chooses this tier, with the page's control.",
+    );
+    expect(tier).not.toHaveTextContent('single failures, one approval');
+  }, 90_000);
+
   it('discards the handed-over draft in Set up the site too when the save bar discards it', async () => {
     const user = userEvent.setup();
     await handedOver(user);

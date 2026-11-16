@@ -77,7 +77,8 @@ import { VersionsPanel } from './VersionsPanel';
 import { SuggestionCard } from './SuggestionCard';
 import { SetupDraftCard } from './SetupDraftCard';
 import { SETUP_DRAFT_TITLE_ID, draftRows } from './setup/draftRows';
-import { answerText, questionOfKey } from './setup/fields';
+import { answerText, consequence, questionOfKey } from './setup/fields';
+import { rowAutomatic } from './setup/proposals';
 import { SetupLink } from './setup/SetupLink';
 import { newRid, useSetup } from './setup/setupStore';
 import {
@@ -992,7 +993,18 @@ function Profile({
                 ? undefined
                 : draft.receivers.find((x) => x.name === d.receiver);
           const q = questionOfKey(d.key);
-          return r && q && answerText(q, r) === d.value ? [{ ...d, receiver: r.name }] : [];
+          if (!r || !q || answerText(q, r) !== d.value) return [];
+          // What the answer comes to under the form as it stands now, which the person may have changed since
+          const automatic =
+            d.key === 'tier' &&
+            (rowAutomatic(base.profile, String(r.tier)) || rowAutomatic(draft, String(r.tier)));
+          return [
+            {
+              ...d,
+              receiver: r.name,
+              consequence: `${consequence(q, r, draft)}${automatic ? ` Tier ${r.tier}'s row now releases a write with no person: only a person chooses this tier, with the page's control.` : ''}`,
+            },
+          ];
         })
       : [];
   const dirty = changes.length > 0;
