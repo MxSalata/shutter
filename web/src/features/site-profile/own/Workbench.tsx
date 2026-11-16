@@ -271,7 +271,11 @@ function Stored({ entry, review, onSaved, onClose }: WorkbenchProps & { entry: S
   };
   return (
     <Stack gap="sm">
-      <Text size="sm">{entry.sentence ? `${entry.sentence}.` : 'Its content could not be read.'}</Text>
+      <Text size="sm">
+        {entry.sentence
+          ? `${entry.sentence}.`
+          : `${entry.unreadable ?? "This entry's content cannot be read"}.`}
+      </Text>
       {entry.draft && live ? (
         <Text size="sm">{`Draft version ${entry.draft.version} is written beside version ${entry.activeVersion}: it changes nothing until a second person approves it.`}</Text>
       ) : null}

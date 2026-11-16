@@ -193,4 +193,59 @@ describe("the site's own scenarios on the Site profile page", () => {
     page();
     expect(await screen.findByText('Our own scenarios could not be read')).toBeInTheDocument();
   });
+
+  it('shows an entry set aside from the terminal as the core reports it: suspended, its reason and its note, with the banner', async () => {
+    const example = SITE_ENTRIES_EXAMPLE.items[0]!;
+    answering({
+      ...SITE_ENTRIES_EXAMPLE,
+      items: [
+        {
+          ...example,
+          state: 'suspended',
+          needsReview: true,
+          suspended: {
+            by: 'admin',
+            at: '2026-11-16T01:00:00Z',
+            reason: 'Set aside by an IRIS administrator: its row was damaged',
+          },
+          review: {
+            dropped: [],
+            notes: [
+              "The entry's row could not be read and was written again from its versions and events: a person reviews it before it applies again",
+            ],
+          },
+        },
+        {
+          ...example,
+          id: 'L2',
+          title: '',
+          sentence: '',
+          content: undefined,
+          unreadable: "This entry's content cannot be read",
+        },
+      ],
+      status: {
+        ...SITE_ENTRIES_EXAMPLE.status,
+        suspended: ['L1'],
+        warnings: [
+          'Site entry L1 is suspended (by admin, 2026-11-16T01:00:00Z): its protection is off until a second person approves resuming it',
+          'Site entry L3 could not be rechecked under release 1.4.9 (its row cannot be read): until it is, every case on the site is matched as error and goes to a person.',
+        ],
+      },
+    });
+    page();
+    const warnings = await screen.findByTestId('own-scenarios-warnings');
+    expect(within(warnings).getByText(/L3 could not be rechecked/)).toBeInTheDocument();
+    const row = screen.getByTestId('own-scenario-L1');
+    expect(within(row).getByText('Suspended')).toBeInTheDocument();
+    expect(
+      within(row).getByText(/Set aside by an IRIS administrator: its row was damaged/),
+    ).toBeInTheDocument();
+    expect(within(row).getByTestId('own-scenario-L1-notes')).toHaveTextContent(
+      /written again from its versions/,
+    );
+    expect(
+      within(screen.getByTestId('own-scenario-L2')).getByText("This entry's content cannot be read."),
+    ).toBeInTheDocument();
+  });
 });

@@ -231,7 +231,9 @@ export function ApprovalDialog({
   const content = versionOf(entry, action)?.content;
   const proof = entry.proofs.find((x) => String(x.id) === String(p.proofId))?.result;
   const onePerson = list?.status.onePerson ?? null;
-  const author = me !== '' && (me === p.by || (action === 'activate' && me === v?.writtenBy));
+  // As the core compares them (R6): the proposer and the version's author, for every action, whatever the letter case
+  const same = (a?: string) => !!a && a.toUpperCase() === me.toUpperCase();
+  const author = me !== '' && (same(p.by) || same(v?.writtenBy));
   // Why this reader cannot decide here: no approval right, or the public demo's (which changes nothing of the site), as
   // the site profile's Save says it. The author may still reject (withdraw) their own, and reads why they cannot approve
   const cannot = !can.approve
@@ -242,7 +244,7 @@ export function ApprovalDialog({
   const locked =
     cannot ??
     (author && !onePerson
-      ? `You ${me === p.by ? 'proposed this' : 'wrote this version'}: a second person approves it, so that no one person adds or removes a brake alone.`
+      ? `You ${same(p.by) ? 'proposed this' : 'wrote this version'}: a second person approves it, so that no one person adds or removes a brake alone.`
       : null);
   const waiting = list?.waitingPlans;
   const send = (decision: 'approve' | 'reject') => {

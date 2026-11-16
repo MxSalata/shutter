@@ -1558,7 +1558,13 @@ export interface SiteEntryItem {
   /** Set by the recheck after an upgrade or a profile save: the entry still applies, and a person should look. */
   needsReview: boolean;
   review?: { dropped?: { condition: string; why: string }[]; notes?: string[] };
+  /**
+   * Who suspended it, when and why. An entry an IRIS administrator set aside from the terminal (a row that could not be
+   * read or rechecked) is reported as suspended too, its reason saying so.
+   */
   suspended?: { by: string; at: string; reason: string };
+  /** Said when the entry's content cannot be read. */
+  unreadable?: string;
   /** The cases the entry sent to a person, in all and in the last 30 days. */
   casesSent: number;
   casesSent30: number;

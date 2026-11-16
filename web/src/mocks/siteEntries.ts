@@ -1006,7 +1006,8 @@ export function siteEntryHandlers(deps: SiteEntryDeps) {
           return HttpResponse.json(describe(e, true));
         }
         const me = deps.who();
-        if (me === p.by || (p.action === 'activate' && me === v.writtenBy))
+        // As the core (R6): neither the proposer nor the version's author, for every action, whatever the letter case
+        if ([p.by, v.writtenBy].some((who) => who.toUpperCase() === me.toUpperCase()))
           return fail(
             409,
             'same_person',

@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { resetMock } from '@/mocks/handlers';
+import { resetMock, SITE_ENTRIES_EXAMPLE } from '@/mocks/handlers';
 import { server } from '@/mocks/node';
 import { useAppearance } from '@/stores/appearance';
 import { theme } from '@/theme';
@@ -255,5 +255,44 @@ describe("the workbench of the site's own scenarios", () => {
     const banner = await screen.findByTestId('own-scenarios-warnings', {}, { timeout: 5000 });
     expect(banner).toHaveTextContent(/L1 is suspended/);
     expect(await screen.findByRole('button', { name: 'Propose resuming it…' })).toBeInTheDocument();
+  }, 60_000);
+
+  it("tells the version's author they cannot approve its retirement either, whatever the letter case of their name", async () => {
+    const example = SITE_ENTRIES_EXAMPLE.items[0]!;
+    server.use(
+      http.get(`${BASE}/site-entries/L1`, () =>
+        HttpResponse.json({
+          ...example,
+          proposal: {
+            action: 'retire',
+            version: 1,
+            digest: example.digest,
+            by: 'colleague',
+            at: '2026-11-16T09:00:00Z',
+          },
+          versions: [
+            {
+              version: 1,
+              status: 'approved',
+              digest: example.digest,
+              writtenBy: 'APPROVER',
+              approvedBy: 'colleague',
+            },
+          ],
+          proofs: [],
+          events: [],
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    page('/site-profile?own=L1');
+    await user.click(await screen.findByRole('button', { name: 'Review the proposal…' }, { timeout: 5000 }));
+    const review = await screen.findByRole('dialog', { name: 'Approve or reject: L1 version 1' });
+    expect(within(review).getByTestId('save-locked')).toHaveTextContent(
+      /You wrote this version: a second person/,
+    );
+    expect(within(review).getByRole('button', { name: 'Approve' })).toHaveAttribute('aria-disabled', 'true');
+    // The author may still reject it
+    expect(within(review).getByRole('button', { name: 'Reject' })).not.toHaveAttribute('aria-disabled');
   }, 60_000);
 });

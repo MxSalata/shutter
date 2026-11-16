@@ -98,7 +98,9 @@ function Entry({
             />
           ) : null}
         </Group>
-        <Text size="sm">{e.sentence ? `${e.sentence}.` : 'Its content could not be read.'}</Text>
+        <Text size="sm">
+          {e.sentence ? `${e.sentence}.` : `${e.unreadable ?? "This entry's content cannot be read"}.`}
+        </Text>
         <Text size="sm" c="dimmed">
           {e.approvedBy
             ? `Version ${e.activeVersion} approved by ${e.approvedBy}${e.approvedAt ? `, ${formatZoned(e.approvedAt)}` : ''}. `
@@ -212,7 +214,12 @@ export function OwnScenarios() {
       ...(s1 ? [{ case: s1, expect: 'no_match' as const }] : []),
     ],
   };
-  const suspended = (entries.data?.status.suspended.length ?? 0) > 0 || !!entries.data?.status.onePerson;
+  // The banner is the blocking kind while any protection is off or the matching of every case is held: a suspension (a
+  // set-aside one included), the two-person rule lifted, or an entry the core could not read or recheck
+  const suspended =
+    (entries.data?.status.suspended.length ?? 0) > 0 ||
+    !!entries.data?.status.onePerson ||
+    warnings.some((w) => /could not be rechecked|cannot all be read/.test(w));
   return (
     <Section
       id="site-own-scenarios"
