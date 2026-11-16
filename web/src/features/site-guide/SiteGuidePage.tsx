@@ -298,7 +298,7 @@ function Receiver({ r, profile, holds }: { r: SiteReceiver; profile: SiteProfile
   const watch = r.watch as { item?: string } | undefined;
   const outage = watch
     ? [
-        `Shutter watches ${typeof watch.item === 'string' ? watch.item : 'its item'} in the engine and opens one outage while its listener is down, with the failed messages listed.`,
+        `Shutter watches ${typeof watch.item === 'string' ? printable(watch.item) : 'its item'} in the engine and opens one outage while its listener is down, with the failed messages listed.`,
         r.engine_resend === true
           ? "After one approval the engine sends again the outage's messages that never arrived, settled by the receiver's declared duplicate handling."
           : 'Shutter resends nothing for an outage here: the engine retries as configured.',

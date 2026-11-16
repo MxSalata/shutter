@@ -185,4 +185,44 @@ describe("This site's guide and the patient's data", () => {
     expect(text).toContain('approved by (an address, not printed here)');
   });
 
+  it('masks a long number and a secret in the free text, and a host in a receiver name or a watched item, wherever they print', async () => {
+    const view = structuredClone(fixtures.siteProfile) as unknown as {
+      profile: Record<string, unknown> & {
+        approvers: Record<string, unknown>;
+        receivers: Record<string, unknown>[];
+      };
+      version: number;
+    };
+    const p = view.profile;
+    // Each secret is written as parts, so no whole token shape stands in this file
+    const key = ['sk-', 'ant-api03-', 'Ab12Cd34Ef56Gh78Ij90Kl12'].join('');
+    const hex = ['5f4dcc3b5aa765d6', '1d8327deb882cf99aa11'].join('');
+    p.approvers.escalation = 'Ring 943 476 5919 on call, or 943\u2013476\u20135919';
+    p.receivers[0].system = `The bed system, key ${key}, hash ${hex}`;
+    p.receivers[0].watch = { item: 'beds01.trust.example.nhs.uk' };
+    p.receivers.push({
+      name: 'Results to labs01.trust.example.nhs.uk',
+      system: 'the old lab system',
+      category: 'current_state',
+      tier: 3,
+      features: { conditional_writes: false, receipts: false, history: false, dry_run: false },
+    });
+    server.use(
+      http.get('/api/shutter/site-profile', () => HttpResponse.json(view)),
+      http.get('/api/shutter/catalogue', () =>
+        HttpResponse.json({ ...catalogueView(view.profile as never), profileVersion: view.version }),
+      ),
+    );
+    const { container } = renderGuide();
+    await screen.findByTestId('site-guide-stamp');
+    const text = container.textContent ?? '';
+    expect(nhsShaped(text)).toEqual([]);
+    expect(text).not.toContain('5919');
+    expect(text).not.toContain(key);
+    expect(text).not.toContain(hex);
+    expect(text.match(/example\.nhs\.uk/g)).toBeNull();
+    expect(text).toContain('Ring (a number, not printed here) on call');
+    expect(text).toContain('key (a secret, not printed here)');
+    expect(text).toContain('Results to (an address, not printed here): a case there is investigated');
+  });
 });

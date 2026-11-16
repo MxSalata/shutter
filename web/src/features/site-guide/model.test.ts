@@ -8,6 +8,7 @@ import {
   hasNoRecoveryApi,
   limitsFor,
   patternWords,
+  printable,
   stampLine,
   type AtReceiver,
   type CatalogueEntry,
@@ -156,6 +157,18 @@ describe('the words', () => {
       expect(askedWords(outcome, 'approval', 'policy')).toBe(
         "Nobody is asked: the case closes once the receiver is read again and agrees, unless one of this site's own entries stopped the case before: then a person closes it.",
       );
+  });
+
+  it('masks long numbers and credential shapes as well as addresses', () => {
+    expect(printable('Ring 943 476 5919 or (020) 7946 0958, ext 4455')).toBe(
+      'Ring (a number, not printed here) or (a number, not printed here), ext 4455',
+    );
+    expect(printable('run 123456 here')).toBe('run (a number, not printed here) here');
+    expect(printable(`token: ${['abc', 'def'].join('')}`)).toBe('(a secret, not printed here)');
+    expect(printable(['hash 5f4dcc3b5aa765d6', '1d8327deb882cf99aa11'].join(''))).toBe(
+      'hash (a secret, not printed here)',
+    );
+    expect(printable('Bay 12, ward 7, since 15/11/2026')).toBe('Bay 12, ward 7, since 15/11/2026');
   });
 
   it('writes a pattern in the words the core gives a site entry', () => {

@@ -291,13 +291,34 @@ const ADDRESS = [
   /\b[\w-]+(?:\.[\w-]+)*\.(?:uk|com|org|net|nhs|scot|wales|ie|eu|io|local|internal|lan|example|test|gov|ac|co)\b/gi,
 ];
 
+/** The words that stand where a long number or a secret was. */
+export const NUMBER_NOT_PRINTED = '(a number, not printed here)';
+export const SECRET_NOT_PRINTED = '(a secret, not printed here)';
+
+/**
+ * What Set up the site's text rule calls a long number (ProfileSetup.TextProblem): a run of six or more digits, or ten
+ * or more with up to three spaces, hyphens, dots or brackets between them, every Unicode space and dash read as typed.
+ */
+const NUMBER = [/\(?\d(?:[ ().\-\u00a0\u2000-\u200a\u202f\u2010-\u2015\u2212]{0,3}\d){9,}/g, /\d{6,}/g];
+
+/** The shapes of a credential the same rule names: a word such as password with ":" or "=", key prefixes, long runs. */
+const SECRET = [
+  /\b(?:password|passwd|pwd|secret|token|api[ _-]?key)\s*[:=]\s*\S+/gi,
+  /\b(?:gh[pousr]_[A-Za-z0-9]{16,}|github_pat_[A-Za-z0-9_]{16,}|sk-[A-Za-z0-9_-]{16,}|xox[abposr]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{30,}|glpat-[A-Za-z0-9_-]{16,}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})/g,
+  /\b[0-9a-f]{32,}\b/gi,
+  /(?=[A-Za-z0-9+/_]*[A-Z])(?=[A-Za-z0-9+/_]*[a-z])(?=[A-Za-z0-9+/_]*[0-9])[A-Za-z0-9+/_]{24,}/g,
+];
+
 /**
  * Free text the site wrote (who to ring, approvers' and teams' names, receivers' names and descriptions, an entry's
- * instructions, who saved the profile), with every mail address, host, URL and API path in it masked.
+ * instructions, who saved the profile), with every mail address, host, URL and API path in it masked, and every long
+ * number (an NHS or telephone number) and credential shape. Text longer than 2000 characters is cut there first.
  */
 export function printable(text: string | undefined | null): string {
-  let out = String(text ?? '');
+  let out = String(text ?? '').slice(0, 2000);
+  for (const re of SECRET) out = out.replace(re, SECRET_NOT_PRINTED);
   for (const re of ADDRESS) out = out.replace(re, NOT_PRINTED);
+  for (const re of NUMBER) out = out.replace(re, NUMBER_NOT_PRINTED);
   return out;
 }
 
@@ -388,7 +409,7 @@ export function limitsFor(profile: SiteProfile): Limit[] {
   if (noApi.length)
     out.push({
       title: 'A receiver with no recovery API',
-      text: `${andWords(noApi.map((r) => r.name))}: a case there is investigated and goes to a person, never resent from the case.`,
+      text: `${andWords(noApi.map((r) => printable(r.name)))}: a case there is investigated and goes to a person, never resent from the case.`,
     });
   if (profile.receivers.some((r) => categoryOf(r) === 'orders_results'))
     out.push({
