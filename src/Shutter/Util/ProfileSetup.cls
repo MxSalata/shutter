@@ -111,7 +111,8 @@ ClassMethod ClassOf(path As %String) As %String
 /// digits, or a run of 24 or more base64 characters mixing capitals, small letters and digits); a run of six or more
 /// digits; and a number of ten or more digits with spaces, hyphens, dots or brackets between them (an NHS number as
 /// printed, 943 476 5919, or a telephone number, (020) 7946 0958). Every Unicode space counts as a space and a run of
-/// them as one (Spaces), so a number pasted with non-breaking spaces is read as typed. The cases are one table, TextRows in Shutter.Test.ProfileSetup, that
+/// them as one (Spaces), so a number pasted with non-breaking spaces is read as typed. An IPv4 address is a link too. The
+/// cases are one table, TextRows in Shutter.Test.ProfileSetup, that
 /// the web app's copy (setup/proposals.ts) runs too. Cutting a text short is not redaction, so a text that fails is
 /// refused whole, neither sent nor stored.
 ClassMethod TextProblem(text As %String) As %String
@@ -123,6 +124,7 @@ ClassMethod TextProblem(text As %String) As %String
     If $LOCATE(text, "[^\s@]@[^\s@]") Quit "an address"
     If $LOCATE(text, "(?i)\b[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z][a-z0-9-]*/") Quit "a link"
     If $LOCATE(text, "(?i)\b[a-z0-9-]+(\.[a-z0-9-]+)*\.(" _ ..#DOMAINS _ ")\b") Quit "a link"
+    If $LOCATE(text, "\b\d{1,3}(\.\d{1,3}){3}\b") Quit "a link"
     If $LOCATE(text, "(?i)\b(password|passwd|pwd|secret|token|api[ _-]?key)\s*[:=]") Quit "what looks like a credential"
     If $LOCATE(text, "\b(gh[pousr]_[A-Za-z0-9]{16,}|github_pat_[A-Za-z0-9_]{16,}|sk-[A-Za-z0-9_-]{16,}|xox[abposr]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{30,}|glpat-[A-Za-z0-9_-]{16,}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})") Quit "what looks like a credential"
     If $LOCATE(text, "(?i)\b[0-9a-f]{32,}\b") Quit "what looks like a credential"
@@ -134,7 +136,7 @@ ClassMethod TextProblem(text As %String) As %String
 
 /// The top-level domains a bare domain is read by when it has no path: the common ones and the ones a hospital's
 /// intranet uses.
-Parameter DOMAINS = "com|org|net|uk|io|gov|edu|info|biz|dev|app|cloud|online|site|xyz|eu|ie|local|internal|lan|ai|co";
+Parameter DOMAINS = "com|org|net|uk|io|gov|edu|info|biz|dev|app|cloud|online|site|xyz|eu|ie|local|internal|lan|ai|co|scot|wales|cymru|nhs|int|health|care";
 
 /// A text with every Unicode space (no-break, the typographic spaces, the narrow and the ideographic ones) as a plain
 /// space and each run of spaces as one.

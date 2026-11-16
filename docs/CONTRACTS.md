@@ -2783,8 +2783,9 @@ turn_pending`), or is refused with the same code if the lock is still held.
 **What the person's text may hold.** Before anything is sent to a model the core refuses (and the web app refuses first)
 a text with any of these (`ProfileSetup.TextProblem`, the rule of a receiver's runbook line widened): a control character
 (C0, DEL or C1); an invisible or direction-changing character (zero-width characters, the bidirectional marks, overrides
-and isolates); a link, which is a scheme, `www.`, or a bare domain with a path or a known top-level domain
-(`intranet.trust.nhs.uk/board`, `example.com`); an address; the shape of a credential (a word such as `password` or
+and isolates); a link, which is a scheme, `www.`, a bare domain with a path or a known top-level domain
+(`intranet.trust.nhs.uk/board`, `example.com`, `intranet.nhs.scot`: the list includes `.scot`, `.wales`, `.cymru` and
+`.nhs`, v1.69), or an IPv4 address with or without a path (v1.69); an address; the shape of a credential (a word such as `password` or
 `token` with `:` or `=`, a provider's key prefix such as `ghp_`, `github_pat_`, `sk-`, `xox?-`, `AKIA`, `AIza` or
 `glpat-`, a JSON web token, a run of 32 or more hex digits, or a run of 24 or more base64 characters mixing capitals,
 small letters and digits); a run of six or more digits; or a number of ten or more digits with spaces, hyphens, dots or

@@ -26,7 +26,7 @@ const KINDS_OF_SYSTEM = ['current_state', 'history_of_record', 'orders_results']
 
 /** The top-level domains a bare domain is read by when it has no path: ProfileSetup's DOMAINS. */
 const DOMAINS =
-  'com|org|net|uk|io|gov|edu|info|biz|dev|app|cloud|online|site|xyz|eu|ie|local|internal|lan|ai|co';
+  'com|org|net|uk|io|gov|edu|info|biz|dev|app|cloud|online|site|xyz|eu|ie|local|internal|lan|ai|co|scot|wales|cymru|nhs|int|health|care';
 
 /** A text with every Unicode space as a plain space and each run of spaces as one: the port of ProfileSetup.Spaces. */
 export const spaces = (text: string) =>
@@ -38,8 +38,8 @@ const BARE_DOMAIN = new RegExp(`\\b[a-z0-9-]+(\\.[a-z0-9-]+)*\\.(${DOMAINS})\\b`
  * invisible or direction-changing character; a link (a scheme, www., or a bare domain with a path or a known top-level
  * domain); an address; the shape of a credential (a word such as password with ":" or "=", a provider's key prefix, a
  * long hex or base64 run); a run of six or more digits; a number of ten or more digits with spaces, hyphens, dots or
- * brackets between them, every Unicode space read as a space and a run of them as one. Both suites run the cases of the
- * core's TextRows table.
+ * brackets between them, every Unicode space read as a space and a run of them as one; an IPv4 address, as a link. Both
+ * suites run the cases of the core's TextRows table.
  */
 export function textProblem(raw: string): string {
   const text = spaces(raw);
@@ -51,6 +51,7 @@ export function textProblem(raw: string): string {
   if (/[^\s@]@[^\s@]/.test(text)) return 'an address';
   if (/\b[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z][a-z0-9-]*\//i.test(text)) return 'a link';
   if (BARE_DOMAIN.test(text)) return 'a link';
+  if (/\b\d{1,3}(\.\d{1,3}){3}\b/.test(text)) return 'a link';
   if (/\b(password|passwd|pwd|secret|token|api[ _-]?key)\s*[:=]/i.test(text))
     return 'what looks like a credential';
   if (
