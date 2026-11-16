@@ -659,11 +659,15 @@ A downgrade to a release from before site entries is different: that release doe
 stops applying, and the older code can say nothing about it. Before you downgrade:
 
 1. Read the Doctor's line, `GET /api/shutter/health`, `site_entries.downgrade`: "N site entries active: they stop
-   applying below this release". `GET /api/shutter/site-entries` lists them with their instructions.
+   applying below this release, and a case saved there loses its record of the entry that stopped it".
+   `GET /api/shutter/site-entries` lists them with their instructions.
 2. Decide, with whoever owns each entry, how the cases it stops are handled by hand while it does not apply, and accept
    that in writing in your own change record. Nothing in the product can hold the brake on across a downgrade.
 3. After upgrading again, read the Site profile page's **Our own scenarios**: the entries apply again from the first
-   match, each rechecked first.
+   match, each rechecked first. A case that the older release saved while it ran has lost its record of the entry that
+   stopped it; the outage close, the engine's delivery read and the resend set match its stored evidence against the
+   entries again, but a closure the workflow plans on later evidence no longer reads that record, so look again at the
+   open cases the entries had stopped.
 
 Who may do what with them: writing a draft, proving it on stored cases and proposing it need `Shutter_Configure`;
 approving the proposal needs `Shutter_Approve` and a second person, never the one who wrote or proposed it. The installer's
@@ -671,6 +675,13 @@ approver role holds both rights, so two approvers are enough. A site with one ap
 the second person from the terminal, for as long as it must and no longer:
 `Write ##class(Shutter.Setup).SiteEntriesOnePerson(1, "why, and your change record")`, and `0` to restore it. It is
 recorded, and warned about on the page and in the Doctor for as long as it holds.
+
+An active entry that cannot be read or rechecked (a damaged row, say) stops every write and closure on the site until it
+is mended, since which cases it would catch cannot be told: the Doctor's `site_entries.warnings` names it and the reason.
+If nobody can mend it, an IRIS administrator sets it aside from the terminal, recorded as an event:
+`Write ##class(Shutter.Setup).SiteEntriesSetAside("L3", "why, and your change record")`. The entry is suspended (a row
+whose own data cannot be read is written again from its versions and events, the damaged data kept beside it), warned
+about as any suspension, and the site's other entries apply again; resuming or retiring it takes two people as before.
 
 **Upgrading to 1.2.0.** Run the install once, or load the newer tree, and restart the production as above. Then:
 

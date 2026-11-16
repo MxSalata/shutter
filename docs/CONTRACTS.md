@@ -1272,9 +1272,11 @@ it got there, can authorise a write or a closure.
   The words can reach a model (a board a person convenes, Ask about this case), so they follow section 9.
 - **R6.** Writing, proving and proposing need `Shutter_Configure`; approving needs `Shutter_Approve`; the approver is
   neither the person who proposed the action nor the person who last changed the proposed version (409 `same_person`),
-  user names compared whatever their letters' case, as IRIS signs them in. Only an IRIS administrator lifts this, from the terminal (`Shutter.Setup.SiteEntriesOnePerson(1, reason)`, which needs
+  for every action (a retirement and a resumption as an activation), user names compared whatever their letters' case,
+  as IRIS signs them in. Only an IRIS administrator lifts this, from the terminal (`Shutter.Setup.SiteEntriesOnePerson(1, reason)`, which needs
   `%Admin_Manage` and answers "from the terminal only" over SQL or HTTP); it is recorded as an event, written in one
-  transaction with the lift (a lift whose event cannot be written is not made), and warned about for as long as it holds. It is not a site profile field.
+  transaction with the lift (a lift whose event cannot be written is not made) and under the entries' lock (so a restore
+  waits for an approval in flight), and warned about for as long as it holds. It is not a site profile field.
 - **R7.** The approver sends the action, the version and the digest they read; another is 409 `digest_mismatch`.
 - **R8.** No activation or resumption without a passing proof of that digest with at least one `match` fixture and at
   least one `no_match` fixture (a near miss), run again at the approval.
@@ -1285,9 +1287,16 @@ it got there, can authorise a write or a closure.
   suspension is recorded and raises a warning on `GET /site-entries`, the Site profile page and the Doctor
   (`site_entries.warnings`) for as long as it lasts. Resuming is a proposal and an approval.
 - **R13.** An active entry that can't be read makes the matcher answer `decision: error` (the gate's `MATCHER_ERROR`,
-  unknown), for every case. It is never skipped. So does a query of the entries that fails or stops at a row it cannot
-  read (never taken as "no entries"; the catalogue's version then ends `:unreadable`), and a site with active entries
-  that no recheck has completed under this release yet (R14).
+  unknown), for every case, since which cases it would catch cannot be told. It is never skipped. So does a query of the
+  entries that fails or stops at a row it cannot read (never taken as "no entries"; the catalogue's version then ends
+  `:unreadable`), and a site with active entries that no recheck has completed under this release and the site profile in
+  force yet (R14). The Doctor (`site_entries.warnings`) names each active entry the last recheck could not check, with the
+  reason. The way out, when nobody can mend it, is an IRIS administrator's, from the terminal
+  (`Shutter.Setup.SiteEntriesSetAside(id, reason)`, which needs `%Admin_Manage` and is neither a route nor an SQL
+  procedure): the entry is suspended, with who, when and the reason, flagged, recorded as a `set_aside` event and warned
+  about as any suspension, and the generation rises; a row whose own data cannot be read is first written again from its
+  versions and events, the damaged data kept beside it. Nothing is deleted. A suspended entry that cannot be read or
+  rechecked is not in force: it is flagged and named on the Doctor and stops nothing.
 - **R14.** After an upgrade and after every save of the site profile the active and suspended entries are checked, before
   any case is matched (`Shutter.Catalogue.SiteEntry.Recheck`: at the end of the catalogue's seed, at the first match
   under a release that has not checked yet, and in `Shutter.Store.SiteProfile.Store`). A predicate that names a condition
@@ -1297,14 +1306,22 @@ it got there, can authorise a write or a closure.
   more and never less (`effectivePattern`, `effectiveScope`), and is flagged `needsReview` with what was dropped (a scope
   fact's row has `part: "scope"`). A `match` fixture the entry, as it now stands, no longer matches as a whole, a receiver
   or a team the profile no longer names, a near miss the entry now matches, and a shipped entry that asks for a person on
-  every case the pattern matches are flagged and change nothing. A fixture whose case is no longer stored is checked
-  against the vocabulary only, and is noted. A fixture whose case is stored but whose evidence this release cannot read
+  every case the pattern matches are flagged and change nothing, except that a near miss the entry now matches, found
+  by this recheck, raises the generation as a drop does. A scope fact this release's vocabulary no longer lists
+  (`site.scope`) is dropped whole too. A fixture whose case is no longer stored is checked against the vocabulary and its
+  frozen copy only (the entry, as it now stands, must still match a frozen `match` fixture), is noted, and the Doctor and
+  the Site profile page say so for the entry. A fixture whose case is stored but whose evidence this release cannot read
   is a failure, never taken for a purge: the entry is flagged with "Case C-... is stored, but ...". Nothing is retired or narrowed by an upgrade or a profile save: what one
   recheck dropped stays dropped and the flag stays set, through every later recheck, until a newly approved version of
   the entry clears them (a resumption keeps them). A recheck that widens an active entry raises the generation, so a plan
-  made before it is not completed (R17), as after an activation. The release is recorded as checked only when every entry
-  was checked and each change saved with its `rechecked` event; a recheck that could not take the lock or save is tried
-  again at the next match, and until one completes the matcher answers `error` on a site with active entries.
+  made before it is not completed (R17), as after an activation. Each entry's stored row is read again under the lock, and
+  is checked on its own. The release and the inputs read (every save of the site profile and every change of the
+  vocabulary in force is counted, and a recheck records the count as it read it when it began) are recorded as checked
+  only when every active entry was checked and each change saved with its `rechecked` event; so a profile saved during or
+  after a recheck is always checked again. A recheck that could not take the lock, load the release's vocabulary file
+  (one that is there and is not the vocabulary is never taken for it), list the entries or check an active one is tried
+  again at the next match, which waits for a recheck another process is running, and until one completes the matcher
+  answers `error` on a site with active entries. The lock is released on every path.
 - **R15.** At most 50 active site entries, so the catalogue's version stays within a plan's field.
 - **R16.** The public demo's roles read site entries and validate a body; they save, prove, propose, approve and suspend
   nothing: on a demo instance an approval needs `Shutter_Configure` as well, since those roles hold `Shutter_Approve`.
@@ -1321,13 +1338,20 @@ it got there, can authorise a write or a closure.
   entry whose match any of its evidence carried (`Shutter.Store.Case.SiteEntry`, set when the evidence is taken in every
   mode, kept for the case's life and by every whole save), and the hold reads that as well as the plan's own snapshot:
   a case the system or a person reopens, whose fresh evidence no longer matches the entry, is still never closed without
-  a person, and the closures below read the record too. The two closures that run outside
-  the case workflow hold to it too. When the engine itself delivered the message (the gate's `ENGINE_DELIVERED` at the
+  a person, and the closures below read the record too. A case such a record names is never written and closed with no
+  person either: the policy path asks a person to approve a write that the site's policy would have released
+  automatically, and an item an incident released by policy or under its approval stops for a person. The closures
+  that run outside the case workflow hold to it too, and to more than the record: they match the case's stored evidence
+  against the entries active now (`SiteEntry.StoppedCase`), so a case whose evidence was collected before an entry was
+  activated is held by it, and they hold a case when that cannot be told (the case's record or the entries cannot be
+  read, or the evidence was matched as `error`). When the engine itself delivered the message (the gate's `ENGINE_DELIVERED` at the
   proposal or the dispatch gate, or the releaser's read of a case waiting on the engine, `Shutter.Util.EngineCheck.Settle`),
   or an outage closes over the case (`Shutter.Operation.OutageClose`, 17), the delivery is recorded as a note on the case
   ("The engine delivered this message (...); the site's own scenario L1 asks a person: <instructions>"), the case is not
   resolved, and it waits for the person (blocked, or as it was; the outage's card lists it open). An outage's resend set
-  holds such a case's message (17.8, rule 7).
+  holds such a case's message (17.8, rule 7), and the outage run's settle after a send (`EngineResend.Resolve`, from the
+  run and from a late settle) notes the delivery on such a case and leaves it for the person; a message the run holds
+  for a site entry is no longer counted among the run's own, so a later message of the same patient is held behind it.
 
 **The match.** `Shutter.Catalogue.Matcher.Match(conditions, facts, scope)` evaluates the shipped entries as before. Then,
 unless E19 matched, and also when the shipped catalogue is empty, it reads the active site entries in order (the priority,
@@ -1383,7 +1407,9 @@ copy answers and the row says `source: "frozen"`. A stored case whose evidence t
   retirement's proof is this list read the other way and needs no fixture; it does not pass when none of the cases it
   scanned could be read. `warnings` says how many could not be read, and when the scan stopped at its time limit.
 - **P5.** The proof's `context` is what it is bound to: the action, the digest, the shipped catalogue's version, the other
-  active site entries, the gate's policy version, the site profile's version and the release. A proof under another
+  active site entries, the gate's policy version, the site profile's version and the release, read before anything is
+  evaluated and again at the end (a context that changed while the proof ran is a problem, so the proof does not pass).
+  The proof and its `proved` event are kept together, or neither (500 `store_failed`). A proof under another
   context is stale: 409 `no_proof` at the proposal, 409 `proof_failed` at the approval unless a person has run the proof
   again since. The approval runs P1 and P2 again and refuses (409 `proof_failed`) unless the fixtures answer as the
   proposal's proof recorded.
@@ -1395,7 +1421,7 @@ The gate is not run per entry: every stop entry has the same gate behaviour, whi
 content, its digest, who wrote and who approved it, the approver's reason, an optional `safetyReference` to the trust's
 own safety record, which Shutter stores and does not check, the proof it was activated on and the release),
 `SiteEntryProof` (every proof run: words, codes and case ids only) and `SiteEntryEvent` (`created`, `edited`, `proved`,
-`proposed`, `approved`, `rejected`, `activated`, `suspended`, `resumed`, `retired`, `rechecked`, and for the site
+`proposed`, `approved`, `rejected`, `activated`, `suspended`, `resumed`, `retired`, `rechecked`, `set_aside`, and for the site
 `two_person_lifted` and `two_person_restored`, each with who, when and from where: `api`, `upgrade`, `profile` or
 `terminal`). The shipped seed never touches these tables, and refuses an id that is not `E<n>`. They are the site's
 configuration, as the site profile is: the scenario reset and the store's purge leave them, and the uninstall names and
@@ -1406,9 +1432,9 @@ replaces the shipped catalogue from any JSON, answers on a demo instance only.
 
 | Route | Needs | What it does |
 | --- | --- | --- |
-| `GET /catalogue` | `Shutter_Operate` | `{version, shippedVersion, generation, shipped, site, vocabulary}`: the shipped entries, the active site entries as the matcher reads them, and the vocabulary |
+| `GET /catalogue` | `Shutter_Operate` | `{version, shippedVersion, generation, shipped, site, vocabulary, siteError?}`: the shipped entries, the active site entries as the matcher reads them (read with the version and the generation as one, again when a change lands between them), and the vocabulary; `siteError` when the entries cannot be read (R13) |
 | `GET /site-entries` | `Shutter_Operate` | `{items, status, catalogueVersion}`: every entry (`id`, `state`, `title`, `sentence`, `version`, `digest`, `content`, `activeVersion`, `draftVersion`, `revision`, `approvedBy`, `approvedAt`, `proposal`, `needsReview`, `review`, `effectivePattern`, `effectiveScope`, `suspended`, `casesSent`, `casesSent30`, and `draft` for a draft beside an active version) and the site's status (`active`, `proposed`, `generation`, `limit`, `suspended`, `needsReview`, `onePerson`, `warnings`, `downgrade`) |
-| `GET /site-entries/{id}` | `Shutter_Operate` | The entry with `versions`, `proofs` and `events`; 404 `not_found` |
+| `GET /site-entries/{id}` | `Shutter_Operate` | The entry with `versions`, `proofs` and `events`; 404 `not_found` (an id is read letter for letter, on every route: `l1` is not `L1`) |
 | `POST /site-entries/validate` | `Shutter_Operate` | `{valid, problems, warnings, sentence, overlap}` for a body: each problem `{rule, field, text}`; `overlap` lists the shipped entries the pattern can displace, condition by condition, with `covers` and `leads`. Stores nothing and reads no case |
 | `POST /site-entries` | `Shutter_Configure` | 201 with a draft. `{fromCase}` fills the pattern with that closed case's conditions (the reserved one aside), the scope with its facts and the first fixture with the case; what the body gives stands. 400 `bad_request` with `problems` |
 | `PUT /site-entries/{id}` | `Shutter_Configure` | Rewrites the draft, or begins one beside the active version. `expectedVersion` is the entry's `revision` and is required (409 `stale_version` with `currentVersion` when it is missing or another); 409 `wrong_state` for a proposed draft or a retired entry |
@@ -1432,8 +1458,10 @@ outage close still resolves it when its own header reads Completed with the ackn
 resend set still offers its message.
 
 **Downgrade.** A release from before this section ignores the tables: the entries stop applying and the older code says
-nothing of it. The Doctor's `site_entries.downgrade` line ("N site entries active: they stop applying below this release")
-is what to read first (`docs/INSTALL.md`, section 8).
+nothing of it. The Doctor's `site_entries.downgrade` line ("N site entries active: they stop applying below this release,
+and a case saved there loses its record of the entry that stopped it") is what to read first (`docs/INSTALL.md`, section
+8): the older release saves a case without `Case.SiteEntry`, so after upgrading again only the closures outside the
+workflow (which match the stored evidence again) hold such a case for the entry.
 
 ## 7. Incidents: many failures to one receiver (v1.6, as built in v1.7)
 
@@ -2982,7 +3010,9 @@ in header id order, goes to one list, by the first rule that places it:
 7. The patient check passes; a message it holds is `refused` with "held by the patient check: <why>". (v1.66) Before it,
    a message with a case one of the site's own entries stopped (6.8, R18) is `refused` with "held by the site's own
    scenario L1 on case C-000123: a person decides on its case. The site's instructions: <instructions>"
-   (`ResendSet.SiteHold`, reading the origin header and a clone standing in for it), and Engine Resend reads it again
+   (`ResendSet.SiteHold`, reading the origin header and a clone standing in for it; a case already closed is said as
+   "its case was closed (<disposition>) at <time>, and the hold stays"; a case whose evidence was collected before the
+   entry was activated is held, as is a message whose cases or entries cannot be read), and Engine Resend reads it again
    before each send and skips it the same way. `SETPOLICYVERSION` is `2026-11-15.1`.
 
 The rest are `offered`. `set.digest` is the SHA-256 of `SETPOLICYVERSION` and the offered header ids in order, so a new
@@ -3348,7 +3378,9 @@ That `If-Match` or an approval makes the write idempotent; that a verified versi
   hold at every site (6.8, R17 and R18): a plan that writes nothing and was made under another catalogue version is
   planned again on fresh evidence, and a case a site entry matched is never closed without a person, by the engine's own
   delivery or an outage's close either; an outage's resend set holds its message (17.8, `SETPOLICYVERSION`
-  `2026-11-15.1`). 6.1: the table gains
+  `2026-11-15.1`); the closures outside the workflow match the case's stored evidence against the entries active now;
+  an entry that cannot be read or rechecked is named on the Doctor and set aside from the terminal by an administrator
+  (`Shutter.Setup.SiteEntriesSetAside`). 6.1: the table gains
   `a08_location`, which the matcher computes and the table lacked. 6.2: a shipped entry's id is `E<n>`,
   which the build script and the seed now refuse to be otherwise; `knowledge/catalogue/vocabulary.json` is the vocabulary
   both validators read. `Shutter.Catalogue.Entry.SeedFromJSON` answers on a demo instance only. 5: the resources of the
