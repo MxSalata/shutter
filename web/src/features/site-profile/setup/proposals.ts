@@ -1,4 +1,4 @@
-import type { SetupProposal, SetupTurnBody, SiteProfile, SiteReceiver } from '@/api/types';
+import type { SetupProposal, SetupTurnBody, SiteEntryItem, SiteProfile, SiteReceiver } from '@/api/types';
 import { KINDS, validateProfile } from '../profile';
 import { effectsOf, lessStrict, type EffectId, type EffectLine } from './effects';
 import { classOf } from './fields';
@@ -159,6 +159,16 @@ const asText = (v: unknown) => (typeof v === 'number' || typeof v === 'string' ?
  * is the receiver's entry in `draft`. A refusal is the end of a problem's path and its words. With `checkValue` the
  * value is checked too.
  */
+/**
+ * Whether one of the site's own active entries reads a receiver's kind: its pattern in force names receiver_category
+ * (SiteEntry.ActiveReads). While one does, a drafted kind could take a receiver out of the entry's stop, so only a person
+ * answers it.
+ */
+export const kindReadBy = (items?: readonly SiteEntryItem[]) =>
+  (items ?? []).some(
+    (e) => e.state === 'active' && 'receiver_category' in (e.effectivePattern ?? e.content?.pattern ?? {}),
+  );
+
 export function draftRefusal(
   field: string,
   base: SiteProfile,
@@ -167,6 +177,7 @@ export function draftRefusal(
   entry: SiteReceiver | undefined,
   to?: unknown,
   checkValue = false,
+  kindRead = false,
 ): string {
   const at = `.field: ${field} `;
   const cls = classOf(field);
@@ -192,6 +203,8 @@ export function draftRefusal(
   if (key === 'category') {
     if ('history_policy' in draft)
       return `${at}is not drafted while the profile holds a site-wide history_policy`;
+    if (kindRead)
+      return `${at}is answered only by a person while one of the site's own entries reads the kind (receiver_category)`;
     if (!checkValue) return '';
     return type === 'string' && KINDS_OF_SYSTEM.includes(to as string)
       ? ''
@@ -246,7 +259,13 @@ export type Checked = { ok: true; turn: SetupTurnBody } | { ok: false; problem: 
  * check (it holds what the person typed). `base` is the profile in force, `draft` the draft as it is now, `receiver`
  * the receiver the turn is about. The proposals pass or fail together.
  */
-export function checkTurn(turn: unknown, base: SiteProfile, draft: SiteProfile, receiver: string): Checked {
+export function checkTurn(
+  turn: unknown,
+  base: SiteProfile,
+  draft: SiteProfile,
+  receiver: string,
+  kindRead = false,
+): Checked {
   const fail = (problem: string): Checked => ({ ok: false, problem });
   if (!isObject(turn)) return fail('the turn is not an object');
   if (typeof turn.say !== 'string') return fail('say: needs a sentence for the person');
@@ -273,7 +292,7 @@ export function checkTurn(turn: unknown, base: SiteProfile, draft: SiteProfile, 
     if (seen.has(field)) return fail(`${at}.field: ${field} is named twice`);
     seen.add(field);
     if (p.to === undefined || p.to === null) return fail(`${at}.to: required`);
-    const why = draftRefusal(field, base, draft, inForce, entry, p.to, true);
+    const why = draftRefusal(field, base, draft, inForce, entry, p.to, true, kindRead);
     if (why) return fail(`${at}${why}`);
     // eslint-disable-next-line no-control-regex
     const quote = typeof p.quote === 'string' ? p.quote.replace(/[\x00-\x1f\x7f-\x9f]/g, '') : '';

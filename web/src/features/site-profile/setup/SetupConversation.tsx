@@ -6,7 +6,8 @@ import { ASK_HERE_ID, SUMMARY_TITLE_ID, cardTitleId, focusLater } from './cards'
 import type { Drafting } from './drafting';
 import { effectsOf } from './effects';
 import { Exchanges, OwnWords } from './OwnWords';
-import { draftRefusal } from './proposals';
+import { useSiteEntries } from '@/api/hooks';
+import { draftRefusal, kindReadBy } from './proposals';
 import { QUESTIONS, SETUP_PAGE, answerText, holdsAnswer, type QuestionId } from './fields';
 import {
   inForce,
@@ -54,6 +55,7 @@ export function SetupConversation({
   foot?: ReactNode;
 }) {
   const s = useSetup();
+  const kindRead = kindReadBy(useSiteEntries().data?.items);
   // The one card whose "Why does this matter?" is open
   const [why, setWhy] = useState<QuestionId | null>(null);
   const toggleWhy = (q: QuestionId) => setWhy((w) => (w === q ? null : q));
@@ -116,7 +118,8 @@ export function SetupConversation({
         const mine =
           q.who === 'A' &&
           r.name.trim() !== '' &&
-          draftRefusal(`receivers[].${q.keys[0]}`, base, draft, existing, r) === '';
+          draftRefusal(`receivers[].${q.keys[0]}`, base, draft, existing, r, undefined, false, kindRead) ===
+            '';
         const reading = !!s.pending && s.pending.rid === rid;
         return (
           <AnswerCard

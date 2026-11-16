@@ -4,7 +4,7 @@ import { IconPlus } from '@tabler/icons-react';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useBlocker, useNavigate, useSearchParams } from 'react-router';
 import { saveLocked } from '@/api/saveLocked';
-import { isAnswering, useCan, useMe, useSiteProfile } from '@/api/hooks';
+import { isAnswering, useCan, useMe, useSiteEntries, useSiteProfile } from '@/api/hooks';
 import { useSetupTurn } from '@/api/setupHooks';
 import type { SetupTurnView, SiteProfileView } from '@/api/types';
 import { ConfirmModal } from '@/components/ConfirmModal';
@@ -39,6 +39,7 @@ import {
   useSetup,
   type ReviewStop,
 } from './setupStore';
+import { kindReadBy } from './proposals';
 import './setup.css';
 
 /** The header's lead, one sentence: with the controls, and in the person's own words where Ask Shutter can read them. */
@@ -232,9 +233,12 @@ function Setup({ view, drafting }: { view: SiteProfileView; drafting: Drafting }
   const pendingId = s.pending?.turnId;
   const turn = useSetupTurn(pendingId);
   const { settle } = s;
+  // While one of the site's own active entries reads a receiver's kind, only a person answers a kind (the core's rule)
+  const kindRead = kindReadBy(useSiteEntries().data?.items);
   useEffect(() => {
     if (!pendingId) return;
-    if (turn.data && turn.data.turnId === pendingId && !isAnswering(turn.data.state)) settle(turn.data);
+    if (turn.data && turn.data.turnId === pendingId && !isAnswering(turn.data.state))
+      settle(turn.data, kindRead);
     else if (turn.isError)
       settle({
         turnId: pendingId,
@@ -242,7 +246,7 @@ function Setup({ view, drafting }: { view: SiteProfileView; drafting: Drafting }
         error: `the answer could not be read (${describeError(turn.error)})`,
         turn: null,
       } as SetupTurnView);
-  }, [pendingId, turn.data, turn.isError, turn.error, settle]);
+  }, [pendingId, turn.data, turn.isError, turn.error, settle, kindRead]);
 
   // Leaving with changes: asked once. The hand-over to the review is not a leave
   const dirty = isDirty(s);

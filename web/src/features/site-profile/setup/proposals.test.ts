@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import type { SetupProposal, SiteProfile, SiteReceiver } from '@/api/types';
+import type { SetupProposal, SiteEntryItem, SiteProfile, SiteReceiver } from '@/api/types';
 import { coreTable } from '@/test/coreTables';
 import {
   applyBatch,
   checkTurn,
   cleanText,
   draftRefusal,
+  kindReadBy,
   nameProblem,
   rowAutomatic,
   textProblem,
@@ -98,6 +99,48 @@ describe('the checks on a turn, the table Shutter.Test.ProfileSetup runs at the 
 describe('what Ask Shutter may draft', () => {
   const draft = stage({ name: '', turn: null, expect: '' }).draft;
   const added = draft.receivers[1];
+
+  it("is no kind while one of the site's own active entries reads the kind, as the core refuses it", () => {
+    const entry = (
+      state: string,
+      pattern: Record<string, string[]>,
+      effectivePattern?: Record<string, string[]>,
+    ) =>
+      ({
+        state,
+        content: { pattern },
+        ...(effectivePattern ? { effectivePattern } : {}),
+      }) as unknown as SiteEntryItem;
+    const reads = entry('active', { event: ['merge'], receiver_category: ['current_state'] });
+    expect(kindReadBy([reads])).toBe(true);
+    expect(kindReadBy([entry('suspended', { receiver_category: ['current_state'] })])).toBe(false);
+    expect(kindReadBy([entry('active', { event: ['merge'] })])).toBe(false);
+    // A recheck that dropped the condition leaves a pattern in force that no longer reads it
+    expect(
+      kindReadBy([entry('active', { receiver_category: ['current_state'] }, { event: ['merge'] })]),
+    ).toBe(false);
+    expect(draftRefusal('receivers[].category', BASE, draft, false, added, undefined, false, true)).toBe(
+      ".field: receivers[].category is answered only by a person while one of the site's own entries reads the kind (receiver_category)",
+    );
+    expect(draftRefusal('receivers[].tier', BASE, draft, false, added, undefined, false, true)).toBe('');
+    const turn = {
+      say: 'It keeps every movement in order.',
+      proposals: [
+        {
+          field: 'receivers[].category',
+          receiver: 'Bed Board',
+          to: 'history_of_record',
+          quote: 'it keeps every movement in order',
+        },
+      ],
+    };
+    const typed = stage({ name: '', turn: null, expect: '' });
+    expect(checkTurn(turn, typed.base, typed.draft, 'Bed Board', true)).toEqual({
+      ok: false,
+      problem:
+        "proposals[0].field: receivers[].category is answered only by a person while one of the site's own entries reads the kind (receiver_category)",
+    });
+  });
 
   it('is a description, and the kind and tier of a receiver being added, and nothing else', () => {
     for (const field of ['receivers[].system', 'receivers[].category', 'receivers[].tier'])

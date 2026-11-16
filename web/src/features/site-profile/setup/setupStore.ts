@@ -173,7 +173,8 @@ interface SetupActions {
    * receiver and the stored version are the ones it was sent for, each field still holds what the turn replaced, and
    * the page's own copy of the core's checks passes on the draft as it is now. Otherwise the whole batch is dropped.
    */
-  settle: (view: SetupTurnView) => void;
+  /** <var>kindRead</var>: one of the site's own active entries reads a receiver's kind, so no kind is drafted. */
+  settle: (view: SetupTurnView, kindRead?: boolean) => void;
   /** Puts back what a turn's drafted answers replaced, where they are still the drafted ones. */
   undo: (turnId: string) => void;
   tookSuggestion: () => void;
@@ -387,7 +388,7 @@ export const useSetup = create<SetupState>((set, get) => ({
           },
     ),
   cancelPending: () => set((s) => dropPending(s)),
-  settle: (view) =>
+  settle: (view, kindRead = false) =>
     set((s) => {
       const p = s.pending;
       // Not the turn being read (cancelled, discarded, signed out since): nothing of it is used
@@ -419,7 +420,7 @@ export const useSetup = create<SetupState>((set, get) => ({
         view.baseVersion !== s.base.version
       )
         return end({ state: 'unused', note: CHANGED_MEANWHILE });
-      const checked = checkTurn(view.turn, s.base.profile, s.draft, r.name);
+      const checked = checkTurn(view.turn, s.base.profile, s.draft, r.name, kindRead);
       if (!checked.ok) return end({ state: 'unused', note: `Not used: ${checked.problem}.` });
       const entry = r as Record<string, unknown>;
       const proposals = checked.turn.proposals;

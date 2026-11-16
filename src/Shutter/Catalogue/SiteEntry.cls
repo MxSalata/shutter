@@ -844,6 +844,33 @@ ClassMethod StillValid(content As %DynamicObject, id As %String) As %String [ Pr
     Quit problems.%Get(0).text
 }
 
+/// Whether one of the active entries' patterns in force (the version's own, or the widened one a recheck left) names a
+/// condition. An active entry that cannot be read answers 1, so a caller that keeps something from a model while an
+/// entry reads a condition errs on the side of a person. Read straight from the rows: no recheck is run for it.
+ClassMethod ActiveReads(condition As %String) As %Boolean
+{
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Shutter_Catalogue.SiteEntry WHERE State = 'active'")
+    If rs.%SQLCODE < 0 Quit 1
+    Set reads = 0
+    Try {
+        While rs.%Next() {
+            Set e = ..%OpenId(rs.%Get("ID"))
+            If '$ISOBJECT(e) Set reads = 1 Quit
+            If e.EffectiveJSON '= "" {
+                Set pattern = ##class(Shutter.Util.Json).Parse(e.EffectiveJSON, .sc)
+            } Else {
+                Set v = ##class(Shutter.Catalogue.SiteEntryVersion).Find(e.EntryId, e.ActiveVersion)
+                Set content = $SELECT($ISOBJECT(v): v.Content(), 1: "")
+                Set pattern = $SELECT($ISOBJECT(content): content.%Get("pattern"), 1: "")
+            }
+            If '$ISOBJECT(pattern) || pattern.%IsDefined(condition) Set reads = 1 Quit
+        }
+    } Catch ex {
+        Set reads = 1
+    }
+    Quit reads
+}
+
 /// The proof an approval of the open proposal stands on, or "": the proposal's own while it passed and is current, else
 /// the newest one a person ran of the same digest and action since, when that one passed and is current (the author
 /// proved again after the catalogue, the profile, the gate's policy or the release changed). Decide reruns this proof;

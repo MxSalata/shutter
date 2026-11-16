@@ -670,6 +670,36 @@ Method TestAQueuedTurnIsCheckedAgainWhenOpened()
     Do $$$AssertEquals($CLASSMETHOD(st, "Count", t.Conversation), before, "no row is added")
 }
 
+/// While one of the site's own active entries reads a receiver's kind (its pattern names receiver_category), a drafted
+/// kind is refused and the agent is told the kind is a person's: a kind could take a receiver out of that entry's stop.
+/// With no such entry the same turn is used. The site entries made here are removed afterwards.
+Method TestAKindIsAPersonsWhileASiteEntryReadsIt()
+{
+    Set ps = "Shutter.Util.ProfileSetup", kit = "Shutter.Test.SiteKit"
+    Do $CLASSMETHOD(kit, "PurgeAll")
+    Do $CLASSMETHOD(kit, "Reset")
+    Set base = ..Base(), draft = ..Base()
+    Do draft.receivers.%Push(..Added())
+    Set turn = {"say": "It keeps every movement in order.", "proposals": [{"field": "receivers[].category", "receiver": "Bed Board", "to": "history_of_record", "quote": "it keeps every movement in order"}]}
+    Set texts = ["it keeps every movement in order"]
+    Do $$$AssertTrue($CLASSMETHOD(ps, "CheckTurn", turn, base, draft, "Bed Board", texts, .problem, .accepted), "with no site entry the kind is drafted: " _ problem)
+    Set match = $CLASSMETHOD(kit, "Case", {"ward": "WARD-ISO"}), near = $CLASSMETHOD(kit, "Case", {"ward": "WARD-B"})
+    Set body = $CLASSMETHOD(kit, "Body", match.CaseId, near.CaseId)
+    Do body.pattern.%Set("receiver_category", ["current_state", "history_of_record", "orders_results"])
+    Set code = $CLASSMETHOD(kit, "Activate", body, .id)
+    Do $$$AssertEquals(code, "", "an entry that reads the kind is active")
+    If code = "" {
+        Do $$$AssertNotTrue($CLASSMETHOD(ps, "CheckTurn", turn, base, draft, "Bed Board", texts, .problem, .accepted), "while it is, the kind is refused")
+        Do $$$AssertEquals(problem, "proposals[0].field: receivers[].category is answered only by a person while one of the site's own entries reads the kind (receiver_category)", "saying why")
+        Set who = ""
+        Set iter = $CLASSMETHOD(ps, "View", base, draft, "Bed Board").fields.%GetIterator()
+        While iter.%GetNext(, .f) { If f.id = "receivers[].category" Set who = f.who }
+        Do $$$AssertEquals(who, "person", "and the agent is told the kind is a person's")
+    }
+    Do $CLASSMETHOD(kit, "PurgeAll")
+    Do $CLASSMETHOD(kit, "Reset")
+}
+
 /// The terminal tool, where the aihub module is compiled: a submission is checked against the stored turn, a person-only
 /// field is refused with the field named, a turn for another id is refused, and an accepted turn is kept as checked.
 Method TestTheTerminalTool()

@@ -420,6 +420,8 @@ ClassMethod DraftRefusal(field As %String, base As %DynamicObject, draft As %Dyn
     If ..Answered(..Find(draft, receiver), key) Quit at _ "is answered in the draft: only a person changes it, with the page's control"
     If key = "category" {
         If draft.%IsDefined("history_policy") Quit at _ "is not drafted while the profile holds a site-wide history_policy"
+        // A drafted kind could take a receiver out of the stop of one of the site's own entries that reads the kind
+        If ##class(Shutter.Catalogue.SiteEntry).ActiveReads("receiver_category") Quit at _ "is answered only by a person while one of the site's own entries reads the kind (receiver_category)"
         If type = "" Quit ""
         If (type '= "string") || '$LISTFIND($LISTBUILD("current_state", "history_of_record", "orders_results"), to) Quit ".to: must be current_state, history_of_record or orders_results"
         Quit ""
