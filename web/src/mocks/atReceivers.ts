@@ -1,7 +1,7 @@
 import type { SiteProfile, SiteReceiver } from '@/api/types';
 import { categoryOf, historyPolicyOf } from '@/lib/categories';
 import { fhirOf } from '@/features/site-profile/receiverCapabilities';
-import type { AtReceiver, CatalogueEntry } from '@/features/site-guide/model';
+import type { AtReceiver, AutomaticHold, CatalogueEntry } from '@/features/site-guide/model';
 
 /**
  * For the trial's mock only: GET /catalogue's atReceivers (CONTRACTS 6.8) for the trial's own site profile, which a
@@ -102,4 +102,44 @@ export function atReceiversOf(entry: CatalogueEntry, profile: SiteProfile): AtRe
   return profile.receivers
     .filter((r) => typeof r.name === 'string' && r.name !== '')
     .map((r) => atReceiver(entry, r, profile));
+}
+
+/**
+ * What an automatic release still sends to a person under a profile: a port of the core's
+ * Shutter.Process.CaseWorkflow.AutomaticHolds, word for word, which atReceivers.test.ts holds to the recording. The
+ * trial answers as a demo instance does, so another visit's movement stops there unless the profile says show.
+ */
+export function automaticHoldsOf(profile: SiteProfile): AutomaticHold[] {
+  const fm = (profile as unknown as { further_messages?: Record<string, unknown> }).further_messages ?? {};
+  const feed = (profile as unknown as { feed?: Record<string, unknown> }).feed ?? {};
+  const out: AutomaticHold[] = [];
+  if ((fm.admission_not_found ?? 'person') === 'person')
+    out.push({
+      hold: 'admission_not_found',
+      when: "the receiver answers that it has no record of the patient's admission (further_messages.admission_not_found: person)",
+      source: 'AdmissionOnNotFound',
+    });
+  if ((fm.in_patient_movement ?? 'stop') === 'show')
+    out.push({
+      hold: 'shown_visit',
+      when: "the case shows the patient's movement on another visit (further_messages.in_patient_movement: show)",
+      source: 'ShownVisit',
+    });
+  out.push({
+    hold: 'site_entry',
+    when: "one of this site's own entries stopped the case before",
+    source: 'StoredSiteEntry',
+  });
+  out.push({
+    hold: 'further_release',
+    when: "a person released a stop on the case's further messages",
+    source: 'FurtherReleaseJSON',
+  });
+  if (feed.prove_origin !== false)
+    out.push({
+      hold: 'origin',
+      when: "the case's source cannot be proved (feed.prove_origin)",
+      source: 'Shutter.Operation.Origin',
+    });
+  return out;
 }

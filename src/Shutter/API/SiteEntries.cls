@@ -8,19 +8,35 @@ Class Shutter.API.SiteEntries Extends %RegisteredObject
 /// GET /catalogue: the shipped entries and the active site entries, with the catalogue's version.
 ClassMethod Catalogue() As %Status
 {
-    Set o = {}
-    // The version, the generation and the entries read as one: read again while a change landed between them, so the
-    // answer never pairs a version with entries of another generation.
+    Quit ##class(Shutter.API.Dispatch).Json(..CatalogueView())
+}
+
+/// GET /catalogue's answer. The catalogue version, the generation, the site profile's version and the entries are read as
+/// one, with the shipped entries' rows at each receiver made inside that read: read again while a change landed between
+/// them, so the answer never pairs a version with entries of another generation, nor rows with another profile than the
+/// one it names (profileVersion; null when a profile save kept landing during the read).
+ClassMethod CatalogueView() As %DynamicObject
+{
+    Set o = {}, mixed = 0
     For try = 1:1:3 {
         Set version = ##class(Shutter.Catalogue.Entry).CatalogueVersion(), generation = ##class(Shutter.Catalogue.SiteEntry).Generation()
+        Set profileVersion = ..ProfileVersion()
         Set list = ##class(Shutter.Catalogue.SiteEntry).ActiveList(.problem)
-        Quit:((##class(Shutter.Catalogue.Entry).CatalogueVersion() = version) && (##class(Shutter.Catalogue.SiteEntry).Generation() = generation))
-        If try = 3 Set problem = $SELECT($GET(problem) '= "": problem, 1: "the site's entries changed while they were read: read them again")
+        Set shipped = ..Shipped(), holds = ##class(Shutter.Process.CaseWorkflow).AutomaticHolds()
+        Set sameProfile = (..ProfileVersion() = profileVersion)
+        Quit:((##class(Shutter.Catalogue.Entry).CatalogueVersion() = version) && (##class(Shutter.Catalogue.SiteEntry).Generation() = generation) && sameProfile)
+        If try = 3 {
+            If 'sameProfile Set mixed = 1
+            If (##class(Shutter.Catalogue.Entry).CatalogueVersion() '= version) || (##class(Shutter.Catalogue.SiteEntry).Generation() '= generation) Set problem = $SELECT($GET(problem) '= "": problem, 1: "the site's entries changed while they were read: read them again")
+        }
     }
     Set o.version = version
     Set o.shippedVersion = ##class(Shutter.Catalogue.Entry).ShippedVersion()
     Do o.%Set("generation", generation, "number")
-    Set o.shipped = ..Shipped()
+    If mixed { Do o.%Set("profileVersion", "", "null") } Else { Do o.%Set("profileVersion", +profileVersion, "number") }
+    Set o.shipped = shipped
+    // What an automatic release by the site's policy still sends to a person, under that profile (CaseWorkflow PolicyPath)
+    Set o.automaticHolds = holds
     Set site = []
     Set it = list.%GetIterator()
     While it.%GetNext(, .m) {
@@ -37,7 +53,16 @@ ClassMethod Catalogue() As %Status
     If $GET(problem) '= "" Set o.siteError = problem
     Set vocabulary = ##class(Shutter.Catalogue.Vocabulary).Current()
     If $ISOBJECT(vocabulary) Set o.vocabulary = vocabulary
-    Quit ##class(Shutter.API.Dispatch).Json(o)
+    Quit o
+}
+
+/// The stored site profile's version, as GET /site-profile answers it: 0 when none is stored (the shipped defaults).
+ClassMethod ProfileVersion() As %Integer [ Private ]
+{
+    // Read from the table each time, never from an object this process may hold open
+    Set v = 0
+    &sql(SELECT Version INTO :v FROM Shutter_Store.SiteProfile WHERE Name = 'current')
+    Quit $SELECT(SQLCODE = 0: +v, 1: 0)
 }
 
 /// The shipped entries for GET /catalogue, each with atReceivers: what a match of the entry alone settles on at each

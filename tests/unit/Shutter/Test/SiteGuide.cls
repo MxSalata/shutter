@@ -142,6 +142,56 @@ Method TestTheOtherSourceIsAConditionNotAGuess()
     }
     // An entry no case-dependent when names keeps no condition
     Do $$$AssertEquals(..Row(shipped, "E1", ..#BEDS).whenOtherSource.%Size(), 0, "E1 depends on no other source")
+    // A case whose other source is another system than the one the site names takes the row's own outcome
+    Set facts = ##class(Shutter.Catalogue.Matcher).ReceiverFacts(..#BEDS)
+    Set facts."other_source" = "UT-ELSEWHERE"
+    Set m = ##class(Shutter.Catalogue.Matcher).Match(..ConditionsFor("E7"), facts)
+    Do $$$AssertEquals(m.outcome _ " " _ m."outcome_ref", ..Row(shipped, "E7", ..#BEDS).outcome _ " " _ ..Row(shipped, "E7", ..#BEDS).outcomeRef, "a case whose other source is another system settles as the row says otherwise")
+}
+
+/// What an automatic release still sends to a person is PolicyPath's own list of holds: every hold that method makes
+/// turns an automatic release into an approval, so the list has one entry for each, naming the call that makes it. A
+/// hold added to or taken from the workflow without the list fails here.
+Method TestTheHoldsAreTheWorkflows()
+{
+    Set all = ##class(Shutter.Process.CaseWorkflow).AutomaticHolds(1)
+    Set def = ##class(%Dictionary.MethodDefinition).%OpenId("Shutter.Process.CaseWorkflow||PolicyPath")
+    Do $$$AssertTrue($ISOBJECT(def), "PolicyPath's source is read")
+    Quit:'$ISOBJECT(def)
+    Set code = "", holds = 0
+    Do def.Implementation.Rewind()
+    While 'def.Implementation.AtEnd {
+        Set line = def.Implementation.ReadLine()
+        Set code = code _ line _ $CHAR(10)
+        If line [ "Set ..Policy = ""approval""" Set holds = holds + 1
+    }
+    Do $$$AssertEquals(all.%Size(), holds, "one hold in the list for each place PolicyPath turns an automatic release into an approval")
+    Set it = all.%GetIterator()
+    While it.%GetNext(, .h) {
+        Do $$$AssertTrue(code [ h.source, h.hold _ ": PolicyPath calls " _ h.source)
+        Do $$$AssertTrue(h.when '= "", h.hold _ " says when, in words")
+    }
+}
+
+/// The holds GET /catalogue gives are those the profile in force makes apply, and the answer names the profile version
+/// its rows were made under.
+Method TestTheAnswerNamesTheProfileItRead()
+{
+    Do ..StoreProfile()
+    Set o = ##class(Shutter.API.SiteEntries).CatalogueView()
+    Do $$$AssertEquals(o.profileVersion, ##class(Shutter.Store.SiteProfile).Row().Version, "the answer names the stored profile's version")
+    Do $$$AssertEquals(o.automaticHolds.%ToJSON(), ##class(Shutter.Process.CaseWorkflow).AutomaticHolds().%ToJSON(), "and the holds in force")
+    Set p = ##class(Shutter.Store.SiteProfile).Current()
+    Do p.%Remove("version")
+    Set p."further_messages"."admission_not_found" = "policy", p."further_messages"."in_patient_movement" = "stop"
+    If '$ISOBJECT(p.%Get("feed")) Set p.feed = {}
+    Do p.feed.%Set("prove_origin", 0, "boolean")
+    Do $$$AssertStatusOK(##class(Shutter.Store.SiteProfile).Store(p.%ToJSON(), "api", "approver", "", .v), "a profile that releases a lost admission by policy, stops another visit's movement and proves no origin")
+    Set o = ##class(Shutter.API.SiteEntries).CatalogueView()
+    Set kinds = "", it = o.automaticHolds.%GetIterator()
+    While it.%GetNext(, .h) { Set kinds = kinds _ $SELECT(kinds = "": "", 1: ",") _ h.hold }
+    Do $$$AssertEquals(kinds, "site_entry,further_release", "only the holds that profile leaves")
+    Do $$$AssertEquals(o.profileVersion, v, "under the version just saved")
 }
 
 }

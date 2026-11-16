@@ -55,6 +55,15 @@ describe("an entry at each receiver, in words, from the route's rows", () => {
     expect(e2).toHaveLength(1);
     expect(e2[0].receivers).toEqual(['Beds Out', 'Records Out']);
     expect(e2[0].lines[0]).toContain("Nobody is asked: the site's written policy releases the write");
+    // With the route's holds, they follow every release by policy; with none listed, the answer is said to be silent
+    const held = entryAtReceivers({ ...entry('E2'), atReceivers: [row('Beds Out', 'resend')] }, p, [
+      { hold: 'site_entry', when: "one of this site's own entries stopped the case before" },
+      { hold: 'origin', when: "the case's source cannot be proved (feed.prove_origin)" },
+    ]);
+    expect(held[0].lines[0]).toContain(
+      "after the gate and the dry run, unless one of this site's own entries stopped the case before or the case's source cannot be proved (feed.prove_origin): then an approver releases it.",
+    );
+    expect(e2[0].lines[0]).toContain("which this install's answer does not list");
     const e1 = entryAtReceivers(
       {
         ...entry('E1'),

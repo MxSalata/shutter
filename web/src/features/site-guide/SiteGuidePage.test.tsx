@@ -149,6 +149,49 @@ describe("This site's guide", () => {
     expect(screen.getAllByTestId('site-guide-foot')[0]).toHaveTextContent(';g1:L1@1');
   });
 
+  it('prints what an automatic release still sends to a person, as the route gives it, beside each release by policy', async () => {
+    renderGuide();
+    const beds = await screen.findByTestId('site-guide-receiver-Downstream Out');
+    const holds = catalogueView().automaticHolds ?? [];
+    expect(holds.map((h) => h.hold)).toContain('origin');
+    expect(beds).toHaveTextContent(
+      /Released automatically means the site's written policy releases the write after the gate and the dry run, unless .*: then an approver releases it\./,
+    );
+    for (const h of holds) expect(beds).toHaveTextContent(h.when);
+    const e2 = screen.getByTestId('site-guide-entry-E2');
+    expect(e2).toHaveTextContent(
+      /Nobody is asked: the site's written policy releases the write after the gate and the dry run, unless /,
+    );
+    expect(e2).toHaveTextContent(
+      "the case's source cannot be proved (feed.prove_origin): then an approver releases it.",
+    );
+  });
+
+  it('reads the profile and the catalogue again when the catalogue was made under another profile version, and prints nothing meanwhile', async () => {
+    let calls = 0;
+    let release = () => {};
+    const held = new Promise<void>((resolve) => (release = resolve));
+    server.use(
+      http.get('/api/shutter/catalogue', async () => {
+        calls += 1;
+        // The second read waits until the test has looked at the page meanwhile
+        if (calls > 1) await held;
+        return HttpResponse.json({ ...catalogueView(), profileVersion: calls === 1 ? 8 : 7 });
+      }),
+    );
+    renderGuide();
+    expect(
+      (await screen.findAllByText('The site profile changed while the guide was read: reading it again…'))
+        .length,
+    ).toBeGreaterThan(0);
+    expect(screen.queryByTestId('site-guide-stamp')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Print or save as PDF' })).toBeDisabled();
+    release();
+    expect(await screen.findByTestId('site-guide-stamp')).toHaveTextContent('Version 7');
+    expect(screen.getByRole('button', { name: 'Print or save as PDF' })).toBeEnabled();
+    expect(calls).toBe(2);
+  });
+
   it('shows the Technical names beside the plain words only in Technical', async () => {
     renderGuide();
     await screen.findByRole('heading', { level: 1 });

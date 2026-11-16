@@ -42,11 +42,23 @@ export interface CatalogueEntry {
   atReceivers?: AtReceiver[];
 }
 
+/** One case an automatic release by the site's policy still sends to a person (CaseWorkflow.AutomaticHolds). */
+export interface AutomaticHold {
+  hold: string;
+  /** In words, for the case: "the case's source cannot be proved (feed.prove_origin)". */
+  when: string;
+  source?: string;
+}
+
 /** GET /catalogue (CONTRACTS 6.8). */
 export interface CatalogueView {
   version: string;
   shippedVersion: string;
   generation: number;
+  /** The site profile's version the rows were made under (v1.68); null when a save kept landing during the read. */
+  profileVersion?: number | null;
+  /** What an automatic release by the site's policy still sends to a person, under that profile (v1.68). */
+  automaticHolds?: AutomaticHold[];
   shipped: CatalogueEntry[];
   site: CatalogueEntry[];
   vocabulary?: unknown;
@@ -154,8 +166,26 @@ export function releaseAt(profile: SiteProfile, r: SiteReceiver, kind: string): 
   return profile.policy?.[String(r.tier)]?.[kind as 'single'] ?? 'approval';
 }
 
+/**
+ * The release by the site's policy, with what the core still sends to a person (GET /catalogue's automaticHolds, never
+ * worked out here): "...after the gate and the dry run, unless the case's source cannot be proved: then an approver
+ * releases it."
+ */
+export function automaticWords(holds: AutomaticHold[] | undefined): string {
+  const head = "the site's written policy releases the write after the gate and the dry run";
+  if (!holds)
+    return `${head}, except for the cases it sends to a person, which this install's answer does not list`;
+  if (!holds.length) return head;
+  return `${head}, unless ${orWords(holds.map((h) => printable(h.when)))}: then an approver releases it`;
+}
+
 /** What a person is asked to do when a case settles on this outcome at this receiver. */
-export function askedWords(outcome: string, release: string, decides: string): string {
+export function askedWords(
+  outcome: string,
+  release: string,
+  decides: string,
+  holds?: AutomaticHold[],
+): string {
   if (decides === 'board' && outcome !== 'escalate')
     return 'The board of agents proposes a plan; any write it proposes waits for a person to approve it.';
   if (outcome === 'escalate')
@@ -167,7 +197,7 @@ export function askedWords(outcome: string, release: string, decides: string): s
   if (outcome === 'resend_unconditional') return 'An approver releases the write; it is never automatic.';
   if (isWrite(outcome))
     return release === 'automatic'
-      ? "Nobody is asked: the site's written policy releases the write after the gate and the dry run."
+      ? `Nobody is asked: ${automaticWords(holds)}.`
       : `An approver releases the write (${POLICY_SHORT[release] ?? release.replace(/_/g, ' ')}).`;
   return 'A person decides.';
 }
@@ -205,7 +235,11 @@ const outcomeOf = (outcome: string, ref: string) =>
  * are left out: the guide says once what happens there. A row whose receiver the profile no longer has is shown with no
  * release table, as the route gave it.
  */
-export function entryAtReceivers(entry: CatalogueEntry, profile: SiteProfile): EntryAt[] {
+export function entryAtReceivers(
+  entry: CatalogueEntry,
+  profile: SiteProfile,
+  holds?: AutomaticHold[],
+): EntryAt[] {
   const groups: EntryAt[] = [];
   for (const row of entry.atReceivers ?? []) {
     if (row.kind === 'fhir_r4' || row.category === 'orders_results') continue;
@@ -214,9 +248,9 @@ export function entryAtReceivers(entry: CatalogueEntry, profile: SiteProfile): E
     const lines = [
       ...row.whenOtherSource.map(
         (o) =>
-          `When the other system sending at the same time is ${printable(o.otherSource)}: ${outcomeOf(o.outcome, o.outcomeRef)}. ${askedWords(o.outcome, release, o.decides)}`,
+          `When the other system sending at the same time is ${printable(o.otherSource)}: ${outcomeOf(o.outcome, o.outcomeRef)}. ${askedWords(o.outcome, release, o.decides, holds)}`,
       ),
-      `${row.whenOtherSource.length ? 'Otherwise' : 'Outcome'}: ${outcomeOf(row.outcome, row.outcomeRef)}. ${askedWords(row.outcome, release, row.decides)}`,
+      `${row.whenOtherSource.length ? 'Otherwise' : 'Outcome'}: ${outcomeOf(row.outcome, row.outcomeRef)}. ${askedWords(row.outcome, release, row.decides, holds)}`,
     ];
     const same = groups.find((g) => g.lines.join('\n') === lines.join('\n'));
     if (same) same.receivers.push(row.receiver);
@@ -298,7 +332,8 @@ export function stampOf(input: {
   const text = (k: string) => (typeof health[k] === 'string' ? (health[k] as string) : '');
   return {
     trial,
-    profileVersion: view.version,
+    // The version GET /catalogue made its rows under, which the page checks is the profile it shows
+    profileVersion: typeof catalogue.profileVersion === 'number' ? catalogue.profileVersion : view.version,
     saved,
     catalogueVersion: catalogue.version || catalogue.shippedVersion || '',
     gatePolicy: text('gate_policy_version'),

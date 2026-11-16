@@ -110,6 +110,11 @@ def site_entry_checks(args, operator, approver, check, error_of):
     entry = {"title": "Roles check: a failed transfer", "pattern": {"event": "transfer"}, "why": "The roles check made this draft; it changes nothing."}
     status, body = operator.call("GET", "/catalogue")
     check("operator: GET /catalogue: 200 with the shipped entries", status == 200 and len((body or {}).get("shipped") or []) > 0, f"{status} {str(body)[:200]}")
+    _, profile = operator.call("GET", "/site-profile")
+    receivers = [r.get("name") for r in ((profile or {}).get("profile") or {}).get("receivers") or []]
+    shipped = (body or {}).get("shipped") or []
+    check("operator: GET /catalogue: every shipped entry has one row for each receiver of the profile", bool(shipped) and all([r.get("receiver") for r in e.get("atReceivers") or []] == receivers for e in shipped), f"{receivers} {str([e.get('atReceivers') for e in shipped[:1]])[:300]}")
+    check("operator: GET /catalogue: names the profile version it read, and what an automatic release still sends to a person", type((body or {}).get("profileVersion")) is int and (body or {}).get("profileVersion") == (profile or {}).get("version") and isinstance((body or {}).get("automaticHolds"), list) and all(h.get("hold") and h.get("when") for h in (body or {}).get("automaticHolds") or []), f"{(body or {}).get('profileVersion')} {(profile or {}).get('version')} {(body or {}).get('automaticHolds')}")
     status, body = operator.call("GET", "/site-entries")
     check("operator: GET /site-entries: 200", status == 200 and isinstance((body or {}).get("items"), list) and "status" in (body or {}), f"{status} {str(body)[:200]}")
     def stored():

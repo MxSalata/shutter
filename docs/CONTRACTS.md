@@ -1435,7 +1435,7 @@ replaces the shipped catalogue from any JSON, answers on a demo instance only.
 
 | Route | Needs | What it does |
 | --- | --- | --- |
-| `GET /catalogue` | `Shutter_Operate` | `{version, shippedVersion, generation, shipped, site, vocabulary, siteError?}`: the shipped entries, each with `atReceivers` (below, v1.67), the active site entries as the matcher reads them (read with the version and the generation as one, again when a change lands between them), and the vocabulary; `siteError` when the entries cannot be read (R13) |
+| `GET /catalogue` | `Shutter_Operate` | `{version, shippedVersion, generation, profileVersion, shipped, automaticHolds, site, vocabulary, siteError?}`: the shipped entries, each with `atReceivers` (below, v1.67), the active site entries as the matcher reads them (read with the version, the generation and the site profile's version as one, the rows at each receiver made inside that read, again when a change lands between them), and the vocabulary; `profileVersion` (v1.68) is the profile version the rows were made under (0 for the shipped defaults, null when a save kept landing during the read); `automaticHolds` (v1.68) is what an automatic release by the site's policy still sends to a person under that profile, each `{hold, when, source}` (`Shutter.Process.CaseWorkflow.AutomaticHolds`, kept beside `PolicyPath`, whose holds it lists); `siteError` when the entries cannot be read (R13) |
 | `GET /site-entries` | `Shutter_Operate` | `{items, status, catalogueVersion}`: every entry (`id`, `state`, `title`, `sentence`, `version`, `digest`, `content`, `activeVersion`, `draftVersion`, `revision`, `approvedBy`, `approvedAt`, `proposal`, `needsReview`, `review`, `effectivePattern`, `effectiveScope`, `suspended`, `casesSent`, `casesSent30`, and `draft` for a draft beside an active version) and the site's status (`active`, `proposed`, `generation`, `limit`, `suspended`, `needsReview`, `onePerson`, `warnings`, `downgrade`), and `waitingPlans` (v1.68), the open cases whose plan was made under the catalogue version in force, which an approval would stop completing (R17) |
 | `GET /site-entries/{id}` | `Shutter_Operate` | The entry with `versions`, `proofs` and `events`; 404 `not_found` (an id is read letter for letter, on every route: `l1` is not `L1`) |
 | `POST /site-entries/validate` | `Shutter_Operate` | `{valid, problems, warnings, sentence, overlap}` for a body: each problem `{rule, field, text}`; `overlap` lists the shipped entries the pattern can displace, condition by condition, with `covers` and `leads`. Stores nothing and reads no case |
@@ -3396,7 +3396,11 @@ That `If-Match` or an approval makes the write idempotent; that a verified versi
   approval, approves, rejects, suspends, retires and resumes an entry through the routes of 6.8, and on the public demo
   reads them and runs the preview. 5: the `Shutter_Operate` row names validate and preview. A proposal names the version
   and digest its proposer read and a suspension the revision its person read, both required (409 `digest_mismatch`,
-  409 `stale_version`), so neither acts on a version changed since it was read.
+  409 `stale_version`), so neither acts on a version changed since it was read. For this site's guide, `GET /catalogue`
+  gains `profileVersion`, the profile version its rows were made under inside its one read, and `automaticHolds`, what
+  an automatic release still sends to a person (a lost admission when the profile asks a person, another visit's movement
+  shown, an earlier stop by one of the site's own entries, a released stop on further messages, a source that cannot be
+  proved).
 - v1.67, 16 Nov 2026 (this site's guide): 6.8: each shipped entry in `GET /catalogue` carries `atReceivers`, what a match
   of it alone settles on at each receiver of the profile in force, by the matcher's own `Settle` on that receiver's facts
   (`Shutter.Catalogue.Matcher.AtReceiver`), with a case-dependent `when` (`other_source`) returned as a condition, never

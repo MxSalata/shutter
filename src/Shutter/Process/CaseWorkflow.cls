@@ -1085,6 +1085,22 @@ Method AttachCorrectionSteps(case As Shutter.Store.Case, plan As %DynamicObject)
 
 /// Rules-only mode: the plan is a resend of the case's own operation at the observed version,
 /// and the gate alone decides.
+/// What an automatic release by the site's policy still sends to a person: the holds PolicyPath makes after it reads the
+/// policy, each turning an automatic release into an approval, as the site profile in force makes them apply, for
+/// GET /catalogue and this site's guide (CONTRACTS 6.8). Each {hold, when, source}: when is a person's words for the
+/// case, source the call in PolicyPath that makes the hold, which Shutter.Test.SiteGuide holds to that method. With
+/// <var>all</var> 1, every hold whatever the profile says. PolicyPath does not read this list: it is kept beside it.
+ClassMethod AutomaticHolds(all As %Boolean = 0) As %DynamicArray
+{
+    Set out = [], profile = "Shutter.Store.SiteProfile"
+    If all || ($CLASSMETHOD(profile, "AdmissionNotFound") = "person") Do out.%Push({"hold": "admission_not_found", "when": "the receiver answers that it has no record of the patient's admission (further_messages.admission_not_found: person)", "source": "AdmissionOnNotFound"})
+    If all || ($CLASSMETHOD(profile, "FurtherMovement") = "show") Do out.%Push({"hold": "shown_visit", "when": "the case shows the patient's movement on another visit (further_messages.in_patient_movement: show)", "source": "ShownVisit"})
+    Do out.%Push({"hold": "site_entry", "when": "one of this site's own entries stopped the case before", "source": "StoredSiteEntry"})
+    Do out.%Push({"hold": "further_release", "when": "a person released a stop on the case's further messages", "source": "FurtherReleaseJSON"})
+    If all || $CLASSMETHOD(profile, "ProveOrigin") Do out.%Push({"hold": "origin", "when": "the case's source cannot be proved (feed.prove_origin)", "source": "Shutter.Operation.Origin"})
+    Quit out
+}
+
 /// The policy path: one catalogue entry matched and decides by policy. The plan follows the entry's preferred
 /// outcome; the site profile's policy for the receiver's tier and the chain kind says whether it is released
 /// automatically (no Workflow task; still gated, rehearsed and verified) or after an approval. A policy of board

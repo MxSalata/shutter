@@ -3,7 +3,7 @@ import type { SiteProfile } from '@/api/types';
 import type { CatalogueEntry, CatalogueView } from '@/features/site-guide/model';
 import shippedFile from '../../../knowledge/catalogue/catalogue.json';
 import recorded from './catalogue-recorded.json';
-import { atReceiversOf } from './atReceivers';
+import { atReceiversOf, automaticHoldsOf } from './atReceivers';
 import { catalogueView, resetMock } from './handlers';
 
 /**
@@ -25,6 +25,22 @@ describe("the trial's catalogue and the recorded route", () => {
   it("gives the route's own rows on the recorded profile, entry by entry and receiver by receiver", () => {
     for (const { atReceivers, ...e } of catalogue.shipped as CatalogueEntry[])
       expect({ id: e.id, rows: atReceiversOf(e, profile) }).toEqual({ id: e.id, rows: atReceivers });
+  });
+
+  it('says what an automatic release still sends to a person as the route does, under the profile it names', () => {
+    expect(catalogue.profileVersion).toBe(recorded.siteProfile.version);
+    expect(automaticHoldsOf(profile)).toEqual(catalogue.automaticHolds);
+    // and a profile that turns each switch the other way, as the core's list reads them
+    const other = {
+      ...profile,
+      further_messages: { admission_not_found: 'policy', in_patient_movement: 'show' },
+      feed: { prove_origin: false },
+    } as unknown as SiteProfile;
+    expect(automaticHoldsOf(other).map((h) => h.hold)).toEqual([
+      'shown_visit',
+      'site_entry',
+      'further_release',
+    ]);
   });
 
   it('gives the route’s rows on the recorded profile with an authoritative source too, as the core would', () => {

@@ -19226,6 +19226,13 @@
           "generation": {
             "type": "integer"
           },
+          "profileVersion": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "The site profile's version the shipped entries' rows were made under, read with the catalogue version and the generation as one (v1.68): GET /site-profile's version, 0 for the shipped defaults; null when a profile save kept landing during the read."
+          },
           "shipped": {
             "type": "array",
             "description": "The shipped entries in id order, each in its front matter's shape with its prose, and atReceivers.",
@@ -19240,6 +19247,37 @@
                   }
                 }
               }
+            }
+          },
+          "automaticHolds": {
+            "type": "array",
+            "description": "What an automatic release by the site's policy still sends to a person under that profile (v1.68): the holds the workflow makes after it reads the policy, each turning the release into an approval.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "hold": {
+                  "type": "string",
+                  "enum": [
+                    "admission_not_found",
+                    "shown_visit",
+                    "site_entry",
+                    "further_release",
+                    "origin"
+                  ]
+                },
+                "when": {
+                  "type": "string",
+                  "description": "The case it holds, in words for a person."
+                },
+                "source": {
+                  "type": "string",
+                  "description": "The call in the workflow that makes the hold."
+                }
+              },
+              "required": [
+                "hold",
+                "when"
+              ]
             }
           },
           "site": {

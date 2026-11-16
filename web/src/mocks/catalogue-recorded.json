@@ -177,7 +177,7 @@
     },
     "version": 4,
     "source": "/home/irisowner/dev/knowledge/site/profile.json (demo)",
-    "updatedAt": "2026-11-16T02:24:19Z",
+    "updatedAt": "2026-11-16T05:04:17Z",
     "updatedBy": "install",
     "catalogueEntries": 19
   },
@@ -185,6 +185,7 @@
     "version": "E1@5,E10@3,E11@2,E12@2,E13@5,E14@1,E15@1,E16@1,E17@1,E18@1,E19@1,E2@4,E3@1,E4@2,E5@2,E6@3,E7@3,E8@1,E9@1",
     "shippedVersion": "E1@5,E10@3,E11@2,E12@2,E13@5,E14@1,E15@1,E16@1,E17@1,E18@1,E19@1,E2@4,E3@1,E4@2,E5@2,E6@3,E7@3,E8@1,E9@1",
     "generation": 0,
+    "profileVersion": 4,
     "shipped": [
       {
         "id": "E1",
@@ -1331,6 +1332,28 @@
             "whenOtherSource": []
           }
         ]
+      }
+    ],
+    "automaticHolds": [
+      {
+        "hold": "admission_not_found",
+        "when": "the receiver answers that it has no record of the patient's admission (further_messages.admission_not_found: person)",
+        "source": "AdmissionOnNotFound"
+      },
+      {
+        "hold": "site_entry",
+        "when": "one of this site's own entries stopped the case before",
+        "source": "StoredSiteEntry"
+      },
+      {
+        "hold": "further_release",
+        "when": "a person released a stop on the case's further messages",
+        "source": "FurtherReleaseJSON"
+      },
+      {
+        "hold": "origin",
+        "when": "the case's source cannot be proved (feed.prove_origin)",
+        "source": "Shutter.Operation.Origin"
       }
     ],
     "site": [],

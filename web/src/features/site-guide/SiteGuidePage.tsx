@@ -34,6 +34,7 @@ import {
   NOT_PRINTED,
   OUT_OF_DATE,
   alternativesOf,
+  automaticWords,
   decidesWords,
   entryAtReceivers,
   hasNoRecoveryApi,
@@ -47,6 +48,7 @@ import {
   stampLine,
   stampOf,
   stampTime,
+  type AutomaticHold,
   type CatalogueEntry,
   type CatalogueView,
   type Stamp,
@@ -214,7 +216,7 @@ function Lines({ label, items }: { label: string; items: ReactNode[] }) {
 }
 
 /** One receiver: what it is, what Shutter may and will never do there, who approves, and what an outage does. */
-function Receiver({ r, profile }: { r: SiteReceiver; profile: SiteProfile }) {
+function Receiver({ r, profile, holds }: { r: SiteReceiver; profile: SiteProfile; holds?: AutomaticHold[] }) {
   const category = categoryOf(r);
   const text = CATEGORY_TEXT[category];
   const fhir = fhirOf(r);
@@ -250,6 +252,8 @@ function Receiver({ r, profile }: { r: SiteReceiver; profile: SiteProfile }) {
         . <Code>{`policy.${r.tier}`}</Code>
       </>,
     );
+    if (KINDS.some((k) => releaseAt(profile, r, k) === 'automatic'))
+      may.push(`Released automatically means ${automaticWords(holds)}.`);
     never.push(
       "It never sends anything but the case's own operation, unchanged, after the gate and a dry run.",
     );
@@ -435,14 +439,16 @@ function Scenario({
   profile,
   titles,
   own,
+  holds,
 }: {
   e: CatalogueEntry;
   profile: SiteProfile;
   titles: Map<string, string>;
   own?: SiteEntryItem;
+  holds?: AutomaticHold[];
 }) {
   const site = e.origin === 'site';
-  const at = site ? [] : entryAtReceivers(e, profile);
+  const at = site ? [] : entryAtReceivers(e, profile, holds);
   const alternatives = site ? [] : alternativesOf(e);
   const shown = (e.scenarios ?? []).map((s) => (titles.get(s) ? `${s} (${titles.get(s)})` : s));
   return (
@@ -570,7 +576,7 @@ function Scenarios({
         The shipped entries
       </Title>
       {[...catalogue.shipped].sort(byNumber).map((e) => (
-        <Scenario key={e.id} e={e} profile={profile} titles={titles} />
+        <Scenario key={e.id} e={e} profile={profile} titles={titles} holds={catalogue.automaticHolds} />
       ))}
     </Stack>
   );
@@ -597,7 +603,8 @@ function Limits({ profile }: { profile: SiteProfile }) {
   );
 }
 
-function Toolbar() {
+/** Back, the detail switch and Print: printing waits until every part was read under one profile version. */
+function Toolbar({ canPrint }: { canPrint: boolean }) {
   return (
     <Group className="site-guide-toolbar" justify="space-between" wrap="wrap" gap="sm" mb="lg">
       <Button
@@ -610,7 +617,11 @@ function Toolbar() {
       </Button>
       <Group gap="sm">
         <DetailSwitch />
-        <Button leftSection={<IconPrinter size={16} aria-hidden />} onClick={() => window.print()}>
+        <Button
+          leftSection={<IconPrinter size={16} aria-hidden />}
+          disabled={!canPrint}
+          onClick={() => window.print()}
+        >
           Print or save as PDF
         </Button>
       </Group>
@@ -634,11 +645,34 @@ export default function SiteGuidePage() {
     };
   }, []);
   const failed = [profile, catalogue, health].find((q) => q.isError);
-  const ready = profile.data && catalogue.data && health.data && !entries.isPending && !scenarios.isPending;
+  // GET /catalogue names the profile version its rows were made under: a guide is printed only when that is the profile
+  // the page read, so no part comes from another version (a save landed between the reads, or a cached profile)
+  const mixed =
+    !!profile.data &&
+    !!catalogue.data &&
+    catalogue.data.profileVersion !== undefined &&
+    catalogue.data.profileVersion !== profile.data.version;
+  const [rereads, setRereads] = useState(0);
+  const { refetch: readProfile } = profile;
+  const { refetch: readCatalogue } = catalogue;
+  useEffect(() => {
+    // Both read again while the answers disagree, five times at most
+    if (!mixed || rereads >= 5) return;
+    void Promise.all([readProfile(), readCatalogue()]).then(() => setRereads((n) => n + 1));
+  }, [mixed, rereads, readProfile, readCatalogue]);
+  const ready =
+    profile.data &&
+    catalogue.data &&
+    health.data &&
+    !mixed &&
+    !profile.isFetching &&
+    !catalogue.isFetching &&
+    !entries.isPending &&
+    !scenarios.isPending;
   const titles = new Map((scenarios.data?.scenarios ?? []).map((s) => [s.id, s.title]));
   return (
     <div className="site-guide">
-      <Toolbar />
+      <Toolbar canPrint={!!ready && !failed} />
       <main aria-labelledby="site-guide-title">
         {failed ? (
           <>
@@ -655,6 +689,19 @@ export default function SiteGuidePage() {
               onRetry={() => void failed.refetch()}
             />
           </>
+        ) : mixed && rereads >= 5 ? (
+          <>
+            <Title order={1} id="site-guide-title" mb="md">
+              This site&apos;s guide
+            </Title>
+            <ErrorAlert
+              error={new Error('The site profile kept changing while the guide was read.')}
+              title="The guide was not made"
+              onRetry={() => setRereads(0)}
+            />
+          </>
+        ) : mixed ? (
+          <PageSkeleton label="The site profile changed while the guide was read: reading it again…" />
         ) : !ready ? (
           <PageSkeleton label="Reading the site profile, the gate and the catalogue…" />
         ) : (
@@ -707,7 +754,7 @@ function Guide({
       </Sheet>
       <Sheet id={PARTS[0][0]} title={PARTS[0][1]} stamp={stamp}>
         {profile.receivers.map((r, i) => (
-          <Receiver key={`${r.name}-${i}`} r={r} profile={profile} />
+          <Receiver key={`${r.name}-${i}`} r={r} profile={profile} holds={catalogue.automaticHolds} />
         ))}
       </Sheet>
       <Sheet id={PARTS[1][0]} title={PARTS[1][1]} stamp={stamp}>

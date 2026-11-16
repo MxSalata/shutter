@@ -2,7 +2,7 @@ import { delay, http, HttpResponse } from 'msw';
 import fixtures from './fixtures.json';
 import definitions from '../../../fixtures/scenarios.json';
 import recordedCatalogue from './catalogue-recorded.json';
-import { atReceiversOf } from './atReceivers';
+import { atReceiversOf, automaticHoldsOf } from './atReceivers';
 import type { CatalogueEntry, CatalogueView } from '@/features/site-guide/model';
 import type {
   SiteEntriesView,
@@ -785,7 +785,8 @@ export const NO_SITE_ENTRIES: SiteEntriesView = {
  * (catalogue-recorded.json, recorded from IRIS with scripts in the file's own note), with each shipped entry's
  * atReceivers worked out again for the trial's own site profile, which a visitor may change: the port of the core's
  * Matcher.AtReceiver in atReceivers.ts, held to the recording by its test. The trial's active site entries, its
- * samples and any a visitor activates, are listed as the route lists them, with the generation and the version's suffix.
+ * samples and any a visitor activates, are listed as the route lists them, with the generation and the version's suffix;
+ * the profile's version and what an automatic release still sends to a person are the trial profile's (automaticHoldsOf).
  */
 export function catalogueView(profile: SiteProfile | undefined = siteProfile?.profile): CatalogueView {
   const recorded = recordedCatalogue.catalogue as unknown as CatalogueView;
@@ -794,6 +795,8 @@ export function catalogueView(profile: SiteProfile | undefined = siteProfile?.pr
     ...recorded,
     version: recorded.version + own.suffix,
     generation: own.generation,
+    profileVersion: siteProfile?.version ?? 0,
+    automaticHolds: profile ? automaticHoldsOf(profile) : [],
     shipped: recorded.shipped.map(({ atReceivers: _recorded, ...e }: CatalogueEntry) => ({
       ...e,
       atReceivers: profile ? atReceiversOf(e, profile) : [],
