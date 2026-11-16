@@ -30,6 +30,7 @@ check fails. Standard library only.
 """
 import argparse
 import os
+import re
 import sys
 import time
 import urllib.parse
@@ -38,6 +39,12 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from scenario_check import CLOSED, Session, downstream_encounter, wait, wait_until_idle  # noqa: E402
 
 ENCOUNTER = "ENC-1002"
+
+
+def generation_of(version):
+    """The generation a catalogue version carries (";g<n>:"), or -1 when it carries none."""
+    found = re.search(r";g(\d+):", version or "")
+    return int(found.group(1)) if found else -1
 
 
 def main():
@@ -196,6 +203,7 @@ def main():
         check("a second person approves: active", status == 200 and active.get("state") == "active" and active.get("approvedBy") == "approver", f"{status} {str(active)[:300]}")
         version = (active or {}).get("catalogueVersion", "")
         check("the catalogue's version carries the generation and the entry", version.startswith(shipped + ";g") and version.endswith(f":{first}@1"), version[-40:])
+        activated_at = generation_of(version)
         check("the answer says how many waiting plans were made under the old version", isinstance((active or {}).get("waitingPlans"), int), str((active or {}).get("waitingPlans")))
         _, listing = operator.call("GET", "/catalogue")
         site = (listing or {}).get("site") or []
@@ -287,7 +295,7 @@ def main():
         status, retired = two_people(first, "retire")
         check("the entry is retired by two people", status == 200 and (retired or {}).get("state") == "retired", f"{status} {str(retired)[:300]}")
         version = (retired or {}).get("catalogueVersion", "")
-        check("the version keeps its suffix, at a higher generation, with no entry", version.startswith(shipped + ";g") and version.endswith(":"), version[-30:])
+        check("the version keeps its suffix, at a higher generation, with no entry", version.startswith(shipped + ";g") and version.endswith(":") and generation_of(version) > activated_at >= 1, f"{version[-30:]} (activated at generation {activated_at})")
         case, why = play("S2", "policy", approve=True)
         check("after the retirement S2 resends again", case and case["state"] == "resolved" and case.get("writes") == 1 and case.get("catalogueEntry") == "E2", f"{why} {case and case['state']}")
         detail = site_entry(first)
