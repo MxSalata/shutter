@@ -231,6 +231,8 @@ Method TestTextRefused()
     Do $$$AssertEquals($CLASSMETHOD(ps, "CleanText", $TRANSLATE($JUSTIFY("", 501), " ", "a"), .problem), "", "501 characters are too many")
     Do $$$AssertEquals(problem, "text is at most 500 characters", "said so")
     Do $$$AssertEquals($CLASSMETHOD(ps, "CleanText", "bay 12345, ward 7", .problem), "bay 12345, ward 7", "five digits pass")
+    Do $$$AssertEquals($CLASSMETHOD(ps, "CleanText", "the ward " _ $CHAR(8211) _ " bay 4", .problem), "the ward - bay 4", "a dash is kept as a hyphen")
+
 }
 
 /// Who may send a turn: the site's own switch first, off unless a person saved it on, then a page question's rule.
@@ -674,6 +676,15 @@ XData TextRows [ MimeType = application/json ]
  ["NHS number 943  476  5919", "a long number"],
  ["call (020) 7946 0958", "a long number"],
  ["NHS number 943.476.5919", "a long number"],
+ ["NHS number 943\u2011476\u20115919", "a long number"],
+ ["NHS number 943\u2013476\u20135919", "a long number"],
+ ["NHS number 943 \u2013 476 \u2013 5919", "a long number"],
+ ["NHS number 943\u2014476\u20145919", "a long number"],
+ ["NHS number 943\uff0d476\uff0d5919", "a long number"],
+ ["call 020\u22127946\u22120958", "a long number"],
+ ["call 0161\u2010276\u20101234", "a long number"],
+ ["NHS number 943\u2028476\u20285919", "a long number"],
+ ["NHS number 943\u2029476\u20295919", "a long number"],
  ["ask at intranet.nhs.scot", "a link"],
  ["connect to 10.0.0.1", "a link"],
  ["the board is at 10.1.2.3/beds", "a link"],
@@ -691,8 +702,15 @@ XData TextRows [ MimeType = application/json ]
  ["the ward\u200bboard", "an invisible or direction-changing character"],
  ["\ufeffthe ward board", "an invisible or direction-changing character"],
  ["the ward \u2066board\u2069", "an invisible or direction-changing character"],
+ ["the ward\u034fboard", "an invisible or direction-changing character"],
+ ["the ward\ufe0fboard", "an invisible or direction-changing character"],
+ ["the ward\u3164board", "an invisible or direction-changing character"],
+ ["the ward\u00adboard", "an invisible or direction-changing character"],
+ ["the ward board\udb40\udc31\udb40\udc32", "an invisible or direction-changing character"],
  ["bay 12345, ward 7", ""],
  ["since 15/11/2026, ward 7", ""],
+ ["since 15\u201311\u20132026, ward 7", ""],
+ ["the ward \u2013 the bed board", ""],
  ["It is the ward whiteboard, it only shows where patients are now. Tier 2 I think.", ""],
  ["tier 2 or 3, e.g. the PAS or the EPR", ""],
  ["version 1.4/2 of the feed", ""],

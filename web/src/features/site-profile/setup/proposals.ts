@@ -28,24 +28,33 @@ const KINDS_OF_SYSTEM = ['current_state', 'history_of_record', 'orders_results']
 const DOMAINS =
   'com|org|net|uk|io|gov|edu|info|biz|dev|app|cloud|online|site|xyz|eu|ie|local|internal|lan|ai|co|scot|wales|cymru|nhs|int|health|care';
 
-/** A text with every Unicode space as a plain space and each run of spaces as one: the port of ProfileSetup.Spaces. */
+/**
+ * A text with every Unicode space and the line and paragraph separators as a plain space, each run of spaces as one,
+ * and every Unicode dash and minus sign as a hyphen: the port of ProfileSetup.Spaces.
+ */
 export const spaces = (text: string) =>
-  text.replace(/[\u00a0\u1680\u2000-\u200a\u202f\u205f\u3000]/g, ' ').replace(/[ \t]{2,}/g, (run) => run[0]);
+  text
+    .replace(/[\u2010-\u2015\u2212\ufe58\ufe63\uff0d]/g, '-')
+    .replace(/[\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]/g, ' ')
+    .replace(/[ \t]{2,}/g, (run) => run[0]);
 const BARE_DOMAIN = new RegExp(`\\b[a-z0-9-]+(\\.[a-z0-9-]+)*\\.(${DOMAINS})\\b`, 'i');
 
 /**
  * Why a text may not go to a model, or "": the port of ProfileSetup.TextProblem. A control character (C0, DEL or C1); an
- * invisible or direction-changing character; a link (a scheme, www., or a bare domain with a path or a known top-level
- * domain); an address; the shape of a credential (a word such as password with ":" or "=", a provider's key prefix, a
- * long hex or base64 run); a run of six or more digits; a number of ten or more digits with spaces, hyphens, dots or
- * brackets between them, every Unicode space read as a space and a run of them as one; an IPv4 address, as a link. Both
- * suites run the cases of the core's TextRows table.
+ * invisible or direction-changing character (every format character, the tag characters among them, and the fillers,
+ * joiners and variation selectors that show nothing); a link (a scheme, www., or a bare domain with a path or a known
+ * top-level domain); an address; the shape of a credential (a word such as password with ":" or "=", a provider's key
+ * prefix, a long hex or base64 run); a run of six or more digits; a number of ten or more digits with spaces, hyphens,
+ * dots or brackets between them, every Unicode space or separator read as a space, a run of them as one, and every
+ * Unicode dash as a hyphen; an IPv4 address, as a link. Both suites run the cases of the core's TextRows table.
  */
 export function textProblem(raw: string): string {
   const text = spaces(raw);
   // eslint-disable-next-line no-control-regex
   if (/[\x00-\x1f\x7f-\x9f]/.test(text)) return 'a control character';
-  if (/[\u00ad\u061c\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]/.test(text))
+  if (
+    /[\p{Cf}\u115f\u180e\u3164\uffa0]|\u034f|\u1160|\u17b4|\u17b5|[\u180b-\u180d]|[\ufe00-\ufe0f]/u.test(text)
+  )
     return 'an invisible or direction-changing character';
   if (/:\/\/|\bwww\.|\bmailto:|\bjavascript:/i.test(text)) return 'a link';
   if (/[^\s@]@[^\s@]/.test(text)) return 'an address';

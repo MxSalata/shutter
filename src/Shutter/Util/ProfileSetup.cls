@@ -110,16 +110,18 @@ ClassMethod ClassOf(path As %String) As %String
 /// credential (a word such as password or token with ":" or "=", a provider's key prefix, a run of 32 or more hex
 /// digits, or a run of 24 or more base64 characters mixing capitals, small letters and digits); a run of six or more
 /// digits; and a number of ten or more digits with spaces, hyphens, dots or brackets between them (an NHS number as
-/// printed, 943 476 5919, or a telephone number, (020) 7946 0958). Every Unicode space counts as a space and a run of
-/// them as one (Spaces), so a number pasted with non-breaking spaces is read as typed. An IPv4 address is a link too. The
-/// cases are one table, TextRows in Shutter.Test.ProfileSetup, that
+/// printed, 943 476 5919, or a telephone number, (020) 7946 0958). Every Unicode space and line or paragraph separator
+/// counts as a space and a run of them as one, and every Unicode dash or minus sign as a hyphen (Spaces), so a number
+/// pasted with non-breaking spaces or typographic dashes is read as typed. The invisible characters are every format
+/// character (Unicode's Cf, the tag characters among them) and the fillers, joiners and variation selectors that show
+/// nothing. An IPv4 address is a link too. The cases are one table, TextRows in Shutter.Test.ProfileSetup, that
 /// the web app's copy (setup/proposals.ts) runs too. Cutting a text short is not redaction, so a text that fails is
 /// refused whole, neither sent nor stored.
 ClassMethod TextProblem(text As %String) As %String
 {
     Set text = ..Spaces($GET(text))
     If $LOCATE(text, "[\x00-\x1F\x7F-\x9F]") Quit "a control character"
-    If $LOCATE(text, "[\x{00AD}\x{061C}\x{180E}\x{200B}-\x{200F}\x{202A}-\x{202E}\x{2060}-\x{2064}\x{2066}-\x{2069}\x{FEFF}]") Quit "an invisible or direction-changing character"
+    If $LOCATE(text, "[\p{Cf}\x{034F}\x{115F}\x{1160}\x{17B4}\x{17B5}\x{180B}-\x{180E}\x{3164}\x{FE00}-\x{FE0F}\x{FFA0}]") Quit "an invisible or direction-changing character"
     If $LOCATE(text, "(?i)(://|\bwww\.|\bmailto:|\bjavascript:)") Quit "a link"
     If $LOCATE(text, "[^\s@]@[^\s@]") Quit "an address"
     If $LOCATE(text, "(?i)\b[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z][a-z0-9-]*/") Quit "a link"
@@ -138,11 +140,14 @@ ClassMethod TextProblem(text As %String) As %String
 /// intranet uses.
 Parameter DOMAINS = "com|org|net|uk|io|gov|edu|info|biz|dev|app|cloud|online|site|xyz|eu|ie|local|internal|lan|ai|co|scot|wales|cymru|nhs|int|health|care";
 
-/// A text with every Unicode space (no-break, the typographic spaces, the narrow and the ideographic ones) as a plain
-/// space and each run of spaces as one.
+/// A text with every Unicode space (no-break, the typographic spaces, the narrow and the ideographic ones) and the line
+/// and paragraph separators as a plain space, each run of spaces as one, and every Unicode dash and minus sign (the
+/// hyphens, the figure, en and em dashes, the horizontal bar, the minus sign and their small and full-width forms) as a
+/// hyphen.
 ClassMethod Spaces(text As %String) As %String
 {
-    Set text = $ZSTRIP($TRANSLATE(text, $CHAR(160, 5760, 8192, 8193, 8194, 8195, 8196, 8197, 8198, 8199, 8200, 8201, 8202, 8239, 8287, 12288), $JUSTIFY("", 16)), "=W")
+    Set text = $TRANSLATE(text, $CHAR(8208, 8209, 8210, 8211, 8212, 8213, 8722, 65112, 65123, 65293), "----------")
+    Set text = $ZSTRIP($TRANSLATE(text, $CHAR(160, 5760, 8192, 8193, 8194, 8195, 8196, 8197, 8198, 8199, 8200, 8201, 8202, 8232, 8233, 8239, 8287, 12288), $JUSTIFY("", 18)), "=W")
     Quit text
 }
 
@@ -161,7 +166,8 @@ ClassMethod TextRefusal(what As %String) As %String
     Quit "The text holds " _ what _ ". Take that out and send again: Ask Shutter does not need it."
 }
 
-/// The person's text as it is kept and sent: line breaks, tabs and every Unicode space as spaces, each run as one, trimmed;
+/// The person's text as it is kept and sent: line breaks, tabs and every Unicode space as spaces, each run as one, every
+/// Unicode dash as a hyphen, trimmed;
 /// "" with a problem when it is
 /// empty, longer than MAXTEXT or holds what a model should not get (TextProblem).
 ClassMethod CleanText(text As %String, Output problem As %String) As %String
