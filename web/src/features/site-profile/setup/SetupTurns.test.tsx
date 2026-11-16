@@ -9,7 +9,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { SIGNED_OUT } from '@/api/hooks';
 import type { SetupTurnBody, SetupTurnView } from '@/api/types';
 import { resetAssistantForTests } from '@/features/assistant/store';
-import { mockSetupAnswers, resetMock } from '@/mocks/handlers';
+import { mockSetupAnswers, mockSetupTurnPause, resetMock } from '@/mocks/handlers';
 import { server } from '@/mocks/node';
 import { recordedSiteProfile } from '@/mocks/profile';
 import { theme } from '@/theme';
@@ -1037,5 +1037,38 @@ describe('the store, around a turn', () => {
     state().settle(answered(1, 'ward display', null));
     expect(JSON.stringify(state().draft)).toBe(before);
     expect(state().turns.at(-1)).toMatchObject({ state: 'unused', note: CHANGED_MEANWHILE });
+  });
+});
+
+describe('the mock route, as the server, takes who asked once', () => {
+  it('keeps the turn as asked by who sent it when the session ends while it is being opened', async () => {
+    const draft = JSON.parse(JSON.stringify(recorded.profile)) as typeof recorded.profile;
+    draft.receivers.push({
+      name: 'Bed Board',
+      features: { conditional_writes: false, receipts: false, history: false, dry_run: false },
+    } as never);
+    mockSetupTurnPause(async () => {
+      await fetch(`${BASE}/session`, { method: 'DELETE', headers: { 'X-Requested-With': 'Shutter' } });
+    });
+    const answer = await fetch(TURNS, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'Shutter' },
+      body: JSON.stringify({
+        receiver: 'Bed Board',
+        text: 'it is a whiteboard',
+        draft,
+        baseVersion: recorded.version,
+        draftRevision: 1,
+      }),
+    });
+    expect(answer.status).toBe(202);
+    const { turnId } = (await answer.json()) as { turnId: string };
+    await fetch(`${BASE}/session`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'Shutter' },
+      body: JSON.stringify({ username: 'approver', password: 'shutter' }),
+    });
+    const turn = (await (await fetch(`${TURNS}/${turnId}`)).json()) as SetupTurnView;
+    expect(turn.askedBy).toBe('approver');
   });
 });

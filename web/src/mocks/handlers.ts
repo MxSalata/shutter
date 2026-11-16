@@ -257,6 +257,7 @@ export function resetMock(signedInAs: keyof typeof USERS | null = 'approver') {
   played = {};
   holds = freshHolds(cases);
   resetSiteProfile();
+  setupTurnPause = null;
   escalations = {};
   closed = {};
   abandoned = {};
@@ -274,6 +275,15 @@ export function resetMock(signedInAs: keyof typeof USERS | null = 'approver') {
  * The site's switch for typed answers in Set up the site (CONTRACTS 14.7), as a site whose approver saved it on or off:
  * the stored profile's model_content.setup_answers, at the version it has. Off in the recording, as on a new install.
  */
+/**
+ * For tests: what the setup-turn route does in place of its short delay, so a test can act while a send is in flight
+ * (sign out, for one). Null puts the delay back.
+ */
+let setupTurnPause: (() => Promise<void>) | null = null;
+export function mockSetupTurnPause(fn: (() => Promise<void>) | null) {
+  setupTurnPause = fn;
+}
+
 export function mockSetupAnswers(on: boolean) {
   if (!siteProfile) return;
   siteProfile = {
@@ -1472,6 +1482,8 @@ export const handlers = [
   http.post(`${BASE}/site-profile/setup-turns`, async ({ request }) => {
     const denied = csrf(request) ?? guard('operator');
     if (denied) return denied;
+    // Who asked, read once as the server does: a sign-out during the delay below does not change it
+    const who = session!.username;
     if (!siteProfile) return error(404, 'not_found', 'No site profile was recorded');
     const body = (await request.json().catch(() => null)) as Partial<SendSetupTurn> | null;
     if (!body || typeof body !== 'object' || Array.isArray(body))
@@ -1522,7 +1534,7 @@ export const handlers = [
     let conversation = body.conversation ?? '';
     if (conversation) {
       const earlier = turnsOf(conversation);
-      if (!earlier.length || earlier[0].askedBy !== session!.username)
+      if (!earlier.length || earlier[0].askedBy !== who)
         return error(404, 'not_found', `No conversation ${conversation} of yours`);
       if (earlier.length >= MAX_TURNS)
         return error(
@@ -1531,7 +1543,7 @@ export const handlers = [
           `This conversation has its ${MAX_TURNS} turns: discard the draft or go on with the page's controls`,
         );
     } else conversation = newConversation();
-    await delay();
+    await (setupTurnPause ? setupTurnPause() : delay());
     const view = answerTurn(
       conversation,
       body.receiver,
@@ -1540,7 +1552,7 @@ export const handlers = [
       draft,
       body.baseVersion,
       Number(body.draftRevision ?? 0),
-      session!.username,
+      who,
       stamp(),
     );
     return HttpResponse.json({ turnId: view.turnId, conversation, state: 'pending' }, { status: 202 });
