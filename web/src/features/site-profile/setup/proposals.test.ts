@@ -6,6 +6,7 @@ import {
   checkTurn,
   cleanText,
   draftRefusal,
+  effectsRefusal,
   kindReadBy,
   nameProblem,
   rowAutomatic,
@@ -93,6 +94,28 @@ describe('the checks on a turn, the table Shutter.Test.ProfileSetup runs at the 
       const { base, draft, receiver } = stage(row);
       expect([row.name, checkTurn(row.turn, base, draft, receiver).ok]).toEqual([row.name, false]);
     }
+  });
+});
+
+describe('the effects check on its own, as Shutter.Test.ProfileSetup:TestTheEffectsCheck holds the core to it', () => {
+  it('refuses a batch that makes a tier release single failures with no person, against the profile in force or the draft', () => {
+    const automatic = (p: SiteProfile): SiteProfile => ({
+      ...p,
+      policy: { ...p.policy, '2': { ...p.policy!['2'], single: 'automatic' } },
+    });
+    expect(effectsRefusal(BASE, clone(BASE), automatic(clone(BASE)), 'Downstream Out')).toBe(
+      "proposals: less strict than the profile in force: a resend of single failures would need no person's approval",
+    );
+    expect(effectsRefusal(BASE, clone(BASE), clone(BASE), 'Downstream Out')).toBe('');
+    const draft = clone(BASE);
+    draft.receivers.push({
+      name: 'Bed Board',
+      tier: 2,
+      features: { conditional_writes: false, receipts: false, history: false, dry_run: false },
+    } as unknown as SiteReceiver);
+    expect(effectsRefusal(BASE, draft, automatic(clone(draft)), 'Bed Board')).toBe(
+      "proposals: less strict than the draft: a resend of single failures would need no person's approval",
+    );
   });
 });
 

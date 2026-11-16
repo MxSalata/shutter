@@ -393,6 +393,22 @@ ClassMethod LineWords(id As %String, before As %DynamicObject = "", after As %Dy
     Quit "recovery would be enabled"
 }
 
+/// CheckTurn's effects check, "" or why a batch is refused: <var>applied</var> (the draft with the batch applied) makes a
+/// line of what Shutter will do at <var>receiver</var> less strict than under the profile in force (<var>base</var>, when
+/// it holds the receiver) or than under the draft as sent.
+ClassMethod EffectsRefusal(base As %DynamicObject, draft As %DynamicObject, applied As %DynamicObject, receiver As %String) As %String
+{
+    Set after = ..Effects(applied, ..Find(applied, receiver))
+    Set inForce = ..Find(base, receiver)
+    Set was = $SELECT($ISOBJECT(inForce): ..Effects(base, inForce), 1: "")
+    Set line = ..LessStrict(was, after)
+    If line '= "" Quit "proposals: less strict than the profile in force: " _ ..LineWords(line, was, after)
+    Set was = ..Effects(draft, ..Find(draft, receiver))
+    Set line = ..LessStrict(was, after)
+    If line '= "" Quit "proposals: less strict than the draft: " _ ..LineWords(line, was, after)
+    Quit ""
+}
+
 /// Why the agent may not draft a field of a receiver, or "" when it may: the field is class A, and its conditions hold.
 /// The description of any receiver; the kind and the tier only of a receiver that is not in the profile in force, and only
 /// while the draft leaves them unanswered; no kind while the draft holds a site-wide history_policy; and never a tier whose
@@ -527,16 +543,10 @@ ClassMethod CheckTurn(turn As %DynamicObject, base As %DynamicObject, draft As %
     }
     If problem '= "" Quit 0
     If out.proposals.%Size() > 0 {
-        // 4. The effects check: no line less strict than under the profile in force, or than under the draft as sent.
+        // 4. The effects check (EffectsRefusal)
         Set applied = ..Apply(draft, receiver, out.proposals)
-        Set after = ..Effects(applied, ..Find(applied, receiver))
-        Set inForce = ..Find(base, receiver)
-        Set was = $SELECT($ISOBJECT(inForce): ..Effects(base, inForce), 1: "")
-        Set line = ..LessStrict(was, after)
-        If line '= "" Set problem = "proposals: less strict than the profile in force: " _ ..LineWords(line, was, after) Quit 0
-        Set was = ..Effects(draft, entry)
-        Set line = ..LessStrict(was, after)
-        If line '= "" Set problem = "proposals: less strict than the draft: " _ ..LineWords(line, was, after) Quit 0
+        Set problem = ..EffectsRefusal(base, draft, applied, receiver)
+        If problem '= "" Quit 0
         // 5. The validator on a copy: nothing, or exactly what it says of the draft as sent (its own unfinished state).
         Set invalid = ##class(Shutter.Store.SiteProfile).Validate(applied)
         If (invalid '= "") && (invalid '= ##class(Shutter.Store.SiteProfile).Validate(draft)) Set problem = "proposals: the profile would not be valid: " _ invalid Quit 0

@@ -259,6 +259,34 @@ export type Checked = { ok: true; turn: SetupTurnBody } | { ok: false; problem: 
  * check (it holds what the person typed). `base` is the profile in force, `draft` the draft as it is now, `receiver`
  * the receiver the turn is about. The proposals pass or fail together.
  */
+/**
+ * The effects check of checkTurn: "" or why a batch is refused, the port of ProfileSetup.EffectsRefusal. The draft with
+ * the batch applied may make no line of what Shutter will do at the receiver less strict than under the profile in force
+ * (when it holds the receiver) or than under the draft as sent.
+ */
+export function effectsRefusal(
+  base: SiteProfile,
+  draft: SiteProfile,
+  applied: SiteProfile,
+  receiver: string,
+): string {
+  const after = effectsOf(
+    applied,
+    applied.receivers.find((r) => r.name === receiver)!,
+  );
+  const was = base.receivers.find((r) => r.name === receiver);
+  const words = (line: EffectLine, before: EffectLine[]) =>
+    lineWords(line.id, before.find((b) => b.id === line.id)?.policy, line.policy);
+  const inForceLines = was ? effectsOf(base, was) : null;
+  let line = lessStrict(inForceLines, after);
+  if (line && inForceLines)
+    return `proposals: less strict than the profile in force: ${words(line, inForceLines)}`;
+  const entry = draft.receivers.find((r) => r.name === receiver)!;
+  const draftLines = effectsOf(draft, entry);
+  line = lessStrict(draftLines, after);
+  return line ? `proposals: less strict than the draft: ${words(line, draftLines)}` : '';
+}
+
 export function checkTurn(
   turn: unknown,
   base: SiteProfile,
@@ -314,20 +342,8 @@ export function checkTurn(
   }
   if (kept.length) {
     const applied = applyBatch(draft, receiver, kept);
-    const after = effectsOf(
-      applied,
-      applied.receivers.find((r) => r.name === receiver)!,
-    );
-    const was = base.receivers.find((r) => r.name === receiver);
-    const words = (line: EffectLine, before: EffectLine[]) =>
-      lineWords(line.id, before.find((b) => b.id === line.id)?.policy, line.policy);
-    const inForceLines = was ? effectsOf(base, was) : null;
-    let line = lessStrict(inForceLines, after);
-    if (line && inForceLines)
-      return fail(`proposals: less strict than the profile in force: ${words(line, inForceLines)}`);
-    const draftLines = effectsOf(draft, entry);
-    line = lessStrict(draftLines, after);
-    if (line) return fail(`proposals: less strict than the draft: ${words(line, draftLines)}`);
+    const refused = effectsRefusal(base, draft, applied, receiver);
+    if (refused) return fail(refused);
     const invalid = validateProfile(applied);
     if (invalid && invalid !== validateProfile(draft))
       return fail(`proposals: the profile would not be valid: ${invalid}`);

@@ -557,6 +557,24 @@ Method TestAConversationLeavesTheProfileAlone()
     Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).Current().%ToJSON(), current, "nor the profile in force")
 }
 
+/// The effects check on its own (EffectsRefusal): a batch whose applied draft makes a tier's row release single failures
+/// with no person is refused naming that line, against the profile in force for a receiver in force and against the
+/// draft for one being added; a batch that loosens nothing is not refused. The web app's port is held to the same cases.
+Method TestTheEffectsCheck()
+{
+    Set ps = "Shutter.Util.ProfileSetup"
+    Set base = ..Base(), applied = ..Base()
+    Set applied.policy."2".single = "automatic"
+    Do $$$AssertEquals($CLASSMETHOD(ps, "EffectsRefusal", base, ..Base(), applied, "Downstream Out"), "proposals: less strict than the profile in force: a resend of single failures would need no person's approval", "a receiver in force, against the profile in force")
+    Do $$$AssertEquals($CLASSMETHOD(ps, "EffectsRefusal", base, ..Base(), ..Base(), "Downstream Out"), "", "nothing loosened, nothing refused")
+    Set added = ..Added(), added.tier = 2
+    Set draft = ..Base()
+    Do draft.receivers.%Push(added)
+    Set applied = {}.%FromJSON(draft.%ToJSON())
+    Set applied.policy."2".single = "automatic"
+    Do $$$AssertEquals($CLASSMETHOD(ps, "EffectsRefusal", base, draft, applied, "Bed Board"), "proposals: less strict than the draft: a resend of single failures would need no person's approval", "a receiver being added, against the draft")
+}
+
 /// A turn of the conversation as the Case Question item holds it while the agent reads it: the row opened and being
 /// answered, about the added receiver Bed Board, and the item's process with the turn's id and its answer awaited.
 Method Asked(text As %String, Output q As Shutter.Process.Question, conversation As %String = "") As Shutter.Store.SetupTurn
