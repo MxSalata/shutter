@@ -21,6 +21,9 @@ import { ACTION_WORDS, chipLabel, displacesWords, entryYaml } from './words';
  * core decides whether it may be done, and its refusal is shown as it came.
  */
 
+/** The YAML wraps rather than scrolls, so no part of it is a region only a mouse can scroll. */
+const YAML_STYLE = { whiteSpace: 'pre-wrap' as const, overflowWrap: 'anywhere' as const };
+
 /** The summary both dialogs open with: the sentence, the exact pattern, what it displaces, the action and the digest. */
 function Summary({
   entry,
@@ -70,7 +73,7 @@ function Summary({
         {`action ${action}, version ${version}, digest ${digest}`}
       </Text>
       {content ? (
-        <Code block style={{ maxHeight: 220, overflow: 'auto' }}>
+        <Code block style={YAML_STYLE} data-testid="own-summary-yaml">
           {entryYaml({ ...content, id: entry.id })}
         </Code>
       ) : null}

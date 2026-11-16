@@ -330,7 +330,7 @@ function Stored({ entry, review, onSaved, onClose }: WorkbenchProps & { entry: S
         />
       ) : (
         <TechDetail label="The entry as it is stored" kind="data">
-          <Code block data-testid="own-yaml">
+          <Code block data-testid="own-yaml" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
             {entryYaml({ ...shown, id: entry.id })}
           </Code>
         </TechDetail>
@@ -712,7 +712,7 @@ function Editor({
         </Stack>
       ) : null}
       <TechDetail label="The entry as YAML" kind="data">
-        <Code block data-testid="own-yaml">
+        <Code block data-testid="own-yaml" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
           {entryYaml({ ...form, id: entry?.id ?? live?.id })}
         </Code>
       </TechDetail>
