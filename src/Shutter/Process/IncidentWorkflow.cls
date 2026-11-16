@@ -650,6 +650,16 @@ Storage Default
 <Value>WaitNoted</Value>
 </Value>
 </Data>
+<Data name="TaskSaid">
+<Attribute>TaskSaid</Attribute>
+<Structure>subnode</Structure>
+<Subscript>"Shutter.Process.IncidentWorkflow.TaskSaid"</Subscript>
+</Data>
+<Data name="TaskSent">
+<Attribute>TaskSent</Attribute>
+<Structure>subnode</Structure>
+<Subscript>"Shutter.Process.IncidentWorkflow.TaskSent"</Subscript>
+</Data>
 <DefaultData>IncidentWorkflowDefaultData</DefaultData>
 <Type>%Storage.Persistent</Type>
 }
