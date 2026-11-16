@@ -76,6 +76,7 @@ test.describe('the API reference @api', () => {
       /^POST\s*\/api\/shutter\/incidents\/\{id\}\/approvals/,
       /^POST\s*\/api\/shutter\/incidents\/\{id\}\/chains\/\{seq\}\/approvals/,
       /^POST\s*\/api\/shutter\/outages\/\{id\}\/approvals/,
+      /^POST\s*\/api\/shutter\/site-entries\/\{id\}\/approvals/,
     ]);
     const approve = lines.filter({ hasText: /^POST\s*\/api\/shutter\/cases\/\{caseId\}\/approvals/ });
     await approve.click();
