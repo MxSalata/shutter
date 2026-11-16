@@ -13,9 +13,10 @@ import { withoutItWords, type SiteMatch } from '@/lib/siteEntry';
 export function SiteEntryNote({ match }: { match: SiteMatch }) {
   const entries = useSiteEntries();
   const entry = entries.data?.items.find((e) => e.id === match.id);
-  // The approver of the version the case matched, when that version is the one still in force.
+  // The approver of the version the case matched, only when that version is known and is the one still in force: an
+  // unversioned match is never given the approver of whatever version is in force now.
   const approver =
-    entry && (!match.version || entry.activeVersion === match.version) ? entry.approvedBy : undefined;
+    entry && match.version && entry.activeVersion === match.version ? entry.approvedBy : undefined;
   return (
     <Stack gap={6} data-testid="site-entry-note" className="ask-readonly" p="sm" maw="75ch">
       <StatusBadge

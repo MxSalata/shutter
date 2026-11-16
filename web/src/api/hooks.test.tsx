@@ -56,6 +56,17 @@ describe('useCasesOnce', () => {
   });
 });
 
+describe('useSiteEntries', () => {
+  it('reads the entries again while the page is open, so a suspension made elsewhere shows', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue({ items: [], status: {}, catalogueVersion: '' });
+    const c = client();
+    const entries = renderHook(() => useSiteEntries(), { wrapper: wrapper(c) });
+    await waitFor(() => expect(entries.result.current.isSuccess).toBe(true));
+    const observer = c.getQueryCache().find({ queryKey: keys.siteEntries })?.observers[0];
+    expect(observer?.options.refetchInterval).toBe(15_000);
+  });
+});
+
 describe('useSaveSiteProfile', () => {
   it("reads the site's own entries again after a save, which rechecks them on the server", async () => {
     const get = vi.spyOn(api, 'get').mockResolvedValue({ items: [], status: {}, catalogueVersion: '' });

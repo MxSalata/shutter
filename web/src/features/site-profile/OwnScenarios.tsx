@@ -78,7 +78,12 @@ function Entry({ e, technical }: { e: SiteEntryItem; technical: boolean }) {
             {`No longer checked: ${e.review.dropped.map((d) => `${d.condition.replace(/_/g, ' ')} (${d.why})`).join('; ')}.`}
           </Text>
         ) : null}
-        {e.needsReview && e.review?.notes?.length ? <Text size="sm">{e.review.notes.join(' ')}</Text> : null}
+        {/* Every note the recheck left, flagged or not: a fixture whose case is gone is said here too (design 7). */}
+        {e.review?.notes?.length ? (
+          <Text size="sm" data-testid={`own-scenario-${e.id}-notes`}>
+            {e.review.notes.join(' ')}
+          </Text>
+        ) : null}
         {technical && e.content ? (
           <Text
             size="xs"

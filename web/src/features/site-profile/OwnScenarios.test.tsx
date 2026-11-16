@@ -42,6 +42,29 @@ describe("the site's own scenarios on the Site profile page", () => {
     expect(screen.queryByTestId('own-scenarios-list')).not.toBeInTheDocument();
   });
 
+  it("says when a fixture's case is no longer stored, though nothing is flagged", async () => {
+    const example = SITE_ENTRIES_EXAMPLE.items[0]!;
+    answering({
+      ...SITE_ENTRIES_EXAMPLE,
+      items: [
+        {
+          ...example,
+          needsReview: false,
+          review: {
+            dropped: [],
+            notes: [
+              'Case C-000123 is no longer stored, so its evidence was not read again: only the vocabulary and its frozen copy were checked for it',
+            ],
+          },
+        },
+      ],
+    });
+    page();
+    expect(await screen.findByTestId('own-scenario-L1-notes')).toHaveTextContent(
+      'Case C-000123 is no longer stored',
+    );
+  });
+
   it('lists an active entry with its sentence, who approved it and what it has stopped', async () => {
     answering(SITE_ENTRIES_EXAMPLE);
     page();

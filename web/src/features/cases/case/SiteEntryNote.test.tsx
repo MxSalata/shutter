@@ -96,4 +96,14 @@ describe("one of the site's own scenarios on a case's plan", () => {
     );
     expect(screen.queryByText(/approved by/)).not.toBeInTheDocument();
   });
+
+  it('gives no approver to a match whose version the evidence does not say', async () => {
+    server.use(http.get(`${BASE}/site-entries`, () => HttpResponse.json(SITE_ENTRIES_EXAMPLE)));
+    const match = siteMatchOf(summary)!;
+    note({ ...match, version: undefined });
+    expect(await screen.findByTestId('site-entry-instructions')).toBeInTheDocument();
+    // The entries are read, and still no approver is lent from the version in force now.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.queryByText(/approved by/)).not.toBeInTheDocument();
+  });
 });

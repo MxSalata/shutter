@@ -664,8 +664,13 @@ export function useSiteProfile() {
 }
 
 /** The site's own catalogue entries (CONTRACTS 6.8) and the warnings that hold for them: read only. */
+/** The site's own entries, read again every 15 s: a suspension or a recheck made elsewhere shows on an open page. */
 export function useSiteEntries() {
-  return useQuery({ queryKey: keys.siteEntries, queryFn: () => api.get<SiteEntriesView>('/site-entries') });
+  return useQuery({
+    queryKey: keys.siteEntries,
+    queryFn: () => api.get<SiteEntriesView>('/site-entries'),
+    refetchInterval: CALM,
+  });
 }
 
 export function useSiteProfileHistory() {
