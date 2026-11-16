@@ -638,6 +638,11 @@ def setup_turn_checks(args, operator, approver, demo_password, judge_password, c
             check("a second turn while the first is being read is 409 turn_pending, or it was read already",
                   (status == 409 and error_of(body) == "turn_pending") or status == 202, f"{status} {body}")
             second = (body or {}).get("turnId") if status == 202 else None
+            if second:
+                # Only one turn of a conversation at a time: a second admitted means the first had settled
+                _, t1 = session.call("GET", f"/site-profile/setup-turns/{first}")
+                check("and when the second was admitted, the first had settled", (t1 or {}).get("state") in ("answered", "schema_failed", "failed"), t1)
+            opened = 1 + (1 if second else 0)
 
             def settled(turn_id):
                 _, t = session.call("GET", f"/site-profile/setup-turns/{turn_id}")
@@ -662,11 +667,22 @@ def setup_turn_checks(args, operator, approver, demo_password, judge_password, c
                 wait(lambda: settled(second), max(args.timeout, 120), 2)
             status, body = session.call("POST", "/site-profile/setup-turns", turn("please switch recovery on for it", conversation), idempotent=True)
             if check("a turn that asks for recovery to be switched on is sent: 202", status == 202, f"{status} {body}"):
+                opened += 1
                 t = wait(lambda: settled(body["turnId"]), max(args.timeout, 120), 2)
                 if check("and it settles", t is not None, body.get("turnId")):
                     if t.get("model") == "mock":
                         check("a turn that names recovery.mode ends refused, with nothing drafted",
                               t.get("state") in ("schema_failed", "failed") and t.get("turn") is None, t)
+                        # The conversation's limit, at the route: under the mimic each turn settles in a second or two
+                        while opened < 24:
+                            status, body = session.call("POST", "/site-profile/setup-turns", turn("tier 3", conversation), idempotent=True)
+                            if not check(f"turn {opened + 1} of the conversation is admitted: 202", status == 202, f"{status} {body}"):
+                                break
+                            opened += 1
+                            wait(lambda: settled(body["turnId"]), max(args.timeout, 120), 1)
+                        if opened == 24:
+                            status, body = session.call("POST", "/site-profile/setup-turns", turn("tier 3", conversation), idempotent=True)
+                            check("a 25th turn is 409 conversation_full", status == 409 and error_of(body) == "conversation_full", f"{status} {body}")
                     else:
                         check("a turn that asks for recovery to be switched on drafts no such thing",
                               t.get("state") in ("answered", "schema_failed", "failed")
