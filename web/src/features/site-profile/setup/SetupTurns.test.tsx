@@ -18,7 +18,7 @@ import { theme } from '@/theme';
 import SiteProfilePage from '../SiteProfilePage';
 import { questionById } from './fields';
 import SetupPage from './SetupPage';
-import { CHANGED_MEANWHILE, resetSetupForTests, statusOf, useSetup } from './setupStore';
+import { CHANGED_MEANWHILE, inForce, resetSetupForTests, statusOf, useSetup } from './setupStore';
 
 /**
  * Set up the site, slice 1b: Ask Shutter reads a typed answer and drafts a receiver's description, and the kind and
@@ -1067,6 +1067,32 @@ describe('drafted answers after the hand-over', () => {
     expect(s.rids.at(-1)).toBe(id);
     for (const q of ['system', 'category', 'tier'] as const)
       expect([q, statusOf(s, id, questionById(q))]).toEqual([q, 'ask']);
+  }, 90_000);
+
+  it('keeps the drafted answers and the tick when another approver saved meanwhile and the save was stale', async () => {
+    const user = userEvent.setup();
+    const band = await handedOver(user);
+    // Another approver saves the stored profile as it is: the version moves on
+    const other = await fetch(`${BASE}/site-profile`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'Shutter' },
+      body: JSON.stringify({ ...recorded.profile, expectedVersion: recorded.version }),
+    });
+    expect(other.status).toBe(200);
+    await user.click(band.getByRole('button', { name: 'Review and save…' }));
+    let dialog = within(await screen.findByRole('dialog', { name: /^Save version/ }));
+    await user.click(dialog.getByRole('checkbox', { name: 'I have read the answers Ask Shutter drafted.' }));
+    await user.click(dialog.getByRole('button', { name: /^Save version/ }));
+    await user.click(await dialog.findByRole('button', { name: 'Keep editing' }));
+    const again = within(await screen.findByRole('region', { name: 'A draft from Set up the site' }));
+    expect(again.queryByText('Not pre-filled')).toBeNull();
+    await user.click(again.getByRole('button', { name: 'Review and save…' }));
+    dialog = within(await screen.findByRole('dialog', { name: /^Save version/ }));
+    expect(dialog.getByRole('list', { name: 'Drafted by Ask Shutter (3)' })).toBeInTheDocument();
+    expect(dialog.getByRole('button', { name: /^Save version/ })).toBeDisabled();
+    expect(
+      dialog.getByRole('checkbox', { name: 'I have read the answers Ask Shutter drafted.' }),
+    ).not.toBeChecked();
   }, 90_000);
 
   it('discards the handed-over draft in Set up the site too when the save bar discards it', async () => {

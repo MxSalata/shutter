@@ -794,7 +794,9 @@ function Profile({
   // A draft made against a version that is no longer in force pre-fills nothing, as a stale suggestion does
   const navigate = useNavigate();
   const [handed] = useState(() => useSetup.getState().handover);
-  const handedHere = !!handed && handed.baseVersion === view.version;
+  // Decided once, as the page takes the hand-over: a newer version read later (another approver's save, a stale save's
+  // reread) does not drop the drafted answers the form still holds, nor the tick the review asks for them
+  const [handedHere] = useState(() => !!handed && handed.baseVersion === view.version);
   const [showHanded, setShowHanded] = useState(!!handed);
   useEffect(() => {
     if (useSetup.getState().handover) useSetup.setState({ handover: null });
