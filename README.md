@@ -28,7 +28,7 @@
   <a href="https://github.com/MxSalata/shutter#limits-plainly">Limits</a> ·
   <a href="https://github.com/MxSalata/shutter/blob/main/CHANGELOG.md">What's new</a>
 </p>
-<p align="center"><sub>Current release 1.4.9; the videos and measurements were recorded on the releases named beside them.</sub></p>
+<p align="center"><sub>Current release 1.5.0; the videos and measurements were recorded on the releases named beside them.</sub></p>
 
 **Shutter is my vision for the hundreds of failed HL7 messages that go unactioned, or that system administrators and integration engineers have to review by hand. Its main point is to pick up those failures, so that integration engineers can do their projects instead of firefighting failures every day.**
 

@@ -4,6 +4,46 @@ Versions follow `major.minor.patch`: a minor release for new features, a patch r
 updates. The version in both `module.xml` files (the one the package manager publishes) is always the version of the
 GitHub tag on the same commit; `scripts/check-versions.py` checks every place the version is written.
 
+## 1.5.0 (16 November 2026)
+
+A trust can add scenarios of its own that stop a case for a person, set up its site profile one receiver at a time with
+Ask Shutter, and print its own site guide.
+
+- **A trust's own scenarios.** A site can add stop entries of its own to the catalogue (`L1`, `L2`, ...): a pattern of
+  the shipped conditions, a scope (receiver, sending system, ward, the receiver's reason word) and the trust's
+  instructions. A case one matches goes to a person, in Site policy, Board and Single investigator mode, and nothing is
+  sent or closed by itself; an entry has no field that could allow a resend or a closure, and the gate is unchanged.
+  One person writes an entry and proves it on stored cases (a match and a near miss), a second approves the exact
+  action, version and digest; one approver can suspend an entry at once; an upgrade can only widen one
+  (`docs/CONTRACTS.md` 6.8, `docs/readme/local-rules.md`).
+- **The scenarios on the Site profile page.** The working list, grouped, with "Make this one of our scenarios" from a
+  case, an editor with a live count of the cases it would catch, Try it and Prove, the proof table, send for approval,
+  review, suspend, retire and resume. `POST /site-entries/preview` tries a draft and stores nothing. The author of a
+  version cannot approve it, its retirement or its resumption.
+- **Two rules about closures, at every site.** A plan that writes nothing, made under another catalogue version than the
+  current one, is no longer verified and closed: the evidence is collected again and the case planned afresh. A case one
+  of the site's own entries stopped is never closed or released without a person, even after the entry is retired.
+- **This site's guide.** Export this site's guide (PDF) on the Site profile page opens a print-ready page made from the
+  install's own answers at that moment: every receiver, the site-wide settings, the gate's twelve checks and when each
+  decides, every catalogue entry with who decides it here and the outcome at each receiver, and the limits that apply.
+  Each page is stamped with the profile, catalogue, gate policy and release versions. It stores nothing, needs
+  `Shutter_Operate`, and works on the demo and in the trial (sample data, labelled). `GET /catalogue` gains `atReceivers`
+  for each shipped entry, made by the matcher's own code (CONTRACTS 6.8, v1.67).
+- **Set up the site.** A new page, linked from the Site profile, asks about one receiver at a time: its production item,
+  what it is, its kind, its tier and what it takes, each with the page's own control and Ask Shutter's explanation, with
+  the draft building up beside it. Nothing is saved from the page: Review and save opens the Site profile's review. A
+  receiver added there declares no API, so Shutter investigates and never writes to it.
+- **Answers in your own words, off by default.** Where the site's approver switches it on (`model_content.setup_answers`),
+  a person may answer in their own words and Ask Shutter drafts the receiver's description, kind and tier for review. It
+  sets nothing else: every policy, capability, site-wide switch and the recovery mode stay a person's own answer, checked
+  by the core and the page. Drafted answers are marked, can be undone, and Save waits until they are ticked as read
+  (`POST /site-profile/setup-turns`, CONTRACTS 14.7).
+- **Upgrade note.** Outage resend sets approved before 1.5.0 and not yet sent become void at the upgrade, because a set
+  now holds a message whose case a site entry stopped: read the set again and approve it again.
+- **Tests.** Unit tests and an end-to-end check of the site entries in CI's policy shard; browser specs for the
+  scenarios page, the site guide and Set up the site; `upgrade_check.py` counts Failure Census among the install's own
+  items.
+
 ## 1.4.9 (16 November 2026)
 
 An upgrade keeps the settings a site gave Shutter's production items, a change whose answer never reached the page is
