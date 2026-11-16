@@ -589,11 +589,16 @@ def setup_turn_checks(args, operator, approver, demo_password, judge_password, c
     status, body = Session(args.url).call("POST", "/site-profile/setup-turns", turn("it is a whiteboard"))
     check("signed out: 401", status == 401, f"{status} {body}")
 
-    # Off: refused with its own code, whoever asks and whatever they hold.
+    # Off: refused with its own code, whoever asks and whatever they hold, and no agent run is made for any of them.
+    runs = lambda c: {k: ((c or {}).get("totals") or {}).get(k) for k in ("liveRuns", "replayedRuns", "mockRuns")}  # noqa: E731
+    _, costs_before = operator.call("GET", "/costs")
     for name, session in sessions.items():
         status, body = session.call("POST", "/site-profile/setup-turns", turn("it is the ward whiteboard"), idempotent=True)
         check(f"{name}, the switch off: POST /site-profile/setup-turns is 409 setup_drafting_off",
               status == 409 and error_of(body) == "setup_drafting_off" and "model_content.setup_answers" in (body or {}).get("detail", ""), f"{status} {body}")
+    _, costs_after = operator.call("GET", "/costs")
+    check("the switch off: no agent run was made for any of those turns (GET /costs)",
+          (costs_before or {}).get("totals") is not None and runs(costs_before) == runs(costs_after), f"{runs(costs_before)} {runs(costs_after)}")
 
     # The demo's and the judges' roles never save: 403, and the version does not move.
     for name in ("demo", "judge"):
