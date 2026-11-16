@@ -3564,7 +3564,11 @@ That `If-Match` or an approval makes the write idempotent; that a verified versi
   `PUT /site-profile`. The text rule refuses control, invisible and direction-changing characters, bare domains, spaced
   long numbers and key shapes too, and holds the name and description the agent is shown; a drafted description is a
   part of its quote about that receiver; a kind or tier is drafted only while unanswered, and the effects check compares
-  who approves by the policy's own values; a later turn holds its conversation while it is admitted.
+  who approves by the policy's own values; a later turn holds its conversation while it is admitted. The text rule
+  reads every Unicode space as a space and a run as one, takes dots and brackets in a long number, and knows `.scot`,
+  `.wales`, `.cymru` and `.nhs` and IPv4 addresses as links; a turn about a name the draft holds twice is 400; the
+  agent is shown a kind, a tier and a yes or no answer only as values the page's controls give; and the Agent Board
+  item reads the site's switch again before any runner.
 - v1.68, 16 Nov 2026 (the page for a site's own entries): 6.8 gains `POST /site-entries/preview` (`Shutter_Operate`):
   a body checked as a draft's is and P1, P2 and P4 run on the stored cases it names, with nothing stored, which the public
   demo's roles may run (R16); `GET /site-entries` gains `waitingPlans`; the Site profile page writes, proves, sends for
