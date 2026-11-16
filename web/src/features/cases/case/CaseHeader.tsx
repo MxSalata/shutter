@@ -33,7 +33,6 @@ import { followedBoard } from './follows';
 import { evidenceOf, messageTypeLabel, messageTypeOf } from './message';
 import { actionHead, headerSentence } from './outcome';
 import { keepTogether } from './keepTogether';
-import { OwnScenarioLink } from './OwnScenarioLink';
 import { FailedAt } from './TechFacts';
 import { catalogueEntryOf, digestPrefix, failureCode, messageContentsLink } from './technical';
 
@@ -163,6 +162,7 @@ export function CaseHeader({
   portalBase = '/csp/shutter/',
   snapshot,
   next,
+  newPattern,
 }: {
   c: CaseDetail;
   provenance?: Status;
@@ -178,6 +178,8 @@ export function CaseHeader({
   snapshot?: Snapshot | null;
   /** A person's next step, when the case waits for one: said under the sentence, before the facts. */
   next?: HeaderNext;
+  /** Beside the New pattern badge: what a person who may change the site can do with it (OwnScenarioLink). */
+  newPattern?: React.ReactNode;
 }) {
   const technical = useDetail() === 'technical';
   const place = incidentPlace(c);
@@ -252,7 +254,7 @@ export function CaseHeader({
               icon={IconSparkles}
             />
           ) : null}
-          {c.candidateEntry ? <OwnScenarioLink c={c} size="xs" /> : null}
+          {c.candidateEntry ? newPattern : null}
         </>
       }
       lead={<Lead c={c} />}

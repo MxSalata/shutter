@@ -365,6 +365,7 @@ function CaseBody({ c }: { c: CaseDetail }) {
         portalBase={base}
         snapshot={facts.snapshot}
         next={headerNext}
+        newPattern={<OwnScenarioLink c={c} size="xs" />}
         actions={
           <>
             {c.document ? null : <ConveneBoard c={c} />}
