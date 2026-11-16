@@ -181,6 +181,17 @@ ClassMethod Admit(enabled As %Boolean, liveAllowed As %Boolean, avail As %Dynami
     Quit 1
 }
 
+/// Whether a turn the route admitted may still go to the agent: the site's switch is read again (<var>enabled</var>, the
+/// stored profile's model_content.setup_answers when not given), since a person may have switched it off while the turn
+/// waited. When it is off the turn ends failed, saying so, and nothing is sent.
+ClassMethod Proceed(t As Shutter.Store.SetupTurn, enabled As %String = "") As %Boolean
+{
+    If enabled = "" Set enabled = ##class(Shutter.Store.SiteProfile).SetupAnswers()
+    If enabled Quit 1
+    Do t.Fail("failed", "Reading typed answers was switched off in the site profile after this turn was sent: nothing went to a model")
+    Quit 0
+}
+
 /// Whether a run is this tier's: its agent class is the tier's.
 ClassMethod IsSetupRun(agentClass As %String) As %Boolean
 {

@@ -441,6 +441,27 @@ Method TestOneTurnAtATime()
     Do $CLASSMETHOD(st, "Release", other)
 }
 
+/// A turn the route admitted goes to the agent only while the site's switch is still on: switched off meanwhile, the turn
+/// ends failed, saying so, and nothing is sent.
+Method TestTheSwitchIsReadAgainBeforeTheAgent()
+{
+    Set ps = "Shutter.Util.ProfileSetup", st = "Shutter.Store.SetupTurn"
+    Set draft = ..Base()
+    Do draft.receivers.%Push(..Added())
+    Set frame = $CLASSMETHOD(ps, "Frame", draft, "Bed Board", .problem)
+    Do $$$AssertStatusOK($CLASSMETHOD(st, "Create", $CLASSMETHOD(st, "NewConversation"), "Bed Board", "it is the ward whiteboard", {}, frame, 7, 1, "ut-setup", .t), "a turn")
+    Do $$$AssertTrue($CLASSMETHOD(ps, "Proceed", t, 1), "still on: it goes on")
+    Do $$$AssertEquals($CLASSMETHOD(st, "ByTurnId", t.TurnId).State, "pending", "and the turn is as it was")
+    Do $$$AssertNotTrue($CLASSMETHOD(ps, "Proceed", t, 0), "switched off meanwhile: it does not")
+    Set row = $CLASSMETHOD(st, "ByTurnId", t.TurnId)
+    Do $$$AssertEquals(row.State, "failed", "the turn ends failed")
+    Do $$$AssertTrue(row.Error [ "switched off", "saying so: " _ row.Error)
+    Do $$$AssertEquals(row.ToObject().%GetTypeOf("turn"), "null", "with nothing drafted")
+    // With no answer given, the stored profile's switch is read
+    Do $$$AssertStatusOK($CLASSMETHOD(st, "Create", $CLASSMETHOD(st, "NewConversation"), "Bed Board", "tier 3", {}, frame, 7, 1, "ut-setup", .u), "another turn")
+    Do $$$AssertEquals($CLASSMETHOD(ps, "Proceed", u), ##class(Shutter.Store.SiteProfile).SetupAnswers(), "the stored switch decides")
+}
+
 /// The other process of TestOneTurnAtATime: it claims the conversation, says so, and lets go when told (or after 20 s).
 ClassMethod HoldConversation(conversation As %String)
 {

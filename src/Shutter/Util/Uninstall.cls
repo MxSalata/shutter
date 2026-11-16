@@ -54,7 +54,9 @@ ClassMethod Plan() As %String [ SqlProc ]
     Do ..UsersPlan(out)
     If ##class(%File).DirectoryExists(..CacheFolder()) Do out.removes.%Push("The folder " _ ..CacheFolder())
     Do out.removes.%Push(..PageQuestionsLine(..PageQuestionCount()))
-    If ..SetupTurnCount() > 0 Do out.removes.%Push(..SetupTurnsLine(..SetupTurnCount()))
+    Set turns = ..SetupTurnCount()
+    If turns > 0 Do out.removes.%Push(..SetupTurnsLine(turns))
+    If turns < 0 Do out.removes.%Push("The set-up turn store Shutter.Store.SetupTurn: its typed answers from Set up the site, with their runs and tool calls (they could not be counted)")
     Do out.removes.%Push("Every case, approval, incident and setting of Shutter's, and the folders under " _ ..Folder() _ ": cases are not kept, so export what you must keep first")
     Do out.keeps.%Push("The namespace " _ $NAMESPACE _ " itself and its databases: it may hold other things, and removing it is yours to do")
     Do out.%Set("ok", out.refused = "", "boolean")
@@ -1015,11 +1017,13 @@ ClassMethod SetupTurnsLine(n As %Integer) As %String
     Quit "The set-up turn store Shutter.Store.SetupTurn: " _ n _ " typed answer(s) from Set up the site, with their runs and tool calls"
 }
 
-/// How many turns of Set up the site there are here.
+/// How many turns of Set up the site there are here, or -1 when they could not be counted (the plan then says so,
+/// rather than reading a failed count as none).
 ClassMethod SetupTurnCount() As %Integer
 {
     Set n = 0
     &sql(SELECT COUNT(*) INTO :n FROM Shutter_Store.SetupTurn)
+    If SQLCODE < 0 Quit -1
     Quit +n
 }
 

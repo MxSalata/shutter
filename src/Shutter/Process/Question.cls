@@ -197,7 +197,8 @@ Method OnPageResponse(callrequest As %Library.Persistent, callresponse As %Libra
 /// Set-up guide agent in the tier setup is asked through the Agent Board item with the person's text, their earlier texts
 /// in the conversation as the rows hold them, and what the page shows of the receiver, all as data
 /// (Shutter.Util.ProfileSetup.Request): its knowledge search and SubmitSetupTurn only, the tier's small budget, and never
-/// a recording. The route has already checked who may ask and that the site switched typed answers on.
+/// a recording. The route has already checked who may ask and that the site switched typed answers on; the switch is
+/// read again just before the request goes to the agent (ProfileSetup.Proceed).
 Method OnSetupRequest(request As Shutter.Msg.SetupTurnRequest, Output response As %Library.Persistent) As %Status
 {
     Set started = ##class(Shutter.Msg.QuestionStarted).%New()
@@ -215,6 +216,9 @@ Method OnSetupRequest(request As Shutter.Msg.SetupTurnRequest, Output response A
     Set earlier = ##class(Shutter.Store.SetupTurn).Earlier(t.Conversation, t.AskedBy, t.TurnId)
     Set context = ##class(Shutter.Util.ProfileSetup).Context(t.TurnId, t.Text, earlier, t.View())
     Set req = ##class(Shutter.Util.ProfileSetup).Request(t.TurnId, t.Receiver, context, t.AskedBy, mode)
+    // The site's switch again, just before the text goes to the agent: switched off since the route admitted the turn,
+    // nothing is sent and the turn ends failed.
+    If '##class(Shutter.Util.ProfileSetup).Proceed(t) Quit $$$OK
     Do t.Answering()
     Set ..ExplainPending = 1
     Set sc = ..SendRequestAsync(..AgentTarget, req, 1, "setup")
