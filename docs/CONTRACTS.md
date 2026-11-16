@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.66, 15 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.67, 16 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -1432,7 +1432,7 @@ replaces the shipped catalogue from any JSON, answers on a demo instance only.
 
 | Route | Needs | What it does |
 | --- | --- | --- |
-| `GET /catalogue` | `Shutter_Operate` | `{version, shippedVersion, generation, shipped, site, vocabulary, siteError?}`: the shipped entries, the active site entries as the matcher reads them (read with the version and the generation as one, again when a change lands between them), and the vocabulary; `siteError` when the entries cannot be read (R13) |
+| `GET /catalogue` | `Shutter_Operate` | `{version, shippedVersion, generation, shipped, site, vocabulary, siteError?}`: the shipped entries, each with `atReceivers` (below, v1.67), the active site entries as the matcher reads them (read with the version and the generation as one, again when a change lands between them), and the vocabulary; `siteError` when the entries cannot be read (R13) |
 | `GET /site-entries` | `Shutter_Operate` | `{items, status, catalogueVersion}`: every entry (`id`, `state`, `title`, `sentence`, `version`, `digest`, `content`, `activeVersion`, `draftVersion`, `revision`, `approvedBy`, `approvedAt`, `proposal`, `needsReview`, `review`, `effectivePattern`, `effectiveScope`, `suspended`, `casesSent`, `casesSent30`, and `draft` for a draft beside an active version) and the site's status (`active`, `proposed`, `generation`, `limit`, `suspended`, `needsReview`, `onePerson`, `warnings`, `downgrade`) |
 | `GET /site-entries/{id}` | `Shutter_Operate` | The entry with `versions`, `proofs` and `events`; 404 `not_found` (an id is read letter for letter, on every route: `l1` is not `L1`) |
 | `POST /site-entries/validate` | `Shutter_Operate` | `{valid, problems, warnings, sentence, overlap}` for a body: each problem `{rule, field, text}`; `overlap` lists the shipped entries the pattern can displace, condition by condition, with `covers` and `leads`. Stores nothing and reads no case |
@@ -1442,6 +1442,19 @@ replaces the shipped catalogue from any JSON, answers on a demo instance only.
 | `POST /site-entries/{id}/propose` | `Shutter_Configure` | `{action}`. 409 `no_proof` without a passing, current proof of the version's digest; 409 `wrong_state` when a proposal already waits; 409 `too_many` (R15) |
 | `POST /site-entries/{id}/approvals` | `Shutter_Approve`; on a demo `Shutter_Configure` too | `{action, version, digest, decision: approve or reject, reason, safetyReference?}`. 409 `same_person`, `digest_mismatch`, `proof_failed`, `too_many`, `wrong_state`. On approve the change is made, the generation raised and the events written together; the answer is the entry with `catalogueVersion`, `approver` and `waitingPlans`, the open cases whose plan was made under the old version (R17) |
 | `POST /site-entries/{id}/suspend` | `Shutter_Approve` and `Shutter_Configure` | `{reason}` (R12); 409 `wrong_state` unless the entry is active |
+
+**What each shipped entry settles on at each receiver** (v1.67, for this site's guide). Each shipped entry in
+`GET /catalogue` carries `atReceivers`, one row per receiver of the profile in force, in its order: `{receiver, kind,
+category, decides, outcome, outcomeRef, whenOtherSource}`. The row is the matcher's own `Settle` for a match of that entry
+alone, on the receiver's facts as `Facts` gives them for a case at it (its history policy and category;
+`Shutter.Catalogue.Matcher.AtReceiver` and `ReceiverFacts`), with no case: `decides` is the decision (`policy`, `board`,
+`person`), `outcome` the preferred outcome or the first alternative whose `when` names a flag that holds at that receiver,
+and `outcomeRef` `preferred` or `alternative:<n>`. A `when` whose value is `other_source` depends on the case, so it is
+never guessed: for each such flag the site has set (`authoritative_source`), `whenOtherSource` holds `{flag, otherSource,
+decides, outcome, outcomeRef}`, the same `Settle` on a case whose other source is that system, when it settles otherwise;
+it is empty when nothing at that receiver depends on it. `kind` (`fhir_r4` or empty) and `category` name the receiver:
+the workflow still sends an orders and results case to a person and judges a FHIR case by its own gate (6.3, 20), as
+before. The answer reads the profile at the request; it stores nothing.
 
 `GET /cases/{id}` gains no field: the match, `overridden` and `site_also` are in the snapshot summary's `catalogue`. The
 case's `catalogueEntry` and `planCreatedBy` (`policy:L1`) name the entry. The app shows a badge "Our own scenario L1" on
@@ -3370,6 +3383,10 @@ That `If-Match` or an approval makes the write idempotent; that a verified versi
 
 ## Changes
 
+- v1.67, 16 Nov 2026 (this site's guide): 6.8: each shipped entry in `GET /catalogue` carries `atReceivers`, what a match
+  of it alone settles on at each receiver of the profile in force, by the matcher's own `Settle` on that receiver's facts
+  (`Shutter.Catalogue.Matcher.AtReceiver`), with a case-dependent `when` (`other_source`) returned as a condition, never
+  guessed. Nothing else changes: the matcher, the gate and their versions are as before.
 - v1.66, 15 Nov 2026 (a site's own entries): 6.8 is new: a trust's own stop entries `L<n>` in tables of their own, the
   rules R1 to R18, the overlay in the matcher (`origin: "site"`, `overridden`, `site_also`, `scope`), the catalogue
   version's generation (`;g<n>:`), the proof on stored cases, the two-person approval of an action, a version and a

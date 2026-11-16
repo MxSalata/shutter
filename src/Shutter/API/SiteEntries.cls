@@ -20,7 +20,7 @@ ClassMethod Catalogue() As %Status
     Set o.version = version
     Set o.shippedVersion = ##class(Shutter.Catalogue.Entry).ShippedVersion()
     Do o.%Set("generation", generation, "number")
-    Set o.shipped = ##class(Shutter.Catalogue.Entry).All()
+    Set o.shipped = ..Shipped()
     Set site = []
     Set it = list.%GetIterator()
     While it.%GetNext(, .m) {
@@ -38,6 +38,22 @@ ClassMethod Catalogue() As %Status
     Set vocabulary = ##class(Shutter.Catalogue.Vocabulary).Current()
     If $ISOBJECT(vocabulary) Set o.vocabulary = vocabulary
     Quit ##class(Shutter.API.Dispatch).Json(o)
+}
+
+/// The shipped entries for GET /catalogue, each with atReceivers: what a match of the entry alone settles on at each
+/// receiver of the profile in force, by the matcher's own Settle on that receiver's facts (Matcher.AtReceiver), for this
+/// site's guide.
+ClassMethod Shipped() As %DynamicArray
+{
+    Set shipped = ##class(Shutter.Catalogue.Entry).All()
+    Set receivers = ##class(Shutter.Store.SiteProfile).ReceiverNames()
+    Set it = shipped.%GetIterator()
+    While it.%GetNext(, .entry) {
+        Set at = [], ri = receivers.%GetIterator()
+        While ri.%GetNext(, .name) { Do at.%Push(##class(Shutter.Catalogue.Matcher).AtReceiver(entry, name)) }
+        Set entry.atReceivers = at
+    }
+    Quit shipped
 }
 
 /// GET /site-entries: every site entry with its state, and the site's status (the generation, the warnings).

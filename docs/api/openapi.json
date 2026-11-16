@@ -19076,8 +19076,18 @@
           },
           "shipped": {
             "type": "array",
+            "description": "The shipped entries in id order, each in its front matter's shape with its prose, and atReceivers.",
             "items": {
-              "type": "object"
+              "type": "object",
+              "properties": {
+                "atReceivers": {
+                  "type": "array",
+                  "description": "One row per receiver of the site profile in force, in the profile's order.",
+                  "items": {
+                    "$ref": "#/components/schemas/CatalogueAtReceiver"
+                  }
+                }
+              }
             }
           },
           "site": {
@@ -19287,6 +19297,87 @@
         "required": [
           "passed",
           "fixtures"
+        ]
+      },
+      "CatalogueAtReceiver": {
+        "description": "What a match of one shipped entry alone settles on at one receiver of the site profile in force: the matcher's own Settle (Shutter.Catalogue.Matcher.AtReceiver) on that receiver's facts, its history policy and category, with no case. For this site's guide. CONTRACTS 6.8.",
+        "type": "object",
+        "properties": {
+          "receiver": {
+            "type": "string",
+            "description": "The receiver's name in the site profile."
+          },
+          "kind": {
+            "type": "string",
+            "description": "fhir_r4 for a FHIR R4 receiver, else empty."
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "current_state",
+              "history_of_record",
+              "orders_results"
+            ]
+          },
+          "decides": {
+            "type": "string",
+            "enum": [
+              "policy",
+              "board",
+              "person"
+            ],
+            "description": "Who settles a case the entry alone matches, as the matcher decides it."
+          },
+          "outcome": {
+            "type": "string",
+            "description": "The outcome the site's settings select at this receiver: the preferred one, or the first alternative whose when names a flag that holds here."
+          },
+          "outcomeRef": {
+            "type": "string",
+            "description": "preferred or alternative:<n>, as a plan names it."
+          },
+          "whenOtherSource": {
+            "type": "array",
+            "description": "An alternative whose when names the case's other source system (other_source) is never guessed: for each such flag the site has set, what a case whose other source is that system settles on, when it settles otherwise. Empty when nothing here depends on it.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "flag": {
+                  "type": "string",
+                  "description": "The profile's flag, such as authoritative_source."
+                },
+                "otherSource": {
+                  "type": "string",
+                  "description": "The system the site names for that flag."
+                },
+                "decides": {
+                  "type": "string"
+                },
+                "outcome": {
+                  "type": "string"
+                },
+                "outcomeRef": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "flag",
+                "otherSource",
+                "decides",
+                "outcome",
+                "outcomeRef"
+              ]
+            }
+          }
+        },
+        "required": [
+          "receiver",
+          "kind",
+          "category",
+          "decides",
+          "outcome",
+          "outcomeRef",
+          "whenOtherSource"
         ]
       }
     }
