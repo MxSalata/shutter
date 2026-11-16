@@ -135,6 +135,13 @@ describe('the words', () => {
     }
   });
 
+  it("says a closure waits for a person when one of the site's own entries stopped the case before", () => {
+    for (const outcome of ['none', 'reconcile'])
+      expect(askedWords(outcome, 'approval', 'policy')).toBe(
+        "Nobody is asked: the case closes once the receiver is read again and agrees, unless one of this site's own entries stopped the case before: then a person closes it.",
+      );
+  });
+
   it('writes a pattern in the words the core gives a site entry', () => {
     expect(patternWords(entry('E6').pattern)).toBe(
       'When a message fails, is rejected or gets no answer, and encounter state is discharged',

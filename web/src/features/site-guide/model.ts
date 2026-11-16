@@ -195,8 +195,9 @@ export function askedWords(
     return 'A person decides the case, with the entry named; Shutter sends nothing.';
   if (outcome === 'correct_history')
     return 'A person corrects the history by hand, with the steps named on the case; Shutter sends nothing.';
+  // R18: a case one of the site's own entries ever stopped is never closed without a person
   if (outcome === 'none' || outcome === 'reconcile')
-    return 'Nobody is asked: the case closes once the receiver is read again and agrees.';
+    return "Nobody is asked: the case closes once the receiver is read again and agrees, unless one of this site's own entries stopped the case before: then a person closes it.";
   if (outcome === 'resend_unconditional') return 'An approver releases the write; it is never automatic.';
   if (isWrite(outcome))
     return release === 'automatic'
