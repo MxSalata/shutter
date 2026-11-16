@@ -209,6 +209,13 @@ Method OnSetupRequest(request As Shutter.Msg.SetupTurnRequest, Output response A
 {
     Set started = ##class(Shutter.Msg.QuestionStarted).%New()
     Set response = started
+    // The route checked one turn at a time and the conversation's limit when it admitted this turn. A request that waited
+    // in this item's queue past the route's own wait (its sender was told it failed, and may have sent again) is checked
+    // again here, so it never opens a turn beside one opened since, nor one past the limit.
+    Set st = "Shutter.Store.SetupTurn", max = $PARAMETER("Shutter.Util.ProfileSetup", "MAXTURNS")
+    Set pending = $CLASSMETHOD(st, "Pending", request.Conversation)
+    If pending '= "" Set started.State = "failed", started.Error = "Turn " _ pending _ " of this conversation is still being read: one turn at a time" Quit $$$OK
+    If $CLASSMETHOD(st, "Count", request.Conversation) >= max Set started.State = "failed", started.Error = "This conversation has its " _ max _ " turns" Quit $$$OK
     Set view = ##class(Shutter.Util.Json).Parse(request.ViewJSON, .vsc)
     Set frame = ##class(Shutter.Util.Json).Parse(request.FrameJSON, .fsc)
     Set sc = ##class(Shutter.Store.SetupTurn).Create(request.Conversation, request.Receiver, request.Text, view, frame, request.BaseVersion, request.DraftRevision, request.AskedBy, .t)

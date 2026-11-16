@@ -651,6 +651,25 @@ Method TestTheAnswerIsCheckedOnItsWayBack()
     Do $$$AssertEquals(##class(Shutter.Store.SiteProfile).Current().%ToJSON(), current, "nor the profile in force")
 }
 
+/// A turn's request that waited in the Case Question item's queue past the route's own wait is checked again when the
+/// item opens it (Question.OnSetupRequest): while another turn of the conversation is still being read it opens no row,
+/// so no second turn of one conversation reaches a model at once.
+Method TestAQueuedTurnIsCheckedAgainWhenOpened()
+{
+    Set st = "Shutter.Store.SetupTurn"
+    Set t = ..Asked("it is the ward whiteboard", .q)
+    Set before = $CLASSMETHOD(st, "Count", t.Conversation)
+    Set request = ##class(Shutter.Msg.SetupTurnRequest).%New()
+    Set request.Conversation = t.Conversation, request.Receiver = "Bed Board", request.Text = "it shows the beds"
+    Set request.ViewJSON = t.ViewJSON, request.FrameJSON = t.FrameJSON, request.BaseVersion = 1, request.DraftRevision = 1, request.AskedBy = "ut-setup"
+    Set item = ##class(Shutter.Process.Question).%New("Case Question")
+    Do $$$AssertStatusOK(item.OnSetupRequest(request, .started), "the request is handled")
+    Do $$$AssertEquals(started.State, "failed", "and refused")
+    Do $$$AssertEquals(started.QuestionId, "", "with no turn opened")
+    Do $$$AssertTrue(started.Error [ t.TurnId, "naming the turn still being read: " _ started.Error)
+    Do $$$AssertEquals($CLASSMETHOD(st, "Count", t.Conversation), before, "no row is added")
+}
+
 /// The terminal tool, where the aihub module is compiled: a submission is checked against the stored turn, a person-only
 /// field is refused with the field named, a turn for another id is refused, and an accepted turn is kept as checked.
 Method TestTheTerminalTool()
