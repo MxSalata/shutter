@@ -122,6 +122,10 @@
   .mantine-Notifications-root {
     display: none !important;
   }
+  /* The trial's frame around the window would print on every page, over the text's edge: the stamp says it instead */
+  :root[data-shutter-env='trial'] body::after {
+    display: none !important;
+  }
   .site-guide-sheet {
     display: table;
     width: 100%;

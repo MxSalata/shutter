@@ -164,9 +164,18 @@ const asList = (v: string | string[] | undefined): string[] =>
   v === undefined ? [] : (Array.isArray(v) ? v : [v]).map(String);
 
 /** "a, b or c", as the core's SiteEntryVersion.Words joins them. */
-export function orWords(list: string[]): string {
+export function orWords(list: string[], last = 'or'): string {
   if (list.length <= 1) return list.join('');
-  return `${list.slice(0, -1).join(', ')} or ${list[list.length - 1]}`;
+  return `${list.slice(0, -1).join(', ')} ${last} ${list[list.length - 1]}`;
+}
+
+/** "a, b and c". */
+export const andWords = (list: string[]) => orWords(list, 'and');
+
+/** Entries in the order a reader counts them: E2 before E10, the site's L entries by their number too. */
+export function byNumber(a: CatalogueEntry, b: CatalogueEntry): number {
+  const n = (e: CatalogueEntry) => Number(/\d+/.exec(e.id)?.[0] ?? 0);
+  return a.id[0] === b.id[0] ? n(a) - n(b) : a.id < b.id ? -1 : 1;
 }
 
 const EVENT_WORDS: Record<string, string> = {
@@ -290,7 +299,7 @@ export function alternativesHere(entry: CatalogueEntry, profile: SiteProfile): s
     if (onCase) return `${head}: ${rule}; here, when ${onCase.onCase}.`;
     if (!yes.length) return `${head}: ${rule}, which does not hold at this site.`;
     if (yes.length === receivers.length) return `${head}: ${rule}, which holds at every receiver here.`;
-    return `${head}: ${rule}, which holds at ${orWords(yes).replace(/ or /, ' and ')}.`;
+    return `${head}: ${rule}, which holds at ${andWords(yes)}.`;
   });
 }
 
@@ -380,7 +389,7 @@ export function limitsFor(profile: SiteProfile): Limit[] {
   if (noApi.length)
     out.push({
       title: 'A receiver with no recovery API',
-      text: `${orWords(noApi.map((r) => r.name)).replace(/ or /, ' and ')}: a case there is investigated and goes to a person, never resent from the case.`,
+      text: `${andWords(noApi.map((r) => r.name))}: a case there is investigated and goes to a person, never resent from the case.`,
     });
   if (profile.receivers.some((r) => categoryOf(r) === 'orders_results'))
     out.push({

@@ -38,7 +38,8 @@ import {
   hasNoRecoveryApi,
   limitsFor,
   modelledReceiver,
-  orWords,
+  andWords,
+  byNumber,
   patternWords,
   releaseAt,
   stampLine,
@@ -68,7 +69,7 @@ const PARTS = [
 const useCatalogue = () =>
   useQuery({ queryKey: ['catalogue'], queryFn: () => api.get<CatalogueView>('/catalogue') });
 
-const and = (list: string[]) => orWords(list).replace(/ or ([^,]*)$/, ' and $1');
+const and = andWords;
 
 /** A part of the guide: on paper a page of its own, with the stamp at the foot of each page it runs to. */
 function Sheet({
@@ -144,21 +145,26 @@ function Cover({ stamp, view }: { stamp: Stamp; view: SiteProfileView }) {
           </Text>
         </StatusNotice>
       ) : null}
-      <dl className="site-guide-block" data-testid="site-guide-stamp" style={{ margin: 0 }}>
-        {rows.map(([k, v]) => (
-          <Group key={k} gap="sm" wrap="nowrap" align="baseline">
-            <Text component="dt" size="sm" fw={600} w={110} style={{ flexShrink: 0 }}>
-              {k}
-            </Text>
-            <Text component="dd" size="sm" m={0} className="site-guide-stamp-value">
-              {v}
-            </Text>
-          </Group>
-        ))}
+      <div className="site-guide-block" data-testid="site-guide-stamp">
+        <dl style={{ margin: 0 }}>
+          {rows.map(([k, v]) => (
+            <div
+              key={k}
+              style={{ display: 'flex', gap: 'var(--mantine-spacing-sm)', alignItems: 'baseline' }}
+            >
+              <Text component="dt" size="sm" fw={600} w={110} style={{ flexShrink: 0 }}>
+                {k}
+              </Text>
+              <Text component="dd" size="sm" m={0} className="site-guide-stamp-value">
+                {v}
+              </Text>
+            </div>
+          ))}
+        </dl>
         <Text size="sm" mt="xs">
           {OUT_OF_DATE}
         </Text>
-      </dl>
+      </div>
       <Stack gap={4}>
         <Text fw={600}>In this guide</Text>
         <List size="md" type="ordered">
@@ -432,7 +438,7 @@ function Scenario({
   const site = e.origin === 'site';
   const at = site ? [] : entryAtReceivers(e, profile);
   const alternatives = site ? [] : alternativesHere(e, profile);
-  const shown = (e.scenarios ?? []).map((s) => (titles.get(s) ? `${s}, ${titles.get(s)}` : s));
+  const shown = (e.scenarios ?? []).map((s) => (titles.get(s) ? `${s} (${titles.get(s)})` : s));
   return (
     <div className="site-guide-block" data-testid={`site-guide-entry-${e.id}`}>
       <Stack gap="xs">
@@ -538,7 +544,7 @@ function Scenarios({
           This site&apos;s own entries
         </Title>
       ) : null}
-      {catalogue.site.map((e) => (
+      {[...catalogue.site].sort(byNumber).map((e) => (
         <Scenario
           key={e.id}
           e={e}
@@ -550,7 +556,7 @@ function Scenarios({
       <Title order={3} fz="lg">
         The shipped entries
       </Title>
-      {catalogue.shipped.map((e) => (
+      {[...catalogue.shipped].sort(byNumber).map((e) => (
         <Scenario key={e.id} e={e} profile={profile} titles={titles} />
       ))}
     </Stack>

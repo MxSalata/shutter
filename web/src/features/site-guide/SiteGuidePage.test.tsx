@@ -94,7 +94,7 @@ describe("This site's guide", () => {
     expect(e1).toHaveTextContent('Who decides here: by site policy.');
     expect(e1).toHaveTextContent('At Downstream Out');
     expect(e1).toHaveTextContent('a correction of the history by a person (its alternative 1)');
-    expect(e1).toHaveTextContent('Shown in the scenarios S1, ');
+    expect(e1).toHaveTextContent('Shown in the scenarios S1 (');
     expect(screen.queryByText("This site's own entries")).toBeNull();
   });
 
