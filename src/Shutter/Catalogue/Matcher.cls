@@ -125,6 +125,13 @@ ClassMethod MatchWith(conditions As %DynamicObject, facts As %DynamicObject = ""
         Set entries = ##class(Shutter.Catalogue.Entry).All()
         Set iter = entries.%GetIterator()
         While iter.%GetNext(.i, .e) {
+            // A shipped entry is E<n>, and the seed refuses any other id: a row of the shipped table that names another
+            // (a site's L<n> among them) was not written by the seed, so it decides nothing. The matcher answers error.
+            If '$MATCH(e.id, "E[1-9][0-9]*") {
+                Set out.matches = [], out.decision = "error", out.error = "The shipped catalogue holds an entry whose id is not E<n>: " _ $EXTRACT(e.id, 1, 40)
+                Do out.%Set("entry", "", "null"), out.%Set("outcome", "", "null")
+                Return out
+            }
             If ..Holds(e.%Get("pattern"), conditions) {
                 Set m = {}
                 Set m.id = e.id, m.version = e.version, m.title = e.title, m.decides = e.decides

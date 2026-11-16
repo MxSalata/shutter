@@ -249,6 +249,26 @@ Method TestStoredRowsThatClaimToDecide()
     Do $$$AssertStatusOK($CLASSMETHOD(kit, "Reset"), "removed")
 }
 
+/// A row of the shipped catalogue's own table whose id is not E<n> (a site's L<n> written there by hand) was not written
+/// by the seed, which refuses such an id: it decides nothing, and the matcher answers error for every case. Before, it
+/// matched as a shipped entry with its stored decision and outcome.
+Method TestAShippedRowThatIsNotAShippedEntryDecidesNothing()
+{
+    Set e = ##class(Shutter.Catalogue.Entry).%New()
+    Set e.EntryId = "L7", e.Version = 1, e.Title = "inserted", e.Decides = "policy", e.Source = "unit test"
+    Set e.PatternJSON = "{}", e.PreferredJSON = {"outcome": "resend", "why": "inserted"}.%ToJSON(), e.AlternativesJSON = "[]"
+    Do $$$AssertStatusOK(e.%Save(), "a row named L7 inserted in the shipped table, claiming a resend by policy")
+    Try {
+        Set cat = ##class(Shutter.Catalogue.Matcher).Match({"event": "transfer", "delivery": "failed"})
+        Do $$$AssertEquals(cat.decision, "error", "the matcher answers error: " _ cat.%ToJSON())
+        Do $$$AssertEquals(cat.matches.%Size(), 0, "with no match")
+        Do $$$AssertTrue(cat.error [ "L7", "naming the row")
+    } Catch ex {
+        Do $$$AssertTrue(0, "failed: " _ ex.DisplayString())
+    }
+    Do ##class(Shutter.Catalogue.Entry).%DeleteId(e.%Id())
+}
+
 /// The gate, unchanged, on a case a site entry matched: the escalate plan that names the entry passes its catalogue
 /// check, and every shape of write is blocked: naming the entry, naming nothing, naming another entry, naming a site
 /// entry whose pattern does not hold, naming one that does not exist.
