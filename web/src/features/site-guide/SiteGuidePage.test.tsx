@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import fixtures from '@/mocks/fixtures.json';
 import { catalogueView, resetMock, SITE_ENTRIES_EXAMPLE } from '@/mocks/handlers';
 import { server } from '@/mocks/node';
 import { useAppearance } from '@/stores/appearance';
@@ -58,8 +59,8 @@ describe("This site's guide", () => {
     for (const f of feet) {
       expect(f.textContent).toContain('Site profile version 7');
       expect(f.textContent).toContain(`catalogue ${view.version}`);
-      expect(f.textContent).toContain('gate policy 2026-11-01.1');
-      expect(f.textContent).toContain('release 1.4.8');
+      expect(f.textContent).toContain(`gate policy ${fixtures.health.gate_policy_version}`);
+      expect(f.textContent).toContain(`release ${fixtures.health.version}`);
       expect(f.textContent).toMatch(/exported \d+ \w+ \d{4}/);
       expect(f.textContent).not.toContain('Trial');
     }
