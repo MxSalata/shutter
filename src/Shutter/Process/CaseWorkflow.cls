@@ -409,6 +409,12 @@ Method OnEvidence(case As Shutter.Store.Case, result As Shutter.Msg.EvidenceResu
     }
     // Every investigation starts clean: a policy from an earlier round never carries over to a plan the board makes.
     Set ..Policy = "", ..CatalogueEntry = "", ..CatalogueOutcome = ""
+    // A document case, or one for an orders and results receiver, goes to a person by its own path before the site's line
+    // below; when one of the site's own entries matched, its instructions go on the case for that person.
+    If ..SiteMatched(cat) && ((case.DocumentJSON '= "") || (##class(Shutter.Store.SiteProfile).ReceiverCategory($SELECT(case.Receiver '= "": case.Receiver, 1: ..WardTarget)) = "orders_results")) {
+        Set m = cat.%Get("matches").%Get(0), instructions = ##class(Shutter.Util.Json).Str(m, "instructions")
+        Do case.Note("note", "The site's own scenario " _ ##class(Shutter.Util.Json).Str(cat, "entry") _ " matched this case" _ $SELECT(instructions '= "": ". Instructions: " _ instructions, 1: "") _ ". It goes to a person by its own path", "system")
+    }
     // A document case (CONTRACTS 11.2) has one answer in every mode: a person, with no agent and no catalogue.
     If case.DocumentJSON '= "" Quit ..DocumentToPerson(case)
     // A withheld operation (T31) has one answer in every mode: nothing is sent and a person decides. The gate blocks
@@ -1117,6 +1123,22 @@ Method PolicyPath(case As Shutter.Store.Case, summary As %DynamicObject, cat As 
         Set ..Policy = "approval", heldBack = 1
         Do case.Note("note", "Another visit's movement is shown for this patient (further_messages.in_patient_movement show): a person approves, so that someone reads it", "system")
     }
+    // A case one of the site's own entries stopped once (CONTRACTS 6.8, R18; the case keeps it, Case.SiteEntry) is never
+    // written and closed with no person, whatever later evidence matches: an item an incident released stops, since the
+    // incident's approval or policy never covered the brake, and an automatic release asks a person.
+    Set marked = case.StoredSiteEntry(.unreadable)
+    If (marked '= "") || unreadable {
+        Set stopped = ##class(Shutter.Catalogue.SiteEntry).StoppedCase(case)
+        Set words = $SELECT($ISOBJECT(stopped): ##class(Shutter.Catalogue.SiteEntry).StoppedWords(stopped), 1: "the site's own scenario " _ marked _ " asks a person")
+        If ..Release && (..ReleasePolicy '= "path") {
+            Set case.Headline = "Not covered by the incident's " _ $SELECT(..Policy = "incident": "approval", 1: "policy") _ ": the site's own scenario " _ $SELECT(marked '= "": marked, 1: "(unreadable)") _ " stopped this case before"
+            Quit case.Transition("blocked", "Chain " _ ..ChainSeq _ " item " _ ..ChainPosition _ " of incident " _ ..IncidentId _ ": an earlier investigation of this case matched one of the site's own entries, and " _ words _ ". The incident's " _ $SELECT(..Policy = "incident": "approval", 1: "policy") _ " did not cover that; nothing was dispatched, and a person must look", "system", "incident:" _ ..IncidentId)
+        }
+        If ..Policy = "automatic" {
+            Set ..Policy = "approval", heldBack = 1
+            Do case.Note("note", "An earlier investigation of this case matched one of the site's own entries, and " _ words _ ": a person approves the write, which the site's policy would have released automatically", "system")
+        }
+    }
     // A person released a stop on this case's further messages: the write after it goes to a person too.
     If (..Policy = "automatic") && (case.FurtherReleaseJSON '= "") {
         Set ..Policy = "approval", heldBack = 1
@@ -1512,12 +1534,19 @@ Method ClosureHeld(case As Shutter.Store.Case, plan As Shutter.Store.Plan, Outpu
     Set cat = $SELECT($ISOBJECT(summary): summary.%Get("catalogue"), 1: "")
     // The plan's own evidence, and what the case recorded of every earlier evidence: a case the system reopened on
     // evidence that no longer matches the entry is still the entry's.
-    Set marked = case.StoredSiteEntry()
-    If ..SiteMatched(cat) || (marked '= "") {
+    Set marked = case.StoredSiteEntry(.unreadable)
+    If ..SiteMatched(cat) || (marked '= "") || unreadable {
         Set held = 1
-        Set entry = $SELECT(..SiteMatched(cat): ##class(Shutter.Util.Json).Str(cat, "entry"), 1: marked)
+        Set entry = $SELECT(..SiteMatched(cat): ##class(Shutter.Util.Json).Str(cat, "entry"), marked '= "": marked, 1: "(its record could not be read)")
+        // The site's instructions with it, for the person (the entry's version in force gives them when the plan's own
+        // evidence no longer carries the match).
+        Set instructions = $SELECT(..SiteMatched(cat): ##class(Shutter.Util.Json).Str(cat.%Get("matches").%Get(0), "instructions"), 1: "")
+        If (instructions = "") && 'unreadable {
+            Set stopped = ##class(Shutter.Catalogue.SiteEntry).StoppedCase(case)
+            If $ISOBJECT(stopped) && (stopped.entry = entry) Set instructions = stopped.instructions
+        }
         Set case.Headline = "A person checks this: the site's own scenario " _ entry _ " matched, and the plan would close the case with nothing sent"
-        Quit case.Transition("escalated", "The plan (" _ plan.Disposition _ ") writes nothing and would close the case, but the site's own scenario " _ entry _ " matched it, and such a case is never closed without a person. Nothing was sent. " _ plan.Summary, "system", "plan:" _ plan.%Id())
+        Quit case.Transition("escalated", "The plan (" _ plan.Disposition _ ") writes nothing and would close the case, but the site's own scenario " _ entry _ " matched it, and such a case is never closed without a person." _ $SELECT(instructions '= "": " The site's instructions: " _ instructions _ ".", 1: "") _ " Nothing was sent. " _ plan.Summary, "system", "plan:" _ plan.%Id())
     }
     Set current = ##class(Shutter.Catalogue.Entry).CatalogueVersion()
     If plan.CatalogueVersion = current Quit $$$OK
@@ -1528,7 +1557,7 @@ Method ClosureHeld(case As Shutter.Store.Case, plan As Shutter.Store.Plan, Outpu
         Quit case.Transition("blocked", "The plan (" _ plan.Disposition _ ") was made under another catalogue version than the current one, and the case was planned again " _ ..Refreshes _ " times already. A plan made under another version is never completed; nothing was sent, and a person must look", "system", "plan:" _ plan.%Id())
     }
     Set ..Refreshes = ..Refreshes + 1, ..Refreshing = 0
-    Set ..PlanId = "", ..PendingJSON = "[]", ..Policy = "", ..CatalogueEntry = "", ..CatalogueOutcome = ""
+    Set ..PlanId = "", ..PendingJSON = "[]", ..Policy = "", ..CatalogueEntry = "", ..CatalogueOutcome = "", ..AttemptId = ""
     Do case.Note("note", "The catalogue changed after this plan was made (the plan's version is not the current one). A plan made under another catalogue version is never completed, and a closure has no approval to void: the evidence is collected again and the case planned afresh (" _ ..Refreshes _ " of " _ ..MaxRefreshes _ ")", "system", "plan:" _ plan.%Id())
     Quit ..StartEvidence(case)
 }
@@ -2278,7 +2307,8 @@ Method OnVerify(case As Shutter.Store.Case, result As Shutter.Msg.VerifyResult) 
         }
         // A plan that writes nothing closes here. The two rules about closures hold to the last step: the catalogue may have
         // changed, or a site entry been activated, while the verifier read the receiver (ClosureHeld).
-        Set closing = $SELECT('$ISOBJECT(attempt): ##class(Shutter.Store.Plan).%OpenId(..PlanId), 1: "")
+        // The current plan decides, never whether an attempt is on record: a plan that writes nothing is held to them.
+        Set closing = ##class(Shutter.Store.Plan).%OpenId(..PlanId)
         If $ISOBJECT(closing) && 'closing.IsWrite() {
             // The verification's words are the outcome of a case that closes; one that is held has none yet.
             Set case.Outcome = ""

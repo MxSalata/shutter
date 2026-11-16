@@ -163,9 +163,21 @@ Method TestTheSiteEntryAnswersInEveryMode()
         Set result = ##class(Shutter.Msg.EvidenceResult).%New()
         Set result.SnapshotId = snap.%Id(), result.Digest = snap.Digest, result.SummaryJSON = snap.SummaryObject().%ToJSON()
         If how = "rules" {
-            // Rules only convenes nobody and proposes the plain resend, which the gate blocks (ENTRY_NOT_NAMED_WRITE, in
-            // Shutter.Test.SiteSafety): here only that the site entry's person path is not taken.
-            Do $$$AssertNotTrue((wf.Mode '= "rules") && ##class(Shutter.Process.CaseWorkflow).SiteMatched(snap.SummaryObject().catalogue), "Rules only does not take the person path")
+            // Rules only convenes nobody and proposes the plain resend: the case records the entry all the same, and the
+            // real gate blocks the resend (ENTRY_NOT_NAMED_WRITE), so it waits for a person.
+            Do $$$AssertStatusOK(wf.OnEvidence(case, result), "rules: the evidence is taken")
+            Do $$$AssertEquals(##class(Shutter.Store.Case).ByCaseId(case.CaseId).SiteEntry, id, "rules: the case records the entry, in Rules only too")
+            Set plan = ##class(Shutter.Store.Plan).%OpenId(wf.PlanId)
+            Do $$$AssertTrue($ISOBJECT(plan), "rules: the plain resend is planned")
+            Continue:'$ISOBJECT(plan)
+            Do $$$AssertEquals(plan.CreatedBy, "rules", "rules: by the rules path, not the site entry's person path")
+            Set req = ##class(Shutter.Msg.GateRequest).%New()
+            Set req.CaseId = case.CaseId, req.PlanId = plan.%Id(), req.Stage = "proposal", req.Receiver = case.Receiver, req.ChainKind = "single"
+            Set gate = ##class(Shutter.Operation.Gate).%New("Shutter Gate (unit test)")
+            Do $$$AssertStatusOK(gate.OnGateRequest(req, .resp), "rules: the gate ran")
+            Do $$$AssertTrue(resp.Summary [ "ENTRY_NOT_NAMED_WRITE", "rules: the gate blocks the resend: " _ resp.Summary)
+            Do $$$AssertNotEquals(resp.Outcome, "pass", "rules: and it does not pass")
+            Set rulesCase = case
             Continue
         }
         Do $$$AssertStatusOK(wf.OnEvidence(case, result), how _ ": the evidence is taken")
@@ -186,6 +198,20 @@ Method TestTheSiteEntryAnswersInEveryMode()
         Do $$$AssertTrue(note [ "Ring the ward", how _ ": and the site's instructions")
     }
     Do $$$AssertEquals(##class(Shutter.Catalogue.SiteEntry).CasesSent(id), 4, "four cases were sent to a person by the entry")
+    // The Rules only case, reopened on evidence that no longer meets the entry: a closure planned then still needs a person.
+    If $ISOBJECT($GET(rulesCase)) {
+        Set stored = ##class(Shutter.Store.Case).%OpenId(rulesCase.%Id())
+        Set stored.Ward = "WARD-B", stored.State = "investigating"
+        Do $$$AssertStatusOK(stored.%Save(), "rules: the case reads another ward now")
+        Do $CLASSMETHOD(kit, "Snapshot", stored)
+        Set wf = ##class(Shutter.Test.SiteWorkflow).%New("Case Workflow")
+        Set wf.CaseId = stored.CaseId, wf.Mode = "rules"
+        Do $$$AssertStatusOK(wf.AdoptPlan(stored, {"disposition": "superseded", "action": {"type": "none"}, "summary": "A later transfer moved the encounter on"}, "run:9"), "rules: a closure on the fresh evidence")
+        Set pass = ##class(Shutter.Msg.GateResult).%New()
+        Set pass.Outcome = "pass", pass.Summary = "Every check passed", pass.ChecksJSON = "[]"
+        Do $$$AssertStatusOK(wf.OnGateProposal(stored, pass), "rules: the gate passes it")
+        Do $$$AssertEquals(stored.State, "escalated", "rules: the case goes to a person, not to the verifier")
+    }
     // A board a person convened on such a case plans to close it, naming no entry: the gate passes that (ENTRY_NOT_NAMED),
     // and the workflow sends the case to a person with the board's reasoning (R18).
     Set case = $CLASSMETHOD(kit, "Case", {"ward": "WARD-ISO", "state": "investigating", "mode": "board"}, .snap)
@@ -247,6 +273,74 @@ Method TestAReopenedCaseIsStillTheEntrys()
     Do row.engine.%Set("established", 1, "boolean")
     Do $$$AssertStatusOK(##class(Shutter.Util.EngineCheck).Settle(stored, row, [(row)], "gate:ut"), "the engine's delivery read")
     Do $$$AssertEquals(##class(Shutter.Store.Case).ByCaseId(stored.CaseId).State, "blocked", "is left for a person")
+}
+
+/// A change takes the stored row as it is under the lock, never a copy the process already had open: here the stored row
+/// is changed behind a copy, as another process's commit changes it. Before, the copy's old state was checked and saved
+/// over the stored one, undoing a suspension or a recheck's widening.
+Method TestAStaleCopyIsNeverSaved()
+{
+    Set kit = "Shutter.Test.SiteKit", site = "Shutter.Catalogue.SiteEntry"
+    Set id = $CLASSMETHOD(kit, "ActiveEntry", .match, .near, .problem)
+    Do $$$AssertEquals(problem, "", "an active entry")
+    Set body = $CLASSMETHOD(kit, "Body", match.CaseId, near.CaseId)
+    Set held = $CLASSMETHOD(site, "ById", id), revision = held.Revision
+    &sql(UPDATE Shutter_Catalogue.SiteEntry SET State = 'suspended', Revision = Revision + 1 WHERE EntryId = :id)
+    Do $$$AssertEquals(SQLCODE, 0, "the stored row is suspended behind the copy")
+    Do $$$AssertEquals($CLASSMETHOD(site, "Change", id, body, revision, "ut-author", "api", .e, .problems, .warnings, .detail), "stale_version", "a change on the copy's revision is refused")
+    Set state = ""
+    &sql(SELECT State INTO :state FROM Shutter_Catalogue.SiteEntry WHERE EntryId = :id)
+    Do $$$AssertEquals(state, "suspended", "and the stored state stands")
+    // A widening, which changes no revision, saved behind the copy: the change goes on and keeps it.
+    Set wide = "{""delivery"":[""failed"",""rejected"",""uncertain""]}", revision = revision + 1
+    &sql(UPDATE Shutter_Catalogue.SiteEntry SET State = 'active', EffectiveJSON = :wide, NeedsReview = 1 WHERE EntryId = :id)
+    Set body.title = "A changed title"
+    Do $$$AssertEquals($CLASSMETHOD(site, "Change", id, body, revision, "ut-author", "api", .e, .problems, .warnings, .detail), "", "a change on the current revision: " _ detail)
+    Set stored = "", flag = ""
+    &sql(SELECT State, EffectiveJSON, NeedsReview INTO :state, :stored, :flag FROM Shutter_Catalogue.SiteEntry WHERE EntryId = :id)
+    Do $$$AssertEquals(state, "active", "the state as stored")
+    Do $$$AssertEquals(stored, wide, "the widening survives the change")
+    Do $$$AssertEquals(+flag, 1, "and so does its flag")
+}
+
+/// A whole save of a copy read before the case recorded its site entry keeps the record (Case.%OnBeforeSave).
+Method TestAnOlderCopyOfTheCaseKeepsTheRecord()
+{
+    Set kit = "Shutter.Test.SiteKit"
+    Set id = $CLASSMETHOD(kit, "ActiveEntry", .match, .near, .problem)
+    Do $$$AssertEquals(problem, "", "an active entry")
+    Set case = $CLASSMETHOD(kit, "Case", {"ward": "WARD-B", "state": "escalated"})
+    Set copy = ##class(Shutter.Store.Case).%OpenId(case.%Id()), cid = case.%Id()
+    Do $$$AssertEquals(copy.SiteEntry, "", "a copy with no record")
+    &sql(UPDATE Shutter_Store."Case" SET SiteEntry = :id WHERE ID = :cid)
+    Set copy.Headline = "Saved by an older copy"
+    Do $$$AssertStatusOK(copy.%Save(), "the older copy is saved whole")
+    Set stored = ""
+    &sql(SELECT SiteEntry INTO :stored FROM Shutter_Store."Case" WHERE ID = :cid)
+    Do $$$AssertEquals(stored, id, "the record stays")
+}
+
+/// A case one of the site's own entries stopped once is never written and closed with no person: on fresh evidence that
+/// matches a shipped policy entry, an item an incident released by policy or under its approval stops, and the site's
+/// own automatic release would ask a person. Before, the write was released by policy with nothing naming the entry.
+Method TestAMarkedCaseIsNotReleasedWithoutAPerson()
+{
+    Set kit = "Shutter.Test.SiteKit"
+    Set id = $CLASSMETHOD(kit, "ActiveEntry", .match, .near, .problem)
+    Do $$$AssertEquals(problem, "", "an active entry")
+    For policy = "automatic", "incident" {
+        Set case = $CLASSMETHOD(kit, "Case", {"ward": "WARD-B", "state": "investigating", "mode": "policy"}, .snap)
+        Set summary = snap.SummaryObject(), cat = summary.catalogue
+        Do $$$AssertEquals(cat.decision, "policy", policy _ ": the fresh evidence is a shipped policy entry's (" _ cat.entry _ ")")
+        Do $$$AssertStatusOK(case.MarkSiteEntry(id), policy _ ": an earlier investigation matched the site entry")
+        Set wf = ##class(Shutter.Test.SiteWorkflow).%New("Case Workflow")
+        Set wf.CaseId = case.CaseId, wf.Mode = "policy", wf.Release = 1, wf.ReleasePolicy = policy, wf.ChainDecides = "policy", wf.ChainKind = "single", wf.IncidentId = "I-UT", wf.ChainSeq = 1, wf.ChainPosition = 1
+        Set wf.IncidentEntry = cat.entry, wf.IncidentOutcome = cat.outcome
+        Do $$$AssertStatusOK(wf.PolicyPath(case, summary, cat), policy _ ": the policy path")
+        Do $$$AssertEquals(case.State, "blocked", policy _ ": the item stops for a person")
+        Do $$$AssertTrue(case.Headline [ id, policy _ ": naming the entry: " _ case.Headline)
+        Do $$$AssertEquals(wf.PlanId, "", policy _ ": and nothing is planned")
+    }
 }
 
 }

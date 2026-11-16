@@ -21,16 +21,17 @@ Method OnAfterAllTests() As %Status
     Quit ##class(Shutter.Test.SiteKit).Reset()
 }
 
-/// The conditions the property is checked on, each {conditions, scope}.
-ClassMethod Samples() As %DynamicArray
+/// The conditions the property is checked on, each {conditions, scope}. <var>dropped</var> names each row of the
+/// matcher's table that could not be made a sample, so none leaves the property unchecked in silence.
+ClassMethod Samples(Output dropped As %String) As %DynamicArray
 {
-    Set out = [], matcher = "Shutter.Catalogue.Matcher"
+    Set out = [], matcher = "Shutter.Catalogue.Matcher", dropped = ""
     Set vocabulary = ##class(Shutter.Catalogue.Vocabulary).Current().conditions
     Set scopes = [{"receiver": "Downstream Out", "source_system": "PAS", "ward": "WARD-ISO", "reason_code": "ward_unavailable"}, {"receiver": "Records Out", "source_system": "LAB", "ward": "WARD-B", "reason_code": "bed_occupied"}, {}]
     // Every row of the matcher's own table.
     Set it = ##class(Shutter.Test.Matcher).Rows().%GetIterator()
     While it.%GetNext(.i, .row) {
-        Try { Do out.%Push({"conditions": (##class(Shutter.Test.Matcher).Conditions(row)), "scope": (scopes.%Get(i # 3))}) } Catch ex { }
+        Try { Do out.%Push({"conditions": (##class(Shutter.Test.Matcher).Conditions(row)), "scope": (scopes.%Get(i # 3))}) } Catch ex { Set dropped = dropped _ $SELECT(dropped = "": "", 1: "; ") _ "row " _ i _ ": " _ ex.DisplayString() }
     }
     // One set from each shipped entry's pattern: its first allowed value for each condition it names, the vocabulary's
     // first value for the rest, so that every shipped entry is matched by a sample.
@@ -95,7 +96,8 @@ Method TestASiteEntryOnlyEverSendsACaseToAPerson()
 {
     Set matcher = "Shutter.Catalogue.Matcher", digest = "Shutter.Util.Digest"
     Do $$$AssertTrue(##class(Shutter.Catalogue.Entry).Count() > 0, "the catalogue is installed")
-    Set samples = ..Samples(), entries = ..Entries()
+    Set samples = ..Samples(.dropped), entries = ..Entries()
+    Do $$$AssertEquals(dropped, "", "every row of the matcher's table is a sample")
     Do $$$AssertTrue(samples.%Size() > 150, "the samples: " _ samples.%Size())
     Do $$$AssertTrue(entries.%Size() > 100, "the entries: " _ entries.%Size())
     Set checked = 0, matched = 0, same = 0, death = 0, wrong = ""
