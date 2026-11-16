@@ -18,12 +18,24 @@ Method OnBeforeOneTest(testname As %String) As %Status
     Quit $$$OK
 }
 
+/// The test's own rows are deleted, and each counter is put back only when its last id is one this test made, so a turn
+/// or conversation opened meanwhile by anyone else (an end-to-end run on the same namespace) keeps its id unique.
 Method OnAfterOneTest(testname As %String) As %Status
 {
+    Set lastTurn = "", lastConversation = ""
+    &sql(SELECT MAX(TurnId), MAX(Conversation) INTO :lastTurn, :lastConversation FROM Shutter_Store.SetupTurn WHERE AskedBy IN ('ut-setup', 'ut-setup-other'))
     &sql(DELETE FROM Shutter_Store.SetupTurn WHERE AskedBy IN ('ut-setup', 'ut-setup-other'))
-    If ..TurnsBefore = "" { Kill ^Shutter.Counter("setupturn") } ElseIf $GET(^Shutter.Counter("setupturn")) >= ..TurnsBefore { Set ^Shutter.Counter("setupturn") = ..TurnsBefore }
-    If ..ConversationsBefore = "" { Kill ^Shutter.Counter("setupconversation") } ElseIf $GET(^Shutter.Counter("setupconversation")) >= ..ConversationsBefore { Set ^Shutter.Counter("setupconversation") = ..ConversationsBefore }
+    Do ..Rewind("setupturn", ..TurnsBefore, lastTurn)
+    Do ..Rewind("setupconversation", ..ConversationsBefore, lastConversation)
     Quit $$$OK
+}
+
+/// A counter put back to <var>before</var> when it stands at the number of <var>last</var>, the highest id this test made.
+ClassMethod Rewind(counter As %String, before As %String, last As %String)
+{
+    Quit:$GET(last)=""
+    Quit:+$GET(^Shutter.Counter(counter))'=+$PIECE(last, "-", 2)
+    If before = "" { Kill ^Shutter.Counter(counter) } Else { Set ^Shutter.Counter(counter) = before }
 }
 
 /// A table of this class, as JSON.

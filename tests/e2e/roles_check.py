@@ -570,14 +570,16 @@ def setup_turn_checks(args, operator, approver, demo_password, judge_password, c
             if second:
                 wait(lambda: settled(second), max(args.timeout, 120), 2)
             status, body = session.call("POST", "/site-profile/setup-turns", turn("please switch recovery on for it", conversation), idempotent=True)
-            if status == 202:
+            if check("a turn that asks for recovery to be switched on is sent: 202", status == 202, f"{status} {body}"):
                 t = wait(lambda: settled(body["turnId"]), max(args.timeout, 120), 2)
-                if ((t or {}).get("model") == "mock"):
-                    check("a turn that names recovery.mode ends refused, with nothing drafted",
-                          (t or {}).get("state") in ("schema_failed", "failed") and (t or {}).get("turn") is None, t)
-                else:
-                    check("a turn that asks for recovery to be switched on drafts no such thing",
-                          all(p.get("field") in ("receivers[].system", "receivers[].category", "receivers[].tier") for p in (((t or {}).get("turn") or {}).get("proposals") or [])), t)
+                if check("and it settles", t is not None, body.get("turnId")):
+                    if t.get("model") == "mock":
+                        check("a turn that names recovery.mode ends refused, with nothing drafted",
+                              t.get("state") in ("schema_failed", "failed") and t.get("turn") is None, t)
+                    else:
+                        check("a turn that asks for recovery to be switched on drafts no such thing",
+                              t.get("state") in ("answered", "schema_failed", "failed")
+                              and all(p.get("field") in ("receivers[].system", "receivers[].category", "receivers[].tier") for p in ((t.get("turn") or {}).get("proposals") or [])), t)
         now, now_history = stored()
         check("a whole conversation leaves the profile's version and its history as they were",
               (now.get("version"), now_history) == (view["version"], history), now.get("version"))
