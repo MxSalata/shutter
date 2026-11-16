@@ -173,25 +173,35 @@ Method TestTheHoldsAreTheWorkflows()
     }
 }
 
-/// The holds GET /catalogue gives are those the profile in force makes apply, and the answer names the profile version
-/// its rows were made under.
+/// The holds GET /catalogue gives are those the profile in force makes apply, each by its own setting, and the answer
+/// names the profile version its rows were made under. Four profiles, one setting changed at a time, each with the hold
+/// list written out: a hold that read the wrong setting would come out wrong in one of them.
 Method TestTheAnswerNamesTheProfileItRead()
 {
     Do ..StoreProfile()
     Set o = ##class(Shutter.API.SiteEntries).CatalogueView()
     Do $$$AssertEquals(o.profileVersion, ##class(Shutter.Store.SiteProfile).Row().Version, "the answer names the stored profile's version")
-    Do $$$AssertEquals(o.automaticHolds.%ToJSON(), ##class(Shutter.Process.CaseWorkflow).AutomaticHolds().%ToJSON(), "and the holds in force")
-    Set p = ##class(Shutter.Store.SiteProfile).Current()
-    Do p.%Remove("version")
-    Set p."further_messages"."admission_not_found" = "policy", p."further_messages"."in_patient_movement" = "stop"
-    If '$ISOBJECT(p.%Get("feed")) Set p.feed = {}
-    Do p.feed.%Set("prove_origin", 0, "boolean")
-    Do $$$AssertStatusOK(##class(Shutter.Store.SiteProfile).Store(p.%ToJSON(), "api", "approver", "", .v), "a profile that releases a lost admission by policy, stops another visit's movement and proves no origin")
-    Set o = ##class(Shutter.API.SiteEntries).CatalogueView()
-    Set kinds = "", it = o.automaticHolds.%GetIterator()
-    While it.%GetNext(, .h) { Set kinds = kinds _ $SELECT(kinds = "": "", 1: ",") _ h.hold }
-    Do $$$AssertEquals(kinds, "site_entry,further_release", "only the holds that profile leaves")
-    Do $$$AssertEquals(o.profileVersion, v, "under the version just saved")
+    Set rows = [
+        {"name": "every hold's setting on", "admission": "person", "movement": "show", "prove": 1, "holds": "admission_not_found,shown_visit,site_entry,further_release,origin"},
+        {"name": "a lost admission released by policy", "admission": "policy", "movement": "show", "prove": 1, "holds": "shown_visit,site_entry,further_release,origin"},
+        {"name": "another visit's movement stopped", "admission": "person", "movement": "stop", "prove": 1, "holds": "admission_not_found,site_entry,further_release,origin"},
+        {"name": "the origin not proved", "admission": "person", "movement": "show", "prove": 0, "holds": "admission_not_found,shown_visit,site_entry,further_release"}
+    ]
+    Set ri = rows.%GetIterator()
+    While ri.%GetNext(, .row) {
+        Set p = ##class(Shutter.Store.SiteProfile).Current()
+        Do p.%Remove("version")
+        If '$ISOBJECT(p.%Get("further_messages")) Set p."further_messages" = {}
+        Set p."further_messages"."admission_not_found" = row.admission, p."further_messages"."in_patient_movement" = row.movement
+        If '$ISOBJECT(p.%Get("feed")) Set p.feed = {}
+        Do p.feed.%Set("prove_origin", row.prove, "boolean")
+        Do $$$AssertStatusOK(##class(Shutter.Store.SiteProfile).Store(p.%ToJSON(), "api", "approver", "", .v), row.name _ ": saved")
+        Set o = ##class(Shutter.API.SiteEntries).CatalogueView()
+        Set kinds = "", it = o.automaticHolds.%GetIterator()
+        While it.%GetNext(, .h) { Set kinds = kinds _ $SELECT(kinds = "": "", 1: ",") _ h.hold }
+        Do $$$AssertEquals(kinds, row.holds, row.name _ ": the holds that profile makes apply")
+        Do $$$AssertEquals(o.profileVersion, v, row.name _ ": under the version just saved")
+    }
 }
 
 }
