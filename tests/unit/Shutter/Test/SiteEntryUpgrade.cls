@@ -271,6 +271,8 @@ Method TestAWideningIsKept()
         Set profile = ##class(%DynamicObject).%FromJSON(saved)
         Do profile.%Remove("version")
         Do $$$AssertStatusOK(##class(Shutter.Store.SiteProfile).Store(profile.%ToJSON(), "unit test", "ut", "", .now), "the profile is saved")
+        // Read before the profile is put back by hand, which is a save of its own.
+        Do $$$AssertEquals($GET(^Shutter.Catalogue.Site("checked")), ##class(Shutter.Catalogue.SiteEntry).CheckedMark(), "the save rechecked the entries")
         Set row = ##class(Shutter.Store.SiteProfile).Row()
         Set row.Json = saved, row.Version = version
         Do row.%Save()
@@ -278,8 +280,8 @@ Method TestAWideningIsKept()
         Kill ^Shutter.Config("feedZone"), ^Shutter.Config("preventFailures")
     } Else {
         Do $CLASSMETHOD(site, "Recheck", "profile", 0)
+        Do $$$AssertEquals($GET(^Shutter.Catalogue.Site("checked")), ##class(Shutter.Catalogue.SiteEntry).CheckedMark(), "the save rechecked the entries")
     }
-    Do $$$AssertEquals($GET(^Shutter.Catalogue.Site("checked")), ##class(Shutter.Catalogue.SiteEntry).CheckedMark(), "the save rechecked the entries")
     Set e = $CLASSMETHOD(site, "ById", id)
     Do $$$AssertEquals(e.EffectiveJSON, widened, "the entry is still widened")
     Do $$$AssertTrue(e.NeedsReview, "and still flagged")
@@ -685,6 +687,123 @@ Method TestALaterRowTheQueryCannotReadIsNeverSkipped()
         Do $$$AssertTrue(0, "failed: " _ ex.DisplayString())
     }
     Set ^Shutter.Catalogue.SiteEntryD(rid) = node
+}
+
+/// A fixture whose case is stored but whose row cannot be opened is a failure, never taken for a case that is gone:
+/// its replay says error, the proof does not pass and the recheck flags the entry. Before, the frozen copy answered.
+Method TestAFixtureWhoseCaseCannotBeOpenedIsAFailure()
+{
+    Set kit = "Shutter.Test.SiteKit", site = "Shutter.Catalogue.SiteEntry", proofClass = "Shutter.Catalogue.SiteEntryProof"
+    Set id = $CLASSMETHOD(kit, "ActiveEntry", .match, .near, .problem)
+    Do $$$AssertEquals(problem, "", "an active entry")
+    Set content = ##class(Shutter.Catalogue.SiteEntryVersion).Find(id, 1).Content(), fixture = ""
+    Set it = content.fixtures.%GetIterator()
+    While it.%GetNext(, .f) { If f.expect = "match" Set fixture = f Quit }
+    Do $$$AssertTrue($ISOBJECT(fixture), "its matching fixture")
+    Set cid = match.%Id(), caseId = match.CaseId
+    Kill match, near
+    Set node = ^Shutter.Store.CaseD(cid)
+    Set ^Shutter.Store.CaseD(cid) = "not a list"
+    Try {
+        Do $CLASSMETHOD(proofClass, "Replay", fixture, .source, .why)
+        Do $$$AssertEquals(source, "error", "the replay says the case could not be read: " _ why)
+        Set result = $CLASSMETHOD(proofClass, "Run", id, 1, content, "activate", "ut-author", "api", 0, .proof)
+        Do $$$AssertNotTrue(result.passed, "a proof does not pass")
+        Do $$$AssertEquals($CLASSMETHOD(site, "Recheck", "upgrade", 0), 1, "the recheck flags the entry")
+        Set words = $CLASSMETHOD(site, "ById", id).ReviewWords()
+        Do $$$AssertTrue(words [ ("Case " _ caseId _ " is stored, but"), "saying the case could not be read: " _ words)
+        Do $$$AssertNotTrue(words [ "no longer stored", "and not that it is gone")
+    } Catch ex {
+        Do $$$AssertTrue(0, "failed: " _ ex.DisplayString())
+    }
+    Set ^Shutter.Store.CaseD(cid) = node
+}
+
+/// A save of the site profile that committed and was never counted (its process ended between the two) is still
+/// checked before the next case is matched: the profile's own version is part of what a recheck records. Before, the
+/// entries were taken as checked and the change was never rechecked.
+Method TestAProfileSaveThatWasNotCountedIsCheckedAgain()
+{
+    Set kit = "Shutter.Test.SiteKit", site = "Shutter.Catalogue.SiteEntry"
+    Set row = ##class(Shutter.Store.SiteProfile).Row()
+    If '$ISOBJECT(row) Do $$$AssertSkipped("no stored site profile on this instance") Quit
+    Set saved = row.Json, version = row.Version
+    Set profile = ##class(%DynamicObject).%FromJSON(saved)
+    If '$ISOBJECT(profile.teams) || (profile.teams.%Size() = 0) Do $$$AssertSkipped("the stored site profile names no team") Quit
+    Set team = profile.teams.%Get(0).id
+    Set match = $CLASSMETHOD(kit, "Case", {"ward": "WARD-ISO"}), near = $CLASSMETHOD(kit, "Case", {"ward": "WARD-B"})
+    Set body = $CLASSMETHOD(kit, "Body", match.CaseId, near.CaseId)
+    Set body.team = team
+    Do $$$AssertEquals($CLASSMETHOD(kit, "Activate", body, .id), "", "an entry that names a team of the profile")
+    Do $CLASSMETHOD(site, "Recheck", "upgrade", 0, .ok)
+    Do $$$AssertTrue($CLASSMETHOD(site, "IsChecked"), "the entries are checked")
+    // The row as a save writes it, committed, and nothing counted after it.
+    Do profile.%Remove("teams"), profile.%Remove("version")
+    Set row.Json = profile.%ToJSON(), row.Version = version + 1
+    Do $$$AssertStatusOK(row.%Save(), "the profile is saved without its teams, and the save is not counted")
+    Kill ^Shutter.Config("feedZone"), ^Shutter.Config("preventFailures")
+    Try {
+        Do $$$AssertNotTrue($CLASSMETHOD(site, "IsChecked"), "the committed save is not taken for one already checked")
+        Do $CLASSMETHOD(kit, "Snapshot", match)
+        Set e = $CLASSMETHOD(site, "ById", id)
+        Do $$$AssertTrue(e.NeedsReview, "the next match checked the entries again, and the entry is flagged")
+        Do $$$AssertTrue(e.ReviewWords() [ ("no longer names the team " _ team), "for the team: " _ e.ReviewWords())
+    } Catch ex {
+        Do $$$AssertTrue(0, "failed: " _ ex.DisplayString())
+    }
+    Set row = ##class(Shutter.Store.SiteProfile).Row()
+    Set row.Json = saved, row.Version = version
+    Do $$$AssertStatusOK(row.%Save(), "the profile is put back")
+    Kill ^Shutter.Config("feedZone"), ^Shutter.Config("preventFailures")
+}
+
+/// A suspended entry whose version in force cannot be read is not in force, and is never taken for one that was checked:
+/// the recheck completes, flags it and names it on the Doctor. Before, the recheck passed over it in silence.
+Method TestASuspendedEntryWhoseVersionCannotBeReadIsFlagged()
+{
+    Set kit = "Shutter.Test.SiteKit", site = "Shutter.Catalogue.SiteEntry"
+    Set id = $CLASSMETHOD(kit, "ActiveEntry", .match, .near, .problem)
+    Do $$$AssertEquals(problem, "", "an active entry")
+    Do $$$AssertEquals($CLASSMETHOD(site, "Suspend", id, "unit test", "ut-approver", "api", .entry, .detail), "", "suspended")
+    Set e = $CLASSMETHOD(site, "ById", id)
+    Do e.%Reload()
+    Do $$$AssertNotTrue(e.NeedsReview, "not flagged yet")
+    Set v = ##class(Shutter.Catalogue.SiteEntryVersion).Find(id, 1)
+    Set json = v.Json, v.Json = "{""id"": ""L1"", ""pattern"": {"
+    Do $$$AssertStatusOK(v.%Save(), "its version no longer reads")
+    Kill ^Shutter.Catalogue.Site("checked")
+    Try {
+        Do $CLASSMETHOD(site, "Recheck", "upgrade", 0, .ok)
+        Do $$$AssertTrue(ok, "the recheck completes: the entry is not in force")
+        Do e.%Reload()
+        Do $$$AssertTrue(e.NeedsReview, "the entry is flagged")
+        Set warnings = $CLASSMETHOD(site, "Status").warnings.%ToJSON()
+        Do $$$AssertTrue(warnings [ ("Site entry " _ id _ " (suspended) could not be rechecked"), "the Doctor names it: " _ warnings)
+    } Catch ex {
+        Do $$$AssertTrue(0, "failed: " _ ex.DisplayString())
+    }
+    Set v.Json = json
+    Do v.%Save()
+}
+
+/// Setting aside an entry whose copy this process already holds reads the row again from the disk: a row that cannot be
+/// read is written again from its versions and events, never saved over from the copy in memory, and its note says what
+/// earlier rechecks dropped cannot be told. Before, the copy in memory was saved.
+Method TestASetAsideReadsAHeldCopyAgain()
+{
+    Set kit = "Shutter.Test.SiteKit", site = "Shutter.Catalogue.SiteEntry"
+    Set id = $CLASSMETHOD(kit, "ActiveEntry", .match, .near, .problem)
+    Do $$$AssertEquals(problem, "", "an active entry")
+    Set held = $CLASSMETHOD(site, "ById", id), rid = held.%Id(), node = ^Shutter.Catalogue.SiteEntryD(rid)
+    Set ^Shutter.Catalogue.SiteEntryD(rid) = "not a list"
+    Do $$$AssertEquals($CLASSMETHOD(site, "SetAside", id, "ut-admin", "its row is damaged", "terminal", .detail), "", "an administrator sets it aside: " _ detail)
+    Do $$$AssertEquals($GET(^Shutter.Catalogue.Site("damaged", rid)), "not a list", "the damaged row is kept beside it")
+    Do $$$AssertStatusOK(held.%Reload(), "the row reads again")
+    Do $$$AssertEquals(held.State, "suspended", "as a suspended entry")
+    Set words = held.ReviewWords()
+    Do $$$AssertTrue(words [ "written again from its versions and events", "written again, not from the copy in memory: " _ words)
+    Do $$$AssertTrue(words [ "cannot be told", "saying what earlier rechecks dropped cannot be told")
+    If $GET(^Shutter.Catalogue.SiteEntryD(rid)) = "not a list" Set ^Shutter.Catalogue.SiteEntryD(rid) = node
 }
 
 }

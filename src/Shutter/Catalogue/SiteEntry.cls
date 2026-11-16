@@ -180,10 +180,16 @@ ClassMethod ActiveCount(exceptId As %String = "", Output failed As %Boolean) As 
 /// What a completed recheck is bound to: this release and the inputs it read, which every save of the site profile and
 /// every change of the vocabulary in force counts (InputsChanged). A recheck stores it in ^Shutter.Catalogue.Site("checked")
 /// as it read it when it began, so a profile saved during or after a recheck always leaves the stored mark another, and
-/// the entries are checked again before any case is matched on them.
+/// the entries are checked again before any case is matched on them. The stored profile's own version is part of it too,
+/// so a save that committed is never taken for one already checked, even when it was not counted (the saving process
+/// ended between its commit and the count). A version that cannot be read gives a mark no recheck recorded, so each
+/// match checks the entries again first.
 ClassMethod CheckedMark() As %String
 {
-    Quit $PARAMETER("Shutter.Setup", "VERSION") _ "|" _ (+$GET(^Shutter.Catalogue.Site("inputs")))
+    Set version = ""
+    &sql(SELECT Version INTO :version FROM Shutter_Store.SiteProfile WHERE Name = 'current')
+    If SQLCODE < 0 Set version = "unreadable:" _ $JOB _ ":" _ $ZHOROLOG
+    Quit $PARAMETER("Shutter.Setup", "VERSION") _ "|" _ (+$GET(^Shutter.Catalogue.Site("inputs"))) _ "|" _ version
 }
 
 /// Whether a recheck completed under this release and the inputs in force.
@@ -288,15 +294,22 @@ ClassMethod ActiveList(Output problem As %String, exceptId As %String = "") As %
 /// match is a site entry's; the entry the case recorded from earlier evidence (Shutter.Store.Case.SiteEntry); and, on a
 /// site that has activated an entry, its stored evidence matched now against the active entries, so a case whose evidence
 /// was collected before an entry was activated is held by it too. {entry, title, instructions}, or "" for a case no site
-/// entry stops. When that cannot be told (the case's record or the active entries cannot be read, the evidence was matched
-/// as error, or matching it now fails) the case is held all the same: entry is "" and unread says why.
+/// entry stops. When that cannot be told (the case's record, the active entries or its stored evidence cannot be read, the
+/// evidence was matched as error, or matching it now fails) the case is held all the same: entry is "" and unread says why.
 /// <var>cache</var> keeps the active entries between calls of one pass (the resend set's).
 ClassMethod StoppedCase(case As Shutter.Store.Case, ByRef cache) As %DynamicObject
 {
     Set json = "Shutter.Util.Json", matcher = "Shutter.Catalogue.Matcher"
     If '$ISOBJECT(case) Quit ""
-    Set snap = case.CurrentSnapshot
-    Set summary = $SELECT($ISOBJECT(snap): snap.SummaryObject(), 1: "")
+    // The case's current evidence: unread says why, when it is on record and cannot be read.
+    Set summary = "", evidence = ""
+    Try {
+        Set snap = case.CurrentSnapshot
+        Set summary = $SELECT($ISOBJECT(snap): snap.SummaryObject(), 1: "")
+    } Catch ex {
+        Set summary = "", evidence = "its stored evidence cannot be read: " _ $EXTRACT(ex.DisplayString(), 1, 200)
+    }
+    If (evidence = "") && '$ISOBJECT(summary) && (case.CurrentSnapshotGetObjectId() '= "") Set evidence = "its stored evidence cannot be read"
     Set cat = $SELECT($ISOBJECT(summary): summary.%Get("catalogue"), 1: "")
     Set m = $SELECT($ISOBJECT(cat) && (cat.%GetTypeOf("matches") = "array") && (cat.%Get("matches").%Size() > 0): cat.%Get("matches").%Get(0), 1: "")
     If $ISOBJECT(m) && ($CLASSMETHOD(json, "Str", m, "origin") = "site") {
@@ -313,7 +326,11 @@ ClassMethod StoppedCase(case As Shutter.Store.Case, ByRef cache) As %DynamicObje
         If '$DATA(cache("list")) Set cache("list") = ..ActiveList(.problem), cache("problem") = problem
         If cache("problem") '= "" Quit ..Unread(cache("problem"))
         Set list = cache("list")
-        If (list.%Size() = 0) || '$ISOBJECT(summary) Quit ""
+        If list.%Size() = 0 Quit ""
+        // A case with no evidence yet has nothing to match. One whose evidence is on record but cannot be read is never
+        // taken for a case no entry stops.
+        If evidence '= "" Quit ..Unread(evidence)
+        If '$ISOBJECT(summary) Quit ""
         // The stored evidence matched now: an entry activated since it was collected holds the case as well.
         Set hit = "", failed = ""
         Try {
@@ -1079,7 +1096,8 @@ ClassMethod SetAside(id As %String, who As %String, reason As %String, source As
         Set now = ##class(Shutter.Util.Time).NowUTC(), rebuilt = 0, e = ""
         Try {
             Set e = ..%OpenId(rid)
-            If $ISOBJECT(e) Do e.%Reload()
+            // A copy this process already holds is read again from the disk; a row that cannot be is written again below.
+            If $ISOBJECT(e) $$$ThrowOnError(e.%Reload())
         } Catch unreadable {
             Set e = ""
         }
@@ -1095,6 +1113,7 @@ ClassMethod SetAside(id As %String, who As %String, reason As %String, source As
             $$$ThrowOnError(..Rebuild(rid, id, now))
             Set e = ..%OpenId(rid)
             If '$ISOBJECT(e) $$$ThrowStatus($$$ERROR($$$GeneralError, "the row could not be written again"))
+            $$$ThrowOnError(e.%Reload())
             Set rebuilt = 1
         }
         If (e.State '= "active") && (e.State '= "suspended") && 'rebuilt {
@@ -1135,7 +1154,9 @@ ClassMethod Rebuild(rid As %String, id As %String, now As %String) As %Status [ 
     Set v = $SELECT(active > 0: ##class(Shutter.Catalogue.SiteEntryVersion).Find(id, active), 1: "")
     Set content = $SELECT($ISOBJECT(v): v.Content(), 1: "")
     If $ISOBJECT(content) Set priority = +##class(Shutter.Util.Json).Str(content, "priority", 100)
-    Set review = {"dropped": [], "notes": ["The entry's row could not be read and was written again from its versions and events: a person reviews it before it applies again"], "trigger": "set_aside", "release": ($PARAMETER("Shutter.Setup", "VERSION"))}
+    // What earlier rechecks dropped was on the damaged row only: the note says so, so that resuming the version as it
+    // was written is never taken for keeping the entry as it stood.
+    Set review = {"dropped": [], "notes": ["The entry's row could not be read and was written again from its versions and events: what earlier rechecks dropped from it cannot be told (see its rechecked events), so a person reviews it before it applies again"], "trigger": "set_aside", "release": ($PARAMETER("Shutter.Setup", "VERSION"))}
     // The storage's values in order (Storage Default below): the class name, then each property.
     Set node = $LISTBUILD("", id, "suspended", active, draft, priority, "", "", "", "", "", "", 1, review.%ToJSON(), "", "", "", "", 1, createdBy, createdAt, now, "")
     // Every state the damaged row may have been indexed under is cleared, then the new one indexed.
@@ -1189,8 +1210,9 @@ Method Review(vocabulary As %DynamicObject, trigger As %String, Output widened A
     Set widened = 0
     Set v = ##class(Shutter.Catalogue.SiteEntryVersion).Find(..EntryId, ..ActiveVersion)
     Set content = $SELECT($ISOBJECT(v): v.Content(), 1: "")
-    // A row that can't be read is not this method's to mend: the matcher answers error for it (R13).
-    If '$ISOBJECT(content) || '$ISOBJECT(content.%Get("pattern")) Quit ..NeedsReview
+    // A version that can't be read is not this method's to mend, and is never taken for one that was checked: the
+    // entry's recheck fails, so an active one keeps the matcher at error (R13) and a suspended one is flagged.
+    If '$ISOBJECT(content) || '$ISOBJECT(content.%Get("pattern")) $$$ThrowStatus($$$ERROR($$$GeneralError, "version " _ ..ActiveVersion _ " of " _ ..EntryId _ " cannot be read"))
     Set pattern = ##class(%DynamicObject).%FromJSON(content.%Get("pattern").%ToJSON())
     Set scope = $SELECT($ISOBJECT(content.%Get("scope")): ##class(%DynamicObject).%FromJSON(content.%Get("scope").%ToJSON()), 1: {})
     Set dropped = [], notes = []

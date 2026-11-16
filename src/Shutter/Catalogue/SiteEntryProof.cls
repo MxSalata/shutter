@@ -107,9 +107,16 @@ ClassMethod Replay(fixture As %DynamicObject, Output source As %String, Output w
     If '$ISOBJECT(out.conditions) Set out.conditions = {}
     If '$ISOBJECT(out.scope) Set out.scope = {}
     Set caseId = $CLASSMETHOD(json, "Str", fixture, "case"), digest = $CLASSMETHOD(json, "Str", fixture, "snapshot_digest")
-    Set case = ##class(Shutter.Store.Case).ByCaseId(caseId)
-    If '$ISOBJECT(case) || (digest = "") Quit out
-    Set cid = case.%Id(), sid = ""
+    If (caseId = "") || (digest = "") Quit out
+    // Only a case that is not there is a purge: a lookup that failed, or a row that is there and cannot be opened, is a
+    // failure to report.
+    Set cid = ""
+    &sql(SELECT ID INTO :cid FROM Shutter_Store."Case" WHERE CaseId = :caseId)
+    If SQLCODE < 0 Set source = "error", why = "it could not be looked up (SQLCODE " _ SQLCODE _ ")" Quit out
+    If (SQLCODE '= 0) || (cid = "") Quit out
+    Set case = ##class(Shutter.Store.Case).%OpenId(cid)
+    If '$ISOBJECT(case) Set source = "error", why = "it cannot be opened" Quit out
+    Set sid = ""
     &sql(SELECT TOP 1 ID INTO :sid FROM Shutter_Store.Snapshot WHERE "Case" = :cid AND Digest = :digest ORDER BY ID DESC)
     // Only a snapshot that is not there is a purge: a lookup that failed is a failure to report.
     If SQLCODE < 0 Set source = "error", why = "its stored evidence could not be looked up (SQLCODE " _ SQLCODE _ ")" Quit out

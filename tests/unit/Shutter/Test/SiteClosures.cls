@@ -105,6 +105,8 @@ Method TestAnEntryActivatedAfterTheEvidenceHoldsTheCase()
     Set case = ##class(Shutter.Store.Case).ByCaseId(case.CaseId)
     Do $$$AssertEquals(case.State, "blocked", "the engine's delivery does not close it")
     Do $$$AssertTrue(..Notes(case) [ ("the site's own scenario " _ id _ " asks a person"), "and the note names the entry")
+    // The outage run's settle of a message it sent reads the case the same way, and leaves it for the person.
+    Do $$$AssertTrue(##class(Shutter.Operation.EngineResend).LeftForPerson(case, "Resent by Shutter; new header 9 Completed.", ##class(Shutter.Store.Outage).%New()), "the outage run's settle leaves it for the person")
     // A case of another ward, matched the same way before the activation, is not the entry's and settles as before.
     Set other = $CLASSMETHOD(kit, "Case", {"ward": "WARD-C", "state": "gated"})
     Do $$$AssertNotTrue($ISOBJECT($CLASSMETHOD(site, "StoppedCase", other)), "a case of another ward is not held")
@@ -159,6 +161,43 @@ Method TestAnUnreadableAnswerHoldsTheCase()
     Set v.Json = json
     Do v.%Save()
     Do $$$AssertNotTrue($ISOBJECT($CLASSMETHOD(site, "StoppedCase", other)), "mended, the case of another ward is not held")
+}
+
+/// A case whose evidence is on record but cannot be read, on a site with an entry in force: whether the entry stops it
+/// cannot be told, so it is held for a person, as when the entries cannot be read. Before, it read as a case no entry
+/// stopped, and the engine's delivery closed it.
+Method TestEvidenceThatCannotBeReadHoldsTheCase()
+{
+    Set kit = "Shutter.Test.SiteKit", site = "Shutter.Catalogue.SiteEntry"
+    Set id = $CLASSMETHOD(kit, "ActiveEntry", .match, .near, .problem)
+    Do $$$AssertEquals(problem, "", "an entry for its ward is in force")
+    Set case = $CLASSMETHOD(kit, "Case", {"ward": "WARD-ISO", "state": "gated"}, .snap)
+    Set caseId = case.CaseId, sid = snap.%Id()
+    Kill case, snap
+    // The case's current snapshot, damaged on the disk.
+    Set node = ^Shutter.Store.SnapshotD(sid)
+    Set ^Shutter.Store.SnapshotD(sid) = "not a list"
+    Try {
+        Set case = ##class(Shutter.Store.Case).ByCaseId(caseId)
+        Set stopped = $CLASSMETHOD(site, "StoppedCase", case)
+        Do $$$AssertTrue($ISOBJECT(stopped) && (stopped.entry = "") && (stopped.unread [ "evidence"), "it is held, saying why: " _ $SELECT($ISOBJECT(stopped): stopped.%ToJSON(), 1: ""))
+        Set row = ..Delivered()
+        Do $$$AssertStatusOK(##class(Shutter.Util.EngineCheck).Settle(case, row, [(row)], "gate:ut"), "settled")
+        Kill case
+        Do $$$AssertEquals(##class(Shutter.Store.Case).ByCaseId(caseId).State, "blocked", "the engine's delivery does not close it")
+    } Catch ex {
+        Do $$$AssertTrue(0, "failed: " _ ex.DisplayString())
+    }
+    Set ^Shutter.Store.SnapshotD(sid) = node
+    // A case with no evidence yet has nothing an entry could match.
+    Set bare = $CLASSMETHOD(kit, "Case", {"ward": "WARD-ISO", "state": "gated"}, .snap2)
+    Set bareId = bare.CaseId, rid = bare.%Id()
+    Kill bare, snap2
+    &sql(UPDATE Shutter_Store."Case" SET CurrentSnapshot = NULL WHERE ID = :rid)
+    Do $$$AssertEquals(SQLCODE, 0, "a case with no current evidence")
+    Set bare = ##class(Shutter.Store.Case).ByCaseId(bareId)
+    Do $$$AssertEquals(bare.CurrentSnapshotGetObjectId(), "", "as stored")
+    Do $$$AssertNotTrue($ISOBJECT($CLASSMETHOD(site, "StoppedCase", bare)), "is not held by the entry")
 }
 
 }
