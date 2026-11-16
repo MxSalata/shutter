@@ -198,6 +198,8 @@ export function OwnWords({
     if (named) return setProblem(named);
     if (!state.draft || !state.base) return;
     setProblem('');
+    // The draft this is sent from: an answer that comes back after a discard or a sign-out is not taken into another
+    const epoch = state.epoch;
     send.mutate(
       {
         turn: {
@@ -212,7 +214,7 @@ export function OwnWords({
       {
         onSuccess: (asked) => {
           useSetup.getState().type(rid, q.id, '');
-          useSetup.getState().sent(rid, q.id, clean.text, asked);
+          useSetup.getState().sent(rid, q.id, clean.text, asked, epoch);
         },
       },
     );

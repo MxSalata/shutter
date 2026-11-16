@@ -963,3 +963,79 @@ describe('drafted answers after the hand-over', () => {
     expect(s.conversation).toBeNull();
   }, 90_000);
 });
+
+describe('the store, around a turn', () => {
+  const state = () => useSetup.getState();
+  const asked = (n: number) => ({
+    turnId: `ST-00000${n}`,
+    conversation: 'SC-000001',
+    state: 'pending' as const,
+  });
+  const answered = (n: number, to: string, from: string | null): SetupTurnView => ({
+    turnId: `ST-00000${n}`,
+    conversation: 'SC-000001',
+    receiver: 'Bed Board',
+    text: 'it is the ward whiteboard display',
+    state: 'answered',
+    baseVersion: recorded.version,
+    draftRevision: 1,
+    askedBy: 'approver',
+    askedAt: '',
+    answeredAt: '',
+    error: null,
+    mode: 'live',
+    model: 'mock',
+    costUsd: 0,
+    ensMessageId: null,
+    turn: {
+      say: 'Read.',
+      proposals: [{ field: 'receivers[].system', receiver: 'Bed Board', to, quote: to, from }],
+      ask: null,
+    },
+  });
+  function named() {
+    state().open(recorded);
+    const id = state().addReceiver();
+    state().setKey(id, 'name', 'Bed Board');
+    return id;
+  }
+
+  it('undoes overlapping turns in any order, leaving no drafted answer that cannot be undone', () => {
+    const id = named();
+    state().sent(id, 'system', 'a', asked(1));
+    state().settle(answered(1, 'ward display', null));
+    state().sent(id, 'system', 'b', asked(2));
+    state().settle(answered(2, 'ward whiteboard display', 'ward display'));
+    expect(added().system).toBe('ward whiteboard display');
+    // A first: its answer is the later turn's now, so nothing is undone and A stays undoable
+    state().undo('ST-000001');
+    expect(added().system).toBe('ward whiteboard display');
+    state().undo('ST-000002');
+    expect(added().system).toBe('ward display');
+    expect(state().prov[`${id}/system`]).toMatchObject({ by: 'ask', turnId: 'ST-000001' });
+    state().undo('ST-000001');
+    expect(added()).not.toHaveProperty('system');
+    expect(Object.values(state().prov).some((p) => p.by === 'ask')).toBe(false);
+  });
+
+  it('does not take an answer to a send made before a discard into the next draft', () => {
+    const id = named();
+    const epoch = state().epoch;
+    state().discard();
+    state().sent(id, 'system', 'it is a bed manager', asked(1), epoch);
+    expect(state().conversation).toBeNull();
+    expect(state().turns).toEqual([]);
+    expect(state().pending).toBeNull();
+  });
+
+  it('uses no answer while the stored version has moved under the draft', () => {
+    const id = named();
+    state().sent(id, 'system', 'a', asked(1));
+    state().open({ ...recorded, version: recorded.version + 1 });
+    expect(state().moved).toBe(true);
+    const before = JSON.stringify(state().draft);
+    state().settle(answered(1, 'ward display', null));
+    expect(JSON.stringify(state().draft)).toBe(before);
+    expect(state().turns.at(-1)).toMatchObject({ state: 'unused', note: CHANGED_MEANWHILE });
+  });
+});

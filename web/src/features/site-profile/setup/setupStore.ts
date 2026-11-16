@@ -118,6 +118,11 @@ export interface SetupData {
   focus: string | null;
   /** The stored version moved while this draft had changes. */
   moved: boolean;
+  /**
+   * Which draft this is: a new one each time the draft starts afresh (a discard, a save, a new stored version, a
+   * sign-out), so an answer to a send made before then is not taken into it.
+   */
+  epoch: number;
   handover: Handover | null;
   /** The conversation with Ask Shutter, as the server names it; null before the first turn and after a discard. */
   conversation: string | null;
@@ -157,7 +162,8 @@ interface SetupActions {
    */
   adopt: (draft: SiteProfile, rids?: string[]) => void;
   /** A typed answer was sent: the server opened its turn. */
-  sent: (rid: string, question: QuestionId, text: string, asked: SetupTurnAsked) => void;
+  /** `epoch` is the draft's when the send was made: an answer that arrives for another draft is ignored. */
+  sent: (rid: string, question: QuestionId, text: string, asked: SetupTurnAsked, epoch?: number) => void;
   /** The turn being read is dropped: whatever comes back for it is not used. */
   cancelPending: () => void;
   /**
@@ -193,6 +199,7 @@ const EMPTY: SetupData = {
   left: {},
   focus: null,
   moved: false,
+  epoch: 0,
   handover: null,
   conversation: null,
   turns: [],
@@ -209,6 +216,7 @@ function seeded(view: SiteProfileView, revision: number): SetupData {
   const rids = view.profile.receivers.map(newRid);
   return {
     ...EMPTY,
+    epoch: ++epochs,
     base: view,
     draft: clone(view.profile),
     rids,
@@ -365,12 +373,17 @@ export const useSetup = create<SetupState>((set, get) => ({
         revision: s.revision + 1,
       };
     }),
-  sent: (rid, question, text, asked) =>
-    set((s) => ({
-      conversation: asked.conversation,
-      turns: [...s.turns, { id: asked.turnId, rid, question, text, state: 'reading' }],
-      pending: { turnId: asked.turnId, rid, question },
-    })),
+  sent: (rid, question, text, asked, epoch) =>
+    set((s) =>
+      // Sent from a draft discarded, saved or signed out of since: its conversation is not this draft's
+      epoch !== undefined && epoch !== s.epoch
+        ? s
+        : {
+            conversation: asked.conversation,
+            turns: [...s.turns, { id: asked.turnId, rid, question, text, state: 'reading' }],
+            pending: { turnId: asked.turnId, rid, question },
+          },
+    ),
   cancelPending: () => set((s) => dropPending(s)),
   settle: (view) =>
     set((s) => {
@@ -392,7 +405,9 @@ export const useSetup = create<SetupState>((set, get) => ({
         return end({ state: 'failed', note: view.error || 'no answer came back' }, { misses: missed });
       const i = s.rids.indexOf(p.rid);
       const r = i < 0 ? undefined : s.draft.receivers[i];
+      // The stored version moved under this draft: what it was checked against is no longer the profile in force
       if (
+        s.moved ||
         !r ||
         r.name !== view.receiver ||
         view.conversation !== s.conversation ||
@@ -441,20 +456,29 @@ export const useSetup = create<SetupState>((set, get) => ({
       const draft = clone(s.draft);
       const r = draft.receivers[i] as Record<string, unknown>;
       const prov = { ...s.prov };
+      let restored = 0;
+      // A turn whose drafted answer comes back by this undo can be undone again
+      const back = new Set<string>();
       for (const d of turn.drafted) {
         const at = `${turn.rid}/${d.key}`;
         const now = prov[at];
-        // Only an answer that is still this turn's: a hand edit since is the person's and stays
+        // Only an answer that is still this turn's: a hand edit since is the person's, and a later turn's is that turn's
         if (!now || now.by !== 'ask' || now.turnId !== turnId) continue;
+        restored += 1;
         if (d.from === undefined || d.from === null) delete r[d.key];
         else r[d.key] = d.from;
         if (d.provenance) prov[at] = d.provenance;
         else delete prov[at];
+        if (d.provenance?.by === 'ask') back.add(d.provenance.turnId);
       }
+      // Nothing of it was still this turn's: it stays as it was, and can be undone once its answer is back
+      if (!restored) return s;
       return {
         draft,
         prov,
-        turns: s.turns.map((t) => (t.id === turnId ? { ...t, undone: true } : t)),
+        turns: s.turns.map((t) =>
+          t.id === turnId ? { ...t, undone: true } : back.has(t.id) ? { ...t, undone: false } : t,
+        ),
         revision: s.revision + 1,
       };
     }),
@@ -598,7 +622,7 @@ export function reviewStop(s: SetupData): ReviewStop | null {
 // A sign-out forgets the draft: signing in as someone else is not a hand-over
 if (typeof window !== 'undefined')
   window.addEventListener(SIGNED_OUT, () =>
-    useSetup.setState({ ...EMPTY, revision: useSetup.getState().revision + 1 }),
+    useSetup.setState({ ...EMPTY, epoch: ++epochs, revision: useSetup.getState().revision + 1 }),
   );
 
 /** For tests: no draft, no hand-over. */
