@@ -1316,7 +1316,8 @@ it got there, can authorise a write or a closure.
   the entry clears them (a resumption keeps them). A recheck that widens an active entry raises the generation, so a plan
   made before it is not completed (R17), as after an activation. Each entry's stored row is read again under the lock, and
   is checked on its own. The release and the inputs read (every save of the site profile and every change of the
-  vocabulary in force is counted, and a recheck records the count as it read it when it began) are recorded as checked
+  vocabulary in force is counted, the stored profile's own version is read with the count, and a recheck records both as
+  it read them when it began, so a save that committed is never taken for one already checked) are recorded as checked
   only when every active entry was checked and each change saved with its `rechecked` event; so a profile saved during or
   after a recheck is always checked again. A recheck that could not take the lock, load the release's vocabulary file
   (one that is there and is not the vocabulary is never taken for it), list the entries or check an active one is tried
@@ -1331,7 +1332,8 @@ it got there, can authorise a write or a closure.
   plan that writes nothing and was made under another version than the current one is not verified and closed; the evidence
   is collected again and the case planned afresh, up to the refresh limit, then the case blocks for a person. This holds
   at every site: a catalogue upgrade between a closure's plan and its verification plans it again. A plan that records no
-  catalogue version is treated so only on a site that has ever activated an entry.
+  catalogue version is treated so only on a site that has ever activated an entry. A verification that answers when the
+  case's plan cannot be read and no write is on record does not close the case either: a person decides.
 - **R18.** On a case a site entry matched, a closure never happens without a person. A board a person convenes on such a
   case (14.5) may plan to close it, naming no entry, which the gate passes (`ENTRY_NOT_NAMED`): the workflow sends the
   case to a person with the board's reasoning, as a partial board's closure goes (6.6). The case records the first site
@@ -1343,8 +1345,8 @@ it got there, can authorise a write or a closure.
   automatically, and an item an incident released by policy or under its approval stops for a person. The closures
   that run outside the case workflow hold to it too, and to more than the record: they match the case's stored evidence
   against the entries active now (`SiteEntry.StoppedCase`), so a case whose evidence was collected before an entry was
-  activated is held by it, and they hold a case when that cannot be told (the case's record or the entries cannot be
-  read, or the evidence was matched as `error`). When the engine itself delivered the message (the gate's `ENGINE_DELIVERED` at the
+  activated is held by it, and they hold a case when that cannot be told (the case's record, the entries or its stored
+  evidence cannot be read, or the evidence was matched as `error`). When the engine itself delivered the message (the gate's `ENGINE_DELIVERED` at the
   proposal or the dispatch gate, or the releaser's read of a case waiting on the engine, `Shutter.Util.EngineCheck.Settle`),
   or an outage closes over the case (`Shutter.Operation.OutageClose`, 17), the delivery is recorded as a note on the case
   ("The engine delivered this message (...); the site's own scenario L1 asks a person: <instructions>"), the case is not
@@ -1423,7 +1425,8 @@ own safety record, which Shutter stores and does not check, the proof it was act
 `SiteEntryProof` (every proof run: words, codes and case ids only) and `SiteEntryEvent` (`created`, `edited`, `proved`,
 `proposed`, `approved`, `rejected`, `activated`, `suspended`, `resumed`, `retired`, `rechecked`, `set_aside`, and for the site
 `two_person_lifted` and `two_person_restored`, each with who, when and from where: `api`, `upgrade`, `profile` or
-`terminal`). The shipped seed never touches these tables, and refuses an id that is not `E<n>`. They are the site's
+`terminal`). The shipped seed never touches these tables, and refuses an id that is not `E<n>`; a row of the shipped
+table whose id is not `E<n>` (written there by hand) decides nothing: the matcher answers `error` while it is there. They are the site's
 configuration, as the site profile is: the scenario reset and the store's purge leave them, and the uninstall names and
 removes them. A fixture's case can go with a purge; its frozen copy stays. `Shutter.Catalogue.Entry.SeedFromJSON`, which
 replaces the shipped catalogue from any JSON, answers on a demo instance only.
