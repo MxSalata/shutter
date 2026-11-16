@@ -8,7 +8,7 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { TechDetail } from '@/components/TechDetail';
 import { Timestamp } from '@/components/Timestamp';
 import { checkCounts, CHECK_STATES, checkState, gateOutcome } from '@/lib/status';
-import { CHECK_QUESTIONS } from '@/lib/gateChecks';
+import { CHECK_QUESTIONS, FHIR_CHECK_QUESTIONS } from '@/lib/gateChecks';
 import { asArray, asObject } from '@/lib/json';
 import { checksOf, fhirSummary, kindOfPlan, quotedVersion, receiverKind, shownFailureText } from './derive';
 import { planLeader } from './follows';
@@ -33,22 +33,6 @@ const STAGES: Record<string, string> = {
 const FHIR_STAGES: Record<string, string> = {
   ...STAGES,
   proposal: 'At proposal',
-};
-
-/**
- * The FHIR gate's questions: its own rows, and the two whose ADT question would be false there (no dry run exists for a
- * FHIR receiver; its capability is what was measured, not what it declares).
- */
-const FHIR_CHECK_QUESTIONS: Record<string, string> = {
-  ...CHECK_QUESTIONS,
-  rehearsal: 'No dry run exists for this receiver. What stands in its place?',
-  capability: 'Does the server refuse a stale If-Match and keep version history, as measured?',
-  enablement: 'Has the site turned recovery on for this receiver?',
-  representation: 'Is the record whole enough to change?',
-  mapping: 'Are both wards mapped to Locations that still match?',
-  plan_shape: 'Is the change exactly the one move?',
-  history: 'Was the history read, and is it free of an earlier update?',
-  earlier_write: 'Is an earlier update of this case still unsettled?',
 };
 
 /** The receiver kind behind a plan's panels: the evidence's route.kind, else the FHIR gate's own policy version. */

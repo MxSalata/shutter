@@ -15,7 +15,16 @@ import { TRIAL } from '@/env/mode';
 import { CATEGORY_TEXT, categoryOf, historyPolicyOf } from '@/lib/categories';
 import { isApiError } from '@/lib/errors';
 import { humanize } from '@/lib/format';
-import { CHECK_QUESTIONS, CHECK_STAGE_DEFAULT, CHECK_STAGES, UNKNOWN_BLOCKS } from '@/lib/gateChecks';
+import {
+  CHECK_QUESTIONS,
+  CHECK_STAGE_DEFAULT,
+  CHECK_STAGES,
+  FHIR_CHECK_QUESTIONS,
+  FHIR_KEEPS_MAIN,
+  FHIR_NO_DRY_RUN,
+  FHIR_OWN,
+  UNKNOWN_BLOCKS,
+} from '@/lib/gateChecks';
 import { useTechnical } from '@/stores/appearance';
 import {
   FHIR_OVERTAKEN_LINE,
@@ -405,7 +414,51 @@ function Settings({ profile }: { profile: SiteProfile }) {
   );
 }
 
-function Gate({ policy }: { policy: string }) {
+/** One table of a gate's checks: each check's name, the question it answers, and when it decides. */
+function ChecksTable({
+  label,
+  names,
+  questions,
+  stage,
+}: {
+  label: string;
+  names: string[];
+  questions: Record<string, string>;
+  stage: (name: string) => string;
+}) {
+  return (
+    <table className="site-guide-checks" aria-label={label}>
+      <thead>
+        <tr>
+          <th scope="col">Check</th>
+          <th scope="col">The question it answers</th>
+          <th scope="col">When it decides</th>
+        </tr>
+      </thead>
+      <tbody>
+        {names.map((name) => (
+          <tr key={name}>
+            <th scope="row">
+              <Text size="sm" fw={600} span>
+                {humanize(name)}
+              </Text>{' '}
+              <Code>{name}</Code>
+            </th>
+            <td>
+              <Text size="sm">{questions[name]}</Text>
+            </td>
+            <td>
+              <Text size="sm">{stage(name)}</Text>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function Gate({ policy, profile }: { policy: string; profile: SiteProfile }) {
+  const fhir = profile.receivers.filter((r) => fhirOf(r)).map((r) => r.name);
   return (
     <Stack gap="sm">
       <Text size="md" className="site-guide-prose">
@@ -415,33 +468,36 @@ function Gate({ policy }: { policy: string }) {
         gate&apos;s policy version
         {policy ? ` (${policy})` : ''}.
       </Text>
-      <table className="site-guide-checks" aria-label="The gate's twelve checks">
-        <thead>
-          <tr>
-            <th scope="col">Check</th>
-            <th scope="col">The question it answers</th>
-            <th scope="col">When it decides</th>
-          </tr>
-        </thead>
-        <tbody>
-          {Object.entries(CHECK_QUESTIONS).map(([name, question]) => (
-            <tr key={name}>
-              <th scope="row">
-                <Text size="sm" fw={600} span>
-                  {humanize(name)}
-                </Text>{' '}
-                <Code>{name}</Code>
-              </th>
-              <td>
-                <Text size="sm">{question}</Text>
-              </td>
-              <td>
-                <Text size="sm">{CHECK_STAGES[name] ?? CHECK_STAGE_DEFAULT}</Text>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {fhir.length ? (
+        <Title order={3} fz="lg">
+          At HL7 receivers
+        </Title>
+      ) : null}
+      <ChecksTable
+        label="The gate's twelve checks"
+        names={Object.keys(CHECK_QUESTIONS)}
+        questions={CHECK_QUESTIONS}
+        stage={(name) => CHECK_STAGES[name] ?? CHECK_STAGE_DEFAULT}
+      />
+      {fhir.length ? (
+        <>
+          <Title order={3} fz="lg">
+            {`At FHIR receivers: ${and(fhir)}`}
+          </Title>
+          <Text size="md" className="site-guide-prose">
+            The FHIR gate, with its own policy version, decides at the proposal and again at dispatch, and an
+            unknown blocks. It keeps the rows of the gate above where they apply (the message&apos;s
+            conformance, the plan&apos;s intent, further and pending messages, the approval, fresh evidence,
+            the catalogue), and adds its own. <strong>{FHIR_NO_DRY_RUN}</strong>
+          </Text>
+          <ChecksTable
+            label="The FHIR gate's checks"
+            names={[...FHIR_KEEPS_MAIN, ...FHIR_OWN]}
+            questions={FHIR_CHECK_QUESTIONS}
+            stage={() => 'At the proposal, and again at dispatch'}
+          />
+        </>
+      ) : null}
     </Stack>
   );
 }
@@ -773,7 +829,7 @@ function Guide({
         <Settings profile={profile} />
       </Sheet>
       <Sheet id={PARTS[2][0]} title={PARTS[2][1]} stamp={stamp}>
-        <Gate policy={stamp.gatePolicy} />
+        <Gate policy={stamp.gatePolicy} profile={profile} />
       </Sheet>
       <Sheet id={PARTS[3][0]} title={PARTS[3][1]} stamp={stamp}>
         <Scenarios catalogue={catalogue} profile={profile} titles={titles} entries={entries} />

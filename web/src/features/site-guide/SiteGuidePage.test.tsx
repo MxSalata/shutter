@@ -224,6 +224,44 @@ describe("This site's guide", () => {
     expect(own).not.toHaveTextContent('bob');
   });
 
+  it('lists the FHIR gate’s checks apart, with no dry run, where the profile has a FHIR receiver', async () => {
+    const view = catalogueView();
+    server.use(
+      http.get('/api/shutter/site-profile', async () => {
+        const recorded = structuredClone(fixtures.siteProfile) as unknown as {
+          profile: { receivers: Record<string, unknown>[] };
+        };
+        recorded.profile.receivers.push({
+          name: 'Ward FHIR',
+          system: 'the ward system (FHIR R4)',
+          category: 'current_state',
+          tier: 3,
+          fhir: { recovery_enabled: false, location_map: [] },
+        });
+        return HttpResponse.json(recorded);
+      }),
+      http.get('/api/shutter/catalogue', () => HttpResponse.json(view)),
+    );
+    renderGuide();
+    expect(await screen.findByRole('heading', { name: 'At HL7 receivers' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'At FHIR receivers: Ward FHIR' })).toBeInTheDocument();
+    const fhir = screen.getByRole('table', { name: "The FHIR gate's checks" });
+    expect(fhir).toHaveTextContent('No dry run exists for this receiver. What stands in its place?');
+    expect(fhir).not.toHaveTextContent("Did the receiver's dry run say this would apply?");
+    expect(
+      screen.getByText(
+        /Substituted: a complete versioned read, a bounded change, If-Match on the version read/,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('lists one gate table, with no receivers named, where the profile has no FHIR receiver', async () => {
+    renderGuide();
+    await screen.findByRole('table', { name: "The gate's twelve checks" });
+    expect(screen.queryByRole('heading', { name: 'At HL7 receivers' })).toBeNull();
+    expect(screen.queryByRole('table', { name: "The FHIR gate's checks" })).toBeNull();
+  });
+
   it('shows the Technical names beside the plain words only in Technical', async () => {
     renderGuide();
     await screen.findByRole('heading', { level: 1 });
