@@ -292,7 +292,9 @@ test.describe('the trial on the build IRIS serves', () => {
     // the way and a page a release replaced (any page's error, so in the shell), 636 more, and the site's own scenarios'
     // list query, its key and a profile save's rereading of the list (in the shared hooks, so in the shell), 190 more
     // (76,597 bytes), and this site's guide, a route outside the shell with its own chunk, 434 more (77,031), so the
-    // allowance is 7,700 bytes
+    // allowance is 7,700 bytes. With the page for the site's own scenarios as well, 38 more (77,069 bytes measured):
+    // its editor is a lazy chunk of its own, and the entry's lists of lazy chunk dependencies gain the shared site entry
+    // module that the case page and the editor both read. The three together stay within 7,700 bytes
     const src = await page.evaluate(
       () => new URL(document.querySelector<HTMLScriptElement>('script[type="module"][src]')!.src).pathname,
     );
