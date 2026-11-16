@@ -32,7 +32,7 @@ import {
 import { capabilities, fhirOf } from '@/features/site-profile/receiverCapabilities';
 import {
   OUT_OF_DATE,
-  alternativesHere,
+  alternativesOf,
   decidesWords,
   entryAtReceivers,
   hasNoRecoveryApi,
@@ -437,7 +437,7 @@ function Scenario({
 }) {
   const site = e.origin === 'site';
   const at = site ? [] : entryAtReceivers(e, profile);
-  const alternatives = site ? [] : alternativesHere(e, profile);
+  const alternatives = site ? [] : alternativesOf(e);
   const shown = (e.scenarios ?? []).map((s) => (titles.get(s) ? `${s} (${titles.get(s)})` : s));
   return (
     <div className="site-guide-block" data-testid={`site-guide-entry-${e.id}`}>
@@ -470,6 +470,11 @@ function Scenario({
           </>
         ) : (
           <>
+            {e.atReceivers ? null : (
+              <Text size="sm">
+                This install&apos;s answer does not say what it settles on at each receiver.
+              </Text>
+            )}
             {at.map((g) => (
               <Stack key={g.receivers.join()} gap={0}>
                 <Text size="sm" fw={600}>

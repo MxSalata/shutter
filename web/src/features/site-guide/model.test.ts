@@ -2,15 +2,13 @@ import { describe, expect, it } from 'vitest';
 import type { SiteProfile, SiteReceiver } from '@/api/types';
 import catalogue from '../../../../knowledge/catalogue/catalogue.json';
 import {
-  alternativesHere,
+  alternativesOf,
   entryAtReceivers,
   hasNoRecoveryApi,
   limitsFor,
   patternWords,
-  receiverFacts,
-  settle,
   stampLine,
-  whenHolds,
+  type AtReceiver,
   type CatalogueEntry,
 } from './model';
 
@@ -31,80 +29,89 @@ const profile = (over: Partial<SiteProfile> = {}): SiteProfile => ({
   ...over,
 });
 
-describe('the outcome a site selects, as Shutter.Catalogue.Matcher settles it', () => {
-  it("keeps E1's preferred outcome at a current state receiver and takes its alternative at a history of record", () => {
-    const p = profile();
-    expect(settle(entry('E1'), receiverFacts(bed, p), p)).toEqual([{ outcome: 'none', ref: 'preferred' }]);
-    expect(settle(entry('E1'), receiverFacts(pas, p), p)).toEqual([
-      { outcome: 'correct_history', ref: 'alternative:1' },
-    ]);
-  });
+const row = (
+  receiver: string,
+  outcome: string,
+  outcomeRef = 'preferred',
+  extra: Partial<AtReceiver> = {},
+): AtReceiver => ({
+  receiver,
+  kind: '',
+  category: 'current_state',
+  decides: 'policy',
+  outcome,
+  outcomeRef,
+  whenOtherSource: [],
+  ...extra,
+});
 
-  it("reads the receiver's own history policy before its category, and the site-wide one only with neither", () => {
-    const p = profile({ history_policy: 'correct' });
-    expect(settle(entry('E6'), receiverFacts({ ...pas, history_policy: 'current' }, p), p)[0].outcome).toBe(
-      'none',
-    );
-    expect(settle(entry('E6'), receiverFacts({ ...bed, category: undefined }, p), p)[0].outcome).toBe(
-      'correct_history',
-    );
-    // A FHIR receiver is current whatever else is said
-    const fhir = { ...pas, fhir: { base: '/fhir' } } as unknown as SiteReceiver;
-    expect(receiverFacts(fhir, p).history_policy).toBe('current');
-  });
-
-  it('never takes an alternative marked always: that is the board’s choice', () => {
-    const p = profile();
-    expect(settle(entry('E3'), receiverFacts(bed, p), p)).toEqual([
-      { outcome: 'reconcile', ref: 'preferred' },
-    ]);
-    expect(whenHolds('always', receiverFacts(bed, p), p)).toBe(true);
-  });
-
-  it("states E7's alternative as a condition of the case when the site names an authoritative source", () => {
-    const none = profile();
-    expect(settle(entry('E7'), receiverFacts(bed, none), none)).toEqual([
-      { outcome: 'escalate', ref: 'preferred' },
-    ]);
-    const named = profile({ authoritative_source: 'PAS' });
-    expect(settle(entry('E7'), receiverFacts(bed, named), named)).toEqual([
-      {
-        outcome: 'none',
-        ref: 'alternative:1',
-        condition: 'the other system sending at the same time is PAS',
-      },
-      { outcome: 'escalate', ref: 'preferred' },
-    ]);
-  });
-
-  it("compares a site-wide flag as written: E8's with_approval never holds, since a profile says allowed or forbidden", () => {
-    const p = profile({ unconditional_resend: 'allowed' });
-    expect(settle(entry('E8'), receiverFacts(bed, p), p)).toEqual([
-      { outcome: 'escalate', ref: 'preferred' },
-    ]);
-    expect(whenHolds('unconditional_resend: with_approval', receiverFacts(bed, p), p)).toBe(false);
-    expect(whenHolds('unconditional_resend: allowed', receiverFacts(bed, p), p)).toBe(true);
-    expect(whenHolds('unconditional_resend:', receiverFacts(bed, p), p)).toBe(false);
-  });
-
+describe("an entry at each receiver, in words, from the route's rows", () => {
   it('groups receivers with the same words, and names who releases a write at their tier', () => {
     const p = profile();
-    const e2 = entryAtReceivers(entry('E2'), p);
+    const e2 = entryAtReceivers(
+      { ...entry('E2'), atReceivers: [row('Beds Out', 'resend'), row('Records Out', 'resend')] },
+      p,
+    );
     expect(e2).toHaveLength(1);
     expect(e2[0].receivers).toEqual(['Beds Out', 'Records Out']);
     expect(e2[0].lines[0]).toContain("Nobody is asked: the site's written policy releases the write");
-    const e1 = entryAtReceivers(entry('E1'), p);
+    const e1 = entryAtReceivers(
+      {
+        ...entry('E1'),
+        atReceivers: [row('Beds Out', 'none'), row('Records Out', 'correct_history', 'alternative:1')],
+      },
+      p,
+    );
     expect(e1.map((g) => g.receivers)).toEqual([['Beds Out'], ['Records Out']]);
     expect(e1[1].lines[0]).toContain('a correction of the history by a person (its alternative 1)');
   });
 
-  it('says where each alternative is allowed here', () => {
-    const p = profile();
-    expect(alternativesHere(entry('E1'), p)[0]).toBe(
-      'Alternative 1, a correction of the history by a person: only where history policy: correct, which holds at Records Out.',
+  it("puts what depends on the case's other source first, then what applies otherwise", () => {
+    const at = entryAtReceivers(
+      {
+        ...entry('E7'),
+        atReceivers: [
+          row('Beds Out', 'escalate', 'preferred', {
+            decides: 'board',
+            whenOtherSource: [
+              {
+                flag: 'authoritative_source',
+                otherSource: 'PAS',
+                decides: 'board',
+                outcome: 'none',
+                outcomeRef: 'alternative:1',
+              },
+            ],
+          }),
+        ],
+      },
+      profile(),
     );
-    expect(alternativesHere(entry('E8'), p)[0]).toContain('which does not hold at this site');
-    expect(alternativesHere(entry('E3'), p)[0]).toContain("the board's or a person's choice");
+    expect(at[0].lines[0]).toMatch(
+      /^When the other system sending at the same time is PAS: closed, nothing sent \(its alternative 1\)\./,
+    );
+    expect(at[0].lines[1]).toMatch(/^Otherwise: a person\./);
+  });
+
+  it('leaves out orders and results and FHIR receivers, which the part says once', () => {
+    const at = entryAtReceivers(
+      {
+        ...entry('E2'),
+        atReceivers: [
+          row('Lab', 'resend', 'preferred', { category: 'orders_results' }),
+          row('Ward FHIR', 'resend', 'preferred', { kind: 'fhir_r4' }),
+        ],
+      },
+      profile(),
+    );
+    expect(at).toEqual([]);
+  });
+
+  it('lists the alternatives as the catalogue writes them', () => {
+    expect(alternativesOf(entry('E1'))[0]).toBe(
+      'Alternative 1, a correction of the history by a person: where history policy: correct.',
+    );
+    expect(alternativesOf(entry('E3'))[0]).toContain("the board's or a person's choice");
   });
 });
 

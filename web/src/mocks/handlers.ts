@@ -1,8 +1,9 @@
 import { delay, http, HttpResponse } from 'msw';
 import fixtures from './fixtures.json';
 import definitions from '../../../fixtures/scenarios.json';
-import shippedCatalogue from '../../../knowledge/catalogue/catalogue.json';
-import catalogueVocabulary from '../../../knowledge/catalogue/vocabulary.json';
+import recordedCatalogue from './catalogue-recorded.json';
+import { atReceiversOf } from './atReceivers';
+import type { CatalogueEntry, CatalogueView } from '@/features/site-guide/model';
 import type {
   SiteEntriesView,
   AccessReport,
@@ -778,22 +779,19 @@ export const NO_SITE_ENTRIES: SiteEntriesView = {
 };
 
 /**
- * GET /catalogue (CONTRACTS 6.8) as an install with no site entry answers it: the shipped entries of this release's
- * knowledge/catalogue/catalogue.json in id order as the store sorts them (the file's source name left out, as the
- * store keeps none), the version string the core builds from them, and the vocabulary.
+ * GET /catalogue (CONTRACTS 6.8) as the real route answered it on a demo install with no site entry
+ * (catalogue-recorded.json, recorded from IRIS with scripts in the file's own note), with each shipped entry's
+ * atReceivers worked out again for the trial's own site profile, which a visitor may change: the port of the core's
+ * Matcher.AtReceiver in atReceivers.ts, held to the recording by its test.
  */
-export function catalogueView() {
-  const shipped = (shippedCatalogue as { id: string; version: number; source?: string }[])
-    .map(({ source: _source, ...e }) => e)
-    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-  const version = shipped.map((e) => `${e.id}@${e.version}`).join(',');
+export function catalogueView(profile: SiteProfile | undefined = siteProfile?.profile): CatalogueView {
+  const recorded = recordedCatalogue.catalogue as unknown as CatalogueView;
   return {
-    version,
-    shippedVersion: version,
-    generation: 0,
-    shipped,
-    site: [],
-    vocabulary: catalogueVocabulary,
+    ...recorded,
+    shipped: recorded.shipped.map(({ atReceivers: _recorded, ...e }: CatalogueEntry) => ({
+      ...e,
+      atReceivers: profile ? atReceiversOf(e, profile) : [],
+    })),
   };
 }
 

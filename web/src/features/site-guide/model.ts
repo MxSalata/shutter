@@ -1,5 +1,5 @@
 import type { SiteProfile, SiteProfileView, SiteReceiver } from '@/api/types';
-import { categoryOf, historyPolicyOf } from '@/lib/categories';
+import { categoryOf } from '@/lib/categories';
 import { formatDay, formatZonedTime } from '@/lib/format';
 import { DECIDES, OUTCOMES } from '@/lib/siteEntry';
 import { POLICY_SHORT } from '@/features/site-profile/profile';
@@ -38,6 +38,8 @@ export interface CatalogueEntry {
   instructions?: string;
   team?: string;
   sentence?: string;
+  /** A shipped entry's rows: what it settles on at each receiver of the profile in force (v1.67). */
+  atReceivers?: AtReceiver[];
 }
 
 /** GET /catalogue (CONTRACTS 6.8). */
@@ -52,99 +54,30 @@ export interface CatalogueView {
   siteError?: string;
 }
 
-// ---- the outcome a site's settings select (Shutter.Catalogue.Matcher, Settle and WhenHolds) ----
+// ---- what an entry settles on at each receiver: the core's answer ----
 
-/** The facts a case's receiver gives an entry's `when` (Matcher.Facts): its history policy and its category. */
-export interface ReceiverFacts {
-  history_policy: string;
-  receiver_category: string;
-}
-
-/** As SiteProfile.ReceiverHistoryPolicy and ReceiverCategory read the receiver. */
-export function receiverFacts(r: SiteReceiver, profile: SiteProfile): ReceiverFacts {
-  return { history_policy: historyPolicyOf(r, profile), receiver_category: categoryOf(r) };
-}
-
-/** Facts that come from the case itself, not from its receiver or the profile: known only when a case is matched. */
-const CASE_FACTS = ['other_source', 'occupant_case'];
-
-/** A profile flag as Shutter.Util.Json.Str reads it: a string or a number as written, a boolean as 1 or 0. */
-function flagOf(profile: SiteProfile, flag: string): string {
-  const v = (profile as unknown as Record<string, unknown>)[flag];
-  if (typeof v === 'string') return v;
-  if (typeof v === 'number') return String(v);
-  if (typeof v === 'boolean') return v ? '1' : '0';
-  return '';
-}
-
-/**
- * Whether an alternative's `when` holds at a receiver, as Matcher.WhenHolds decides it: true, false, or, where the
- * answer depends on the case (the other source system of a simultaneous movement), the condition in words.
- */
-export function whenHolds(
-  when: string,
-  facts: ReceiverFacts,
-  profile: SiteProfile,
-): boolean | { onCase: string } {
-  const w = when.trim();
-  if (w === '' || w === 'always') return true;
-  const at = w.indexOf(':');
-  const flag = (at < 0 ? w : w.slice(0, at)).trim();
-  const value = (at < 0 ? '' : w.slice(at + 1)).trim();
-  // A fact of the flag's name (the receiver's history policy and category) answers before the site-wide flag
-  const known = (f: string) =>
-    f === 'history_policy' || f === 'receiver_category' ? facts[f] : flagOf(profile, f);
-  if (value === 'other_source') {
-    // The value is the case's other source system: it holds when that system is the one this flag names
-    const named = CASE_FACTS.includes(flag) ? '' : known(flag);
-    return named ? { onCase: `the other system sending at the same time is ${named}` } : false;
-  }
-  if (value === '') return false;
-  if (CASE_FACTS.includes(flag)) return { onCase: `the case's ${flag.replace(/_/g, ' ')} is ${value}` };
-  return known(flag) === value;
-}
-
-/** One way an entry settles at a receiver: its outcome, which of the entry's outcomes it is, and when it applies. */
-export interface Branch {
+/** A case-dependent outcome of a row: what a case whose other source system is the one the site names settles on. */
+export interface OnOtherSource {
+  flag: string;
+  otherSource: string;
+  decides: string;
   outcome: string;
-  /** "preferred" or "alternative:<n>", as the plan names it. */
-  ref: string;
-  /** Set when it applies only on a case where this holds; the last branch has none. */
-  condition?: string;
+  outcomeRef: string;
 }
 
 /**
- * The outcome a single match settles on at a receiver, as Matcher.Settle picks it: the preferred one, unless an
- * alternative whose `when` names a flag holds for the receiver (the first that holds, in the entry's order). `always`
- * and a `when` with no flag are board options, never a policy. An alternative that holds only on some cases comes first,
- * with its condition; the last branch is what applies otherwise.
+ * One row of a shipped entry's atReceivers in GET /catalogue (CONTRACTS 6.8, v1.67): what a match of the entry alone
+ * settles on at one receiver of the profile in force, as the core's matcher settles it (Matcher.AtReceiver).
  */
-export function settle(entry: CatalogueEntry, facts: ReceiverFacts, profile: SiteProfile): Branch[] {
-  const out: Branch[] = [];
-  const alternatives = Array.isArray(entry.alternatives) ? entry.alternatives : [];
-  for (const [n, alt] of alternatives.entries()) {
-    if (!alt || typeof alt !== 'object') continue;
-    const when = (alt.when ?? '').trim();
-    if (when === '' || when === 'always' || !when.includes(':')) continue;
-    const holds = whenHolds(when, facts, profile);
-    if (holds === true) {
-      out.push({ outcome: alt.outcome, ref: `alternative:${n + 1}` });
-      return out;
-    }
-    if (holds !== false)
-      out.push({ outcome: alt.outcome, ref: `alternative:${n + 1}`, condition: holds.onCase });
-  }
-  out.push({ outcome: entry.preferred?.outcome ?? '', ref: 'preferred' });
-  return out;
-}
-
-/** Whether a gate would allow an alternative at a receiver (Gate.cls reads the same WhenHolds). */
-export function alternativeHere(
-  alt: CatalogueAlternative,
-  facts: ReceiverFacts,
-  profile: SiteProfile,
-): boolean | { onCase: string } {
-  return whenHolds(alt.when ?? 'always', facts, profile);
+export interface AtReceiver {
+  receiver: string;
+  /** fhir_r4 or empty. */
+  kind: string;
+  category: string;
+  decides: string;
+  outcome: string;
+  outcomeRef: string;
+  whenOtherSource: OnOtherSource[];
 }
 
 // ---- words ----
@@ -262,44 +195,44 @@ export interface EntryAt {
   lines: string[];
 }
 
-/** What the entry comes to at each receiver Shutter can write to, receivers with the same words grouped together. */
+/** An outcome with which of the entry's outcomes it is: "closed, nothing sent", "a correction ... (its alternative 1)". */
+const outcomeOf = (outcome: string, ref: string) =>
+  `${outcomeWords(outcome)}${ref.startsWith('alternative:') ? ` (its alternative ${ref.split(':')[1]})` : ''}`;
+
+/**
+ * What the entry comes to at each receiver Shutter can write to, in words, from the rows the route answered (never
+ * worked out here): receivers with the same words grouped together. An orders and results receiver and a FHIR receiver
+ * are left out: the guide says once what happens there. A row whose receiver the profile no longer has is shown with no
+ * release table, as the route gave it.
+ */
 export function entryAtReceivers(entry: CatalogueEntry, profile: SiteProfile): EntryAt[] {
   const groups: EntryAt[] = [];
-  for (const r of profile.receivers.filter(modelledReceiver)) {
-    const branches = settle(entry, receiverFacts(r, profile), profile);
-    const lines = branches.map((b) => {
-      const what = `${outcomeWords(b.outcome)}${b.ref === 'preferred' ? '' : ` (its alternative ${b.ref.split(':')[1]})`}`;
-      const asked = askedWords(b.outcome, releaseAt(profile, r, chainOf(entry)), entry.decides);
-      return b.condition
-        ? `When ${b.condition}: ${what}. ${asked}`
-        : `${branches.length > 1 ? 'Otherwise' : 'Outcome'}: ${what}. ${asked}`;
-    });
+  for (const row of entry.atReceivers ?? []) {
+    if (row.kind === 'fhir_r4' || row.category === 'orders_results') continue;
+    const r = profile.receivers.find((x) => x.name === row.receiver);
+    const release = r ? releaseAt(profile, r, chainOf(entry)) : 'approval';
+    const lines = [
+      ...row.whenOtherSource.map(
+        (o) =>
+          `When the other system sending at the same time is ${o.otherSource}: ${outcomeOf(o.outcome, o.outcomeRef)}. ${askedWords(o.outcome, release, o.decides)}`,
+      ),
+      `${row.whenOtherSource.length ? 'Otherwise' : 'Outcome'}: ${outcomeOf(row.outcome, row.outcomeRef)}. ${askedWords(row.outcome, release, row.decides)}`,
+    ];
     const same = groups.find((g) => g.lines.join('\n') === lines.join('\n'));
-    if (same) same.receivers.push(r.name || 'unnamed');
-    else groups.push({ receivers: [r.name || 'unnamed'], lines });
+    if (same) same.receivers.push(row.receiver);
+    else groups.push({ receivers: [row.receiver], lines });
   }
   return groups;
 }
 
-/**
- * The entry's alternatives and where each is allowed here: an alternative the gate lets a plan name only where its
- * `when` holds (Gate.cls, OUTCOME_NOT_ALLOWED otherwise); `always` is the board's choice.
- */
-export function alternativesHere(entry: CatalogueEntry, profile: SiteProfile): string[] {
-  const alternatives = Array.isArray(entry.alternatives) ? entry.alternatives : [];
-  const receivers = profile.receivers.filter(modelledReceiver);
-  return alternatives.map((alt, n) => {
-    const head = `Alternative ${n + 1}, ${outcomeWords(alt.outcome)}`;
+/** The entry's alternatives as the catalogue writes them, with when each applies, in words. */
+export function alternativesOf(entry: CatalogueEntry): string[] {
+  return (Array.isArray(entry.alternatives) ? entry.alternatives : []).map((alt, n) => {
     const when = (alt.when ?? 'always').trim();
-    if (when === 'always' || when === '') return `${head}: the board's or a person's choice on any case.`;
-    const at = receivers.map((r) => ({ r, holds: alternativeHere(alt, receiverFacts(r, profile), profile) }));
-    const yes = at.filter((a) => a.holds === true).map((a) => a.r.name);
-    const onCase = at.find((a) => typeof a.holds === 'object')?.holds as { onCase: string } | undefined;
-    const rule = `only where ${when.replace(/_/g, ' ')}`;
-    if (onCase) return `${head}: ${rule}; here, when ${onCase.onCase}.`;
-    if (!yes.length) return `${head}: ${rule}, which does not hold at this site.`;
-    if (yes.length === receivers.length) return `${head}: ${rule}, which holds at every receiver here.`;
-    return `${head}: ${rule}, which holds at ${andWords(yes)}.`;
+    const head = `Alternative ${n + 1}, ${outcomeWords(alt.outcome)}`;
+    return when === 'always' || when === ''
+      ? `${head}: the board's or a person's choice.`
+      : `${head}: where ${when.replace(/_/g, ' ')}.`;
   });
 }
 

@@ -90,7 +90,8 @@ ClassMethod Shipped() As %DynamicArray
 Method Check(id As %String, receiver As %String, shipped As %DynamicArray, label As %String)
 {
     Set row = ..Row(shipped, id, receiver)
-    If '$$$AssertTrue($ISOBJECT(row), id _ " has a row for " _ receiver) Quit
+    Do $$$AssertTrue($ISOBJECT(row), id _ " has a row for " _ receiver)
+    Quit:'$ISOBJECT(row)
     Set m = ##class(Shutter.Catalogue.Matcher).Match(..ConditionsFor(id), ##class(Shutter.Catalogue.Matcher).ReceiverFacts(receiver))
     Do $$$AssertEquals(m.matches.%Size() _ " " _ m.entry, "1 " _ id, "the conditions match " _ id _ " alone")
     Do $$$AssertEquals(row.decides _ " " _ row.outcome _ " " _ row.outcomeRef, m.decision _ " " _ m.outcome _ " " _ m."outcome_ref", id _ " at " _ label _ ": the route says what the matcher decides")
@@ -106,7 +107,8 @@ Method TestEachEntryAtEachKindIsTheMatchers()
         For receiver = ..#BEDS, ..#RECORDS, ..#LAB, ..#FHIR {
             Do ..Check(id, receiver, shipped, receiver)
             Set row = ..Row(shipped, id, receiver)
-            Do:$ISOBJECT(row) $$$AssertEquals(row.whenOtherSource.%Size(), 0, id _ " at " _ receiver _ ": nothing depends on the case's other source when the site names none")
+            Continue:'$ISOBJECT(row)
+            Do $$$AssertEquals(row.whenOtherSource.%Size(), 0, id _ " at " _ receiver _ ": nothing depends on the case's other source when the site names none")
         }
     }
     // What the rows come to, as the catalogue says: E1 closes at a current state receiver, and asks for the history to be
