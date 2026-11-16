@@ -14,10 +14,19 @@ const turnKey = (id: string) => ['setup-turn', id] as const;
 /** Sends what a person typed about a receiver: 202 with the turn's id, then useSetupTurn reads what was drafted. */
 export function useSendSetupTurn() {
   return useMutation({
-    mutationFn: ({ turn, idempotencyKey }: { turn: SendSetupTurn; idempotencyKey?: string }) =>
+    mutationFn: ({
+      turn,
+      idempotencyKey,
+    }: {
+      turn: SendSetupTurn;
+      idempotencyKey?: string;
+      /** What to do with the 202: run by the mutation itself, so it runs even when the card that sent it has closed. */
+      accepted?: (asked: SetupTurnAsked) => void;
+    }) =>
       api.post<SetupTurnAsked>('/site-profile/setup-turns', turn, {
         idempotencyKey: idempotencyKey ?? newIdempotencyKey(),
       }),
+    onSuccess: (asked, { accepted }) => accepted?.(asked),
   });
 }
 

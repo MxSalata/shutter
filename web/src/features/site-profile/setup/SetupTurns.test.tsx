@@ -1230,6 +1230,23 @@ describe('the mock route, as the server, takes who asked once', () => {
     expect(inForce(useSetup.getState(), id)).toBe(false);
   });
 
+  it('records a turn whose card was closed before the route answered, so its conversation is kept', async () => {
+    let release = () => {};
+    const held = new Promise<void>((resolve) => (release = resolve));
+    mockSetupTurnPause(() => held);
+    const user = userEvent.setup();
+    renderApp();
+    await nameBedBoard(user);
+    await sendTyped(user);
+    await waitFor(() => expect(posts()).toHaveLength(1));
+    // The card is closed while the turn is still being opened
+    await user.click(screen.getByRole('button', { name: 'Leave for now' }));
+    release();
+    await waitFor(() => expect(useSetup.getState().conversation).not.toBeNull());
+    expect(useSetup.getState().pending?.rid).toBe(rid());
+    mockSetupTurnPause(null);
+  }, 90_000);
+
   it('keeps the turn as asked by who sent it when the session ends while it is being opened', async () => {
     const draft = JSON.parse(JSON.stringify(recorded.profile)) as typeof recorded.profile;
     draft.receivers.push({

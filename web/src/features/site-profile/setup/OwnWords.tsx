@@ -205,24 +205,22 @@ export function OwnWords({
     setProblem('');
     // The draft this is sent from: an answer that comes back after a discard or a sign-out is not taken into another
     const epoch = state.epoch;
-    send.mutate(
-      {
-        turn: {
-          ...(state.conversation ? { conversation: state.conversation } : {}),
-          receiver: r.name,
-          text: clean.text,
-          draft: state.draft,
-          baseVersion: state.base.version,
-          draftRevision: state.revision,
-        },
+    send.mutate({
+      turn: {
+        ...(state.conversation ? { conversation: state.conversation } : {}),
+        receiver: r.name,
+        text: clean.text,
+        draft: state.draft,
+        baseVersion: state.base.version,
+        draftRevision: state.revision,
       },
-      {
-        onSuccess: (asked) => {
-          useSetup.getState().type(rid, q.id, '');
-          useSetup.getState().sent(rid, q.id, clean.text, asked, epoch);
-        },
+      // Recorded by the mutation, not this card's own callback: a card closed while the turn is sent (Leave for now,
+      // another card) still leaves the turn, its conversation and its Cancel on the page
+      accepted: (asked) => {
+        useSetup.getState().type(rid, q.id, '');
+        useSetup.getState().sent(rid, q.id, clean.text, asked, epoch);
       },
-    );
+    });
   };
   if (!drafting.can && !send.isError) return null;
   return (
