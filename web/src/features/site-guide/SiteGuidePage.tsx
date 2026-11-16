@@ -4,8 +4,8 @@ import { IconArrowLeft, IconPrinter } from '@tabler/icons-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { api } from '@/api/client';
-import { useHealth, useScenarios, useSiteEntries, useSiteProfile } from '@/api/hooks';
-import type { SiteEntryItem, SiteProfile, SiteProfileView, SiteReceiver } from '@/api/types';
+import { useHealth, useScenarios, useSiteProfile } from '@/api/hooks';
+import type { SiteEntriesView, SiteEntryItem, SiteProfile, SiteProfileView, SiteReceiver } from '@/api/types';
 import { CodeChip } from '@/components/CodeChip';
 import { DetailSwitch } from '@/components/DetailSwitch';
 import { ErrorAlert } from '@/components/ErrorAlert';
@@ -72,6 +72,18 @@ const PARTS = [
 
 const useCatalogue = () =>
   useQuery({ queryKey: ['catalogue'], queryFn: () => api.get<CatalogueView>('/catalogue') });
+
+/**
+ * The site's own entries, read once for the guide: who approved each version, matched to the catalogue's by id and
+ * version, never read again while the guide is open (the Site profile page's list refetches; this one does not).
+ */
+const useGuideEntries = () =>
+  useQuery({
+    queryKey: ['site-guide', 'site-entries'],
+    queryFn: () => api.get<SiteEntriesView>('/site-entries'),
+    staleTime: Infinity,
+    gcTime: 0,
+  });
 
 /** A list in words, every name in it printable (no address, host or API path). */
 const and = (items: string[]) => andWords(items.map(printable));
@@ -569,7 +581,7 @@ function Scenarios({
           e={e}
           profile={profile}
           titles={titles}
-          own={entries.find((x) => x.id === e.id)}
+          own={entries.find((x) => x.id === e.id && x.activeVersion === e.version)}
         />
       ))}
       <Title order={3} fz="lg">
@@ -633,7 +645,7 @@ export default function SiteGuidePage() {
   const profile = useSiteProfile();
   const catalogue = useCatalogue();
   const health = useHealth();
-  const entries = useSiteEntries();
+  const entries = useGuideEntries();
   const scenarios = useScenarios();
   // The moment of export: fixed when the page opens, so every page of the PDF carries the same stamp
   const [now] = useState(() => new Date());

@@ -192,6 +192,38 @@ describe("This site's guide", () => {
     expect(calls).toBe(2);
   });
 
+  it('names who approved a site entry only for the version the catalogue lists', async () => {
+    const example = SITE_ENTRIES_EXAMPLE.items[0];
+    server.use(
+      http.get('/api/shutter/catalogue', () =>
+        HttpResponse.json({
+          ...catalogueView(),
+          site: [
+            {
+              ...example.content,
+              version: 2,
+              origin: 'site',
+              decides: 'person',
+              preferred: { outcome: 'escalate', why: example.content!.why },
+              alternatives: [],
+              sentence: example.sentence,
+            },
+          ],
+        }),
+      ),
+      http.get('/api/shutter/site-entries', () =>
+        HttpResponse.json({
+          ...SITE_ENTRIES_EXAMPLE,
+          items: [{ ...example, activeVersion: 3, approvedBy: 'bob' }],
+        }),
+      ),
+    );
+    renderGuide();
+    const own = await screen.findByTestId('site-guide-entry-L1');
+    expect(own).toHaveTextContent('Version 2; who approved it was not read.');
+    expect(own).not.toHaveTextContent('bob');
+  });
+
   it('shows the Technical names beside the plain words only in Technical', async () => {
     renderGuide();
     await screen.findByRole('heading', { level: 1 });
