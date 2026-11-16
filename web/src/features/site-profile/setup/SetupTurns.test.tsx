@@ -1111,6 +1111,17 @@ describe('drafted answers after the hand-over', () => {
     expect(tier).not.toHaveTextContent('single failures, one approval');
   }, 90_000);
 
+  it("takes the form's answers back to Set up the site from a receiver card's link, as the band's Back does", async () => {
+    const user = userEvent.setup();
+    await handedOver(user);
+    const id = rid();
+    const tiers = screen.getAllByRole('radiogroup', { name: 'Tier of Bed Board' }).at(-1)!;
+    await user.click(within(tiers).getAllByRole('radio')[1]!);
+    await user.click(screen.getByRole('link', { name: 'Change in Set up the site: Bed Board' }));
+    await waitFor(() => expect(added().tier).toBe(2));
+    expect(statusOf(useSetup.getState(), id, questionById('tier'))).not.toBe('ask');
+  }, 90_000);
+
   it('discards the handed-over draft in Set up the site too when the save bar discards it', async () => {
     const user = userEvent.setup();
     await handedOver(user);

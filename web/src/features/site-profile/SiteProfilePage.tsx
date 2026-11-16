@@ -1008,6 +1008,13 @@ function Profile({
         })
       : [];
   const dirty = changes.length > 0;
+  // Back to Set up the site, from the band or from any of the page's links to it: while a handed draft is shown, the
+  // answers as the form holds them now go back with the reader, so nothing changed here is dropped on the way
+  const leaveForSetup = (to: string) => {
+    if (handed && handedHere && showHanded && useSetup.getState().base?.version === base.version)
+      useSetup.getState().adopt(draft, byId ? rids : undefined);
+    void navigate(to);
+  };
   // Something to say about the answer a review refused: in the save bar while it shows, else on its own
   const problemAlert = problem ? (
     <Alert color="red" variant="light" role="alert" title="Check this answer">
@@ -1051,7 +1058,7 @@ function Profile({
             >
               Export this site&apos;s guide (PDF)
             </Button>
-            <SetupLink />
+            <SetupLink onLeave={leaveForSetup} />
           </>
         }
         meta={
@@ -1077,12 +1084,7 @@ function Profile({
                 reseed(base);
               }
             }}
-            onBack={() => {
-              // The answers as the form holds them now go back with the reader
-              if (handedHere && useSetup.getState().base?.version === base.version)
-                useSetup.getState().adopt(draft, byId ? rids : undefined);
-              void navigate('/site-setup');
-            }}
+            onBack={() => leaveForSetup('/site-setup')}
           />
         ) : null}
         {suggested && showSuggestion ? (
@@ -1139,7 +1141,10 @@ function Profile({
           <Text component="h2" id="site-policy-title" className="overline" m={0}>
             What this site&apos;s policy does
           </Text>
-          <ReceiverCards profile={draft} action={(r) => (r.name ? <SetupLink r={r} /> : null)} />
+          <ReceiverCards
+            profile={draft}
+            action={(r) => (r.name ? <SetupLink r={r} onLeave={leaveForSetup} /> : null)}
+          />
           <Card withBorder padding="md">
             <ReleaseMatrix profile={draft} />
           </Card>
