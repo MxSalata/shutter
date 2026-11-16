@@ -308,13 +308,9 @@ Method TestAProposalAndARejectionKeepTheirEvent()
 Method TestOnlyAnAdministratorLiftsTheTwoPersonRule()
 {
     Set site = "Shutter.Catalogue.SiteEntry", kit = "Shutter.Test.SiteKit"
-    // The suite runs through an SQL procedure, which is not the terminal.
-    If $ISOBJECT($GET(%sqlcontext)) || $ISOBJECT($GET(%request)) {
-        Do $$$AssertTrue(##class(Shutter.Setup).SiteEntriesOnePerson(1, "unit test") [ "terminal only", "refused away from the terminal")
-        Do $$$AssertNotTrue($ISOBJECT($CLASSMETHOD(site, "OnePerson")), "and nothing is lifted")
-    } Else {
-        Do $$$AssertSkipped("run from the terminal: the refusal away from it is not exercised")
-    }
+    // Away from the terminal (a web request here, as a route would run it) it is refused, whoever runs the suite.
+    Do $$$AssertEquals(..AwayFromTheTerminal("SiteEntriesOnePerson"), 1, "refused away from the terminal")
+    Do $$$AssertNotTrue($ISOBJECT($CLASSMETHOD(site, "OnePerson")), "and nothing is lifted")
     Do $$$AssertNotTrue(##class(%Dictionary.CompiledMethod).%OpenId("Shutter.Setup||SiteEntriesOnePerson").SqlProc, "it is no SQL procedure")
     Set id = ..Draft(.match, .near)
     Do $$$AssertEquals($CLASSMETHOD(site, "Prove", id, "activate", "ut-author", "api", .result, .detail), "", "proved")
@@ -419,6 +415,15 @@ Method TestARetirementNeedsAReadableImpact()
     }
     Set result = ##class(Shutter.Catalogue.SiteEntryProof).Run(id, 1, ##class(Shutter.Catalogue.SiteEntryVersion).Find(id, 1).Content(), "retire", "ut-author", "api", 1, .proof)
     Do $$$AssertTrue(result.passed, "with the cases readable again it passes")
+}
+
+/// Whether a terminal-only method of Shutter.Setup refuses inside a web request.
+ClassMethod AwayFromTheTerminal(method As %String, id As %String = "L1") As %Boolean
+{
+    New %request
+    Set %request = ##class(%CSP.Request).%New()
+    Set answer = $SELECT(method = "SiteEntriesOnePerson": ##class(Shutter.Setup).SiteEntriesOnePerson(1, "unit test"), 1: ##class(Shutter.Setup).SiteEntriesSetAside(id, "unit test"))
+    Quit answer [ "terminal only"
 }
 
 /// A restore of the two-person rule waits for an approval in flight: it takes the entries' lock, which an approval holds

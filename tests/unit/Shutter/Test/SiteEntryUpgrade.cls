@@ -541,11 +541,8 @@ Method TestAnActiveEntryThatCannotBeRecheckedIsSetAside()
     Do $$$AssertTrue(cat.error [ ("site entry " _ id _ " could not be rechecked"), "naming the entry: " _ cat.error)
     Set warnings = $CLASSMETHOD(site, "Status").warnings.%ToJSON()
     Do $$$AssertTrue(warnings [ "SiteEntriesSetAside", "the Doctor gives the way out: " _ warnings)
-    If $ISOBJECT($GET(%sqlcontext)) || $ISOBJECT($GET(%request)) {
-        Do $$$AssertTrue(##class(Shutter.Setup).SiteEntriesSetAside(id, "unit test") [ "terminal only", "refused away from the terminal")
-    } Else {
-        Do $$$AssertSkipped("run from the terminal: the refusal away from it is not exercised")
-    }
+    Do $$$AssertEquals(##class(Shutter.Test.SiteEntryLifecycle).AwayFromTheTerminal("SiteEntriesSetAside", id), 1, "refused away from the terminal")
+    Do $$$AssertNotEquals(##class(Shutter.Catalogue.SiteEntryEvent).For(id).%Get(0).kind, "set_aside", "and nothing was set aside")
     Do $$$AssertNotTrue(##class(%Dictionary.CompiledMethod).%OpenId("Shutter.Setup||SiteEntriesSetAside").SqlProc, "it is no SQL procedure")
     Set generation = $CLASSMETHOD(site, "Generation")
     Do $$$AssertEquals($CLASSMETHOD(site, "SetAside", id, "ut-admin", "its row is damaged", "terminal", .detail), "", "an administrator sets it aside: " _ detail)
