@@ -248,6 +248,7 @@ export function entryAtReceivers(
   for (const row of entry.atReceivers ?? []) {
     if (row.kind === 'fhir_r4' || row.category === 'orders_results') continue;
     const r = profile.receivers.find((x) => x.name === row.receiver);
+    if (r && hasNoRecoveryApi(r)) continue;
     const release = r ? releaseAt(profile, r, chainOf(entry)) : 'approval';
     const lines = [
       ...row.whenOtherSource.map(

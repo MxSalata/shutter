@@ -117,6 +117,22 @@ describe("an entry at each receiver, in words, from the route's rows", () => {
     expect(at).toEqual([]);
   });
 
+  it('leaves out a receiver with no recovery API: no write is offered there, so the part says once that a person decides', () => {
+    const old: SiteReceiver = {
+      name: 'Lab Old',
+      system: 'the old lab system',
+      category: 'current_state',
+      tier: 2,
+      features: { conditional_writes: false, receipts: false, history: false, dry_run: false },
+    };
+    const p = profile({ receivers: [bed, old] });
+    const at = entryAtReceivers(
+      { ...entry('E2'), atReceivers: [row('Beds Out', 'resend'), row('Lab Old', 'resend')] },
+      p,
+    );
+    expect(at.map((g) => g.receivers)).toEqual([['Beds Out']]);
+  });
+
   it('lists the alternatives as the catalogue writes them', () => {
     expect(alternativesOf(entry('E1'))[0]).toBe(
       'Alternative 1, a correction of the history by a person: where history policy: correct.',

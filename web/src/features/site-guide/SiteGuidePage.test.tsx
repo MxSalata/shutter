@@ -325,4 +325,24 @@ describe("This site's guide", () => {
     );
   });
 
+  it('sends every case of a receiver with no recovery API to a person, and promises it no write', async () => {
+    withProfile((p) =>
+      p.receivers.push({
+        name: 'Lab Old',
+        system: 'the old lab system',
+        category: 'current_state',
+        tier: 3,
+        features: { conditional_writes: false, receipts: false, history: false, dry_run: false },
+      }),
+    );
+    renderGuide();
+    const scenarios = await part('site-guide-scenarios');
+    expect(scenarios).toHaveTextContent(
+      /At [^.]*Lab Old[^.]*, every case goes to a person with its findings, whatever the entry\./,
+    );
+    for (const e of within(scenarios).getAllByText(/^At /))
+      if (e.textContent !== null && /every case goes to a person/.test(e.textContent) === false)
+        expect(e.textContent).not.toContain('Lab Old');
+  });
+
 });

@@ -595,7 +595,11 @@ function Scenarios({
   entries: SiteEntryItem[];
 }) {
   const others = profile.receivers.filter((r) => !modelledReceiver(r));
-  const orders = others.filter((r) => !fhirOf(r)).map((r) => r.name);
+  // A receiver with no recovery API takes no write from the case either: its cases go to a person, as at orders
+  const noApi = profile.receivers
+    .filter((r) => modelledReceiver(r) && hasNoRecoveryApi(r))
+    .map((r) => r.name);
+  const orders = [...others.filter((r) => !fhirOf(r)).map((r) => r.name), ...noApi];
   const fhir = others.filter((r) => fhirOf(r)).map((r) => r.name);
   return (
     <Stack gap="sm">
