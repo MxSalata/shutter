@@ -552,8 +552,17 @@ export function baseReceiver(s: SetupData, rid: string): SiteReceiver | undefine
   return i === undefined || s.added[rid] ? undefined : s.base?.profile.receivers[i];
 }
 
-/** Whether the receiver is in the profile in force: only a person changes its kind and its tier. */
-export const inForce = (s: SetupData, rid: string): boolean => !s.added[rid] && rid in s.baseIndex;
+/**
+ * Whether the receiver is in the profile in force: only a person changes its kind and its tier. A receiver of the stored
+ * profile is decided by its name, as the core decides it (ProfileSetup.DraftRefusal and View read the stored profile by
+ * name), so one renamed counts as one being added here too, as it does for the agent and for the checks on its answer.
+ */
+export const inForce = (s: SetupData, rid: string): boolean => {
+  const r = receiverOf(s, rid);
+  // One added here under a name in force is not: its name is the person's to change, and a turn about a name the draft
+  // holds twice is never sent
+  return !s.added[rid] && !!r && !!s.base && s.base.profile.receivers.some((x) => x.name === r.name);
+};
 
 /** Whether the draft differs from the stored profile. */
 export function isDirty(s: SetupData): boolean {

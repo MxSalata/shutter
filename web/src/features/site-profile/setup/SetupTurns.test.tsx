@@ -1219,6 +1219,17 @@ describe('the store, around a turn', () => {
 });
 
 describe('the mock route, as the server, takes who asked once', () => {
+  it('decides a receiver in force by its name, as the core does: one renamed counts as one being added', () => {
+    useSetup.getState().open(recorded);
+    const first = useSetup.getState().rids[0]!;
+    expect(inForce(useSetup.getState(), first)).toBe(true);
+    useSetup.getState().setKey(first, 'name', `${recorded.profile.receivers[0]!.name} East`);
+    expect(inForce(useSetup.getState(), first)).toBe(false);
+    const id = useSetup.getState().addReceiver();
+    useSetup.getState().setKey(id, 'name', 'Bed Board');
+    expect(inForce(useSetup.getState(), id)).toBe(false);
+  });
+
   it('keeps the turn as asked by who sent it when the session ends while it is being opened', async () => {
     const draft = JSON.parse(JSON.stringify(recorded.profile)) as typeof recorded.profile;
     draft.receivers.push({
