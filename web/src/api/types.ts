@@ -1548,6 +1548,13 @@ export interface SiteEntryItem {
     by: string;
     at: string;
     proofId?: string;
+    /**
+     * The proof an approval stands on now: the one proposed on while it passed and is current, else the newest passing
+     * proof of the same digest a person ran since, else "" (the approval is refused until the proof is run again).
+     */
+    standsOn?: string;
+    /** Whether the proof it was proposed on still passes under the catalogue, profile, gate policy and release in force. */
+    proofCurrent?: boolean;
   };
   /** A draft begun beside the active version: it changes nothing until it is approved. */
   draft?: {
@@ -1560,6 +1567,12 @@ export interface SiteEntryItem {
   };
   /** Set by the recheck after an upgrade or a profile save: the entry still applies, and a person should look. */
   needsReview: boolean;
+  /**
+   * The pattern and the scope the entry is matched by when a recheck dropped a condition (R14): wider than the active
+   * version's own. A retirement's and a resumption's proof are run on them.
+   */
+  effectivePattern?: Record<string, string[]>;
+  effectiveScope?: Record<string, string[]>;
   review?: { dropped?: { condition: string; why: string }[]; notes?: string[] };
   /**
    * Who suspended it, when and why. An entry an IRIS administrator set aside from the terminal (a row that could not be

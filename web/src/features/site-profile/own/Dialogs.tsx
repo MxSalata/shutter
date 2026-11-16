@@ -8,10 +8,11 @@ import type { SiteEntryContent, SiteEntryDetail, SiteEntryProofResult } from '@/
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { LockedNote, LockedSaveButton } from '@/components/LockedSave';
 import { byEnv, toBecomeApprover } from '@/env/copy';
-import { describeError } from '@/lib/errors';
+import { describeError, isApiError } from '@/lib/errors';
 import { useTechnical } from '@/stores/appearance';
 import {
   changedWords,
+  inForce,
   useDecide,
   usePropose,
   useProve,
@@ -48,9 +49,13 @@ function Summary({
   content?: SiteEntryContent;
 }) {
   const technical = useTechnical();
-  const validation = useValidation(content ? { ...content, fixtures: [] } : undefined);
-  const pattern = Object.entries(content?.pattern ?? {});
-  const scope = Object.entries(content?.scope ?? {});
+  // The pattern in force, which is what the proof is run on and what it displaces now; the YAML stays the version's own
+  const held = inForce(entry, action, content);
+  const widened = held !== content;
+  const validation = useValidation(held ? { ...held, fixtures: [] } : undefined);
+  const pattern = Object.entries(held?.pattern ?? {});
+  const scope = Object.entries(held?.scope ?? {});
+  const dropped = entry.review?.dropped ?? [];
   return (
     <Stack gap="xs" data-testid="own-summary">
       <Text size="sm" fw={600}>
@@ -71,6 +76,11 @@ function Summary({
           : ''}
         .
       </Text>
+      {widened ? (
+        <Text size="sm" data-testid="own-in-force">
+          {`This is the pattern in force: a recheck dropped ${dropped.length ? dropped.map((d) => d.condition.replace(/_/g, ' ')).join(', ') : 'a condition'} from version ${version}, so the entry catches more than the version as written. The proof is run on the pattern in force.`}
+        </Text>
+      ) : null}
       <Text size="sm" data-testid="own-displaces">
         {validation.data
           ? displacesWords(validation.data.overlap)
@@ -242,7 +252,11 @@ export function ApprovalDialog({
   const action = p.action;
   const v = entry.versions.find((x) => x.version === p.version);
   const content = versionOf(entry, action)?.content;
-  const proof = entry.proofs.find((x) => String(x.id) === String(p.proofId))?.result;
+  // The proof the approval stands on (the core's StandsOn): the one proposed on, or a newer one when that one went stale
+  const standsOn = p.standsOn === undefined ? p.proofId : p.standsOn;
+  const proof = standsOn ? entry.proofs.find((x) => String(x.id) === String(standsOn))?.result : undefined;
+  const newer = !!standsOn && String(standsOn) !== String(p.proofId);
+  const [refused, setRefused] = useState<SiteEntryProofResult | null>(null);
   const onePerson = list?.status.onePerson ?? null;
   // As the core compares them (R6): the proposer and the version's author, for every action, whatever the letter case
   const same = (a?: string) => !!a && a.toUpperCase() === me.toUpperCase();
@@ -262,6 +276,7 @@ export function ApprovalDialog({
   const waiting = list?.waitingPlans;
   const send = (decision: 'approve' | 'reject') => {
     setProblem('');
+    setRefused(null);
     if (!reason.trim()) {
       setProblem('A reason is needed, for the record.');
       return;
@@ -286,7 +301,16 @@ export function ApprovalDialog({
           });
           onClose();
         },
-        onError: (e) => setProblem(describeError(e)),
+        onError: (e) => {
+          if (isApiError(e) && e.code === 'proof_failed') {
+            // The approval refused on its proof: the way on is to reject, prove again and send again
+            const again = (e.body as { proof?: SiteEntryProofResult } | null)?.proof;
+            setRefused(again ?? null);
+            setProblem(`${describeError(e)}. Reject it, prove it again and send it again.`);
+            return;
+          }
+          setProblem(describeError(e));
+        },
       },
     );
   };
@@ -308,9 +332,20 @@ export function ApprovalDialog({
         </Text>
         <Text size="sm">{`Proposed by ${p.by}.`}</Text>
         <Summary entry={entry} action={action} version={p.version} digest={p.digest} content={content} />
+        {standsOn === '' ? (
+          <Alert color="yellow" variant="light" data-testid="own-approval-stale">
+            The proof it was proposed on is out of date, and no newer proof of this version passes: an
+            approval is refused until the proof is run again.
+          </Alert>
+        ) : newer ? (
+          <Alert color="yellow" variant="light" data-testid="own-approval-stale">
+            The proof it was proposed on is out of date: the approval stands on this newer proof of the same
+            version.
+          </Alert>
+        ) : null}
         {proof ? (
           <ProofTable proof={proof} testId="own-approval-proof" />
-        ) : (
+        ) : standsOn === '' ? null : (
           <Text size="sm">The proof it was proposed on cannot be read here; the approval runs it again.</Text>
         )}
         <Alert color="blue" variant="light" data-testid="own-waiting">
@@ -342,6 +377,7 @@ export function ApprovalDialog({
             {problem}
           </Alert>
         ) : null}
+        {refused ? <ProofTable proof={refused} testId="own-approval-refused" /> : null}
         {locked ? (
           <Group justify="flex-end">
             <LockedNote id={lockedId}>{locked}</LockedNote>

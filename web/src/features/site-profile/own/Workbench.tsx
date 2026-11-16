@@ -24,7 +24,16 @@ import { TechDetail } from '@/components/TechDetail';
 import { byEnv } from '@/env/copy';
 import { describeError, isApiError } from '@/lib/errors';
 import { useTechnical } from '@/stores/appearance';
-import { preview, useProve, useSaveDraft, useSiteEntry, versionOf, type Action, type EntryBody } from './api';
+import {
+  inForce,
+  preview,
+  useProve,
+  useSaveDraft,
+  useSiteEntry,
+  versionOf,
+  type Action,
+  type EntryBody,
+} from './api';
 import { ApprovalDialog, SendDialog, SuspendDialog } from './Dialogs';
 import { ProofTable } from './ProofTable';
 import { SCOPE_KEYS, SCOPE_LABELS, chipLabel, entryYaml, impactLine } from './words';
@@ -264,7 +273,8 @@ function Stored({ entry, review, onSaved, onClose }: WorkbenchProps & { entry: S
   const onTry = () => {
     setTrying(true);
     setTryProblem('');
-    preview({ ...formOf(shown), id: entry.id })
+    // An active entry is tried as the matcher holds it: with what a recheck dropped left out
+    preview({ ...formOf(draftContent ? shown : inForce(entry, 'retire', shown)), id: entry.id })
       .then((r) => setTried(r))
       .catch((e: unknown) => setTryProblem(describeError(e)))
       .finally(() => setTrying(false));

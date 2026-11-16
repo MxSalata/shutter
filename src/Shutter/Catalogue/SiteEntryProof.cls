@@ -67,6 +67,25 @@ ClassMethod Latest(entryId As %String, digest As %String, action As %String) As 
     Quit ..%OpenId(id)
 }
 
+/// What a proof's fixtures assert, row by row: the case, what was expected, whether it answered so, whether the entry's
+/// own scope and pattern held, and which entry led. An approval compares these with the proposal's proof: where a row was
+/// read from (the stored evidence, or its frozen copy once the retention task took the case) and its words are not part
+/// of what was proved.
+ClassMethod Asserted(fixtures As %DynamicArray) As %DynamicArray
+{
+    Set out = []
+    If '$ISOBJECT(fixtures) Quit out
+    Set iter = fixtures.%GetIterator()
+    While iter.%GetNext(, .f) {
+        Set row = {}
+        Set row.case = ##class(Shutter.Util.Json).Str(f, "case"), row.expect = ##class(Shutter.Util.Json).Str(f, "expect")
+        Do row.%Set("ok", ''f.%Get("ok"), "boolean"), row.%Set("holds", ''f.%Get("holds"), "boolean")
+        Set row.lead = ##class(Shutter.Util.Json).Str(f, "lead")
+        Do out.%Push(row)
+    }
+    Quit out
+}
+
 /// A fixture frozen from a stored, closed case: beside the case id and what is expected, the digest of the snapshot it
 /// was read from, the chain kind the case had, and a copy of the conditions and the scope facts (words, no patient data).
 /// "" with <var>why</var> when the case can't serve.
@@ -164,8 +183,11 @@ Method Current() As %Boolean
 /// fixture to answer as expected, with at least one match and at least one near miss (no_match); a retirement's proof is
 /// its impact read the other way (the cases the entry catches, and what each would do without it) and passes when it
 /// could be computed. <var>impact</var> 0 leaves P4 out (the run at an approval, which compares P1 and P2 alone).
-/// <var>store</var> 0 keeps nothing (the preview): the result is the same, with no proofId.
-ClassMethod Run(entryId As %String, version As %Integer, content As %DynamicObject, action As %String, by As %String, origin As %String = "api", impact As %Boolean = 1, Output proof As Shutter.Catalogue.SiteEntryProof, store As %Boolean = 1) As %DynamicObject
+/// <var>store</var> 0 keeps nothing (the preview): the result is the same, with no proofId. <var>pattern</var> and
+/// <var>scope</var>, when given, are what the entry is matched by in place of the version's own: the pattern and scope in
+/// force after a recheck dropped a condition (SiteEntry.InForce), for a retirement or a resumption. The digest is the
+/// version's all the same.
+ClassMethod Run(entryId As %String, version As %Integer, content As %DynamicObject, action As %String, by As %String, origin As %String = "api", impact As %Boolean = 1, Output proof As Shutter.Catalogue.SiteEntryProof, store As %Boolean = 1, pattern As %DynamicObject = "", scope As %DynamicObject = "") As %DynamicObject
 {
     Set json = "Shutter.Util.Json", matcher = "Shutter.Catalogue.Matcher"
     Set proof = "", result = {}, problems = []
@@ -176,7 +198,10 @@ ClassMethod Run(entryId As %String, version As %Integer, content As %DynamicObje
     Set started = ##class(Shutter.Util.Digest).Canonical(..Context(entryId, action, digest))
     Set others = ##class(Shutter.Catalogue.SiteEntry).ActiveList(.problem, entryId)
     If problem '= "" Do problems.%Push("The active site entries cannot be read: " _ problem) Set others = []
-    Set mine = ##class(Shutter.Catalogue.SiteEntry).MatchItem(entryId, version, content, content.%Get("pattern"))
+    // The entry as the matcher holds it: its own pattern and scope, or the ones in force when they are given.
+    If '$ISOBJECT(pattern) Set pattern = content.%Get("pattern")
+    If '$ISOBJECT(scope) Set scope = content.%Get("scope")
+    Set mine = ##class(Shutter.Catalogue.SiteEntry).MatchItem(entryId, version, content, pattern, scope)
     Set with = ##class(Shutter.Catalogue.SiteEntry).Ordered(others, mine)
     Set rows = [], matchCount = 0, nearCount = 0, allOk = 1
     Set fixtures = content.%Get("fixtures")
@@ -185,7 +210,7 @@ ClassMethod Run(entryId As %String, version As %Integer, content As %DynamicObje
     While fi.%GetNext(, .f) {
         Set expect = $CLASSMETHOD(json, "Str", f, "expect")
         Set now = ..Replay(f, .source, .why)
-        Set own = $CLASSMETHOD(matcher, "ScopeHolds", content.%Get("scope"), now.scope) && $CLASSMETHOD(matcher, "SiteHolds", content.%Get("pattern"), now.conditions)
+        Set own = $CLASSMETHOD(matcher, "ScopeHolds", scope, now.scope) && $CLASSMETHOD(matcher, "SiteHolds", pattern, now.conditions)
         Set row = {}
         Set row.case = $CLASSMETHOD(json, "Str", f, "case"), row.expect = expect, row.source = source
         Do row.%Set("holds", own, "boolean")

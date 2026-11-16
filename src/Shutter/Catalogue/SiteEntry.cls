@@ -424,6 +424,12 @@ Method Describe(full As %Boolean = 0) As %DynamicObject
         Set p = {}
         Set p.action = ..ProposalAction, p.digest = ..ProposalDigest, p.by = ..ProposalBy, p.at = ..ProposalAt, p.proofId = ..ProposalProofId
         Do p.%Set("version", +..ProposalVersion, "number")
+        // Which proof an approval stands on now, and whether the one proposed on is still current: an approver reads that
+        // proof's impact, not a stale one's.
+        Set own = ##class(Shutter.Catalogue.SiteEntryProof).%OpenId(..ProposalProofId)
+        Do p.%Set("proofCurrent", $ISOBJECT(own) && own.Passed && own.Current(), "boolean")
+        Set stands = ..StandsOn()
+        Set p.standsOn = $SELECT($ISOBJECT(stands): stands.%Id() _ "", 1: "")
         Set o.proposal = p
     }
     Do o.%Set("needsReview", ''..NeedsReview, "boolean")
@@ -733,12 +739,16 @@ ClassMethod Prove(id As %String, action As %String, actor As %String, source As 
     If '$ISOBJECT(v) Quit $SELECT(detail [ "The action is": "bad_request", 1: "wrong_state")
     Set content = v.Content()
     If '$ISOBJECT(content) Set detail = "Version " _ v.Version _ " of " _ id _ " cannot be read" Quit "wrong_state"
+    // A retirement or a resumption is proved on the entry as it is matched now, widened by a recheck or not.
+    Set held = content
+    If action '= "activate" Set held = entry.InForce(content, .detail)
+    If '$ISOBJECT(held) Quit "wrong_state"
     // The proof and its event together, or neither: no proof a proposal could stand on is kept without its line in the
     // entry's history.
     Set level = $TLEVEL, code = ""
     Try {
         TSTART
-        Set result = ##class(Shutter.Catalogue.SiteEntryProof).Run(id, v.Version, content, action, actor, "api", 1, .proof)
+        Set result = ##class(Shutter.Catalogue.SiteEntryProof).Run(id, v.Version, content, action, actor, "api", 1, .proof, 1, held.%Get("pattern"), held.%Get("scope"))
         $$$ThrowOnError(##class(Shutter.Catalogue.SiteEntryEvent).Record(id, v.Version, "proved", actor, source, "Proof for " _ action _ ": " _ $SELECT(result.passed: "passed", 1: "did not pass"), $SELECT($ISOBJECT(proof): "proof:" _ proof.%Id(), 1: "")))
         TCOMMIT
     } Catch ex {
@@ -770,7 +780,10 @@ ClassMethod Propose(id As %String, action As %String, actor As %String, source A
         Set content = v.Content()
         If '$ISOBJECT(content) Set code = "wrong_state", detail = "Version " _ v.Version _ " of " _ id _ " cannot be read" Quit
         If action '= "retire" {
-            Set detail = ..StillValid(content, id)
+            // A resumption is checked as the entry is matched now: a condition a recheck dropped is not read again.
+            Set held = $SELECT(action = "resume": entry.InForce(content, .detail), 1: content)
+            If '$ISOBJECT(held) Set code = "wrong_state" Quit
+            Set detail = ..StillValid(held, id)
             If detail '= "" Set code = "bad_request" Quit
         }
         If (action = "activate") && (entry.State '= "active") && ((..ActiveCount(id, .failed) >= $PARAMETER("Shutter.Catalogue.SiteEntryVersion", "MAXACTIVE")) || failed) Set code = "too_many", detail = $SELECT(failed: "The active site entries cannot be counted", 1: "The site has its " _ $PARAMETER("Shutter.Catalogue.SiteEntryVersion", "MAXACTIVE") _ " active site entries already") Quit
@@ -807,6 +820,41 @@ ClassMethod StillValid(content As %DynamicObject, id As %String) As %String [ Pr
     Do ##class(Shutter.Catalogue.SiteEntryVersion).Normalise(body, id, .again, .problems, .warnings, 0)
     If problems.%Size() = 0 Quit ""
     Quit problems.%Get(0).text
+}
+
+/// The proof an approval of the open proposal stands on, or "": the proposal's own while it passed and is current, else
+/// the newest one a person ran of the same digest and action since, when that one passed and is current (the author
+/// proved again after the catalogue, the profile, the gate's policy or the release changed). Decide reruns this proof;
+/// Describe names it (proposal.standsOn) so the approver reads the proof the approval will stand on.
+Method StandsOn() As Shutter.Catalogue.SiteEntryProof
+{
+    If ..ProposalAction = "" Quit ""
+    Set proof = ##class(Shutter.Catalogue.SiteEntryProof).%OpenId(..ProposalProofId)
+    If $ISOBJECT(proof) && proof.Passed && proof.Current() Quit proof
+    Set proof = ##class(Shutter.Catalogue.SiteEntryProof).Latest(..EntryId, ..ProposalDigest, ..ProposalAction)
+    If $ISOBJECT(proof) && proof.Passed && proof.Current() Quit proof
+    Quit ""
+}
+
+/// A version's content as the matcher holds the entry to it now: a copy with the pattern and the scope in force, which
+/// leave out what a recheck dropped (EffectiveJSON, EffectiveScopeJSON, R14). A retirement and a resumption are about the
+/// entry in force, so their proofs and checks read this, not the narrower version as written. "" with <var>problem</var>
+/// when a widened pattern or scope cannot be read.
+Method InForce(content As %DynamicObject, Output problem As %String) As %DynamicObject
+{
+    Set problem = ""
+    Set held = ##class(%DynamicObject).%FromJSON(content.%ToJSON())
+    If ..EffectiveJSON '= "" {
+        Set pattern = ##class(Shutter.Util.Json).Parse(..EffectiveJSON, .sc)
+        If '$ISOBJECT(pattern) || 'pattern.%IsA("%Library.DynamicObject") Set problem = "The widened pattern of " _ ..EntryId _ " cannot be read" Quit ""
+        Set held.pattern = pattern
+    }
+    If ..EffectiveScopeJSON '= "" {
+        Set scope = ##class(Shutter.Util.Json).Parse(..EffectiveScopeJSON, .sc)
+        If '$ISOBJECT(scope) || 'scope.%IsA("%Library.DynamicObject") Set problem = "The widened scope of " _ ..EntryId _ " cannot be read" Quit ""
+        Set held.scope = scope
+    }
+    Quit held
 }
 
 /// A second person's decision on the open proposal (R6 to R8). The body is {action, version, digest, decision, reason,
@@ -851,19 +899,24 @@ ClassMethod Decide(id As %String, body As %DynamicObject, actor As %String, sour
         Set who = $ZCONVERT(actor, "U")
         Set alone = (who = $ZCONVERT(entry.ProposalBy, "U")) || (who = $ZCONVERT(v.WrittenBy, "U"))
         If alone && '$ISOBJECT(..OnePerson()) Set code = "same_person", detail = "A second person approves a site entry: " _ actor _ " proposed this or wrote the version" Quit
+        Set held = content
+        If action '= "activate" Set held = entry.InForce(content, .detail)
+        If '$ISOBJECT(held) Set code = "wrong_state" Quit
         If action '= "retire" {
-            Set detail = ..StillValid(content, id)
+            Set detail = ..StillValid(held, id)
             If detail '= "" Set code = "bad_request" Quit
             Set detail = ""
         }
         If (action '= "retire") && ((..ActiveCount(id, .failed) >= $PARAMETER("Shutter.Catalogue.SiteEntryVersion", "MAXACTIVE")) || failed) Set code = "too_many", detail = $SELECT(failed: "The active site entries cannot be counted", 1: "The site has its " _ $PARAMETER("Shutter.Catalogue.SiteEntryVersion", "MAXACTIVE") _ " active site entries already") Quit
         // The proof again (R8, P5): nobody activates on a stale proof, or on one the evidence no longer bears out.
         // A proposal whose own proof went stale stands on the newest one a person ran of the same digest since, if any.
-        Set proposed = ##class(Shutter.Catalogue.SiteEntryProof).%OpenId(entry.ProposalProofId)
-        If '$ISOBJECT(proposed) || 'proposed.Passed || 'proposed.Current() Set proposed = ##class(Shutter.Catalogue.SiteEntryProof).Latest(id, v.Digest, action)
-        If '$ISOBJECT(proposed) || 'proposed.Passed || 'proposed.Current() Set code = "proof_failed", detail = "The proof of this digest is stale: the catalogue, the site profile, the gate's policy or the release changed since it ran. Run the proof again" Quit
-        Set again = ##class(Shutter.Catalogue.SiteEntryProof).Run(id, v.Version, content, action, actor, "approval", 0, .proofNow)
-        If 'again.passed || '$ISOBJECT(proofNow) || (##class(Shutter.Util.Digest).Canonical(again.fixtures) '= ##class(Shutter.Util.Digest).Canonical(proposed.ToObject().result.%Get("fixtures"))) {
+        Set proposed = entry.StandsOn()
+        If '$ISOBJECT(proposed) Set code = "proof_failed", detail = "The proof of this digest is stale: the catalogue, the site profile, the gate's policy or the release changed since it ran. Run the proof again" Quit
+        Set again = ##class(Shutter.Catalogue.SiteEntryProof).Run(id, v.Version, content, action, actor, "approval", 0, .proofNow, 1, held.%Get("pattern"), held.%Get("scope"))
+        // Each fixture must assert what it asserted at the proposal; a case the retention task took since is read from
+        // its frozen copy, which is no difference.
+        Set proofClass = "Shutter.Catalogue.SiteEntryProof"
+        If 'again.passed || '$ISOBJECT(proofNow) || (##class(Shutter.Util.Digest).Canonical($CLASSMETHOD(proofClass, "Asserted", again.fixtures)) '= ##class(Shutter.Util.Digest).Canonical($CLASSMETHOD(proofClass, "Asserted", proposed.ToObject().result.%Get("fixtures")))) {
             Set code = "proof_failed", detail = "The proof run again at approval did not answer as the proposal's did"
             Set extra.proof = again
             Quit

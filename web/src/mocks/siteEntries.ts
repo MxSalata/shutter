@@ -585,7 +585,10 @@ export function siteEntryHandlers(deps: SiteEntryDeps) {
             },
           }
         : {}),
-      ...(e.proposal ? { proposal: { ...e.proposal } } : {}),
+      // The trial's proofs never go stale, so an approval always stands on the proof proposed on
+      ...(e.proposal
+        ? { proposal: { ...e.proposal, standsOn: e.proposal.proofId ?? '', proofCurrent: true } }
+        : {}),
       needsReview: false,
       ...(e.state === 'suspended' && e.suspended ? { suspended: e.suspended } : {}),
       casesSent: sent,
@@ -1059,7 +1062,18 @@ export function siteEntryHandlers(deps: SiteEntryDeps) {
           );
         const again = run(e.id, v.version, v.content, p.action);
         const before = e.proofs.find((x) => x.id === p.proofId);
-        if (!again.passed || canonical(again.fixtures) !== canonical(before?.result.fixtures))
+        // As the core: what each fixture asserts, not where it was read from or its words
+        const asserted = (fixtures?: SiteEntryProofResult['fixtures']) =>
+          canonical(
+            (fixtures ?? []).map((f) => ({
+              case: f.case,
+              expect: f.expect,
+              ok: f.ok,
+              holds: f.holds,
+              lead: f.lead ?? '',
+            })),
+          );
+        if (!again.passed || asserted(again.fixtures) !== asserted(before?.result.fixtures))
           return fail(
             409,
             'proof_failed',

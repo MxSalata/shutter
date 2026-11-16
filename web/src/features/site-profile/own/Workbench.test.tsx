@@ -347,4 +347,152 @@ describe("the workbench of the site's own scenarios", () => {
     // The author may still reject it
     expect(within(review).getByRole('button', { name: 'Reject' })).not.toHaveAttribute('aria-disabled');
   }, 60_000);
+
+  describe('as the core holds a stored entry', () => {
+    const example = SITE_ENTRIES_EXAMPLE.items[0]!;
+    const at = '2026-11-16T09:00:00Z';
+    const proofRow = (id: string, origin: string, action: string, caught?: number) => ({
+      id,
+      version: 1,
+      digest: example.digest,
+      action,
+      passed: true,
+      at,
+      by: 'colleague',
+      origin,
+      result: {
+        passed: true,
+        action,
+        version: 1,
+        digest: example.digest!,
+        fixtures: [],
+        counts: { match: 0, no_match: 0 },
+        problems: [],
+        ...(caught === undefined
+          ? {}
+          : { impact: { scanned: 200, caught, unread: 0, capped: false, groups: {}, cases: {} } }),
+      },
+    });
+    const serve = (over: Record<string, unknown>) =>
+      server.use(
+        http.get(`${BASE}/site-entries/L1`, () =>
+          HttpResponse.json({
+            ...example,
+            versions: [
+              {
+                version: 1,
+                status: 'approved',
+                digest: example.digest,
+                writtenBy: 'author',
+                approvedBy: 'colleague',
+              },
+            ],
+            proofs: [],
+            events: [],
+            ...over,
+          }),
+        ),
+      );
+    const retiring = (standsOn: string) => ({
+      proposal: {
+        action: 'retire',
+        version: 1,
+        digest: example.digest,
+        by: 'colleague',
+        at,
+        proofId: '11',
+        standsOn,
+        proofCurrent: standsOn === '11',
+      },
+      proofs: [proofRow('12', 'api', 'retire', 12), proofRow('11', 'api', 'retire', 3)],
+    });
+
+    it('shows a retirement the pattern in force when a recheck widened the entry, naming what it dropped', async () => {
+      serve({
+        needsReview: true,
+        review: { dropped: [{ condition: 'ward', why: 'its fixture reads another ward now' }] },
+        effectiveScope: { receiver: ['Downstream Out'], source_system: ['PAS'] },
+      });
+      const user = userEvent.setup();
+      page('/site-profile?own=L1');
+      await user.click(
+        await screen.findByRole('button', { name: 'Propose retiring it…' }, { timeout: 5000 }),
+      );
+      const dialog = await screen.findByRole('dialog', { name: 'Propose retiring L1' });
+      expect(within(dialog).getByTestId('own-in-force')).toHaveTextContent(/dropped ward from version 1/);
+      const exact = within(dialog).getByText(/^The exact pattern/);
+      expect(exact).toHaveTextContent(/only receiver Downstream Out, source system PAS\.$/);
+      expect(exact).not.toHaveTextContent(/WARD-ISO/);
+    }, 60_000);
+
+    it('shows the approver the proof the approval stands on when the one proposed on went stale', async () => {
+      serve(retiring('12'));
+      const user = userEvent.setup();
+      page('/site-profile?own=L1');
+      await user.click(
+        await screen.findByRole('button', { name: 'Review the proposal…' }, { timeout: 5000 }),
+      );
+      const review = await screen.findByRole('dialog', { name: 'Approve or reject: L1 version 1' });
+      expect(within(review).getByTestId('own-approval-stale')).toHaveTextContent(
+        /out of date: the approval stands on this newer proof/,
+      );
+      expect(within(review).getByTestId('own-approval-proof-impact')).toHaveTextContent(/it catches 12/);
+    }, 60_000);
+
+    it('says an approval is refused until the proof is run again when no current proof is left', async () => {
+      serve(retiring(''));
+      const user = userEvent.setup();
+      page('/site-profile?own=L1');
+      await user.click(
+        await screen.findByRole('button', { name: 'Review the proposal…' }, { timeout: 5000 }),
+      );
+      const review = await screen.findByRole('dialog', { name: 'Approve or reject: L1 version 1' });
+      expect(within(review).getByTestId('own-approval-stale')).toHaveTextContent(
+        /an approval is refused until the proof is run again/,
+      );
+      expect(within(review).queryByTestId('own-approval-proof')).not.toBeInTheDocument();
+    }, 60_000);
+
+    it('shows the rerun and the way on when an approval is refused on its proof', async () => {
+      serve(retiring('11'));
+      server.use(
+        http.post(`${BASE}/site-entries/L1/approvals`, () =>
+          HttpResponse.json(
+            {
+              error: 'proof_failed',
+              detail: "The proof run again at approval did not answer as the proposal's did",
+              proof: {
+                ...proofRow('0', 'approval', 'retire').result,
+                passed: false,
+                fixtures: [
+                  {
+                    case: 'C-10',
+                    expect: 'match',
+                    source: 'frozen',
+                    holds: true,
+                    lead: 'L1',
+                    ok: true,
+                    text: '',
+                  },
+                ],
+              },
+            },
+            { status: 409 },
+          ),
+        ),
+      );
+      const user = userEvent.setup();
+      page('/site-profile?own=L1');
+      await user.click(
+        await screen.findByRole('button', { name: 'Review the proposal…' }, { timeout: 5000 }),
+      );
+      const review = await screen.findByRole('dialog', { name: 'Approve or reject: L1 version 1' });
+      await user.type(within(review).getByLabelText(/^Reason/), 'Agreed with the ward');
+      await user.click(within(review).getByRole('button', { name: 'Approve' }));
+      expect(
+        await within(review).findByText(/Reject it, prove it again and send it again\./),
+      ).toBeInTheDocument();
+      expect(within(review).getByTestId('own-approval-refused-fixtures')).toHaveTextContent(/C-10/);
+    }, 60_000);
+  });
 });

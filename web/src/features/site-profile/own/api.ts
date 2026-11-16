@@ -5,6 +5,7 @@ import { isApiError } from '@/lib/errors';
 import type {
   SiteEntryContent,
   SiteEntryDetail,
+  SiteEntryItem,
   SiteEntryPreview,
   SiteEntryProofResult,
   SiteEntryValidation,
@@ -36,6 +37,23 @@ export function versionOf(
       ? (entry.draft?.content ?? (entry.activeVersion ? undefined : entry.content))
       : entry.content;
   return v ? { version: n, digest: v.digest, content, writtenBy: v.writtenBy } : undefined;
+}
+
+/**
+ * The entry as the matcher holds it for an action: a retirement or a resumption is about the active version as it is
+ * matched now, with what a recheck dropped left out (effectivePattern, effectiveScope), and the core proves it so.
+ */
+export function inForce(
+  entry: SiteEntryItem,
+  action: Action,
+  content?: SiteEntryContent,
+): SiteEntryContent | undefined {
+  if (!content || action === 'activate' || (!entry.effectivePattern && !entry.effectiveScope)) return content;
+  return {
+    ...content,
+    pattern: entry.effectivePattern ?? content.pattern,
+    scope: entry.effectiveScope ?? content.scope,
+  };
 }
 
 const entryKey = (id: string) => ['site-entry', id] as const;

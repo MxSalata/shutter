@@ -302,6 +302,37 @@ Method TestAWideningIsKept()
     Do $$$AssertEquals(again.CurrentSnapshot.SummaryObject().catalogue.entry, id, "a case like the fixture is still caught after the resumption")
 }
 
+/// A widened entry is retired and resumed as it is matched now: its proofs run on the pattern in force, so a resumption
+/// is proved by the fixture whose new reading was the reason the condition was dropped (the case still stored), and a
+/// retirement's impact counts a case only the widened pattern catches.
+Method TestAWidenedEntryIsProvedAsItIsMatched()
+{
+    Set kit = "Shutter.Test.SiteKit", site = "Shutter.Catalogue.SiteEntry"
+    Set match = $CLASSMETHOD(kit, "Case", {"ward": "WARD-ISO"}, .snap), near = $CLASSMETHOD(kit, "Case", {"ward": "WARD-B"})
+    Set body = $CLASSMETHOD(kit, "Body", match.CaseId, near.CaseId)
+    Set body.pattern = {"event": "transfer", "delivery": ["failed", "rejected", "uncertain"], "receipt": "absent"}
+    Do $$$AssertEquals($CLASSMETHOD(kit, "Activate", body, .id), "", "an entry that also asks for no receipt")
+    Set summary = snap.SummaryObject()
+    Do summary.%Set("receipt_http_status", 200, "number")
+    Set snap.Summary = summary.%ToJSON()
+    Do $$$AssertStatusOK(snap.%Save(), "the fixture's evidence reads differently, its case still stored")
+    Do $$$AssertEquals($CLASSMETHOD(site, "Recheck", "upgrade", 0), 1, "the recheck widens and flags the entry")
+    Set widened = $CLASSMETHOD(site, "ById", id).EffectiveJSON
+    Do $$$AssertNotEquals(widened, "", "widened")
+    Set wide = $CLASSMETHOD(kit, "Case", {"ward": "WARD-ISO", "summary": {"receipt_http_status": 200}})
+    Do $$$AssertEquals(wide.CurrentSnapshot.SummaryObject().catalogue.entry, id, "a case only the widened pattern catches")
+    Do $$$AssertEquals($CLASSMETHOD(site, "Prove", id, "retire", "ut-author", "api", .retire, .detail), "", "a retirement is proved: " _ detail)
+    Do $$$AssertTrue(retire.impact.caught > 0, "its impact counts what the entry catches now: " _ retire.impact.%ToJSON())
+    Do $$$AssertEquals($CLASSMETHOD(site, "Suspend", id, "unit test", "ut-approver", "api", .entry, .detail), "", "suspended: " _ detail)
+    Do $$$AssertEquals($CLASSMETHOD(site, "Prove", id, "resume", "ut-author", "api", .resume, .detail), "", "a resumption is proved: " _ detail)
+    Do $$$AssertTrue(resume.passed, "and passes on the fixture as it reads now: " _ resume.%ToJSON())
+    Do $$$AssertEquals(resume.fixtures.%Get(0).source, "evidence", "read from the stored case")
+    Do $$$AssertEquals($CLASSMETHOD(kit, "Approve", id, "resume"), "", "resumed by two people")
+    Set e = $CLASSMETHOD(site, "ById", id)
+    Do $$$AssertEquals(e.State, "active", "it applies again")
+    Do $$$AssertEquals(e.EffectiveJSON, widened, "still widened")
+}
+
 /// R14, the scope: a release that reads a scope fact of the entry's own matching fixture differently drops that fact, so
 /// the entry matches more, and flags it. The scope fact here is the ward, as a release that read it with its facility
 /// would give it.

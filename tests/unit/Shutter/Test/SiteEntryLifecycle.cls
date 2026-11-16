@@ -123,6 +123,49 @@ Method TestAStaleProofIsRefused()
     Do $$$AssertEquals($CLASSMETHOD(site, "ById", id).State, "active", "active")
 }
 
+/// The entry names the proof an approval stands on: the one proposed on while it is current; once it goes stale, none
+/// until the author proves the same digest again, and then that newer proof, which the approval reruns.
+Method TestTheProposalNamesTheProofItStandsOn()
+{
+    Set site = "Shutter.Catalogue.SiteEntry", kit = "Shutter.Test.SiteKit"
+    Set id = ..Draft(.match, .near)
+    Do $$$AssertEquals($CLASSMETHOD(site, "Prove", id, "activate", "ut-author", "api", .first, .detail), "", "proved")
+    Do $$$AssertEquals($CLASSMETHOD(site, "Propose", id, "activate", "ut-author", "api", .entry, .detail), "", "proposed")
+    Set p = $CLASSMETHOD(site, "ById", id).Describe().proposal
+    Do $$$AssertEquals(p.standsOn, first.proofId, "it stands on the proof it was proposed on")
+    Do $$$AssertTrue(p.proofCurrent, "which is current")
+    // Another entry is activated: the proof proposed on is stale, and no other proof of the digest is current.
+    Set other = $CLASSMETHOD(kit, "Body", match.CaseId, near.CaseId)
+    Set other.title = "Another", other.priority = 50
+    Do $$$AssertEquals($CLASSMETHOD(kit, "Activate", other, .otherId, "ut-author-2", "ut-approver"), "", "another entry is activated")
+    Set p = $CLASSMETHOD(site, "ById", id).Describe().proposal
+    Do $$$AssertEquals(p.standsOn, "", "it stands on no proof now")
+    Do $$$AssertNotTrue(p.proofCurrent, "the proof proposed on is out of date")
+    Do $$$AssertEquals($CLASSMETHOD(site, "Prove", id, "activate", "ut-author", "api", .second, .detail), "", "proved again")
+    Set p = $CLASSMETHOD(site, "ById", id).Describe().proposal
+    Do $$$AssertEquals(p.standsOn, second.proofId, "it stands on the newer proof")
+    Do $$$AssertNotEquals(p.standsOn, p.proofId, "not the one proposed on")
+    Do $$$AssertNotTrue(p.proofCurrent, "which is still out of date")
+    Set body = {"action": "activate", "version": 1, "digest": (entry.ProposalDigest), "decision": "approve", "reason": "ok"}
+    Do $$$AssertEquals($CLASSMETHOD(site, "Decide", id, body, "ut-approver", "api", .e2, .detail, .extra), "", "approved on it: " _ detail)
+}
+
+/// A fixture's case that the retention task takes between the proposal and the approval is read from its frozen copy:
+/// what each fixture asserts is the same, so the approval goes through.
+Method TestAPurgeBeforeTheApprovalIsNoDifference()
+{
+    Set site = "Shutter.Catalogue.SiteEntry", kit = "Shutter.Test.SiteKit"
+    Set id = ..Draft(.match, .near)
+    Do $$$AssertEquals($CLASSMETHOD(site, "Prove", id, "activate", "ut-author", "api", .result, .detail), "", "proved")
+    Do $$$AssertEquals($CLASSMETHOD(site, "Propose", id, "activate", "ut-author", "api", .entry, .detail), "", "proposed")
+    Do $CLASSMETHOD(kit, "Purge", match.CaseId)
+    Set body = {"action": "activate", "version": 1, "digest": (entry.ProposalDigest), "decision": "approve", "reason": "ok"}
+    Do $$$AssertEquals($CLASSMETHOD(site, "Decide", id, body, "ut-approver", "api", .e2, .detail, .extra), "", "approved: " _ detail)
+    Do $$$AssertEquals($CLASSMETHOD(site, "ById", id).State, "active", "active")
+    Set rows = ##class(Shutter.Catalogue.SiteEntryProof).For(id).%Get(0).result.fixtures
+    Do $$$AssertEquals(rows.%Get(0).source, "frozen", "the approval's run read the purged case from its frozen copy")
+}
+
 /// The proof run again at the approval must answer as the proposal's did: evidence that reads differently refuses it.
 Method TestTheProofIsRunAgainAtApproval()
 {
