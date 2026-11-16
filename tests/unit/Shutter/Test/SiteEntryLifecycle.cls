@@ -166,6 +166,24 @@ Method TestAPurgeBeforeTheApprovalIsNoDifference()
     Do $$$AssertEquals(rows.%Get(0).source, "frozen", "the approval's run read the purged case from its frozen copy")
 }
 
+/// The list counts the cases each entry sent to a person once for all its entries, and gives each entry the counts its
+/// own reading gives.
+Method TestTheListCountsWhatEachEntrySent()
+{
+    Set site = "Shutter.Catalogue.SiteEntry", kit = "Shutter.Test.SiteKit"
+    Set match = $CLASSMETHOD(kit, "Case", {"ward": "WARD-ISO"}), near = $CLASSMETHOD(kit, "Case", {"ward": "WARD-B"})
+    Do $$$AssertEquals($CLASSMETHOD(kit, "Activate", $CLASSMETHOD(kit, "Body", match.CaseId, near.CaseId), .id), "", "an active entry")
+    Set id2 = ..Draft(.m2, .n2)
+    Set items = $CLASSMETHOD(site, "List"), n = 0
+    Set iter = items.%GetIterator()
+    While iter.%GetNext(, .item) {
+        Set n = n + 1
+        Do $$$AssertEquals(item.casesSent, $CLASSMETHOD(site, "CasesSent", item.id), item.id _ ": the cases it sent, as counted for it alone")
+        Do $$$AssertEquals(item.casesSent30, $CLASSMETHOD(site, "CasesSent", item.id, 30), item.id _ ": and in the last 30 days")
+    }
+    Do $$$AssertEquals(n, 2, "both entries are listed")
+}
+
 /// The proof run again at the approval must answer as the proposal's did: evidence that reads differently refuses it.
 Method TestTheProofIsRunAgainAtApproval()
 {

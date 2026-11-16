@@ -393,8 +393,22 @@ Method ShownState() As %String
     Quit $SELECT((..State = "draft") && (..ProposalAction '= ""): "proposed", 1: ..State)
 }
 
-/// The entry for the API. <var>full</var> adds every version, the proofs and the events.
-Method Describe(full As %Boolean = 0) As %DynamicObject
+/// How many cases each entry sent to a person, in all (<var>all</var>) and in the last 30 days (<var>recent</var>), by
+/// the entry's id: two counts over the plans for the whole list, where CasesSent per entry would read them twice for
+/// every entry.
+ClassMethod SentCounts(Output all, Output recent)
+{
+    Kill all, recent
+    Set since = ##class(Shutter.Util.Time).FromNow(-86400 * 30)
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT CatalogueEntry AS e, COUNT(DISTINCT ""Case"") AS n FROM Shutter_Store.Plan WHERE CatalogueEntry IS NOT NULL GROUP BY CatalogueEntry")
+    While rs.%Next() { Set all(rs.%Get("e")) = +rs.%Get("n") }
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT CatalogueEntry AS e, COUNT(DISTINCT ""Case"") AS n FROM Shutter_Store.Plan WHERE CatalogueEntry IS NOT NULL AND CreatedAt >= ? GROUP BY CatalogueEntry", since)
+    While rs.%Next() { Set recent(rs.%Get("e")) = +rs.%Get("n") }
+}
+
+/// The entry for the API. <var>full</var> adds every version, the proofs and the events. <var>all</var> and
+/// <var>recent</var>, when given, are the counts SentCounts read for a whole list.
+Method Describe(full As %Boolean = 0, ByRef all, ByRef recent) As %DynamicObject
 {
     Set json = "Shutter.Util.Json", versionClass = "Shutter.Catalogue.SiteEntryVersion"
     Set o = {}
@@ -437,7 +451,11 @@ Method Describe(full As %Boolean = 0) As %DynamicObject
     If ..EffectiveJSON '= "" Set o.effectivePattern = $CLASSMETHOD(json, "Parse", ..EffectiveJSON, .sc)
     If ..EffectiveScopeJSON '= "" Set o.effectiveScope = $CLASSMETHOD(json, "Parse", ..EffectiveScopeJSON, .sc)
     If ..State = "suspended" Set o.suspended = {"by": (..SuspendedBy), "at": (..SuspendedAt), "reason": (..SuspendedReason)}
-    Do o.%Set("casesSent", ..CasesSent(..EntryId), "number"), o.%Set("casesSent30", ..CasesSent(..EntryId, 30), "number")
+    If $DATA(all) || $DATA(recent) {
+        Do o.%Set("casesSent", +$GET(all(..EntryId)), "number"), o.%Set("casesSent30", +$GET(recent(..EntryId)), "number")
+    } Else {
+        Do o.%Set("casesSent", ..CasesSent(..EntryId), "number"), o.%Set("casesSent30", ..CasesSent(..EntryId, 30), "number")
+    }
     Set o.createdBy = ..CreatedBy, o.createdAt = ..CreatedAt, o.updatedAt = ..UpdatedAt
     If full {
         Set versions = []
@@ -457,10 +475,14 @@ Method Describe(full As %Boolean = 0) As %DynamicObject
 ClassMethod List() As %DynamicArray
 {
     Set out = []
+    // The plans are counted once for the whole list, not twice for each entry: the page reads the list every 15 s.
+    Do ..SentCounts(.all, .recent)
+    // Defined even when no entry sent a case, so Describe reads these counts rather than counting again
+    Set all = "", recent = ""
     Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID FROM Shutter_Catalogue.SiteEntry ORDER BY CASE State WHEN 'active' THEN 0 WHEN 'suspended' THEN 1 WHEN 'draft' THEN 2 ELSE 3 END, Priority, ID")
     While rs.%Next() {
         Set e = ..%OpenId(rs.%Get("ID"))
-        If $ISOBJECT(e) Do out.%Push(e.Describe())
+        If $ISOBJECT(e) Do out.%Push(e.Describe(0, .all, .recent))
     }
     Quit out
 }
