@@ -65,6 +65,20 @@ describe('the API document', () => {
     ]);
   });
 
+  it("says a site entry's suspension needs both rights, and every change of the entries answers busy and store_failed", () => {
+    expect(byId('siteEntrySuspend').resources).toEqual(['Shutter_Approve', 'Shutter_Configure']);
+    for (const id of [
+      'siteEntryCreate',
+      'siteEntryChange',
+      'siteEntryPropose',
+      'siteEntryApprove',
+      'siteEntrySuspend',
+    ]) {
+      const responses = byId(id).op.responses as Record<string, unknown>;
+      expect([id, '503' in responses, '500' in responses]).toEqual([id, true, true]);
+    }
+  });
+
   it('describes the questions about a page beside the case questions, live only to ask, read by the one who asked', () => {
     const ask = byId('pageQuestionAsk');
     const get = byId('pageQuestionGet');

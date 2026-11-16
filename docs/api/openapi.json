@@ -9657,6 +9657,48 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "Server error. store_failed: The change could not be stored with its event; nothing was changed.",
+            "x-error-codes": [
+              "store_failed"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "store_failed": {
+                    "value": {
+                      "error": "store_failed",
+                      "detail": "The change could not be stored"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable. busy: Another change of the site's entries holds their lock (5 seconds); try again.",
+            "x-error-codes": [
+              "busy"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "busy": {
+                    "value": {
+                      "error": "busy",
+                      "detail": "The site entries are being changed: try again"
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -10175,6 +10217,48 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "Server error. store_failed: The change could not be stored with its event; nothing was changed.",
+            "x-error-codes": [
+              "store_failed"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "store_failed": {
+                    "value": {
+                      "error": "store_failed",
+                      "detail": "The change could not be stored"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable. busy: Another change of the site's entries holds their lock (5 seconds); try again.",
+            "x-error-codes": [
+              "busy"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "busy": {
+                    "value": {
+                      "error": "busy",
+                      "detail": "The site entries are being changed: try again"
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -10547,6 +10631,48 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "Server error. store_failed: The change could not be stored with its event; nothing was changed.",
+            "x-error-codes": [
+              "store_failed"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "store_failed": {
+                    "value": {
+                      "error": "store_failed",
+                      "detail": "The change could not be stored"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable. busy: Another change of the site's entries holds their lock (5 seconds); try again.",
+            "x-error-codes": [
+              "busy"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "busy": {
+                    "value": {
+                      "error": "busy",
+                      "detail": "The site entries are being changed: try again"
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -10740,6 +10866,48 @@
                 }
               }
             }
+          },
+          "500": {
+            "description": "Server error. store_failed: The change could not be stored with its event; nothing was changed.",
+            "x-error-codes": [
+              "store_failed"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "store_failed": {
+                    "value": {
+                      "error": "store_failed",
+                      "detail": "The change could not be stored"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable. busy: Another change of the site's entries holds their lock (5 seconds); try again.",
+            "x-error-codes": [
+              "busy"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "busy": {
+                    "value": {
+                      "error": "busy",
+                      "detail": "The site entries are being changed: try again"
+                    }
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -10753,7 +10921,10 @@
         "summary": "Suspend an active site entry at once",
         "description": "One person switches one entry off, with a reason and the revision they read: the cases it caught are the shipped catalogue's again. The suspension is recorded, raises the catalogue's generation and is warned about for as long as it lasts. Resuming is a proposal and a second person's approval.\n\nNeeds Shutter_Approve and Shutter_Configure. A change: send X-Requested-With: Shutter.\n\nCONTRACTS 6.8.",
         "x-contract": "docs/CONTRACTS.md section 6.8",
-        "x-required-resource": "Shutter_Approve",
+        "x-required-resource": [
+          "Shutter_Approve",
+          "Shutter_Configure"
+        ],
         "x-writes": true,
         "x-idempotent": false,
         "x-dispatch": "Shutter.API.Dispatch.SiteEntrySuspend",
@@ -10837,7 +11008,7 @@
             }
           },
           "403": {
-            "description": "Forbidden. forbidden: This needs Shutter_Approve. csrf: Changes need the header X-Requested-With: Shutter.",
+            "description": "Forbidden. forbidden: This needs Shutter_Approve and Shutter_Configure. csrf: Changes need the header X-Requested-With: Shutter.",
             "x-error-codes": [
               "forbidden",
               "csrf"
@@ -10851,7 +11022,7 @@
                   "forbidden": {
                     "value": {
                       "error": "forbidden",
-                      "detail": "This needs Shutter_Approve"
+                      "detail": "This needs Shutter_Configure"
                     }
                   },
                   "csrf": {
@@ -10908,6 +11079,48 @@
                       "error": "stale_version",
                       "detail": "expectedVersion is missing or not the entry's revision",
                       "currentVersion": 5
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Server error. store_failed: The change could not be stored with its event; nothing was changed.",
+            "x-error-codes": [
+              "store_failed"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "store_failed": {
+                    "value": {
+                      "error": "store_failed",
+                      "detail": "The change could not be stored"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable. busy: Another change of the site's entries holds their lock (5 seconds); try again.",
+            "x-error-codes": [
+              "busy"
+            ],
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "examples": {
+                  "busy": {
+                    "value": {
+                      "error": "busy",
+                      "detail": "The site entries are being changed: try again"
                     }
                   }
                 }
@@ -10998,7 +11211,7 @@
             }
           },
           "400": {
-            "description": "Bad request. bad_request: A body over 400000 characters or out of shape, a receiver the draft does not name, a text missing or over 500 characters, a text that holds a link, an address, a run of six or more digits or the shape of a credential, a baseVersion that is not a number, or a conversation that is not an id. Or: Idempotency-Key is longer than 128 characters.",
+            "description": "Bad request. bad_request: A body over 400000 characters or out of shape, a receiver name over 200 characters, a receiver the draft does not name, a text missing or over 500 characters, a text that holds a link, an address, a run of six or more digits, a long number (dashes and separators read as typed) or the shape of a credential, or is over 2000 characters, a baseVersion that is not a number, or a conversation that is not an id. Or: Idempotency-Key is longer than 128 characters.",
             "x-error-codes": [
               "bad_request"
             ],
@@ -11096,7 +11309,7 @@
             }
           },
           "409": {
-            "description": "Conflict. setup_drafting_off: Reading typed answers is switched off in the site profile (model_content.setup_answers): Set up the site works with its controls and written explanations, and no model is called.; live_unavailable: The day's budget or the caller's share is spent, or the model provider refuses the key (with live).; no_model: No model answers here (the agents replay recordings, and a typed answer has none): reading typed answers needs a model key.; stale_version: baseVersion is not the stored profile's version (with currentVersion).; turn_pending: A turn of this conversation is still being read, or another request on it is being admitted: one turn at a time (with turnId when one is being read).; conversation_full: This conversation has its 24 turns: discard the draft or go on with the page's controls.; idempotency_key_reused: The key was used with another body.",
+            "description": "Conflict. setup_drafting_off: Reading typed answers is switched off in the site profile (model_content.setup_answers): Set up the site works with its controls and written explanations, and no model is called.; live_unavailable: The day's budget or the caller's share is spent, or the model provider refuses the key (with live).; no_model: No model answers here (the agents replay recordings, and a typed answer has none): reading typed answers needs a model key.; stale_version: baseVersion is not the stored profile's version (with currentVersion).; turn_pending: A turn of this conversation is still being read, or another request on it is being admitted: one turn at a time (with turnId when one is being read). A repeat with the same Idempotency-Key sent while the first is still being admitted waits for it, up to 30 seconds, then turn_pending.; conversation_full: This conversation has its 24 turns: discard the draft or go on with the page's controls.; idempotency_key_reused: The key was used with another body.",
             "x-error-codes": [
               "setup_drafting_off",
               "live_unavailable",
@@ -19472,6 +19685,14 @@
               },
               "proofId": {
                 "type": "string"
+              },
+              "standsOn": {
+                "type": "string",
+                "description": "The proof an approval stands on now: the one proposed on while it passed and is current, else the newest passing and current proof of the same digest a person ran since, else \"\" (an approval is refused until the proof is run again). CONTRACTS 6.8, P5 (v1.70)."
+              },
+              "proofCurrent": {
+                "type": "boolean",
+                "description": "Whether the proof proposed on still passes under the catalogue, profile, gate policy and release in force (v1.70)."
               }
             }
           },
