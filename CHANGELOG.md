@@ -4,6 +4,32 @@ Versions follow `major.minor.patch`: a minor release for new features, a patch r
 updates. The version in both `module.xml` files (the one the package manager publishes) is always the version of the
 GitHub tag on the same commit; `scripts/check-versions.py` checks every place the version is written.
 
+## 1.5.1 (16 November 2026)
+
+Fixes from a review of 1.5.0. No change to the gate, its policy version or storage.
+
+- **Site entries.** A retirement's and a resumption's proof runs on the pattern in force, so a widened entry can be
+  resumed, and its retirement counts the cases it catches now. The approval dialog shows the proof the approval stands
+  on, and says when the one proposed on is out of date. A fixture whose case was purged after the proposal no longer
+  refuses the approval. The Send dialog shows the proof a proposal will stand on. One approver can suspend an active
+  entry while a proposal waits on it.
+- **Site entries' checks.** R5 reads an NHS number written with dots, brackets, two spaces or dashes. GET /site-entries
+  counts the cases sent once for the whole list. A catch-up recheck names the change that caused it.
+- **Set up the site.** The text rule reads typographic dashes and line separators as typed, and refuses every invisible
+  character and any text over 2,000 characters. The route refuses a receiver name over 200 characters (a very long name
+  could hold a server process for minutes). A kind stays a person's answer while one of the site's own entries reads
+  it. A repeat with its idempotency key waits for the first. A late answer is recorded as a run. A queued turn is
+  checked again when opened.
+- **Set up the site and the Site profile page.** A handed-over draft keeps its drafted answers and the review's tick
+  after a newer version is read. The review recomputes what each drafted answer comes to. The page's links back to Set
+  up the site keep the form's answers. A renamed receiver in force counts as one being added. A turn sent from a card
+  closed before the 202 is kept.
+- **This site's guide.** An unknown pattern goes to the board, as the core does. A policy of board, the brake on
+  closures, receivers with no recovery API, typed set-up answers, the outage resend's exception, the watched mode and
+  the site entries' warnings are printed as the core behaves. Long numbers and credential shapes are masked.
+- **API document.** The suspension needs Shutter_Approve and Shutter_Configure. The site entries' change routes answer
+  503 busy and 500 store_failed. CONTRACTS 1.70.
+
 ## 1.5.0 (16 November 2026)
 
 A trust can add scenarios of its own that stop a case for a person, set up its site profile one receiver at a time with
