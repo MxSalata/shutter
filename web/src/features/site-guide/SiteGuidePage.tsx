@@ -677,10 +677,19 @@ function Scenarios({
           <Text size="md">Until it is fixed, every case goes to a person. {catalogue.siteError}</Text>
         </StatusNotice>
       ) : null}
-      {catalogue.site.length ? (
+      {catalogue.site.length || warnings.length ? (
         <Title order={3} fz="lg">
           This site&apos;s own entries
         </Title>
+      ) : null}
+      {warnings.length ? (
+        <StatusNotice tone="attention" title="What holds for this site's own entries now">
+          <List size="md" spacing="xs" data-testid="site-guide-entry-warnings">
+            {warnings.map((w) => (
+              <List.Item key={w}>{printable(w)}</List.Item>
+            ))}
+          </List>
+        </StatusNotice>
       ) : null}
       {[...catalogue.site].sort(byNumber).map((e) => (
         <Scenario

@@ -399,4 +399,30 @@ describe("This site's guide", () => {
     );
   });
 
+  it("prints what holds for the site's own entries now: a suspension, a review, a lifted two-person rule", async () => {
+    const warnings = [
+      'Site entry L3 is suspended (by alice, 2026-11-16T09:00:00Z): its protection is off until a second person approves resuming it',
+      'Site entry L1 needs review: an upgrade or a change of the site profile touched it. It still applies',
+      'The two-person rule for site entries is lifted (by admin, 2026-11-16T09:30:00Z): one person may propose and approve their own entry',
+    ];
+    server.use(
+      http.get('/api/shutter/site-entries', () =>
+        HttpResponse.json({
+          ...SITE_ENTRIES_EXAMPLE,
+          status: {
+            ...SITE_ENTRIES_EXAMPLE.status,
+            suspended: ['L3'],
+            needsReview: ['L1'],
+            onePerson: { by: 'admin', at: '2026-11-16T09:30:00Z', reason: 'one approver on leave' },
+            warnings,
+          },
+        }),
+      ),
+    );
+    renderGuide();
+    const list = await screen.findByTestId('site-guide-entry-warnings');
+    for (const w of warnings) expect(list).toHaveTextContent(w);
+    await userEvent.click(screen.getByRole('radio', { name: 'Technical' }));
+    for (const w of warnings) expect(screen.getByTestId('site-guide-entry-warnings')).toHaveTextContent(w);
+  });
 });
