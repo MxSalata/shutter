@@ -19,7 +19,7 @@ import { PlanHeadline } from './PlanHeadline';
 import { planWords, type ActionCase } from './planAction';
 import { capitalReceiverNoun, receiverNoun } from './receiver';
 import { useDetail } from '@/stores/appearance';
-import { siteMatchOf } from '@/lib/siteEntry';
+import { planSiteMatch } from '@/lib/siteEntry';
 import { SiteEntryNote } from './SiteEntryNote';
 
 const STAGES: Record<string, string> = {
@@ -165,8 +165,9 @@ export function PlanPanel({
   const preconditions = asArray<string>(p?.preconditions ?? body.preconditions);
   const disagreements = asArray(p?.disagreements ?? body.disagreements);
   const write = !!p?.operationKey && ['resend'].includes(p.disposition);
-  // One of the site's own scenarios matched (CONTRACTS 6.8): its words and what it displaced go with the plan.
-  const siteMatch = p ? siteMatchOf(snapshot?.summary) : undefined;
+  // One of the site's own scenarios matched (CONTRACTS 6.8): its words and what it displaced go with the plan, when the
+  // evidence shown is the plan's own.
+  const siteMatch = planSiteMatch(p, snapshot);
   return (
     <Section
       id="plan"

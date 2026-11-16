@@ -686,6 +686,8 @@ export function useSaveSiteProfile() {
     },
     onSettled: async () => {
       await client.invalidateQueries({ queryKey: keys.siteProfileHistory });
+      // A save rechecks the site's own entries on the server (CONTRACTS 6.8, R14), which may flag one: read them again.
+      await client.invalidateQueries({ queryKey: keys.siteEntries });
     },
   });
 }

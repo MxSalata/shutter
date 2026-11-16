@@ -3,7 +3,8 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api } from './client';
-import { keys, useCasesOnce, useDecideApproval } from './hooks';
+import { keys, useCasesOnce, useDecideApproval, useSaveSiteProfile, useSiteEntries } from './hooks';
+import type { SiteProfile } from './types';
 
 const client = () => new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 5_000 } } });
 const wrapper =
@@ -52,5 +53,23 @@ describe('useCasesOnce', () => {
     expect(get).toHaveBeenCalledTimes(1);
     renderHook(() => useCasesOnce(filters), { wrapper: wrapper(c) });
     await waitFor(() => expect(get).toHaveBeenCalledTimes(2));
+  });
+});
+
+describe('useSaveSiteProfile', () => {
+  it("reads the site's own entries again after a save, which rechecks them on the server", async () => {
+    const get = vi.spyOn(api, 'get').mockResolvedValue({ items: [], status: {}, catalogueVersion: '' });
+    vi.spyOn(api, 'put').mockResolvedValue({ version: 2 });
+    const c = client();
+    const entries = renderHook(() => useSiteEntries(), { wrapper: wrapper(c) });
+    await waitFor(() => expect(entries.result.current.isSuccess).toBe(true));
+    expect(get).toHaveBeenCalledTimes(1);
+    const save = renderHook(() => useSaveSiteProfile(), { wrapper: wrapper(c) });
+    await act(() =>
+      save.result.current.mutateAsync({ expectedVersion: 1 } as unknown as SiteProfile & {
+        expectedVersion: number;
+      }),
+    );
+    await waitFor(() => expect(get.mock.calls.filter(([path]) => path === '/site-entries')).toHaveLength(2));
   });
 });

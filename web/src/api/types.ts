@@ -595,6 +595,8 @@ export interface PrecedentsView {
 
 export interface Plan {
   id?: string | number;
+  /** The snapshot the plan was made on. */
+  snapshotId?: string | number;
   version: number;
   digest: string;
   disposition: string;

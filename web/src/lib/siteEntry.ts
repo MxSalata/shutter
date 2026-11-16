@@ -51,6 +51,29 @@ function instruction(v: unknown): SiteInstruction | undefined {
   };
 }
 
+/**
+ * The site entry a plan was made under, from the evidence the panel holds: only when that evidence is the plan's own
+ * snapshot (or either does not say which it is), so a newer snapshot read before the newer plan never lends the older
+ * plan its site entry and instructions.
+ */
+export function planSiteMatch(
+  plan: { snapshotId?: string | number | null } | null | undefined,
+  snapshot: { id?: string | number | null; summary?: unknown } | null | undefined,
+): SiteMatch | undefined {
+  if (!plan || !snapshot) return undefined;
+  const planSnapshot = plan.snapshotId;
+  const shown = snapshot.id;
+  if (
+    planSnapshot != null &&
+    planSnapshot !== '' &&
+    shown != null &&
+    shown !== '' &&
+    String(planSnapshot) !== String(shown)
+  )
+    return undefined;
+  return siteMatchOf(snapshot.summary);
+}
+
 /** The site entry a case's evidence shows as its match, or undefined when a shipped entry, several or none matched. */
 export function siteMatchOf(summary: unknown): SiteMatch | undefined {
   const catalogue = obj(obj(summary)?.catalogue);

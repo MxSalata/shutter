@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { displacedWords, isSiteEntryId, siteMatchOf, withoutItWords } from './siteEntry';
+import { displacedWords, isSiteEntryId, planSiteMatch, siteMatchOf, withoutItWords } from './siteEntry';
 
 const summary = (catalogue: unknown) => ({ catalogue });
 
@@ -91,5 +91,17 @@ describe("one of the site's own scenarios on a case", () => {
     expect(displacedWords({ id: 'E9', decides: 'board', outcome: 'some_new_outcome' })).toBe(
       'E9, some new outcome decided by the board',
     );
+  });
+});
+
+describe('planSiteMatch', () => {
+  it('lends a plan the site entry only from its own snapshot', () => {
+    const snapshot = { id: 12, summary: summary(site) };
+    expect(planSiteMatch({ snapshotId: 12 }, snapshot)?.id).toBe('L1');
+    expect(planSiteMatch({ snapshotId: '12' }, snapshot)?.id).toBe('L1');
+    expect(planSiteMatch({ snapshotId: 11 }, snapshot)).toBeUndefined();
+    expect(planSiteMatch({}, snapshot)?.id).toBe('L1');
+    expect(planSiteMatch(null, snapshot)).toBeUndefined();
+    expect(planSiteMatch({ snapshotId: 12 }, null)).toBeUndefined();
   });
 });
