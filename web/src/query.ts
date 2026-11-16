@@ -1,4 +1,5 @@
 import { MutationCache, QueryCache, QueryClient } from '@tanstack/react-query';
+import { sessionEnded } from '@/api/endedSession';
 import { isApiError } from '@/lib/errors';
 
 /**
@@ -6,8 +7,11 @@ import { isApiError } from '@/lib/errors';
  * another tab): forget who was signed in (keys.me), so RequireAuth sends them to sign in and back again.
  */
 export function forgetSessionOn401(error: unknown) {
-  if (isApiError(error) && error.isUnauthorized && error.path !== '/me' && error.path !== '/session')
+  if (isApiError(error) && error.isUnauthorized && error.path !== '/me' && error.path !== '/session') {
+    // Who it was, so that someone else signing in next on this tab gets none of their page's state
+    sessionEnded(queryClient.getQueryData<{ username?: string } | null>(['me'])?.username);
     queryClient.setQueryData(['me'], null);
+  }
 }
 
 export const queryClient = new QueryClient({

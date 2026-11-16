@@ -1,12 +1,14 @@
 import { MantineProvider } from '@mantine/core';
 import { Notifications, notifications } from '@mantine/notifications';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { SIGNED_OUT } from '@/api/hooks';
+import { SIGNED_OUT, useSignIn } from '@/api/hooks';
+import { ApiError } from '@/lib/errors';
+import { forgetSessionOn401, queryClient } from '@/query';
 import type { SetupTurnBody, SetupTurnView } from '@/api/types';
 import { resetAssistantForTests } from '@/features/assistant/store';
 import { mockSetupAnswers, mockSetupTurnPause, resetMock } from '@/mocks/handlers';
@@ -757,6 +759,48 @@ describe('an answer that must not be used', () => {
     expect(await screen.findByText(/^Choose here instead, with the control above/)).toBeInTheDocument();
     expect(screen.queryByRole('textbox', { name: BOX })).not.toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: /What it does/ })).toBeEnabled();
+  });
+});
+
+describe('a session that ended without a sign-out', () => {
+  const state = () => useSetup.getState();
+  function draftWithATurn() {
+    state().open(recorded);
+    const id = state().addReceiver();
+    state().setKey(id, 'name', 'Bed Board');
+    state().sent(id, 'system', 'a whiteboard', {
+      turnId: 'ST-000001',
+      conversation: 'SC-000001',
+      state: 'pending',
+    });
+  }
+  async function signInAs(username: string) {
+    server.use(http.post(`${BASE}/session`, () => HttpResponse.json({ ok: true })));
+    const { result } = renderHook(() => useSignIn(), {
+      wrapper: ({ children }) => <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>,
+    });
+    await act(() => result.current.mutateAsync({ username, password: 'pw' }));
+  }
+  const expired = () =>
+    forgetSessionOn401(new ApiError({ status: 401, method: 'GET', path: '/site-profile', body: null }));
+
+  it("forgets the earlier person's draft and typed answers when someone else signs in next", async () => {
+    queryClient.setQueryData(['me'], { username: 'approver' });
+    draftWithATurn();
+    expired();
+    await signInAs('operator');
+    expect(state().draft).toBeNull();
+    expect(state().turns).toEqual([]);
+    expect(state().conversation).toBeFalsy();
+  });
+
+  it('keeps them when the same person signs in again, in any letter case', async () => {
+    queryClient.setQueryData(['me'], { username: 'approver' });
+    draftWithATurn();
+    expired();
+    await signInAs('APPROVER');
+    expect(state().draft).not.toBeNull();
+    expect(state().turns).toHaveLength(1);
   });
 });
 

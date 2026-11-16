@@ -1,6 +1,7 @@
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, newIdempotencyKey, seg } from './client';
 import { resolveCan } from './can';
+import { takeEndedSession } from './endedSession';
 import { isApiError } from '@/lib/errors';
 import {
   CLOSED_STATES,
@@ -123,7 +124,14 @@ export function useSignIn() {
   return useMutation({
     mutationFn: (credentials: { username: string; password: string }) =>
       api.post<unknown>('/session', credentials),
-    onSuccess: async () => {
+    onSuccess: async (_answer, credentials) => {
+      // After a session that ended without a sign-out, someone else signing in forgets what the earlier person's pages
+      // held (their drafts and typed answers), as a sign-out does; the same person, in any letter case, keeps them
+      const before = takeEndedSession();
+      if (before && before.toLowerCase() !== credentials.username.toLowerCase()) {
+        window.dispatchEvent(new Event(SIGNED_OUT));
+        client.clear();
+      }
       await client.invalidateQueries({ queryKey: keys.me });
     },
   });
