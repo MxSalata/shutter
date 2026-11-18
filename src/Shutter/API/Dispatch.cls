@@ -1667,10 +1667,19 @@ ClassMethod SiteProfilePut() As %Status
     }
     Set problem = ##class(Shutter.Store.SiteProfile).Validate(body)
     If problem '= "" Quit ..Fail("400 Bad Request", "bad_request", "The profile is not valid (CONTRACTS 6.4): " _ problem)
-    // A changed kind can take a receiver out of, or into, the pattern of one of the site's own entries that reads it: the
-    // save waits for a person to have read each such change (R19). With expectedVersion, the profile compared with is the
-    // one the store's version check then holds.
-    Set kinds = ##class(Shutter.Catalogue.SiteEntry).KindChanges(##class(Shutter.Store.SiteProfile).Current(), body)
+    // A save of a profile that has moved since the caller read it is stale before anything else is said of it: R19's list
+    // below is of what this save does to the profile in force, which the caller has not read. The store checks the
+    // version again under its lock.
+    Set inForce = ##class(Shutter.Store.SiteProfile).Current(), row = ##class(Shutter.Store.SiteProfile).Row()
+    Set stored = $SELECT($ISOBJECT(row): +row.Version, 1: 0)
+    Kill row
+    If (expected '= "") && (+expected '= stored) {
+        Set extra = {} Set extra.currentVersion = stored
+        Quit ..Fail("409 Conflict", "stale_version", "expectedVersion is not the stored profile's version", extra)
+    }
+    // A changed kind can take a receiver out of, or into, the pattern of one of the site's own entries that reads it, or
+    // widen one: the save waits for a person to have read each such change (R19).
+    Set kinds = ##class(Shutter.Catalogue.SiteEntry).KindChanges(inForce, body)
     Set refused = ##class(Shutter.Catalogue.SiteEntry).KindChangeRefusal(kinds, read)
     If refused '= "" {
         Set extra = {}
