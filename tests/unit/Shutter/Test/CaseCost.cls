@@ -29,6 +29,8 @@ Method Clean()
     Set rs = ##class(%SQL.Statement).%ExecDirect(, "SELECT ID FROM Shutter_Store.""Case"" WHERE CaseId %STARTSWITH 'UT-COST-'")
     While rs.%Next() {
         Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM Shutter_Store.AgentRun WHERE ""Case"" = ?", rs.%Get("ID"))
+        Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM Shutter_Store.CaseEvent WHERE ""Case"" = ?", rs.%Get("ID"))
+        Kill ^Shutter.Counter("event", rs.%Get("ID"))
         Do ##class(Shutter.Store.Case).%DeleteId(rs.%Get("ID"))
     }
     Do ##class(%SQL.Statement).%ExecDirect(, "DELETE FROM Shutter_Store.ModelPrice WHERE Model = ? OR Model = ?", ..#MODEL, ..#UNPRICED)

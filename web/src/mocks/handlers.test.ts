@@ -197,7 +197,13 @@ describe('the held case', () => {
     const c = await api.get<CaseDetail>('/cases/C-000009');
     const runs = fixtures.cases['C-000009'].runs;
     expect(runs.length).toBeGreaterThan(0);
-    expect(c.cost).toMatchObject({ usd: 0, unpriced: false, runs: runs.length, replayedRuns: runs.length, modelRuns: 0 });
+    expect(c.cost).toMatchObject({
+      usd: 0,
+      unpriced: false,
+      runs: runs.length,
+      replayedRuns: runs.length,
+      modelRuns: 0,
+    });
   });
 });
 

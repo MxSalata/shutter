@@ -38,7 +38,13 @@ describe('costAtPrice', () => {
   });
 });
 
-const live = { mode: 'live', model: 'claude-opus-5-5', promptTokens: 1000, completionTokens: 200, costUsd: 0.015 };
+const live = {
+  mode: 'live',
+  model: 'claude-opus-5-5',
+  promptTokens: 1000,
+  completionTokens: 200,
+  costUsd: 0.015,
+};
 
 describe('caseCostOf', () => {
   it('adds up what the runs that called a model spent, replays and the mimic at nothing', () => {
@@ -50,7 +56,14 @@ describe('caseCostOf', () => {
       { ...live, costUsd: 0.002, questionId: 'Q-000001' },
     ]);
     expect(c.usd).toBeCloseTo(0.0195, 10);
-    expect(c).toMatchObject({ unpriced: false, runs: 5, modelRuns: 3, replayedRuns: 1, mockRuns: 1, questionRuns: 1 });
+    expect(c).toMatchObject({
+      unpriced: false,
+      runs: 5,
+      modelRuns: 3,
+      replayedRuns: 1,
+      mockRuns: 1,
+      questionRuns: 1,
+    });
     expect(c.questionUsd).toBeCloseTo(0.002, 10);
     expect(c.models).toEqual(['claude-opus-5-5']);
   });
@@ -75,7 +88,12 @@ describe('caseCostOf', () => {
 
 describe('caseCostWords', () => {
   it('says Unpriced, never $0.00, and names the model with no price', () => {
-    const w = caseCostWords(caseCostOf([{ ...live, costUsd: 0.12 }, { ...live, model: 'new-model', costUsd: '' }]));
+    const w = caseCostWords(
+      caseCostOf([
+        { ...live, costUsd: 0.12 },
+        { ...live, model: 'new-model', costUsd: '' },
+      ]),
+    );
     expect(w?.short).toBe('Unpriced');
     expect(w?.detail).toContain('no price for new-model when its run was made');
     expect(w?.detail).toContain('The one other run that called a model came to $0.12.');
@@ -83,10 +101,16 @@ describe('caseCostWords', () => {
   });
 
   it('gives $0.00 for a case whose runs were all replays, and says why', () => {
-    const w = caseCostWords(caseCostOf([{ ...live, mode: 'replay' }, { ...live, mode: 'replay' }]));
+    const w = caseCostWords(
+      caseCostOf([
+        { ...live, mode: 'replay' },
+        { ...live, mode: 'replay' },
+      ]),
+    );
     expect(w).toEqual({
       short: '$0.00',
-      detail: 'No run on this case called a model. 2 runs replayed from recordings, which call no model and cost nothing.',
+      detail:
+        'No run on this case called a model. 2 runs replayed from recordings, which call no model and cost nothing.',
     });
   });
 

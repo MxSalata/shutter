@@ -1017,7 +1017,11 @@ export const handlers = [
   }),
   // The case with what its recorded runs cost, as the server adds it (CONTRACTS 5)
   http.get(`${BASE}/cases/:id`, ({ params }) =>
-    part(String(params.id), (c) => c.detail && { ...c.detail, cost: caseCostOf(c.runs as CostRun[]) }, 'not_found'),
+    part(
+      String(params.id),
+      (c) => c.detail && { ...c.detail, cost: caseCostOf(c.runs as CostRun[]) },
+      'not_found',
+    ),
   ),
   http.get(`${BASE}/cases/:id/events`, ({ params }) => part(String(params.id), (c) => c.events, 'not_found')),
   http.get(`${BASE}/cases/:id/snapshot`, ({ params }) =>

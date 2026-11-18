@@ -73,7 +73,8 @@ export function caseCostOf(runs: readonly CostRun[] | null | undefined): CaseCos
       c.mockRuns += 1;
       continue;
     }
-    const tokens = n(r.promptTokens) + n(r.completionTokens) + n(r.cacheReadTokens) + n(r.cacheCreationTokens);
+    const tokens =
+      n(r.promptTokens) + n(r.completionTokens) + n(r.cacheReadTokens) + n(r.cacheCreationTokens);
     if (tokens <= 0) continue;
     c.modelRuns += 1;
     if (r.model) models.add(r.model);
@@ -103,12 +104,16 @@ const runsWord = (k: number) => `${k} run${k === 1 ? '' : 's'}`;
  * model had no stored price, never $0.00; $0.00 when no agent ran or every run was a replay or the mimic's. Undefined when
  * the server sent no cost (an older build).
  */
-export function caseCostWords(cost: CaseCost | null | undefined): { short: string; detail: string } | undefined {
+export function caseCostWords(
+  cost: CaseCost | null | undefined,
+): { short: string; detail: string } | undefined {
   if (!cost || typeof cost !== 'object') return undefined;
   const free: string[] = [];
   if (cost.replayedRuns > 0) free.push(`${runsWord(cost.replayedRuns)} replayed from recordings`);
   if (cost.mockRuns > 0) free.push(`${runsWord(cost.mockRuns)} answered by the API mimic`);
-  const freeLine = free.length ? ` ${capital(free.join(' and '))}, which call no model and cost nothing.` : '';
+  const freeLine = free.length
+    ? ` ${capital(free.join(' and '))}, which call no model and cost nothing.`
+    : '';
   const questions =
     cost.questionRuns > 0
       ? ` Questions asked about the case: ${runsWord(cost.questionRuns)}, ${formatUsd(cost.questionUsd)} of it.`
