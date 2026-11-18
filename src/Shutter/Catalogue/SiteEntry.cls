@@ -886,10 +886,14 @@ ClassMethod ActiveReads(condition As %String) As %Boolean
 /// one sent). For each receiver whose kind differs, each active entry whose pattern in force (the version's own, or the
 /// widened one a recheck left) names receiver_category, and whose scope in force admits the receiver when it lists
 /// receivers, is listed when the receiver's kind is among the pattern's values before and not after (leaves) or after and
-/// not before (enters). An active entry whose row, version or pattern cannot be read is listed once as unread while any
-/// kind changes, since it may read the kind. Each item is {entry, title, receiver, from, to, change}, in the entries'
-/// order, then the order of the receivers in the profile sent, then those only the profile in force names. Read straight
-/// from the rows: no recheck is run for it.
+/// not before (enters). An entry one of whose matching fixtures is a stored case of a receiver this save changes, and read
+/// its kind otherwise when it was frozen than the profile sent gives it, is widened by the recheck after the save (R14:
+/// receiver_category is dropped, so it then stops its cases whatever the receiver's kind, and is flagged): it is listed
+/// as widens, once for each such receiver with the first such case, in place of its leaves and enters. An active entry
+/// whose row, version or pattern cannot be read is listed once as unread while any kind changes, since it may read the
+/// kind. Each item is {entry, title, receiver, from, to, change}, and a widens item also has case; in the entries' order,
+/// then the order of the receivers in the profile sent, then those only the profile in force names. Read from the rows
+/// and the fixtures' stored cases as the recheck reads them (SiteEntryProof.Replay): no recheck is run for it.
 ClassMethod KindChanges(before As %DynamicObject, after As %DynamicObject) As %DynamicArray
 {
     Set out = [], json = "Shutter.Util.Json", sp = "Shutter.Store.SiteProfile"
@@ -909,7 +913,7 @@ ClassMethod KindChanges(before As %DynamicObject, after As %DynamicObject) As %D
             Continue:$DATA(seen(name))
             Set seen(name) = ""
             Set from = $CLASSMETHOD(sp, "CategoryOf", before, name), to = $CLASSMETHOD(sp, "CategoryOf", after, name)
-            If from '= to Set n = n + 1, changed(n) = $LISTBUILD(name, from, to)
+            If from '= to Set n = n + 1, changed(n) = $LISTBUILD(name, from, to), index(name) = n
         }
     }
     If n = 0 Quit out
@@ -917,7 +921,7 @@ ClassMethod KindChanges(before As %DynamicObject, after As %DynamicObject) As %D
     If rs.%SQLCODE < 0 Do out.%Push({"entry": "", "title": "", "receiver": "", "from": "", "to": "", "change": "unread"}) Quit out
     Try {
         While rs.%Next() {
-            Set id = rs.%Get("EntryId"), held = "", problem = ""
+            Set id = rs.%Get("EntryId"), held = "", problem = "", content = ""
             Set e = ..%OpenId(rs.%Get("ID"))
             If $ISOBJECT(e) {
                 Set v = ##class(Shutter.Catalogue.SiteEntryVersion).Find(e.EntryId, e.ActiveVersion)
@@ -933,6 +937,35 @@ ClassMethod KindChanges(before As %DynamicObject, after As %DynamicObject) As %D
             Set allowed = pattern.%Get("receiver_category"), scope = held.%Get("scope")
             Set receivers = $SELECT($ISOBJECT(scope) && scope.%IsA("%Library.DynamicObject"): scope.%Get("receiver"), 1: "")
             Set scoped = $ISOBJECT(scope) && scope.%IsA("%Library.DynamicObject") && scope.%IsDefined("receiver")
+            // The entry's own matching fixtures, as the recheck after the save reads them (R14): a stored case of a receiver
+            // this save changes, whose frozen kind is not the one the profile sent gives it, has receiver_category dropped.
+            Kill wide
+            Set fixtures = content.%Get("fixtures")
+            If $ISOBJECT(fixtures) && fixtures.%IsA("%Library.DynamicArray") {
+                Set fi = fixtures.%GetIterator()
+                While fi.%GetNext(, .f) {
+                    Continue:'$ISOBJECT(f)
+                    Continue:'f.%IsA("%Library.DynamicObject")
+                    Continue:($CLASSMETHOD(json, "Str", f, "expect") '= "match")
+                    Set frozen = f.%Get("conditions")
+                    Continue:'$ISOBJECT(frozen)
+                    Set now = ##class(Shutter.Catalogue.SiteEntryProof).Replay(f, .source, .why)
+                    Continue:(source '= "evidence")
+                    Set name = $CLASSMETHOD(json, "Str", now.scope, "receiver")
+                    Continue:(name = "")
+                    Set i = $GET(index(name))
+                    Continue:(i = "")
+                    Continue:$DATA(wide(i))
+                    If $CLASSMETHOD(json, "Str", frozen, "receiver_category") '= $LIST(changed(i), 3) Set wide(i) = $CLASSMETHOD(json, "Str", f, "case")
+                }
+            }
+            If $DATA(wide) {
+                For i = 1:1:n {
+                    Continue:'$DATA(wide(i))
+                    Do out.%Push({"entry": (id), "title": ($CLASSMETHOD(json, "Str", held, "title")), "receiver": ($LIST(changed(i), 1)), "from": ($LIST(changed(i), 2)), "to": ($LIST(changed(i), 3)), "change": "widens", "case": (wide(i))})
+                }
+                Continue
+            }
             For i = 1:1:n {
                 Set name = $LIST(changed(i), 1), from = $LIST(changed(i), 2), to = $LIST(changed(i), 3)
                 Continue:(scoped && '..Among(receivers, name))
@@ -967,6 +1000,7 @@ ClassMethod KindChangeWords(item As %DynamicObject) As %String
     If change = "unread" Quit who _ " cannot be read, so it may read the kind"
     Set kinds = " (" _ $CLASSMETHOD(json, "Str", item, "from") _ " to " _ $CLASSMETHOD(json, "Str", item, "to") _ ")"
     Set receiver = $CLASSMETHOD(json, "Str", item, "receiver")
+    If change = "widens" Quit receiver _ kinds _ " is the receiver of case " _ $CLASSMETHOD(json, "Str", item, "case") _ ", a matching fixture of " _ who _ ": the recheck after the save drops receiver_category from that entry, which then stops its cases whatever the receiver's kind and is flagged for review"
     If change = "leaves" Quit receiver _ kinds _ " leaves the pattern of " _ who _ ", which then no longer stops its cases"
     Quit receiver _ kinds _ " comes into the pattern of " _ who _ ", which then stops its cases too"
 }
