@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.70, 16 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.71, 18 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -495,8 +495,49 @@ the engine's worklist row for the user before assigning, and assigns once more i
 step from SQL is `Shutter.Util.Workflow.Decide(caseId, action, digest, comment)` (`SELECT
 Shutter_Util.Workflow_Decide(...)`): the actor is the SQL session's user, never an argument, the same role check
 applies, and an approval with an empty digest is refused (`no_digest`). An approver who decides in the Management
-Portal's Workflow inbox pastes the plan digest from the task's message into its `PlanDigest` field; the task's form
-starts empty, so pressing Approve without it binds nothing and the case blocks (or the incident's chains are rejected). The body of `POST /cases/{id}/approvals` is `{decision: "approve" | "reject", planDigest, expectedVersion, comment?}` (v1.39, written down): `expectedVersion` is the case's `version` the caller read and is required; 400 `bad_request` for a decision outside the two; 409 `wrong_state` (with `approval` when a decision was already taken) unless the case awaits approval, and also when another decision reached the case's Workflow task first, another approver has accepted the task, or no task is open: two decisions on one task at the same instant are taken one at a time, so one stands, and the other's 409 carries `approval` with the decision, approver and time of the one that stands; 409 `stale_version` with `currentDigest` when `planDigest` is not the current plan's digest, and with `currentVersion` when `expectedVersion` is missing or is not the case's version, so the caller reads the case again and decides on what it sees.
+Portal's Workflow inbox pastes nothing (v1.71): the task is bound on the server when the workflow makes it, its form
+shows what it is bound to and takes only `Comment`, and Approve releases exactly that, or blocks the case (or rejects
+the incident's chains) with nothing written when anything bound has moved; **Approval in the Workflow inbox**, below. The body of `POST /cases/{id}/approvals` is `{decision: "approve" | "reject", planDigest, expectedVersion, comment?}` (v1.39, written down): `expectedVersion` is the case's `version` the caller read and is required; 400 `bad_request` for a decision outside the two; 409 `wrong_state` (with `approval` when a decision was already taken) unless the case awaits approval, and also when another decision reached the case's Workflow task first, another approver has accepted the task, or no task is open: two decisions on one task at the same instant are taken one at a time, so one stands, and the other's 409 carries `approval` with the decision, approver and time of the one that stands; 409 `stale_version` with `currentDigest` when `planDigest` is not the current plan's digest, and with `currentVersion` when `expectedVersion` is missing or is not the case's version, so the caller reads the case again and decides on what it sees.
+
+**Approval in the Workflow inbox** (v1.71). Before, the inbox's form started with an empty `PlanDigest` field that the
+approver filled by pasting the digest from the task's message, so a task could not approve a plan nobody had looked
+at. The task now carries that guarantee itself:
+
+- **Bound when it is made.** The workflow writes the binding on the task request (`Shutter.Process.TaskBinding`), as
+  form values named `Shutter.*`. A case's task binds the case and its `version`; the plan's id, version and digest; the
+  evidence (the case's current snapshot: its id, digest and material digest); the rehearsal of the plan that passed
+  (none for a FHIR receiver, which has no dry run); the receiver version the plan is conditioned on (the version the
+  rehearsal validated, the plan's expected version when it gave none; for a FHIR receiver, the sealed update's ETag)
+  and the receiver's epoch; the deciding gate's policy version; the site profile's version; and a digest of the
+  catalogue's version. An incident's task binds the incident, the chain (none for the chains under one approval) and
+  the incident plan's digest (7.3).
+- **Shown, and nothing else to fill.** `%FormFields` is `Comment` alone and `%FormTemplate` is
+  `Shutter.Process.ApprovalForm.cls`, the form the inbox draws below the task's message once the task is accepted: the
+  case and its version, the plan's version and disposition, the exact action read from the plan the task was made for,
+  the plan's digest and the evidence's digest in read-only boxes with no name, the rehearsal and its result, the
+  versions, a link to the case page (`/shutter/index.html#/cases/<id>`, or the incident's), and `Comment`. For an
+  incident: the incident and the chain, the digest, the catalogue, site profile and gate policy its plan names, and the
+  link. The inbox's submit saves only the fields `%FormFields` names, so nothing the form shows can be changed from it.
+  Asked for as a page of its own, the form answers 404. The task's message says what the task is bound to, in place of
+  the instruction to paste.
+- **Void if anything bound moved.** An approval from the inbox names no digest. The workflow reads the binding from the
+  request it sent, never from the answer, and checks it against the case now: the case's version, the workflow's plan
+  and the case's current plan, the snapshot (a refreshed snapshot keeps the binding when nothing material changed, as
+  an approval does, A7), the newest rehearsal of the plan, the receiver version and epoch the workflow holds, the gate's
+  policy version, the site profile and the catalogue. When all hold, the approval is recorded for the bound plan and
+  rehearsal, its state event saying "in the Workflow inbox, as its task was bound", and the case goes on to the read
+  before the write. When any has moved, the case blocks with nothing approved and nothing sent, and the state event
+  names what moved ("The approval's task no longer matches what it was made for (the case moved: version 7 when the
+  task was made, 8 now), so it binds nothing"). An incident's chains are rejected in the same way when the incident,
+  the chain or the plan digest no longer matches ("the approval's task no longer matches the incident"). Everything an
+  approval binds is checked again at the dispatch gate, as for every approval (6.5, `APPROVAL_*`).
+- **The web application's approval is unchanged.** An answer that names a digest (`POST /cases/{id}/approvals`, the
+  incident routes and `Shutter.Util.Workflow.Decide` from SQL, which write it into `PlanDigest`) is decided by that
+  digest as before, after the route's own checks; the binding is not consulted. A task made before tasks were bound (one
+  open across the upgrade) has no binding, so an inbox approval of it still needs the digest pasted, and without it the
+  case blocks ("carried no plan digest"), as before.
+- `GET /cases/{id}`'s `tasks[].planDigest` is still empty while a task is open; once a task is approved in the inbox it
+  is the digest its task is bound to (before, the digest the approver pasted), and an inbox rejection names none.
 
 **The case bundle.** `POST /cases/{id}/bundle` (`Shutter_Operate`, `X-Requested-With`; it writes, so it is not a `GET` a link could set off) answers 200 with one JSON file for audit or a support handoff, `Content-Disposition: attachment; filename="shutter-case-<id>-redacted.json"`: `redaction`, alone on the file's first line and starting `REDACTED:`, then `format` (`shutter-case-bundle/1`), `generatedAt`, `generatedBy`, `case` (operational fields and the operation key), `evidence` (every snapshot with its summary and items), `plans`, `gateDecisions`, `approvals`, `attempts`, `verifications`, `receipt` (what `GET /cases/{id}/closure` answers, or null while the case is open) and `notIncluded`. The case's event log, the agents' runs and escalation emails are not in it. Everything passes through the model view (section 9), read from the stored rows, with the same tokens and the map staying in IRIS. Three things go further, since a file leaves with no one to ask: note text stays out whatever `model_content.free_text` says; what a person typed (an approval's `comment`, which becomes `commentPresent`, and a hand closure's or an abandon's reason in `outcome`) stays out, since no map covers it; and a last sweep of the finished object refuses the file if a value of the map is left in a string, a number or a key. Wards, beds, times, message control ids and staff user names remain, and the first line says so. Each file leaves a `note` event on the case, naming who took it and the file's SHA-256; the case's version does not move. A case that cannot be redacted (its message cannot be read, so its names are unknown) answers 409 `not_redactable` with the reason, and nothing is recorded; so does a download whose record cannot be written. A plan's `action` keeps its `type` and `expected_version` as well as what the view's operation allowlist keeps. The digests in the file are of the unredacted rows, so they identify them and cannot be recomputed from it.
 
@@ -995,10 +1036,12 @@ keeps `further_messages.in_patient_movement: stop`, which a demo install writes 
   dispatch, rehearsed and verified, exactly as an approved case. The case records an approval whose approver is
   `policy`, with the profile's version, the tier, the chain kind and the entry, so the authorization check and the
   closure read as for a person's approval, and the app shows "automatic by site policy".
-- `approval`: one Workflow task for the case, or for the whole incident (section 7). The task's `PlanDigest` form
-  value is empty: the decider supplies the digest (the API from the body it checked, an approver in the Workflow inbox
-  by pasting it from the task's message), and an approval with no digest, or another one, blocks the case (v1.21;
-  before, the value was pre-filled with the plan's digest, so an inbox approval always matched).
+- `approval`: one Workflow task for the case, or for the whole incident (section 7). The task is bound on the server
+  when it is made, and an approver in the Workflow inbox approves what it is bound to, with nothing pasted; the approval
+  blocks the case when anything bound has moved (v1.71; section 5, "Approval in the Workflow inbox"). The task's
+  `PlanDigest` form value is empty: the API's decider writes the digest its body named, and an approval naming another
+  digest blocks the case (v1.21; before, the value was pre-filled with the plan's digest, so an inbox approval always
+  matched; from v1.21 to v1.70 the inbox approver pasted it).
 - `per_chain`: one Workflow task per chain of the incident.
 - `board` for a chain kind means the board runs whatever the match says.
 - A tier 3 receiver never takes `automatic` unless the profile says so explicitly; the shipped default does not.
@@ -1562,10 +1605,12 @@ workflow (which match the stored evidence again) hold such a case for the entry.
   writes nothing still closes, and each stopped case can be reinvestigated under the versions now in force. A chain with no
   person's approval has no approval to void: the new versions decide it on fresh evidence.
 - Task subjects: `Shutter I-nnnnnn: approve the release of N chain(s) to <receiver>` for the shared approval, and
-  `Shutter I-nnnnnn/<seq>: ...` per chain; both carry the `PlanDigest` and `Comment` form fields, `PlanDigest` empty
-  until the decider fills it (v1.21; before, it was pre-filled with the plan's digest, so an inbox approval always
-  matched). An approval with another digest, or none, rejects the chains it covers: their cases are escalated with the
-  reason.
+  `Shutter I-nnnnnn/<seq>: ...` per chain. Since v1.71 each is bound on the server to the incident, the chain and the
+  plan digest, its form takes only `Comment`, and an inbox approval names no digest: it releases what the task is bound
+  to while that still matches the incident (section 5, "Approval in the Workflow inbox"). The `PlanDigest` form value
+  stays empty for the API's decider (v1.21; before, it was pre-filled with the plan's digest, so an inbox approval
+  always matched). An approval with another digest, from a task whose binding no longer matches, or of an unbound task
+  with no digest, rejects the chains it covers: their cases are escalated with the reason.
 - A task's message holds 2,000 characters (`EnsLib.Workflow.TaskRequest.%Message`). It lists every chain and item when
   they fit; otherwise the first whole chains, how many chains and operations it leaves out, and the incident page
   (`/shutter/index.html#/incidents/I-nnnnnn`), which has them all. The digest is always whole, and an approval binds every chain the
@@ -3578,6 +3623,15 @@ That `If-Match` or an approval makes the write idempotent; that a verified versi
 
 ## Changes
 
+- v1.71, 18 Nov 2026: 5, 6.4, 7.3: approval in the Workflow inbox needs nothing pasted. Each approval task, a case's,
+  a FHIR case's and an incident's, is bound on the server when it is made (`Shutter.Process.TaskBinding`: the case and
+  its version, the plan and its digest, the evidence, the rehearsal, the receiver version and epoch, the gate's policy,
+  the site profile and the catalogue; for an incident, the incident, the chain and the plan digest); its form
+  (`Shutter.Process.ApprovalForm`) shows them read-only and takes only `Comment`; and an inbox approval, which names no
+  digest, approves what the task is bound to, read from the request the workflow sent, or blocks the case (rejects the
+  chains) with nothing written when anything bound has moved. An answer that names a digest (the web application's,
+  `Decide` from SQL) is decided as before, and a task made before tasks were bound still needs the digest. `tasks[].planDigest`
+  of a task approved in the inbox is the bound digest.
 - v1.70, 16 Nov 2026 (the review of 1.5.0): 5: `POST /page-questions` and `POST /site-profile/setup-turns` in the
   `Shutter_Operate` and `Shutter_LiveAgents` rows. 6.8: R5 reads a number as the text rule reads a long number; R8, a
   retirement's and a resumption's proof and check are of the entry as matched now (`effectivePattern`,

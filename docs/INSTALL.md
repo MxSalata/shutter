@@ -393,9 +393,11 @@ Shape A:
    by hand answers yes to "Closing a case by hand needs an approver" in the site profile
    (`approvers.close_needs_approver`). Shutter checks the role of whoever closes the case, not that a second person
    does: an approver may escalate and close the same case. An approver who decides in the Management Portal's Workflow
-   inbox pastes the plan digest from the task's message (it is **Plan digest** on the case page too) into its `PlanDigest` field (the field starts empty, and an
-   approval without it, or with another digest, blocks the case; the recovery is a reinvestigation); the web
-   application sends it for them. Whoever approves must hold `Shutter_Approve` and be a member of the Workflow role
+   inbox presses **Accept**, reads the task's message and its form (the plan it releases, read-only: the exact action, the
+   plan's digest, the evidence, the rehearsal and the versions) and presses **Approve**, with nothing to paste: the task
+   was bound to that plan on the server when it was made, and if the plan, the case, the evidence, the receiver, the
+   policy, the site profile or the catalogue has moved since, the approval blocks the case with nothing written (the
+   recovery is a reinvestigation); the web application names the digest for them. Whoever approves must hold `Shutter_Approve` and be a member of the Workflow role
    "Shutter Approvers". The role check is the last one an approval meets, so a holder outside the role is refused (403) only
    when the approval gets that far: the case must be awaiting approval (otherwise 409 `wrong_state`), the request must carry the
    plan's current digest and the case's current version (otherwise 409 `stale_version`), and recovery must be enabled (in shadow
