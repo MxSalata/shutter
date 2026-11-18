@@ -5103,7 +5103,7 @@
             }
           },
           "409": {
-            "description": "Conflict. stale_version: expectedVersion is not the stored version (with currentVersion).; kind_change_unread: The save changes a receiver's kind that an active site entry reads, and kindChangesRead does not name every such entry (with kindChanges: [{entry, title, receiver, from, to, change}], change leaves, enters or unread).",
+            "description": "Conflict. stale_version: expectedVersion is not the stored version (with currentVersion).; kind_change_unread: The save changes a receiver's kind that an active site entry reads, and kindChangesRead does not name every such entry (with kindChanges: [{entry, title, receiver, from, to, change, case}], change leaves, enters, widens (with case, the matching fixture of the receiver whose recheck after the save drops receiver_category) or unread). A stale expectedVersion is stale_version before this is read.",
             "x-error-codes": [
               "stale_version",
               "kind_change_unread"
