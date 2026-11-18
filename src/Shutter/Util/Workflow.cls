@@ -1,7 +1,8 @@
 /// The Workflow engine's tasks for Shutter cases and incidents: finding a case's open approval task and completing
 /// it on the signed-in user's behalf. The REST API calls Decide() after its own checks, and a script or the terminal
 /// calls it through SQL; the Management Portal's Workflow inbox is the other way to answer a task, and there the
-/// approver pastes the plan digest from the task's text into its PlanDigest field.
+/// approver pastes nothing: the task is bound on the server to what it approves (Shutter.Process.TaskBinding), and an
+/// approval there names no digest.
 Class Shutter.Util.Workflow Extends %RegisteredObject
 {
 
@@ -36,8 +37,8 @@ ClassMethod TasksFor(caseId As %String) As %DynamicArray
             Do ..SetTime(t, "timeCreated", task.%TaskStatus.TimeCreated)
             Do ..SetTime(t, "timeCompleted", task.%TaskStatus.TimeCompleted)
         }
-        // Empty while the task is open: the decider supplies the digest (Decide, or the inbox approver).
-        Set t.planDigest = task.%FormValues.GetAt("PlanDigest")
+        // Empty while the task is open: Decide writes the digest its caller named, and an inbox approval binds its task's.
+        Set t.planDigest = ..DecidedDigest(task)
         Do out.%Push(t)
     }
     Quit out
@@ -142,8 +143,18 @@ ClassMethod NoOpenTask(caseId As %String, digest As %String) As %String
     If 'rs.%Next() Quit none
     Set task = ##class(EnsLib.Workflow.TaskResponse).%OpenId(rs.%Get("ID"))
     If '$ISOBJECT(task) || '$ISOBJECT(task.%TaskStatus) || 'task.%TaskStatus.IsComplete Quit none
-    If task.%FormValues.GetAt("PlanDigest") '= digest Quit none
+    If ..DecidedDigest(task) '= digest Quit none
     Quit ..DecidedJSON(task)
+}
+
+/// The digest a task's decision bound: the one Decide wrote, or, for a task approved in the Workflow inbox, which names
+/// none, the digest its task is bound to; "" while the task is open with none written, and for an inbox rejection.
+ClassMethod DecidedDigest(task As EnsLib.Workflow.TaskResponse) As %String
+{
+    Set named = task.%FormValues.GetAt("PlanDigest")
+    If named '= "" Quit named
+    If '$ISOBJECT(task.%TaskStatus) || 'task.%TaskStatus.IsComplete || ($ZCONVERT(task.%Action, "L") '= "approve") Quit ""
+    Quit task.%FormValues.GetAt("Shutter.PlanDigest")
 }
 
 /// Gives back the lock Claim took.

@@ -89,8 +89,8 @@ Method OnResponse(request As %Library.Persistent, ByRef response As %Library.Per
         If completionkey = "quiet" { Set sc = ..OnQuiet(incident) Quit }
         If completionkey = "ready" { Set sc = ..OnReady(incident) Quit }
         If completionkey = "poll" { Set sc = ..OnPoll(incident) Quit }
-        If completionkey = "approval" { Set sc = ..OnApproval(incident, "", callresponse) Quit }
-        If $EXTRACT(completionkey, 1, 9) = "approval:" { Set sc = ..OnApproval(incident, $EXTRACT(completionkey, 10, *), callresponse) Quit }
+        If completionkey = "approval" { Set sc = ..OnApproval(incident, "", callresponse, callrequest) Quit }
+        If $EXTRACT(completionkey, 1, 9) = "approval:" { Set sc = ..OnApproval(incident, $EXTRACT(completionkey, 10, *), callresponse, callrequest) Quit }
         If $PIECE(completionkey, ":", 1) = "raise" { Set sc = ..OnRaiseAgain(incident, $PIECE(completionkey, ":", 2)) Quit }
         If $PIECE(completionkey, ":", 1) = "taskcheck" { Set sc = ..OnTaskCheck(incident, $PIECE(completionkey, ":", 2), $PIECE(completionkey, ":", 3)) Quit }
         $$$LOGWARNING("Unexpected completion key " _ completionkey)
@@ -335,9 +335,12 @@ ClassMethod LostWords(item As %DynamicObject) As %String
 }
 
 /// The approval task for the incident's policy chains (seq ""), or for one chain (7.3), over the text AskApproval
-/// made of the chains. Its PlanDigest form value starts empty: the decider supplies the digest (the API from the body
-/// it checked, an approver in the Workflow inbox by pasting it from this message), and an answer with none, or another
-/// one, rejects the chains it covers (OnApproval).
+/// made of the chains, bound on the server when it is made (Shutter.Process.TaskBinding) to the incident, the chain and
+/// the plan digest, which holds every chain's first expected version and the receiver's epoch. Its form
+/// (Shutter.Process.ApprovalForm) shows them and takes only a comment, so an approver in the Workflow inbox approves with
+/// Accept and Approve, naming no digest. Its PlanDigest form value starts empty: the API's decider writes the digest its
+/// body named there. An answer with another digest, an inbox approval whose binding no longer matches the incident, or an
+/// approval of an unbound task with no digest rejects the chains it covers (OnApproval).
 ClassMethod ApprovalTask(incident As Shutter.Store.Incident, seq As %String, count As %Integer, failures As %Integer, lines As %String) As EnsLib.Workflow.TaskRequest
 {
     Set task = ##class(EnsLib.Workflow.TaskRequest).%New()
@@ -345,19 +348,28 @@ ClassMethod ApprovalTask(incident As Shutter.Store.Incident, seq As %String, cou
     Set task.%Subject = "Shutter " _ incident.IncidentId _ $SELECT(seq '= "": "/" _ seq, 1: "") _ ": approve the release of " _ count _ " chain(s) to " _ incident.Receiver
     Set task.%Message = ##class(Shutter.Process.IncidentTaskText).Message(incident, count, failures, lines)
     Set task.%Priority = 1
-    Set task.%FormFields = "PlanDigest,Comment"
+    Do ##class(Shutter.Process.TaskBinding).BindIncident(task, incident, seq)
     Quit task
 }
 
-/// A Workflow task answered: the chains it covered are approved, or rejected with their cases escalated.
-Method OnApproval(incident As Shutter.Store.Incident, seq As %String, result As EnsLib.Workflow.TaskResponse) As %Status
+/// A Workflow task answered: the chains it covered are approved, or rejected with their cases escalated. <var>sent</var>
+/// is the task request the workflow sent, which holds the task's binding: an inbox approval names no digest and approves
+/// what its task is bound to while the binding holds; an answer that names a digest is checked by it, as before.
+Method OnApproval(incident As Shutter.Store.Incident, seq As %String, result As EnsLib.Workflow.TaskResponse, sent As %Library.Persistent = "") As %Status
 {
     Set sc = $$$OK
     Set ..PendingTasks = ..PendingTasks - 1
     Set action = $ZCONVERT(result.%Action, "L"), user = result.%UserName
     Set comment = result.%FormValues.GetAt("Comment"), digest = result.%FormValues.GetAt("PlanDigest"), taskId = result.%Id()
-    Set ok = (action = "approve") && (digest '= "") && (digest = incident.PlanDigest)
-    Set why = $SELECT(action '= "approve": "rejected by " _ user _ $SELECT(comment '= "": ": " _ $EXTRACT(comment, 1, ##class(Shutter.Process.IncidentTaskText).#COMMENTWORDS), 1: ""), digest = "": "the approval carried no plan digest, so it binds nothing", 1: "the approval named another plan digest (" _ $EXTRACT(digest, 1, 19) _ ")")
+    // The Workflow inbox's approval names no digest: the task's binding, read from the request this workflow sent, is
+    // what it approves, while it still matches the incident.
+    Set moved = "", inbox = 0
+    If (action = "approve") && (digest = "") && ##class(Shutter.Process.TaskBinding).IsBound(sent) {
+        Set moved = ##class(Shutter.Process.TaskBinding).IncidentMoved(sent, incident, seq)
+        If moved = "" Set digest = ##class(Shutter.Process.TaskBinding).BoundDigest(sent), inbox = 1
+    }
+    Set ok = (action = "approve") && (moved = "") && (digest '= "") && (digest = incident.PlanDigest)
+    Set why = $SELECT(action '= "approve": "rejected by " _ user _ $SELECT(comment '= "": ": " _ $EXTRACT(comment, 1, ##class(Shutter.Process.IncidentTaskText).#COMMENTWORDS), 1: ""), moved '= "": "the approval's task no longer matches the incident (" _ moved _ "), so it binds nothing", digest = "": "the approval carried no plan digest, so it binds nothing", 1: "the approval named another plan digest (" _ $EXTRACT(digest, 1, 19) _ ")")
     Set chains = incident.ChainList(), now = ##class(Shutter.Util.Time).NowUTC()
     If seq = "" {
         Set incident.ApprovedBy = user, incident.ApprovedAt = now, incident.ApprovalDecision = $SELECT(ok: "approved", 1: "rejected")
@@ -384,7 +396,7 @@ Method OnApproval(incident As Shutter.Store.Incident, seq As %String, result As 
         Quit:$$$ISERR(sc)
     }
     Quit:$$$ISERR(sc) sc
-    Set sc = incident.Note("approval", $SELECT(ok: "Approved by " _ user _ " (task " _ taskId _ ", plan digest " _ $EXTRACT(digest, 1, 19) _ ")", 1: "Not approved: " _ why _ " (task " _ taskId _ ")") _ $SELECT(seq '= "": ", chain " _ seq, 1: ", the policy chains under one approval"), user)
+    Set sc = incident.Note("approval", $SELECT(ok: "Approved by " _ user _ " (task " _ taskId _ ", plan digest " _ $EXTRACT(digest, 1, 19) _ $SELECT(inbox: ", in the Workflow inbox, as its task was bound", 1: "") _ ")", 1: "Not approved: " _ why _ " (task " _ taskId _ ")") _ $SELECT(seq '= "": ", chain " _ seq, 1: ", the policy chains under one approval"), user)
     Quit:$$$ISERR(sc) sc
     Quit ..Advance(incident)
 }

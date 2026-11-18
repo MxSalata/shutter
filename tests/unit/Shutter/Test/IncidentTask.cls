@@ -98,7 +98,7 @@ Method TestAStormRaisesOneTaskThatFits()
     Do $$$AssertTrue(msg [ ((30 - shown) _ " more chain"), "and how many more")
     Do $$$AssertTrue(msg [ ("/shutter/index.html#/incidents/" _ inc.IncidentId), "it points to the incident page")
     Do $$$AssertTrue(msg [ "binds all 30 chains", "and says the approval covers them all")
-    Do $$$AssertTrue(msg [ "PlanDigest field", "the inbox's instruction is there")
+    Do $$$AssertTrue(msg [ "needs nothing pasted", "the inbox's words are there")
     Do $$$AssertTrue($LENGTH(msg, $CHAR(10) _ "  ") - 1 = (2 * shown), "whole chains only: " _ shown _ " chains, each with its two items")
 }
 
@@ -550,6 +550,52 @@ Method TestALongCommentRejectsAndDoesNotAbandon()
     Do $$$AssertEquals(inc.ChainAt(1).ItemAt(1).Case.State, "escalated", "its cases go to a person")
     Do $$$AssertTrue(inc.ChainAt(1).Outcome [ "rejected by approver: ccc", "the outcome keeps the start of the comment")
     Do $$$AssertEquals($EXTRACT(inc.ApprovalComment, 1, 3), "ccc", "the approval keeps it")
+}
+
+/// An approval from the Workflow inbox names no digest: it approves what the incident's task is bound to, read from the
+/// request the workflow sent. Once the incident's plan has moved, the same answer rejects the chains, though the task's
+/// own copy of the binding was set to the new plan; and an answer with no bound request and no digest binds nothing.
+Method TestAnInboxApprovalIsBoundToItsTask()
+{
+    Set inc = ..NewIncident(1, 2)
+    Set wf = ..Workflow(inc)
+    Do $$$AssertStatusOK(wf.AskApproval(inc, inc.ChainList(), ""), "the task is raised")
+    Set task = wf.LastTask
+    Do $$$AssertStatusOK(wf.OnResponse("", "", task, ..InboxAnswer(task), "approval"), "the inbox's answer is taken")
+    Set inc = ##class(Shutter.Store.Incident).%OpenId(inc.%Id())
+    Do $$$AssertEquals(inc.ApprovalDecision, "approved", "approved with nothing pasted")
+    Do $$$AssertNotEquals(inc.ChainAt(1).State, "rejected", "the chain is not rejected")
+    Do $$$AssertEquals(..Said(inc, "approval", "Approved by approver"), 1, "the incident says who approved")
+
+    Set inc = ..NewIncident(1, 2)
+    Set wf = ..Workflow(inc)
+    Do $$$AssertStatusOK(wf.AskApproval(inc, inc.ChainList(), ""), "the task is raised")
+    Set task = wf.LastTask
+    Set inc.PlanDigest = ##class(Shutter.Util.Digest).SHA256Hex("another plan"), sc = inc.%Save()
+    Do $$$AssertStatusOK(sc, "the incident's plan moves")
+    Set answer = ..InboxAnswer(task)
+    Do answer.%FormValues.SetAt(inc.PlanDigest, "Shutter.PlanDigest")
+    Do $$$AssertStatusOK(wf.OnResponse("", "", task, answer, "approval"), "the inbox's answer is taken")
+    Set inc = ##class(Shutter.Store.Incident).%OpenId(inc.%Id())
+    Do $$$AssertEquals(inc.ChainAt(1).State, "rejected", "the chain is rejected")
+    Do $$$AssertTrue(inc.ChainAt(1).Outcome [ "no longer matches the incident (the plan moved", "and says why: " _ inc.ChainAt(1).Outcome)
+
+    Set inc = ..NewIncident(1, 2)
+    Set wf = ..Workflow(inc)
+    Do $$$AssertStatusOK(wf.AskApproval(inc, inc.ChainList(), ""), "the task is raised")
+    Do $$$AssertStatusOK(wf.OnResponse("", "", "", ..InboxAnswer(wf.LastTask), "approval"), "an answer with no bound request is taken")
+    Set inc = ##class(Shutter.Store.Incident).%OpenId(inc.%Id())
+    Do $$$AssertTrue(inc.ChainAt(1).Outcome [ "carried no plan digest", "and binds nothing: " _ inc.ChainAt(1).Outcome)
+}
+
+/// The task as the Workflow engine makes it from the request, approved in the inbox: the request's form values copied,
+/// and no digest, since the inbox's form sends only Comment.
+ClassMethod InboxAnswer(task As EnsLib.Workflow.TaskRequest) As EnsLib.Workflow.TaskResponse
+{
+    Set answer = ##class(EnsLib.Workflow.TaskResponse).%New(), key = ""
+    For { Set value = task.%FormValues.GetNext(.key) Quit:key=""  Do answer.%FormValues.SetAt(value, key) }
+    Set answer.%Action = "Approve", answer.%UserName = "approver"
+    Quit answer
 }
 
 /// A chain of more operations than Entries holds is classified, not refused: the first entries and how many more,

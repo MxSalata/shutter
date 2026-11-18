@@ -1,8 +1,8 @@
 /// Who decides a Workflow task and what the task carries (CONTRACTS 5, 6.4, 7.3): Shutter.Util.Workflow takes the decider
 /// from the process's own user, never from an argument, refuses an approval that names no digest and a decider outside
-/// the task's Workflow role, and the approval tasks of a case and of an incident start with an empty PlanDigest form
-/// value, the digest in the text the approver reads; and an assignment keeps in step with the engine's distribution of
-/// the task. Nothing here needs a production or leaves a row: the membership and assignment tests make a Workflow role
+/// the task's Workflow role, and the approval tasks of a case and of an incident are bound on the server to what they
+/// approve, with an empty PlanDigest form value for the API's decider and the digest in the text the approver reads; and
+/// an assignment keeps in step with the engine's distribution of the task. Nothing here needs a production or leaves a row: the membership and assignment tests make a Workflow role
 /// and user of their own and remove them again, the assignment test removes the tasks it saves, and the task tests
 /// build unsaved objects.
 Class Shutter.Test.Workflow Extends %UnitTest.TestCase
@@ -131,9 +131,10 @@ ClassMethod SaveTaskLater(role As %String, caseId As %String, seconds As %Numeri
     Do ..SavedTask(role, caseId)
 }
 
-/// The case's approval task starts with an empty PlanDigest form value and carries the digest in its text, with the
-/// instruction to paste it.
-Method TestCaseTaskCarriesNoDigestValue()
+/// The case's approval task is bound on the server when it is made (Shutter.Process.TaskBinding): its form takes only a
+/// comment, its PlanDigest form value starts empty for the API's decider alone, and its text carries the digest and says
+/// nothing needs pasting.
+Method TestCaseTaskIsBound()
 {
     Set case = ##class(Shutter.Store.Case).%New()
     Set case.CaseId = "UT-WF-1", case.Headline = "Resend the transfer at version 3"
@@ -141,15 +142,64 @@ Method TestCaseTaskCarriesNoDigestValue()
     Set plan = ##class(Shutter.Store.Plan).%New()
     Set plan.Version = 1, plan.Disposition = "resend", plan.ActionType = "resend", plan.OperationKey = case.OperationKey
     Set plan.ExpectedVersion = 3, plan.Digest = "sha256:abc"
-    Set task = ##class(Shutter.Process.CaseWorkflow).ApprovalTask(case, plan)
+    Set task = ##class(Shutter.Process.CaseWorkflow).ApprovalTask(case, plan, 0, "R-7", 4, 2)
     Do $$$AssertEquals(task.%Subject, "Shutter UT-WF-1: approve plan v1 (resend)", "the subject names the case and the plan")
     Do $$$AssertEquals(task.%Actions, "Approve,Reject", "the actions")
     Do $$$AssertEquals(task.%Priority, 2, "the priority")
-    Do $$$AssertEquals(task.%FormFields, "PlanDigest,Comment", "the form fields")
-    Do $$$AssertEquals(task.%FormValues.GetAt("PlanDigest"), "", "the PlanDigest form value starts empty")
+    Do $$$AssertEquals(task.%FormFields, "Comment", "the inbox's form takes only a comment")
+    Do $$$AssertEquals(task.%FormTemplate, "Shutter.Process.ApprovalForm.cls", "drawn by Shutter's own form page")
+    Do $$$AssertEquals(task.%FormValues.GetAt("PlanDigest"), "", "the PlanDigest form value starts empty: only the API's decider writes one")
+    Set v = task.%FormValues
+    Do $$$AssertEquals(v.GetAt("Shutter.Kind") _ "|" _ v.GetAt("Shutter.Case") _ "|" _ v.GetAt("Shutter.CaseVersion") _ "|" _ v.GetAt("Shutter.PlanVersion") _ "|" _ v.GetAt("Shutter.PlanDigest") _ "|" _ v.GetAt("Shutter.Rehearsal") _ "|" _ v.GetAt("Shutter.ReceiverVersion") _ "|" _ v.GetAt("Shutter.ReceiverEpoch") _ "|" _ v.GetAt("Shutter.Policy"), "case|UT-WF-1|1|1|sha256:abc|R-7|4|2|" _ ##class(Shutter.Operation.Gate).#POLICYVERSION, "bound to the case, the plan, the rehearsal, the receiver and the gate's policy")
+    Do $$$AssertEquals(v.GetAt("Shutter.SiteProfile") _ "|" _ v.GetAt("Shutter.Catalogue"), ##class(Shutter.Process.TaskBinding).ProfileVersion() _ "|" _ ##class(Shutter.Process.TaskBinding).CatalogueDigest(), "and to the site profile and the catalogue")
     Do $$$AssertTrue(task.%Message [ "Plan digest: sha256:abc", "the digest is in the text the approver reads")
-    Do $$$AssertTrue(task.%Message [ "PlanDigest field", "with the instruction to paste it")
+    Do $$$AssertNotTrue(task.%Message [ "PlanDigest field", "nothing asks for a paste")
+    Do $$$AssertTrue(task.%Message [ "needs nothing pasted: this task is bound to this plan, case version 1, this evidence and rehearsal, and receiver version 4", "the text says what the task is bound to")
     Do $$$AssertTrue(task.%Message [ "Exact action: resend " _ case.OperationKey _ " at receiver version 3", "and the exact action")
+    Set task = ##class(Shutter.Process.CaseWorkflow).ApprovalTask(case, plan)
+    Do $$$AssertEquals(task.%FormValues.GetAt("Shutter.ReceiverVersion"), 3, "with no rehearsed version, the plan's expected version is bound")
+}
+
+/// What moved since a case's task was made, said in words, from the request the workflow sent; nothing when the binding
+/// holds, and a refreshed snapshot keeps it when nothing material changed (A7). A request that is not a bound task is not
+/// bound.
+Method TestCaseBindingIsChecked()
+{
+    Set case = ##class(Shutter.Store.Case).%New()
+    Set case.CaseId = "UT-WF-3", case.Headline = "Resend", case.OperationKey = "PAS^HOSP^MRN-UT3^ENC-UT3^transfer^2026-10-19T09:00:00Z"
+    Set snap = ##class(Shutter.Store.Snapshot).%New()
+    Set snap.Digest = "sha256:snap1", snap.MaterialDigest = "sha256:mat1"
+    Set case.CurrentSnapshot = snap
+    Set plan = ##class(Shutter.Store.Plan).%New()
+    Set plan.Version = 2, plan.Disposition = "resend", plan.ActionType = "resend", plan.OperationKey = case.OperationKey, plan.ExpectedVersion = 3, plan.Digest = "sha256:abc"
+    Set policy = ##class(Shutter.Operation.Gate).#POLICYVERSION
+    Set task = ##class(Shutter.Process.CaseWorkflow).ApprovalTask(case, plan, 0, "R-7", 3, 2)
+    Set binding = "Shutter.Process.TaskBinding"
+    Do $$$AssertTrue($CLASSMETHOD(binding, "IsBound", task), "the task is bound")
+    Do $$$AssertEquals($CLASSMETHOD(binding, "BoundDigest", task), "sha256:abc", "to the plan's digest")
+    Do $$$AssertEquals($CLASSMETHOD(binding, "CaseMoved", task, case, plan, "R-7", 3, 2, policy), "", "nothing moved")
+    Set case.Version = 2
+    Do $$$AssertEquals($CLASSMETHOD(binding, "CaseMoved", task, case, plan, "R-7", 3, 2, policy), "the case moved: version 1 when the task was made, 2 now", "the case moved")
+    Set case.Version = 1, plan.Digest = "sha256:def"
+    Do $$$AssertTrue($CLASSMETHOD(binding, "CaseMoved", task, case, plan, "R-7", 3, 2, policy) [ "the plan moved: the task was made for plan v2 (sha256:abc)", "the plan moved")
+    Set plan.Digest = "sha256:abc", snap.Digest = "sha256:snap2"
+    Do $$$AssertEquals($CLASSMETHOD(binding, "CaseMoved", task, case, plan, "R-7", 3, 2, policy), "", "a refreshed snapshot with the same material keeps the binding")
+    Set snap.MaterialDigest = "sha256:mat2"
+    Do $$$AssertEquals($CLASSMETHOD(binding, "CaseMoved", task, case, plan, "R-7", 3, 2, policy), "the evidence moved: snapshot sha256:snap1 when the task was made, sha256:snap2 now", "a material change moves the evidence")
+    Set snap.Digest = "sha256:snap1", snap.MaterialDigest = "sha256:mat1"
+    Do $$$AssertEquals($CLASSMETHOD(binding, "CaseMoved", task, case, plan, "R-8", 3, 2, policy), "the rehearsal moved: R-7 when the task was made, R-8 now", "another rehearsal")
+    Do $$$AssertEquals($CLASSMETHOD(binding, "CaseMoved", task, case, plan, "R-7", 4, 2, policy), "the receiver version moved: 3 when the task was made, 4 now", "another receiver version")
+    Do $$$AssertEquals($CLASSMETHOD(binding, "CaseMoved", task, case, plan, "R-7", 3, 5, policy), "the receiver's epoch moved: 2 when the task was made, 5 now", "another epoch")
+    Do $$$AssertEquals($CLASSMETHOD(binding, "CaseMoved", task, case, plan, "R-7", 3, 2, "2000-01-01.1"), "the gate's policy moved: " _ policy _ " when the task was made, 2000-01-01.1 now", "another gate policy")
+    Set other = ##class(Shutter.Store.Case).%New()
+    Set other.CaseId = "UT-WF-4", other.CurrentSnapshot = snap
+    Do $$$AssertEquals($CLASSMETHOD(binding, "CaseMoved", task, other, plan, "R-7", 3, 2, policy), "the task is for case UT-WF-3", "a task for another case")
+    Set old = ##class(EnsLib.Workflow.TaskRequest).%New()
+    Set old.%FormFields = "PlanDigest,Comment"
+    Do $$$AssertNotTrue($CLASSMETHOD(binding, "IsBound", old), "a task made before tasks were bound is not")
+    Do $$$AssertNotTrue($CLASSMETHOD(binding, "IsBound", ""), "nor is no request")
+    Do $$$AssertNotTrue($CLASSMETHOD(binding, "IsBound", ##class(Shutter.Msg.WardOperation).%New()), "nor another kind of request")
+    Do $$$AssertEquals($CLASSMETHOD(binding, "CaseMoved", "", case, plan, "R-7", 3, 2, policy), "the task is not bound", "and an unbound request never holds")
 }
 
 /// A line the approver should read that could not be worked out is said to be missing, not left out: the digest doesn't change,
@@ -169,9 +219,10 @@ Method TestCaseTaskSaysWhatItCouldNotRead()
     Do $$$AssertTrue(message [ "before deciding", "and what to do about it")
 }
 
-/// The incident's approval task, shared or per chain, starts with an empty PlanDigest form value and carries the
-/// digest and what the approval binds in its text.
-Method TestIncidentTaskCarriesNoDigestValue()
+/// The incident's approval task, shared or per chain, is bound on the server to the incident, the chain and the plan
+/// digest; its form takes only a comment, its PlanDigest form value starts empty, and its text carries the digest and what
+/// the approval binds. The binding moves with another incident, another chain or another plan.
+Method TestIncidentTaskIsBound()
 {
     Set receiver = $PARAMETER("Shutter.Production", "RECEIVER")
     Set inc = ##class(Shutter.Store.Incident).%New()
@@ -182,15 +233,29 @@ Method TestIncidentTaskCarriesNoDigestValue()
     Do $$$AssertEquals(task.%Subject, "Shutter UT-WF-I1: approve the release of 1 chain(s) to " _ receiver, "the shared task's subject")
     Do $$$AssertEquals(task.%Actions, "Approve,Reject", "the actions")
     Do $$$AssertEquals(task.%Priority, 1, "the priority")
-    Do $$$AssertEquals(task.%FormFields, "PlanDigest,Comment", "the form fields")
+    Do $$$AssertEquals(task.%FormFields _ "|" _ task.%FormTemplate, "Comment|Shutter.Process.ApprovalForm.cls", "the form takes only a comment, drawn by Shutter's own page")
     Do $$$AssertEquals(task.%FormValues.GetAt("PlanDigest"), "", "the PlanDigest form value starts empty")
+    Set v = task.%FormValues
+    Do $$$AssertEquals(v.GetAt("Shutter.Kind") _ "|" _ v.GetAt("Shutter.Incident") _ "|" _ v.GetAt("Shutter.Chain") _ "|" _ v.GetAt("Shutter.PlanDigest"), "incident|UT-WF-I1||sha256:def", "bound to the incident, the chains under one approval and the plan")
     Do $$$AssertTrue(task.%Message [ "Plan digest: sha256:def", "the digest is in the text the approver reads")
-    Do $$$AssertTrue(task.%Message [ "PlanDigest field", "with the instruction to paste it")
+    Do $$$AssertNotTrue(task.%Message [ "PlanDigest field", "nothing asks for a paste")
+    Do $$$AssertTrue(task.%Message [ "needs nothing pasted", "the text says so")
     Do $$$AssertTrue(task.%Message [ "2 failures to " _ receiver, "the count of failures")
     Do $$$AssertTrue(task.%Message [ lines, "the chains as listed")
     Do $$$AssertTrue(task.%Message [ "catalogue entry and outcome listed for it", "and that each operation goes only as listed")
+    Set binding = "Shutter.Process.TaskBinding"
+    Do $$$AssertEquals($CLASSMETHOD(binding, "IncidentMoved", task, inc, ""), "", "nothing moved")
+    Do $$$AssertEquals($CLASSMETHOD(binding, "IncidentMoved", task, inc, "2"), "the task is for the chains under one approval", "an answer for a chain")
+    Set inc.PlanDigest = "sha256:fed"
+    Do $$$AssertEquals($CLASSMETHOD(binding, "IncidentMoved", task, inc, ""), "the plan moved: the task was made for sha256:def, the incident's plan is sha256:fed", "the plan moved")
+    Set inc.PlanDigest = "sha256:def"
     Set task = ##class(Shutter.Process.IncidentWorkflow).ApprovalTask(inc, "2", 1, 2, "")
     Do $$$AssertEquals(task.%Subject, "Shutter UT-WF-I1/2: approve the release of 1 chain(s) to " _ receiver, "a chain's own task names the chain")
+    Do $$$AssertEquals(task.%FormValues.GetAt("Shutter.Chain"), "2", "and binds it")
+    Set html = ##class(Shutter.Process.ApprovalForm).FormHTML(task)
+    Do $$$AssertTrue(html [ "<th scope=""row"">Incident</th><td>UT-WF-I1, chain 2</td>", "the form names the incident and the chain: " _ $EXTRACT(html, 1, 400))
+    Do $$$AssertTrue(html [ "value=""sha256:def""", "and shows the digest")
+    Do $$$AssertEquals($LENGTH(html, "name=""") - 1, 1, "with one named field")
 }
 
 /// A decision that lands while the engine is still distributing the task (CI, 2 Nov 2026): the task is saved, with no

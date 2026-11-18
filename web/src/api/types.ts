@@ -780,7 +780,7 @@ export interface WorkflowTask {
   assignedTo: string;
   timeCreated: string;
   timeCompleted: string;
-  /** The digest the decider named: empty while the task is open. */
+  /** The digest the decision bound: the one the decider named, or for a task approved in the Workflow inbox the digest its task is bound to; empty while the task is open. */
   planDigest?: string;
 }
 

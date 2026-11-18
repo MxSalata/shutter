@@ -170,7 +170,7 @@ ClassMethod OnResponse(p As Shutter.Process.CaseWorkflow, case As Shutter.Store.
     Try {
         Set sc = $CASE(key,
             "fhir:gate:proposal": ..OnGateProposal(p, case, callresponse),
-            "fhir:approval": ..OnApproval(p, case, callresponse),
+            "fhir:approval": ..OnApproval(p, case, callresponse, callrequest),
             "fhir:preflight": ..OnPreflight(p, case, callresponse),
             "fhir:preflight:retry": ..SendPreflight(p, case),
             "fhir:gate:dispatch": ..OnGateDispatch(p, case, callresponse),
@@ -310,9 +310,11 @@ ClassMethod SealBinding(p As Shutter.Process.CaseWorkflow, case As Shutter.Store
 
 // ---- the approval ----
 
-/// The approval task of a FHIR case's plan. Its subject and its form are the workflow's own, so the timeout, the
-/// cancel, the close and the abandon find it as they find any; its words say what will be sent, that nothing was
-/// rehearsed, and that the HL7 message stays where it is.
+/// The approval task of a FHIR case's plan. Its subject is the workflow's own, so the timeout, the cancel, the close and
+/// the abandon find it as they find any; its words say what will be sent, that nothing was rehearsed, and that the HL7
+/// message stays where it is. It is bound on the server as a case's task is (Shutter.Process.TaskBinding, kind "fhir"):
+/// the case, the plan, the evidence, the ETag the update is conditioned on, the FHIR gate's policy, the site profile and
+/// the catalogue, with no dry run; its form shows them and takes only a comment.
 ClassMethod ApprovalTask(case As Shutter.Store.Case, plan As Shutter.Store.Plan, binding As Shutter.Store.FHIRBinding, waitSeconds As %Integer = 0) As EnsLib.Workflow.TaskRequest
 {
     Set lf = $CHAR(10), workflow = "Shutter.Process.CaseWorkflow"
@@ -326,7 +328,7 @@ ClassMethod ApprovalTask(case As Shutter.Store.Case, plan As Shutter.Store.Plan,
     Set message = message _ lf _ "Plan digest: " _ plan.Digest _ lf _ "Snapshot digest: " _ $SELECT($ISOBJECT(snapshot): snapshot.Digest, 1: "")
     Set message = message _ lf _ "No dry run exists for this receiver."
     Set message = message _ lf _ "After this update, do not resend the original HL7 message from the engine."
-    Set message = message _ lf _ "To approve from the Workflow inbox, paste the plan digest above into the PlanDigest field: an approval with no digest, or another one, binds nothing and blocks the case."
+    Set message = message _ lf _ "Approving in the Workflow inbox needs nothing pasted: this task is bound to this plan, case version " _ case.Version _ ", this evidence and ETag " _ binding.ExpectedEtag _ ". If any of them moves before you approve, the case blocks and nothing is written."
     // What the approver should look at first (Shutter.Util.FurtherMessages): the plan's lines for this patient.
     Try {
         Set lines = ##class(Shutter.Util.FurtherMessages).PlanLines(case, $SELECT($ISOBJECT(snapshot): snapshot.SummaryObject(), 1: ""))
@@ -344,14 +346,15 @@ ClassMethod ApprovalTask(case As Shutter.Store.Case, plan As Shutter.Store.Plan,
     If waitSeconds > 0 Set message = message _ lf _ "Unanswered after " _ $CLASSMETHOD(workflow, "WaitWords", waitSeconds) _ ", the task is cancelled and the case escalates to a person."
     Set task.%Message = message
     Set task.%Priority = 2
-    Set task.%FormFields = "PlanDigest,Comment"
+    Do ##class(Shutter.Process.TaskBinding).BindCase(task, "fhir", case, plan, "", binding.ExpectedEtag, "", ##class(Shutter.FHIR.Profile).#POLICYVERSION)
     Quit task
 }
 
-/// The approver's answer. As the workflow's own (a rejection, an answer with no digest or another one), with no
-/// rehearsal to bind, no expected version, the FHIR gate's policy version and no precedent; an approval is tied to the
-/// sealed binding, and the read before the write is asked for.
-ClassMethod OnApproval(p As Shutter.Process.CaseWorkflow, case As Shutter.Store.Case, result As EnsLib.Workflow.TaskResponse) As %Status
+/// The approver's answer. As the workflow's own (a rejection, an answer with no digest or another one, an inbox approval
+/// whose task's binding moved: <var>sent</var> is the task request), with no rehearsal to bind, no expected version, the
+/// FHIR gate's policy version and no precedent; an approval is tied to the sealed binding, and the read before the write
+/// is asked for.
+ClassMethod OnApproval(p As Shutter.Process.CaseWorkflow, case As Shutter.Store.Case, result As EnsLib.Workflow.TaskResponse, sent As %Library.Persistent = "") As %Status
 {
     Set policy = ##class(Shutter.FHIR.Profile).#POLICYVERSION
     Set plan = ##class(Shutter.Store.Plan).%OpenId(p.PlanId)
@@ -367,6 +370,16 @@ ClassMethod OnApproval(p As Shutter.Process.CaseWorkflow, case As Shutter.Store.
         Set case.Headline = "Rejected by " _ user _ ": " _ case.Headline
         Quit case.Transition("blocked", "Rejected by " _ user _ $SELECT(comment '= "": ": " _ comment, 1: ""), user, "approval:" _ a.%Id())
     }
+    Set inbox = 0
+    If (digest = "") && ##class(Shutter.Process.TaskBinding).IsBound(sent) {
+        // The Workflow inbox's approval: the task's binding, read from the request the workflow sent, is what it approves.
+        Set sealed = ..Binding(p)
+        Set moved = ##class(Shutter.Process.TaskBinding).CaseMoved(sent, case, plan, "", $SELECT($ISOBJECT(sealed): sealed.ExpectedEtag, 1: ""), "", policy)
+        If moved '= "" {
+            Quit case.Transition("blocked", "The approval's task no longer matches what it was made for (" _ moved _ "), so it binds nothing; nothing was dispatched", user, "task:" _ taskId)
+        }
+        Set digest = ##class(Shutter.Process.TaskBinding).BoundDigest(sent), inbox = 1
+    }
     If digest = "" {
         Quit case.Transition("blocked", "The approval carried no plan digest, so it binds nothing; nothing was dispatched", user)
     }
@@ -377,7 +390,7 @@ ClassMethod OnApproval(p As Shutter.Process.CaseWorkflow, case As Shutter.Store.
     Quit:$$$ISERR(sc) sc
     Set p.ApprovalId = a.%Id()
     Set case.CurrentApproval = a
-    Set sc = case.Transition("approved", "Approved by " _ user _ " for plan digest " _ $EXTRACT(plan.Digest, 1, 19) _ $SELECT(comment '= "": ": " _ comment, 1: ""), user, "approval:" _ a.%Id())
+    Set sc = case.Transition("approved", "Approved by " _ user _ " for plan digest " _ $EXTRACT(plan.Digest, 1, 19) _ $SELECT(inbox: " in the Workflow inbox, as its task was bound", 1: "") _ $SELECT(comment '= "": ": " _ comment, 1: ""), user, "approval:" _ a.%Id())
     Quit:$$$ISERR(sc) sc
     Set binding = ..Binding(p)
     Set sc = $SELECT($ISOBJECT(binding): binding.Bind(a.%Id()), 1: $$$ERROR($$$GeneralError, "the plan has no sealed binding"))

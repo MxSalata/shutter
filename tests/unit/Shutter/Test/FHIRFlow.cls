@@ -348,7 +348,7 @@ Method TestHeadlineAndTaskNeverSayRehearsal()
     Do $$$AssertEquals($CLASSNAME(task) _ "|" _ $LIST(wf.Sent(2), 1) _ "|" _ $LIST(wf.Sent(2), 3), "EnsLib.Workflow.TaskRequest|" _ wf.ApprovalTarget _ "|fhir:approval", "the task goes to the approvers")
     Set plan = ##class(Shutter.Store.Plan).%OpenId(wf.PlanId)
     Do $$$AssertEquals(task.%Subject, "Shutter " _ case.CaseId _ ": approve plan v" _ plan.Version _ " (resend)", "under the subject every approval task has")
-    Do $$$AssertEquals(task.%Actions _ "|" _ task.%FormFields, "Approve,Reject|PlanDigest,Comment", "with its actions and form")
+    Do $$$AssertEquals(task.%Actions _ "|" _ task.%FormFields, "Approve,Reject|Comment", "with its actions and its form, which takes only a comment")
     Set text = task.%Message, lf = $CHAR(10)
     For words = case.Headline, task.%Subject, text, ..AllEvents(case) {
         Do $$$AssertNotTrue($ZCONVERT(words, "L") [ "rehears", "no rehearsal is spoken of: " _ $EXTRACT(words, 1, 120))
@@ -359,7 +359,7 @@ Method TestHeadlineAndTaskNeverSayRehearsal()
     Do $$$AssertEquals($PIECE(text, lf, 3) _ lf _ $PIECE(text, lf, 4), "Plan digest: " _ plan.Digest _ lf _ "Snapshot digest: " _ case.CurrentSnapshot.Digest, "the two digests")
     Do $$$AssertEquals($PIECE(text, lf, 5), "No dry run exists for this receiver.", "that nothing was rehearsed")
     Do $$$AssertEquals($PIECE(text, lf, 6), "After this update, do not resend the original HL7 message from the engine.", "and what not to do afterwards")
-    Do $$$AssertTrue(text [ "paste the plan digest above into the PlanDigest field", "how to approve from the inbox")
+    Do $$$AssertTrue(text [ ("Approving in the Workflow inbox needs nothing pasted: this task is bound to this plan, case version " _ case.Version _ ", this evidence and ETag W/""1"""), "how to approve from the inbox")
     Do $$$AssertTrue(text [ ("Unanswered after " _ wf.WaitWords(wf.ApprovalWaitSeconds)), "and how long the task waits")
     Do $$$AssertEquals(..Event(case, "awaiting_approval"), "No dry run exists for this receiver; asking an approver for the exact plan", "the case says why it waits")
     Do $$$AssertEquals(wf.Requests.GetAt(3).Timeout _ "|" _ $LIST(wf.Sent(3), 1) _ "|" _ $LIST(wf.Sent(3), 3), wf.ApprovalWaitSeconds _ "|Ens.Alarm|approval:timeout:" _ wf.Round, "the wait is bounded by the workflow's own alarm")
@@ -864,6 +864,41 @@ Method Gate(case As Shutter.Store.Case, wf As Shutter.Test.QuietFHIRWorkflow, st
 ClassMethod Row(check As %String, result As %String, code As %String) As %DynamicObject
 {
     Quit {"check": (check), "result": (result), "reason_code": (code), "detail": "made up"}
+}
+
+/// An approval from the Workflow inbox names no digest: it approves what the FHIR case's task is bound to (the plan, the
+/// case's version, the evidence, the ETag), read from the task request the workflow sent, and the read before the write is
+/// asked for. Once the case has moved, the same answer blocks it with nothing approved, though the task's own copy of the
+/// binding was set to the case's new version.
+Method TestAnInboxApprovalIsBoundToItsTask()
+{
+    Do ..Awaiting(.wf, .case)
+    Set task = wf.Requests.GetAt(2)
+    Do $$$AssertEquals(task.%FormValues.GetAt("Shutter.Kind") _ "|" _ task.%FormValues.GetAt("Shutter.ReceiverVersion") _ "|" _ task.%FormValues.GetAt("Shutter.Rehearsal"), "fhir|W/""1""|", "bound to the ETag, with no rehearsal")
+    Set response = ""
+    Do $$$AssertStatusOK(wf.OnResponse("", .response, task, ..InboxAnswer(task), "fhir:approval"), "the inbox's answer is taken")
+    Set case = ##class(Shutter.Store.Case).%OpenId(case.%Id())
+    Do $$$AssertEquals(case.State _ " " _ wf.Last(), "approved FHIR Receiver|Shutter.Msg.FHIRRead|fhir:preflight", "approved with nothing pasted, and the read before the write asked for")
+    Do ..Awaiting(.wf, .case)
+    Set task = wf.Requests.GetAt(2), was = case.Version
+    Do $$$AssertStatusOK(case.Transition(case.State, "Another job moves the case under its open task", "test"), "the case moves")
+    Set answer = ..InboxAnswer(task)
+    Do answer.%FormValues.SetAt(case.Version, "Shutter.CaseVersion")
+    Do $$$AssertStatusOK(wf.OnResponse("", .response, task, answer, "fhir:approval"), "the inbox's answer is taken")
+    Set case = ##class(Shutter.Store.Case).%OpenId(case.%Id())
+    Do $$$AssertEquals(case.State, "blocked", "the moved case blocks")
+    Do $$$AssertTrue(..Event(case, "blocked") [ ("the case moved: version " _ was _ " when the task was made, " _ (was + 1) _ " now"), "and says what moved: " _ ..Event(case, "blocked"))
+    Do $$$AssertEquals(wf.ApprovalId, "", "nothing is approved")
+}
+
+/// The task as the Workflow engine makes it from the request, approved in the inbox: the request's form values copied,
+/// and no digest, since the inbox's form sends only Comment.
+ClassMethod InboxAnswer(task As EnsLib.Workflow.TaskRequest) As EnsLib.Workflow.TaskResponse
+{
+    Set answer = ##class(EnsLib.Workflow.TaskResponse).%New(), key = ""
+    For { Set value = task.%FormValues.GetNext(.key) Quit:key=""  Do answer.%FormValues.SetAt(value, key) }
+    Set answer.%Action = "Approve", answer.%UserName = ..#APPROVER
+    Quit answer
 }
 
 /// The approver's answer to the task: an approval of the workflow's plan by its digest, or another action.

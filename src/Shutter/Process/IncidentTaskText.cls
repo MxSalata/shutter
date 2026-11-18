@@ -1,6 +1,6 @@
 /// The words of an incident's approval task (CONTRACTS 7.3). EnsLib.Workflow.TaskRequest.%Message holds 2,000 characters,
 /// so the text lists as many whole chains as fit, says how many more there are, and points to the incident page for the
-/// rest. The digest is never cut: it is what the approver pastes, and it binds every chain, listed here or not.
+/// rest. The digest is never cut: it is what the approval binds, every chain, listed here or not.
 Class Shutter.Process.IncidentTaskText
 {
 
@@ -24,7 +24,7 @@ ClassMethod Message(incident As Shutter.Store.Incident, count As %Integer, failu
     If $LENGTH(catalogue) > ..#CATALOGUEWORDS Set catalogue = $EXTRACT(catalogue, 1, ..#CATALOGUEWORDS) _ " (the rest in the plan)"
     Set tail = nl _ nl _ "Approving binds: resend these, in this order. Each one is rehearsed, gated and verified just before it goes; items after the first go at exactly the version the previous item's verified receipt reports; each operation goes only under the catalogue entry and outcome listed for it, and one whose fresh evidence reads differently stops its chain; the chain stops at the first surprise, and the rest comes back to you." _ nl
     Set tail = tail _ "Plan digest: " _ incident.PlanDigest _ nl _ "Catalogue " _ catalogue _ ", site profile v" _ incident.ProfileVersion _ ", gate policy " _ incident.PolicyVersion _ nl
-    Set tail = tail _ "To approve from the Workflow inbox, paste the plan digest above into the PlanDigest field: an approval with no digest, or another one, binds nothing and rejects these chains."
+    Set tail = tail _ "Approving in the Workflow inbox needs nothing pasted: this task is bound to this plan, and if it changes before you approve, these chains are not released and nothing is written."
     If ($LENGTH(head) + $LENGTH(lines) + $LENGTH(tail)) <= ..#MESSAGELIMIT Quit head _ lines _ tail
     // A long list: what is left out is said once, before what the approval binds.
     Set total = $LENGTH(lines, nl) - 1, chains = $LENGTH(lines, nl _ "Chain ") - 1, items = total - chains

@@ -289,7 +289,7 @@ Method OnResponse(request As %Library.Persistent, ByRef response As %Library.Per
         If completionkey = "coordinator" { Set sc = ..OnCoordinator(case, callresponse) Quit }
         If completionkey = "gate:proposal" { Set sc = ..OnGateProposal(case, callresponse) Quit }
         If completionkey = "rehearsal" { Set sc = ..OnRehearsal(case, callrequest, callresponse) Quit }
-        If completionkey = "approval" { Set sc = ..OnApproval(case, callresponse) Quit }
+        If completionkey = "approval" { Set sc = ..OnApproval(case, callresponse, callrequest) Quit }
         If $PIECE(completionkey, ":", 1, 2) = "approval:timeout" { Set sc = ..OnApprovalTimeout(case, +$PIECE(completionkey, ":", 3)) Quit }
         If $PIECE(completionkey, ":", 1, 2) = "board:defer" { Set sc = ..OnBoardDefer(case, +$PIECE(completionkey, ":", 3)) Quit }
         If completionkey = "preflight" { Set sc = ..OnPreflight(case, callresponse) Quit }
@@ -1691,7 +1691,7 @@ Method OnRehearsal(case As Shutter.Store.Case, sent As Shutter.Msg.WardOperation
     If ..Policy = "incident" Quit ..ReleaseByIncident(case, plan, r)
     Set sc = case.Transition("awaiting_approval", "Rehearsal passed; asking an approver for the exact plan", "system", "rehearsal:" _ r.%Id())
     Quit:$$$ISERR(sc) sc
-    Set sc = ..SendRequestAsync(..ApprovalTarget, ..ApprovalTask(case, plan, ..ApprovalWaitSeconds), 1, "approval")
+    Set sc = ..SendRequestAsync(..ApprovalTarget, ..ApprovalTask(case, plan, ..ApprovalWaitSeconds, r.%Id(), ..BoundReceiverVersion(plan, ..ReceiverVersion), ..ReceiverEpoch), 1, "approval")
     Quit:$$$ISERR(sc) sc
     // The wait is bounded (v1.35): an alarm keyed by the round, so one from an earlier plan is ignored.
     If ..ApprovalWaitSeconds > 0 {
@@ -1743,16 +1743,21 @@ ClassMethod WaitWords(seconds As %Integer) As %String
     Quit $FNUMBER(seconds / 3600, "", 1) _ " hours"
 }
 
-/// The approval task for a case's plan (CONTRACTS 6.4). Its PlanDigest form value starts empty: the decider supplies
-/// the digest (the API from the body it checked, an approver in the Workflow inbox by pasting it from this message),
-/// and OnApproval blocks the case when the answer carries none, or another one.
-ClassMethod ApprovalTask(case As Shutter.Store.Case, plan As Shutter.Store.Plan, waitSeconds As %Integer = 0) As EnsLib.Workflow.TaskRequest
+/// The approval task for a case's plan (CONTRACTS 6.4), bound on the server when it is made (Shutter.Process.TaskBinding):
+/// the case and its version, the plan and its digest, the evidence, the rehearsal <var>rehearsalId</var>, the receiver
+/// version <var>receiverVersion</var> (the plan's expected version when empty) and epoch <var>epoch</var>, the gate's
+/// policy, the site profile and the catalogue. Its form (Shutter.Process.ApprovalForm) shows them and takes only a
+/// comment, so an approver in the Workflow inbox approves with Accept and Approve, naming no digest; OnApproval then
+/// blocks the case if anything bound moved. Its PlanDigest form value starts empty: the API's decider writes the digest
+/// its body named there, and OnApproval checks that digest as before.
+ClassMethod ApprovalTask(case As Shutter.Store.Case, plan As Shutter.Store.Plan, waitSeconds As %Integer = 0, rehearsalId As %String = "", receiverVersion As %String = "", epoch As %String = "") As EnsLib.Workflow.TaskRequest
 {
+    Set receiverVersion = ..BoundReceiverVersion(plan, receiverVersion)
     Set task = ##class(EnsLib.Workflow.TaskRequest).%New()
     Set task.%Actions = "Approve,Reject"
     Set task.%Subject = "Shutter " _ case.CaseId _ ": approve plan v" _ plan.Version _ " (" _ plan.Disposition _ ")"
     Set task.%Message = case.Headline _ $CHAR(10) _ "Exact action: " _ plan.ActionType _ " " _ plan.OperationKey _ " at receiver version " _ plan.ExpectedVersion _ $CHAR(10) _ "Plan digest: " _ plan.Digest _ $CHAR(10) _ "Snapshot digest: " _ $SELECT($ISOBJECT(case.CurrentSnapshot): case.CurrentSnapshot.Digest, 1: "") _ $CHAR(10) _ "Rehearsal: would apply (rolled back)."
-    Set task.%Message = task.%Message _ $CHAR(10) _ "To approve from the Workflow inbox, paste the plan digest above into the PlanDigest field: an approval with no digest, or another one, binds nothing and blocks the case."
+    Set task.%Message = task.%Message _ $CHAR(10) _ ..BoundLine(case, receiverVersion)
     Set absent = $SELECT(plan.Json '= "": plan.PlanObject().%Get("absent_members"), 1: "")
     If $ISOBJECT(absent) && (absent.%Size() > 0) {
         Set names = "", iter = absent.%GetIterator()
@@ -1782,8 +1787,21 @@ ClassMethod ApprovalTask(case As Shutter.Store.Case, plan As Shutter.Store.Plan,
     }
     If waitSeconds > 0 Set task.%Message = task.%Message _ $CHAR(10) _ "Unanswered after " _ ..WaitWords(waitSeconds) _ ", the task is cancelled and the case escalates to a person."
     Set task.%Priority = 2
-    Set task.%FormFields = "PlanDigest,Comment"
+    Do ##class(Shutter.Process.TaskBinding).BindCase(task, "case", case, plan, rehearsalId, receiverVersion, epoch, ##class(Shutter.Operation.Gate).#POLICYVERSION)
     Quit task
+}
+
+/// The line of a case's approval task that says what the task is bound to, in place of a digest to paste.
+ClassMethod BoundLine(case As Shutter.Store.Case, receiverVersion As %String) As %String
+{
+    Quit "Approving in the Workflow inbox needs nothing pasted: this task is bound to this plan, case version " _ case.Version _ ", this evidence and rehearsal, and receiver version " _ receiverVersion _ ". If any of them moves before you approve, the case blocks and nothing is written."
+}
+
+/// The receiver version an approval task binds: the one the rehearsal validated, the plan's expected version when that
+/// is empty.
+ClassMethod BoundReceiverVersion(plan As Shutter.Store.Plan, receiverVersion As %String = "") As %String
+{
+    Quit $SELECT(receiverVersion '= "": receiverVersion, $ISOBJECT(plan): plan.ExpectedVersion, 1: "")
 }
 
 /// A line of an approval task that could not be worked out, logged, and said in words: the plan's digest doesn't change, so
@@ -2107,7 +2125,12 @@ Method ReleaseByIncident(case As Shutter.Store.Case, plan As Shutter.Store.Plan,
     Quit ..SendPreflight(case)
 }
 
-Method OnApproval(case As Shutter.Store.Case, result As EnsLib.Workflow.TaskResponse) As %Status
+/// An approval task answered (CONTRACTS 6.4). <var>sent</var> is the task request the workflow sent, which holds the
+/// task's binding (Shutter.Process.TaskBinding). An answer that names a digest (the web application's, or Decide from
+/// SQL) is checked by that digest, as before. An approval from the Workflow inbox names none: it approves what its task is
+/// bound to, and blocks the case with nothing written when anything bound moved; a task with no binding (made before
+/// tasks were bound) still needs the digest.
+Method OnApproval(case As Shutter.Store.Case, result As EnsLib.Workflow.TaskResponse, sent As %Library.Persistent = "") As %Status
 {
     Set plan = ##class(Shutter.Store.Plan).%OpenId(..PlanId)
     Set action = $ZCONVERT(result.%Action, "L")
@@ -2127,6 +2150,15 @@ Method OnApproval(case As Shutter.Store.Case, result As EnsLib.Workflow.TaskResp
         Set case.Headline = "Rejected by " _ user _ ": " _ case.Headline
         Quit case.Transition("blocked", "Rejected by " _ user _ $SELECT(comment '= "": ": " _ comment, 1: ""), user, "approval:" _ a.%Id())
     }
+    Set inbox = 0
+    If (digest = "") && ##class(Shutter.Process.TaskBinding).IsBound(sent) {
+        // The Workflow inbox's approval: the task's binding, read from the request this workflow sent, is what it approves.
+        Set moved = ##class(Shutter.Process.TaskBinding).CaseMoved(sent, case, plan, $SELECT($ISOBJECT(rehearsal): rehearsal.%Id(), 1: ""), ..BoundReceiverVersion(plan, ..ReceiverVersion), ..ReceiverEpoch, ##class(Shutter.Operation.Gate).#POLICYVERSION)
+        If moved '= "" {
+            Quit case.Transition("blocked", "The approval's task no longer matches what it was made for (" _ moved _ "), so it binds nothing; nothing was dispatched", user, "task:" _ taskId)
+        }
+        Set digest = ##class(Shutter.Process.TaskBinding).BoundDigest(sent), inbox = 1
+    }
     If digest = "" {
         Quit case.Transition("blocked", "The approval carried no plan digest, so it binds nothing; nothing was dispatched", user)
     }
@@ -2137,7 +2169,7 @@ Method OnApproval(case As Shutter.Store.Case, result As EnsLib.Workflow.TaskResp
     Quit:$$$ISERR(sc) sc
     Set ..ApprovalId = a.%Id()
     Set case.CurrentApproval = a
-    Set sc = case.Transition("approved", "Approved by " _ user _ " for plan digest " _ $EXTRACT(plan.Digest, 1, 19) _ $SELECT(comment '= "": ": " _ comment, 1: ""), user, "approval:" _ a.%Id())
+    Set sc = case.Transition("approved", "Approved by " _ user _ " for plan digest " _ $EXTRACT(plan.Digest, 1, 19) _ $SELECT(inbox: " in the Workflow inbox, as its task was bound", 1: "") _ $SELECT(comment '= "": ": " _ comment, 1: ""), user, "approval:" _ a.%Id())
     Quit:$$$ISERR(sc) sc
     // Preflight: read the receiver's current version before the dispatch gate decides.
     Quit ..SendPreflight(case)
