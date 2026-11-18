@@ -402,11 +402,19 @@ ClassMethod EffectsRefusal(base As %DynamicObject, draft As %DynamicObject, appl
     Set inForce = ..Find(base, receiver)
     Set was = $SELECT($ISOBJECT(inForce): ..Effects(base, inForce), 1: "")
     Set line = ..LessStrict(was, after)
-    If line '= "" Quit "proposals: less strict than the profile in force: " _ ..LineWords(line, was, after)
+    // Said of the change, not of who made it: the draft may hold a change made with the page's controls (v1.71)
+    If line '= "" Quit ..InForceWords(receiver, ..LineWords(line, was, after))
     Set was = ..Effects(draft, ..Find(draft, receiver))
     Set line = ..LessStrict(was, after)
     If line '= "" Quit "proposals: less strict than the draft: " _ ..LineWords(line, was, after)
     Quit ""
+}
+
+/// The effects check's refusal against the profile in force, in words that say what the change does and why nothing is
+/// drafted, and not who made it (CONTRACTS 14.7, check 4, v1.71). <var>line</var> is LineWords' answer.
+ClassMethod InForceWords(receiver As %String, line As %String) As %String
+{
+    Quit "proposals: with these answers, " _ receiver _ " would be less strict in the draft than in the profile in force: " _ line _ ". Nothing is drafted on a receiver that would be less strict than in force; the review shows such a change before it is saved"
 }
 
 /// Why the agent may not draft a field of a receiver, or "" when it may: the field is class A, and its conditions hold.

@@ -565,7 +565,17 @@ Method TestTheEffectsCheck()
     Set ps = "Shutter.Util.ProfileSetup"
     Set base = ..Base(), applied = ..Base()
     Set applied.policy."2".single = "automatic"
-    Do $$$AssertEquals($CLASSMETHOD(ps, "EffectsRefusal", base, ..Base(), applied, "Downstream Out"), "proposals: less strict than the profile in force: a resend of single failures would need no person's approval", "a receiver in force, against the profile in force")
+    Do $$$AssertEquals($CLASSMETHOD(ps, "EffectsRefusal", base, ..Base(), applied, "Downstream Out"), "proposals: with these answers, Downstream Out would be less strict in the draft than in the profile in force: a resend of single failures would need no person's approval. Nothing is drafted on a receiver that would be less strict than in force; the review shows such a change before it is saved", "a receiver in force, against the profile in force")
+    // The draft holds a change made with the page's controls (engine_resend ticked on a receiver in force) and the batch
+    // drafts only a description: the refusal says what the change does, and not who made it (v1.71)
+    Set draft = ..Base()
+    Do draft.receivers.%Get(0).%Set("engine_resend", 1, "boolean")
+    Set applied = {}.%FromJSON(draft.%ToJSON())
+    Set inForce = applied.receivers.%Get(0)
+    Set inForce.system = "the bed manager board"
+    Set words = $CLASSMETHOD(ps, "EffectsRefusal", base, draft, applied, "Downstream Out")
+    Do $$$AssertEquals(words, "proposals: with these answers, Downstream Out would be less strict in the draft than in the profile in force: an engine resend would become possible. Nothing is drafted on a receiver that would be less strict than in force; the review shows such a change before it is saved", "a change in the draft on a receiver in force, in neutral words")
+    For blame = "agent", "Ask Shutter", "description", "you " Do $$$AssertNotTrue($ZCONVERT(words, "L") [ $ZCONVERT(blame, "L"), "naming no one: " _ blame)
     Do $$$AssertEquals($CLASSMETHOD(ps, "EffectsRefusal", base, ..Base(), ..Base(), "Downstream Out"), "", "nothing loosened, nothing refused")
     Set added = ..Added(), added.tier = 2
     Set draft = ..Base()
