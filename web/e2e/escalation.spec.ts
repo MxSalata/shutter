@@ -46,8 +46,13 @@ for (const colorScheme of ['light', 'dark'] as const)
         await expect(panel.getByText(/^Digest of the text saved: /)).toBeVisible();
         await expect(panel.getByRole('button', { name: 'Send it again…' })).toBeVisible();
         await expect(panel.getByRole('button', { name: /Mark as handled by the team/ })).toBeVisible();
-        // The toast has gone, so the check reads the page as it stands
-        await page.locator('.mantine-Notification-root').evaluateAll((n) => n.forEach((x) => x.remove()));
+        // The toast is closed with its own close button and gone before the check reads the page. Removing its nodes by
+        // hand broke the page when the toast's timer ended later: React then had a node to remove that was not there.
+        const toasts = page.locator('.mantine-Notification-root');
+        await toasts.evaluateAll((n) =>
+          n.forEach((x) => x.querySelector<HTMLButtonElement>('.mantine-Notification-closeButton')?.click()),
+        );
+        await expect(toasts).toHaveCount(0);
         const sideways = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
         expect(sideways).toBeLessThanOrEqual(0);
         expect(await audit(page)).toEqual([]);
