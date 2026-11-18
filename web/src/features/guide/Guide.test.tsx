@@ -136,12 +136,28 @@ describe('the guide', () => {
   });
   afterEach(() => vi.restoreAllMocks());
 
+  it('welcomes a first visit in the technical words at Technical detail, as Home does', async () => {
+    useAppearance.setState({ detail: 'technical' });
+    try {
+      renderApp();
+      const d = await welcome();
+      expect(d).toHaveTextContent(
+        "When a patient movement fails to reach another system, Shutter's AI Hub agents propose a plan, and a deterministic gate decides whether it may write.",
+      );
+      expect(d).not.toHaveTextContent(/rule-based safety checks/);
+    } finally {
+      useAppearance.setState({ detail: 'plain' });
+    }
+  });
+
   it('welcomes a first visit with what Shutter does, what the trial is, and three tours', async () => {
+    useAppearance.setState({ detail: 'plain' });
     renderApp();
     const d = await welcome();
     expect(d).toHaveTextContent(
-      "When a patient movement fails to reach another system, Shutter's AI Hub agents propose a plan, and a deterministic gate decides whether it may write.",
+      "When a patient movement fails to reach another system, Shutter's AI Hub agents propose a plan, and rule-based safety checks (the gate) decide whether it may write.",
     );
+    expect(d).not.toHaveTextContent(/deterministic/);
     expect(d).toHaveTextContent(
       "Mikolaj's Fictional Hospital: a demo hospital with made-up patients, recorded.",
     );

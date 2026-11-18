@@ -43,6 +43,7 @@ import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router';
 import { api, newIdempotencyKey, seg } from '@/api/client';
 import { keys, useCan, useCase } from '@/api/hooks';
+import { useTechnical } from '@/stores/appearance';
 import type { CaseDetail, CaseState, PlanView } from '@/api/types';
 import { TechDetail } from '@/components/TechDetail';
 import { ENV } from '@/env/mode';
@@ -167,11 +168,13 @@ function Welcome({ initial, onStartS2 }: { initial: GuideScope; onStartS2: () =>
   const notNow = useGuide((s) => s.notNow);
   const dontShowAgain = useGuide((s) => s.dontShowAgain);
   const [scope, setScope] = useState<GuideScope>(initial);
+  const technical = useTechnical();
   return (
     <Stack gap="md">
       <Text fz={18}>
-        When a patient movement fails to reach another system, Shutter's AI Hub agents propose a plan, and a
-        deterministic gate decides whether it may write.
+        {technical
+          ? "When a patient movement fails to reach another system, Shutter's AI Hub agents propose a plan, and a deterministic gate decides whether it may write."
+          : "When a patient movement fails to reach another system, Shutter's AI Hub agents propose a plan, and rule-based safety checks (the gate) decide whether it may write."}
       </Text>
       <Text fz={15}>
         {HOSPITAL_NAME}: a demo hospital with made-up patients, recorded. {welcomeActions(can)}: each replays
