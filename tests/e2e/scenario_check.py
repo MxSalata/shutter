@@ -232,9 +232,18 @@ def cost_of_runs(runs):
 
 
 def cost_differences(operator, caseid):
-    """GET /cases/{id}'s cost against the case's own runs: the same rows, the same sum, unpriced when one had no price."""
-    _, case = operator.call("GET", f"/cases/{caseid}")
-    _, runs = operator.call("GET", f"/cases/{caseid}/runs")
+    """GET /cases/{id}'s cost against the case's own runs: the same rows, the same sum, unpriced when one had no price.
+
+    The runs are read before and after the case, and compared only when both reads agree, so a run stored between the
+    requests (a live run still finishing) is read again rather than reported as a difference."""
+    for _ in range(3):
+        _, runs = operator.call("GET", f"/cases/{caseid}/runs")
+        _, case = operator.call("GET", f"/cases/{caseid}")
+        _, again = operator.call("GET", f"/cases/{caseid}/runs")
+        if runs == again:
+            break
+    else:
+        return ["the case's runs kept changing while its cost was read"]
     cost = (case or {}).get("cost")
     if not isinstance(cost, dict):
         return ["the case carries no cost"]
@@ -254,6 +263,24 @@ def cost_self_test():
     runs.append({"mode": "record", "model": "n", "completionTokens": 5, "costUsd": None})
     assert cost_of_runs(runs)["unpriced"] is True
     assert cost_of_runs([]) == {"usd": 0.0, "unpriced": False, "runs": 0, "replayedRuns": 0}
+
+    class Operator:
+        """Answers the case and its runs, with a run stored between the first two reads."""
+
+        def __init__(self, reads):
+            self.reads = list(reads)
+
+        def call(self, method, path):
+            return 200, self.reads.pop(0)
+
+    live = {"mode": "live", "model": "m", "promptTokens": 10, "costUsd": 0.25}
+    one = {"usd": 0.25, "unpriced": False, "runs": 1, "replayedRuns": 0}
+    two = {"usd": 0.5, "unpriced": False, "runs": 2, "replayedRuns": 0}
+    raced = Operator([[live], {"cost": one}, [live, live], [live, live], {"cost": two}, [live, live]])
+    assert cost_differences(raced, "C-1") == [], "a run stored between the reads is read again"
+    assert cost_differences(Operator([[live], {"cost": two}, [live]]), "C-1"), "a real difference is reported"
+    assert cost_differences(Operator([[live], {}, [live, live]] * 3), "C-1") == [
+        "the case's runs kept changing while its cost was read"]
 
 
 def fhir_self_test():

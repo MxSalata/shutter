@@ -205,6 +205,30 @@ describe('the held case', () => {
       modelRuns: 0,
     });
   });
+
+  it("counts the runs of the questions asked about a case in its cost, as the server's rows carry the case", async () => {
+    const before = await api.get<CaseDetail>('/cases/C-000008');
+    const recorded = fixtures.cases['C-000008'].runs.length;
+    // The example conversation is already asked on the showcase case: two explains and a board of three and its coordinator
+    expect(before.cost).toMatchObject({
+      runs: recorded + 6,
+      questionRuns: 6,
+      replayedRuns: recorded + 6,
+      usd: 0,
+    });
+    await api.post('/cases/C-000008/questions', {
+      tier: 'board',
+      suggested: { conversation: 'c4', turn: 1 },
+    });
+    const after = await api.get<CaseDetail>('/cases/C-000008');
+    expect(after.cost).toMatchObject({
+      runs: recorded + 10,
+      questionRuns: 10,
+      questionUsd: 0,
+      usd: 0,
+      unpriced: false,
+    });
+  });
 });
 
 describe('the scenarios', () => {
