@@ -36,6 +36,7 @@ import type {
   SiteProfileView,
 } from '@/api/types';
 import { CLOSED_STATES } from '@/api/types';
+import { kindChangeRefusal, kindChanges } from '@/features/site-profile/kindChanges';
 import {
   addressesProblem,
   closeNeedsApprover,
@@ -1704,7 +1705,10 @@ export const handlers = [
     }
     if (!body || typeof body !== 'object' || Array.isArray(body))
       return error(400, 'bad_request', 'The body must be the profile as a JSON object');
-    const { expectedVersion, ...profile } = body as SiteProfile & { expectedVersion?: number };
+    const { expectedVersion, kindChangesRead: read, ...profile } = body as SiteProfile & {
+      expectedVersion?: number;
+      kindChangesRead?: unknown;
+    };
     if (expectedVersion !== undefined && Number(expectedVersion) !== siteProfile.version)
       return HttpResponse.json(
         {
@@ -1714,8 +1718,15 @@ export const handlers = [
         },
         { status: 409 },
       );
+    if (read !== undefined && !Array.isArray(read))
+      return error(400, 'bad_request', 'kindChangesRead must be a list of site entry ids');
     const problem = validateProfile(profile);
     if (problem) return error(400, 'bad_request', `The profile is not valid (CONTRACTS 6.4): ${problem}`);
+    // A changed kind one of the site's own active entries reads waits for a person to have read it (CONTRACTS 6.8, R19)
+    const kinds = kindChanges(siteProfile.profile, profile, siteEntries.items());
+    const refused = kindChangeRefusal(kinds, (read as unknown[] | undefined) ?? []);
+    if (refused)
+      return HttpResponse.json({ error: 'kind_change_unread', detail: refused, kindChanges: kinds }, { status: 409 });
     const version = siteProfile.version + 1;
     const updatedAt = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
     const updatedBy = session?.username ?? '';

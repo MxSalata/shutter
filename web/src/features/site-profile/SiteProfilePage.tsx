@@ -19,7 +19,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { RunbookField } from './RunbookField';
 import { api } from '@/api/client';
 import { saveLocked } from '@/api/saveLocked';
-import { keys, useCan, useMe, useSaveSiteProfile, useSiteProfile, useWhatIf } from '@/api/hooks';
+import { keys, useCan, useMe, useSaveSiteProfile, useSiteEntries, useSiteProfile, useWhatIf } from '@/api/hooks';
 import type { SiteProfile, SiteProfileView, SiteReceiver, WhatIf } from '@/api/types';
 import { ApiSource } from '@/components/ApiSource';
 import { ErrorAlert } from '@/components/ErrorAlert';
@@ -70,6 +70,7 @@ import {
   toPutBody,
 } from './profile';
 import { kindFocus, tierFocus } from './askAbout';
+import { kindChanges as kindChangesOf, kindChangesRead, type KindChange } from './kindChanges';
 import { ReviewModal, type SaveProblem } from './ReviewModal';
 import { SaveBar } from './SaveBar';
 import { OwnScenarios } from './OwnScenarios';
@@ -820,6 +821,10 @@ function Profile({
   const [problem, setProblem] = useState<Problem>(null);
   const [reviewing, setReviewing] = useState(handedHere ? 1 : 0);
   const [saveProblem, setSaveProblem] = useState<SaveProblem>(null);
+  // The site's own active entries, for what a changed kind does to those that read it (R19); the server's own list when a
+  // save was refused for it, until the review is opened again
+  const siteEntries = useSiteEntries();
+  const [refusedKinds, setRefusedKinds] = useState<KindChange[] | null>(null);
   // The button that opened the review, and whether a cancel should give focus back to it: the dialog is unmounted on
   // close, so the modal cannot return focus itself
   const opener = useRef<HTMLElement | null>(null);
@@ -852,7 +857,10 @@ function Profile({
   const changes = diffProfiles(base.profile, draft);
   const shipped = isShipped(base.source);
   const demoPolicy = isDemoPolicy(base.source);
-  const body = toPutBody(draft, base.version);
+  const kinds = refusedKinds ?? kindChangesOf(base.profile, draft, siteEntries.data?.items);
+  const read = kindChangesRead(kinds);
+  // The entries whose change the person read: sent only with the review's tick, which the Save waits for
+  const body = read.length ? { ...toPutBody(draft, base.version), kindChangesRead: read } : toPutBody(draft, base.version);
 
   // A radio question's id names its label (Mantine keeps the group's own id off the page): focus its chosen radio
   const focusField = (path: string) =>
@@ -881,6 +889,7 @@ function Profile({
     }
     setProblem(null);
     setSaveProblem(null);
+    setRefusedKinds(null);
     opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setReviewing((n) => n + 1);
   };
@@ -957,6 +966,18 @@ function Profile({
               v === undefined
                 ? `The answer was lost (${describeError(e)}), and the stored profile could not be read to check whether this save went through. Reload the page before saving again.`
                 : describeError(e),
+          });
+          return;
+        }
+        if (isApiError(e) && e.code === 'kind_change_unread') {
+          // The site's own entries changed since the review was read: the server's list is shown, and the tick asked again
+          const sent = (e.body ?? null) as { kindChanges?: KindChange[] } | null;
+          if (Array.isArray(sent?.kindChanges)) setRefusedKinds(sent.kindChanges);
+          void client.invalidateQueries({ queryKey: keys.siteEntries });
+          setSaveProblem({
+            kind: 'error',
+            message:
+              "Nothing was saved: what this save does to the site's own entries has changed since the review was opened. Read the list again, tick it, and save.",
           });
           return;
         }
@@ -1222,6 +1243,7 @@ function Profile({
             saving={save.isPending || checking}
             locked={locked}
             drafted={drafted}
+            kindChanges={kinds}
             problem={saveProblem}
             onCancel={() => {
               refocus.current = true;

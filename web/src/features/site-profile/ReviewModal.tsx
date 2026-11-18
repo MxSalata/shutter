@@ -5,6 +5,7 @@ import { ConfirmModal } from '@/components/ConfirmModal';
 import { JsonBlock } from '@/components/JsonBlock';
 import { LockedNote, LockedSaveButton } from '@/components/LockedSave';
 import { byEnv } from '@/env/copy';
+import { kindChangeWords, type KindChange } from './kindChanges';
 import type { Change } from './profile';
 import type { DraftedAnswer } from './setup/setupStore';
 
@@ -23,6 +24,7 @@ export function ReviewModal({
   saving,
   locked = null,
   drafted = [],
+  kindChanges = [],
   problem,
   onCancel,
   onSave,
@@ -31,7 +33,7 @@ export function ReviewModal({
   opened: boolean;
   view: SiteProfileView;
   changes: Change[];
-  body: SiteProfile & { expectedVersion: number };
+  body: SiteProfile & { expectedVersion: number; kindChangesRead?: string[] };
   saving: boolean;
   /**
    * Why this reader cannot save (`saveLocked`): the review reads as an approver's, and its Save is locked with this
@@ -43,6 +45,11 @@ export function ReviewModal({
    * since: each is listed with its value, the quoted words and what it does, and the Save waits for the tick below them.
    */
   drafted?: DraftedAnswer[];
+  /**
+   * What the save does to the site's own active entries that read a receiver's kind (CONTRACTS 6.8, R19): each is listed,
+   * and the Save waits for the tick below them. The tick is for the list as shown: a list that changes asks again.
+   */
+  kindChanges?: KindChange[];
   problem: SaveProblem;
   onCancel: () => void;
   onSave: () => void;
@@ -54,6 +61,9 @@ export function ReviewModal({
   const [acknowledged, setAcknowledged] = useState(false);
   // Clear on every opening: the dialog is unmounted when it closes
   const [read, setRead] = useState(false);
+  const kindsKey = kindChanges.map((k) => `${k.entry}/${k.receiver}/${k.change}`).join('|');
+  const [kindsReadFor, setKindsReadFor] = useState<string | null>(null);
+  const kindsRead = kindsReadFor === kindsKey;
   const confirmOnly = changes.length === 0;
   const lockedId = useId();
   return (
@@ -98,6 +108,31 @@ export function ReviewModal({
               checked={read}
               onChange={(e) => setRead(e.currentTarget.checked)}
               label="I have read the answers Ask Shutter drafted."
+            />
+          </Stack>
+        ) : null}
+        {kindChanges.length ? (
+          <Stack gap="xs" component="section" aria-labelledby={`${lockedId}-kinds`} className="review-kinds">
+            <Text size="sm" fw={600} id={`${lockedId}-kinds`}>
+              The site's own entries that read a receiver's kind ({kindChanges.length})
+            </Text>
+            <Text size="sm">
+              These entries stop cases by the receiver's kind (receiver_category), so a kind changed here changes
+              which cases they stop.
+            </Text>
+            <List size="sm" spacing={6} aria-labelledby={`${lockedId}-kinds`}>
+              {kindChanges.map((k, i) => (
+                <List.Item key={`${k.entry}/${k.receiver}/${i}`}>
+                  <Text size="sm" style={{ overflowWrap: 'anywhere' }}>
+                    {kindChangeWords(k)}.
+                  </Text>
+                </List.Item>
+              ))}
+            </List>
+            <Checkbox
+              checked={kindsRead}
+              onChange={(e) => setKindsReadFor(e.currentTarget.checked ? kindsKey : null)}
+              label="I have read what this save does to the site's own entries."
             />
           </Stack>
         ) : null}
@@ -193,6 +228,7 @@ export function ReviewModal({
               disabled={
                 (tier3.length > 0 && !acknowledged) ||
                 (drafted.length > 0 && !read) ||
+                (kindChanges.length > 0 && !kindsRead) ||
                 problem?.kind === 'stale'
               }
               onClick={onSave}
