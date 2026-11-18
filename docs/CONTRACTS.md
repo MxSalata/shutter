@@ -518,7 +518,9 @@ at. The task now carries that guarantee itself:
   versions, a link to the case page (`/shutter/index.html#/cases/<id>`, or the incident's), and `Comment`. For an
   incident: the incident and the chain, the digest, the catalogue, site profile and gate policy its plan names, and the
   link. The inbox's submit saves only the fields `%FormFields` names, so nothing the form shows can be changed from it.
-  Asked for as a page of its own, the form answers 404. The task's message says what the task is bound to, in place of
+  Asked for as a page of its own, the form answers 404. How the inbox draws the template and what its submit saves are
+  read from IRIS 2026.2's own Workflow code, not exercised by a test in a browser: the checks call the form's
+  `FormHTML` and the engine's `CompleteTask` directly (`tests/e2e/inbox_check.py`). The task's message says what the task is bound to, in place of
   the instruction to paste.
 - **Void if anything bound moved.** An approval from the inbox names no digest. The workflow reads the binding from the
   request it sent, never from the answer, and checks it against the case now: the case's version, the workflow's plan
