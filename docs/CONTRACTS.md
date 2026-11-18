@@ -537,7 +537,10 @@ at. The task now carries that guarantee itself:
   open across the upgrade) has no binding, so an inbox approval of it still needs the digest pasted, and without it the
   case blocks ("carried no plan digest"), as before.
 - `GET /cases/{id}`'s `tasks[].planDigest` is still empty while a task is open; once a task is approved in the inbox it
-  is the digest its task is bound to (before, the digest the approver pasted), and an inbox rejection names none.
+  is the digest its task is bound to (before, the digest the approver pasted), but only when that approval stood (it was
+  recorded as approved): an inbox approval that was void because something bound had moved shows none, since it bound
+  nothing, and neither does an inbox rejection. A second decider racing an inbox approval is told `decided` only when it
+  stood.
 
 **The case bundle.** `POST /cases/{id}/bundle` (`Shutter_Operate`, `X-Requested-With`; it writes, so it is not a `GET` a link could set off) answers 200 with one JSON file for audit or a support handoff, `Content-Disposition: attachment; filename="shutter-case-<id>-redacted.json"`: `redaction`, alone on the file's first line and starting `REDACTED:`, then `format` (`shutter-case-bundle/1`), `generatedAt`, `generatedBy`, `case` (operational fields and the operation key), `evidence` (every snapshot with its summary and items), `plans`, `gateDecisions`, `approvals`, `attempts`, `verifications`, `receipt` (what `GET /cases/{id}/closure` answers, or null while the case is open) and `notIncluded`. The case's event log, the agents' runs and escalation emails are not in it. Everything passes through the model view (section 9), read from the stored rows, with the same tokens and the map staying in IRIS. Three things go further, since a file leaves with no one to ask: note text stays out whatever `model_content.free_text` says; what a person typed (an approval's `comment`, which becomes `commentPresent`, and a hand closure's or an abandon's reason in `outcome`) stays out, since no map covers it; and a last sweep of the finished object refuses the file if a value of the map is left in a string, a number or a key. Wards, beds, times, message control ids and staff user names remain, and the first line says so. Each file leaves a `note` event on the case, naming who took it and the file's SHA-256; the case's version does not move. A case that cannot be redacted (its message cannot be read, so its names are unknown) answers 409 `not_redactable` with the reason, and nothing is recorded; so does a download whose record cannot be written. A plan's `action` keeps its `type` and `expected_version` as well as what the view's operation allowlist keeps. The digests in the file are of the unredacted rows, so they identify them and cannot be recomputed from it.
 
@@ -3631,7 +3634,7 @@ That `If-Match` or an approval makes the write idempotent; that a verified versi
   digest, approves what the task is bound to, read from the request the workflow sent, or blocks the case (rejects the
   chains) with nothing written when anything bound has moved. An answer that names a digest (the web application's,
   `Decide` from SQL) is decided as before, and a task made before tasks were bound still needs the digest. `tasks[].planDigest`
-  of a task approved in the inbox is the bound digest.
+  of a task approved in the inbox is the bound digest when the approval stood, and empty when it was void.
 - v1.70, 16 Nov 2026 (the review of 1.5.0): 5: `POST /page-questions` and `POST /site-profile/setup-turns` in the
   `Shutter_Operate` and `Shutter_LiveAgents` rows. 6.8: R5 reads a number as the text rule reads a long number; R8, a
   retirement's and a resumption's proof and check are of the entry as matched now (`effectivePattern`,

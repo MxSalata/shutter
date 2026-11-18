@@ -149,6 +149,48 @@ Method TestANewerRehearsalBlocks()
     Do $$$AssertEquals(..Approvals(case), 0, "nothing is approved")
 }
 
+/// What GET /cases/{id} shows as a task's planDigest (Shutter.Util.Workflow.DecidedDigest): for an inbox approval that
+/// stood, the digest its task was bound to; for one that was void because the case moved under its task, none, since it
+/// bound nothing. The answers are saved tasks, as the engine's are, so the approval records name them.
+Method TestTheDigestShownIsOnlyAnApprovalThatStood()
+{
+    Set role = ..#ROLE
+    If ##class(EnsLib.Workflow.RoleDefinition).%ExistsId(role) Do ##class(EnsLib.Workflow.RoleDefinition).%DeleteId(role)
+    Do $$$AssertStatusOK(##class(EnsLib.Workflow.RoleDefinition).CreateRole(role), "a role of the test's own is made")
+    Do ..Awaiting(.wf, .case, .plan, .task)
+    Set answer = ..SavedAnswer(task)
+    If $$$AssertTrue($ISOBJECT(answer), "the approval is a saved task") {
+        Do ..Answer(wf, task, answer)
+        Do $$$AssertEquals(##class(Shutter.Store.Case).ByCaseId(case.CaseId).State, "approved", "the approval stood")
+        Do $$$AssertEquals(##class(Shutter.Util.Workflow).DecidedDigest(answer), plan.Digest, "so the task shows the digest it was bound to")
+        Do ##class(Shutter.Test.Workflow).DeleteTask(answer)
+    }
+    Do ..Awaiting(.wf, .case, .plan, .task)
+    Do $$$AssertStatusOK(case.Transition(case.State, "Another job moves the case under its open task", "test"), "the case moves")
+    Set answer = ..SavedAnswer(task)
+    If $$$AssertTrue($ISOBJECT(answer), "the second approval is a saved task") {
+        Do ..Answer(wf, task, answer)
+        Do $$$AssertEquals(##class(Shutter.Store.Case).ByCaseId(case.CaseId).State, "blocked", "the approval was void")
+        Do $$$AssertEquals(##class(Shutter.Util.Workflow).DecidedDigest(answer), "", "so the task shows no digest: it bound nothing")
+        Do ##class(Shutter.Test.Workflow).DeleteTask(answer)
+    }
+    Do ##class(EnsLib.Workflow.RoleDefinition).%DeleteId(role)
+}
+
+Parameter ROLE = "UT Shutter Inbox Approvers";
+
+/// An inbox answer saved and completed, as the engine leaves a task approved in the inbox; "" when it could not be saved.
+ClassMethod SavedAnswer(task As EnsLib.Workflow.TaskRequest) As EnsLib.Workflow.TaskResponse
+{
+    Set answer = ..InboxAnswer(task)
+    Set answer.%Subject = task.%Subject, answer.%Actions = task.%Actions, answer.%RoleName = ..#ROLE
+    Set answer.%TaskStatus.Role = ##class(EnsLib.Workflow.RoleDefinition).%OpenId(..#ROLE)
+    Set answer.%TaskStatus.AssignedTo = ..#APPROVER
+    Set answer.%TaskStatus.IsComplete = 1, answer.%TaskStatus.TimeCompleted = $ZDATETIME($ZTIMESTAMP, 3, 1, 3)
+    Set sc = answer.%Save()
+    Quit $SELECT($$$ISOK(sc): answer, 1: "")
+}
+
 /// An inbox approval with no bound request (a task made before tasks were bound) names no digest and binds nothing, as
 /// before; and an answer that names the plan's digest, as the web application's does, is decided by it, as before.
 Method TestUnboundAndNamedAnswersAreDecidedAsBefore()

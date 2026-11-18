@@ -37,7 +37,8 @@ ClassMethod TasksFor(caseId As %String) As %DynamicArray
             Do ..SetTime(t, "timeCreated", task.%TaskStatus.TimeCreated)
             Do ..SetTime(t, "timeCompleted", task.%TaskStatus.TimeCompleted)
         }
-        // Empty while the task is open: Decide writes the digest its caller named, and an inbox approval binds its task's.
+        // Empty while the task is open: Decide writes the digest its caller named, and an inbox approval that stood binds its
+        // task's; one that was void binds none.
         Set t.planDigest = ..DecidedDigest(task)
         Do out.%Push(t)
     }
@@ -148,13 +149,30 @@ ClassMethod NoOpenTask(caseId As %String, digest As %String) As %String
 }
 
 /// The digest a task's decision bound: the one Decide wrote, or, for a task approved in the Workflow inbox, which names
-/// none, the digest its task is bound to; "" while the task is open with none written, and for an inbox rejection.
+/// none, the digest its task is bound to, once that approval stood (it was recorded as approved). "" while the task is
+/// open with none written, for an inbox rejection, and for an inbox approval that was void because something bound had
+/// moved, or that the workflow has not taken yet: those bound nothing.
 ClassMethod DecidedDigest(task As EnsLib.Workflow.TaskResponse) As %String
 {
     Set named = task.%FormValues.GetAt("PlanDigest")
     If named '= "" Quit named
     If '$ISOBJECT(task.%TaskStatus) || 'task.%TaskStatus.IsComplete || ($ZCONVERT(task.%Action, "L") '= "approve") Quit ""
-    Quit task.%FormValues.GetAt("Shutter.PlanDigest")
+    Set bound = task.%FormValues.GetAt("Shutter.PlanDigest")
+    If (bound = "") || '..ApprovalStood(task.%Id(), bound) Quit ""
+    Quit bound
+}
+
+/// Whether the workflow recorded the task's approval of this digest as approved: a case's approval (Shutter_Store.Approval),
+/// or an incident's or a chain's (Shutter_Store.Incident, Shutter_Store.Chain).
+ClassMethod ApprovalStood(taskId As %String, digest As %String) As %Boolean
+{
+    If (taskId = "") || (digest = "") Quit 0
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT TOP 1 ID FROM Shutter_Store.Approval WHERE WorkflowTaskId = ? AND Decision = 'approved' AND PlanDigest = ?", taskId, digest)
+    If rs.%Next() Quit 1
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT TOP 1 ID FROM Shutter_Store.Incident WHERE ApprovalTaskId = ? AND ApprovalDecision = 'approved' AND PlanDigest = ?", taskId, digest)
+    If rs.%Next() Quit 1
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT TOP 1 ID FROM Shutter_Store.Chain WHERE ApprovalTaskId = ? AND ApprovalDecision = 'approved' AND Incident->PlanDigest = ?", taskId, digest)
+    Quit rs.%Next()
 }
 
 /// Gives back the lock Claim took.
