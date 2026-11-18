@@ -953,8 +953,25 @@ ClassMethod StrictAnswers(name As %String) As %Boolean
 /// meant.
 ClassMethod ReceiverCategory(name As %String) As %String
 {
-    Set r = ..Receiver(name)
-    Set category = $SELECT($ISOBJECT(r): ##class(Shutter.Util.Json).Str(r, "category"), 1: "")
+    Quit ..CategoryOf(..Current(), name)
+}
+
+/// ReceiverCategory read from a given profile instead of the one in force, by the same rule: the first entry of that name,
+/// and current_state when it names no kind or there is none. A save's check of the site's own entries that read the kind
+/// compares the profile in force with the one sent (SiteEntry.KindChanges, CONTRACTS 6.8 R19).
+ClassMethod CategoryOf(profile As %DynamicObject, name As %String) As %String
+{
+    Set category = ""
+    Set list = $SELECT($ISOBJECT(profile): profile.%Get("receivers"), 1: "")
+    If $ISOBJECT(list) && list.%IsA("%Library.DynamicArray") {
+        Set iter = list.%GetIterator()
+        While iter.%GetNext(, .r) {
+            If $ISOBJECT(r) && r.%IsA("%Library.DynamicObject") && (##class(Shutter.Util.Json).Str(r, "name") = name) {
+                Set category = ##class(Shutter.Util.Json).Str(r, "category")
+                Quit
+            }
+        }
+    }
     If '$LISTFIND($LISTBUILD("current_state", "history_of_record", "orders_results"), category) Quit "current_state"
     Quit category
 }

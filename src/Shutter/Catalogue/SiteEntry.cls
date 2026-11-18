@@ -880,6 +880,113 @@ ClassMethod ActiveReads(condition As %String) As %Boolean
     Quit reads
 }
 
+/// What a save of the site profile does to the site's own active entries that read a receiver's kind (CONTRACTS 6.8, R19,
+/// v1.71). A receiver's kind is read as the matcher reads it (SiteProfile.CategoryOf: current_state when its entry names
+/// none or the profile has no entry of that name), in <var>before</var> (the profile in force) and in <var>after</var> (the
+/// one sent). For each receiver whose kind differs, each active entry whose pattern in force (the version's own, or the
+/// widened one a recheck left) names receiver_category, and whose scope in force admits the receiver when it lists
+/// receivers, is listed when the receiver's kind is among the pattern's values before and not after (leaves) or after and
+/// not before (enters). An active entry whose row, version or pattern cannot be read is listed once as unread while any
+/// kind changes, since it may read the kind. Each item is {entry, title, receiver, from, to, change}, in the entries'
+/// order, then the order of the receivers in the profile sent, then those only the profile in force names. Read straight
+/// from the rows: no recheck is run for it.
+ClassMethod KindChanges(before As %DynamicObject, after As %DynamicObject) As %DynamicArray
+{
+    Set out = [], json = "Shutter.Util.Json", sp = "Shutter.Store.SiteProfile"
+    // The receivers whose kind the save changes, in order
+    Set n = 0
+    For which = 1, 2 {
+        Set p = $SELECT(which = 1: after, 1: before)
+        Set list = $SELECT($ISOBJECT(p): p.%Get("receivers"), 1: "")
+        Continue:'$ISOBJECT(list)
+        Continue:'list.%IsA("%Library.DynamicArray")
+        Set iter = list.%GetIterator()
+        While iter.%GetNext(, .r) {
+            Continue:'$ISOBJECT(r)
+            Continue:'r.%IsA("%Library.DynamicObject")
+            Set name = $CLASSMETHOD(json, "Str", r, "name")
+            Continue:(name = "")
+            Continue:$DATA(seen(name))
+            Set seen(name) = ""
+            Set from = $CLASSMETHOD(sp, "CategoryOf", before, name), to = $CLASSMETHOD(sp, "CategoryOf", after, name)
+            If from '= to Set n = n + 1, changed(n) = $LISTBUILD(name, from, to)
+        }
+    }
+    If n = 0 Quit out
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT ID, EntryId FROM Shutter_Catalogue.SiteEntry WHERE State = 'active' ORDER BY ID")
+    If rs.%SQLCODE < 0 Do out.%Push({"entry": "", "title": "", "receiver": "", "from": "", "to": "", "change": "unread"}) Quit out
+    Try {
+        While rs.%Next() {
+            Set id = rs.%Get("EntryId"), held = "", problem = ""
+            Set e = ..%OpenId(rs.%Get("ID"))
+            If $ISOBJECT(e) {
+                Set v = ##class(Shutter.Catalogue.SiteEntryVersion).Find(e.EntryId, e.ActiveVersion)
+                Set content = $SELECT($ISOBJECT(v): v.Content(), 1: "")
+                If $ISOBJECT(content) Set held = e.InForce(content, .problem)
+            }
+            Set pattern = $SELECT($ISOBJECT(held): held.%Get("pattern"), 1: "")
+            If '$ISOBJECT(pattern) || 'pattern.%IsA("%Library.DynamicObject") {
+                Do out.%Push({"entry": (id), "title": "", "receiver": "", "from": "", "to": "", "change": "unread"})
+                Continue
+            }
+            Continue:'pattern.%IsDefined("receiver_category")
+            Set allowed = pattern.%Get("receiver_category"), scope = held.%Get("scope")
+            Set receivers = $SELECT($ISOBJECT(scope) && scope.%IsA("%Library.DynamicObject"): scope.%Get("receiver"), 1: "")
+            Set scoped = $ISOBJECT(scope) && scope.%IsA("%Library.DynamicObject") && scope.%IsDefined("receiver")
+            For i = 1:1:n {
+                Set name = $LIST(changed(i), 1), from = $LIST(changed(i), 2), to = $LIST(changed(i), 3)
+                Continue:(scoped && '..Among(receivers, name))
+                Set was = ..Among(allowed, from), now = ..Among(allowed, to)
+                Continue:(was = now)
+                Do out.%Push({"entry": (id), "title": ($CLASSMETHOD(json, "Str", held, "title")), "receiver": (name), "from": (from), "to": (to), "change": ($SELECT(was: "leaves", 1: "enters"))})
+            }
+        }
+    } Catch ex {
+        Do out.%Push({"entry": "", "title": "", "receiver": "", "from": "", "to": "", "change": "unread"})
+    }
+    Quit out
+}
+
+/// Whether a pattern's or a scope's value (a list of values, or one) holds this one, compared as the matcher compares.
+ClassMethod Among(allowed, value As %String) As %Boolean [ Private ]
+{
+    If '$ISOBJECT(allowed) Quit ("" _ allowed) = value
+    If 'allowed.%IsA("%Library.DynamicArray") Quit 0
+    Set iter = allowed.%GetIterator()
+    While iter.%GetNext(, .v) { If ("" _ v) = value Return 1 }
+    Quit 0
+}
+
+/// A line of KindChanges in words, for the refusal and the Doctor: what the save does to that entry.
+ClassMethod KindChangeWords(item As %DynamicObject) As %String
+{
+    Set json = "Shutter.Util.Json"
+    Set id = $CLASSMETHOD(json, "Str", item, "entry"), title = $CLASSMETHOD(json, "Str", item, "title")
+    Set change = $CLASSMETHOD(json, "Str", item, "change")
+    Set who = $SELECT(id = "": "an active site entry", title = "": id, 1: id _ " (" _ title _ ")")
+    If change = "unread" Quit who _ " cannot be read, so it may read the kind"
+    Set kinds = " (" _ $CLASSMETHOD(json, "Str", item, "from") _ " to " _ $CLASSMETHOD(json, "Str", item, "to") _ ")"
+    Set receiver = $CLASSMETHOD(json, "Str", item, "receiver")
+    If change = "leaves" Quit receiver _ kinds _ " leaves the pattern of " _ who _ ", which then no longer stops its cases"
+    Quit receiver _ kinds _ " comes into the pattern of " _ who _ ", which then stops its cases too"
+}
+
+/// Why a save is refused under R19, or "": an entry KindChanges lists that <var>read</var> (the body's kindChangesRead, the
+/// ids of the entries the person read the changes of) does not name. An entry listed as unread with no id is never
+/// acknowledged: the save waits until the entries can be read.
+ClassMethod KindChangeRefusal(changes As %DynamicArray, read As %DynamicArray) As %String
+{
+    Set words = "", json = "Shutter.Util.Json"
+    Set iter = changes.%GetIterator()
+    While iter.%GetNext(, .item) {
+        Set id = $CLASSMETHOD(json, "Str", item, "entry")
+        Continue:((id '= "") && ..Among(read, id))
+        Set words = words _ $SELECT(words = "": "", 1: "; ") _ ..KindChangeWords(item)
+    }
+    If words = "" Quit ""
+    Quit "This save changes a receiver's kind that one of the site's own active entries reads (receiver_category): " _ words _ ". Send kindChangesRead with the id of each entry once a person has read what the save does to it (CONTRACTS 6.8, R19)"
+}
+
 /// The proof an approval of the open proposal stands on, or "": the proposal's own while it passed and is current, else
 /// the newest one a person ran of the same digest and action since, when that one passed and is current (the author
 /// proved again after the catalogue, the profile, the gate's policy or the release changed). Decide reruns this proof;

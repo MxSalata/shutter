@@ -1658,8 +1658,25 @@ ClassMethod SiteProfilePut() As %Status
     // would otherwise win): the stored version must still be the one the caller read.
     Set expected = ##class(Shutter.Util.Json).Str(body, "expectedVersion")
     If body.%IsDefined("expectedVersion") Do body.%Remove("expectedVersion")
+    // kindChangesRead: the ids of the site's own entries whose change by this save a person read (CONTRACTS 6.8, R19)
+    Set read = []
+    If body.%IsDefined("kindChangesRead") {
+        Set read = body.%Get("kindChangesRead")
+        Do body.%Remove("kindChangesRead")
+        If '$ISOBJECT(read) || 'read.%IsA("%Library.DynamicArray") Quit ..Fail("400 Bad Request", "bad_request", "kindChangesRead must be a list of site entry ids")
+    }
     Set problem = ##class(Shutter.Store.SiteProfile).Validate(body)
     If problem '= "" Quit ..Fail("400 Bad Request", "bad_request", "The profile is not valid (CONTRACTS 6.4): " _ problem)
+    // A changed kind can take a receiver out of, or into, the pattern of one of the site's own entries that reads it: the
+    // save waits for a person to have read each such change (R19). With expectedVersion, the profile compared with is the
+    // one the store's version check then holds.
+    Set kinds = ##class(Shutter.Catalogue.SiteEntry).KindChanges(##class(Shutter.Store.SiteProfile).Current(), body)
+    Set refused = ##class(Shutter.Catalogue.SiteEntry).KindChangeRefusal(kinds, read)
+    If refused '= "" {
+        Set extra = {}
+        Set extra.kindChanges = kinds
+        Quit ..Fail("409 Conflict", "kind_change_unread", refused, extra)
+    }
     // The store checks the version under its own lock, so the check and the write are one step.
     Set sc = ##class(Shutter.Store.SiteProfile).Store(body.%ToJSON(), "api", $USERNAME, expected, .current)
     If $$$ISERR(sc) && ($SYSTEM.Status.GetErrorText(sc) [ "stale_version") {

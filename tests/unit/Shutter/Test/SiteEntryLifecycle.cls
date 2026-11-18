@@ -664,4 +664,58 @@ Method TestAProofFailsWhenAnotherEntryLeads()
     Do $$$AssertTrue(row.text [ broadId, "in its words: " _ row.text)
 }
 
+
+/// A save that changes a receiver's kind which an active entry reads (R19): KindChanges lists the entry, the receiver and
+/// what the change does to the entry's pattern; a receiver outside the entry's receiver scope and a kind the pattern reads
+/// the same way are not listed; and KindChangeRefusal refuses until the body names every listed entry as read. An entry
+/// that cannot be read, with no id, is never taken as read.
+Method TestAKindChangeAnEntryReadsWaitsForAReading()
+{
+    Set site = "Shutter.Catalogue.SiteEntry", kit = "Shutter.Test.SiteKit"
+    Set receiver = $PARAMETER("Shutter.Production", "RECEIVER")
+    Set kind = ##class(Shutter.Store.SiteProfile).ReceiverCategory(receiver)
+    Set other = $SELECT(kind = "history_of_record": "current_state", 1: "history_of_record")
+    Set before = ##class(Shutter.Store.SiteProfile).Current()
+    Set after = ..WithKind(before, receiver, other)
+    Do $$$AssertEquals($CLASSMETHOD(site, "KindChanges", before, after).%Size(), 0, "with no active entry, a kind change lists nothing")
+    Set match = $CLASSMETHOD(kit, "Case", {"ward": "WARD-ISO"}), near = $CLASSMETHOD(kit, "Case", {"ward": "WARD-B"})
+    Set body = $CLASSMETHOD(kit, "Body", match.CaseId, near.CaseId)
+    Do body.pattern.%Set("receiver_category", [(kind)])
+    Do body.scope.%Set("receiver", [(receiver)])
+    Set code = $CLASSMETHOD(kit, "Activate", body, .id)
+    Do $$$AssertEquals(code, "", "an entry that reads the kind, scoped to the receiver, is active")
+    Quit:(code '= "")
+    Set changes = $CLASSMETHOD(site, "KindChanges", before, after)
+    Do $$$AssertEquals(changes.%Size(), 1, "the change is listed: " _ changes.%ToJSON())
+    Set item = changes.%Get(0)
+    Do $$$AssertEquals($SELECT($ISOBJECT(item): item.entry _ "|" _ item.receiver _ "|" _ item.from _ "|" _ item.to _ "|" _ item.change, 1: ""), id _ "|" _ receiver _ "|" _ kind _ "|" _ other _ "|leaves", "naming the entry, the receiver, both kinds and that it leaves the pattern")
+    Set refused = $CLASSMETHOD(site, "KindChangeRefusal", changes, [])
+    Do $$$AssertTrue((refused [ id) && (refused [ "leaves the pattern of") && (refused [ "kindChangesRead"), "a save that names nothing read is refused, saying what changes: " _ refused)
+    Do $$$AssertTrue($CLASSMETHOD(site, "KindChangeRefusal", changes, ["L999"]) '= "", "and so is one that names another entry")
+    Do $$$AssertEquals($CLASSMETHOD(site, "KindChangeRefusal", changes, [(id)]), "", "naming the entry read, the save goes")
+    // Back: the receiver comes into the pattern
+    Set changes = $CLASSMETHOD(site, "KindChanges", after, before)
+    Do $$$AssertEquals($SELECT(changes.%Size() = 1: changes.%Get(0).change, 1: changes.%ToJSON()), "enters", "the change back brings the receiver into the pattern")
+    Do $$$AssertTrue($CLASSMETHOD(site, "KindChangeWords", changes.%Get(0)) [ "comes into the pattern of " _ id, "in words")
+    // A receiver the entry's scope does not name, given a kind
+    Set added = {}.%FromJSON(before.%ToJSON())
+    Do added.receivers.%Push({"name": "UT Kind Board", "category": (other)})
+    Do $$$AssertEquals($CLASSMETHOD(site, "KindChanges", before, added).%Size(), 0, "a receiver outside the entry's receiver scope is not listed")
+    // A kind the pattern reads the same way: both values allowed
+    Set third = $SELECT((kind '= "orders_results") && (other '= "orders_results"): "orders_results", 1: "current_state")
+    Do $$$AssertEquals($CLASSMETHOD(site, "KindChanges", ..WithKind(before, receiver, other), ..WithKind(before, receiver, third)).%Size(), 0, "a change between two kinds the pattern leaves out is not listed")
+    // An entry that cannot be read, with no id, is never taken as read
+    Set unread = [{"entry": "", "title": "", "receiver": "", "from": "", "to": "", "change": "unread"}]
+    Do $$$AssertTrue($CLASSMETHOD(site, "KindChangeRefusal", unread, [(id)]) [ "cannot be read", "an unreadable entry keeps the save waiting")
+}
+
+/// A copy of the profile with the receiver's kind set.
+ClassMethod WithKind(profile As %DynamicObject, receiver As %String, kind As %String) As %DynamicObject
+{
+    Set copy = {}.%FromJSON(profile.%ToJSON())
+    Set iter = copy.receivers.%GetIterator()
+    While iter.%GetNext(, .r) { If r.name = receiver Set r.category = kind }
+    Quit copy
+}
+
 }
