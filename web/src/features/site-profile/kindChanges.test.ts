@@ -134,4 +134,56 @@ describe("what a changed kind does to the site's own entries, as Shutter.Test.Si
       kindChangeRefusal([{ entry: '', title: '', receiver: '', from: '', to: '', change: 'unread' }], ['L1']),
     ).toContain('an active site entry cannot be read');
   });
+
+  it('lists an entry its own matching fixture of the receiver widens, in place of leaves, as the recheck does (R14)', () => {
+    const fixture = (c: string, receiver: string, kind: string, expect: 'match' | 'no_match' = 'match') => ({
+      case: c,
+      expect,
+      conditions: { event: 'merge', receiver_category: kind },
+      scope: { receiver },
+    });
+    const withFixtures = (id: string, fixtures: unknown[], extra: Partial<SiteEntryItem> = {}) => {
+      const e = entry(id, ['current_state'], { receiver: ['Downstream Out'] }, extra);
+      (e.content as unknown as { fixtures: unknown[] }).fixtures = fixtures;
+      return e;
+    };
+    const widened = kindChanges(before, after, [
+      withFixtures('L1', [fixture('C-1', 'Downstream Out', 'current_state')]),
+    ]);
+    expect(widened).toEqual([
+      {
+        entry: 'L1',
+        title: 'Entry L1',
+        receiver: 'Downstream Out',
+        from: 'current_state',
+        to: 'history_of_record',
+        change: 'widens',
+        case: 'C-1',
+      },
+    ]);
+    expect(kindChangeWords(widened[0])).toBe(
+      "Downstream Out (current_state to history_of_record) is the receiver of case C-1, a matching fixture of L1 (Entry L1): the recheck after the save drops receiver_category from that entry, which then stops its cases whatever the receiver's kind and is flagged for review",
+    );
+    expect(kindChangesRead(widened)).toEqual(['L1']);
+    // A near miss, a fixture of another receiver, and one frozen at the kind the draft gives, widen nothing
+    for (const f of [
+      fixture('C-2', 'Downstream Out', 'current_state', 'no_match'),
+      fixture('C-3', 'Bed Board', 'current_state'),
+      fixture('C-4', 'Downstream Out', 'history_of_record'),
+    ])
+      expect(kindChanges(before, after, [withFixtures('L1', [f])])[0]?.change).toBe('leaves');
+    // A fixture whose case the review says is no longer stored is read from its frozen copy, which drops nothing
+    const gone = withFixtures('L1', [fixture('C-1', 'Downstream Out', 'current_state')], {
+      review: {
+        notes: [
+          'Case C-1 is no longer stored, so its evidence was not read again: only the vocabulary and its frozen copy were checked for it',
+        ],
+      },
+    });
+    expect(kindChanges(before, after, [gone])[0]?.change).toBe('leaves');
+    // Two kinds the pattern reads the same way still widen it when the fixture reads the kind again
+    const both = withFixtures('L1', [fixture('C-1', 'Downstream Out', 'current_state')]);
+    both.content!.pattern = { event: ['merge'], receiver_category: ['current_state', 'history_of_record'] };
+    expect(kindChanges(before, after, [both])[0]?.change).toBe('widens');
+  });
 });

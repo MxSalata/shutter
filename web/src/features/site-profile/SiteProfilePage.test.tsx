@@ -282,6 +282,32 @@ describe('SiteProfilePage', () => {
     expect(puts[1].body.kindChangesRead).toEqual(['L9']);
   });
 
+  it('says the entries cannot be read when the only entry the server lists has no id, which no tick clears', async () => {
+    server.use(
+      http.put(
+        `${BASE}/site-profile`,
+        () =>
+          HttpResponse.json(
+            {
+              error: 'kind_change_unread',
+              detail: 'This save changes a receiver kind',
+              kindChanges: [{ entry: '', title: '', receiver: '', from: '', to: '', change: 'unread' }],
+            },
+            { status: 409 },
+          ),
+        { once: true },
+      ),
+    );
+    renderPage();
+    const select = (await inReceiver1()).getByRole('combobox', { name: 'Category of Downstream Out' });
+    await userEvent.selectOptions(select, 'history_of_record');
+    await userEvent.click(screen.getByRole('button', { name: 'Review and save…' }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 8' }));
+    expect(await within(dialog).findByText(/cannot be read just now/)).toBeInTheDocument();
+    expect(within(dialog).queryByText(/has changed since the review was opened/)).not.toBeInTheDocument();
+  });
+
   it("shows the validator's message for a category the server would refuse, at its field", async () => {
     server.use(
       http.put(`${BASE}/site-profile`, () =>

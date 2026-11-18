@@ -984,10 +984,16 @@ function Profile({
           const sent = (e.body ?? null) as { kindChanges?: KindChange[] } | null;
           if (Array.isArray(sent?.kindChanges)) setRefusedKinds(sent.kindChanges);
           void client.invalidateQueries({ queryKey: keys.siteEntries });
+          // An entry the server could not read, with no id, is never taken as read: no tick clears it, so say so
+          const unreadable =
+            Array.isArray(sent?.kindChanges) &&
+            sent.kindChanges.length > 0 &&
+            sent.kindChanges.every((k) => !k?.entry);
           setSaveProblem({
             kind: 'error',
-            message:
-              "Nothing was saved: what this save does to the site's own entries has changed since the review was opened. Read the list again, tick it, and save.",
+            message: unreadable
+              ? "Nothing was saved: the site's own entries cannot be read just now, and one of them may read a receiver's kind. A save that changes a kind waits until they can be read: try again later, or save without changing a kind."
+              : "Nothing was saved: what this save does to the site's own entries has changed since the review was opened. Read the list again, tick it, and save.",
           });
           return;
         }
