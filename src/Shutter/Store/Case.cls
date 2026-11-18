@@ -265,9 +265,18 @@ ClassMethod Open(op As %DynamicObject, failureKind As %String, failureText As %S
     Set case.SourceHeaderId = sourceHeaderId
     If op.%IsDefined("document_stage") Set case.DocumentJSON = ##class(Shutter.Util.DocumentCase).Unstage(op."document_stage")
     Set case.Mode = $SELECT(mode = "": "board", 1: mode)
-    Set case.Scenario = $GET(^Shutter.Config("scenario"))
-    Set case.ScenarioRecorded = (case.Scenario '= "") && (case.Scenario = $GET(^Shutter.Config("scenarioRun")))
-    If case.ScenarioRecorded Set case.ScenarioBy = $EXTRACT($GET(^Shutter.Config("scenarioBy")), 1, 100), case.ScenarioReplay = +$GET(^Shutter.Config("scenarioReplay"))
+    // A message the scenario runner played itself carries its run's label whenever its case opens (1.5.2): the stamp below
+    // is one global that the live hospital's player rewrites every minute, so a case that opens late (S35's, through the demo
+    // hospital's alert and forwarder, can) would take the player's stamp and lose its scenario, recorded run and replay mark.
+    Set sent = ..SentByRunner(case.SourceMessageId)
+    If sent '= "" {
+        Set case.Scenario = $EXTRACT($LISTGET(sent, 1), 1, 32), case.ScenarioRecorded = ''$LISTGET(sent, 2)
+        If case.ScenarioRecorded Set case.ScenarioBy = $EXTRACT($LISTGET(sent, 3), 1, 100), case.ScenarioReplay = ''$LISTGET(sent, 4)
+    } Else {
+        Set case.Scenario = $GET(^Shutter.Config("scenario"))
+        Set case.ScenarioRecorded = (case.Scenario '= "") && (case.Scenario = $GET(^Shutter.Config("scenarioRun")))
+        If case.ScenarioRecorded Set case.ScenarioBy = $EXTRACT($GET(^Shutter.Config("scenarioBy")), 1, 100), case.ScenarioReplay = +$GET(^Shutter.Config("scenarioReplay"))
+    }
     Set now = ##class(Shutter.Util.Time).NowUTC()
     Set case.OpenedAt = now, case.UpdatedAt = now
     // A held message's headline is the hold itself ("Held: the schema X is not loaded here ..."), as the feed wrote it.
@@ -283,6 +292,16 @@ ClassMethod Open(op As %DynamicObject, failureKind As %String, failureText As %S
         TROLLBACK
     }
     Quit sc
+}
+
+/// The label the scenario runner recorded for a message it played itself (Shutter.Scenarios.Runner MarkSent), by the
+/// message's control id (MSH-10): $LISTBUILD(scenario, recorded, by, replay), or "" when the current run played no message
+/// with that id (every site install, the live hospital's stories with their own control ids, the feed's own messages).
+ClassMethod SentByRunner(controlId As %String) As %List
+{
+    Quit:(controlId = "")||($LENGTH(controlId) > 200) ""
+    Set sent = $GET(^Shutter.Config("scenarioSent", controlId))
+    Quit $SELECT($LISTVALID(sent) && ($LISTGET(sent, 1) '= ""): sent, 1: "")
 }
 
 /// Delete the finished cases whose closing is older than a time, with everything that hangs off them (events, snapshots

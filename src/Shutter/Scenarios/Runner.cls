@@ -371,6 +371,7 @@ ClassMethod Begin(scenario As %String, mode As %String, Output error As %String,
     If requestedBy = "" Set requestedBy = $SELECT($USERNAME = "UnknownUser": "", 1: $USERNAME)
     Set ^Shutter.Config("scenarioBy") = requestedBy
     Set ^Shutter.Config("scenarioReplay") = '+liveAllowed
+    Do ..KeepTag(scenario, '$ISOBJECT(pathology), requestedBy, '+liveAllowed)
     Quit reset."reset_at"
 }
 
@@ -385,6 +386,16 @@ ClassMethod Tag(scenario As %String, pathology As %Boolean)
     } Else {
         Set ^Shutter.Config("scenarioRun") = scenario
     }
+}
+
+/// Keeps the run's whole tag once, as <method>Begin</method> works it out, in ^Shutter.Config("scenarioTag") =
+/// $LISTBUILD(scenario, recorded, by, replay), a node only this runner writes: the live hospital's player rewrites
+/// ^Shutter.Config("scenario") every minute and kills ("scenarioRun") whenever a story starts, so a file step played later
+/// in the run would otherwise read a tag the player has changed. The values come from Begin itself, never read back from
+/// those globals, so a rewrite between the two calls changes nothing. <method>MarkSent</method> reads it from here.
+ClassMethod KeepTag(scenario As %String, recorded As %Boolean, by As %String, replay As %Boolean)
+{
+    Set ^Shutter.Config("scenarioTag") = $LISTBUILD(scenario, (scenario '= "") && ''recorded, by, ''replay)
 }
 
 /// Why a run in <var>mode</var> can't be played replay only, or "": the single investigator was never recorded, so a
@@ -470,6 +481,8 @@ ClassMethod Play(found As %DynamicObject, scenario As %String, mode As %String, 
                 Hang 2
                 Continue
             }
+            // The run's own label travels with the message it plays (MarkSent), whenever its case opens
+            Do ..MarkSent(step.path, scenario)
             // A step naming an item plays through that demo route instead of the inbound folder (S14, S26)
             If step.%IsDefined("item") {
                 Set error = ##class(Shutter.Scenarios.Route).Play(step.item, step.path)
@@ -538,6 +551,46 @@ ClassMethod Play(found As %DynamicObject, scenario As %String, mode As %String, 
         Quit {"error": (error), "files": (files)}
     }
     Quit {"scenario": (scenario), "mode": (mode), "started_at": (started), "files": (files), "timeouts": (timeouts)}
+}
+
+/// Records the run's label for the message in the file at <var>path</var>, by its control id (MSH-10), before the file is
+/// played: ^Shutter.Config("scenarioSent", control id) = $LISTBUILD(scenario, recorded, by, replay), from the run's tag as
+/// <method>Begin</method> kept it (^Shutter.Config("scenarioTag"), <method>KeepTag</method>), which the live hospital's player
+/// never writes, so a step played after a story has started records its run's tag whole. Played without that tag (a test
+/// calling <method>Play</method> by itself), the record is worked out from <var>scenario</var>: a recorded run unless it
+/// is a pathology path. Shutter.Store.Case Open takes the label from here for a case of that message, so the case
+/// carries its run's scenario however late it opens: the stamp in ^Shutter.Config("scenario") is one global that the live
+/// hospital's player rewrites (its ordinary feed blanks it every minute, a story sets its own id), so a case that opens
+/// after a rewrite, as one that comes through the demo hospital's alert and forwarder (S35) can, would take the player's
+/// stamp. Kept until the next <method>Reset</method>, so a message played again by a later run takes that run's
+/// label. A file whose control id can't be read records nothing, and its case keeps the stamp.
+ClassMethod MarkSent(path As %String, scenario As %String)
+{
+    Set control = ..ControlId(path)
+    Quit:(control = "")||($LENGTH(control) > 200)
+    Quit:scenario=""
+    Set tag = $GET(^Shutter.Config("scenarioTag"))
+    If '$LISTVALID(tag) || ($LISTGET(tag, 1) '= scenario) {
+        Set tag = $LISTBUILD(scenario, '$ISOBJECT(..FindPathology(scenario)), $GET(^Shutter.Config("scenarioBy")), +$GET(^Shutter.Config("scenarioReplay")))
+    }
+    Set ^Shutter.Config("scenarioSent", control) = tag
+}
+
+/// The control id (MSH-10) of the HL7 message in the file at <var>path</var>, or "" when the file can't be read or holds
+/// no MSH segment.
+ClassMethod ControlId(path As %String) As %String
+{
+    Set text = ""
+    Try {
+        Set stream = ##class(%Stream.FileCharacter).%New()
+        Set stream.TranslateTable = "UTF8"
+        If $$$ISOK(stream.LinkToFile(path)) Set text = stream.Read(32000)
+    } Catch ex {
+        Set text = ""
+    }
+    Set msh = ##class(Shutter.Util.LiveFeed).Segment($ZSTRIP(text, "<W"), "MSH")
+    Quit:msh="" ""
+    Quit $ZSTRIP($PIECE(msh, $EXTRACT(msh, 4), 10), "<>W")
 }
 
 /// A step in words, for <method>Status</method>.
@@ -746,7 +799,7 @@ ClassMethod Reset() As %String [ SqlProc ]
         }
     }
     Set ^Shutter.Config("mode") = "board"
-    Kill ^Shutter.Config("scenario"), ^Shutter.Config("scenarioRun"), ^Shutter.Config("scenarioBy"), ^Shutter.Config("scenarioReplay")
+    Kill ^Shutter.Config("scenario"), ^Shutter.Config("scenarioRun"), ^Shutter.Config("scenarioBy"), ^Shutter.Config("scenarioReplay"), ^Shutter.Config("scenarioTag"), ^Shutter.Config("scenarioSent")
     // S26 turns the hold on for its own run: a run cut off must not leave it on, so the profile's word stands again.
     Do ##class(Shutter.Scenarios.SiteSchema).PreventFailures(0)
     Set ^Shutter.Config("resetAt") = resetAt
