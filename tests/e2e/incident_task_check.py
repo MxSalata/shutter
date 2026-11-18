@@ -5,9 +5,9 @@
 
 Two storms through the intake route, each with its own patients, on an instance nobody else is using:
 
-- 24 failures in 12 chains: one task is raised and its message fits; the digest is read from the message, as an approver
-  in the Workflow inbox reads it, and the task is completed through the engine with that digest, as the inbox's Approve
-  does; every case resolves.
+- 24 failures in 12 chains: one task is raised and its message fits; the digest in the message is the plan's and the
+  task is bound to it on the server, with no digest for the inbox to fill; the task is completed through the engine with
+  only a comment, as the inbox's Approve sends it, nothing pasted; every chain is released and every case resolves.
 - 8 failures with the approval target missing: no task can be raised, and the incident waits for a person instead of
   closing: no case fails, its timeline and an alert name the incident, once, through a retry that fails again. The target
   comes back, the next try raises the task, the API approves, and every case resolves, in order, verified, no key twice.
@@ -112,12 +112,20 @@ def open_task_message(ctr, incident_id):
 
 
 
-def complete_in_inbox(ctr, incident_id, digest):
-    """As the inbox's Approve does, the digest typed into the form (tests/e2e/inbox_check.py)."""
+def task_digests(ctr, incident_id):
+    """The open task's PlanDigest form value (for a decider to name) and the digest it is bound to, between markers."""
+    code = (f'Set t = ##class(Shutter.Util.Workflow).OpenTaskFor("{incident_id}") If $ISOBJECT(t) {{ '
+            'Write !,"<<<",t.%FormValues.GetAt("PlanDigest"),"|",t.%FormValues.GetAt("Shutter.PlanDigest"),">>>",! }')
+    m = re.search(r"<<<(.*?)\|(.*?)>>>", storm.iris_session(ctr, "SHUTTER", code), re.DOTALL)
+    return (m.group(1), m.group(2)) if m else (None, None)
+
+
+def complete_in_inbox(ctr, incident_id):
+    """As the inbox's Approve does: only Comment, the form's one field, with nothing pasted (tests/e2e/inbox_check.py)."""
     code = "\n".join([
         f'Set t = ##class(Shutter.Util.Workflow).OpenTaskFor("{incident_id}")',
         'Set sc = ##class(Shutter.Util.Workflow).Assign(t, "approver")',
-        f'Do t.%FormValues.SetAt("{digest}", "PlanDigest")',
+        'Do t.%FormValues.SetAt("approved in the inbox, nothing pasted", "Comment")',
         'If $SYSTEM.Status.IsOK(sc) { Set sc = t.%Save() }',
         'If $SYSTEM.Status.IsOK(sc) { Set sc = ##class(EnsLib.Workflow.Engine).CompleteTask(t, "Approve") }',
         'Write !,"RESULT: ",$SELECT($SYSTEM.Status.IsOK(sc): "ok", 1: $SYSTEM.Status.GetErrorText(sc)),!',
@@ -213,7 +221,9 @@ def main():
     typed = re.search(r"Plan digest: (\S+)", message)
     _, detail = case_states(operator, iid)
     line("the digest in the message is the plan's", typed and typed.group(1) == detail.get("planDigest"), typed and typed.group(1))
-    line("completed through the engine with that digest", typed and complete_in_inbox(args.ctr, iid, typed.group(1)))
+    named, bound = task_digests(args.ctr, iid)
+    line("the task is bound to the plan's digest, with none for the inbox to fill", named == "" and bound == detail.get("planDigest"), (named, bound))
+    line("completed through the engine with nothing pasted", complete_in_inbox(args.ctr, iid))
     incident = wait_state(operator, before, ("closed",), 300)
     states, detail = case_states(operator, iid)
     line("every chain resolved", {c.get("state") for c in detail.get("chains", [])} == {"resolved"} and len(detail.get("chains", [])) == 12, detail.get("summary"))
