@@ -128,7 +128,8 @@ describe('the effects check on its own, as Shutter.Test.ProfileSetup:TestTheEffe
     expect(words).toBe(
       'proposals: with these answers, Downstream Out would be less strict in the draft than in the profile in force: an engine resend would become possible. Nothing is drafted on a receiver that would be less strict than in force; the review shows such a change before it is saved',
     );
-    for (const blame of ['agent', 'ask shutter', 'description', 'you ']) expect(words.toLowerCase()).not.toContain(blame);
+    for (const blame of ['agent', 'ask shutter', 'description', 'you '])
+      expect(words.toLowerCase()).not.toContain(blame);
   });
 });
 

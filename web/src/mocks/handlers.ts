@@ -1705,7 +1705,11 @@ export const handlers = [
     }
     if (!body || typeof body !== 'object' || Array.isArray(body))
       return error(400, 'bad_request', 'The body must be the profile as a JSON object');
-    const { expectedVersion, kindChangesRead: read, ...profile } = body as SiteProfile & {
+    const {
+      expectedVersion,
+      kindChangesRead: read,
+      ...profile
+    } = body as SiteProfile & {
       expectedVersion?: number;
       kindChangesRead?: unknown;
     };
@@ -1726,7 +1730,10 @@ export const handlers = [
     const kinds = kindChanges(siteProfile.profile, profile, siteEntries.items());
     const refused = kindChangeRefusal(kinds, (read as unknown[] | undefined) ?? []);
     if (refused)
-      return HttpResponse.json({ error: 'kind_change_unread', detail: refused, kindChanges: kinds }, { status: 409 });
+      return HttpResponse.json(
+        { error: 'kind_change_unread', detail: refused, kindChanges: kinds },
+        { status: 409 },
+      );
     const version = siteProfile.version + 1;
     const updatedAt = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
     const updatedBy = session?.username ?? '';

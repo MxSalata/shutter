@@ -19,7 +19,15 @@ import { useQueryClient } from '@tanstack/react-query';
 import { RunbookField } from './RunbookField';
 import { api } from '@/api/client';
 import { saveLocked } from '@/api/saveLocked';
-import { keys, useCan, useMe, useSaveSiteProfile, useSiteEntries, useSiteProfile, useWhatIf } from '@/api/hooks';
+import {
+  keys,
+  useCan,
+  useMe,
+  useSaveSiteProfile,
+  useSiteEntries,
+  useSiteProfile,
+  useWhatIf,
+} from '@/api/hooks';
 import type { SiteProfile, SiteProfileView, SiteReceiver, WhatIf } from '@/api/types';
 import { ApiSource } from '@/components/ApiSource';
 import { ErrorAlert } from '@/components/ErrorAlert';
@@ -860,7 +868,9 @@ function Profile({
   const kinds = refusedKinds ?? kindChangesOf(base.profile, draft, siteEntries.data?.items);
   const read = kindChangesRead(kinds);
   // The entries whose change the person read: sent only with the review's tick, which the Save waits for
-  const body = read.length ? { ...toPutBody(draft, base.version), kindChangesRead: read } : toPutBody(draft, base.version);
+  const body = read.length
+    ? { ...toPutBody(draft, base.version), kindChangesRead: read }
+    : toPutBody(draft, base.version);
 
   // A radio question's id names its label (Mantine keeps the group's own id off the page): focus its chosen radio
   const focusField = (path: string) =>

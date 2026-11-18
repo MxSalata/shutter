@@ -230,7 +230,9 @@ describe('SiteProfilePage', () => {
     const save = within(dialog).getByRole('button', { name: 'Save version 8' });
     expect(save).toBeDisabled();
     await userEvent.click(
-      within(dialog).getByRole('checkbox', { name: "I have read what this save does to the site's own entries." }),
+      within(dialog).getByRole('checkbox', {
+        name: "I have read what this save does to the site's own entries.",
+      }),
     );
     expect(save).toBeEnabled();
     await userEvent.click(save);
@@ -252,7 +254,11 @@ describe('SiteProfilePage', () => {
         `${BASE}/site-profile`,
         () =>
           HttpResponse.json(
-            { error: 'kind_change_unread', detail: 'This save changes a receiver kind', kindChanges: [refused] },
+            {
+              error: 'kind_change_unread',
+              detail: 'This save changes a receiver kind',
+              kindChanges: [refused],
+            },
             { status: 409 },
           ),
         { once: true },

@@ -117,8 +117,8 @@ export function ReviewModal({
               The site's own entries that read a receiver's kind ({kindChanges.length})
             </Text>
             <Text size="sm">
-              These entries stop cases by the receiver's kind (receiver_category), so a kind changed here changes
-              which cases they stop.
+              These entries stop cases by the receiver's kind (receiver_category), so a kind changed here
+              changes which cases they stop.
             </Text>
             <List size="sm" spacing={6} aria-labelledby={`${lockedId}-kinds`}>
               {kindChanges.map((k, i) => (
