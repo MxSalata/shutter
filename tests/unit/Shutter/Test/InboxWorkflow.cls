@@ -8,7 +8,7 @@ Property Requests As list Of %Library.RegisteredObject [ Transient ];
 
 Property Keys As list Of %String(MAXLEN = 200) [ Transient ];
 
-Method SendRequestAsync(pTargetDispatchName As %String, pRequest As %Library.Persistent, pResponseRequired As %Boolean = 1, pCompletionKey As %String = "", pDescription As %String = "") As %Status
+Method SendRequestAsync(pTargetDispatchName As %String, pRequest As Ens.Request, pResponseRequired As %Boolean = 1, pCompletionKey As %String = "", pDescription As %String = "") As %Status
 {
     Do ..Requests.Insert(pRequest)
     Do ..Keys.Insert(pCompletionKey)
