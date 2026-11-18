@@ -170,8 +170,8 @@ function Welcome({ initial, onStartS2 }: { initial: GuideScope; onStartS2: () =>
   return (
     <Stack gap="md">
       <Text fz={18}>
-        When a patient movement fails to reach another system, Shutter finds out why and writes a fix only
-        once its checks pass.
+        When a patient movement fails to reach another system, Shutter's AI Hub agents propose a plan, and a
+        deterministic gate decides whether it may write.
       </Text>
       <Text fz={15}>
         {HOSPITAL_NAME}: a demo hospital with made-up patients, recorded. {welcomeActions(can)}: each replays

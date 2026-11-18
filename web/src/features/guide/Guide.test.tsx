@@ -140,7 +140,7 @@ describe('the guide', () => {
     renderApp();
     const d = await welcome();
     expect(d).toHaveTextContent(
-      'When a patient movement fails to reach another system, Shutter finds out why and writes a fix only once its checks pass.',
+      "When a patient movement fails to reach another system, Shutter's AI Hub agents propose a plan, and a deterministic gate decides whether it may write.",
     );
     expect(d).toHaveTextContent(
       "Mikolaj's Fictional Hospital: a demo hospital with made-up patients, recorded.",
