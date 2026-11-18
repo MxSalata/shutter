@@ -190,7 +190,14 @@ describe('the held case', () => {
 
   it('leaves the other recorded cases as they were recorded', async () => {
     const c = await api.get<CaseDetail>('/cases/C-000009');
-    expect(c).toEqual(fixtures.cases['C-000009'].detail);
+    expect({ ...c, cost: undefined }).toEqual(fixtures.cases['C-000009'].detail);
+  });
+
+  it('says what a recorded case cost: its runs are replays, so $0 and not unpriced', async () => {
+    const c = await api.get<CaseDetail>('/cases/C-000009');
+    const runs = fixtures.cases['C-000009'].runs;
+    expect(runs.length).toBeGreaterThan(0);
+    expect(c.cost).toMatchObject({ usd: 0, unpriced: false, runs: runs.length, replayedRuns: runs.length, modelRuns: 0 });
   });
 });
 

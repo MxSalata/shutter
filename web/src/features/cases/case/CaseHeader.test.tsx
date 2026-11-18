@@ -483,4 +483,32 @@ describe("the case header's Technical facts", () => {
     for (const id of ['case-tech-message', 'case-tech-source', 'case-tech-failure', 'case-tech-plan'])
       expect(screen.getByTestId(id)).not.toHaveTextContent('MRN1232');
   });
+  it('says in Details what the case cost, Unpriced when a model had no stored price', async () => {
+    const cost = {
+      usd: 0.015,
+      unpriced: true,
+      runs: 2,
+      modelRuns: 2,
+      replayedRuns: 0,
+      mockRuns: 0,
+      unpricedRuns: 1,
+      questionRuns: 0,
+      questionUsd: 0,
+      models: ['claude-opus-5-5', 'new-model'],
+      unpricedModels: ['new-model'],
+    };
+    renderHeader({ ...base, mode: 'board', cost });
+    expect(screen.queryByTestId('case-cost')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Details' }));
+    const shown = screen.getByTestId('case-cost');
+    expect(within(shown).getByText('Unpriced')).toBeInTheDocument();
+    expect(shown).toHaveTextContent('no price for new-model');
+    expect(shown).not.toHaveTextContent('$0.00');
+  });
+
+  it('shows no cost for a build that sends none', async () => {
+    renderHeader({ ...base, mode: 'board' });
+    await userEvent.click(screen.getByRole('button', { name: 'Details' }));
+    expect(screen.queryByTestId('case-cost')).not.toBeInTheDocument();
+  });
 });

@@ -36,6 +36,7 @@ import type {
   SiteProfileView,
 } from '@/api/types';
 import { CLOSED_STATES } from '@/api/types';
+import { caseCostOf, type CostRun } from '@/lib/cost';
 import {
   addressesProblem,
   closeNeedsApprover,
@@ -1014,7 +1015,10 @@ export const handlers = [
       total: items.length,
     });
   }),
-  http.get(`${BASE}/cases/:id`, ({ params }) => part(String(params.id), (c) => c.detail, 'not_found')),
+  // The case with what its recorded runs cost, as the server adds it (CONTRACTS 5)
+  http.get(`${BASE}/cases/:id`, ({ params }) =>
+    part(String(params.id), (c) => c.detail && { ...c.detail, cost: caseCostOf(c.runs as CostRun[]) }, 'not_found'),
+  ),
   http.get(`${BASE}/cases/:id/events`, ({ params }) => part(String(params.id), (c) => c.events, 'not_found')),
   http.get(`${BASE}/cases/:id/snapshot`, ({ params }) =>
     part(String(params.id), (c) => withPrecedents(c.snapshot), 'no_snapshot'),

@@ -20,6 +20,7 @@ import { DispositionBadge } from '@/components/StateBadge';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Term } from '@/components/Term';
 import { Timestamp } from '@/components/Timestamp';
+import { caseCostWords } from '@/lib/cost';
 import { displayZone, humanize } from '@/lib/format';
 import { asObject } from '@/lib/json';
 import { isSiteEntryId } from '@/lib/siteEntry';
@@ -210,6 +211,7 @@ export function CaseHeader({
   // MSH-9 as the server read it from the message, else as the evidence recorded it
   const msh9 = c.messageType || message?.messageType || '';
   const entry = catalogueEntryOf(c);
+  const cost = caseCostWords(c.cost);
   const board = followedBoard(c);
   return (
     <PageHeader
@@ -495,6 +497,19 @@ export function CaseHeader({
             <Group id="case-details" gap="xl" wrap="wrap" align="flex-start">
               <Meta label="Scenario">{c.scenario || 'None'}</Meta>
               <Meta label="Investigated by">{MODES[c.mode] ?? humanize(c.mode)}</Meta>
+              {/* What the case's agent runs cost: Unpriced when a model had no stored price, $0.00 for replays */}
+              {cost ? (
+                <Meta label="Model cost">
+                  <Stack gap={2} maw={420} data-testid="case-cost">
+                    <Text size="sm" className="tabular">
+                      {cost.short}
+                    </Text>
+                    <Text size="xs" c="dimmed">
+                      {cost.detail}
+                    </Text>
+                  </Stack>
+                </Meta>
+              ) : null}
               {provenance ? (
                 <Meta label="Provenance">
                   <StatusBadge {...provenance} w="fit-content" />
