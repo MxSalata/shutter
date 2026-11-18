@@ -59,7 +59,7 @@ export function kindChanges(
     const scope = (e.effectiveScope ?? e.content?.scope) as Record<string, unknown> | undefined;
     const scoped = !!scope && typeof scope === 'object' && 'receiver' in scope;
     for (const c of changed) {
-      if (scoped && !among(scope.receiver, c.name)) continue;
+      if (scoped && !among(scope?.receiver, c.name)) continue;
       const was = among(allowed, c.from);
       if (was === among(allowed, c.to)) continue;
       out.push({
