@@ -634,6 +634,8 @@ ClassMethod CaseGet(caseId As %String) As %Status
     &sql(SELECT COUNT(*) INTO :n FROM Shutter_Store.ExecutionAttempt WHERE "Case" = :id)
     Set counts.attempts = +n
     Set o.counts = counts
+    // What the case cost (CONTRACTS 5): what its agent runs spent, unpriced when a run's model had no stored price.
+    Set o.cost = ##class(Shutter.Util.CaseCost).ForCase(id)
     // Shutter's resends of the case's message (v1.53, CONTRACTS 17.8): the ledger rows on its origin header.
     Set o.resends = $SELECT(case.SourceNamespace '= "": ##class(Shutter.Store.ResendRecord).OfHeader(case.SourceNamespace, case.OriginHeaderId), 1: [])
     Do ..Technical(case, o)

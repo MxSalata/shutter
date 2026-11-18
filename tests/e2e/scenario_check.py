@@ -212,6 +212,50 @@ def fhir_judge(want, final_state, block, current, history):
     return held, differences
 
 
+def cost_of_runs(runs):
+    """What a case cost from its runs, as CONTRACTS 5 reckons it: a live or record run with tokens spent its costUsd, and
+    one with none had no stored price (unpriced); a replay, the API mimic's run (model mock) and a run with no tokens
+    spent nothing."""
+    usd, unpriced, replayed = 0.0, 0, 0
+    for r in runs or []:
+        if r.get("mode") == "replay":
+            replayed += 1
+            continue
+        tokens = sum(int(r.get(k) or 0) for k in ("promptTokens", "completionTokens", "cacheReadTokens", "cacheCreationTokens"))
+        if r.get("model") == "mock" or tokens <= 0:
+            continue
+        if r.get("costUsd") in (None, ""):
+            unpriced += 1
+        else:
+            usd += float(r["costUsd"])
+    return {"usd": round(usd, 6), "unpriced": unpriced > 0, "runs": len(runs or []), "replayedRuns": replayed}
+
+
+def cost_differences(operator, caseid):
+    """GET /cases/{id}'s cost against the case's own runs: the same rows, the same sum, unpriced when one had no price."""
+    _, case = operator.call("GET", f"/cases/{caseid}")
+    _, runs = operator.call("GET", f"/cases/{caseid}/runs")
+    cost = (case or {}).get("cost")
+    if not isinstance(cost, dict):
+        return ["the case carries no cost"]
+    want = cost_of_runs(runs if isinstance(runs, list) else [])
+    seen = {"usd": round(float(cost.get("usd") or 0), 6), "unpriced": cost.get("unpriced"), "runs": cost.get("runs"),
+            "replayedRuns": cost.get("replayedRuns")}
+    return [] if seen == want else [f"the case's cost reads {seen}, its runs give {want}"]
+
+
+def cost_self_test():
+    """The cost reckoning on made-up runs: replays and the mimic cost nothing, a run with tokens and no cost is unpriced."""
+    runs = [{"mode": "live", "model": "m", "promptTokens": 10, "costUsd": 0.25},
+            {"mode": "replay", "model": "m", "promptTokens": 10, "costUsd": 0},
+            {"mode": "live", "model": "mock", "promptTokens": 10, "costUsd": 0},
+            {"mode": "live", "model": "m", "promptTokens": 0, "costUsd": None}]
+    assert cost_of_runs(runs) == {"usd": 0.25, "unpriced": False, "runs": 4, "replayedRuns": 1}, cost_of_runs(runs)
+    runs.append({"mode": "record", "model": "n", "completionTokens": 5, "costUsd": None})
+    assert cost_of_runs(runs)["unpriced"] is True
+    assert cost_of_runs([]) == {"usd": 0.0, "unpriced": False, "runs": 0, "replayedRuns": 0}
+
+
 def fhir_self_test():
     """The FHIR judgement on made-up reads: the expected Encounter passes, and each way it can differ is named."""
     want = {"receiver": "FHIR Ward Out", "encounter": "enc-1035", "final_location": "Location/ward-b",
@@ -686,6 +730,8 @@ def judge(args, operator, scenario, mode, final, receiver=None):
                 differences.append(f"{key} {case.get(key) or 'empty'}, expected {want}")
         if not case.get("originHeaderId"):
             differences.append("no originHeaderId: the case does not name the source's message")
+    # What the case cost (CONTRACTS 5), as its own runs give it
+    differences += cost_differences(operator, caseid)
     where = (f"at {fhir['receiver']}" if fhir else "at the receiver" if receiver else "downstream")
     outcome = (f"{final['state']}, {final.get('disposition') or 'no plan'}{f' ({taken})' if taken else ''}, "
                f"{'one write' if wrote else 'no write'}, {where} {held.get('state')} {held.get('ward')}")
@@ -749,6 +795,7 @@ def main():
     p.add_argument("--self-test", action="store_true", help="check the FHIR judgement on made-up reads, then stop")
     args = p.parse_args()
     if args.self_test:
+        cost_self_test()
         return fhir_self_test()
     if not args.scenarios:
         p.error("the following arguments are required: scenarios")
