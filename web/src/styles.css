@@ -2628,6 +2628,10 @@ main[data-assistant='beside'] .stack-scroll {
 .guide-dot[data-kind='engineer'] {
   border: 1.5px solid var(--shutter-trial-accent);
 }
+.guide-scope-card {
+  display: flex;
+  align-items: flex-start;
+}
 .guide-scope-card[data-checked] {
   border-color: var(--shutter-trial-accent);
   box-shadow: inset 0 0 0 1px var(--shutter-trial-accent);
