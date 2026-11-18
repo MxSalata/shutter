@@ -100,7 +100,7 @@ All 37 scenarios (S1 to S35, with S23 in three parts; CI plays 27 of them end to
 
 ## The approval boundary, attacked over HTTP
 
-On every push to `main` that changes code, CI tries an approval naming another plan or a stale version (409), an operator's approval (403), one approval sent twice (one write), a Workflow inbox approval after the case moved under its task (blocked, no write) and one with nothing pasted (one write), the receiver changed after approval (S20, no write), and a resend of a delivery the receiver already holds (S3, no write). The script: [boundary_check.py](https://github.com/MxSalata/shutter/blob/main/tests/e2e/boundary_check.py).
+On every push to `main` that changes code, CI tries an approval naming another plan or a stale version (409), an operator's approval (403), one approval sent twice (one write), a Workflow inbox approval after the case moved under its task (blocked, no write) and one with nothing pasted (one write), the receiver changed after approval (S20, no write), and a resend of a delivery the receiver already holds (S3, no write). The scripts: [boundary_check.py](https://github.com/MxSalata/shutter/blob/main/tests/e2e/boundary_check.py), and for the two Workflow inbox approvals [inbox_check.py](https://github.com/MxSalata/shutter/blob/main/tests/e2e/inbox_check.py).
 
 ## Terms
 
