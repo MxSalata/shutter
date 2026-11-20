@@ -538,7 +538,7 @@ at. The task now carries that guarantee itself:
   digest as before, after the route's own checks; the binding is not consulted. A task made before tasks were bound (one
   open across the upgrade) has no binding, so an inbox approval of it still needs the digest pasted, and without it the
   case blocks ("carried no plan digest"), as before.
-- `GET /cases/{id}`'s `tasks[].planDigest` is still empty while a task is open; once a task is approved in the inbox it
+- `GET /cases/{id}/approvals`' `tasks[].planDigest` is still empty while a task is open; once a task is approved in the inbox it
   is the digest its task is bound to (before, the digest the approver pasted), but only when that approval stood (it was
   recorded as approved): an inbox approval that was void because something bound had moved shows none, since it bound
   nothing, and neither does an inbox rejection. A second decider racing an inbox approval is told `decided` only when it
