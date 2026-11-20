@@ -190,7 +190,44 @@ describe('the held case', () => {
 
   it('leaves the other recorded cases as they were recorded', async () => {
     const c = await api.get<CaseDetail>('/cases/C-000009');
-    expect(c).toEqual(fixtures.cases['C-000009'].detail);
+    expect({ ...c, cost: undefined }).toEqual(fixtures.cases['C-000009'].detail);
+  });
+
+  it('says what a recorded case cost: its runs are replays, so $0 and not unpriced', async () => {
+    const c = await api.get<CaseDetail>('/cases/C-000009');
+    const runs = fixtures.cases['C-000009'].runs;
+    expect(runs.length).toBeGreaterThan(0);
+    expect(c.cost).toMatchObject({
+      usd: 0,
+      unpriced: false,
+      runs: runs.length,
+      replayedRuns: runs.length,
+      modelRuns: 0,
+    });
+  });
+
+  it("counts the runs of the questions asked about a case in its cost, as the server's rows carry the case", async () => {
+    const before = await api.get<CaseDetail>('/cases/C-000008');
+    const recorded = fixtures.cases['C-000008'].runs.length;
+    // The example conversation is already asked on the showcase case: two explains and a board of three and its coordinator
+    expect(before.cost).toMatchObject({
+      runs: recorded + 6,
+      questionRuns: 6,
+      replayedRuns: recorded + 6,
+      usd: 0,
+    });
+    await api.post('/cases/C-000008/questions', {
+      tier: 'board',
+      suggested: { conversation: 'c4', turn: 1 },
+    });
+    const after = await api.get<CaseDetail>('/cases/C-000008');
+    expect(after.cost).toMatchObject({
+      runs: recorded + 10,
+      questionRuns: 10,
+      questionUsd: 0,
+      usd: 0,
+      unpriced: false,
+    });
   });
 });
 

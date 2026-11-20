@@ -876,7 +876,7 @@
         ],
         "responses": {
           "200": {
-            "description": "The case with its counts, links and incident.",
+            "description": "The case with its counts, links, incident and cost.",
             "content": {
               "application/json": {
                 "schema": {
@@ -13052,6 +13052,14 @@
                   "$ref": "#/components/schemas/OutageResend"
                 },
                 "description": "v1.53: Shutter's ledger rows on the case's origin header (CONTRACTS 17.8)."
+              },
+              "cost": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/CaseCost"
+                  }
+                ],
+                "description": "v1.71: what the case's agent runs cost (CONTRACTS 5)."
               }
             },
             "required": [
@@ -20675,6 +20683,73 @@
           "ensMessageId",
           "messageLink",
           "turn"
+        ]
+      },
+      "CaseCost": {
+        "type": "object",
+        "description": "What a case cost (CONTRACTS 5, v1.71): the sum of what its agent runs spent, as GET /costs counts the case in byCase. A replay, a run the API mimic answered and a run with no tokens cost 0. unpriced is true when a run that called a model had no stored price; usd is then what the priced runs spent, and the case's cost is not known.",
+        "properties": {
+          "usd": {
+            "type": "number",
+            "description": "What the priced runs spent, in US dollars, the questions' runs included."
+          },
+          "unpriced": {
+            "type": "boolean",
+            "description": "A run that called a model had no stored price, so the case's cost is not known."
+          },
+          "runs": {
+            "type": "number",
+            "description": "Every run of the case."
+          },
+          "modelRuns": {
+            "type": "number",
+            "description": "Live or record runs with tokens on a model other than the mimic."
+          },
+          "replayedRuns": {
+            "type": "number"
+          },
+          "mockRuns": {
+            "type": "number",
+            "description": "Runs the API mimic answered (model mock)."
+          },
+          "unpricedRuns": {
+            "type": "number"
+          },
+          "questionRuns": {
+            "type": "number",
+            "description": "The runs that answered a question about the case (CONTRACTS 14.2), inside runs."
+          },
+          "questionUsd": {
+            "type": "number",
+            "description": "What those runs spent, inside usd."
+          },
+          "models": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The models the case's runs called."
+          },
+          "unpricedModels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The models with no stored price when their runs were made."
+          }
+        },
+        "required": [
+          "usd",
+          "unpriced",
+          "runs",
+          "modelRuns",
+          "replayedRuns",
+          "mockRuns",
+          "unpricedRuns",
+          "questionRuns",
+          "questionUsd",
+          "models",
+          "unpricedModels"
         ]
       }
     }

@@ -390,6 +390,29 @@ export interface CaseDetail extends CaseSummary {
   document?: CaseDocument;
   /** Shutter's resends of the case's message through an outage (v1.53, CONTRACTS 17.8): the ledger's rows on its header. */
   resends?: CaseResend[];
+  /** What the case's agent runs cost (v1.71, CONTRACTS 5); absent from older builds. */
+  cost?: CaseCost;
+}
+
+/**
+ * What a case cost (v1.71, CONTRACTS 5, Shutter.Util.CaseCost): the sum of what its agent runs spent, as `GET /costs`
+ * counts the case. A replay, the API mimic's run and a run that reached no model cost 0. `unpriced` is true when a run
+ * that reached a model had no stored price, and `usd` is then only what the priced runs spent.
+ */
+export interface CaseCost {
+  usd: number;
+  unpriced: boolean;
+  runs: number;
+  /** Runs that called a model (live or record, with tokens, not the mimic). */
+  modelRuns: number;
+  replayedRuns: number;
+  mockRuns: number;
+  unpricedRuns: number;
+  /** The questions' runs (CONTRACTS 14.2), inside `runs` and `usd` and given apart. */
+  questionRuns: number;
+  questionUsd: number;
+  models: string[];
+  unpricedModels: string[];
 }
 
 /** One row of the resend ledger on a case's origin header, as `GET /cases/{id}` gives it (CONTRACTS 17.8). */

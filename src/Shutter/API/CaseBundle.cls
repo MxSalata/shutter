@@ -1,5 +1,6 @@
 /// One case's bundle for audit and support handoff (CONTRACTS 5): its evidence, plans, gate decisions, approvals,
-/// attempts, verifications and closure receipt, as one JSON file whose first line says it is redacted. The redaction is
+/// attempts, verifications, closure receipt and what its agent runs cost (Shutter.Util.CaseCost, totals only), as one JSON
+/// file whose first line says it is redacted. The redaction is
 /// the model view's (Shutter.Util.ModelView): the same tokens, the same allowlists, the same denied keys, read from the
 /// stored rows. A bundle goes further in three places, since a file leaves with no one to ask: note text stays in IRIS
 /// whatever the site's model switch says, what a person typed (an approver's comment, a hand closure's reason) stays in
@@ -72,6 +73,7 @@ ClassMethod UnredactedText(case As Shutter.Store.Case, user As %String, reason A
     Set out.case = {"caseId": (case.CaseId), "state": (case.State), "disposition": (case.Disposition), "mode": (case.Mode), "event": (case.Event), "receiver": (case.Receiver), "failureKind": (case.FailureKind), "failureReasonCode": (case.FailureReasonCode), "openedAt": (case.OpenedAt), "closedAt": (case.ClosedAt), "version": (case.Version), "operationKey": (case.OperationKey), "patientId": (case.PatientId), "patientIdAuthority": (case.PatientIdAuthority), "encounterId": (case.EncounterId), "priorPatientId": (case.PriorPatientId), "priorEncounterId": (case.PriorEncounterId)}
     For part = "evidence", "plans", "gateDecisions", "approvals", "attempts", "verifications" { Do out.%Set(part, parts.%Get(part)) }
     If parts.%GetTypeOf("receipt") = "object" { Set out.receipt = parts.receipt } Else { Do out.%Set("receipt", "", "null") }
+    Set out.cost = ##class(Shutter.Util.CaseCost).ForCase(case.%Id())
     Set out.notIncluded = ["the case's event log", "the agents' runs", "escalation emails"]
     Quit "{""redaction"":""" _ ..#UNREDACTED _ """," _ $CHAR(10) _ $EXTRACT(out.%ToJSON(), 2, *)
 }
@@ -96,6 +98,8 @@ ClassMethod Text(case As Shutter.Store.Case, user As %String, Output why As %Str
     }
     Do ..KeepActionFields(out.plans, parts.plans)
     If parts.%GetTypeOf("receipt") = "object" { Set out.receipt = ..Receipt(case, parts.receipt) } Else { Do out.%Set("receipt", "", "null") }
+    // What the agents' runs cost, as GET /cases/{id} gives it: totals and model ids, which name no one; the sweep reads it.
+    Set out.cost = ##class(Shutter.Util.CaseCost).ForCase(case.%Id())
     Set out.notIncluded = ["the map from tokens to values", "note text", "comments and reasons people typed", "the case's event log", "the agents' runs", "escalation emails"]
     Do ..DropNoteText(out)
     Set left = ..Sweep(case, out)

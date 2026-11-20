@@ -81,6 +81,7 @@ Method OnAfterOneTest(testname As %String) As %Status
         &sql(DELETE FROM Shutter_Store.SnapshotItem WHERE Snapshot IN (SELECT ID FROM Shutter_Store.Snapshot WHERE "Case" = :id))
         &sql(DELETE FROM Shutter_Store.Snapshot WHERE "Case" = :id)
         &sql(DELETE FROM Shutter_Store.CaseToken WHERE "Case" = :id)
+        &sql(DELETE FROM Shutter_Store.AgentRun WHERE "Case" = :id)
         &sql(DELETE FROM Shutter_Store.CaseEvent WHERE "Case" = :id)
         Kill ^Shutter.Counter("event", id), ^Shutter.Counter("snapshot", id), ^Shutter.Counter("plan", id)
         Do ##class(Shutter.Store.Case).%DeleteId(id)
@@ -256,6 +257,27 @@ Method TestUnredactedSaysSoOnItsFirstLine()
         Do $$$AssertTrue(text [ seen, seen _ " is in the file")
     }
     Do $$$AssertNotTrue(text [ "MRN-T1", "and no token stands in")
+}
+
+/// Both files say what the case's agent runs cost, as GET /cases/{id} does (Shutter.Util.CaseCost): totals and the model
+/// called, with nothing of a run's content. The redacted file is still built and swept with it.
+Method TestBothFilesCarryTheCost()
+{
+    Set run = ##class(Shutter.Store.AgentRun).%New()
+    Do run.CaseSetObjectId(..CaseRowId)
+    Set run.Mode = "live", run.Model = "ut-bundle-model", run.Status = "ok", run.StartedAt = "2026-10-15T08:21:00Z"
+    Set run.PromptTokens = 1000, run.CompletionTokens = 100, run.CostUSD = .125, run.Content = "UT-RUN-CONTENT-MARKER"
+    Do $$$AssertStatusOK(run.%Save(), "a live run on the case")
+    Set text = ##class(Shutter.API.CaseBundle).Text(..Case(), "operator", .why)
+    Do $$$AssertTrue(text '= "", "the redacted file is built: " _ $GET(why))
+    Set cost = ##class(%DynamicObject).%FromJSON(text).cost
+    Do $$$AssertTrue($ISOBJECT(cost), "with the cost")
+    Do $$$AssertEquals(cost.usd _ "|" _ cost.runs _ "|" _ cost.modelRuns, ".125|1|1", "what the run spent: " _ text)
+    Do $$$AssertEquals(cost.models.%Get(0), "ut-bundle-model", "and the model it called")
+    Do $$$AssertNotTrue(text [ "UT-RUN-CONTENT-MARKER", "and nothing of the run's text")
+    Set text = ##class(Shutter.API.CaseBundle).UnredactedText(..Case(), "approver", "The supplier needs the record", .why)
+    Do $$$AssertEquals(##class(%DynamicObject).%FromJSON(text).cost.usd, .125, "the approver's file says the same")
+    Do $$$AssertNotTrue(text [ "UT-RUN-CONTENT-MARKER", "with nothing of the run's text either")
 }
 
 /// No reason, no file and no record, whatever else is right.

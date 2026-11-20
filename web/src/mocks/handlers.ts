@@ -37,6 +37,7 @@ import type {
 } from '@/api/types';
 import { CLOSED_STATES } from '@/api/types';
 import { kindChangeRefusal, kindChanges } from '@/features/site-profile/kindChanges';
+import { caseCostOf, type CostRun } from '@/lib/cost';
 import {
   addressesProblem,
   closeNeedsApprover,
@@ -320,6 +321,16 @@ export const PAGE_LIVE_AGENTS_ONLY =
  */
 let asked: Record<string, CaseQuestion[]> = {};
 const questionsOf = (id: string) => (asked[id] ??= startingQuestions(id, stamp()));
+/** The agent runs of the questions asked about a case here, as its cost reads them: replays, at no cost. */
+const questionRunsOf = (id: string): CostRun[] =>
+  questionsOf(id).flatMap((q) =>
+    questionDetail(q).agentRuns.map((r) => ({
+      mode: r.mode,
+      model: r.model,
+      costUsd: r.costUsd,
+      questionId: q.questionId,
+    })),
+  );
 
 /** Cases a person closed as handled by hand in the demo, laid over the recorded case when it is read. */
 let closed: Record<string, { reason: string; by: string; at: string; version: number }> = {};
@@ -1015,7 +1026,20 @@ export const handlers = [
       total: items.length,
     });
   }),
-  http.get(`${BASE}/cases/:id`, ({ params }) => part(String(params.id), (c) => c.detail, 'not_found')),
+  // The case with what its runs cost, as the server adds it (CONTRACTS 5): the recorded runs and the runs of the
+  // questions asked about it here (the example conversation and any asked in the trial), each with its question, since a
+  // question's runs carry the case on the server too. The mock's runs list keeps to the recorded runs.
+  http.get(`${BASE}/cases/:id`, ({ params }) =>
+    part(
+      String(params.id),
+      (c) =>
+        c.detail && {
+          ...c.detail,
+          cost: caseCostOf([...(c.runs as CostRun[]), ...questionRunsOf(String(params.id))]),
+        },
+      'not_found',
+    ),
+  ),
   http.get(`${BASE}/cases/:id/events`, ({ params }) => part(String(params.id), (c) => c.events, 'not_found')),
   http.get(`${BASE}/cases/:id/snapshot`, ({ params }) =>
     part(String(params.id), (c) => withPrecedents(c.snapshot), 'no_snapshot'),
