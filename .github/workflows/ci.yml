@@ -472,8 +472,9 @@ jobs:
       - name: What the approval boundary refuses
         if: matrix.shard == 'checks'
         run: python3 tests/e2e/boundary_check.py --url "$IRIS_URL"
-      # The approval through the Workflow inbox, whose form starts empty: an empty or another digest blocks the case with
-      # nothing written, a reinvestigation recovers it, and the plan's digest writes once, verified.
+      # The approval through the Workflow inbox, bound on the server when the task is made: the form shows the plan and
+      # takes only a comment; a case moved under its task, its own copy of the binding forged, and an answer naming another
+      # digest each block the case with nothing written, a reinvestigation recovers it, and nothing pasted writes once.
       - name: What the Workflow inbox's approval binds
         if: matrix.shard == 'checks'
         run: python3 tests/e2e/inbox_check.py --url "$IRIS_URL"

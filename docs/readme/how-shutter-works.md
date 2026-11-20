@@ -193,7 +193,7 @@ Once the proposal gate passes a resend, the receiver dry-runs the exact action, 
 
 **Who may approve.** Shutter keeps no users of its own. An approver is an IRIS user who holds the resource `Shutter_Approve` and is a member of the Workflow role. The approver of record is the signed-in user; a name in the request is ignored. An operator, who holds `Shutter_Operate` but not `Shutter_Approve`, is refused with 403.
 
-**What the decision must carry:** the plan's digest and, through the API, the case's version as the caller read it. A stale digest or version is refused with 409, and of two decisions on one task one stands. In the Workflow inbox the `PlanDigest` field starts empty: an approval with no digest, or another plan's, binds nothing, and the case blocks with nothing dispatched. A task nobody answers in 24 hours is cancelled and the case escalates.
+**What the decision must carry:** the plan's digest and, through the API, the case's version as the caller read it. A stale digest or version is refused with 409, and of two decisions on one task one stands. In the Workflow inbox nothing is pasted: the task is bound on the server, when it is made, to the plan and its digest, the case's version, the evidence, the rehearsal and the receiver, and its form shows that plan read-only. Approve there releases exactly what the task is bound to; if any of it has moved since, the case blocks with nothing dispatched. A task nobody answers in 24 hours is cancelled and the case escalates.
 
 **What the approval binds** ([Approval.cls](../../src/Shutter/Store/Approval.cls)). If any of these has changed when the dispatch gate asks, the approval no longer authorises the write:
 

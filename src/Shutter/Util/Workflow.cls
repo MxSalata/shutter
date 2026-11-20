@@ -1,7 +1,8 @@
 /// The Workflow engine's tasks for Shutter cases and incidents: finding a case's open approval task and completing
 /// it on the signed-in user's behalf. The REST API calls Decide() after its own checks, and a script or the terminal
 /// calls it through SQL; the Management Portal's Workflow inbox is the other way to answer a task, and there the
-/// approver pastes the plan digest from the task's text into its PlanDigest field.
+/// approver pastes nothing: the task is bound on the server to what it approves (Shutter.Process.TaskBinding), and an
+/// approval there names no digest.
 Class Shutter.Util.Workflow Extends %RegisteredObject
 {
 
@@ -36,8 +37,9 @@ ClassMethod TasksFor(caseId As %String) As %DynamicArray
             Do ..SetTime(t, "timeCreated", task.%TaskStatus.TimeCreated)
             Do ..SetTime(t, "timeCompleted", task.%TaskStatus.TimeCompleted)
         }
-        // Empty while the task is open: the decider supplies the digest (Decide, or the inbox approver).
-        Set t.planDigest = task.%FormValues.GetAt("PlanDigest")
+        // Empty while the task is open: Decide writes the digest its caller named, and an inbox approval that stood binds its
+        // task's; one that was void binds none.
+        Set t.planDigest = ..DecidedDigest(task)
         Do out.%Push(t)
     }
     Quit out
@@ -142,8 +144,35 @@ ClassMethod NoOpenTask(caseId As %String, digest As %String) As %String
     If 'rs.%Next() Quit none
     Set task = ##class(EnsLib.Workflow.TaskResponse).%OpenId(rs.%Get("ID"))
     If '$ISOBJECT(task) || '$ISOBJECT(task.%TaskStatus) || 'task.%TaskStatus.IsComplete Quit none
-    If task.%FormValues.GetAt("PlanDigest") '= digest Quit none
+    If ..DecidedDigest(task) '= digest Quit none
     Quit ..DecidedJSON(task)
+}
+
+/// The digest a task's decision bound: the one Decide wrote, or, for a task approved in the Workflow inbox, which names
+/// none, the digest its task is bound to, once that approval stood (it was recorded as approved). "" while the task is
+/// open with none written, for an inbox rejection, and for an inbox approval that was void because something bound had
+/// moved, or that the workflow has not taken yet: those bound nothing.
+ClassMethod DecidedDigest(task As EnsLib.Workflow.TaskResponse) As %String
+{
+    Set named = task.%FormValues.GetAt("PlanDigest")
+    If named '= "" Quit named
+    If '$ISOBJECT(task.%TaskStatus) || 'task.%TaskStatus.IsComplete || ($ZCONVERT(task.%Action, "L") '= "approve") Quit ""
+    Set bound = task.%FormValues.GetAt("Shutter.PlanDigest")
+    If (bound = "") || '..ApprovalStood(task.%Id(), bound) Quit ""
+    Quit bound
+}
+
+/// Whether the workflow recorded the task's approval of this digest as approved: a case's approval (Shutter_Store.Approval),
+/// or an incident's or a chain's (Shutter_Store.Incident, Shutter_Store.Chain).
+ClassMethod ApprovalStood(taskId As %String, digest As %String) As %Boolean
+{
+    If (taskId = "") || (digest = "") Quit 0
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT TOP 1 ID FROM Shutter_Store.Approval WHERE WorkflowTaskId = ? AND Decision = 'approved' AND PlanDigest = ?", taskId, digest)
+    If rs.%Next() Quit 1
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT TOP 1 ID FROM Shutter_Store.Incident WHERE ApprovalTaskId = ? AND ApprovalDecision = 'approved' AND PlanDigest = ?", taskId, digest)
+    If rs.%Next() Quit 1
+    Set rs = ##class(%SQL.Statement).%ExecDirectNoPriv(, "SELECT TOP 1 ID FROM Shutter_Store.Chain WHERE ApprovalTaskId = ? AND ApprovalDecision = 'approved' AND Incident->PlanDigest = ?", taskId, digest)
+    Quit rs.%Next()
 }
 
 /// Gives back the lock Claim took.

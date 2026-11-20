@@ -33,7 +33,7 @@ The mode decides who proposes the plan. In every mode the same gate checks the p
 
 - Sign in as `operator` / `shutter`: the case's action reads **Waiting for an approver**, **Approve the resend** under **Gate and decision** is disabled ("Deciding needs the approver role"), and the API answers 403.
 - Open the review (**Decide on the resend**) in two tabs and confirm in each: one write; the second answers 409 ("The case is resolved, not awaiting approval").
-- Sign in to the Management Portal as `approver` / `shutter`, the role's member (`_SYSTEM` is not one, so its inbox is empty), and open the Workflow inbox at http://localhost:52773/csp/healthshare/shutter/_DeepSee.UserPortal.Workflow.zen. Select the task, press **Accept**, then **Approve** with `PlanDigest` empty or wrong: the case blocks and nothing is dispatched ("The approval carried no plan digest, so it binds nothing", or "named another plan digest"). **Reinvestigate** recovers it; the digest in the new task's message then approves it: one write, verified.
+- Sign in to the Management Portal as `approver` / `shutter`, the role's member (`_SYSTEM` is not one, so its inbox is empty), and open the Workflow inbox at http://localhost:52773/csp/healthshare/shutter/_DeepSee.UserPortal.Workflow.zen. Select the task and press **Accept**: the form shows the plan the task is bound to, read-only (the exact action, the plan's digest, the evidence, the rehearsal and the versions), and takes only a comment. Press **Approve**, with nothing to paste: one write, verified. Had the case, its plan, the evidence or the receiver moved after the task was made, the approval would block the case with nothing dispatched, naming what moved ("The approval's task no longer matches what it was made for"); **Reinvestigate** recovers it with a new task.
 
 ## As an approver: decide on a waiting case
 
@@ -77,7 +77,7 @@ For a hospital trying Shutter beside a real production, as [the install guide](h
 
 ![The Scenarios page: the evidence, then the short route's three cards, S2, S3 and S8, each with its own Run button](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/scenarios-start.png)
 
-- **S2, a transfer that never arrived.** The gate passes the board's resend, the receiver's dry run says it would apply, and the approval waits as a Workflow task. "Acknowledged" is never "Verified". The web app's **Approve the resend** completes that same `EnsLib.Workflow` task as the signed-in approver; from the IRIS Workflow inbox, signed in to the portal as `approver`, press **Accept**, then copy the plan digest from the task's message (it is **Plan digest** on the case page too) into the task's `PlanDigest` field.
+- **S2, a transfer that never arrived.** The gate passes the board's resend, the receiver's dry run says it would apply, and the approval waits as a Workflow task. "Acknowledged" is never "Verified". The web app's **Approve the resend** completes that same `EnsLib.Workflow` task as the signed-in approver; from the IRIS Workflow inbox, signed in to the portal as `approver`, press **Accept**, read the plan the task is bound to in its form, then **Approve**: nothing to paste, since the task was bound to that plan on the server when it was made.
 
 ![S2's approval as a task in the IRIS Workflow inbox, with the plan digest in its message and Approve and Reject beside it](https://raw.githubusercontent.com/MxSalata/shutter/main/docs/readme/images/workflow-inbox-s2.png)
 
@@ -100,7 +100,7 @@ All 37 scenarios (S1 to S35, with S23 in three parts; CI plays 27 of them end to
 
 ## The approval boundary, attacked over HTTP
 
-On every push to `main` that changes code, CI tries an approval naming another plan or a stale version (409), an operator's approval (403), one approval sent twice (one write), a Workflow inbox approval with an empty or another digest (blocked, no write), the receiver changed after approval (S20, no write), and a resend of a delivery the receiver already holds (S3, no write). The script: [boundary_check.py](https://github.com/MxSalata/shutter/blob/main/tests/e2e/boundary_check.py).
+On every push to `main` that changes code, CI tries an approval naming another plan or a stale version (409), an operator's approval (403), one approval sent twice (one write), a Workflow inbox approval after the case moved under its task (blocked, no write) and one with nothing pasted (one write), the receiver changed after approval (S20, no write), and a resend of a delivery the receiver already holds (S3, no write). The scripts: [boundary_check.py](https://github.com/MxSalata/shutter/blob/main/tests/e2e/boundary_check.py), and for the two Workflow inbox approvals [inbox_check.py](https://github.com/MxSalata/shutter/blob/main/tests/e2e/inbox_check.py).
 
 ## Terms
 
