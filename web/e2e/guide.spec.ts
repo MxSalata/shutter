@@ -567,3 +567,45 @@ test.describe("the tour through a step's dialog", () => {
     await expect(guide).toContainText('Past reviews');
   });
 });
+
+for (const [width, viewport] of [
+  ['a laptop', { width: 1280, height: 800 }],
+  ['a phone', { width: 390, height: 844 }],
+] as const) {
+  test.describe(`the first words, on ${width}`, () => {
+    test.use({ viewport });
+
+    test("the welcome names the agents, its radios start level, and S8's note says the same recorded time", async ({
+      page,
+    }) => {
+      await page.addInitScript((key) => localStorage.removeItem(key), GUIDE_KEY);
+      await page.goto('./?trial#/scenarios');
+      const dialog = page.getByRole('dialog', { name: 'Welcome to the Shutter trial' });
+      await expect(dialog).toContainText("Shutter's AI Hub agents propose a plan");
+      const gaps = await dialog.locator('.guide-scope-card').evaluateAll((cards) =>
+        cards.map((card) => {
+          const dot = card.querySelector('.mantine-RadioIndicator-indicator');
+          return dot!.getBoundingClientRect().top - card.getBoundingClientRect().top;
+        }),
+      );
+      expect(gaps).toHaveLength(3);
+      expect(Math.max(...gaps) - Math.min(...gaps)).toBeLessThan(1);
+      if (viewport.width >= 768) {
+        const tops = await dialog
+          .locator('.mantine-RadioIndicator-indicator')
+          .evaluateAll((dots) => dots.map((dot) => dot.getBoundingClientRect().top));
+        expect(Math.max(...tops) - Math.min(...tops)).toBeLessThan(1);
+      }
+
+      await skipWelcome(page);
+      await go(page, '/cases/C-000008?show=compare');
+      await expect(page.getByRole('region', { name: /^S8 side by side/ })).toContainText(
+        'at exactly the same recorded time',
+      );
+      const sideways = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      );
+      expect(sideways).toBeLessThanOrEqual(0);
+    });
+  });
+}
