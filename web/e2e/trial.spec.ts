@@ -299,13 +299,14 @@ test.describe('the trial on the build IRIS serves', () => {
     // conversation there) adds 582 more: the four together measure 77,651 bytes, so the allowance was 8,300 bytes. The
     // check after a session ends without a sign-out (who it was, so that someone else signing in next is given none of
     // the earlier person's page state), in the query client and the sign-in hook, so in the shell, adds 236 more:
-    // 77,887 bytes, so the allowance is 8,550 bytes
+    // 77,887 bytes, so the allowance was 8,550 bytes. The six items merged for 1.5.2 add 73 more together:
+    // 77,960 bytes, so the allowance is 8,600 bytes
     const src = await page.evaluate(
       () => new URL(document.querySelector<HTMLScriptElement>('script[type="module"][src]')!.src).pathname,
     );
     const entry = bodies.find((b) => b.path === src);
     expect(entry, 'the entry chunk').toBeTruthy();
-    expect(entry!.size).toBeLessThanOrEqual(69_373 + 8_550);
+    expect(entry!.size).toBeLessThanOrEqual(69_373 + 8_600);
   });
 });
 
