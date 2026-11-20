@@ -9,6 +9,7 @@
     "build": "npm run typecheck && vite build",
     "build:www": "npm run typecheck && vite build --mode iris --outDir ../www --emptyOutDir",
     "build:demo": "npm run typecheck && vite build --mode demo --outDir dist-demo --emptyOutDir",
+    "build:cloudflare": "npm run build:demo && node -e \"require('fs').copyFileSync('cloudflare/_headers', 'dist-demo/_headers')\"",
     "preview:demo": "vite preview --outDir dist-demo --port 4174 --strictPort",
     "record:demo": "node scripts/record-demo.mjs",
     "export:answers": "node scripts/export-recorded-answers.mjs",
