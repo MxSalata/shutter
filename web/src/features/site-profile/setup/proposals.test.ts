@@ -104,7 +104,7 @@ describe('the effects check on its own, as Shutter.Test.ProfileSetup:TestTheEffe
       policy: { ...p.policy, '2': { ...p.policy!['2'], single: 'automatic' } },
     });
     expect(effectsRefusal(BASE, clone(BASE), automatic(clone(BASE)), 'Downstream Out')).toBe(
-      "proposals: less strict than the profile in force: a resend of single failures would need no person's approval",
+      "proposals: with these answers, Downstream Out would be less strict in the draft than in the profile in force: a resend of single failures would need no person's approval. Nothing is drafted on a receiver that would be less strict than in force; the review shows such a change before it is saved",
     );
     expect(effectsRefusal(BASE, clone(BASE), clone(BASE), 'Downstream Out')).toBe('');
     const draft = clone(BASE);
@@ -116,6 +116,20 @@ describe('the effects check on its own, as Shutter.Test.ProfileSetup:TestTheEffe
     expect(effectsRefusal(BASE, draft, automatic(clone(draft)), 'Bed Board')).toBe(
       "proposals: less strict than the draft: a resend of single failures would need no person's approval",
     );
+  });
+
+  it('says what a change in the draft on a receiver in force does, and not who made it', () => {
+    // engine_resend ticked with the page's control on a receiver in force, and a batch that drafts only its description
+    const draft = clone(BASE);
+    (draft.receivers[0] as unknown as Record<string, unknown>).engine_resend = true;
+    const applied = clone(draft);
+    applied.receivers[0].system = 'the bed manager board';
+    const words = effectsRefusal(BASE, draft, applied, 'Downstream Out');
+    expect(words).toBe(
+      'proposals: with these answers, Downstream Out would be less strict in the draft than in the profile in force: an engine resend would become possible. Nothing is drafted on a receiver that would be less strict than in force; the review shows such a change before it is saved',
+    );
+    for (const blame of ['agent', 'ask shutter', 'description', 'you '])
+      expect(words.toLowerCase()).not.toContain(blame);
   });
 });
 

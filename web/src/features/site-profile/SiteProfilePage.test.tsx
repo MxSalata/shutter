@@ -170,6 +170,144 @@ describe('SiteProfilePage', () => {
     expect(sent[0].history_policy).toBeUndefined();
   });
 
+  it("names each of the site's own entries a changed kind moves a receiver out of, and saves only after a tick", async () => {
+    // One active entry that stops merges to a current-state system, with no receiver scope (CONTRACTS 6.8, R19)
+    const reads = {
+      id: 'L9',
+      state: 'active',
+      kind: 'stop',
+      title: 'Merges to a current-state system',
+      sentence: 'When a merge to a current-state system fails: a person decides.',
+      content: {
+        id: 'L9',
+        kind: 'stop',
+        title: 'Merges to a current-state system',
+        priority: 10,
+        scope: {},
+        pattern: { event: ['merge'], receiver_category: ['current_state'] },
+        why: '',
+        team: '',
+        instructions: '',
+        prose: '',
+        fixtures: [],
+      },
+      activeVersion: 1,
+      draftVersion: 0,
+      revision: 2,
+      needsReview: false,
+      casesSent: 0,
+      casesSent30: 0,
+    };
+    server.use(
+      http.get(`${BASE}/site-entries`, () =>
+        HttpResponse.json({
+          items: [reads],
+          status: {
+            active: 1,
+            proposed: 0,
+            generation: 2,
+            limit: 50,
+            suspended: [],
+            needsReview: [],
+            onePerson: null,
+            warnings: [],
+          },
+          catalogueVersion: 'test;g2:L9@1',
+          waitingPlans: 0,
+        }),
+      ),
+    );
+    renderPage();
+    const select = (await inReceiver1()).getByRole('combobox', { name: 'Category of Downstream Out' });
+    await userEvent.selectOptions(select, 'history_of_record');
+    await userEvent.click(screen.getByRole('button', { name: 'Review and save…' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(
+      await within(dialog).findByText(
+        'Downstream Out (current_state to history_of_record) leaves the pattern of L9 (Merges to a current-state system), which then no longer stops its cases.',
+      ),
+    ).toBeInTheDocument();
+    const save = within(dialog).getByRole('button', { name: 'Save version 8' });
+    expect(save).toBeDisabled();
+    await userEvent.click(
+      within(dialog).getByRole('checkbox', {
+        name: "I have read what this save does to the site's own entries.",
+      }),
+    );
+    expect(save).toBeEnabled();
+    await userEvent.click(save);
+    expect(await screen.findByText('Version 8 saved')).toBeInTheDocument();
+    expect(puts[0].body.kindChangesRead).toEqual(['L9']);
+  });
+
+  it("shows the server's list when a save is refused for an entry the review did not show, and asks for the tick", async () => {
+    const refused = {
+      entry: 'L9',
+      title: 'Merges to a current-state system',
+      receiver: 'Downstream Out',
+      from: 'current_state',
+      to: 'history_of_record',
+      change: 'leaves',
+    };
+    server.use(
+      http.put(
+        `${BASE}/site-profile`,
+        () =>
+          HttpResponse.json(
+            {
+              error: 'kind_change_unread',
+              detail: 'This save changes a receiver kind',
+              kindChanges: [refused],
+            },
+            { status: 409 },
+          ),
+        { once: true },
+      ),
+    );
+    renderPage();
+    const select = (await inReceiver1()).getByRole('combobox', { name: 'Category of Downstream Out' });
+    await userEvent.selectOptions(select, 'history_of_record');
+    await userEvent.click(screen.getByRole('button', { name: 'Review and save…' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).queryByRole('checkbox', { name: /what this save does/ })).not.toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 8' }));
+    expect(await within(dialog).findByText(/has changed since the review was opened/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/leaves the pattern of L9/)).toBeInTheDocument();
+    const save = within(dialog).getByRole('button', { name: 'Save version 8' });
+    expect(save).toBeDisabled();
+    await userEvent.click(within(dialog).getByRole('checkbox', { name: /what this save does/ }));
+    await userEvent.click(save);
+    expect(await screen.findByText('Version 8 saved')).toBeInTheDocument();
+    expect(puts[0].body.kindChangesRead).toBeUndefined();
+    expect(puts[1].body.kindChangesRead).toEqual(['L9']);
+  });
+
+  it('says the entries cannot be read when the only entry the server lists has no id, which no tick clears', async () => {
+    server.use(
+      http.put(
+        `${BASE}/site-profile`,
+        () =>
+          HttpResponse.json(
+            {
+              error: 'kind_change_unread',
+              detail: 'This save changes a receiver kind',
+              kindChanges: [{ entry: '', title: '', receiver: '', from: '', to: '', change: 'unread' }],
+            },
+            { status: 409 },
+          ),
+        { once: true },
+      ),
+    );
+    renderPage();
+    const select = (await inReceiver1()).getByRole('combobox', { name: 'Category of Downstream Out' });
+    await userEvent.selectOptions(select, 'history_of_record');
+    await userEvent.click(screen.getByRole('button', { name: 'Review and save…' }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save version 8' }));
+    expect(await within(dialog).findByText(/cannot be read just now/)).toBeInTheDocument();
+    expect(within(dialog).queryByText(/has changed since the review was opened/)).not.toBeInTheDocument();
+  });
+
   it("shows the validator's message for a category the server would refuse, at its field", async () => {
     server.use(
       http.put(`${BASE}/site-profile`, () =>

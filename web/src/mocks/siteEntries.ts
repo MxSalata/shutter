@@ -712,6 +712,10 @@ export function siteEntryHandlers(deps: SiteEntryDeps) {
   const find = (id: string) => entries.find((e) => e.id === id);
 
   return {
+    /** Every entry as GET /site-entries lists it: the trial's PUT /site-profile reads the active ones (R19). */
+    items() {
+      return view().items;
+    },
     reset() {
       entries = samples();
       next = entries.length;

@@ -692,7 +692,7 @@ export function useSiteProfileHistory() {
 export function useSaveSiteProfile() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (body: SiteProfile & { expectedVersion: number }) =>
+    mutationFn: (body: SiteProfile & { expectedVersion: number; kindChangesRead?: string[] }) =>
       api.put<SiteProfileView>('/site-profile', body),
     onSuccess: (data) => {
       client.setQueryData(keys.siteProfile, data);

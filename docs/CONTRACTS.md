@@ -1,6 +1,6 @@
 # Contracts between Shutter's parts
 
-Version 1.71, 18 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
+Version 1.72, 20 November 2026. These are the interfaces the parts of Shutter are built against. Change the version and the date when something here changes, and say what changed at the end.
 
 ## 1. The downstream system's API
 
@@ -1365,6 +1365,31 @@ it got there, can authorise a write or a closure.
   holds such a case's message (17.8, rule 7), and the outage run's settle after a send (`EngineResend.Resolve`, from the
   run and from a late settle) notes the delivery on such a case and leaves it for the person; a message the run holds
   for a site entry is no longer counted among the run's own, so a later message of the same patient is held behind it.
+- **R19.** A person's save of the site profile through `PUT /site-profile` that changes a receiver's kind waits for them to
+  have read what it does to the site's own entries that read the kind (v1.72). The install's own stores of the seed's
+  profile (the demo's Lab Results Out, the FHIR demo's receiver) are outside it: they store the seed's answers with no
+  person to read anything, and the recheck after each (R14) still flags what they touch. A receiver's kind is read as the
+  matcher reads it, `current_state` when its entry names none or the profile has no entry of that name, so adding,
+  removing or renaming a receiver can change it too. For each receiver whose kind differs between the profile in force and
+  the one sent, each active entry whose pattern in force (the version's own, or `effectivePattern`) names
+  `receiver_category` is listed:
+  - `widens` (with `case`), when one of the entry's matching fixtures is a stored case of that receiver whose kind, as it
+    was frozen, is not the one the profile sent gives it: the recheck after the save reads that case again and drops
+    `receiver_category` (R14), so the entry then stops its cases whatever the receiver's kind, and is flagged. Such an
+    entry is listed once for each such receiver, with the first such case, and has no `leaves` or `enters` item. A fixture
+    whose case is no longer stored, or cannot be read, is read from its frozen copy and drops nothing;
+  - otherwise, when its scope in force admits the receiver where it lists receivers, `leaves` when the receiver's kind is
+    among the pattern's values before and not after (the entry no longer stops its cases), or `enters` when it is after and
+    not before (it stops them too).
+  An active entry that cannot be read is listed as `unread` while any kind changes, since it may read the kind
+  (`Shutter.Catalogue.SiteEntry.KindChanges`, read from the rows and the fixtures' stored cases as the recheck reads them,
+  with no recheck run). While anything is listed, `PUT /site-profile` needs `kindChangesRead`, the ids of every listed
+  entry, which the review sends with its tick; otherwise it answers 409 `kind_change_unread` with `kindChanges`
+  (`[{entry, title, receiver, from, to, change, case}]`) and stores nothing (`KindChangeRefusal`). An unread entry with no
+  id is never taken as read. A save whose `expectedVersion` is not the stored version is 409 `stale_version` before R19 is
+  read, since the list is of what the save does to the profile in force. The web's port (`kindChanges.ts`) knows a
+  fixture's case is gone only from the entry's review notes, so it may say `widens` where the core says `leaves`; the
+  ids, which the refusal reads, are the same.
 
 **The match.** `Shutter.Catalogue.Matcher.Match(conditions, facts, scope)` evaluates the shipped entries as before. Then,
 unless E19 matched, and also when the shipped catalogue is empty, it reads the active site entries in order (the priority,
@@ -1644,7 +1669,10 @@ workflow (which match the stored evidence again) hold such a case for the entry.
 - `GET /site-profile` (`Shutter_Operate`, as every read) returns the current profile with its version; `PUT /site-profile`
   (`Shutter_Configure`, `X-Requested-With`) replaces it with the body, which must have the shape of 6.4 (400 `bad_request`
   naming the field otherwise), and answers the same object as the GET with the new version; the questionnaire page writes
-  it. Every version is kept as a `Shutter.Store.SiteProfileVersion` row with who stored it and from where
+  it. Beside the profile the body may carry `expectedVersion` (409 `stale_version` when the stored version is another)
+  and `kindChangesRead`, a list of site entry ids (400 `bad_request` when it is not a list): a save that changes a
+  receiver's kind which one of the site's own active entries reads is 409 `kind_change_unread` until it names each such
+  entry (6.8, R19, v1.72), and a stale `expectedVersion` is 409 `stale_version` before that is read. Every version is kept as a `Shutter.Store.SiteProfileVersion` row with who stored it and from where
   (`GET /site-profile/history`).
 
 ### 7.6 Scenario S11, an outage burst
@@ -2868,7 +2896,11 @@ proposals of a turn pass or fail together; a turn that never passes ends `schema
    name the kind; `person` at a FHIR receiver), since they are not points on one scale: any value in place of `automatic` is
    stricter, and any other change (to `automatic`, or between `per_chain`, `approval` and `board`) counts as less strict.
    Every other line is a rank. The batch is refused if any line is less strict than under the profile in force or than
-   under the draft as sent (`ProfileSetup.EffectsRefusal`, tested on its own, v1.70). With check 1's rule that a kind or a tier is drafted only while unanswered, a turn never
+   under the draft as sent (`ProfileSetup.EffectsRefusal`, tested on its own, v1.70). The refusal against the profile in
+   force says what the change does and why nothing is drafted, and not who made it, since the draft may hold a change made
+   with the page's own controls (`ProfileSetup.InForceWords`, v1.72): "proposals: with these answers, <receiver> would be
+   less strict in the draft than in the profile in force: <line>. Nothing is drafted on a receiver that would be less strict
+   than in force; the review shows such a change before it is saved". The refusal against the draft keeps its words. With check 1's rule that a kind or a tier is drafted only while unanswered, a turn never
    undoes, or moves, an answer the person gave.
 5. The validator on a copy: `SiteProfile.Validate` answers nothing for the batch applied, or exactly what it answers
    for the draft as sent (its own unfinished state). The validator returns its first problem only, so this is a
@@ -2909,7 +2941,13 @@ each field still holds its `from`, and its own copy of checks 1, 2, 4 and 5 pass
 ("Not used: the draft changed meanwhile"). Drafted answers enter the draft at once, marked "Drafted by Ask Shutter", with
 Undo; a hand edit makes an answer the person's. The review dialog lists them under "Drafted by Ask Shutter", each with its
 value, the quoted words and what it does, and its Save stays disabled until "I have read the answers Ask Shutter drafted"
-is ticked. Drafted answers follow their receiver by the page's own receiver id, which the hand-over carries to the Site
+is ticked. When the draft changes a receiver's kind that one of the site's own active entries reads (6.8, R19), the review
+lists each such entry under "The site's own entries that read a receiver's kind", saying which receiver leaves or comes into
+its pattern, or which fixture's case widens it after the save, and between which kinds (`kindChanges.ts`, the port of `KindChanges`, on `GET /site-entries`), and its Save stays
+disabled until "I have read what this save does to the site's own entries" is ticked; the save then sends
+`kindChangesRead`. The tick is for the list as shown: a 409 `kind_change_unread` shows the server's list in its place and
+asks for the tick again, or, when every entry it lists has no id, says the entries cannot be read just now (v1.72). Set up the site saves through the same review, so the same list and tick hold there.
+Drafted answers follow their receiver by the page's own receiver id, which the hand-over carries to the Site
 profile page: a receiver renamed there keeps them in the review's list, with the tick, and they stay marked when the draft
 goes back to Set up the site; only an answer changed since leaves the list. The Site profile's "Discard changes" discards
 a handed-over draft in Set up the site too. An answer to a send made before a discard, a save or a sign-out is not taken
@@ -3578,6 +3616,16 @@ That `If-Match` or an approval makes the write idempotent; that a verified versi
 
 ## Changes
 
+- v1.72, 18 Nov 2026 (what the review of 1.5.0 left open): 6.8 gains R19: a save of the
+  site profile that changes a receiver's kind which one of the site's own active entries reads (`receiver_category`) is
+  409 `kind_change_unread`, with `kindChanges`, until `kindChangesRead` names each such entry
+  (`SiteEntry.KindChanges`, `KindChangeRefusal`): each entry leaves, enters, is unread, or widens when a matching fixture
+  of the receiver is stored and the recheck after the save will drop `receiver_category`; the install's own stores of the
+  seed's profile are outside it. `PUT /site-profile` takes `kindChangesRead` beside `expectedVersion` (7.5), and a stale
+  `expectedVersion` is 409 `stale_version` before R19 is read. 14.7: the review lists those entries and its Save waits for "I have read what this save does to the
+  site's own entries", in Set up the site's review too; check 4's refusal against the profile in force says what the
+  change does and why nothing is drafted, naming no one (`ProfileSetup.InForceWords`); its code and the refusal against
+  the draft are unchanged.
 - v1.71, 18 Nov 2026: 4: the scenario runner keeps the run's tag once at its start (`^Shutter.Config("scenarioTag")`) and
   records each message it plays by its control id (`^Shutter.Config("scenarioSent")`) from that tag, and a case of that
   message takes its run's scenario, recorded run, starter and replay mark from the record, not from the stamp and

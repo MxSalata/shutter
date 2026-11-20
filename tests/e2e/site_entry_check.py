@@ -17,7 +17,9 @@ and S1 (the same transfer overtaken: closed with nothing sent) to have two store
    the case is not resolved and nothing is written.
 4. A second, broader entry with a lower priority number: it leads, and the first is shown beside it with its
    instructions.
-5. Suspension by one approver (the case is the shipped catalogue's again, the Doctor warns), resumption by two.
+5. Suspension by one approver (the case is the shipped catalogue's again, the Doctor warns), resumption by two. Then a
+   save of the site profile that changes the receiver's kind, which the entry reads: refused (409 kind_change_unread)
+   until it names the entry as read (R19), and the kind put back.
 6. Retirement by two people: S2 resends again, and the version keeps a higher generation with no entry.
 
 What this does not reach, and where it is checked instead (tests/unit/Shutter/Test): a real case in Rules only, which
@@ -317,6 +319,40 @@ def main():
         check("resuming takes a proof, a proposal and a second person", status == 200 and (resumed or {}).get("state") == "active", f"{status} {str(resumed)[:300]}")
         case, why = play("S2", "policy")
         check("resumed, the entry stops S2 again", case and case["state"] == "escalated" and case.get("catalogueEntry") == first, f"{why} {case and case['state']}")
+
+        # ---- 5b. a receiver's kind the entry reads, changed on the site profile (R19) ----
+        # The entry made from S2's case holds the case's conditions, receiver_category among them, and is scoped to its
+        # receiver. Its matching fixture is S2's stored case, which the recheck after the save reads again (R14): a save
+        # that changes that receiver's kind widens the entry past the kind, says so, and waits for a reading.
+        listed_first = next((e for e in (operator.call("GET", "/site-entries")[1] or {}).get("items", []) if e.get("id") == first), {})
+        pattern = listed_first.get("effectivePattern") or (listed_first.get("content") or {}).get("pattern") or {}
+        check("the entry made from S2's case reads the receiver's kind", "receiver_category" in pattern, str(pattern)[:300])
+        _, held = operator.call("GET", "/site-profile")
+        in_force = {k: v for k, v in ((held or {}).get("profile") or {}).items() if k != "version"}
+        receiver = baseline.get("receiver")
+        kind = next((r.get("category") or "current_state" for r in in_force.get("receivers") or [] if r.get("name") == receiver), "current_state")
+        other = "current_state" if kind == "history_of_record" else "history_of_record"
+        changed = dict(in_force, receivers=[dict(r, category=other) if r.get("name") == receiver else r for r in in_force.get("receivers") or []])
+        version = (held or {}).get("version")
+        fixture_cases = [f.get("case") for f in (listed_first.get("content") or {}).get("fixtures") or [] if f.get("expect") == "match"]
+        status, refused = approver.call("PUT", "/site-profile", dict(changed, expectedVersion=(version or 0) - 1))
+        check("a stale save that changes the kind is 409 stale_version, before anything is said of the entries", status == 409 and error_of(refused) == "stale_version" and (refused or {}).get("currentVersion") == version, f"{status} {str(refused)[:300]}")
+        status, refused = approver.call("PUT", "/site-profile", dict(changed, expectedVersion=version))
+        rows = [r for r in (refused or {}).get("kindChanges") or [] if r.get("entry") == first]
+        check("a save that changes the kind with no reading is 409 kind_change_unread, naming the entry, what changes and the fixture that widens it", status == 409 and error_of(refused) == "kind_change_unread" and rows and rows[0].get("receiver") == receiver and rows[0].get("from") == kind and rows[0].get("to") == other and rows[0].get("change") == "widens" and rows[0].get("case") in fixture_cases and first in (refused or {}).get("detail", "") and "drops receiver_category" in (refused or {}).get("detail", ""), f"{status} {str(refused)[:400]}")
+        status, refused = approver.call("PUT", "/site-profile", dict(changed, expectedVersion=version, kindChangesRead=["L999"]))
+        check("so is one that names another entry as read", status == 409 and error_of(refused) == "kind_change_unread", f"{status} {str(refused)[:200]}")
+        status, refused = approver.call("PUT", "/site-profile", dict(changed, expectedVersion=version, kindChangesRead=first))
+        check("and kindChangesRead that is not a list is 400", status == 400 and error_of(refused) == "bad_request", f"{status} {str(refused)[:200]}")
+        _, unchanged = operator.call("GET", "/site-profile")
+        check("nothing was stored", (unchanged or {}).get("version") == version, str((unchanged or {}).get("version")))
+        status, saved = approver.call("PUT", "/site-profile", dict(changed, expectedVersion=version, kindChangesRead=[first]))
+        check("naming the entry read, the save goes", status == 200 and (saved or {}).get("version") == version + 1, f"{status} {str(saved)[:200]}")
+        widened = next((e for e in (operator.call("GET", "/site-entries")[1] or {}).get("items", []) if e.get("id") == first), {})
+        check("as the refusal said, the recheck dropped receiver_category from the entry and flagged it", widened.get("needsReview") is True and isinstance(widened.get("effectivePattern"), dict) and "receiver_category" not in widened["effectivePattern"], str({k: widened.get(k) for k in ("needsReview", "effectivePattern")})[:300])
+        # Back as it was: the entry no longer reads the kind, so no reading is needed
+        status, saved = approver.call("PUT", "/site-profile", dict(in_force, expectedVersion=(saved or {}).get("version")))
+        check("and the kind is put back with no reading, since the widened entry no longer reads it", status == 200, f"{status} {str(saved)[:200]}")
 
         # ---- 6. retirement ----
         status, refused = author.call("POST", f"/site-entries/{first}/propose", read_for(first, "retire"))

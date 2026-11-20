@@ -1658,8 +1658,34 @@ ClassMethod SiteProfilePut() As %Status
     // would otherwise win): the stored version must still be the one the caller read.
     Set expected = ##class(Shutter.Util.Json).Str(body, "expectedVersion")
     If body.%IsDefined("expectedVersion") Do body.%Remove("expectedVersion")
+    // kindChangesRead: the ids of the site's own entries whose change by this save a person read (CONTRACTS 6.8, R19)
+    Set read = []
+    If body.%IsDefined("kindChangesRead") {
+        Set read = body.%Get("kindChangesRead")
+        Do body.%Remove("kindChangesRead")
+        If '$ISOBJECT(read) || 'read.%IsA("%Library.DynamicArray") Quit ..Fail("400 Bad Request", "bad_request", "kindChangesRead must be a list of site entry ids")
+    }
     Set problem = ##class(Shutter.Store.SiteProfile).Validate(body)
     If problem '= "" Quit ..Fail("400 Bad Request", "bad_request", "The profile is not valid (CONTRACTS 6.4): " _ problem)
+    // A save of a profile that has moved since the caller read it is stale before anything else is said of it: R19's list
+    // below is of what this save does to the profile in force, which the caller has not read. The store checks the
+    // version again under its lock.
+    Set inForce = ##class(Shutter.Store.SiteProfile).Current(), row = ##class(Shutter.Store.SiteProfile).Row()
+    Set stored = $SELECT($ISOBJECT(row): +row.Version, 1: 0)
+    Kill row
+    If (expected '= "") && (+expected '= stored) {
+        Set extra = {} Set extra.currentVersion = stored
+        Quit ..Fail("409 Conflict", "stale_version", "expectedVersion is not the stored profile's version", extra)
+    }
+    // A changed kind can take a receiver out of, or into, the pattern of one of the site's own entries that reads it, or
+    // widen one: the save waits for a person to have read each such change (R19).
+    Set kinds = ##class(Shutter.Catalogue.SiteEntry).KindChanges(inForce, body)
+    Set refused = ##class(Shutter.Catalogue.SiteEntry).KindChangeRefusal(kinds, read)
+    If refused '= "" {
+        Set extra = {}
+        Set extra.kindChanges = kinds
+        Quit ..Fail("409 Conflict", "kind_change_unread", refused, extra)
+    }
     // The store checks the version under its own lock, so the check and the write are one step.
     Set sc = ##class(Shutter.Store.SiteProfile).Store(body.%ToJSON(), "api", $USERNAME, expected, .current)
     If $$$ISERR(sc) && ($SYSTEM.Status.GetErrorText(sc) [ "stale_version") {

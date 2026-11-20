@@ -264,6 +264,13 @@ export type Checked = { ok: true; turn: SetupTurnBody } | { ok: false; problem: 
  * the batch applied may make no line of what Shutter will do at the receiver less strict than under the profile in force
  * (when it holds the receiver) or than under the draft as sent.
  */
+/**
+ * The effects check's refusal against the profile in force, the port of ProfileSetup.InForceWords: what the change does
+ * and why nothing is drafted, and not who made it.
+ */
+export const inForceWords = (receiver: string, line: string) =>
+  `proposals: with these answers, ${receiver} would be less strict in the draft than in the profile in force: ${line}. Nothing is drafted on a receiver that would be less strict than in force; the review shows such a change before it is saved`;
+
 export function effectsRefusal(
   base: SiteProfile,
   draft: SiteProfile,
@@ -279,8 +286,8 @@ export function effectsRefusal(
     lineWords(line.id, before.find((b) => b.id === line.id)?.policy, line.policy);
   const inForceLines = was ? effectsOf(base, was) : null;
   let line = lessStrict(inForceLines, after);
-  if (line && inForceLines)
-    return `proposals: less strict than the profile in force: ${words(line, inForceLines)}`;
+  // Said of the change, not of who made it: the draft may hold a change made with the page's controls
+  if (line && inForceLines) return inForceWords(receiver, words(line, inForceLines));
   const entry = draft.receivers.find((r) => r.name === receiver)!;
   const draftLines = effectsOf(draft, entry);
   line = lessStrict(draftLines, after);

@@ -5000,7 +5000,7 @@
           "site profile"
         ],
         "summary": "Replace the site profile",
-        "description": "The questionnaire's answers. The body must have the shape of CONTRACTS 6.4; every version is kept with who stored it.\n\nNeeds Shutter_Configure. A change: send X-Requested-With: Shutter.\n\nCONTRACTS 6.4.",
+        "description": "The questionnaire's answers. The body must have the shape of CONTRACTS 6.4; every version is kept with who stored it. A save that changes a receiver's kind which one of the site's own active entries reads (receiver_category) needs kindChangesRead, the ids of every such entry, once a person has read what the save does to them (CONTRACTS 6.8, R19); otherwise 409 kind_change_unread lists them in kindChanges.\n\nNeeds Shutter_Configure. A change: send X-Requested-With: Shutter.\n\nCONTRACTS 6.4.",
         "x-contract": "docs/CONTRACTS.md section 6.4",
         "x-required-resource": "Shutter_Configure",
         "x-writes": true,
@@ -5033,7 +5033,7 @@
             }
           },
           "400": {
-            "description": "Bad request. bad_request: The body is not a JSON object, or the profile is not valid (names the field).",
+            "description": "Bad request. bad_request: The body is not a JSON object, the profile is not valid (names the field), or kindChangesRead is not a list.",
             "x-error-codes": [
               "bad_request"
             ],
@@ -5103,9 +5103,10 @@
             }
           },
           "409": {
-            "description": "Conflict. stale_version: expectedVersion is not the stored version (with currentVersion).",
+            "description": "Conflict. stale_version: expectedVersion is not the stored version (with currentVersion).; kind_change_unread: The save changes a receiver's kind that an active site entry reads, and kindChangesRead does not name every such entry (with kindChanges: [{entry, title, receiver, from, to, change, case}], change leaves, enters, widens (with case, the matching fixture of the receiver whose recheck after the save drops receiver_category) or unread). A stale expectedVersion is stale_version before this is read.",
             "x-error-codes": [
-              "stale_version"
+              "stale_version",
+              "kind_change_unread"
             ],
             "content": {
               "application/json": {
@@ -5117,6 +5118,22 @@
                     "value": {
                       "error": "stale_version",
                       "detail": "expectedVersion is not the stored version (with currentVersion)"
+                    }
+                  },
+                  "kind_change_unread": {
+                    "value": {
+                      "error": "kind_change_unread",
+                      "detail": "This save changes a receiver's kind that one of the site's own active entries reads (receiver_category): Ward Whiteboard (current_state to history_of_record) leaves the pattern of L1 (Merges to a current-state system), which then no longer stops its cases. Send kindChangesRead with the id of each entry once a person has read what the save does to it (CONTRACTS 6.8, R19)",
+                      "kindChanges": [
+                        {
+                          "entry": "L1",
+                          "title": "Merges to a current-state system",
+                          "receiver": "Ward Whiteboard",
+                          "from": "current_state",
+                          "to": "history_of_record",
+                          "change": "leaves"
+                        }
+                      ]
                     }
                   }
                 }
@@ -14256,7 +14273,7 @@
         ]
       },
       "Error": {
-        "description": "Every error reply (CONTRACTS 5): JSON with error and detail. Some carry more fields, named in the route's description (currentVersion, currentDigest, approval, budget, live).",
+        "description": "Every error reply (CONTRACTS 5): JSON with error and detail. Some carry more fields, named in the route's description (currentVersion, currentDigest, approval, budget, live, kindChanges).",
         "type": "object",
         "properties": {
           "error": {
@@ -18440,7 +18457,7 @@
         ]
       },
       "SiteProfilePutRequest": {
-        "description": "The profile, with an optional expectedVersion: the stored version the caller read (409 stale_version otherwise).",
+        "description": "The profile, with an optional expectedVersion: the stored version the caller read (409 stale_version otherwise), and an optional kindChangesRead: the ids of the site's own entries whose change by this save a person read (CONTRACTS 6.8, R19).",
         "allOf": [
           {
             "$ref": "#/components/schemas/SiteProfile"
@@ -18450,6 +18467,13 @@
             "properties": {
               "expectedVersion": {
                 "type": "integer"
+              },
+              "kindChangesRead": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "The ids of the site's own active entries whose change by this save a person read: every entry a 409 kind_change_unread would list."
               }
             }
           }
