@@ -181,6 +181,8 @@ Method TestRouteFhirWard()
     Do $$$AssertEquals($SELECT($ISOBJECT(out.files): out.files.%ToJSON(), 1: ""), "[""S35-01-A02.hl7""]", "its file")
     Do $$$AssertTrue(##class(%File).Exists(target _ "S35-01-A02.hl7"), "into the feed's folder")
     Do $$$AssertEquals($CLASSMETHOD(r, "Describe", step), "delivering S35-01-A02.hl7 to the demo hospital's FHIR ward feed", "the step in words")
+    // The run's record of the message it played (MarkSent), which no later case of this control id may take
+    Kill ^Shutter.Config("scenarioSent", "UT35")
 }
 
 /// A scenario reset on a demo with S35's receiver resets and seeds the test FHIR server, revokes a standing approval of

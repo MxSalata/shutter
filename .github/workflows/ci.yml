@@ -832,6 +832,25 @@ jobs:
           python3 scripts/iris-sql.py --url "http://127.0.0.1:$port" --ns SHUTTER \
             "SELECT TOP 1 Text FROM Ens_Util.Log WHERE Text %STARTSWITH 'The environment was applied' ORDER BY ID DESC" \
             | tee /dev/stderr | grep -q 'The environment was applied'
+      # The public demo's case: S35 played first on a fresh start with the live hospital on, whose player rewrites the
+      # scenario stamp (the ordinary feed blanks it every minute, a story sets its own id and drops the recorded run) while
+      # S35's case comes through the hospital's alert and forwarder. Here the rewrite is forced: every second for the run's
+      # first two minutes the stamp is blanked and the recorded run dropped, as the player does, so the case opens after a
+      # rewrite every time. It must still carry S35 (the checker finds it by its scenario) and reach awaiting approval and
+      # its verified write.
+      - name: Scenario S35 first, beside the live hospital, with the stamp rewritten throughout
+        run: |
+          port=$(docker port "$CTR" 52773/tcp | head -1 | sed 's/.*://')
+          ( for i in $(seq 1 120); do
+              printf '%s\n' 'Set ^Shutter.Config("scenario") = "" Kill ^Shutter.Config("scenarioRun")' 'Halt' \
+                | docker exec -i "$CTR" iris session IRIS -U SHUTTER > /dev/null 2>&1
+              sleep 1
+            done ) &
+          rewriter=$!
+          rc=0
+          python3 tests/e2e/scenario_check.py --url "http://127.0.0.1:$port" --modes policy --approve S35 || rc=$?
+          kill "$rewriter" 2> /dev/null || true
+          exit "$rc"
       # A person's zpm on a plain instance goes where the build above does not: its installer has made the namespaces
       # first, and SHUTTER_BUILD=1 starts no production. A load that only worked there failed on a stock instance until
       # 4 Nov. The core module is the one 2026.2 takes; the whole package goes the same way on the AI Hub builds, which CI
