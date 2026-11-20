@@ -23,7 +23,8 @@ Fixes and finished work from the review of 1.5.0. No change to the gate, its pol
   the label fix; a first run on a fresh demo that showed no labelled case is still being looked into.
 - **Words.** The guide's welcome names the agents and the gate and follows the Detail level, its radios line up at
   laptop and phone width, and S8's comparison says the two moves share one recorded time.
-- **Build.** Archives, zips and env files stay out of the Docker build context.
+- **Build.** Archives, zips and env files stay out of the Docker build context. The online demo can be served from Cloudflare
+  (`web/wrangler.jsonc`, `npm run build:cloudflare`); the GitHub Pages demo is unchanged.
 - **Tests.** The escalation browser test closes its toast with the toast's own button, which removes a flake under
   load. CONTRACTS 1.74.
 
