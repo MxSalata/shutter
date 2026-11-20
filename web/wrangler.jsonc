@@ -1,0 +1,22 @@
+// The online demo on Cloudflare (Workers static assets), served at shutter.mxsalata.com. Workers Builds, connected to
+// this repository with web/ as its root directory, runs `npm ci && npm run build:cloudflare` and then
+// `npx wrangler deploy` for each push to main. Only the demo build is published: the trial, whose answers come from
+// the recorded mock inside the page, with no server code and no IRIS.
+{
+  "name": "shutter-demo",
+  "compatibility_date": "2026-11-18",
+  // One address only: shutter.mxsalata.com (a custom domain, added in the dashboard; a deploy leaves it as it is).
+  // Without these two lines every deploy turns the workers.dev address and preview URLs back on.
+  "workers_dev": false,
+  "preview_urls": false,
+  // Workers Logs record the Worker's own code running, and this Worker has none: the files are served directly.
+  "observability": {
+    "enabled": false,
+    "logs": { "enabled": false },
+    "traces": { "enabled": false },
+  },
+  // The app routes after the # (a hash router), so every page is index.html and no not-found handling is needed.
+  "assets": {
+    "directory": "./dist-demo",
+  },
+}

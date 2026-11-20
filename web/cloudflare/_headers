@@ -1,0 +1,20 @@
+# Response headers for the online demo on Cloudflare; `npm run build:cloudflare` copies this file into dist-demo/.
+# The same policy as the build's meta element (vite.config.ts), with frame-ancestors, which a meta element cannot
+# carry. The demo calls nothing but its own origin: the mock answers inside the page.
+/*
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
+  Cross-Origin-Opener-Policy: same-origin
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+
+# Vite's built files carry a content hash in their names, so a browser may keep them for good.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# The page must always be fresh, so a new release reaches every visitor.
+/
+  Cache-Control: no-cache
+/index.html
+  Cache-Control: no-cache
