@@ -4,6 +4,29 @@ Versions follow `major.minor.patch`: a minor release for new features, a patch r
 updates. The version in both `module.xml` files (the one the package manager publishes) is always the version of the
 GitHub tag on the same commit; `scripts/check-versions.py` checks every place the version is written.
 
+## 1.5.2 (20 November 2026)
+
+Fixes and finished work from the review of 1.5.0. No change to the gate, its policy version or storage.
+
+- **Site profile.** A save that changes the kind of a receiver one of the site's own active entries reads now warns
+  first: the review names each affected entry, and Save waits for "I have read what this save does to the site's own
+  entries" (R19, `kind_change_unread`). The refusal against the profile in force says what the change does and why
+  nothing is drafted, naming no one.
+- **Approval in the Workflow inbox needs nothing pasted.** Each approval task is bound on the server when it is made
+  (case, plan, evidence, rehearsal and receiver versions), the form shows the plan it approves, and an approval is void
+  if anything bound has moved. Approvals on the web page are unchanged.
+- **What a case cost.** The case page shows Model cost in Details: the sum of what the case's agent runs spent, counted
+  as `GET /costs` counts the case, and Unpriced (never 0) when a run that called a model had no stored price.
+  `GET /cases/{id}` and both bundle files carry it.
+- **Scenario runs beside the live hospital.** A case opened by a scenario run takes its scenario and recorded run from
+  the run's own record of the messages it played, so the live hospital's player no longer strips the label. This is
+  the label fix; a first run on a fresh demo that showed no labelled case is still being looked into.
+- **Words.** The guide's welcome names the agents and the gate and follows the Detail level, its radios line up at
+  laptop and phone width, and S8's comparison says the two moves share one recorded time.
+- **Build.** Archives, zips and env files stay out of the Docker build context.
+- **Tests.** The escalation browser test closes its toast with the toast's own button, which removes a flake under
+  load. CONTRACTS 1.74.
+
 ## 1.5.1 (16 November 2026)
 
 Fixes from a review of 1.5.0. No change to the gate, its policy version or storage.
