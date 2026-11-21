@@ -26,8 +26,8 @@ import { TrialCard } from './TrialCard';
 /**
  * The live sign-in page, in two halves: what Shutter is for and the proof for it (`ProofPanel`), and the password form
  * with, on a demo install, the way into the trial under it (`TrialCard`); a hospital's own install shows no trial card,
- * since the trial is the demo hospital's. Trial pages never show it: the trial opens signed in, and its own
- * sign-in page (src/trial/TrialSignIn.tsx) offers roles with no password. So nothing here names a trial user.
+ * since the trial is the demo hospital's. Trial pages never show it: the trial starts on its own sign-in page
+ * (src/trial/TrialSignIn.tsx), which offers roles with no password. So nothing here names a trial user.
  *
  * Under the heading, a demo install says it is a real IRIS for Health instance, and the public demo (its live hospital
  * on, as its health answer says) adds its build, its production of made-up patients, the player's cadence and the hourly

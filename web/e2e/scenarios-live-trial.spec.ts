@@ -1,4 +1,4 @@
-import { expect, test, type Page, type Route } from '@playwright/test';
+import { expect, test, type Page, type Route } from './test';
 import fixtures from '../src/mocks/fixtures.json' with { type: 'json' };
 import paths from '../../fixtures/pathology.json' with { type: 'json' };
 import { audit } from './axe';

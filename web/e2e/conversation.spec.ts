@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page, startAs } from './test';
 import { audit, choosePastel, MODES } from './axe';
 import { skipWelcome } from './guide';
 import { go } from './helpers';
@@ -181,6 +181,7 @@ test.describe('the recording on a laptop', () => {
       viewport: { width: 1280, height: 800 },
       baseURL: test.info().project.use.baseURL,
     });
+    await startAs(context);
     const page = await context.newPage();
     await skipWelcome(page);
     const card = await encounterCard(page);

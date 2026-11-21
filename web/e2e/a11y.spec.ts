@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './test';
 import { audit, choosePastel, MODES } from './axe';
 import { GUIDE_KEY, skipWelcome } from './guide';
 import { atWidth, checkedBy, go, openSteps, screenName, signIn, signOutOfTrial } from './helpers';

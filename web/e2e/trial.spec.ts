@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './test';
 import { audit, choosePastel, MODES } from './axe';
 import { GUIDE_KEY, skipWelcome } from './guide';
 import { areas, shell, signIn as signInArea } from './areas';
@@ -300,13 +300,14 @@ test.describe('the trial on the build IRIS serves', () => {
     // check after a session ends without a sign-out (who it was, so that someone else signing in next is given none of
     // the earlier person's page state), in the query client and the sign-in hook, so in the shell, adds 236 more:
     // 77,887 bytes, so the allowance was 8,550 bytes. The six items merged for 1.5.2 add 73 more together:
-    // 77,960 bytes, so the allowance is 8,600 bytes
+    // 77,960 bytes, so the allowance was 8,600 bytes. Starting the trial on its own sign-in page (whether the tab has
+    // still to choose a role, read once at load) adds 54 more: 78,014 bytes, so the allowance is 8,650 bytes
     const src = await page.evaluate(
       () => new URL(document.querySelector<HTMLScriptElement>('script[type="module"][src]')!.src).pathname,
     );
     const entry = bodies.find((b) => b.path === src);
     expect(entry, 'the entry chunk').toBeTruthy();
-    expect(entry!.size).toBeLessThanOrEqual(69_373 + 8_600);
+    expect(entry!.size).toBeLessThanOrEqual(69_373 + 8_650);
   });
 });
 

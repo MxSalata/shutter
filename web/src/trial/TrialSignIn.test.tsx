@@ -110,4 +110,10 @@ describe("the trial's sign-in page", () => {
     chooseTransport(createTrialTransport('operator'));
     expect(await api.get<Me>('/me')).toMatchObject({ username: 'operator', approver: false });
   });
+
+  it('starts signed out when the person has still to choose a role, so the trial opens on this page', async () => {
+    resetTransportForTests();
+    chooseTransport(createTrialTransport(null));
+    await expect(api.get<Me>('/me')).rejects.toMatchObject({ status: 401 });
+  });
 });

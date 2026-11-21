@@ -9,7 +9,8 @@ import { HOSPITAL_NAME } from '@/lib/hospital';
  * top edge and icon, the only grape on a live page), with two real links, so they also open in a new tab. It says what
  * the trial is in one breath, and in no more words than before: made-up patients, each action replays a recording, so
  * there is no new inference and nothing reaches IRIS. No password:
- * the trial opens signed in, and the card says so in a badge beside its title ("No sign-in required").
+ * the trial starts on its own sign-in page, which offers roles with no password, and the card says so in a badge
+ * beside its title ("No password").
  */
 export function TrialCard() {
   const heading = useId();
@@ -34,7 +35,7 @@ export function TrialCard() {
             New to Shutter?
           </Title>
           <Badge color="grape" variant="light" leftSection={<IconLockOpen size={12} aria-hidden />}>
-            No sign-in required
+            No password
           </Badge>
         </Group>
         <Text size="sm">

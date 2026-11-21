@@ -10,9 +10,10 @@ import { APP_NAME } from '@/theme';
 import { LeaveTrialButton, LeaveTrialConfirm } from './LeaveTrial';
 
 /**
- * The trial's sign-in page, reached only by signing out (the trial opens signed in): one card per role, each a
- * "Continue" that signs that fake user in, and no password field, so no one learns to type real credentials into a
- * fake form. The live sign-in page is LoginPage; trial pages never show it.
+ * The trial's sign-in page, where the trial starts (unless the address names a role, `?as=`, or the tab chose one
+ * before a reload) and where signing out leads: one card per role, each a "Continue" that signs that fake user in and
+ * goes on to the page asked for, and no password field, so no one learns to type real credentials into a fake form.
+ * The live sign-in page is LoginPage; trial pages never show it.
  */
 export default function TrialSignIn() {
   const me = useMe();
@@ -40,6 +41,9 @@ export default function TrialSignIn() {
             <Title order={1} fz={24} ta="center">
               Choose who you are in the trial
             </Title>
+            <Text ta="center">
+              The trial plays recorded runs in your browser, and nothing is sent anywhere.
+            </Text>
             <Text ta="center">No password: these are the trial&apos;s own roles.</Text>
           </Stack>
           {signIn.error ? <ErrorAlert error={signIn.error} title="The trial could not sign you in" /> : null}

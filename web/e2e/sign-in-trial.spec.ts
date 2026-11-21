@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './test';
 import { audit, choosePastel, MODES } from './axe';
 import { signIn as signInArea } from './areas';
 

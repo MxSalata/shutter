@@ -19,6 +19,11 @@ export interface Env {
   canLeave: boolean;
   /** The trial's user at start: `?as=operator|approver|demo|judge`, else the approver. */
   role: TrialRole;
+  /**
+   * The trial opens on its sign-in page, signed out, so the person chooses a role, as on the live sign-in page: true
+   * unless the address names a role (`?as=`) or this tab chose one before a reload.
+   */
+  choosesRole: boolean;
   /** `?trial=tour` starts the guide's quick tour on arrival, `?trial=engineer` the integration engineers' tour. */
   openGuide: 'quick' | 'engineer' | false;
   /**
@@ -47,6 +52,7 @@ export function envFrom(search: string, demoBuild: boolean): Env {
     demoBuild,
     canLeave: trial && !demoBuild,
     role: ROLES.includes(as as TrialRole) ? (as as TrialRole) : 'approver',
+    choosesRole: trial && !ROLES.includes(as as TrialRole),
     openGuide: trialValue === 'tour' ? 'quick' : trialValue === 'engineer' ? 'engineer' : false,
     judgePath: trialValue === 'judge',
     detail: detail === 'technical' || detail === 'plain' ? detail : null,
@@ -82,12 +88,13 @@ export function rememberTrialRole(role: TrialRole): void {
 
 /**
  * The environment this page was loaded in, with the trial's starting role: the one `?as=` names, else the one this
- * tab chose before a reload, else the approver.
+ * tab chose before a reload, else none yet: the trial opens on its sign-in page.
  */
 export function pageEnv(search: string, demoBuild: boolean): Env {
   const env = envFrom(search, demoBuild);
-  if (!env.trial || new URLSearchParams(search).has('as')) return env;
-  return { ...env, role: storedRole() ?? env.role };
+  if (!env.choosesRole) return env;
+  const stored = storedRole();
+  return stored ? { ...env, role: stored, choosesRole: false } : env;
 }
 
 /** This page's environment, fixed for the life of the page: a trial page and a live one never share memory. */

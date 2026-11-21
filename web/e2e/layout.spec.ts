@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './test';
 import { skipWelcome } from './guide';
 import { checkedBy, go, openSteps, screenName, signIn, signOutOfTrial, type Screen } from './helpers';
 import { areas, signIn as signInArea } from './areas';

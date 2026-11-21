@@ -38,7 +38,7 @@ The mode decides who proposes the plan. In every mode the same gate checks the p
 ## As an approver: decide on a waiting case
 
 - **Goal:** release, refuse or leave a plan that waits for you, knowing what each does. About two minutes in the
-  [trial](https://shutter.mxsalata.com/), which opens signed in as an approver; on your machine, sign in as
+  [trial](https://shutter.mxsalata.com/), where you choose **Approver** on its sign-in page; on your machine, sign in as
   `approver` / `shutter`.
 - **Steps:**
   1. Open the trial and choose **Explore on my own**.

@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page, startAs } from './test';
 import { audit } from './axe';
 import { skipWelcome } from './guide';
 import { go, signIn } from './helpers';
@@ -156,6 +156,7 @@ test.describe('the links from the receipt', () => {
     browser,
   }) => {
     const context = await browser.newContext({ viewport: { width: 360, height: 800 }, hasTouch: true });
+    await startAs(context);
     const page = await context.newPage();
     await skipWelcome(page);
     const receipt = await openCase(page, 'C-000008');

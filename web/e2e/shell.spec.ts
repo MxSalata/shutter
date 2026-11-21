@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './test';
 import { GUIDE_KEY, skipWelcome } from './guide';
 import { banner, go, signIn } from './helpers';
 

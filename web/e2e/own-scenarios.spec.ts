@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page, startAs } from './test';
 import { audit } from './axe';
 import { skipWelcome } from './guide';
 import { go, READ_ONLY, signIn } from './helpers';
@@ -96,6 +96,7 @@ test.describe('the workbench without a mouse', () => {
 
   test('works by touch on a phone: a chip, a near miss, Try it and the review', async ({ browser }) => {
     const context = await browser.newContext({ viewport: { width: 360, height: 800 }, hasTouch: true });
+    await startAs(context);
     const page = await context.newPage();
     await skipWelcome(page);
     const bench = await openFromCase(page);

@@ -29,7 +29,7 @@ async function bootstrap() {
         import('./trial/transport'),
         import('./trial/chrome'),
       ]);
-      chooseTransport(createTrialTransport(ENV.role));
+      chooseTransport(createTrialTransport(ENV.choosesRole ? null : ENV.role));
       provideTrialChrome(chrome);
     } catch {
       root().render(<TrialFailed />);

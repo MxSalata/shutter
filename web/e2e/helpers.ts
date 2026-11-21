@@ -19,7 +19,7 @@ export function go(page: Page, path: string, opened: Opened = {}) {
 }
 
 /**
- * The demo build is always the trial and opens signed in: as the approver of the recorded runs, or (`as: 'demo'`)
+ * The demo build is always the trial, and each test's page starts as the approver of the recorded runs (`./test`), or (`as: 'demo'`)
  * as the live hospital's public role, who approves but cannot run or reset scenarios or save the site. This opens
  * Scenarios and waits until it is there.
  */

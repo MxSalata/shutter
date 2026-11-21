@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './test';
 import { audit } from './axe';
 import { skipWelcome } from './guide';
 import { go, signIn } from './helpers';

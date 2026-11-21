@@ -19,10 +19,22 @@ describe('envFrom', () => {
       demoBuild: false,
       canLeave: false,
       role: 'approver',
+      choosesRole: false,
       openGuide: false,
       judgePath: false,
       detail: null,
     });
+  });
+
+  it('has the trial open on its sign-in page unless the address names a role', () => {
+    expect(envFrom('?trial', false).choosesRole).toBe(true);
+    expect(envFrom('', true).choosesRole).toBe(true);
+    expect(envFrom('?trial=tour', true).choosesRole).toBe(true);
+    expect(envFrom('?trial=judge', true).choosesRole).toBe(true);
+    expect(envFrom('?as=operator', true).choosesRole).toBe(false);
+    expect(envFrom('?as=root', true).choosesRole).toBe(true);
+    // A live page has no trial role to choose
+    expect(envFrom('', false).choosesRole).toBe(false);
   });
 
   it('is the trial with ?trial in the address, in any form, and the trial can be left', () => {
@@ -107,11 +119,11 @@ describe("the page's environment", () => {
   afterEach(() => sessionStorage.clear());
 
   it('signs a reloaded trial in as the role the tab chose, unless the address names one', () => {
-    expect(pageEnv('?trial', false).role).toBe('approver');
+    expect(pageEnv('?trial', false)).toMatchObject({ role: 'approver', choosesRole: true });
     rememberTrialRole('operator');
     expect(sessionStorage.getItem(TRIAL_ROLE_KEY)).toBe('operator');
     expect(pageEnv('?trial', false).role).toBe('operator');
-    expect(pageEnv('', true).role).toBe('operator');
+    expect(pageEnv('', true)).toMatchObject({ role: 'operator', choosesRole: false });
     expect(pageEnv('?trial&as=judge', false).role).toBe('judge');
     // A live page has no trial role to keep
     expect(pageEnv('', false).role).toBe('approver');

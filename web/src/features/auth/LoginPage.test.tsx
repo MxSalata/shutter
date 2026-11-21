@@ -476,7 +476,7 @@ describe('LoginPage, the way into the trial', () => {
     expect(tour.getAttribute('href')).toMatch(/\?trial=tour#\/scenarios$/);
     expect(open.getAttribute('href')).toMatch(/\?trial#\/home$/);
     expect(card.querySelector('input')).toBeNull();
-    expect(within(card).getByText('No sign-in required')).toBeInTheDocument();
+    expect(within(card).getByText('No password')).toBeInTheDocument();
     // The words on the link are "Take the guided tour"; "of the trial" is only for those who do not see the card
     expect(tour).toHaveTextContent(/^Take the guided tour/);
   });

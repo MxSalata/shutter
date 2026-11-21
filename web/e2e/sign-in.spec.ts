@@ -1,10 +1,10 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './test';
 import { skipWelcome } from './guide';
 import { signIn, signOutOfTrial } from './helpers';
 
 /**
- * Signing in. The demo build is always the trial and opens signed in, so the sign-in page it can show is the trial's
- * own: its roles, no password. The live sign-in page (the proof and the way into the trial) exists only in a build
+ * Signing in. The demo build is always the trial, so the sign-in page it shows is the trial's own: its roles, no
+ * password, where the trial starts (`trial-start.spec.ts`) and where signing out leads. The live sign-in page (the proof and the way into the trial) exists only in a build
  * IRIS serves, so `trial.spec.ts` (the `iris-trial` project) opens and audits that one.
  */
 

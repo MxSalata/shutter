@@ -53,7 +53,8 @@ the case page (`POST /api/shutter/cases/{id}/escalations` through the API); unti
 ### A first look, in the trial, before you install
 
 - **Goal:** see what a failed delivery gives your team as a case, before anything is installed. About ten minutes, in the
-  [trial](https://shutter.mxsalata.com/), which opens signed in as an approver and sends nothing to IRIS.
+  [trial](https://shutter.mxsalata.com/), which starts on its own sign-in page (choose **Approver**, no password) and
+  sends nothing to IRIS.
 - **Steps:**
   1. Open the trial, choose **Explore on my own**, then **Technical** in the header (on a phone, **Detail: Plain**, then
      **Technical**): codes and UTC times appear beside the plain words.

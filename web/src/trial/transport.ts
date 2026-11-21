@@ -34,10 +34,11 @@ function untilAborted<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
 /**
  * The trial's transport: every call is answered by the recorded mock's own handlers, in memory (msw's `getResponse`,
  * with no service worker and no interceptor), and none can reach the network: there is no `fetch` here. The mock
- * starts afresh with the role signed in, so the trial opens signed in, and each answer is written to the journal.
+ * starts afresh with the role signed in, or with nobody when the person has still to choose one (the trial's sign-in
+ * page), and each answer is written to the journal.
  * Loaded only in trial pages, in its own chunk with the mock and the recordings.
  */
-export function createTrialTransport(role: TrialRole): Transport {
+export function createTrialTransport(role: TrialRole | null): Transport {
   resetMock(role);
   journal.setRecording({ at: fixtures.recordedAt, source: fixtures.source });
   return async (request) => {

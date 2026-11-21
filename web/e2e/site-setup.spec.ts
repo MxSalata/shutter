@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from './test';
 import { audit } from './axe';
 import { skipWelcome } from './guide';
 import { go, READ_ONLY, signIn } from './helpers';
