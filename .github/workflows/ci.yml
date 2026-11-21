@@ -11,7 +11,7 @@ name: CI
 # scenarios and the three IRIS shards run on every pull request, a docs-only one included (the paths-ignore above belongs
 # to the push), for a person's as for Dependabot's: they need no secret and write nothing outside their own run. The
 # image job stays on main and on Dependabot's pull requests (see its comment); the release jobs run on a push to main
-# alone, and the Pages deployment on main alone, with the repository variable DEPLOY_DEMO set. Nothing that publishes,
+# alone. Nothing that publishes,
 # releases, deploys or holds a write token runs on a pull request, and the trigger is pull_request, never
 # pull_request_target: a pull request from a fork gets a read-only token and no secret, and runs the workflow file of its
 # own branch. The condition that used to keep other pull requests out (since 20 October) was written for a self-hosted
@@ -27,7 +27,7 @@ on:
   # Every pull request is tested before it is merged (see above)
   pull_request:
 
-# Least privilege by default; the Pages deployment raises what it needs.
+# Least privilege by default; a job that needs more raises it.
 permissions:
   contents: read
 
@@ -95,15 +95,11 @@ jobs:
           exit 1
       - name: Build the online demo (recorded runs on the in-browser mock)
         run: npm run build:demo
-      # Every run keeps the demo as a plain artifact (unzip and serve with any static server). The Pages artifact and
-      # the deployment below are opt-in through the repository variable DEPLOY_DEMO: Pages needs a public repository.
+      # Every run keeps the demo as a plain artifact (unzip and serve with any static server). The online demo is
+      # served from Cloudflare, which builds it from main itself (web/wrangler.jsonc).
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: demo-site
-          path: web/dist-demo
-      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
-        if: vars.DEPLOY_DEMO == 'true' && github.ref == 'refs/heads/main'
-        with:
           path: web/dist-demo
 
   # The browser suite: the page tests, and axe-core on every screen in every appearance against the demo build. A job
@@ -214,7 +210,7 @@ jobs:
 
   # Checks of the repository as a whole (credentials, versions, module.xml in ASCII, no em or en dash), in a workflow
   # of their own, .github/workflows/repository-checks.yml, which also runs on the docs-only pushes this workflow skips.
-  # Called here so the dependency release and the Pages deployment wait for them. A called workflow gets this run's
+  # Called here so the dependency release waits for them. A called workflow gets this run's
   # event (the push's before and after commits) and at most the token this job has (contents: read), and no secret.
   repository-checks:
     name: Repository checks
@@ -689,7 +685,7 @@ jobs:
   #
   # It runs on main, on Dependabot's pull requests and by hand, not on a person's pull request. It uses no repository
   # secret and pushes the image nowhere (the BuildKit secret is a password made in the job), but it builds the whole
-  # image on the runner, 30 minutes after freeing the runner's disk, it gates the demo's deployment, and the IRIS shards
+  # image on the runner, 30 minutes after freeing the runner's disk, and the IRIS shards
   # above already play every scenario on a stock instance with the same sources. To check a change to the Dockerfile,
   # the build script or the IPM module before it is merged, run this workflow by hand on its branch.
   image:
@@ -874,31 +870,3 @@ jobs:
           docker rm -f "$CTR" > /dev/null 2>&1 || true
           docker image rm "shutter:ci-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" > /dev/null 2>&1 || true
           docker builder prune -af --filter until=2h > /dev/null 2>&1 || true
-
-  # Publishes the demo to GitHub Pages. Skipped (not failed) until the repository is public, Pages is enabled
-  # (Settings, Pages, Source: GitHub Actions) and the repository variable DEPLOY_DEMO is 'true'. The six checks are
-  # named in the condition: the release jobs before the image are skipped on most runs, and a skipped job further up
-  # would otherwise skip this one too.
-  deploy-demo:
-    if: >-
-      ${{ !cancelled() && needs.web.result == 'success' && needs.web-e2e.result == 'success'
-      && needs.fixtures.result == 'success' && needs.repository-checks.result == 'success'
-      && needs.iris.result == 'success' && needs.image.result == 'success'
-      && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && vars.DEPLOY_DEMO == 'true' }}
-    needs: [web, web-e2e, fixtures, repository-checks, iris, image]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
-    # Pages deployments must never be interrupted, so this job keeps its own serial queue.
-    concurrency:
-      group: pages
-      cancel-in-progress: false
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
-      - id: deployment
-        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

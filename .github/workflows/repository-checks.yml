@@ -4,8 +4,8 @@ name: Repository checks
 # written, both module.xml files in plain ASCII, and no em or en dash in the files or the pushed commit messages.
 #
 # A workflow of its own so that it also runs on a push that changes only the docs, which CI skips (its paths-ignore):
-# every push to main runs it. CI calls it too (workflow_call), so the dependency release and the Pages deployment
-# still wait for these checks; a push that changes code therefore runs it twice, once on its own and once inside CI.
+# every push to main runs it. CI calls it too (workflow_call), so the dependency release still waits
+# for these checks; a push that changes code therefore runs it twice, once on its own and once inside CI.
 # Called from CI, github.event, github.event_name, github.sha and github.ref are CI's, so the dash check reads the
 # same pushed commits either way.
 #

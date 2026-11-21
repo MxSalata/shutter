@@ -9,10 +9,10 @@ import { readFileSync } from 'node:fs';
 // Modes:
 //   dev    `vite`                     proxies /api/shutter to an IRIS instance (VITE_IRIS_URL)
 //   iris   `vite build --mode iris`   ../www/, the build IRIS serves at /shutter/ (npm run build:www)
-//   demo   `vite build --mode demo`   dist-demo/, always the trial (GitHub Pages, the e2e tests)
+//   demo   `vite build --mode demo`   dist-demo/, always the trial (the online demo, the e2e tests)
 //
 // Every build carries the trial (`?trial` in the address): the recorded mock answers its calls in the browser, from a
-// chunk only trial pages load. VITE_BASE sets the demo's base path (GitHub Pages serves /<repo>/); by default it is
+// chunk only trial pages load. VITE_BASE sets the demo's base path (a host that serves it under /<path>/); by default it is
 // relative. E2E_NO_PROXY=1 turns `vite preview`'s proxy off, so a test of the IRIS build reaches no instance.
 
 /**

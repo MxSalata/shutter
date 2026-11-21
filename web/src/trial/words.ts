@@ -13,7 +13,7 @@ export const TRIAL_NO_INFERENCE =
 export const TRIAL_WORDS_SHORT = 'Recorded, made-up patients; nothing leaves this browser';
 
 /**
- * Where Leave trial would be, in a copy that is the trial alone (the demo build: GitHub Pages, the preview), with no
+ * Where Leave trial would be, in a copy that is the trial alone (the demo build: the online demo, the preview), with no
  * live system to go back to: the user menu and the help menu say so, so nobody hunts for it.
  */
 export const TRIAL_ONLY_WORDS =

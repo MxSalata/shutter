@@ -13,7 +13,7 @@ export type DetailLevel = 'plain' | 'technical';
 export interface Env {
   /** The trial: recorded cases answered in the browser. */
   trial: boolean;
-  /** The demo build (GitHub Pages, `VITE_MOCK=1`): always the trial, with no live system to go back to. */
+  /** The demo build (the online demo, `VITE_MOCK=1`): always the trial, with no live system to go back to. */
   demoBuild: boolean;
   /** A trial with a live system at the same address to go back to ("Leave trial"). */
   canLeave: boolean;

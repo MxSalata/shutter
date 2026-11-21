@@ -13,7 +13,7 @@
   <a href="https://github.com/MxSalata/shutter/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-lightgrey" alt="MIT licence" /></a>
 </p>
 <p align="center">
-  <a href="https://mxsalata.github.io/shutter/"><img src="https://img.shields.io/badge/trial-try%20it-45acd1" alt="Trial" /></a>
+  <a href="https://shutter.mxsalata.com/"><img src="https://img.shields.io/badge/trial-try%20it-45acd1" alt="Trial" /></a>
   <a href="https://shutter.mxsalata.com"><img src="https://img.shields.io/badge/online%20demo-live-2f9e6b" alt="Online demo" /></a>
   <a href="https://youtu.be/InZx2MYJ47k"><img src="https://img.shields.io/badge/walkthrough-13%20minutes-c4302b?logo=youtube&logoColor=white" alt="Walkthrough video, 13 minutes" /></a>
   <a href="https://youtu.be/ZBnAqKTfdvM"><img src="https://img.shields.io/badge/video-2%20minutes-c4302b?logo=youtube&logoColor=white" alt="Two-minute video" /></a>
@@ -46,7 +46,7 @@ On an ordinary day a hospital's integration engine can see hundreds of failed me
 
 | | Click | Look at |
 | --- | --- | --- |
-| 1 | Open the [trial](https://mxsalata.github.io/shutter/) and, in the welcome dialog, choose **Start with S2** (if the dialog has been closed, the same button is on **Home**, under **New here?**) | **Scenarios**, in Board mode: the four agents propose the plan. **Try these three first** has a card for each scenario, with its own **Run** button |
+| 1 | Open the [trial](https://shutter.mxsalata.com/) and, in the welcome dialog, choose **Start with S2** (if the dialog has been closed, the same button is on **Home**, under **New here?**) | **Scenarios**, in Board mode: the four agents propose the plan. **Try these three first** has a card for each scenario, with its own **Run** button |
 | 2 | **Run S2**, open **C-000002** from the banner, then **Decide on the resend** and **Approve the resend** | A transfer that never arrived. After the approval, **Outcome** reads "Delivered: verified at the receiver", and the **Decision receipt** under it reads "12 passed", "Approved by approver", "1 write" and "Effect verified at the receiver". Further down, **6. What was verified** says "Verified: Committed and current", from the receiver's receipt |
 | 3 | **Run S3** and open **C-000003** | A transfer that had already arrived: only the acknowledgement was lost. **Outcome** reads "Nothing to send: verified at the receiver", and **5. What was written** reads "0 writes by Shutter" |
 | 4 | **Run S8 in Board** and open **C-000008** | Two systems moved the same patient at the same recorded time. The case is **Escalated**, with **0 writes** in the **Decision receipt**, and **The board** reads "1 dissent kept", with the Conformance specialist marked **Dissent** |
